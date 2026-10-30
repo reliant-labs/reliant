@@ -186,6 +186,11 @@ message MachinePoolSpec {
   // limit. A full member is passed over; a pool with every member full
   // queues the run.
   uint32 max_runs_per_member = 6;
+  // How long a member may sit idle before it sleeps, as a duration ("10m").
+  // Empty means 10m: a CI pool's members wake per burst of work, and the
+  // machine default (30m) bills an idle member for 20 more minutes after
+  // every burst. Between 1m and 4h.
+  string member_idle_timeout = 7;
 }
 
 // MachinePool is a pool with its members as placement sees them now.

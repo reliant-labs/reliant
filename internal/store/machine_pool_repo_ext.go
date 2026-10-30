@@ -28,11 +28,16 @@ func machinePoolToCore(row *MachinePool) (*core.MachinePool, error) {
 			return nil, fmt.Errorf("read machine pool %s selector: %w", row.ID, err)
 		}
 	}
-	return &core.MachinePool{
+	pool := &core.MachinePool{
 		ID: row.ID, UserID: row.UserID, Name: row.Name, Selector: selector,
 		MinMembers: int(row.MinMembers), MaxMembers: int(row.MaxMembers), MemberSize: row.MemberSize,
-		MaxRunsPerMember: int(row.MaxRunsPerMember), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-	}, nil
+		MaxRunsPerMember: int(row.MaxRunsPerMember), MemberIdleTimeout: core.DefaultMemberIdleTimeout,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
+	if row.MemberIdleTimeout != nil && *row.MemberIdleTimeout != "" {
+		pool.MemberIdleTimeout = *row.MemberIdleTimeout
+	}
+	return pool, nil
 }
 
 func scanMachinePools(rows []*MachinePool) ([]*core.MachinePool, error) {
@@ -90,19 +95,24 @@ func PutMachinePool(ctx context.Context, db orm.Context, p *core.MachinePool, ne
 	if err != nil {
 		return nil, fmt.Errorf("encode machine pool selector: %w", err)
 	}
+	idleTimeout := p.MemberIdleTimeout
+	if idleTimeout == "" {
+		idleTimeout = core.DefaultMemberIdleTimeout
+	}
 	var row MachinePool
 	err = db.Bun().NewRaw(`
-INSERT INTO machine_pools (id, user_id, name, selector, min_members, max_members, member_size, max_runs_per_member, created_at, updated_at)
-VALUES (?0, ?1, ?2, ?3::jsonb, ?4, ?5, ?6, ?7, ?8, ?8)
+INSERT INTO machine_pools (id, user_id, name, selector, min_members, max_members, member_size, max_runs_per_member, member_idle_timeout, created_at, updated_at)
+VALUES (?0, ?1, ?2, ?3::jsonb, ?4, ?5, ?6, ?7, ?9, ?8, ?8)
 ON CONFLICT (user_id, name) DO UPDATE SET
     selector = EXCLUDED.selector,
     min_members = EXCLUDED.min_members,
     max_members = EXCLUDED.max_members,
     member_size = EXCLUDED.member_size,
     max_runs_per_member = EXCLUDED.max_runs_per_member,
+    member_idle_timeout = EXCLUDED.member_idle_timeout,
     updated_at = EXCLUDED.updated_at
 RETURNING *`,
-		newID, p.UserID, p.Name, string(selector), p.MinMembers, p.MaxMembers, p.MemberSize, p.MaxRunsPerMember, now).Scan(ctx, &row)
+		newID, p.UserID, p.Name, string(selector), p.MinMembers, p.MaxMembers, p.MemberSize, p.MaxRunsPerMember, now, idleTimeout).Scan(ctx, &row)
 	if err != nil {
 		return nil, fmt.Errorf("write machine pool %q: %w", p.Name, err)
 	}
@@ -159,6 +169,33 @@ func CountMachinePoolMemberLiveRuns(ctx context.Context, db orm.Context, poolID,
 		return 0, fmt.Errorf("count live runs of pool %s on %s: %w", poolID, daemonID, err)
 	}
 	return n, nil
+}
+
+// CountTriggerCapacityHeldByMember is, per member, how many slots of one
+// trigger-capacity scope the runs pool placed there still hold: admitted
+// (capacity_order set), launched and not released, the same predicate
+// CanLaunchTriggerCapacity counts as occupied.
+func CountTriggerCapacityHeldByMember(ctx context.Context, db orm.Context, poolID, userID, projectID, workflowRef string) (map[string]int, error) {
+	var rows []struct {
+		DaemonID string `bun:"daemon_id"`
+		Held     int    `bun:"held"`
+	}
+	err := db.Bun().NewRaw(`
+SELECT ch.active_daemon_id AS daemon_id, count(*) AS held
+FROM trigger_events e
+JOIN chats ch ON ch.id = e.chat_id
+WHERE e.user_id = ?1 AND e.capacity_project_id = ?2 AND e.capacity_workflow_ref = ?3
+  AND e.capacity_order IS NOT NULL AND e.outcome = 'launched' AND NOT e.capacity_released
+  AND ch.machine_pool_id = ?0 AND ch.active_daemon_id IS NOT NULL
+GROUP BY ch.active_daemon_id`, poolID, userID, projectID, workflowRef).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("count capacity held on members of pool %s: %w", poolID, err)
+	}
+	out := make(map[string]int, len(rows))
+	for _, r := range rows {
+		out[r.DaemonID] = r.Held
+	}
+	return out, nil
 }
 
 // ListMachinePoolMembers reads pool's members with what placement needs about

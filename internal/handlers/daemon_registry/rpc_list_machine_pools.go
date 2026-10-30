@@ -53,6 +53,7 @@ func (s *Service) poolToProto(ctx context.Context, p *core.MachinePool) (*pb.Mac
 			Name: p.Name, Selector: p.Selector,
 			MinMembers: uint32(p.MinMembers), MaxMembers: uint32(p.MaxMembers),
 			MemberSize: p.MemberSize, MaxRunsPerMember: uint32(p.MaxRunsPerMember),
+			MemberIdleTimeout: p.MemberIdleTimeout,
 		},
 		CreatedAt: timestamppb.New(p.CreatedAt),
 		UpdatedAt: timestamppb.New(p.UpdatedAt),

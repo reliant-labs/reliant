@@ -11061,6 +11061,10 @@
             {
               "name": "max_runs_per_member",
               "kind": "uint32"
+            },
+            {
+              "name": "member_idle_timeout",
+              "kind": "string"
             }
           ],
           "reliant.v1.PutMachinePoolRequest": [
@@ -49724,6 +49728,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.CountThreadsInConversation"
+          }
+        },
+        {
+          "id": "method1:2497033787209f79908b5470f2801da5a6501018216351a4961f34309ab7df15",
+          "name": "CountTriggerCapacityHeldByMember",
+          "signature": "func(ctx context.Context, poolID string, userID string, projectID string, workflowRef string) (map[string]int, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.CountTriggerCapacityHeldByMember",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.CountTriggerCapacityHeldByMember"
           }
         },
         {

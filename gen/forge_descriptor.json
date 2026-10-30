@@ -17615,6 +17615,10 @@
           {
             "name": "max_runs_per_member",
             "kind": "uint32"
+          },
+          {
+            "name": "member_idle_timeout",
+            "kind": "string"
           }
         ],
         "reliant.v1.PutMachinePoolRequest": [
@@ -42630,7 +42634,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c94522c33f4605d8b89f2fe6be011dfacda7c09fbc2937deb83d72a7deddec1b",
+    "reliant/v1/daemon_registry.proto": "97f5ddf2875fe45d286ae5c1a4ddd62dd0b006f0fd4fc45471c396012ca202a7",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
@@ -42655,7 +42659,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
+    "reliant/v1/trigger.proto": "274269fe6cd1ef8a8b4ccb2d66b6b3ea8e24cd32a2e665ba44a03ea9c200d73a",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "7b526749d1271075d9ff47331d684dd5b3715f1658254fda0ab58ebeda378ed8",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"

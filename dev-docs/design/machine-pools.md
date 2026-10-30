@@ -40,7 +40,7 @@ and failover.
 
 | Term | Meaning |
 |---|---|
-| Pool | `machine_pools` row: owner, `name` (unique per owner), label `selector`, `min_members`/`max_members`, `member_size`, `max_runs_per_member` |
+| Pool | `machine_pools` row: owner, `name` (unique per owner), label `selector`, `min_members`/`max_members`, `member_size`, `max_runs_per_member`, `member_idle_timeout` (default 10m) |
 | Member | A machine of the pool's owner whose **durable labels** contain the selector (default `pool=<name>`) |
 | Machine label | `daemons.labels` (jsonb), set by the owner (`SetMachineLabels`). It persists across sleep, reconnects and re-registration. Registration and identity upserts name their columns, so they never touch it |
 | Placement | The launch-time choice of one member for one run |
@@ -52,7 +52,7 @@ membership comes from the durable column.
 
 ## Data model
 
-Migration `20261030165821_machine_pools`:
+Migration `20261030222234_machine_pools`:
 
 - `daemons.labels jsonb NOT NULL DEFAULT '{}'`
 - `machine_pools (id, user_id, name, selector, min_members, max_members,
@@ -113,6 +113,18 @@ order and push time don't affect it.
   is **ineligible**. If no eligible member is free, the run waits. It never
   runs on a member with a different catalog.
 
+**Every read about a pool trigger's run uses the agreed catalog.** A
+pool-bound trigger has no machine of its own, so before placement the fire
+binds it to a member holding the agreed catalog (`bindPoolCatalog`,
+`machinepool.AgreedCatalog`). The declaration, filter, dedupe key, inputs,
+prompt and concurrency policy are all read from that machine's catalog, never
+from the project's union (which whichever machine pushed last decides). The
+intake, both fire paths, the replay preview and activation validation do this.
+If a push moves the agreed catalog between that read and placement, the fire
+waits and is redriven rather than launching on decisions read from a catalog
+the run would not execute. A pool none of whose members has synced the project
+waits too.
+
 `sync-checkouts` has to cover every member (Stage 4). Until then a member that
 missed a merge is ineligible until it catches up. That is safe, but it reduces
 capacity.
@@ -147,10 +159,13 @@ concurrency:
 - `per_member: K` on a pool-bound trigger: **K × eligible members** (installed,
   on the pool's catalog, not failed or removed, any of connected, starting or
   suspended). Adding a member raises throughput with no workflow edit.
-- A member that drops out (dies, drifts) still counts for the slots its live
-  runs hold (at most K). Those runs keep their capacity slot until they end.
-  Charging them to the healthy members would starve the pool exactly when it
-  has lost a machine.
+- A member that drops out (dies, drifts) still counts for the slots **this
+  workflow's** runs hold there (at most K): admitted, launched, unreleased
+  capacity records in this trigger's admission scope whose chat the pool
+  placed on that member (`CountTriggerCapacityHeldByMember`). Those runs keep
+  their slot until they end, and charging them to the healthy members would
+  starve the pool exactly when it has lost a machine. Other workflows' runs on
+  the dead member hold none of this workflow's slots and add nothing.
 - `per_member` on a single-machine or no-machine trigger is a pool of one: K.
 - With both fields set, `max_running` caps the scaled value.
 - A pool with no eligible member and nothing running allows 0, so fires wait
@@ -283,8 +298,12 @@ GCP cost, which is what the PR pipeline costs us (list price in brackets):
 
 Sleeping is cheap either way. Disk is about 4% of a running member's cost. The
 bigger idle lever is `idle_timeout`: 30 minutes of an awake, unused 2xl costs
-$0.85, the same as about 14 hours of its sleeping disk. CI pools should use
-`idle_timeout: 10m`.
+$0.85, the same as about 14 hours of its sleeping disk. So a pool carries
+`member_idle_timeout`, **10m by default**, and every member it creates or
+adopts is set to it (the machine default stays 30m for interactive boxes). The
+field is stored and returned now; applying it to members goes with Stage 7's
+control-plane change, and until then set it on each member with
+`UpdateDaemon`/`CreateDaemon idle_timeout: "10m"`.
 
 ## Ephemeral members (Stage 7)
 
@@ -303,11 +322,50 @@ worktrees and uncommitted work are the point.
 - `CreateDaemon` takes `disk_mode: EPHEMERAL`, which the Workspace CR carries.
 - The pod mounts a **generic ephemeral volume**
   (`volumes[].ephemeral.volumeClaimTemplate`, `workspace-ssd`, the size's
-  `disk_gib`) instead of the named home PVC. Kubernetes creates it with the pod
-  and deletes it with the pod, so suspend leaves nothing to bill. This is no
-  new infrastructure: same StorageClass, same nodes, same scheduling (owner,
-  17:26Z). Node local SSD would be faster, but it needs a dedicated node pool,
-  so it is out of scope.
+  `disk_gib`, `volumeMode: Block`) instead of the named disk PVC. Kubernetes
+  creates it with the pod and deletes it with the pod, so suspend leaves
+  nothing to bill. Under kata it is the same virtio-blk device the docker-tier
+  disk is today, formatted and mounted by the same entrypoint. This is no new
+  infrastructure: same StorageClass, same nodes, same scheduling (owner,
+  17:26Z).
+
+### Why not emptyDir (owner, 20:52Z)
+
+Measured 2026-10-30 on a kata-qemu std node in prod-daemon-v2, workspace-base
+image, 4 vCPU, two rounds, then deleted (namespace `mp-disk-bench`; its PV and
+GCE disk are gone). Under this cluster's kata-qemu an emptyDir reaches the
+guest over **virtio-fs** (`none on /bench/emptydir type virtiofs`); the
+ephemeral PVC is a **virtio-blk** device formatted ext4 in the guest.
+
+| Workload (GOROOT tree, 15.7k files) | emptyDir (virtio-fs) | ephemeral PVC (virtio-blk) | |
+|---|---|---|---|
+| untar | 21–23 s | 10–11 s | 2.1× slower |
+| `git add -A && commit` | 23–24 s | 4.0 s | 6× |
+| `go build std`, cold cache | 51–52 s | 35 s | 1.5× |
+| `go build std`, warm cache (no-op) | 2.5 s | 0.32 s | 8× |
+| `git status` | 0.8 s | 0.06 s | 13× |
+| `rm -rf` the tree | 5.7 s | 0.39 s | 15× |
+| 1 GiB sequential write + fsync | 7–9 s | 7–9 s | same |
+
+Git and Go builds are metadata-heavy, which is exactly where virtio-fs loses.
+The workspace operator already moved the data path off virtio-fs after it
+exhausted virtiofsd's file descriptors on 2026-10-09
+(`internal/operators/workspace/workspace_disk.go`); an emptyDir data disk
+would reintroduce both problems.
+
+- **emptyDir on the boot disk**: virtio-fs speeds above, plus every kata
+  max-tier node's boot disk (100 GB pd-balanced today) grows to ~500 GB,
+  interactive machines' nodes included. Rejected.
+- **emptyDir on local NVMe SSD**: $0.08/GiB-month (GCP SKU "SSD backed Local
+  Storage", us-central1) ≈ $0.04/h per 375 GiB device while the node exists,
+  so cheap. But node ephemeral storage still reaches the guest as an emptyDir,
+  over virtio-fs; using it as a block device in the guest needs a local-PV
+  provisioner and a node pool with local SSDs: new infrastructure, which the
+  owner ruled out. Rejected.
+- **Generic ephemeral PVC**: block-device speed (today's), $0 asleep. Its cost
+  is provisioning and attaching on wake: about **15 s** measured (provisioned
+  in 1 s, attached 6 s later, mapped 6 s after that), against **~3.5 min** for
+  the autoscaler to add the node that every wake already waits for. **Chosen.**
 - Three things that assume a persistent disk must learn the mode:
   1. `volume_presence` must not mark an ephemeral member's absent disk as
      *missing → Failed*.
@@ -346,10 +404,10 @@ barely notices. A gate pays the first-build cost once per wake.
   keeps one member always on, at $1.71/h ≈ $1,250/month for a 2xl, which
   buys away the first cold start. That isn't worth it for review latency.
 
-### Recommendation for pool `cicd`
+### Recommendation for pool `cicd` (owner approved 2026-10-30 20:58Z)
 
-New members are ephemeral 2xl, `idle_timeout: 10m`, pool `min_members: 0`,
-`max_members: 3`. `cicd` itself stays persistent until the ephemeral path is
+New members are ephemeral 2xl, `idle_timeout: 10m` (the pool's
+`member_idle_timeout`, default 10m), pool `min_members: 0`, `max_members: 3`. `cicd` itself stays persistent until the ephemeral path is
 proven, then converts. Until Stage 7 ships, new members are persistent and
 cost $42/month each while asleep.
 

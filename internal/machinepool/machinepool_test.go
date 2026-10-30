@@ -2,9 +2,13 @@
 package machinepool
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 var t0 = time.Date(2026, 10, 30, 16, 0, 0, 0, time.UTC)
@@ -174,9 +178,9 @@ func TestPlacement_MemberDiesMidRun(t *testing.T) {
 		t.Fatalf("got %v %q, want queue naming b disconnected", d.Kind, d.Reason(p.Name))
 	}
 
-	// Per-member concurrency of 2: B's live run keeps its slot (it holds one
-	// until it ends), so A and C still get their full 2 each.
-	if c := PerMemberCapacity(snapshot(), 2); c != 2+1+2 {
+	// Per-member concurrency of 2: B's live run of this workflow keeps its
+	// slot (it holds one until it ends), so A and C still get their full 2.
+	if c := PerMemberCapacity(snapshot(), 2, map[string]int{"id-b": 1}); c != 2+1+2 {
 		t.Fatalf("capacity with B down = %d, want 5 (2 + B's held 1 + 2)", c)
 	}
 
@@ -189,19 +193,76 @@ func TestPlacement_MemberDiesMidRun(t *testing.T) {
 
 func TestPerMemberCapacity_ScalesWithMembers(t *testing.T) {
 	ms := []Member{member("a", PhaseConnected, 0), member("b", PhaseSuspended, 0)}
-	if got := PerMemberCapacity(ms, 4); got != 8 {
+	if got := PerMemberCapacity(ms, 4, nil); got != 8 {
 		t.Fatalf("2 members x 4 = %d", got)
 	}
 	ms = append(ms, member("c", PhaseStarting, 0))
-	if got := PerMemberCapacity(ms, 4); got != 12 {
+	if got := PerMemberCapacity(ms, 4, nil); got != 12 {
 		t.Fatalf("adding a member: %d, want 12", got)
 	}
 	gone := member("d", PhaseRemoved, 0)
-	if got := PerMemberCapacity(append(ms, gone), 4); got != 12 {
+	if got := PerMemberCapacity(append(ms, gone), 4, nil); got != 12 {
 		t.Fatalf("a removed member with no runs added capacity: %d", got)
 	}
-	if got := PerMemberCapacity(nil, 4); got != 0 {
+	if got := PerMemberCapacity(nil, 4, nil); got != 0 {
 		t.Fatalf("empty pool: %d", got)
+	}
+}
+
+// Several workflows share a pool. When a member dies holding four runs of
+// OTHER workflows, this workflow's cap drops to the healthy members' share:
+// unrelated load on the dead member holds none of its slots.
+func TestPerMemberCapacity_CountsOnlyThisWorkflowsHeldSlots(t *testing.T) {
+	dead := member("b", PhaseDisconnected, 4) // 4 live runs, all other workflows'
+	ms := []Member{member("a", PhaseConnected, 0), dead}
+	if got := PerMemberCapacity(ms, 4, nil); got != 4 {
+		t.Fatalf("cap = %d, want 4: other workflows' runs on a dead member raised it", got)
+	}
+	// One of the four is this workflow's: it keeps that one slot.
+	if got := PerMemberCapacity(ms, 4, map[string]int{"id-b": 1}); got != 5 {
+		t.Fatalf("cap = %d, want 5", got)
+	}
+	// Never more than per_member for one member, whatever is recorded.
+	if got := PerMemberCapacity(ms, 4, map[string]int{"id-b": 9}); got != 8 {
+		t.Fatalf("cap = %d, want 8", got)
+	}
+}
+
+type fakeReader struct {
+	pool    *core.MachinePool
+	members []core.MachinePoolMemberRow
+}
+
+func (f fakeReader) GetMachinePoolForUser(_ context.Context, userID, id string) (*core.MachinePool, error) {
+	if id != f.pool.ID {
+		return nil, core.ErrMachinePoolNotFound
+	}
+	return f.pool, nil
+}
+
+func (f fakeReader) ListMachinePoolMembers(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
+	return f.members, nil
+}
+
+// The agreed catalog is the majority's, read from a member that holds it,
+// even when another member (or another machine) pushed a newer one.
+func TestAgreedCatalog_MajorityMemberEvenWhenANewerCatalogExists(t *testing.T) {
+	a, b := `[{"slug":"pr-review","content_hash":"A"}]`, `[{"slug":"pr-review","content_hash":"B"}]`
+	old, newer := t0, t0.Add(time.Hour)
+	r := fakeReader{pool: &core.MachinePool{ID: "p"}, members: []core.MachinePoolMemberRow{
+		{DaemonID: "d-c", Name: "c", Phase: "connected", Installed: true, WorkflowsJSON: &b, CatalogPushedAt: &newer},
+		{DaemonID: "d-b", Name: "b", Phase: "connected", Installed: true, WorkflowsJSON: &a, CatalogPushedAt: &old},
+		{DaemonID: "d-a", Name: "a", Phase: "failed", Installed: true, WorkflowsJSON: &a, CatalogPushedAt: &old},
+		{DaemonID: "d-d", Name: "d", Phase: "suspended", Installed: true, WorkflowsJSON: &a, CatalogPushedAt: &old},
+	}}
+	daemon, digest, err := AgreedCatalog(context.Background(), r, "u", "p", "proj")
+	wantDigest, _ := CatalogDigest(&a, nil)
+	if err != nil || digest != wantDigest || daemon != "d-b" {
+		t.Fatalf("got %s %s %v, want d-b (first usable member on A; a failed)", daemon, digest, err)
+	}
+	empty := fakeReader{pool: &core.MachinePool{ID: "p"}}
+	if _, _, err := AgreedCatalog(context.Background(), empty, "u", "p", "proj"); !errors.Is(err, ErrNoAgreedCatalog) {
+		t.Fatalf("empty pool: %v", err)
 	}
 }
 

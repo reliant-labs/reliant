@@ -149,6 +149,20 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
 	}
 
+	// A pool-bound trigger reads its declaration and concurrency from the
+	// pool's agreed catalog, the one its run is placed on.
+	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+		}
+		return nil, err
+	}
+	if wait != "" {
+		return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: wait, EventID: ev.ID}, nil
+	}
+	trigger = bound
+
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
 	decl, err := activationFor(ctx, f.workflows, trigger)
@@ -197,7 +211,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
-	}, spec, resuming)
+	}, spec, resuming, catalog)
 
 	switch {
 	case launchErr == nil:
@@ -251,7 +265,20 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 
 // PreviewEvent maps a sample through the exact event-fire seed path. It does
 // not persist, enable, or launch anything. The caller must authorize the trigger.
-func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+//
+// pools answers a pool-bound trigger's agreed catalog, so the preview reads
+// the definitions a real fire would; nil previews from the union.
+func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, pools PoolCatalogs, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+	if pools != nil {
+		bound, _, wait, err := bindPoolCatalog(ctx, pools, trigger)
+		if err != nil {
+			return launch.Spec{}, err
+		}
+		if wait != "" {
+			return launch.Spec{}, &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
+		}
+		trigger = bound
+	}
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		return launch.Spec{}, err

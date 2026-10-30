@@ -57,6 +57,12 @@ func (r *Repo) CountMachinePoolMemberLiveRuns(ctx context.Context, poolID, daemo
 	return store.CountMachinePoolMemberLiveRuns(ctx, r.ORM(), poolID, daemonID)
 }
 
+// CountTriggerCapacityHeldByMember is, per member of a pool, the slots of one
+// trigger-capacity scope its pool-placed runs hold.
+func (r *Repo) CountTriggerCapacityHeldByMember(ctx context.Context, poolID, userID, projectID, workflowRef string) (map[string]int, error) {
+	return store.CountTriggerCapacityHeldByMember(ctx, r.ORM(), poolID, userID, projectID, workflowRef)
+}
+
 // SetDaemonLabels replaces one of userID's machines' durable labels; false
 // when there is no such machine.
 func (r *Repo) SetDaemonLabels(ctx context.Context, userID, daemonID string, labels map[string]string) (bool, error) {

@@ -84,6 +84,34 @@ func TestMachinePoolQueries(t *testing.T) {
 		t.Fatalf("live runs on a = %d, %v; want 2", n, err)
 	}
 
+	// Held capacity: one admitted, launched, unreleased pr-review slot on a
+	// (chat mp-live-1); one of another workflow; one released.
+	scope := store.TriggerCapacityScope{UserID: storetest.SeedUserID, ProjectID: storetest.SeedProjectID, WorkflowRef: "project:pr-review"}
+	other := scope
+	other.WorkflowRef = "project:cp-merge"
+	for i, c := range []struct {
+		chat     string
+		scope    store.TriggerCapacityScope
+		released bool
+	}{{"mp-live-1", scope, false}, {"mp-live-2", other, false}, {"mp-done", scope, true}} {
+		ev := &core.TriggerEvent{ID: "cap-" + c.chat, UserID: storetest.SeedUserID, Kind: core.TriggerEventKindSchedule,
+			DedupeKey: "cap-" + c.chat, OccurredAt: now, CreatedAt: now, Outcome: core.TriggerEventPending}
+		if err := env.Repo.EnqueueTriggerCapacity(ctx, ev, c.scope); err != nil {
+			t.Fatalf("EnqueueTriggerCapacity %d: %v", i, err)
+		}
+		if _, err := env.ORM.Bun().NewRaw(`UPDATE trigger_events SET outcome = 'launched', chat_id = ?0, capacity_released = ?1 WHERE id = ?2`,
+			c.chat, c.released, ev.ID).Exec(ctx); err != nil {
+			t.Fatalf("mark %d launched: %v", i, err)
+		}
+	}
+	held, err := env.Repo.CountTriggerCapacityHeldByMember(ctx, pool.ID, scope.UserID, scope.ProjectID, scope.WorkflowRef)
+	if err != nil || len(held) != 1 || held["mp-a"] != 1 {
+		t.Fatalf("held = %v, %v; want only pr-review's one unreleased slot on a", held, err)
+	}
+	if again.MemberIdleTimeout != core.DefaultMemberIdleTimeout {
+		t.Fatalf("member idle timeout = %q, want the 10m default", again.MemberIdleTimeout)
+	}
+
 	members, err := env.Repo.ListMachinePoolMembers(ctx, again, storetest.SeedProjectID)
 	if err != nil {
 		t.Fatalf("ListMachinePoolMembers: %v", err)

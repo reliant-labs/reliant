@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 // poolWaitingPrefix starts the reason a pool-bound fire records while no
@@ -23,11 +24,57 @@ const poolWaitingPrefix = "waiting for a machine in pool "
 // chosen member's last slot (machinepool.MemberBusy).
 const poolPlaceAttempts = 3
 
+// PoolCatalogs answers a pool's agreed catalog. *machinepool.Placer
+// implements it, and so does machinepool.Catalogs over a bare member reader.
+type PoolCatalogs interface {
+	AgreedCatalog(ctx context.Context, userID, poolID, projectID string) (daemonID, digest string, err error)
+}
+
 // Placer places a pool-bound trigger's runs. *machinepool.Placer implements it.
 type Placer interface {
+	PoolCatalogs
 	Place(ctx context.Context, userID, poolID, projectID string) (machinepool.Placement, error)
-	Capacity(ctx context.Context, userID, poolID, projectID string, perMember uint32) (uint32, error)
+	Capacity(ctx context.Context, userID, poolID, projectID, workflowRef string, perMember uint32) (uint32, error)
 	SlotGuard(pool machinepool.Pool, member machinepool.Member) func(ctx context.Context) (string, error)
+}
+
+// poolUnsyncedReason is a pool fire's wait reason when no member has synced
+// the project: there is no catalog to read its declaration from.
+const poolUnsyncedReason = "no member has synced the project, so there is no catalog to run from"
+
+// bindPoolCatalog points a pool-bound trigger's catalog reads at the pool's
+// agreed catalog (machinepool.AgreedCatalog): it returns a copy of t whose
+// CatalogDaemonID is a member holding that catalog, and the catalog's digest.
+// Everything a fire decides from the workflow (declaration, filter, inputs,
+// prompt, concurrency) is then read from the catalog its run will be placed
+// on, never the union a third machine last pushed to. A trigger with no pool
+// is returned as is, with "".
+//
+// A pool none of whose members has synced the project returns a wait reason
+// (poolWaitingPrefix…) and no trigger: the caller keeps the event pending.
+func bindPoolCatalog(ctx context.Context, pools PoolCatalogs, t *core.Trigger) (*core.Trigger, string, string, error) {
+	if t.MachinePoolID == "" {
+		return t, "", "", nil
+	}
+	if pools == nil {
+		return nil, "", "", errNoPlacer
+	}
+	daemonID, digest, err := pools.AgreedCatalog(ctx, t.UserID, t.MachinePoolID, t.ProjectID)
+	switch {
+	case errors.Is(err, machinepool.ErrNoAgreedCatalog):
+		name := t.MachinePoolName
+		if name == "" {
+			name = t.MachinePoolID
+		}
+		return nil, "", poolWaitingPrefix + name + " (" + poolUnsyncedReason + ")", nil
+	case errors.Is(err, core.ErrMachinePoolNotFound):
+		return nil, "", "", &DeclarationError{Workflow: t.Workflow, Name: triggerName(t), Reason: "the trigger's machine pool no longer exists; edit the trigger to choose a machine or pool"}
+	case err != nil:
+		return nil, "", "", fmt.Errorf("read the agreed catalog of trigger %s's pool: %w", t.ID, err)
+	}
+	bound := *t
+	bound.CatalogDaemonID = daemonID
+	return &bound, digest, "", nil
 }
 
 // errNoPlacer is a pool-bound trigger fired by a process with no placer
@@ -58,7 +105,12 @@ func capacityLimit(ctx context.Context, placer Placer, t *core.Trigger, policy *
 		if placer == nil {
 			return 0, true, errNoPlacer
 		}
-		limit, err = placer.Capacity(ctx, t.UserID, t.MachinePoolID, t.ProjectID, policy.GetPerMember())
+		// The admission scope prepareCapacity counts slots in.
+		ref, err := workflowref.Parse(t.Workflow)
+		if err != nil {
+			return 0, true, err
+		}
+		limit, err = placer.Capacity(ctx, t.UserID, t.MachinePoolID, t.ProjectID, ref.Key(), policy.GetPerMember())
 		if err != nil {
 			return 0, true, fmt.Errorf("pool capacity of trigger %s: %w", t.ID, err)
 		}
@@ -80,7 +132,13 @@ func capacityLimit(ctx context.Context, placer Placer, t *core.Trigger, policy *
 //
 // A pool with no free member declines with a poolWaitingPrefix reason naming
 // why each member was passed over.
-func launchOnPool(ctx context.Context, placer Placer, launcher Launcher, t *core.Trigger, ev launch.Event, spec launch.Spec, resuming bool) (*launch.Result, error) {
+//
+// catalog is the agreed catalog the fire read its declaration and
+// concurrency from (bindPoolCatalog). Placement re-derives it from the
+// members as they are now; if a push changed it in between, the run is not
+// launched on decisions read from a catalog it would not run: the fire waits
+// and is redriven, reading the new one.
+func launchOnPool(ctx context.Context, placer Placer, launcher Launcher, t *core.Trigger, ev launch.Event, spec launch.Spec, resuming bool, catalog string) (*launch.Result, error) {
 	if t.MachinePoolID == "" {
 		return launcher.Launch(ctx, ev, spec)
 	}
@@ -102,6 +160,9 @@ func launchOnPool(ctx context.Context, placer Placer, launcher Launcher, t *core
 			return launcher.Launch(ctx, ev, spec)
 		}
 		d := placed.Decision
+		if d.ExpectedCatalog != catalog {
+			return nil, &launch.DeclinedError{Reason: poolWaitingPrefix + placed.Pool.Name + " (its catalog changed during this fire; it is read again)"}
+		}
 		if d.Kind == machinepool.Queue {
 			return nil, &launch.DeclinedError{Reason: d.Reason(placed.Pool.Name)}
 		}
@@ -141,6 +202,13 @@ func (f *Firer) recordPoolWait(ctx context.Context, t *core.Trigger, ev launch.E
 		return nil, fmt.Errorf("record the pool wait of fire %s: %w", ev.DedupeKey, err)
 	}
 	return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: row.ID}, nil
+}
+
+func triggerName(t *core.Trigger) string {
+	if t.WorkflowTrigger != nil {
+		return *t.WorkflowTrigger
+	}
+	return t.Name
 }
 
 // composeGuards runs first, then next; the first decline wins.

@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
@@ -768,6 +769,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithConnectionSecrets(d.Connections.Tokens)

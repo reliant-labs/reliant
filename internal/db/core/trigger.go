@@ -245,6 +245,11 @@ type Trigger struct {
 	MachinePoolID string
 	// MachinePoolName is MachinePoolID's name, joined in by reads.
 	MachinePoolName string
+	// CatalogDaemonID is not stored. For a pool-bound trigger the fire paths
+	// set it to a member on the pool's agreed catalog, so the declaration,
+	// filter, inputs and concurrency are read from the catalog its runs are
+	// placed on (CatalogMachine), not the union of every machine's.
+	CatalogDaemonID string
 	// NotifyOnComplete opts the owner in to being told when a run of this
 	// trigger completes (unread + OS notification + a Run finished Inbox
 	// item). Unattended completions are otherwise silent.

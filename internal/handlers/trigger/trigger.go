@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -782,8 +783,17 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	}
 	// On the machine the activation targets: its runs execute there, so a
 	// workflow only another machine provides is refused here, naming both.
+	// A pool's runs execute on its agreed catalog; before any member has
+	// synced there is none, and the union is all there is to validate
+	// against (fires then wait until a member syncs).
+	catalogMachine := def.DaemonId
+	if def.MachinePoolId != "" {
+		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Repo, userID, def.MachinePoolId, def.ProjectId); err == nil {
+			catalogMachine = member
+		}
+	}
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo,
-		launch.AutomationScope(userID, def.ProjectId, def.DaemonId), def.Workflow)
+		launch.AutomationScope(userID, def.ProjectId, catalogMachine), def.Workflow)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {

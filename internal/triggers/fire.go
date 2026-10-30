@@ -108,6 +108,20 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, fmt.Errorf("load trigger %s: %w", req.TriggerID, err)
 	}
 
+	// A pool-bound trigger reads everything below from its pool's agreed
+	// catalog, the one its run is placed on.
+	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.failPermanently(ctx, trigger, req, err.Error(), err)
+		}
+		return nil, err
+	}
+	if wait != "" {
+		return f.recordPoolWait(ctx, trigger, f.buildEvent(trigger, req), wait)
+	}
+	trigger = bound
+
 	// An activation fires from its workflow's declaration as it is NOW: the
 	// row's config is only the projection the schedule was converged from.
 	// A declaration that is gone or changed kind is recorded and stops here;
@@ -206,7 +220,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 			return nil, errors.New("admitted retry storage unavailable")
 		}
 	}
-	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, ev, spec, resuming)
+	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, ev, spec, resuming, catalog)
 	switch {
 	case errors.Is(launchErr, launch.ErrDeclined):
 		var declined *launch.DeclinedError

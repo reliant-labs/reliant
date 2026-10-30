@@ -155,14 +155,7 @@ const (
 //
 // Ties break on name then id, so the same inputs always give the same answer.
 func Decide(pool Pool, members []Member) Decision {
-	ordered := append([]Member(nil), members...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].Name != ordered[j].Name {
-			return ordered[i].Name < ordered[j].Name
-		}
-		return ordered[i].DaemonID < ordered[j].DaemonID
-	})
-
+	ordered := sortedByName(members)
 	expected := ExpectedCatalog(ordered)
 	d := Decision{Kind: Queue, ExpectedCatalog: expected}
 
@@ -204,6 +197,19 @@ func Decide(pool Pool, members []Member) Decision {
 		d.Kind, d.Member = Wake, leastLoaded(suspended)
 	}
 	return d
+}
+
+// sortedByName is a copy of members ordered by name, then id: the order every
+// tie in placement breaks on.
+func sortedByName(members []Member) []Member {
+	ordered := append([]Member(nil), members...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Name != ordered[j].Name {
+			return ordered[i].Name < ordered[j].Name
+		}
+		return ordered[i].DaemonID < ordered[j].DaemonID
+	})
+	return ordered
 }
 
 // ineligible is why m cannot take any work regardless of load, or "".

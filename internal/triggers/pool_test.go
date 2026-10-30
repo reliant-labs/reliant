@@ -24,9 +24,14 @@ type fakePoolStore struct {
 	// stealSlotOnce makes the in-transaction count one higher than the
 	// read, once: a concurrent launch took the slot between choice and tx.
 	stealSlotOnce string
+	// heldOf is the admitted workflow's held capacity slots per member.
+	heldOf map[string]int
 }
 
 var catalogJSON = `[{"slug":"pr-review","yaml_content":"x","content_hash":"h1"}]`
+
+// agreed is catalogJSON's digest: the catalog every fake member holds.
+var agreed, _ = machinepool.CatalogDigest(&catalogJSON, nil)
 
 func newFakePool(maxPer int, names ...string) *fakePoolStore {
 	s := &fakePoolStore{pool: &core.MachinePool{ID: "pool-cicd", UserID: "user-1", Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MaxRunsPerMember: maxPer}}
@@ -52,6 +57,14 @@ func (s *fakePoolStore) ListMachinePoolMembers(context.Context, *core.MachinePoo
 }
 
 func (s *fakePoolStore) LockMachinePool(context.Context, string) error { return nil }
+
+// CountTriggerCapacityHeldByMember models this workflow's held slots as
+// heldOf, independent of each member's pool-wide LiveRuns.
+func (s *fakePoolStore) CountTriggerCapacityHeldByMember(context.Context, string, string, string, string) (map[string]int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.heldOf, nil
+}
 
 func (s *fakePoolStore) CountMachinePoolMemberLiveRuns(_ context.Context, _, daemonID string) (int, error) {
 	s.mu.Lock()
@@ -94,7 +107,7 @@ func (l *poolLauncher) Launch(ctx context.Context, ev launch.Event, spec launch.
 }
 
 func poolTrigger() *core.Trigger {
-	return &core.Trigger{ID: "t-1", UserID: "user-1", ProjectID: "p-1", Name: "pr-review", MachinePoolID: "pool-cicd"}
+	return &core.Trigger{ID: "t-1", UserID: "user-1", ProjectID: "p-1", Name: "pr-review", Workflow: "pr-review", MachinePoolID: "pool-cicd"}
 }
 
 func TestLaunchOnPool_SpreadsAndPinsEachRunToItsMember(t *testing.T) {
@@ -103,7 +116,7 @@ func TestLaunchOnPool_SpreadsAndPinsEachRunToItsMember(t *testing.T) {
 	placer := machinepool.NewPlacer(store)
 	got := map[string]int{}
 	for i := 0; i < 6; i++ {
-		if _, err := launchOnPool(context.Background(), placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+		if _, err := launchOnPool(context.Background(), placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 			t.Fatalf("launch %d: %v", i, err)
 		}
 	}
@@ -117,7 +130,7 @@ func TestLaunchOnPool_SpreadsAndPinsEachRunToItsMember(t *testing.T) {
 		t.Fatalf("placements = %v, want 2 per member", got)
 	}
 	// Seventh: every member full, so the fire declines with the pool's wait.
-	_, err := launchOnPool(context.Background(), placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false)
+	_, err := launchOnPool(context.Background(), placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed)
 	var declined *launch.DeclinedError
 	if !errors.As(err, &declined) || !isPoolWaiting(declined.Reason) {
 		t.Fatalf("got %v, want a pool wait", err)
@@ -133,12 +146,12 @@ func TestLaunchOnPool_MemberDiesMidRun(t *testing.T) {
 	placer := machinepool.NewPlacer(store)
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
-		if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+		if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 			t.Fatal(err)
 		}
 	}
 	store.set("b", func(m *core.MachinePoolMemberRow) { m.Phase = "disconnected" })
-	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 		t.Fatal(err)
 	}
 	calls := l.snapshot()
@@ -146,7 +159,7 @@ func TestLaunchOnPool_MemberDiesMidRun(t *testing.T) {
 		t.Fatalf("third run went to %s, want c (a full, b down)", last)
 	}
 	// A retried fire of b's already-launched run resumes it: never re-placed.
-	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, true); err != nil {
+	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, true, agreed); err != nil {
 		t.Fatal(err)
 	}
 	calls = l.snapshot()
@@ -154,14 +167,14 @@ func TestLaunchOnPool_MemberDiesMidRun(t *testing.T) {
 		t.Fatalf("a resumed launch was re-placed: daemon %q", resumed.DaemonID)
 	}
 	// Everything full or down: the next fire waits, naming b.
-	_, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false)
+	_, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed)
 	var declined *launch.DeclinedError
 	if !errors.As(err, &declined) || !strings.Contains(declined.Reason, "b: disconnected") {
 		t.Fatalf("got %v, want a wait naming b", err)
 	}
 	// b's run ends and b reconnects current: it takes the next run.
 	store.set("b", func(m *core.MachinePoolMemberRow) { m.Phase, m.LiveRuns = "connected", 0 })
-	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 		t.Fatal(err)
 	}
 	calls = l.snapshot()
@@ -174,7 +187,7 @@ func TestLaunchOnPool_LostSlotRacePlacesAgain(t *testing.T) {
 	store := newFakePool(1, "a", "b")
 	store.stealSlotOnce = "d-a"
 	l := &poolLauncher{store: store}
-	if _, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+	if _, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 		t.Fatal(err)
 	}
 	calls := l.snapshot()
@@ -191,7 +204,7 @@ func TestLaunchOnPool_CatalogDriftIsNeverPlacedOn(t *testing.T) {
 	store.set("a", func(m *core.MachinePoolMemberRow) { m.WorkflowsJSON = &stale })
 	l := &poolLauncher{store: store}
 	for i := 0; i < 4; i++ {
-		if _, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), l, poolTrigger(), launch.Event{}, launch.Spec{}, false); err != nil {
+		if _, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -206,10 +219,16 @@ func TestLaunchOnPool_DeletedPoolIsAVerdict(t *testing.T) {
 	store := newFakePool(0, "a")
 	tr := poolTrigger()
 	tr.MachinePoolID = "gone"
-	_, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), &poolLauncher{store: store}, tr, launch.Event{}, launch.Spec{}, false)
+	// The fire reads the pool first: a missing pool is a verdict there...
+	_, _, _, err := bindPoolCatalog(context.Background(), machinepool.NewPlacer(store), tr)
+	if !isVerdict(err) {
+		t.Fatalf("bind: got %v, want a verdict", err)
+	}
+	// ...and at placement, should it vanish in between.
+	_, err = launchOnPool(context.Background(), machinepool.NewPlacer(store), &poolLauncher{store: store}, tr, launch.Event{}, launch.Spec{}, false, agreed)
 	var v *launch.ValidationError
 	if !errors.As(err, &v) {
-		t.Fatalf("got %v, want a validation verdict", err)
+		t.Fatalf("launch: got %v, want a validation verdict", err)
 	}
 }
 
@@ -277,5 +296,105 @@ func TestFire_PoolWaitIsPendingThenLaunches(t *testing.T) {
 	calls := l.snapshot()
 	if last := calls[len(calls)-1].Spec; last.DaemonID != "d-a" || last.MachinePool == nil {
 		t.Fatalf("launched spec = daemon %q pool %v", last.DaemonID, last.MachinePool)
+	}
+}
+
+// catalogResolver serves catalog A from machines d-a/d-b and catalog B from
+// d-c, and B as the union (B was pushed last). A's pr-review admits 1 run
+// per member; B's admits a fixed 100.
+type catalogResolver struct{ machines []string }
+
+func (r *catalogResolver) wf(concurrency *reliantv1.WorkflowConcurrency) *reliantv1.Workflow {
+	return &reliantv1.Workflow{Name: "pr-review", Concurrency: concurrency}
+}
+
+func (r *catalogResolver) ResolveRunWorkflow(context.Context, string, string, string) (*reliantv1.Workflow, error) {
+	r.machines = append(r.machines, "")
+	return r.wf(&reliantv1.WorkflowConcurrency{MaxRunning: 100}), nil
+}
+
+func (r *catalogResolver) ResolveRunWorkflowOn(_ context.Context, _, _, _, daemonID string) (*reliantv1.Workflow, error) {
+	r.machines = append(r.machines, daemonID)
+	if daemonID == "d-c" {
+		return r.wf(&reliantv1.WorkflowConcurrency{MaxRunning: 100}), nil
+	}
+	return r.wf(&reliantv1.WorkflowConcurrency{PerMember: 1}), nil
+}
+
+// The #1915 review blocker: two members hold catalog A, a third (and the
+// union) hold a newer B. The fire must read its declaration and concurrency
+// from A, the catalog its run is placed on, never from B.
+func TestPoolFireReadsTheAgreedCatalogNotTheUnion(t *testing.T) {
+	store := newFakePool(0, "a", "b", "c")
+	stale := `[{"slug":"pr-review","yaml_content":"y","content_hash":"B"}]`
+	newer := time.Date(2026, 10, 30, 18, 0, 0, 0, time.UTC)
+	store.set("c", func(m *core.MachinePoolMemberRow) { m.WorkflowsJSON, m.CatalogPushedAt = &stale, &newer })
+	placer := machinepool.NewPlacer(store)
+	resolver := &catalogResolver{}
+	ctx := context.Background()
+
+	bound, catalog, wait, err := bindPoolCatalog(ctx, placer, poolTrigger())
+	if err != nil || wait != "" || catalog != agreed || bound.CatalogDaemonID != "d-a" {
+		t.Fatalf("bind = %+v %q %q %v; want d-a on catalog A", bound, catalog, wait, err)
+	}
+	policy, err := capacityPolicy(ctx, resolver, bound)
+	if err != nil || policy.GetPerMember() != 1 || policy.GetMaxRunning() != 0 {
+		t.Fatalf("policy = %v %v, want catalog A's per_member 1 (read on %v)", policy, err, resolver.machines)
+	}
+	limit, capped, err := capacityLimit(ctx, placer, bound, policy)
+	if err != nil || !capped || limit != 2 {
+		t.Fatalf("limit = %d %v %v, want 2 (a, b on A; c drifted)", limit, capped, err)
+	}
+	// Unbound, the same trigger reads the union's B: what the fix prevents.
+	if p, _ := capacityPolicy(ctx, resolver, poolTrigger()); p.GetMaxRunning() != 100 {
+		t.Fatalf("test premise: the union should serve B, got %v", p)
+	}
+	// And the run is placed on A only.
+	l := &poolLauncher{store: store}
+	for i := 0; i < 3; i++ {
+		if _, err := launchOnPool(ctx, placer, l, bound, launch.Event{}, launch.Spec{}, false, catalog); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range l.snapshot() {
+		if c.Spec.DaemonID == "d-c" {
+			t.Fatal("placed on the member whose catalog the fire did not read")
+		}
+	}
+}
+
+// A push between reading the declaration and placing changes the pool's
+// agreed catalog: the run is not launched on decisions read from the old one.
+func TestLaunchOnPool_CatalogChangedDuringFireWaits(t *testing.T) {
+	store := newFakePool(0, "a")
+	_, err := launchOnPool(context.Background(), machinepool.NewPlacer(store), &poolLauncher{store: store}, poolTrigger(), launch.Event{}, launch.Spec{}, false, "an-older-catalog")
+	var declined *launch.DeclinedError
+	if !errors.As(err, &declined) || !isPoolWaiting(declined.Reason) || !strings.Contains(declined.Reason, "catalog changed") {
+		t.Fatalf("got %v, want a pool wait naming the catalog change", err)
+	}
+}
+
+func TestBindPoolCatalog_UnsyncedPoolWaits(t *testing.T) {
+	store := newFakePool(0, "a")
+	store.set("a", func(m *core.MachinePoolMemberRow) { m.WorkflowsJSON = nil })
+	_, _, wait, err := bindPoolCatalog(context.Background(), machinepool.NewPlacer(store), poolTrigger())
+	if err != nil || !isPoolWaiting(wait) {
+		t.Fatalf("got %q %v, want a pool wait", wait, err)
+	}
+}
+
+// Several workflows share the pool and member b dies holding runs: only
+// THIS workflow's held slots on b count toward its cap.
+func TestCapacityLimit_DeadMemberCountsOnlyThisWorkflowsSlots(t *testing.T) {
+	store := newFakePool(0, "a", "b")
+	store.set("b", func(m *core.MachinePoolMemberRow) { m.Phase, m.LiveRuns = "disconnected", 4 })
+	policy := &reliantv1.WorkflowConcurrency{PerMember: 4}
+	placer := machinepool.NewPlacer(store)
+	if got, _, _ := capacityLimit(context.Background(), placer, poolTrigger(), policy); got != 4 {
+		t.Fatalf("cap = %d, want 4: four unrelated runs on dead b raised it", got)
+	}
+	store.heldOf = map[string]int{"d-b": 1}
+	if got, _, _ := capacityLimit(context.Background(), placer, poolTrigger(), policy); got != 5 {
+		t.Fatalf("cap = %d, want 5 (a's 4 + this workflow's 1 held on b)", got)
 	}
 }

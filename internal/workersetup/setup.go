@@ -265,7 +265,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
 				cfg.TriggerCredentials,
 			)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})

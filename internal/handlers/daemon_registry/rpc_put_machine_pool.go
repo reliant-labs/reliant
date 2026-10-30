@@ -3,6 +3,7 @@ package daemon_registry
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -41,14 +42,22 @@ func (s *Service) PutMachinePool(
 	if spec.GetMaxMembers() > 0 && spec.GetMinMembers() > spec.GetMaxMembers() {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("min_members (%d) exceeds max_members (%d)", spec.GetMinMembers(), spec.GetMaxMembers()))
 	}
+	idleTimeout := spec.GetMemberIdleTimeout()
+	if idleTimeout == "" {
+		idleTimeout = core.DefaultMemberIdleTimeout
+	}
+	if d, err := time.ParseDuration(idleTimeout); err != nil || d < time.Minute || d > 4*time.Hour {
+		return nil, svcerr.InvalidArgument("member_idle_timeout: a duration between 1m and 4h, e.g. \"10m\"")
+	}
 	stored, err := s.deps.Repo.PutMachinePool(ctx, &core.MachinePool{
-		UserID:           userID,
-		Name:             spec.GetName(),
-		Selector:         selector,
-		MinMembers:       int(spec.GetMinMembers()),
-		MaxMembers:       int(spec.GetMaxMembers()),
-		MemberSize:       spec.GetMemberSize(),
-		MaxRunsPerMember: int(spec.GetMaxRunsPerMember()),
+		MemberIdleTimeout: idleTimeout,
+		UserID:            userID,
+		Name:              spec.GetName(),
+		Selector:          selector,
+		MinMembers:        int(spec.GetMinMembers()),
+		MaxMembers:        int(spec.GetMaxMembers()),
+		MemberSize:        spec.GetMemberSize(),
+		MaxRunsPerMember:  int(spec.GetMaxRunsPerMember()),
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to write the machine pool"))

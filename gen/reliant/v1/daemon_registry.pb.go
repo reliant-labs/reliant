@@ -538,8 +538,13 @@ type MachinePoolSpec struct {
 	// limit. A full member is passed over; a pool with every member full
 	// queues the run.
 	MaxRunsPerMember uint32 `protobuf:"varint,6,opt,name=max_runs_per_member,json=maxRunsPerMember,proto3" json:"max_runs_per_member,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// How long a member may sit idle before it sleeps, as a duration ("10m").
+	// Empty means 10m: a CI pool's members wake per burst of work, and the
+	// machine default (30m) bills an idle member for 20 more minutes after
+	// every burst. Between 1m and 4h.
+	MemberIdleTimeout string `protobuf:"bytes,7,opt,name=member_idle_timeout,json=memberIdleTimeout,proto3" json:"member_idle_timeout,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *MachinePoolSpec) Reset() {
@@ -612,6 +617,13 @@ func (x *MachinePoolSpec) GetMaxRunsPerMember() uint32 {
 		return x.MaxRunsPerMember
 	}
 	return 0
+}
+
+func (x *MachinePoolSpec) GetMemberIdleTimeout() string {
+	if x != nil {
+		return x.MemberIdleTimeout
+	}
+	return ""
 }
 
 // MachinePool is a pool with its members as placement sees them now.
@@ -1931,7 +1943,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x04pool\x18\x01 \x01(\v2\x17.reliant.v1.MachinePoolR\x04pool\".\n" +
 	"\x18DeleteMachinePoolRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"\x1b\n" +
-	"\x19DeleteMachinePoolResponse\"\xbb\x02\n" +
+	"\x19DeleteMachinePoolResponse\"\xeb\x02\n" +
 	"\x0fMachinePoolSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12E\n" +
 	"\bselector\x18\x02 \x03(\v2).reliant.v1.MachinePoolSpec.SelectorEntryR\bselector\x12\x1f\n" +
@@ -1941,7 +1953,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"maxMembers\x12\x1f\n" +
 	"\vmember_size\x18\x05 \x01(\tR\n" +
 	"memberSize\x12-\n" +
-	"\x13max_runs_per_member\x18\x06 \x01(\rR\x10maxRunsPerMember\x1a;\n" +
+	"\x13max_runs_per_member\x18\x06 \x01(\rR\x10maxRunsPerMember\x12.\n" +
+	"\x13member_idle_timeout\x18\a \x01(\tR\x11memberIdleTimeout\x1a;\n" +
 	"\rSelectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x02\n" +

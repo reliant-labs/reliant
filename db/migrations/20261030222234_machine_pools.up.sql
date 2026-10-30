@@ -31,6 +31,10 @@ CREATE TABLE machine_pools (
     -- owner, so growing is a later, approval-gated value ('ask': design
     -- Stage 4), added with the code that honours it.
     scale_up text NOT NULL DEFAULT 'never',
+    -- How long a member may sit idle before it sleeps (a Go duration). A CI
+    -- pool's members wake per burst of work; the machine default (30m) keeps
+    -- an unused 2xl running long after its last job, so pools default to 10m.
+    member_idle_timeout text NOT NULL DEFAULT '10m',
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT machine_pools_user_name_key UNIQUE (user_id, name),

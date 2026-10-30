@@ -3,20 +3,73 @@ package machinepool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Store is what the Placer reads. *db.Repo implements it.
-type Store interface {
+// MemberReader reads a pool and its members. *db.Repo implements it.
+type MemberReader interface {
 	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
+}
+
+// Store is what the Placer reads. *db.Repo implements it.
+type Store interface {
+	MemberReader
 	// LockMachinePool and CountMachinePoolMemberLiveRuns run inside the
 	// launch transaction (SlotGuard).
 	LockMachinePool(ctx context.Context, id string) error
 	CountMachinePoolMemberLiveRuns(ctx context.Context, poolID, daemonID string) (int, error)
+	// CountTriggerCapacityHeldByMember is, per member of poolID, how many
+	// slots of one trigger-capacity scope (owner, project, workflow ref) its
+	// runs hold: the admitted, unreleased executions whose chat the pool
+	// placed there.
+	CountTriggerCapacityHeldByMember(ctx context.Context, poolID, userID, projectID, workflowRef string) (map[string]int, error)
+}
+
+// ErrNoAgreedCatalog is a pool none of whose usable members has synced the
+// project: there is no catalog its runs could be read from or placed on.
+var ErrNoAgreedCatalog = errors.New("no member of the pool has synced the project")
+
+// AgreedCatalog is the pool's agreed (expected) catalog for projectID and a
+// usable member holding it, whose machine catalog every read about the
+// pool's runs (declaration, filter, inputs, concurrency) must resolve
+// against, so they agree with where Decide places the run. Members on the
+// agreed catalog hold identical definitions, so any of them answers the
+// same; the first by name is returned. ErrNoAgreedCatalog when none has
+// synced the project.
+func AgreedCatalog(ctx context.Context, r MemberReader, userID, poolID, projectID string) (daemonID, digest string, err error) {
+	members, err := readMembers(ctx, r, userID, poolID, projectID)
+	if err != nil {
+		return "", "", err
+	}
+	digest = ExpectedCatalog(members)
+	if digest == "" {
+		return "", "", ErrNoAgreedCatalog
+	}
+	for _, m := range sortedByName(members) {
+		if ineligible(m, digest) == "" {
+			return m.DaemonID, digest, nil
+		}
+	}
+	return "", "", ErrNoAgreedCatalog
+}
+
+// Catalogs answers AgreedCatalog over a bare MemberReader, for a caller that
+// reads pools without placing on them (the trigger handlers, intake).
+type Catalogs struct{ R MemberReader }
+
+// AgreedCatalog is machinepool.AgreedCatalog over c.R.
+func (c Catalogs) AgreedCatalog(ctx context.Context, userID, poolID, projectID string) (string, string, error) {
+	return AgreedCatalog(ctx, c.R, userID, poolID, projectID)
+}
+
+// AgreedCatalog is machinepool.AgreedCatalog over the Placer's store.
+func (p *Placer) AgreedCatalog(ctx context.Context, userID, poolID, projectID string) (string, string, error) {
+	return AgreedCatalog(ctx, p.store, userID, poolID, projectID)
 }
 
 // Placer places runs on a pool's members.
@@ -53,40 +106,62 @@ func (p *Placer) Read(ctx context.Context, userID, poolID, projectID string) (Po
 	if err != nil {
 		return Pool{}, nil, err
 	}
-	rows, err := p.store.ListMachinePoolMembers(ctx, row, projectID)
+	members, err := membersOf(ctx, p.store, row, projectID)
 	if err != nil {
 		return Pool{}, nil, err
-	}
-	members := make([]Member, 0, len(rows))
-	for _, r := range rows {
-		m, err := memberFromRow(r)
-		if err != nil {
-			return Pool{}, nil, err
-		}
-		members = append(members, m)
 	}
 	return PoolFromCore(row), members, nil
 }
 
-// Capacity is how many runs a per-member concurrency of perMember allows on
-// poolID for projectID right now (PerMemberCapacity over its members).
-func (p *Placer) Capacity(ctx context.Context, userID, poolID, projectID string, perMember uint32) (uint32, error) {
+func readMembers(ctx context.Context, r MemberReader, userID, poolID, projectID string) ([]Member, error) {
+	row, err := r.GetMachinePoolForUser(ctx, userID, poolID)
+	if err != nil {
+		return nil, err
+	}
+	return membersOf(ctx, r, row, projectID)
+}
+
+func membersOf(ctx context.Context, r MemberReader, row *core.MachinePool, projectID string) ([]Member, error) {
+	rows, err := r.ListMachinePoolMembers(ctx, row, projectID)
+	if err != nil {
+		return nil, err
+	}
+	members := make([]Member, 0, len(rows))
+	for _, mr := range rows {
+		m, err := memberFromRow(mr)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, nil
+}
+
+// Capacity is how many runs of one workflow (its trigger-capacity scope:
+// owner, project, workflowRef) a per-member concurrency of perMember allows
+// on poolID right now (PerMemberCapacity).
+func (p *Placer) Capacity(ctx context.Context, userID, poolID, projectID, workflowRef string, perMember uint32) (uint32, error) {
 	_, members, err := p.Read(ctx, userID, poolID, projectID)
 	if err != nil {
 		return 0, err
 	}
-	return PerMemberCapacity(members, perMember), nil
+	held, err := p.store.CountTriggerCapacityHeldByMember(ctx, poolID, userID, projectID, workflowRef)
+	if err != nil {
+		return 0, err
+	}
+	return PerMemberCapacity(members, perMember, held), nil
 }
 
 // PerMemberCapacity is perMember slots for each member that can take work
-// (Eligible), plus the slots still held by live runs on a member that cannot
-// (it died, failed, drifted from the pool's catalog): those runs hold
+// (Eligible), plus, for a member that cannot (it died, failed, drifted from
+// the pool's catalog), the slots THIS workflow's runs still hold there
+// (held, by member id; at most perMember). Those runs keep their
 // trigger-capacity slots until they end, and charging them to the healthy
-// members would starve the pool exactly when it has lost a machine. That
-// allowance is at most perMember per member, the most of this workflow's
-// runs it could have held. A pool with no eligible member allows only what
-// is already running, so new runs wait rather than launch onto nothing.
-func PerMemberCapacity(members []Member, perMember uint32) uint32 {
+// members would starve the pool exactly when it has lost a machine. Other
+// workflows' runs on that member hold none of this workflow's slots, so they
+// add nothing. A pool with no eligible member allows only what this workflow
+// already runs, so new runs wait rather than launch onto nothing.
+func PerMemberCapacity(members []Member, perMember uint32, held map[string]int) uint32 {
 	eligible := map[string]bool{}
 	for _, m := range Eligible(members) {
 		eligible[m.DaemonID] = true
@@ -97,7 +172,7 @@ func PerMemberCapacity(members []Member, perMember uint32) uint32 {
 			total += perMember
 			continue
 		}
-		total += min(uint32(m.LiveRuns), perMember)
+		total += min(uint32(max(held[m.DaemonID], 0)), perMember)
 	}
 	return total
 }
