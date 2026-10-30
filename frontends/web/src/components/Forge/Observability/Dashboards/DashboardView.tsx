@@ -977,6 +977,10 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
+  // A panel that buckets by a fixed span (minStep: "1d") cannot be drawn from a
+  // window shorter than that span: it would return one bucket. Widen it to the
+  // smallest range holding two, and say so under the title; the other panels
+  // stay on the dashboard's range.
   const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
   const range = widening?.range ?? rangeOfCard;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
