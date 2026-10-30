@@ -13,6 +13,18 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.12" description="October 30, 2026">
+### A cleaner chat list and steadier machines
+
+- **Keep automation runs out of the chat list** Runs started by automations, agents and the CLI no longer crowd the chat list. Each chat records where it came from, and only the conversations you start appear there.
+- **Refresh chat lists without request storms** Streaming updates are coalesced into one list refresh, and a superseded chat-list request is cancelled instead of racing the new one.
+- **Load long chats faster** A new index on messages makes counting a chat's messages an index-only read.
+- **Run workflows from the machine's own catalog** A run loads its workflow, child workflows and presets from the catalog of the machine it runs on, so a machine's local changes apply to its own runs.
+- **See each repository's state from the daemon** Daemons report every repository's branch, commit and uncommitted changes with each snapshot.
+- **See forge-applied rollout slots separately** The Rollout tab groups slots that Forge applies apart from the rest.
+- **Reliant Forge v1.0.6** The embedded `reliant forge` moves to v1.0.6 plus the environment validation fix: the service catalog no longer records source lines, and environments have no arbitrary entry-count limit.
+</Update>
+
 <Update label="v1.8.11" description="October 29, 2026">
 ### Faster chats and clearer workflow failures
 
