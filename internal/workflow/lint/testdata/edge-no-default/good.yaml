@@ -1,0 +1,20 @@
+name: fixture
+inputs:
+  mode: {type: string, default: fast}
+entry: [decide]
+nodes:
+- id: decide
+  type: compute
+  outputs:
+    fast: "{{ inputs.mode == 'fast' }}"
+- id: quick
+  type: save_message
+  args: {role: assistant, content: quick}
+- id: slow
+  type: save_message
+  args: {role: assistant, content: 'nothing to do in mode {{ inputs.mode }}'}
+edges:
+- from: decide
+  cases:
+  - {to: quick, condition: 'nodes.decide.fast == true'}
+  default: slow

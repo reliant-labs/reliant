@@ -1,0 +1,18 @@
+name: fixture
+concurrency:
+  max_running: 1
+entry: [gate]
+nodes:
+- id: gate
+  type: run
+  timeout: 90m
+  args: {command: task ci}
+- id: approve
+  type: approval
+  args: {title: 'Merge it?', timeout: 4h}
+- id: done
+  type: save_message
+  args: {role: assistant, content: 'exit {{ nodes.gate.exit_code }}'}
+edges:
+- {from: gate, default: approve}
+- {from: approve, default: done}

@@ -339,6 +339,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`reliant workflow eval`](#reliant-workflow-eval) | Evaluate a CEL expression or \{`{ }`\} template against a sample context |
 | [`reliant workflow follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`reliant workflow lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`reliant workflow list`](#reliant-workflow-list) | List available workflows |
 | [`reliant workflow pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
 | [`reliant workflow questions`](#reliant-workflow-questions) | List the open question(s) awaiting input on a workflow execution |
@@ -14389,6 +14390,7 @@ reliant workflow
 | [`answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`eval`](#reliant-workflow-eval) | Evaluate a CEL expression or \{`{ }`\} template against a sample context |
 | [`follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`list`](#reliant-workflow-list) | List available workflows |
 | [`pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
 | [`questions`](#reliant-workflow-questions) | List the open question(s) awaiting input on a workflow execution |
@@ -14560,6 +14562,42 @@ reliant workflow follow <execution-id> [flags]
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+
+---
+
+### reliant workflow lint
+
+Check workflows for behaviour validation cannot see
+
+Lints workflow YAML files: rules about whether a workflow that validates will
+also behave when nobody is watching. Does every run end, does a failure reach
+someone, can a run hold a max_running slot forever, does a step fetch into the
+shared checkout, is a secret written into the file, do the scenarios fire every
+trigger and expect every ending.
+
+Every finding names its rule and links to the rule's section of the docs. An
+error fails (exit 1); a warning is reported. `reliant workflow validate` runs the same
+rules, so a repository's gate that validates its workflows lints them too.
+
+Silence a finding you have judged where it is, with the reason, in a comment
+on the node (or on a top-level key, for the whole workflow):
+
+  # lint:allow action-error-unread — best effort: a 404 means already removed
+  - id: clear_label
+
+--rules lists every rule with its severity.
+
+```
+reliant workflow lint [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
+| `--json` | `bool` | - | Output in JSON format (for CI) |
+| `--rules` | `bool` | - | List the rules instead of linting |
 
 ---
 
@@ -14880,6 +14918,9 @@ reported under "Breaks activations": each activation of it would turn BROKEN
 and fire nothing. These are warnings, since the CLI cannot see whether anyone
 activated the trigger; the server lists any enabled activation a synced change
 broke in its owner's Inbox.
+
+Each project workflow is also linted (reliant workflow lint --rules lists the
+rules): a lint error fails validation, a lint warning is reported.
 
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 

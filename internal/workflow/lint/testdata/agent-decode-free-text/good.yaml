@@ -1,0 +1,22 @@
+name: fixture
+entry: [triage]
+nodes:
+- id: triage
+  type: workflow
+  ref: builtin://autopilot-agent
+  timeout: 20m
+  args:
+    max_turns: 20
+    system_prompt: Triage the issue and submit its severity.
+    response_tool_name: submit_triage
+    response_schema:
+      type: object
+      required: [severity]
+      properties:
+        severity: {type: string, enum: [low, high]}
+- id: route
+  type: compute
+  outputs:
+    severity: '{{ nodes.triage.response.severity }}'
+edges:
+- {from: triage, default: route}

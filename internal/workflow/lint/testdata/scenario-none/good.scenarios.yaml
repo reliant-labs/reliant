@@ -1,0 +1,5 @@
+name: says_done
+events: []
+expect:
+  outcome: completed
+  completed: [done]

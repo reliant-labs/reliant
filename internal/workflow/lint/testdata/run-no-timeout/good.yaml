@@ -1,0 +1,19 @@
+name: fixture
+entry: [build]
+nodes:
+- id: build
+  type: run
+  timeout: 20m
+  args: {command: make build}
+- id: ok
+  type: save_message
+  args: {role: assistant, content: built}
+- id: broken
+  type: save_message
+  outcome: failure
+  args: {role: assistant, content: failed}
+edges:
+- from: build
+  cases:
+  - {to: ok, condition: 'nodes.build.exit_code == 0'}
+  default: broken

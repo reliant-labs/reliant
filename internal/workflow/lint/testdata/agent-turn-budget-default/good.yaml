@@ -1,0 +1,10 @@
+name: fixture
+entry: [review]
+nodes:
+- id: review
+  type: workflow
+  ref: builtin://autopilot-agent
+  timeout: 45m
+  args:
+    max_turns: 40
+    system_prompt: Review the diff. Submit by turn 30.
