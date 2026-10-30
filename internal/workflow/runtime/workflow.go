@@ -5812,18 +5812,25 @@ func preflightTarget(input WorkflowInput, execCtx *ExecutionContext) map[string]
 		"chat_id": input.ChatID,
 	}
 	// Pass daemon selector if one was resolved at workflow level
+	// The chat's pin stays marked as one (session), so the activities let it
+	// yield to the chat's workspace owner as tool execution does.
 	if execCtx.DaemonSelector != nil {
-		target["daemon_selector"] = map[string]interface{}{
+		sel := map[string]interface{}{
 			"id":   execCtx.DaemonSelector.ID,
 			"name": execCtx.DaemonSelector.Name,
 			"type": execCtx.DaemonSelector.Type,
 		}
+		if execCtx.DaemonSelector.Session {
+			sel["session"] = true
+		}
+		target["daemon_selector"] = sel
 	}
 	// Also check session daemon from inputs
 	if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
 		if _, hasDaemonSelector := target["daemon_selector"]; !hasDaemonSelector {
 			target["daemon_selector"] = map[string]interface{}{
-				"id": sessionDaemonID,
+				"id":      sessionDaemonID,
+				"session": true,
 			}
 		}
 	}

@@ -46,3 +46,25 @@ func configMachine(ctx context.Context, router toolexec.DaemonRouter, userID str
 	}
 	return id
 }
+
+// chatWorktreeReader reads the chat's workspace for runMachineSelector.
+type chatWorktreeReader interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+}
+
+// runMachineSelector is the machine a run's machine steps reach, by the rule
+// tool execution applies: the run's selector, else the chat's pin, except
+// that a pin (a session selector) naming another machine than the chat's
+// branch workspace's owner yields to the owner (toolDaemonSelector). The
+// preflight and resume wake check and wake this machine, so they wake the one
+// the run's tools and commands will use. A worktree that cannot be read
+// leaves the selector as it is: the wake is best effort and never fails a run.
+func runMachineSelector(ctx context.Context, worktrees chatWorktreeReader, chat *db.Chat, explicit *types.DaemonSelector) *toolexec.DaemonSelector {
+	owner := ""
+	if chat != nil && chat.WorktreeID != nil && *chat.WorktreeID != "" {
+		if wt, err := worktrees.GetWorktree(ctx, *chat.WorktreeID); err == nil && wt != nil {
+			owner = ptrValue(wt.DaemonID)
+		}
+	}
+	return toolDaemonSelector(owner, chatDaemonSelector(chat, explicit))
+}

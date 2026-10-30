@@ -315,6 +315,8 @@ type LoadWorkflowStore interface {
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.
 type MachineResumeWakeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
@@ -324,6 +326,8 @@ type MachineResumeWakeStore interface {
 // writes.
 type PreflightDaemonCheckStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
