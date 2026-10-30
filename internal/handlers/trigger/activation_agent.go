@@ -183,7 +183,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 			return nil, tools.ActivationPreview{}, tools.RefuseActivation("integration access could not be refreshed ("+svcerr.Code(err).String()+")", err)
 		}
 	}
-	wf, err := launch.ResolveValidatedRunWorkflow(ctx, s.deps.Repo, user, def.Workflow, def.ProjectId)
+	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), def.Workflow)
 	if err != nil {
 		return nil, tools.ActivationPreview{}, tools.RefuseActivation("workflow not found in this project, or it does not validate", err)
 	}

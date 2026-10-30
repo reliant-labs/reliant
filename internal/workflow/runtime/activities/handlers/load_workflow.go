@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -25,6 +26,12 @@ import (
 type LoadWorkflowInput struct {
 	ChatID       string `json:"chat_id" reliant:"-"` // Chat ID to resolve project path
 	WorkflowName string `json:"workflow_name"`       // Workflow name or path
+	// CatalogPin is the project catalog the run started with (the root
+	// load's LoadWorkflowOutput.CatalogPin): every later load of the run (a
+	// child, a loop body, a router target) reads its project workflows and
+	// presets from it, so one run executes one definition tree. Empty pins
+	// the catalog as it is now: a root load, or a run recorded before pins.
+	CatalogPin string `json:"catalog_pin,omitempty" reliant:"-"`
 }
 
 // LoadWorkflowOutput contains both the raw YAML and validated workflow
@@ -33,6 +40,10 @@ type LoadWorkflowOutput struct {
 	YAML         []byte `json:"yaml"`          // Raw YAML bytes for template resolution
 	WorkflowJSON []byte `json:"workflow_json"` // Placeholder-resolved workflow JSON for validation
 	HasTemplates bool   `json:"has_templates"` // Whether workflow contains unresolved templates
+	// CatalogPin is the project catalog this load resolved against: the
+	// input's, or the one it pinned. The runtime carries it to every later
+	// load of the run.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 }
 
 // LoadWorkflowActivity loads a workflow definition from the filesystem
@@ -81,6 +92,9 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 	if err != nil {
 		wfCtx = &workflowContext{}
 	}
+	if err := a.pinCatalog(ctx, wfCtx, input.CatalogPin); err != nil {
+		return nil, err
+	}
 
 	yamlData, loaded, err := a.loadWorkflowByNameWithRaw(ctx, input.WorkflowName, wfCtx)
 	if err != nil {
@@ -117,7 +131,27 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 		YAML:         yamlData,
 		WorkflowJSON: jsonData,
 		HasTemplates: loaded.HasTemplates,
+		CatalogPin:   wfCtx.catalogPin,
 	}, nil
+}
+
+// pinCatalog sets the project catalog this load resolves against: pin, the
+// run's, when it has one; else the catalog as it is now on the run's
+// machine, stored so the rest of the run reads the same one.
+func (a *LoadWorkflowActivity) pinCatalog(ctx context.Context, wfCtx *workflowContext, pin string) error {
+	if pin != "" || wfCtx.projectID == "" || a.repo == nil {
+		wfCtx.catalogPin = pin
+		return nil
+	}
+	pinned, err := a.repo.PinProjectCatalog(ctx, db.CatalogPinScope{
+		ProjectID: wfCtx.projectID, DaemonID: wfCtx.daemonID, UserID: wfCtx.userID,
+		DraftRoot: workflowref.ProjectSlug(wfCtx.draftRoot),
+	})
+	if err != nil {
+		return fmt.Errorf("pin the project's workflow catalog for this run: %w", err)
+	}
+	wfCtx.catalogPin = pinned
+	return nil
 }
 
 // workflowContext holds the resolved context needed for workflow loading
@@ -133,6 +167,13 @@ type workflowContext struct {
 	// workflows and presets are that machine's own synced catalog, the one
 	// a trigger was admitted against, not the union of every machine's.
 	daemonID string
+	// projectFirst is an automation's precedence (launch.AutomationPrecedence):
+	// a run its trigger started resolves the project's workflow before the
+	// owner's own of the same name, as its activation was admitted.
+	projectFirst bool
+	// catalogPin is the project catalog the run started with
+	// (workflowsource.Options.CatalogPin).
+	catalogPin string
 }
 
 // sourceOptions is whose workflows, in which project, a ref resolves against.
@@ -140,7 +181,7 @@ func (c *workflowContext) sourceOptions() workflowsource.Options {
 	if c == nil {
 		return workflowsource.Options{}
 	}
-	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, DraftRoot: c.draftRoot}
+	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, ProjectFirst: c.projectFirst, DraftRoot: c.draftRoot, CatalogPin: c.catalogPin}
 }
 
 // resolveWorkflowContext resolves user, project, and path from a chat ID
@@ -161,6 +202,9 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	wfCtx := &workflowContext{
 		userID:    chat.UserID,
 		projectID: chat.ProjectID,
+		// The chat's origin, not its trigger id: deleting the trigger clears
+		// the id, and must not switch a running automation to account-first.
+		projectFirst: chat.Origin == core.ChatOriginAutomation,
 	}
 	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
 		wfCtx.draftRoot = *chat.WorkflowName
@@ -252,7 +296,7 @@ func (a *LoadWorkflowActivity) createPresetLoader(ctx context.Context, wfCtx *wo
 	return func(presetName string) (map[string]interface{}, error) {
 		// One column, not the whole config row (see GetProjectPresetsJSON).
 		if wfCtx.projectID != "" && a.repo != nil {
-			presets, err := workflowsource.ProjectPresets(ctx, a.repo, wfCtx.projectID, wfCtx.daemonID)
+			presets, err := projectPresets(ctx, a.repo, wfCtx.projectID, wfCtx.daemonID, wfCtx.catalogPin)
 			if err == nil {
 				if sp := cfg.FindStoredPresetByName(presets, presetName); sp != nil {
 					p, err := preset.ParsePreset([]byte(sp.YAMLContent), presetName)
@@ -287,4 +331,15 @@ func loadBuiltinWorkflow(name string) (*reliantv1.Workflow, error) {
 		return nil, err
 	}
 	return loaded.Workflow, nil
+}
+
+// projectPresets reads a run's project presets: from its pinned catalog when
+// it has one, else its machine's (workflowsource.ProjectPresets).
+func projectPresets(ctx context.Context, repo interface {
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+}, projectID, daemonID, pin string) ([]cfg.StoredPreset, error) {
+	if pin != "" {
+		return workflowsource.PinnedPresets(ctx, repo, pin)
+	}
+	return workflowsource.ProjectPresets(ctx, repo, projectID, daemonID)
 }

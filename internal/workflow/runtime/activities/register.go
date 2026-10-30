@@ -162,7 +162,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithLocalModels(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -171,8 +171,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// The skill tool reads the project's skills through the same config
 	// provider CallLLM offered them from (cached per config version on the
 	// worker), not by re-reading the whole config row per call.
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions))
 
 	// ========================================================================

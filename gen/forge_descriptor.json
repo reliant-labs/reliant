@@ -11750,6 +11750,11 @@
           {
             "name": "webhook_managed",
             "kind": "bool"
+          },
+          {
+            "name": "definition_source",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerDefinitionSource"
           }
         ],
         "reliant.v1.TriggerChange": [
@@ -11889,6 +11894,33 @@
             "name": "acting_identity",
             "kind": "enum",
             "type_name": "reliant.v1.ActingIdentity"
+          }
+        ],
+        "reliant.v1.TriggerDefinitionSource": [
+          {
+            "name": "kind",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_name",
+            "kind": "string"
+          },
+          {
+            "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "warnings",
+            "kind": "string",
+            "repeated": true
           }
         ],
         "reliant.v1.TriggerEvent": [
@@ -12212,6 +12244,7 @@
         "reliant.v1.Trigger": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
@@ -42610,7 +42643,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "6e1ff0fc9ad62b388f5371f0bbfb33303e33dd18e04241943a45e6f037fd106a",
+    "reliant/v1/trigger.proto": "2487e444cc7ceb7c9f29d16e1cfe0733faeeb91c32a42dc58ff9c15ba1c59076",
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
