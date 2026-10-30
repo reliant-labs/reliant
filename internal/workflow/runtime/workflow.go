@@ -5863,8 +5863,10 @@ const (
 	preflightWaitSlice = 60 * time.Second
 	// preflightHeartbeatTimeout deliberately differs from
 	// activityHeartbeatTimeout so resolveMaxAttempts does not treat the check
-	// as a retried graph step.
-	preflightHeartbeatTimeout = 20 * time.Second
+	// as a retried graph step. It must still leave room for several heartbeat
+	// windows: the SDK heartbeats every min(0.8x this, the worker's 15s
+	// throttle) = 15s, so 45s is three windows (20s left one).
+	preflightHeartbeatTimeout = 45 * time.Second
 	preflightSliceMargin      = 30 * time.Second
 
 	// preflightMachineWaitCap is the safety net behind the machine's own
