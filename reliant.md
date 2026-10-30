@@ -52,8 +52,17 @@ main after the merge and gates the release, never the merge. Label a PR `ci:run`
 (then push) to run the merge gate on it before review. Queue a PR with:
 
 ```bash
-gh pr merge <pr> --squash --auto --match-head-commit <sha>
+reliant github gh --repo reliant-labs/reliant -- pr merge <pr> --squash --auto --match-head-commit <sha>
 ```
+
+**GitHub identity (owner, 2026-10-30):** implementation is yours: commit, push
+and open PRs as the user, with plain `git` and `gh`. Every review, label, comment
+on someone else's PR, enqueue and merge is the Reliant bot's (`reliant-labs[bot]`):
+run it through `reliant github gh --repo <owner/name> -- <gh args>`, or take a
+one-hour token scoped to that repository from `reliant github token --as app
+--repo <owner/name>`. Never review, label or merge as the owner's account
+(`reliant-01`): its ruleset bypass is the owner's alone. Fall back to the user
+only where the bot cannot act at all, and say so.
 
 The PR pipeline does this for you: label the PR `merge:queue` and stop. The
 `pr-review` workflow reviews the exact head; on `review:passed` it enqueues it.
