@@ -3314,8 +3314,14 @@ type EnableWorkflowRequest struct {
 	// TriggerDefinition.acting_identity. Unspecified means APP for each new
 	// activation and preserves an existing activation's stored identity.
 	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Only these declared triggers (WorkflowTrigger.name). Empty means every
+	// trigger the workflow declares. Each named trigger is created or brought
+	// to the request exactly as in the whole-workflow case, all or nothing
+	// within the selection; the others are left as they are. A name the
+	// workflow does not declare refuses the request.
+	Triggers      []string `protobuf:"bytes,14,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnableWorkflowRequest) Reset() {
@@ -3437,6 +3443,13 @@ func (x *EnableWorkflowRequest) GetActingIdentity() ActingIdentity {
 		return x.ActingIdentity
 	}
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+}
+
+func (x *EnableWorkflowRequest) GetTriggers() []string {
+	if x != nil {
+		return x.Triggers
+	}
+	return nil
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -5083,7 +5096,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"J\n" +
 	"\x19SetTriggerEnabledResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\xf4\x06\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\x90\a\n" +
 	"\x15EnableWorkflowRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1d\n" +
 	"\n" +
@@ -5102,7 +5115,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vname_prefix\x18\v \x01(\tR\n" +
 	"namePrefix\x12A\n" +
 	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x12C\n" +
-	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a@\n" +
+	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12\x1a\n" +
+	"\btriggers\x18\x0e \x03(\tR\btriggers\x1a@\n" +
 	"\x12ConnectionIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +

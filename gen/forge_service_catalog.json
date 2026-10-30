@@ -34911,6 +34911,11 @@
               "Name": "acting_identity",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "triggers",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "EnableWorkflowResponse": [
@@ -35338,6 +35343,11 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "triggers",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.EnableWorkflowResponse": [
@@ -53143,6 +53153,17 @@
           "source": {
             "path": "internal/db/integration_access.go",
             "symbol": "Repo.PruneIntegrationAccess"
+          }
+        },
+        {
+          "id": "method1:d2d3a374d30c7ea55f80d72428a222290e1f9d8333e5953ad2360378eecee770",
+          "name": "QueueChatForMachine",
+          "signature": "func(ctx context.Context, chatID string, machine *github.com/reliant-labs/reliant/internal/db.QueuedMachine) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.QueueChatForMachine",
+          "source": {
+            "path": "internal/db/repo.go",
+            "symbol": "Repo.QueueChatForMachine"
           }
         },
         {
