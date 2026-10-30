@@ -22,6 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
@@ -77,6 +78,11 @@ type Options struct {
 	// just saved. Every other ref, including the root's children, needs a
 	// complete workflow.
 	DraftRoot string
+	// DraftRootOptional lets DraftRoot fall through to the project's workflow
+	// of that name when the user has no workflow of it at all: a read of a
+	// workflow's input schema for whatever is about to start, as opposed to
+	// a builder test run, which must run the draft or nothing.
+	DraftRootOptional bool
 }
 
 // ProjectIndex indexes the workflows synced for a project: nil when there is
@@ -116,6 +122,7 @@ func MachineProjectIndex(ctx context.Context, store ProjectStore, projectID, dae
 		return nil, &StoreError{Err: fmt.Errorf("read machine %s's project workflows: %w", daemonID, err)}
 	}
 	if !synced {
+		warnUnsyncedMachine(ctx, projectID, daemonID, "workflows")
 		return ProjectIndex(ctx, store, projectID)
 	}
 	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
@@ -123,6 +130,15 @@ func MachineProjectIndex(ctx context.Context, store ProjectStore, projectID, dae
 		return nil, err
 	}
 	return config.ProjectWorkflowIndex(workflows), nil
+}
+
+// warnUnsyncedMachine says that a read for one machine is answered with the
+// union of every machine's catalog, because that machine has never synced the
+// project: what runs is then whatever machine pushed last, not what the run's
+// machine holds, and that is worth a line in the log every time it happens.
+func warnUnsyncedMachine(ctx context.Context, projectID, daemonID, what string) {
+	logging.WarnContext(ctx, "[workflowsource] machine has never synced this project; resolving against every machine's catalog instead",
+		"project_id", projectID, "daemon_id", daemonID, "catalog", what)
 }
 
 // ProjectPresets reads a project's synced presets: one machine's when
@@ -146,6 +162,7 @@ func ProjectPresets(ctx context.Context, store interface {
 		if synced {
 			return config.ParseStoredPresets(presetsJSON)
 		}
+		warnUnsyncedMachine(ctx, projectID, daemonID, "presets")
 	}
 	presetsJSON, err := store.GetProjectPresetsJSON(ctx, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -183,6 +200,9 @@ func userWorkflows(ctx context.Context, store Store, opts Options) func(slug str
 				return nil, &StoreError{Err: fmt.Errorf("look up workflow %q: %w", slug, err)}
 			}
 			if draft == nil || draft.IsHidden {
+				if opts.DraftRootOptional {
+					return nil, nil
+				}
 				return nil, fmt.Errorf("%w: you have no workflow named %q to test", workflowref.ErrNotFound, slug)
 			}
 			return []byte(draft.Definition), nil

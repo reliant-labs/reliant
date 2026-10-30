@@ -46573,7 +46573,7 @@
         {
           "id": "method1:b4d2c7903646f2925ebc3861ad72a491c7d124024a08a923a45b742f26a68eb7",
           "name": "fallBackFromUnservableModels",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.fallBackFromUnservableModels",
           "source": {
@@ -46628,7 +46628,7 @@
         {
           "id": "method1:780ad48dd39f6bbf970609e343adce817d072a62d18c1d0753345b817811e0e9",
           "name": "inputsAfterClosedRun",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) map[string]interface{}",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.inputsAfterClosedRun",
           "source": {
@@ -46694,7 +46694,7 @@
         {
           "id": "method1:b9e47c62603c446e8d93141af648fd5b09605f03b941bedd9f705def4b3422a6",
           "name": "moveUnservableModels",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.moveUnservableModels",
           "source": {
@@ -46914,7 +46914,7 @@
         {
           "id": "method1:6abbd1e1cbe1809f5d92a9964e036767938048ddd8b8645af9da4b40509b9717",
           "name": "resumeInputUpdate",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, sent map[string]interface{}, runInputs map[string]interface{}) (map[string]interface{}, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution)",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, sent map[string]interface{}, runInputs map[string]interface{}) (map[string]interface{}, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.resumeInputUpdate",
           "source": {
@@ -58939,7 +58939,7 @@
         {
           "id": "method1:2c61befe32e7629724c85fba6189204ea91e2c4f10af93ac38fd06c32002351b",
           "name": "BuildChatWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildChatWorkflowInputs",
           "source": {
@@ -58950,7 +58950,7 @@
         {
           "id": "method1:aaa257a8079a804c306b17e6c082616cd31281f47fe3d20c0a1a1dc04348cab7",
           "name": "BuildStateUpdateForActiveWorkflow",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, changedPresets map[string]string, requestParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, changedPresets map[string]string, requestParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildStateUpdateForActiveWorkflow",
           "source": {
@@ -58961,7 +58961,7 @@
         {
           "id": "method1:6c38793dbab81d37cb743ccc0e1de6d7a5d4c8d572d39bf2c8743336f1e066c0",
           "name": "BuildWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, projectID string, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, projectID string, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildWorkflowInputs",
           "source": {
@@ -59137,12 +59137,23 @@
         {
           "id": "method1:67629520144e7a96e114bb5a96b94aac1824667ac3288b7ea17c9aaefcc9d917",
           "name": "SubstituteUnservableModels",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.SubstituteUnservableModels",
           "source": {
             "path": "internal/launch/workflows.go",
             "symbol": "Launcher.SubstituteUnservableModels"
+          }
+        },
+        {
+          "id": "method1:93106dedf53de92114918c9838fc510be23a7429e5c0ab32543cc7b38adb9f40",
+          "name": "ValidateChatWorkflowInputs",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, inputs map[string]interface{}) []error",
+          "scope": "github.com/reliant-labs/reliant/internal/launch",
+          "legacy_name": "launch.ValidateChatWorkflowInputs",
+          "source": {
+            "path": "internal/launch/workflows.go",
+            "symbol": "Launcher.ValidateChatWorkflowInputs"
           }
         },
         {
@@ -59190,17 +59201,6 @@
           }
         },
         {
-          "id": "method1:fcdc3ca25fa8bc82ce7f3bff1fbb23b682a8a3f853104887177f10362bb7fc84",
-          "name": "ValidateWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, inputs map[string]interface{}) []error",
-          "scope": "github.com/reliant-labs/reliant/internal/launch",
-          "legacy_name": "launch.ValidateWorkflowInputs",
-          "source": {
-            "path": "internal/launch/workflows.go",
-            "symbol": "Launcher.ValidateWorkflowInputs"
-          }
-        },
-        {
           "id": "method1:9fa90a033be464c121513d73b45ee171021e7ea099120b91e14aa9a32ca65e6d",
           "name": "WantsGreenfieldProbe",
           "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat) bool",
@@ -59214,7 +59214,7 @@
         {
           "id": "method1:75ebcc47d5acd5bf54c4232c1243fb4e4ffe06b135ee71224397cdddd1fc070f",
           "name": "applyPresets",
-          "signature": "func(ctx context.Context, userID string, projectID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, data map[string]interface{}, selectedPresets map[string]string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.applyPresets",
           "source": {
@@ -59225,7 +59225,7 @@
         {
           "id": "method1:46b561e9722532ae2fc9c8dd7919cbd31d5e2ad0f852f3073f0b68039a5f7155",
           "name": "buildChatWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, send map[string]interface{}) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, send map[string]interface{}) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.buildChatWorkflowInputs",
           "source": {
@@ -59247,7 +59247,7 @@
         {
           "id": "method1:ccabd1b942415a18f30662456d236bb78e8eee688acb3e2f57ea0d8b5e844b38",
           "name": "buildWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, projectID string, workflowName string, selectedPresets map[string]string, selection map[string]interface{}, send map[string]interface{}) map[string]interface{}",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, workflowName string, selectedPresets map[string]string, selection map[string]interface{}, send map[string]interface{}) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.buildWorkflowInputs",
           "source": {
@@ -59258,7 +59258,7 @@
         {
           "id": "method1:4f79e6d9507dcc739940ea82285b3983b6ba275230ef25cc4b5e3e1a7d49c5ad",
           "name": "createChatWorkflowLoader",
-          "signature": "func(ctx context.Context, userID string, projectID string, draftRoot string) github.com/reliant-labs/reliant/internal/workflow/validation.WorkflowLoader",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope) github.com/reliant-labs/reliant/internal/workflow/validation.WorkflowLoader",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.createChatWorkflowLoader",
           "source": {
@@ -59269,7 +59269,7 @@
         {
           "id": "method1:c1512341ffcf849fe33491f4d8e4194465c991807441dbcb339f5333d7c0c117",
           "name": "createDBPresetLoaderFull",
-          "signature": "func(ctx context.Context, userID string, projectID string) func(name string) (*github.com/reliant-labs/reliant/internal/preset.Preset, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string) func(name string) (*github.com/reliant-labs/reliant/internal/preset.Preset, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.createDBPresetLoaderFull",
           "source": {
@@ -59335,12 +59335,23 @@
         {
           "id": "method1:e1e25269fc04d018529d2e6eafee24a6901608c05bae146902a61bc3d1e705bc",
           "name": "loadCreateChatWorkflowForValidation",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, draftRoot string) (*github.com/reliant-labs/reliant/gen/reliant/v1.Workflow, error)",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, workflowName string) (*github.com/reliant-labs/reliant/gen/reliant/v1.Workflow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.loadCreateChatWorkflowForValidation",
           "source": {
             "path": "internal/launch/workflows.go",
             "symbol": "Launcher.loadCreateChatWorkflowForValidation"
+          }
+        },
+        {
+          "id": "method1:bce777171cd5be64e050482e11ba1ce9a1ad19dca8ec23422a4478eb666bdbdd",
+          "name": "loadWorkflowInputs",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, workflowName string) map[string]*github.com/reliant-labs/reliant/gen/reliant/v1.Input",
+          "scope": "github.com/reliant-labs/reliant/internal/launch",
+          "legacy_name": "launch.loadWorkflowInputs",
+          "source": {
+            "path": "internal/launch/workflows.go",
+            "symbol": "Launcher.loadWorkflowInputs"
           }
         },
         {
@@ -59445,7 +59456,7 @@
         {
           "id": "method1:f41612eaf16ccf8d887302507899e59ed99b0000625572cd1dec88a8ef15f050",
           "name": "validateNoMachine",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, draftRoot string) error",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, workflowName string) error",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.validateNoMachine",
           "source": {
@@ -59456,7 +59467,7 @@
         {
           "id": "method1:b70d4b28a1366357f1ac4a81175728f0e12ecb04d136cba42e0adca4f8eb9751",
           "name": "validateWorkflowTree",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, ev github.com/reliant-labs/reliant/internal/launch.Event) error",
+          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event) error",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.validateWorkflowTree",
           "source": {
@@ -64530,7 +64541,7 @@
         {
           "id": "method1:fa5665449e20a44b0893ddd23bf3b7a2fc97aa031a706178250f79804991dde2",
           "name": "fallBackFromUnservableModels",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.fallBackFromUnservableModels",
           "source": {
@@ -64585,7 +64596,7 @@
         {
           "id": "method1:5b5e73419261a01fd6b165df1c57537e26f3eb31dc6532121a8e81fe7beda598",
           "name": "inputsAfterClosedRun",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) map[string]interface{}",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.inputsAfterClosedRun",
           "source": {
@@ -64651,7 +64662,7 @@
         {
           "id": "method1:6f9dc0d85f0902bfb3973bd0c943b29514aa18723272e2dee130e990e44c1895",
           "name": "moveUnservableModels",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, inputs map[string]interface{}) []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.moveUnservableModels",
           "source": {
@@ -64871,7 +64882,7 @@
         {
           "id": "method1:d6c881ab29ee2e07a845dfd4167245ead0b1d2c2c01f3c579dfeb98d426ce40b",
           "name": "resumeInputUpdate",
-          "signature": "func(ctx context.Context, userID string, chatID string, projectID string, workflowName string, workflowID string, sent map[string]interface{}, runInputs map[string]interface{}) (map[string]interface{}, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution)",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, workflowID string, sent map[string]interface{}, runInputs map[string]interface{}) (map[string]interface{}, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution, []github.com/reliant-labs/reliant/internal/launch.ModelSubstitution)",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.resumeInputUpdate",
           "source": {

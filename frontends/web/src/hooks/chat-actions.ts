@@ -61,8 +61,16 @@ function chatOf<R extends { chat?: Parameters<typeof convertProtoChat>[0] }>(res
  * The sidebar's chat list: one project's chats, or every project's when
  * `projectId` is undefined (the "All projects" view). `mainWorktrees` carries
  * the main workspace of each project in that scope.
+ *
+ * Pass the query's `signal`: a refetch that supersedes this one aborts it, and
+ * the abort cancels the server's read too. Without it a cancelled fetch kept
+ * running to completion on the server, so a burst of invalidations piled up
+ * that many concurrent ListChats against the database.
  */
-export async function listChats(projectId?: string): Promise<{
+export async function listChats(
+  projectId?: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{
   chats: Chat[];
   lastUserUpdateSequence: number;
   mainWorktrees: WorktreeSummary[];
@@ -80,7 +88,7 @@ export async function listChats(projectId?: string): Promise<{
     sidebarOnly: true,
     // Across every project a page has to hold more than one project's worth.
     ...(projectId ? {} : { limit: ALL_PROJECTS_CHAT_LIMIT }),
-  });
+  }, { signal: options.signal });
   return {
     chats: response.chats.map(convertProtoChat),
     lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
