@@ -10846,6 +10846,11 @@
             "Name": "acting_identity",
             "ProtoType": "enum",
             "IsOptional": false
+          },
+          {
+            "Name": "triggers",
+            "ProtoType": "[]string",
+            "IsOptional": false
           }
         ],
         "EnableWorkflowResponse": [
@@ -11273,6 +11278,11 @@
             "name": "acting_identity",
             "kind": "enum",
             "type_name": "reliant.v1.ActingIdentity"
+          },
+          {
+            "name": "triggers",
+            "kind": "string",
+            "repeated": true
           }
         ],
         "reliant.v1.EnableWorkflowResponse": [
@@ -39221,6 +39231,15 @@
             "validate": {
               "gt": "0"
             }
+          },
+          {
+            "name": "waiting",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorkflowConcurrencyWaiting"
+          },
+          {
+            "name": "key",
+            "kind": "string"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -39529,6 +39548,11 @@
           "TRIGGER_OVERLAP_POLICY_SKIP",
           "TRIGGER_OVERLAP_POLICY_ALLOW"
         ],
+        "reliant.v1.WorkflowConcurrencyWaiting": [
+          "WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED",
+          "WORKFLOW_CONCURRENCY_WAITING_FIFO",
+          "WORKFLOW_CONCURRENCY_WAITING_LATEST"
+        ],
         "reliant.v1.WorkflowDraftStatus": [
           "WORKFLOW_DRAFT_STATUS_UNSPECIFIED",
           "WORKFLOW_DRAFT_STATUS_DRAFT",
@@ -39547,6 +39571,11 @@
           1,
           2
         ],
+        "reliant.v1.WorkflowConcurrencyWaiting": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.WorkflowDraftStatus": [
           0,
           1,
@@ -39561,6 +39590,10 @@
         "reliant.v1.TriggerOverlapPolicy": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TriggerOverlapPolicy"
+        },
+        "reliant.v1.WorkflowConcurrencyWaiting": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "WorkflowConcurrencyWaiting"
         },
         "reliant.v1.WorkflowDraftStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -42646,10 +42679,10 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "2487e444cc7ceb7c9f29d16e1cfe0733faeeb91c32a42dc58ff9c15ba1c59076",
+    "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
+    "reliant/v1/workflow_v2.proto": "e147f09969abaec0d629efccfce0964975cd97a169b0553bf1600a0b9a4ecf2a",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }

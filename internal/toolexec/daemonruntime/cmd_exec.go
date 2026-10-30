@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // heavyGateRef is the gate exec.run and exec.bg_start queue heavy commands
@@ -169,9 +170,18 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := memReader.SnapshotOOMKills()
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree). Last before Start:
+	// the heavy-slot and sandbox rewrites above change what cmd execs.
+	tree := proctree.Default().Prepare(cmd)
+
 	start := time.Now()
 	err = cmd.Start()
+	if err != nil {
+		tree.Started(0)
+	}
 	if err == nil {
+		tree.Started(cmd.Process.Pid)
 		// Steer the OOM killer toward the workload, away from the daemon.
 		steerOOMKiller(cmd)
 
@@ -190,6 +200,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			StdoutBuf:  &stdoutBuf,
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
+			Tree:       tree,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -199,6 +210,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			return json.Marshal(bgResp)
 		}
 		err = <-waitCh
+		tree.Release()
 	}
 	// Finished: nothing may stop it now, and Err() below stays the reason it
 	// was stopped, if it was.

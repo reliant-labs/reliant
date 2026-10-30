@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PANEL_CONCURRENCY, PanelScheduler } from "../panelScheduler";
+import { OBS_READ_CONCURRENCY, ReadScheduler } from "../readScheduler";
 
 function deferred<T = string>() {
   let resolve!: (value: T) => void;
@@ -15,14 +15,14 @@ function deferred<T = string>() {
 /** Lets promise callbacks (the scheduler's own `then`) run. */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-describe("PanelScheduler", () => {
+describe("ReadScheduler", () => {
   it("stays under the server's cap of six", () => {
-    expect(PANEL_CONCURRENCY).toBeLessThan(6);
-    expect(PANEL_CONCURRENCY).toBeGreaterThanOrEqual(2);
+    expect(OBS_READ_CONCURRENCY).toBeLessThan(6);
+    expect(OBS_READ_CONCURRENCY).toBeGreaterThanOrEqual(2);
   });
 
   it("runs at most `max` at once and starts the rest first come, first served", async () => {
-    const scheduler = new PanelScheduler(2);
+    const scheduler = new ReadScheduler(2);
     const started: string[] = [];
     let running = 0;
     let peak = 0;
@@ -55,7 +55,7 @@ describe("PanelScheduler", () => {
   });
 
   it("gives a slot back when a task fails", async () => {
-    const scheduler = new PanelScheduler(1);
+    const scheduler = new ReadScheduler(1);
     const failing = scheduler.run(() => Promise.reject(new Error("boom")));
     const next = scheduler.run(async () => "ok");
     await expect(failing).rejects.toThrow("boom");
@@ -63,7 +63,7 @@ describe("PanelScheduler", () => {
   });
 
   it("drops a queued task that is cancelled without ever starting it", async () => {
-    const scheduler = new PanelScheduler(1);
+    const scheduler = new ReadScheduler(1);
     const hold = deferred();
     const first = scheduler.run(() => hold.promise);
     let startedSecond = false;
@@ -86,7 +86,7 @@ describe("PanelScheduler", () => {
   });
 
   it("aborts a running task, hands it the signal, and frees its slot at once", async () => {
-    const scheduler = new PanelScheduler(1);
+    const scheduler = new ReadScheduler(1);
     const cancel = new AbortController();
     let seen: AbortSignal | undefined;
     const running = scheduler.run((signal) => {
@@ -104,7 +104,7 @@ describe("PanelScheduler", () => {
   });
 
   it("rejects at once when the signal is already aborted", async () => {
-    const scheduler = new PanelScheduler(1);
+    const scheduler = new ReadScheduler(1);
     const cancel = new AbortController();
     cancel.abort(new Error("already"));
     await expect(scheduler.run(async () => "x", cancel.signal)).rejects.toThrow("already");
@@ -112,7 +112,7 @@ describe("PanelScheduler", () => {
   });
 
   it("does not release a slot twice when a finished task is aborted later", async () => {
-    const scheduler = new PanelScheduler(1);
+    const scheduler = new ReadScheduler(1);
     const cancel = new AbortController();
     await scheduler.run(async () => "done", cancel.signal);
     cancel.abort();

@@ -16,7 +16,13 @@ vi.mock('@/services/controlPlane/config', () => ({
   hasControlPlane: true,
 }))
 
-import { ClaimableState } from '@/gen/controlplane/services/claimable/v1/claimable_pb'
+import {
+  ClaimableState,
+  FreeSiteChoice,
+  FreeSiteChoiceRequiredSchema,
+  FreeSiteOutcome,
+} from '@/gen/controlplane/services/claimable/v1/claimable_pb'
+import { create } from '@bufbuild/protobuf'
 import { setTransport } from '@/lib/connect'
 import { mockTransport } from '@/lib/test-utils'
 import {
@@ -25,7 +31,9 @@ import {
   isDeclined,
   completeClaim,
   failureReasonOf,
+  freeSiteConflictOf,
   getClaim,
+  getClaimFreeSite,
   openClaimSession,
   type ClaimRefusal,
 } from '../claim'
@@ -163,7 +171,46 @@ describe('completeClaim', () => {
       claimPath: 'upgrade',
       hostnames: ['a.sites.reliantlabs.dev'],
       holds: 1,
+      freeSite: 'none',
+      pausedSite: null,
     })
+  })
+
+  it('reports what the claim did about the free site, and the site it paused', async () => {
+    setTransport(
+      mockTransport({
+        'ClaimableService.CompleteClaim': {
+          response: {
+            orgId: 'org_1',
+            claimPath: 'membership',
+            hostnames: [],
+            holds: [],
+            freeSiteOutcome: FreeSiteOutcome.CLAIMED_SITE_LIVE,
+            pausedSite: { deploymentId: 'dep_a', project: 'blog', env: 'prod', name: 'web', url: 'https://old.sites.test' },
+          },
+        },
+      }),
+    )
+    expect(await completeClaim(TOKEN, 'claimed')).toMatchObject({
+      claimPath: 'membership',
+      freeSite: 'claimed-live',
+      pausedSite: { deploymentId: 'dep_a', url: 'https://old.sites.test' },
+    })
+  })
+
+  it.each([
+    ['claimed', FreeSiteChoice.CLAIMED],
+    ['existing', FreeSiteChoice.EXISTING],
+    [undefined, FreeSiteChoice.UNSPECIFIED],
+  ] as const)('sends the choice %s as %s, and never invents one', async (keep, wire) => {
+    const seen = vi.fn()
+    setTransport(
+      mockTransport({
+        'ClaimableService.CompleteClaim': (input: unknown) => (seen((input as { freeSite: number }).freeSite), { orgId: 'o' }),
+      }),
+    )
+    await completeClaim(TOKEN, keep)
+    expect(seen).toHaveBeenCalledWith(wire)
   })
 
   it('a lost race is refused as claimed', async () => {
@@ -197,9 +244,21 @@ describe('claimRefusalOf / failureReasonOf', () => {
 })
 
 describe('completeActionOf / isDeclined', () => {
-  it.each(['claimable_upgrade_required', 'claimable_existing_account'] as const)('reads %s as an action, never a refusal', (reason) => {
-    const err = refused(reason, Code.PermissionDenied)
-    expect(completeActionOf(err)).toBe(reason)
+  it('reads claimable_upgrade_required as an action, never a refusal', () => {
+    const err = refused('claimable_upgrade_required', Code.PermissionDenied)
+    expect(completeActionOf(err)).toBe('claimable_upgrade_required')
+    expect(claimRefusalOf(err)).toBeNull()
+  })
+
+  it('reads claimable_free_site_choice_required as an action: the page asks, the claim is not over', () => {
+    const err = refused('claimable_free_site_choice_required', Code.FailedPrecondition)
+    expect(completeActionOf(err)).toBe('claimable_free_site_choice_required')
+    expect(claimRefusalOf(err)).toBeNull()
+  })
+
+  it('no longer knows claimable_existing_account: the server joins the org instead of asking', () => {
+    const err = refused('claimable_existing_account', Code.PermissionDenied)
+    expect(completeActionOf(err)).toBeNull()
     expect(claimRefusalOf(err)).toBeNull()
   })
 
@@ -218,3 +277,39 @@ describe('completeActionOf / isDeclined', () => {
 })
 
 beforeEach(() => vi.clearAllMocks())
+
+describe('the free static site choice', () => {
+  const existing = { deploymentId: 'dep_mine', project: 'blog', env: 'prod', name: 'web', url: 'https://mine.sites.test' }
+  const claimed = { deploymentId: 'dep_new', project: 'shop', env: 'prod', name: 'web', url: 'https://new.sites.test' }
+
+  it('reads the two sites out of a claimable_free_site_choice_required refusal', () => {
+    const err = new ConnectError(
+      'choose',
+      Code.FailedPrecondition,
+      new Headers({ 'x-forge-error-reason': 'claimable_free_site_choice_required' }),
+      [{ desc: FreeSiteChoiceRequiredSchema, value: create(FreeSiteChoiceRequiredSchema, { existingSite: existing, claimedSite: claimed }) }],
+    )
+    expect(freeSiteConflictOf(err)).toEqual({
+      existing: { ...existing },
+      claimed: { ...claimed },
+    })
+  })
+
+  it('is null for any other error, and for the refusal without its detail', () => {
+    expect(freeSiteConflictOf(refused('claimable_claimed'))).toBeNull()
+    expect(freeSiteConflictOf(refused('claimable_free_site_choice_required'))).toBeNull()
+    expect(freeSiteConflictOf(new Error('plain'))).toBeNull()
+  })
+
+  it('GetClaimFreeSite returns the pair only when a choice is needed', async () => {
+    setTransport(
+      mockTransport({
+        'ClaimableService.GetClaimFreeSite': { response: { choiceRequired: true, existingSite: existing, claimedSite: claimed } },
+      }),
+    )
+    expect(await getClaimFreeSite(TOKEN)).toMatchObject({ existing: { url: 'https://mine.sites.test' }, claimed: { name: 'web' } })
+
+    setTransport(mockTransport({ 'ClaimableService.GetClaimFreeSite': { response: { choiceRequired: false } } }))
+    expect(await getClaimFreeSite(TOKEN)).toBeNull()
+  })
+})

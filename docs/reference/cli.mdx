@@ -14133,7 +14133,9 @@ no value) none is, and the reason is printed per trigger. Run it again with
 changed flags to change an automation's settings; an existing activation is
 brought to them.
 
---trigger activates only the named declared triggers, one at a time.
+--trigger enables only the named declared triggers (all or nothing among
+them) and leaves the workflow's other activations as they are. A named
+trigger that is already activated is brought to the flags, not duplicated.
 
 ```
 reliant trigger activate [flags]
@@ -14143,7 +14145,7 @@ reliant trigger activate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--acting-as` | `string` | - | Who integration writes speak as: owner or app (default: owner for a new activation, unchanged otherwise) |
+| `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
 | `--message` | `string` | - | Prompt for a declared trigger that has none |

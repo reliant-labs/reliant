@@ -251,24 +251,26 @@ func (TriggerEventOutcome) EnumDescriptor() ([]byte, []int) {
 //
 // It is chosen per activation, because the same declared trigger can be
 // activated by an owner who wants their own name on the comments and by an
-// owner who wants a bot's. It applies to every integration action the run
-// takes (a node's `action` and an agent's integration tools alike), and only to
-// a run the trigger fired: a person replying in that chat acts as themselves.
+// owner who wants a bot's. It applies to every GitHub write the run makes (a
+// node's `action`, an agent's integration tools and git_publish alike), and only
+// to a run the trigger fired: a person replying in that chat acts as themselves.
+// Integrations with no bot (Slack, Gmail, Twilio, HTTP) always write through the
+// owner's connection.
 type ActingIdentity int32
 
 const (
 	ActingIdentity_ACTING_IDENTITY_UNSPECIFIED ActingIdentity = 0
-	// OWNER: the activation's owner, through their own GitHub App user token. What
-	// every activation did before identities existed; still the default for
-	// new sources other than GitHub integration triggers.
+	// OWNER: the activation's owner, through their own GitHub App user token. An
+	// explicit opt-in; the default only on a deployment with no control plane,
+	// for a source other than a GitHub integration trigger.
 	ActingIdentity_ACTING_IDENTITY_OWNER ActingIdentity = 1
 	// APP: the GitHub App's bot (`reliant-labs[bot]`), through a per-repository
 	// installation token. control-plane mints it only when the owner's own token
 	// has push access to that repository, scopes it to that one repository and to
 	// issues, pull requests and contents, and bot-authored comments, reviews and
-	// pull requests end with a footer naming the automation and its owner. Needs
-	// a hosted deployment: a self-hosted one has no App key to mint from and
-	// refuses this value.
+	// pull requests end with a footer naming the automation and its owner. The
+	// default for every new activation. Needs a hosted deployment: a self-hosted
+	// one has no App key to mint from and refuses this value.
 	ActingIdentity_ACTING_IDENTITY_APP ActingIdentity = 2
 )
 
@@ -2302,8 +2304,8 @@ type TriggerDefinition struct {
 	//	*TriggerDefinition_WorkflowTrigger
 	Source isTriggerDefinition_Source `protobuf_oneof:"source"`
 	// Who the integration writes of this trigger's runs speak as. UNSPECIFIED
-	// means APP on create for a resolved GitHub integration source, OWNER for
-	// other new sources, and "unchanged" on update. APP is refused on a
+	// means APP on create, whatever the source (OWNER for a non-GitHub source on
+	// a deployment with no control plane), and "unchanged" on update. APP is refused on a
 	// deployment with no control plane to mint installation tokens from, and
 	// for a trigger whose owner cannot push to a repository it writes to the
 	// write fails when it happens (never silently as the owner).
@@ -3309,12 +3311,17 @@ type EnableWorkflowRequest struct {
 	// Per-trigger exceptions to the shared choices above.
 	Overrides []*WorkflowTriggerOverride `protobuf:"bytes,12,rep,name=overrides,proto3" json:"overrides,omitempty"`
 	// Who the integration writes of every run speak as, as
-	// TriggerDefinition.acting_identity. Unspecified defaults each new source
-	// separately (APP for GitHub integration, OWNER otherwise) and preserves an
-	// existing activation's stored identity.
+	// TriggerDefinition.acting_identity. Unspecified means APP for each new
+	// activation and preserves an existing activation's stored identity.
 	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Only these declared triggers (WorkflowTrigger.name). Empty means every
+	// trigger the workflow declares. Each named trigger is created or brought
+	// to the request exactly as in the whole-workflow case, all or nothing
+	// within the selection; the others are left as they are. A name the
+	// workflow does not declare refuses the request.
+	Triggers      []string `protobuf:"bytes,14,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnableWorkflowRequest) Reset() {
@@ -3436,6 +3443,13 @@ func (x *EnableWorkflowRequest) GetActingIdentity() ActingIdentity {
 		return x.ActingIdentity
 	}
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+}
+
+func (x *EnableWorkflowRequest) GetTriggers() []string {
+	if x != nil {
+		return x.Triggers
+	}
+	return nil
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -5082,7 +5096,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"J\n" +
 	"\x19SetTriggerEnabledResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\xf4\x06\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\x90\a\n" +
 	"\x15EnableWorkflowRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1d\n" +
 	"\n" +
@@ -5101,7 +5115,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vname_prefix\x18\v \x01(\tR\n" +
 	"namePrefix\x12A\n" +
 	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x12C\n" +
-	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a@\n" +
+	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12\x1a\n" +
+	"\btriggers\x18\x0e \x03(\tR\btriggers\x1a@\n" +
 	"\x12ConnectionIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +

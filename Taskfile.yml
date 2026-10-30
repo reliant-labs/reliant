@@ -357,9 +357,16 @@ tasks:
         if: '[ -z "{{.CLI_ARGS}}" ]'
 
   test:integration:
-    desc: Run integration tests (-tags=integration)
+    # Only the packages with integration-tagged test files
+    # (scripts/integration-packages.sh); `--` args replace them. `./...` re-ran
+    # every unit test under an unused tag, since no file carries it.
+    desc: Run integration tests (-tags=integration) in the packages that have them
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - |
+        pkgs="{{.CLI_ARGS}}"
+        [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
+        if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
+        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
@@ -787,6 +794,16 @@ tasks:
     desc: Generate the Mintlify changelog page from the release YAML files
     cmds:
       - '{{.GEN_GO}} run ./tools/docgen/changelog/... {{.MINTLIFY_DOCS_DIR}}/data/releases {{.MINTLIFY_DOCS_DIR}}/changelog.mdx'
+
+  generate:docs:changelog:draft:
+    # What the release workflow runs before ./scripts/release.sh (control-plane
+    # scripts/release-chain/reliant-bump.sh). Deterministic; refuses to replace an
+    # existing file (FORCE=1 does).
+    desc: Write docs/data/releases/VERSION.yaml from the PR titles merged since SINCE_TAG, grouped by conventional-commit type
+    requires:
+      vars: [VERSION, SINCE_TAG]
+    cmds:
+      - '{{.GEN_GO}} run ./tools/releasenotes --version {{.VERSION}} --since {{.SINCE_TAG}} --to {{.TO | default "HEAD"}} --out {{.MINTLIFY_DOCS_DIR}}/data/releases/{{.VERSION}}.yaml{{if .FORCE}} --force{{end}}'
 
   generate:docs:mintlify-reference:
     desc: Convert the generated reference markdown into Mintlify .mdx pages

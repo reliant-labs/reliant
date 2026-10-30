@@ -37,7 +37,7 @@ Neither gate keeps a second copy of it.
 | Tier | Command | What it runs | When |
 |---|---|---|---|
 | **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -406,7 +406,24 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
 | `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, and the path lanes below that the diff reaches; the review marker must pass |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate` and every lane | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag`. Never required for a merge |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed |
+
+### Why the release gate runs as parts in CI
+
+Run in one job, step after step, the gate took 45-70 minutes on a CI runner
+(2026-10-30: `test` 1345-2112s, `integration` 591-897s, `lint` 365-549s,
+`generate` 201-396s), and every release waited on it. In CI each part is its
+own runner, so the gate's wall time is the slowest part's (target ~20 min, plus
+the runner queue). The Go suite is split three ways by package, balanced on
+the recorded `-race` package times in `scripts/release-gate-go-timings.json`;
+refresh it from a run's `test-go.log` when the shards drift apart. Locally
+`task release:gate` still runs every step in one process, and records the same
+way.
+
+`task test:integration` runs only the packages that have integration-tagged
+test files (`scripts/integration-packages.sh`). There are none today: it used to
+run `go test -race -tags=integration ./...`, which re-ran the whole unit suite
+a second time (the 591-897s above) for no test the unit step had not run.
 
 Beside them run the lanes neither gate covers (`scripts/ci-lanes.sh`,
 `task ci:lanes`): the renderer's release build (`task build:web:verify`),

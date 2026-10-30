@@ -10,11 +10,12 @@
  * create another user). So "is the signed-in user the claim's own user" is a
  * comparison of ids, and it tells the stages of the settled flow apart:
  *
- *   nobody signed in ................... signed-out          open the session
+ *   nobody signed in ................... signed-out          open the session, or sign in
  *   the claim's user, still anonymous .. resume-upgrade      go on to /upgrade
  *   the claim's user, upgraded ......... finish              CompleteClaim
  *   another anonymous user ............. replace-anonymous   warn, then switch
- *   another, upgraded user ............. existing-account    W11 replaces this
+ *   another, upgraded user ............. existing-account    claim into their account
+ *                                                            (join the org as its owner)
  */
 
 import type { PendingClaim } from "@/lib/claimLink";
