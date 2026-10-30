@@ -5,6 +5,7 @@ package readguard
 import (
 	"context"
 	"errors"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"sync"
@@ -98,9 +99,6 @@ type flight struct {
 	// read.
 	callers int
 	cancel  context.CancelFunc
-	// handedOut is set once a caller has the original response; every other
-	// caller gets a copy.
-	handedOut bool
 }
 
 func (g *guard) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -205,7 +203,17 @@ func (g *guard) startLocked(ctx context.Context, userID string, u *userReads, ke
 	g.signalLocked(u)
 	go func() {
 		defer cancel()
-		resp, err := run(rctx)
+		resp, err := runSafely(rctx, run)
+		// Connect initializes metadata lazily. Initialize while exclusively
+		// owned, before publishing; the original is never returned to a waiter.
+		if resp != nil {
+			resp.Header()
+			resp.Trailer()
+		}
+		var ce *connect.Error
+		if errors.As(err, &ce) {
+			ce.Meta()
+		}
 		g.mu.Lock()
 		f.resp, f.err = resp, err
 		delete(u.flights, key)
@@ -231,20 +239,22 @@ func (g *guard) await(ctx context.Context, userID string, u *userReads, f *fligh
 		g.mu.Unlock()
 		return nil, ctx.Err()
 	}
-	g.mu.Lock()
-	first := !f.handedOut
-	f.handedOut = true
-	g.mu.Unlock()
 	if f.err != nil {
-		if first {
-			return nil, f.err
-		}
 		return nil, copyError(f.err)
 	}
-	if first {
-		return f.resp, nil
-	}
 	return copyResponse(f.resp, proc), nil
+}
+
+// The caller's recovery interceptor cannot catch a panic on this goroutine.
+func runSafely(ctx context.Context, run func(context.Context) (connect.AnyResponse, error)) (resp connect.AnyResponse, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			logging.ErrorContext(ctx, "[ReadGuard] list handler panicked", "panic", p, "stack", string(debug.Stack()))
+			resp = nil
+			err = connect.NewError(connect.CodeInternal, errors.New("internal server error"))
+		}
+	}()
+	return run(ctx)
 }
 
 func (g *guard) signalLocked(u *userReads) {
@@ -296,7 +306,7 @@ func copyResponse(resp connect.AnyResponse, proc Procedure) connect.AnyResponse 
 // is a value the callers only read.
 func copyError(err error) error {
 	var ce *connect.Error
-	if !errors.As(err, &ce) || ce != err {
+	if !errors.As(err, &ce) {
 		return err
 	}
 	cause := ce.Unwrap()
