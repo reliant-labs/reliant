@@ -662,7 +662,11 @@ func TestStartNATSCluster_RetriesAStalledFormation(t *testing.T) {
 
 	c := startNATSCluster(t, 3)
 	require.Len(t, c.servers, 3)
-	assert.Equal(t, int32(2), attempts.Load(), "the stalled attempt is retried once, on a fresh cluster")
+	// At least one retry: the stalled first attempt. A later attempt may also
+	// be retried for its own reason (another process took a route port between
+	// allocation and bind, which startNATSCluster retries by design), so the
+	// count is a floor, not an exact 2 (release gate a2726fa83: 3 attempts).
+	assert.GreaterOrEqual(t, attempts.Load(), int32(2), "the stalled attempt is retried, on a fresh cluster")
 	formed, state := c.formation()
 	assert.True(t, formed, "the retried cluster is fully formed: %s", state)
 }

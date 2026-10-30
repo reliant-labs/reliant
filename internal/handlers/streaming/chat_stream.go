@@ -206,7 +206,7 @@ func (s *Service) StreamChatUpdates(
 					Heartbeat: &reliantv1.Heartbeat{Timestamp: time.Now().Unix()},
 				},
 			}); err != nil {
-				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
+				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
 				return err
 			}
 		}

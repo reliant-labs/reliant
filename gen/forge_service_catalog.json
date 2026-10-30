@@ -53005,6 +53005,17 @@
           }
         },
         {
+          "id": "method1:163030c629544a4676ebf51bf1e64f5243930a847410112c5cb766f880791204",
+          "name": "ReleaseClosedTriggerCapacityExecution",
+          "signature": "func(ctx context.Context, e github.com/reliant-labs/reliant/internal/store.TriggerCapacityExecution) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ReleaseClosedTriggerCapacityExecution",
+          "source": {
+            "path": "internal/db/trigger_capacity.go",
+            "line": 40
+          }
+        },
+        {
           "id": "method1:09e17d5c884bb67658b1d69645819ee7c3ae9c9caaba5def4ec4d686a2bc281b",
           "name": "ReleaseDaemonAttachment",
           "signature": "func(ctx context.Context, daemonID string, attachedAt time.Time) error",
