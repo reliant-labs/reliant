@@ -330,61 +330,46 @@ func categorizeError(err error) string {
 }
 
 const (
-	// activityHeartbeatInterval is how often ActivityWrapper heartbeats while an
-	// activity runs.
+	// activityHeartbeatInterval is how often ActivityWrapper's heartbeat loop
+	// ticks while an activity runs.
 	//
-	// Temporal delivers a pending cancellation to an activity ONLY in a
-	// heartbeat RPC's response. The SDK's temporalInvoker.Heartbeat swallows
-	// any RecordHeartbeat call that lands inside an open batching window
-	// entirely locally — it just overwrites the pending details and returns
-	// nil, with no RPC and no cancellation check. So calling RecordHeartbeat
-	// more often than the window is open cannot speed up cancellation: cancel
-	// latency == MaxHeartbeatThrottleInterval (internal/workersetup), full
-	// stop. Verified against SDK v1.37.0 and v1.47.0 source, both identical;
-	// see specs/fast-cancel-briefing.md.
+	// A tick is not an RPC. The SDK's temporalInvoker.Heartbeat swallows any
+	// RecordHeartbeat that lands inside an open batching window entirely
+	// locally (it overwrites the pending details and returns nil), so the
+	// server sees one heartbeat per MaxHeartbeatThrottleInterval
+	// (maxHeartbeatThrottleInterval, internal/workersetup), whatever this is.
+	// Verified against SDK v1.37.0, v1.47.0 and v1.50.0 source; see
+	// specs/fast-cancel-briefing.md. The tick only keeps fresh details ready
+	// for the window, paces an engaged heartbeat shield and the stall warning.
 	//
-	// The interval here is set to match the throttle (500ms) rather than
-	// below it: it costs nothing extra (the SDK drops any surplus ticks), and
-	// it means a heartbeat is always ready to go the instant the throttle
-	// window opens, rather than adding its own latency on top of the window.
-	//
-	// The throttle is ALSO the heartbeat RPC's own deadline, as
-	// max(throttle, minRPCTimeout=1s) (internal_task_handlers.go
-	// internalHeartBeat). The floor only applies BELOW 1s, so raising the
-	// throttle above 1s DOES widen that budget — which is exactly why
-	// maxHeartbeatThrottleInterval is now 2s (internal/workersetup). An
-	// earlier revision of this comment claimed the floor made the budget
-	// insensitive to the throttle; that was wrong and it cost a correct fix.
-	activityHeartbeatInterval = 500 * time.Millisecond
+	// Cancellation does NOT ride on it any more. Temporal delivers a pending
+	// cancellation only in a heartbeat response, which made the throttle the
+	// cancel latency of every pause and interrupt; a stop is now nudged out of
+	// band (stop_nudge.go), and the nudged activity asks the server directly.
+	activityHeartbeatInterval = 1 * time.Second
 
 	// activityHeartbeatTimeout is how long Temporal waits for a heartbeat before
 	// declaring the activity dead and re-dispatching it. It is the recovery time
 	// for a worker that died WITHOUT releasing its activities — SIGKILL, OOM,
 	// crash, or an air rebuild that orphaned the process. A worker that exits
 	// cleanly reports the failure itself and never reaches this deadline. It is
-	// NOT on the cancellation path — cancel latency is governed entirely by
-	// MaxHeartbeatThrottleInterval above.
+	// NOT on the cancellation path (stop_nudge.go is).
 	//
-	// It deliberately does NOT need to cover a rebuild: a restarted worker is a
-	// new worker and never reclaims the old activity task, so stretching this
-	// only lengthens the dead air before the retry can start. Sizing is against
-	// the EFFECTIVE heartbeat cadence, which is the worker's throttle interval,
-	// not activityHeartbeatInterval directly — the SDK coalesces surplus ticks
-	// down to one delivery per throttle window.
+	// Sized against the EFFECTIVE heartbeat cadence, which is the worker's
+	// throttle interval: the SDK derives it as min(0.8*HeartbeatTimeout,
+	// MaxHeartbeatThrottleInterval) = min(48s, 15s) = 15s. 60s leaves four
+	// heartbeat windows, so a run of slow heartbeat RPCs (each has the 15s
+	// window as its deadline) cannot trip a false "worker died" and re-dispatch
+	// a healthy activity underneath itself — a far worse failure (a second LLM
+	// request, tool calls run twice) than 30 more seconds of recovery after a
+	// real crash. It was 30s against a 2s cadence; keeping 30s against 15s would
+	// have left two windows, one slow RPC from a false timeout.
 	//
-	// The throttle interval is derived as 0.8*HeartbeatTimeout capped by
-	// MaxHeartbeatThrottleInterval (getHeartbeatThrottleInterval); ours is
-	// 0.8*30s=24s, capped down to the 500ms MaxHeartbeatThrottleInterval, so
-	// this value does not itself determine the effective cadence — the cap
-	// does. Left at 30s (unchanged) rather than shortened to match the new
-	// 500ms throttle: at 500ms, "ten missed heartbeats" would be only 5s,
-	// tight enough that a worker briefly pinned by GC, a `go build`, or a slow
-	// Temporal server round trip could trip a false "worker died" and have a
-	// healthy, still-running activity re-dispatched underneath it — a far
-	// worse failure mode (duplicate work, non-idempotent tool calls) than a
-	// few extra seconds of dead-worker recovery time. No evidence motivates
-	// shortening it, so it stays.
-	activityHeartbeatTimeout = 30 * time.Second
+	// Changing it is replay-safe: the SDK matches a ScheduleActivityTask
+	// command to its history event by activity id and type only
+	// (isCommandMatchEvent), never by timeouts, so running workflows replay
+	// the new value without a version gate.
+	activityHeartbeatTimeout = 60 * time.Second
 
 	// activityStallWarnAfter is how long an activity may run before the
 	// heartbeat loop starts logging that it might be stalled, and
@@ -564,8 +549,19 @@ type ActivityWrapper[I any, O any] struct {
 	// out does not cancel its work. Set from heartbeatRPCFailureSurvivor.
 	outlivesHeartbeatRPCFailure bool
 	// directHeartbeat is how the heartbeat loop heartbeats once the shield
-	// has engaged; nil means clientHeartbeat.
+	// has engaged, and how a stop nudge probes; nil means clientHeartbeat.
 	directHeartbeat directHeartbeater
+	// stopNudges supplies the stop-nudge source (stop_nudge.go). A func so
+	// the registry's source is read at execution time, not at registration.
+	stopNudges func() stopNudgeSource
+}
+
+// nudges returns the injected stop-nudge source, or nil.
+func (w *ActivityWrapper[I, O]) nudges() stopNudgeSource {
+	if w.stopNudges == nil {
+		return nil
+	}
+	return w.stopNudges()
 }
 
 // writer returns the injected message writer, or nil.
@@ -658,6 +654,11 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	}
 	ctx, cancelForWorkerStop := context.WithCancel(ctx)
 	defer cancelForWorkerStop()
+	// A stop nudge the server confirms cancels the work with the server's
+	// verdict as the cause (followStopNudges), exactly the cause the SDK
+	// path would have delivered a heartbeat window later.
+	ctx, stopForNudge := context.WithCancelCause(ctx)
+	defer stopForNudge(nil)
 	if workerStopCh != nil {
 		helpers.Go(func() {
 			select {
@@ -723,6 +724,47 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat() // Stop heartbeat when activity completes
 
+	// heartbeatDetails reports elapsed time, not just liveness.
+	//
+	// This heartbeat proves the WORKER is alive; it has never proven the
+	// activity is making progress, and a hardcoded "status: running" actively
+	// obscured that difference. During the credit-exhaustion incident Temporal
+	// showed a current lastHeartbeatTime beside a 34-minute-old
+	// lastStartedTime for seven activities, and every surface that consulted
+	// the heartbeat called them healthy. Carrying elapsed_seconds in the
+	// payload makes `temporal workflow describe` show the age of the work
+	// rather than the age of the ping.
+	heartbeatDetails := func() map[string]interface{} {
+		return map[string]interface{}{
+			"activity_type":   activityType,
+			"attempt":         attemptNumber,
+			"status":          "running",
+			"elapsed_seconds": int64(time.Since(startTime).Seconds()),
+		}
+	}
+
+	// Watch for stop nudges: a stop requested for this workflow makes the
+	// activity ask the server for its verdict now, instead of a heartbeat
+	// window (up to maxHeartbeatThrottleInterval) later. A local activity has
+	// no server-side attempt to ask about (and runs inside the workflow task
+	// that a stop would cancel anyway), so it does not watch.
+	if src := w.nudges(); src != nil && workflowID != "" && !info.IsLocalActivity {
+		nudged, unwatch := src.Watch(workflowID)
+		defer unwatch()
+		helpers.Go(func() {
+			followStopNudges(heartbeatCtx, nudged, stopNudgeProbes, func(rpcCtx context.Context) error {
+				return directHeartbeat(rpcCtx, heartbeatDetails())
+			}, func(cause error) {
+				logging.InfoContext(ctx, "[ActivityWrapper] Stop nudge confirmed by the server, stopping the activity",
+					"activityType", activityType,
+					"activityID", activityID,
+					"workflowID", workflowID,
+					"cause", cause)
+				stopForNudge(cause)
+			})
+		})
+	}
+
 	helpers.Go(func() {
 		ticker := time.NewTicker(activityHeartbeatInterval)
 		defer ticker.Stop()
@@ -755,31 +797,15 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 					return
 				}
 
-				// Report elapsed time, not just liveness.
-				//
-				// This heartbeat proves the WORKER is alive; it has never
-				// proven the activity is making progress, and a hardcoded
-				// "status: running" actively obscured that difference. During
-				// the credit-exhaustion incident Temporal showed a current
-				// lastHeartbeatTime beside a 34-minute-old lastStartedTime for
-				// seven activities, and every surface that consulted the
-				// heartbeat called them healthy. Carrying elapsed_seconds in
-				// the payload makes `temporal workflow describe` show the age
-				// of the work rather than the age of the ping.
-				//
-				// Deliberately NOT turned into a failure here: withholding a
-				// heartbeat would make Temporal re-dispatch the activity, and
-				// for CallLLM that means a second in-flight request to the
-				// provider. Bounding the hang belongs at the transport layer,
-				// where llm.ErrStreamContentStalled now ends it. This is the
-				// diagnostic half of that fix.
+				// A long elapsed time is deliberately NOT turned into a
+				// failure here: withholding a heartbeat would make Temporal
+				// re-dispatch the activity, and for CallLLM that means a
+				// second in-flight request to the provider. Bounding the hang
+				// belongs at the transport layer, where
+				// llm.ErrStreamContentStalled now ends it. heartbeatDetails is
+				// the diagnostic half of that fix.
 				elapsed := time.Since(startTime)
-				details := map[string]interface{}{
-					"activity_type":   activityType,
-					"attempt":         attemptNumber,
-					"status":          "running",
-					"elapsed_seconds": int64(elapsed.Seconds()),
-				}
+				details := heartbeatDetails()
 				if shield != nil && shield.engaged() {
 					// The SDK path can no longer report a cancel for this
 					// attempt (see shieldFromSpuriousHeartbeatCancel), so
@@ -1963,9 +1989,13 @@ type ActivityRegistry struct {
 	// messageWriteRetry is the retry policy for messageWriter's writes,
 	// copied into each wrapper at registration. Tests shrink it per registry.
 	messageWriteRetry messageWriteRetry
-	// directHeartbeat is how an engaged heartbeat shield heartbeats, copied
-	// into each wrapper at registration. Tests replace it per registry.
+	// directHeartbeat is how an engaged heartbeat shield heartbeats and a
+	// stop nudge probes, copied into each wrapper at registration. Tests
+	// replace it per registry.
 	directHeartbeat directHeartbeater
+	// stopNudges is the stop-nudge source every wrapper watches; see
+	// SetStopNudges. nil leaves cancellation to the regular heartbeat.
+	stopNudges stopNudgeSource
 }
 
 // NewActivityRegistry creates a new activity registry
@@ -2064,6 +2094,7 @@ func wrapActivity[TInput any, TOutput any](
 	wrapper.workKind = kind
 	wrapper.outlivesHeartbeatRPCFailure = outlivesHeartbeatRPCFailure
 	wrapper.directHeartbeat = registry.directHeartbeat
+	wrapper.stopNudges = func() stopNudgeSource { return registry.stopNudges }
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
 	wrapper.messageWriteRetry = registry.messageWriteRetry
 

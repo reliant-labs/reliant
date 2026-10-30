@@ -149,9 +149,7 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	// Layer 7 runs first and regardless of the graph: a declared trigger is
 	// independent of the nodes, and one save should show every finding.
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
-	if wf.Concurrency != nil && wf.Concurrency.MaxRunning == 0 {
-		result.AddError(CategoryStructure, nil, "concurrency.max_running", "must be positive")
-	}
+	validateConcurrency(wf.GetConcurrency(), result)
 
 	valueTypes := opts.valueTypes()
 

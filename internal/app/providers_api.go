@@ -17,6 +17,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -43,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/readguard"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -1182,11 +1185,26 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 // version skew — and when the operator turned the forge API off
 // (RELIANT_DISABLE_FORGE_API) it answers every rpc FailedPrecondition, after
 // auth, before the handler runs.
+//
+// The list reads the user-update stream makes a client refetch (the chat list,
+// the archived list, a chat's approvals) go through one readguard: one user's
+// identical concurrent reads share a read, and at most readguard.DefaultPerUser
+// distinct ones run at once, so a client that storms them (desktop builds
+// before #1865) cannot take the database pool from everyone else.
 func apiMountOptions(disableForgeAPI bool) MountOptions {
 	machineWake := mountkit.WithHandlerOptions(connect.WithInterceptors(machinewake.NewInterceptor()))
+	listReads := mountkit.WithHandlerOptions(connect.WithInterceptors(readguard.NewInstrumented(readguard.Deps{
+		Procedures: []readguard.Procedure{
+			readguard.Read[reliantv1.ListChatsResponse](reliantv1connect.ChatServiceListChatsProcedure),
+			readguard.Read[reliantv1.ListArchivedChatsResponse](reliantv1connect.ChatServiceListArchivedChatsProcedure),
+			readguard.Read[reliantv1.ListApprovalsByChatResponse](reliantv1connect.ApprovalServiceListApprovalsByChatProcedure),
+		},
+	})))
 	opts := MountOptions{
 		Worktree:   []mountkit.Option{machineWake},
 		FileSystem: []mountkit.Option{machineWake},
+		Chat:       []mountkit.Option{listReads},
+		Approval:   []mountkit.Option{listReads},
 	}
 	if disableForgeAPI {
 		logging.Info("forge API disabled in this deployment (RELIANT_DISABLE_FORGE_API): ForgeService answers FailedPrecondition")
