@@ -209,7 +209,10 @@ func (s *Service) resurrectGhostWorkflow(
 		}
 	}
 
-	initialData := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 
 	// Validate workflow inputs before starting, and before anything of the
 	// send is written — a refused send leaves nothing behind (see

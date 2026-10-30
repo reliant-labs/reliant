@@ -117,7 +117,12 @@ func (l *Launcher) RootProvider(ctx context.Context, userID string, chat *db.Cha
 	if sel, err := l.repo.GetChatSelection(ctx, chat.ID); err == nil && sel != nil && sel.ChatProvider != "" {
 		return sel.ChatProvider
 	}
-	inputs := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, chat.SelectedPresets, nil)
+	inputs, err := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, chat.SelectedPresets, nil)
+	if err != nil {
+		// The next run refuses to launch on it, so there is no root provider
+		// to switch away from.
+		return ""
+	}
 	selector := inputs["model"]
 	if selector == nil || isLocalSelector(selector) {
 		return ""

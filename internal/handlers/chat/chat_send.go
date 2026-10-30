@@ -182,7 +182,10 @@ func (s *Service) liveRunStateUpdate(
 	if len(req.Msg.WorkflowParams) == 0 && len(newPresets) == 0 {
 		return nil, nil
 	}
-	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, newPresets, req.Msg.WorkflowParams)
+	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, newPresets, req.Msg.WorkflowParams)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
@@ -711,7 +714,10 @@ func (s *Service) SendMessage(
 					// inputs (Temporal would replay its whole history to
 					// answer — rtemporal.QueryOpenRun). What it was running on
 					// is rebuilt from the chat's presets and stored selection.
-					recorded := s.inputsAfterClosedRun(ctx, chat, activeWorkflowNameForResume(chat, existingWorkflow))
+					recorded, err := s.inputsAfterClosedRun(ctx, chat, activeWorkflowNameForResume(chat, existingWorkflow))
+					if err != nil {
+						return nil, svcerr.Wrap(err)
+					}
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
@@ -880,7 +886,10 @@ func (s *Service) SendMessage(
 	// Build workflow inputs: presets, then the chat's stored selection, then
 	// this send's params. A send that carries no params still runs the model
 	// and mode the chat was set to, from any device.
-	initialData := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 
 	// Validate workflow inputs before starting — and before the messages are
 	// saved below. This catches missing required inputs, unknown models and a

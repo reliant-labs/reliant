@@ -59,7 +59,7 @@ func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 		"tools": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		launch.Checkout{Path: projectPath},
@@ -68,6 +68,7 @@ func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 		map[string]string{"default": "general"},
 		userParams,
 	)
+	require.NoError(t, err)
 
 	toolsRaw, exists := initialInputs["tools"]
 	require.True(t, exists)
@@ -97,7 +98,7 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 		"spawn_presets": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		launch.Checkout{Path: projectPath},
@@ -106,6 +107,7 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 		map[string]string{"default": "general"},
 		userParams,
 	)
+	require.NoError(t, err)
 
 	spawnPresetsRaw, exists := initialInputs["spawn_presets"]
 	require.True(t, exists)
@@ -126,7 +128,7 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 		}}),
 	}
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		launch.Checkout{Path: projectPath},
@@ -135,6 +137,7 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 		map[string]string{"default": "general"},
 		userParams,
 	)
+	require.NoError(t, err)
 
 	toolsRaw, exists := initialInputs["tools"]
 	require.True(t, exists)
@@ -149,7 +152,7 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 	service := &Service{}
 	projectPath := t.TempDir()
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		launch.Checkout{Path: projectPath},
@@ -158,6 +161,7 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 		map[string]string{"": "workflow_builder"},
 		nil,
 	)
+	require.NoError(t, err)
 
 	modelRaw, exists := initialInputs["model"]
 	require.True(t, exists)
@@ -166,7 +170,7 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 	require.NotContains(t, modelMap, "id")
 	require.Equal(t, []interface{}{models.TagFlagship}, modelMap["tags"])
 
-	_, err := models.MustGetRegistry().Resolve(
+	_, err = models.MustGetRegistry().Resolve(
 		models.ModelSelector{Tags: []string{models.TagFlagship}},
 		[]string{"codex"},
 	)
@@ -237,7 +241,7 @@ func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOver
 		"tools": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
+	stateUpdate, err := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-1",
 		chat,
@@ -245,6 +249,7 @@ func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOver
 		map[string]string{"default": "general"},
 		params,
 	)
+	require.NoError(t, err)
 
 	toolsRaw, exists := stateUpdate["tools"]
 	require.True(t, exists)
@@ -284,7 +289,7 @@ func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) 
 		SelectedPresets: map[string]string{"default": "general"},
 	}
 
-	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
+	stateUpdate, err := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-2",
 		chat,
@@ -292,6 +297,7 @@ func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) 
 		map[string]string{"default": "general"},
 		map[string]*structpb.Value{},
 	)
+	require.NoError(t, err)
 
 	_, hasTools := stateUpdate["tools"]
 	_, hasSpawnPresets := stateUpdate["spawn_presets"]
@@ -337,7 +343,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 		}}),
 	}
 
-	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
+	stateUpdate, err := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-3",
 		chat,
@@ -345,6 +351,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 		map[string]string{"": "workflow_builder"},
 		params,
 	)
+	require.NoError(t, err)
 
 	require.NotContains(t, stateUpdate, "thinking_level")
 	modelMap, ok := stateUpdate["model"].(map[string]interface{})
@@ -394,7 +401,7 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		ctx,
 		userID,
 		launch.Checkout{Path: projectPath},
@@ -403,6 +410,7 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 		map[string]string{"default": "general-mcp-copy"},
 		map[string]*structpb.Value{},
 	)
+	require.NoError(t, err)
 
 	require.Equal(t, customTools, initialInputs["tools"])
 	require.Equal(t, []interface{}{"general", "researcher"}, initialInputs["spawn_presets"])
@@ -502,7 +510,7 @@ func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testin
 	})
 	require.NoError(t, err)
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		launch.Checkout{Path: projectPath},
@@ -511,6 +519,7 @@ func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testin
 		map[string]string{"default": "general"},
 		map[string]*structpb.Value{"default": userParamsValue},
 	)
+	require.NoError(t, err)
 
 	defaultGroup, ok := initialInputs["default"].(map[string]interface{})
 	require.True(t, ok)
@@ -606,7 +615,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsNestedWorkflowParams(t *testin
 		"mode": structpb.NewStringValue("planning"),
 	}})
 
-	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
+	stateUpdate, err := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-nested-params",
 		chat,
@@ -614,6 +623,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsNestedWorkflowParams(t *testin
 		nil,
 		map[string]*structpb.Value{"agent": agentValue},
 	)
+	require.NoError(t, err)
 
 	agentMap, ok := stateUpdate["agent"].(map[string]interface{})
 	require.True(t, ok)
@@ -627,7 +637,7 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 	service := &Service{}
 	projectPath := t.TempDir()
 
-	initialInputs := service.launcher().BuildWorkflowInputs(
+	initialInputs, err := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-builtin-model-normalize",
 		launch.Checkout{Path: projectPath},
@@ -636,6 +646,7 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 		map[string]string{"default": "general"},
 		map[string]*structpb.Value{"model": structpb.NewStringValue("gpt-5.4-mini@codex")},
 	)
+	require.NoError(t, err)
 
 	modelValue, ok := initialInputs["model"].(map[string]interface{})
 	require.True(t, ok)
@@ -658,15 +669,17 @@ func TestBuildWorkflowInputs_InjectsTheChatCheckout(t *testing.T) {
 		"worktree_branch": structpb.NewStringValue("evil"),
 	}
 
-	inWorktree := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
+	inWorktree, err := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
 		launch.Checkout{Path: projectPath, WorktreePath: projectPath, Branch: "feature/x"},
 		"", "builtin://agent", nil, spoof)
+	require.NoError(t, err)
 	require.Equal(t, projectPath, inWorktree["project_path"])
 	require.Equal(t, projectPath, inWorktree["worktree_path"])
 	require.Equal(t, "feature/x", inWorktree["worktree_branch"])
 
-	mainCheckout := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
+	mainCheckout, err := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
 		launch.Checkout{Path: projectPath}, "", "builtin://agent", nil, spoof)
+	require.NoError(t, err)
 	require.Equal(t, projectPath, mainCheckout["project_path"])
 	require.NotContains(t, mainCheckout, "worktree_path")
 	require.NotContains(t, mainCheckout, "worktree_branch")

@@ -126,7 +126,13 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 	}
 	delete(base, v2.InputKeyProviderPolicy)
 	if chat != nil && len(chat.SelectedPresets) > 0 {
-		fromPresets := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), map[string]interface{}{}, chat.SelectedPresets)
+		// A preset that no longer resolves leaves its policy out: this
+		// re-derives a live run's policy, and the next launch on these
+		// presets is refused (applyPresets) before it can run without it.
+		fromPresets, err := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), map[string]interface{}{}, chat.SelectedPresets)
+		if err != nil {
+			logging.WarnContext(ctx, "[ProviderPolicy] A selected preset did not resolve; its policy is left out", "chatID", chat.ID, "error", err)
+		}
 		if value, ok := fromPresets[v2.InputKeyProviderPolicy]; ok {
 			base[v2.InputKeyProviderPolicy] = value
 		}

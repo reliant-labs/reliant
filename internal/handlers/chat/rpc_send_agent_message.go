@@ -407,7 +407,10 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
 		return refuse(fmt.Errorf("chat has no workflow"))
 	}
-	inputs := s.inputsAfterClosedRun(ctx, chat, *chat.WorkflowName)
+	inputs, err := s.inputsAfterClosedRun(ctx, chat, *chat.WorkflowName)
+	if err != nil {
+		return refuse(err)
+	}
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)

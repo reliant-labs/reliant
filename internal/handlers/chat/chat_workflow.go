@@ -75,7 +75,10 @@ func (s *Service) UpdateWorkflowParams(
 	// unchanged to the run: the old expansion to the full preset+default set
 	// reset a live run's model to the preset's tier on a Mode toggle, and
 	// overwrote a sub-agent's model, tools and skills with the root's preset.
-	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, nil, req.Msg.Params)
+	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, nil, req.Msg.Params)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 
 	// Validate the run as it would be after the update (model selectors,
 	// required inputs) before anything is stored or signalled.

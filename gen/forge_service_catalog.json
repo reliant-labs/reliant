@@ -45995,7 +45995,7 @@
           "legacy_name": "chat.GetThreadWorkflowInputs",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 448
+            "line": 451
           }
         },
         {
@@ -46017,7 +46017,7 @@
           "legacy_name": "chat.GetWorkflowExecutions",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 282
+            "line": 285
           }
         },
         {
@@ -46248,7 +46248,7 @@
           "legacy_name": "chat.SendMessage",
           "source": {
             "path": "internal/handlers/chat/chat_send.go",
-            "line": 224
+            "line": 227
           }
         },
         {
@@ -46358,7 +46358,7 @@
           "legacy_name": "chat.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 364
+            "line": 367
           }
         },
         {
@@ -46380,7 +46380,7 @@
           "legacy_name": "chat.attachThreadsWithoutWorkflowRow",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 543
+            "line": 546
           }
         },
         {
@@ -46628,12 +46628,12 @@
         {
           "id": "method1:780ad48dd39f6bbf970609e343adce817d072a62d18c1d0753345b817811e0e9",
           "name": "inputsAfterClosedRun",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) map[string]interface{}",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 331
+            "line": 334
           }
         },
         {
@@ -46710,7 +46710,7 @@
           "legacy_name": "chat.newRunOptions",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 454
+            "line": 457
           }
         },
         {
@@ -46743,7 +46743,7 @@
           "legacy_name": "chat.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 344
+            "line": 347
           }
         },
         {
@@ -46776,7 +46776,7 @@
           "legacy_name": "chat.persistChatPresets",
           "source": {
             "path": "internal/handlers/chat/chat_send.go",
-            "line": 216
+            "line": 219
           }
         },
         {
@@ -46985,7 +46985,7 @@
           "legacy_name": "chat.rootRunIsLive",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 220
+            "line": 223
           }
         },
         {
@@ -47106,7 +47106,7 @@
           "legacy_name": "chat.signalParamUpdate",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 232
+            "line": 235
           }
         },
         {
@@ -47183,7 +47183,7 @@
           "legacy_name": "chat.threadAcceptsParamUpdate",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 248
+            "line": 251
           }
         },
         {
@@ -47271,7 +47271,7 @@
           "legacy_name": "chat.wakeLiveRun",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 476
+            "line": 479
           }
         },
         {
@@ -58939,29 +58939,29 @@
         {
           "id": "method1:2c61befe32e7629724c85fba6189204ea91e2c4f10af93ac38fd06c32002351b",
           "name": "BuildChatWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildChatWorkflowInputs",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 128
+            "line": 131
           }
         },
         {
           "id": "method1:aaa257a8079a804c306b17e6c082616cd31281f47fe3d20c0a1a1dc04348cab7",
           "name": "BuildStateUpdateForActiveWorkflow",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, changedPresets map[string]string, requestParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, changedPresets map[string]string, requestParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildStateUpdateForActiveWorkflow",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 341
+            "line": 380
           }
         },
         {
           "id": "method1:6c38793dbab81d37cb743ccc0e1de6d7a5d4c8d572d39bf2c8743336f1e066c0",
           "name": "BuildWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, projectID string, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, projectID string, workflowName string, selectedPresets map[string]string, userParams map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.BuildWorkflowInputs",
           "source": {
@@ -58977,7 +58977,7 @@
           "legacy_name": "launch.ChatSelectionParams",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 157
+            "line": 163
           }
         },
         {
@@ -59021,7 +59021,7 @@
           "legacy_name": "launch.LoadPresetFromDB",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 827
+            "line": 872
           }
         },
         {
@@ -59032,7 +59032,7 @@
           "legacy_name": "launch.LoadWorkflowForValidation",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 571
+            "line": 616
           }
         },
         {
@@ -59043,7 +59043,7 @@
           "legacy_name": "launch.LoadWorkflowInputsForBuild",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 382
+            "line": 427
           }
         },
         {
@@ -59054,7 +59054,7 @@
           "legacy_name": "launch.RefreshProviderPolicy",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 144
+            "line": 150
           }
         },
         {
@@ -59065,7 +59065,7 @@
           "legacy_name": "launch.RefreshSelectedProvider",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 176
+            "line": 182
           }
         },
         {
@@ -59109,7 +59109,7 @@
           "legacy_name": "launch.ResolvedModelAtDriver",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 200
+            "line": 206
           }
         },
         {
@@ -59131,7 +59131,7 @@
           "legacy_name": "launch.SelectionPatch",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 176
+            "line": 182
           }
         },
         {
@@ -59142,7 +59142,7 @@
           "legacy_name": "launch.SubstituteUnservableModels",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 514
+            "line": 559
           }
         },
         {
@@ -59153,7 +59153,7 @@
           "legacy_name": "launch.ValidateChatWorkflowInputs",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 418
+            "line": 463
           }
         },
         {
@@ -59164,7 +59164,7 @@
           "legacy_name": "launch.ValidateCreateChatWorkflowTree",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 694
+            "line": 739
           }
         },
         {
@@ -59175,7 +59175,7 @@
           "legacy_name": "launch.ValidateNoMachine",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 781
+            "line": 826
           }
         },
         {
@@ -59197,7 +59197,7 @@
           "legacy_name": "launch.ValidateStateUpdate",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 373
+            "line": 415
           }
         },
         {
@@ -59214,23 +59214,23 @@
         {
           "id": "method1:75ebcc47d5acd5bf54c4232c1243fb4e4ffe06b135ee71224397cdddd1fc070f",
           "name": "applyPresets",
-          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, data map[string]interface{}, selectedPresets map[string]string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.applyPresets",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 301
+            "line": 316
           }
         },
         {
           "id": "method1:46b561e9722532ae2fc9c8dd7919cbd31d5e2ad0f852f3073f0b68039a5f7155",
           "name": "buildChatWorkflowInputs",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, send map[string]interface{}) map[string]interface{}",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, selectedPresets map[string]string, send map[string]interface{}) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.buildChatWorkflowInputs",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 139
+            "line": 142
           }
         },
         {
@@ -59247,12 +59247,12 @@
         {
           "id": "method1:ccabd1b942415a18f30662456d236bb78e8eee688acb3e2f57ea0d8b5e844b38",
           "name": "buildWorkflowInputs",
-          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, workflowName string, selectedPresets map[string]string, selection map[string]interface{}, send map[string]interface{}) map[string]interface{}",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, checkout github.com/reliant-labs/reliant/internal/launch.Checkout, workflowName string, selectedPresets map[string]string, selection map[string]interface{}, send map[string]interface{}) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.buildWorkflowInputs",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 209
+            "line": 216
           }
         },
         {
@@ -59263,7 +59263,7 @@
           "legacy_name": "launch.createChatWorkflowLoader",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 682
+            "line": 727
           }
         },
         {
@@ -59274,7 +59274,7 @@
           "legacy_name": "launch.createDBPresetLoaderFull",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 810
+            "line": 855
           }
         },
         {
@@ -59340,7 +59340,7 @@
           "legacy_name": "launch.loadCreateChatWorkflowForValidation",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 656
+            "line": 701
           }
         },
         {
@@ -59351,7 +59351,7 @@
           "legacy_name": "launch.loadWorkflowInputs",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 400
+            "line": 445
           }
         },
         {
@@ -59362,7 +59362,7 @@
           "legacy_name": "launch.primaryDriver",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 159
+            "line": 165
           }
         },
         {
@@ -59373,7 +59373,7 @@
           "legacy_name": "launch.recordFailedStart",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1316
+            "line": 1319
           }
         },
         {
@@ -59384,7 +59384,7 @@
           "legacy_name": "launch.recordStartSelection",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1422
+            "line": 1425
           }
         },
         {
@@ -59417,7 +59417,7 @@
           "legacy_name": "launch.saveSeedMessages",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1090
+            "line": 1093
           }
         },
         {
@@ -59428,7 +59428,7 @@
           "legacy_name": "launch.start",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1141
+            "line": 1144
           }
         },
         {
@@ -59450,7 +59450,7 @@
           "legacy_name": "launch.startTitleGeneration",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1328
+            "line": 1331
           }
         },
         {
@@ -59461,7 +59461,7 @@
           "legacy_name": "launch.validateNoMachine",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 791
+            "line": 836
           }
         },
         {
@@ -59472,7 +59472,7 @@
           "legacy_name": "launch.validateWorkflowTree",
           "source": {
             "path": "internal/launch/workflows.go",
-            "line": 703
+            "line": 748
           }
         }
       ],
@@ -63963,7 +63963,7 @@
           "legacy_name": "app.GetThreadWorkflowInputs",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 448
+            "line": 451
           }
         },
         {
@@ -63985,7 +63985,7 @@
           "legacy_name": "app.GetWorkflowExecutions",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 282
+            "line": 285
           }
         },
         {
@@ -64216,7 +64216,7 @@
           "legacy_name": "app.SendMessage",
           "source": {
             "path": "internal/handlers/chat/chat_send.go",
-            "line": 224
+            "line": 227
           }
         },
         {
@@ -64326,7 +64326,7 @@
           "legacy_name": "app.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 364
+            "line": 367
           }
         },
         {
@@ -64348,7 +64348,7 @@
           "legacy_name": "app.attachThreadsWithoutWorkflowRow",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 543
+            "line": 546
           }
         },
         {
@@ -64596,12 +64596,12 @@
         {
           "id": "method1:5b5e73419261a01fd6b165df1c57537e26f3eb31dc6532121a8e81fe7beda598",
           "name": "inputsAfterClosedRun",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) map[string]interface{}",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 331
+            "line": 334
           }
         },
         {
@@ -64678,7 +64678,7 @@
           "legacy_name": "app.newRunOptions",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 454
+            "line": 457
           }
         },
         {
@@ -64711,7 +64711,7 @@
           "legacy_name": "app.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 344
+            "line": 347
           }
         },
         {
@@ -64744,7 +64744,7 @@
           "legacy_name": "app.persistChatPresets",
           "source": {
             "path": "internal/handlers/chat/chat_send.go",
-            "line": 216
+            "line": 219
           }
         },
         {
@@ -64953,7 +64953,7 @@
           "legacy_name": "app.rootRunIsLive",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 220
+            "line": 223
           }
         },
         {
@@ -65074,7 +65074,7 @@
           "legacy_name": "app.signalParamUpdate",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 232
+            "line": 235
           }
         },
         {
@@ -65151,7 +65151,7 @@
           "legacy_name": "app.threadAcceptsParamUpdate",
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
-            "line": 248
+            "line": 251
           }
         },
         {
@@ -65239,7 +65239,7 @@
           "legacy_name": "app.wakeLiveRun",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 476
+            "line": 479
           }
         },
         {

@@ -237,7 +237,11 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 				presets[k] = v
 			}
 		}
-		inputs = s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, nil)
+		var err error
+		inputs, err = s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, nil)
+		if err != nil {
+			return refuse(err, "This chat's settings need attention before it can run again: "+err.Error()+".")
+		}
 		if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, inputs); len(validationErrors) > 0 {
 			msgs := make([]string, len(validationErrors))
 			for i, e := range validationErrors {

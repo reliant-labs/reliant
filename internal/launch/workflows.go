@@ -114,7 +114,7 @@ func (l *Launcher) BuildWorkflowInputs(
 	workflowName string,
 	selectedPresets map[string]string,
 	userParams map[string]*structpb.Value,
-) map[string]interface{} {
+) (map[string]interface{}, error) {
 	return l.buildWorkflowInputs(ctx, Scope{UserID: userID, ProjectID: projectID}, checkout, workflowName, selectedPresets, nil, paramValues(userParams))
 }
 
@@ -125,6 +125,9 @@ func (l *Launcher) BuildWorkflowInputs(
 // The selection is what the composer chose and the server kept, so a run built
 // from a send that carries no params (another device, a restart, a branch, an
 // API message) still runs the model and mode the chat was set to.
+//
+// A selected preset that does not resolve (not synced on the chat's machine,
+// or not parseable) is an error, never a run on schema defaults without it.
 func (l *Launcher) BuildChatWorkflowInputs(
 	ctx context.Context,
 	userID string,
@@ -132,7 +135,7 @@ func (l *Launcher) BuildChatWorkflowInputs(
 	workflowName string,
 	selectedPresets map[string]string,
 	userParams map[string]*structpb.Value,
-) map[string]interface{} {
+) (map[string]interface{}, error) {
 	return l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, selectedPresets, paramValues(userParams))
 }
 
@@ -143,11 +146,14 @@ func (l *Launcher) buildChatWorkflowInputs(
 	workflowName string,
 	selectedPresets map[string]string,
 	send map[string]interface{},
-) map[string]interface{} {
-	inputs := l.buildWorkflowInputs(ctx, chatScope(userID, chat, workflowName), l.GetEffectiveCheckout(ctx, chat), workflowName,
+) (map[string]interface{}, error) {
+	inputs, err := l.buildWorkflowInputs(ctx, chatScope(userID, chat, workflowName), l.GetEffectiveCheckout(ctx, chat), workflowName,
 		selectedPresets, l.ChatSelectionParams(ctx, chat.ID, workflowName), send)
+	if err != nil {
+		return nil, err
+	}
 	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
-	return inputs
+	return inputs, nil
 }
 
 // ChatSelectionParams is the chat's stored selection params for workflowName,
@@ -205,7 +211,8 @@ func paramValues(params map[string]*structpb.Value) map[string]interface{} {
 // presets, which is where a group's params merge with the preset's. scope
 // says where the presets and the workflow's input schema are read from: the
 // run's machine's synced catalog (scope.DaemonID), or the union of every
-// machine's when it is empty (see chatScope).
+// machine's when it is empty (see chatScope). A selected preset that does not
+// resolve there fails the build (applyPresets).
 func (l *Launcher) buildWorkflowInputs(
 	ctx context.Context,
 	scope Scope,
@@ -214,7 +221,7 @@ func (l *Launcher) buildWorkflowInputs(
 	selectedPresets map[string]string,
 	selection map[string]interface{},
 	send map[string]interface{},
-) map[string]interface{} {
+) (map[string]interface{}, error) {
 	userID, projectID := scope.UserID, scope.ProjectID
 	initialData := make(map[string]interface{})
 
@@ -224,7 +231,10 @@ func (l *Launcher) buildWorkflowInputs(
 	}
 	logging.DebugContext(ctx, "[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
 	if len(selectedPresets) > 0 {
-		initialData = l.applyPresets(ctx, userID, projectID, scope.DaemonID, initialData, selectedPresets)
+		var err error
+		if initialData, err = l.applyPresets(ctx, userID, projectID, scope.DaemonID, initialData, selectedPresets); err != nil {
+			return nil, err
+		}
 	} else {
 		logging.DebugContext(ctx, "[buildWorkflowInputs] No presets selected")
 	}
@@ -292,27 +302,56 @@ func (l *Launcher) buildWorkflowInputs(
 		initialData["worktree_branch"] = checkout.Branch
 	}
 
-	return initialData
+	return initialData, nil
 }
 
 // applyPresets applies each selected preset's params onto data, in place of
 // the map it returns. Project presets come from daemonID's catalog (see
 // buildWorkflowInputs).
-func (l *Launcher) applyPresets(ctx context.Context, userID, projectID, daemonID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{} {
+//
+// A selected preset that does not resolve fails closed: running on schema
+// defaults would silently drop the tools, prompt and provider policy the
+// preset was chosen for. With machine-scoped catalogs that is a real case,
+// not a typo: a preset synced only by another machine is not this run's.
+func (l *Launcher) applyPresets(ctx context.Context, userID, projectID, daemonID string, data map[string]interface{}, selectedPresets map[string]string) (map[string]interface{}, error) {
 	loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID, daemonID)
-	for groupName, presetName := range selectedPresets {
+	groups := make([]string, 0, len(selectedPresets))
+	for groupName := range selectedPresets {
+		groups = append(groups, groupName)
+	}
+	sort.Strings(groups)
+	for _, groupName := range groups {
+		presetName := selectedPresets[groupName]
 		if presetName == "" {
 			continue
 		}
 		p, err := loadPreset(presetName)
 		if err != nil {
-			logging.WarnContext(ctx, "Failed to load preset", "preset", presetName, "group", groupName, "error", err)
-			continue
+			return nil, presetUnavailable(groupName, presetName, daemonID, err)
 		}
 		data = preset.ApplyToInputs(p, data, groupName)
 		logging.DebugContext(ctx, "[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", data["tools"])
 	}
-	return data
+	return data, nil
+}
+
+// presetUnavailable is the error for a selected preset that did not resolve:
+// a store failure is internal, anything else (not found, not parseable) a
+// precondition the person can fix by syncing the preset or choosing another.
+func presetUnavailable(group, name, daemonID string, err error) error {
+	var store *workflowsource.StoreError
+	if errors.As(err, &store) {
+		return &InternalError{Reason: "failed to read the project's presets", Err: err}
+	}
+	where := "this project"
+	if daemonID != "" {
+		where = "the machine this chat runs on"
+	}
+	return &ValidationError{
+		Kind:   ValidationFailedPrecondition,
+		Reason: fmt.Sprintf("the selected %s preset %q is not available on %s; sync it there or choose another preset", group, name, where),
+		Err:    err,
+	}
 }
 
 // cloneMap copies a param map one level deep, so the group-merge above writes
@@ -345,13 +384,16 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	workflowName string,
 	changedPresets map[string]string,
 	requestParams map[string]*structpb.Value,
-) map[string]interface{} {
+) (map[string]interface{}, error) {
 	if chat == nil {
-		return map[string]interface{}{}
+		return map[string]interface{}{}, nil
 	}
 	update := make(map[string]interface{})
 	if len(changedPresets) > 0 {
-		update = l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), update, changedPresets)
+		var err error
+		if update, err = l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), update, changedPresets); err != nil {
+			return nil, err
+		}
 	}
 	for key, value := range paramValues(requestParams) {
 		if workflow.RuntimeInjectedInputs[key] {
@@ -363,7 +405,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	if protoInputs := l.loadWorkflowInputs(ctx, chatScope(userID, chat, workflowName), workflowName); len(protoInputs) > 0 {
 		NormalizeModelInputs(update, protoInputs)
 	}
-	return update
+	return update, nil
 }
 
 // ValidateStateUpdate validates what a run would hold after update lands: the
@@ -371,7 +413,10 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 // The update alone cannot be validated — a required input the chat set earlier
 // is not in it — so the signal carries the delta and the check the whole.
 func (l *Launcher) ValidateStateUpdate(ctx context.Context, userID string, chat *db.Chat, workflowName string, presets map[string]string, update map[string]interface{}) []error {
-	effective := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, update)
+	effective, err := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, update)
+	if err != nil {
+		return []error{err}
+	}
 	return l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, effective)
 }
 
@@ -855,16 +900,21 @@ func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projec
 		}
 
 		// Try stored project presets from daemon config sync.
+		// A project preset that cannot be read or parsed is an error, not a
+		// fall-through to a builtin of the same name: that would run a
+		// definition other than the one the project declares.
 		if projectID != "" {
 			presets, err := workflowsource.ProjectPresets(ctx, repo, projectID, daemonID)
-			if err == nil {
-				if sp := cfg.FindStoredPresetByName(presets, name); sp != nil {
-					p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
-					if err == nil {
-						p.Source = "project"
-						return p, nil
-					}
+			if err != nil {
+				return nil, &workflowsource.StoreError{Err: fmt.Errorf("read the project's presets: %w", err)}
+			}
+			if sp := cfg.FindStoredPresetByName(presets, name); sp != nil {
+				p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
+				if err != nil {
+					return nil, fmt.Errorf("project preset %s (%s) does not parse: %w", name, sp.RelativePath, err)
 				}
+				p.Source = "project"
+				return p, nil
 			}
 		}
 	}

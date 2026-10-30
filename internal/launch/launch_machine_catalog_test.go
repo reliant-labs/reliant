@@ -86,6 +86,50 @@ func TestLaunchOnAMachineReadsThatMachinesCatalog(t *testing.T) {
 	assert.NotContains(t, inputs, "region", "the laptop's default is not cicd's")
 }
 
+// A selected preset only another machine synced is not this run's: the
+// launch is refused before anything is stored, rather than run on schema
+// defaults without the preset's tools, prompt and provider policy.
+func TestLaunchRefusesAPresetOnlyAnotherMachineSynced(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	cicd, laptop := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{cicd, laptop} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: launchTestUserID}))
+	}
+	now := time.Now().UTC()
+	for daemonID, presets := range map[string][]config.StoredPreset{
+		cicd:   {{Name: "other", RelativePath: ".reliant/presets/other.yaml", YAMLContent: "name: other\ntag: agent\nparams:\n  mode: plan\n"}},
+		laptop: {{Name: "laptop-only", RelativePath: ".reliant/presets/laptop-only.yaml", YAMLContent: "name: laptop-only\ntag: agent\nparams:\n  mode: auto\n"}},
+	} {
+		pj, err := config.EncodeCatalogJSON(presets)
+		require.NoError(t, err)
+		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+			ProjectID: projectID, DaemonID: daemonID, ProjectPresetsJSON: pj, PushedAt: now,
+		}, true)
+		require.NoError(t, err)
+	}
+
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	spec := func(daemonID string) Spec {
+		return Spec{
+			OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent", DaemonID: daemonID,
+			Presets: map[string]string{"default": "laptop-only"},
+			Params:  mockModelParams(t), Messages: userSeed("go"),
+		}
+	}
+	_, err := launcher.Launch(ctx, chatStartEvent(), spec(cicd))
+	require.Error(t, err, "cicd never synced laptop-only")
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Equal(t, ValidationFailedPrecondition, ve.Kind)
+	assert.Contains(t, ve.Reason, `"laptop-only"`)
+	assert.Empty(t, starter.calls, "nothing started")
+
+	_, err = launcher.Launch(ctx, chatStartEvent(), spec(laptop))
+	require.NoError(t, err, "on the laptop the preset resolves")
+	assert.Equal(t, "auto", starter.lastRootInput(t).Inputs["mode"])
+}
+
 // A pending no-machine branch started with a daemon named at its first send
 // is admitted against that daemon's catalog: its tree, presets and input
 // schema. The input check used to keep the chat's no-machine flag and read

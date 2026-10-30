@@ -1065,7 +1065,10 @@ func (l *Launcher) buildInputs(
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
-	initialData := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	initialData, err := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
 	if validationErrors := l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
