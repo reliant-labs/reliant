@@ -257,11 +257,23 @@ function FailingJobs({
 }) {
   if (listed.isLoading) return <Pending />;
   if (listed.error && !listed.data) return <Unavailable what="Job runs" error={listed.error} />;
-  const failing = failingJobs(listed.data?.jobs ?? [], env);
+  const jobs = listed.data?.jobs ?? [];
+  const failing = failingJobs(jobs, env);
   if (failing.length === 0) {
+    // Only failures are claimed: a running or unknown latest run is not a
+    // success, and a truncated list (ListWorkloads caps it, across every env)
+    // may not hold this environment's runs at all.
+    const ranHere = all ? jobs.length > 0 : jobs.some((job) => job.envName === env);
+    const none = !ranHere
+      ? listed.data?.jobsTruncated
+        ? "No run of this environment's jobs among the most recent listed."
+        : "No job ran in the last day."
+      : listed.data?.jobsTruncated
+        ? "No failed latest run among the most recent jobs listed."
+        : "No job's latest run failed.";
     return (
       <p className="text-ink-muted" data-testid="hub-jobs-none">
-        {listed.data?.jobs.length ? "Every job's latest run succeeded." : "No job ran in the last day."}
+        {none}
       </p>
     );
   }

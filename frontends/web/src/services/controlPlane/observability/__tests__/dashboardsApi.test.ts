@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, fromJson, toJson } from "@bufbuild/protobuf";
 import { DashboardSource, DashboardViewKind, ListDashboardsResponseSchema, GetDashboardResponseSchema } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 import { getDashboard, listDashboards } from "../dashboardsApi";
 
@@ -53,9 +53,10 @@ describe("builtin dashboard wire mapping", () => {
 
 describe("group and tags", () => {
   it("reads DashboardSummary.group and .tags when the server sends them", async () => {
-    const wire = create(ListDashboardsResponseSchema, { dashboards: [summary] });
-    Object.assign(wire.dashboards[0]!, { group: "platform", tags: ["billing", "org"] });
-    client.listDashboards.mockResolvedValue(wire);
+    // Through the JSON the Connect transport decodes, so a descriptor that
+    // lacks the fields drops them here as it would in production.
+    const sent = toJson(ListDashboardsResponseSchema, create(ListDashboardsResponseSchema, { dashboards: [{ ...summary, group: "platform", tags: ["billing", "org"] }] }));
+    client.listDashboards.mockResolvedValue(fromJson(ListDashboardsResponseSchema, sent));
     const index = await listDashboards({ orgId: "org" });
     expect(index.dashboards[0]).toMatchObject({ group: "platform", tags: ["billing", "org"] });
   });
