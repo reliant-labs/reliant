@@ -34,6 +34,9 @@ func workflowContextToTyped(m map[string]interface{}) *model.WorkflowContext {
 	if name, ok := m[workflowContextKeyName].(string); ok {
 		wc.Name = name
 	}
+	if chatID, ok := m[workflowContextKeyChatID].(string); ok {
+		wc.ChatID = chatID
+	}
 	if path, ok := m[workflowContextKeyPath].(string); ok {
 		wc.Path = path
 	}

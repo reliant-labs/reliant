@@ -304,6 +304,19 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__check_run_list": {
+		Bindable: map[string]struct{}{
+			"app_id":     {},
+			"check_name": {},
+			"connection": {},
+			"filter":     {},
+			"head_sha":   {},
+			"owner":      {},
+			"repo":       {},
+			"status":     {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__code_search": {
 		Bindable: map[string]struct{}{
 			"connection": {},

@@ -115,6 +115,9 @@ var actionPermissions = map[string]map[string]string{
 	"pr.create":               {"pull_requests": "write", "contents": "read"},
 	// Auto-merge, the merge queue and a merge write the base branch.
 	"pr.merge": {"pull_requests": "write", "contents": "write"},
+	// A check run is checks alone; GitHub lets only an App write one.
+	"check_run.create": {"checks": "write"},
+	"check_run.update": {"checks": "write"},
 	// git_publish's push (writeledger.GitPushAction): a branch is contents.
 	"git.push": {"contents": "write"},
 }
