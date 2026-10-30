@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -130,12 +133,19 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// machines resolves the turn's selector to the machine whose synced
+	// config it reads (configMachine); nil reads the project's union for any
+	// selector that names no id. Set by WithDaemonRouter.
+	machines toolexec.DaemonRouter
 	// allowPrivateEgress is the dial policy for user-supplied model endpoint
 	// URLs; see WithPrivateEgress.
 	allowPrivateEgress bool
 	// routing picks the account of a provider that serves a thread and
 	// handles an account that is refused; nil routes nothing.
 	routing *AccountRouting
+	// trackerFor returns the product-event tracker for a user; analytics.ForUser
+	// outside tests.
+	trackerFor func(ctx context.Context, userID string) analytics.Tracker
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's
@@ -154,9 +164,12 @@ func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
 	return a
 }
 
-// WithLocalModels wires the daemon relay local models are reached through.
-func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallLLMActivity {
-	a.localRelay = relay
+// WithDaemonRouter wires the daemon router: the relay local models are
+// reached through, and the resolution that picks the machine whose synced
+// config (skills, memory, MCP servers) a turn reads.
+func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLLMActivity {
+	a.machines = router
+	a.localRelay = router
 	return a
 }
 
@@ -192,6 +205,7 @@ func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFact
 		configProvider: cfgProvider,
 		driverResolver: resolver,
 		mcpBinder:      mcpBinder,
+		trackerFor:     analytics.ForUser,
 	}
 }
 
@@ -997,7 +1011,10 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	}
 }
 
-func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project) (*cfgpkg.Config, error) {
+// getProjectConfig reads the project's config as daemonID (the machine the
+// turn's tools run on) synced it: its skills, memories and MCP servers, not
+// the last pusher's.
+func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project, daemonID string) (*cfgpkg.Config, error) {
 	if project == nil {
 		return nil, fmt.Errorf("project is nil")
 	}
@@ -1008,6 +1025,7 @@ func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Proj
 
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{
 		ProjectID: project.ID,
+		DaemonID:  daemonID,
 	})
 	if err != nil {
 		return nil, err
@@ -1083,11 +1101,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 	projectPath := project.Path
 
-	projectCfg, err := a.getProjectConfig(ctx, project)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load project config: %w", err)
-	}
-
 	// Load worktree path if applicable
 	var worktreePath string
 	// worktreeDaemonID is the daemon that physically owns this worktree's
@@ -1115,6 +1128,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	workingDir := projectPath
 	if worktreePath != "" {
 		workingDir = worktreePath
+	}
+
+	// The project config (skills, memory, MCP servers) is the one the machine
+	// this turn's tools run on synced: routed as ExecuteTools routes them.
+	projectCfg, err := a.getProjectConfig(ctx, project,
+		configMachine(ctx, a.machines, chat.UserID, toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use
@@ -1302,7 +1323,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		for _, spawnConfig := range spawnConfigs {
-			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
 				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
@@ -1845,6 +1866,7 @@ streamLoop:
 		usageErr = nil
 	}
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
+	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -2418,9 +2440,18 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 	return ownChildren, len(inherited) > 0
 }
 
+// spawnPresetSource is where the spawn tool reads the project presets it
+// describes: the run's pinned catalog when it has one, else its machine's (the
+// union when the machine never synced), exactly where LoadPresetParams loads
+// the preset a spawn then runs (projectPresets). The model is shown the
+// presets the run will actually spawn with, not a later push.
+type spawnPresetSource struct {
+	projectID, daemonID, pin string
+}
+
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.
 // Used when spawn configurations come from tool_filter syntax.
-func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, projectID string, config tools.SpawnFilterConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig) tools.Tool {
 	if len(config.Presets) == 0 {
 		return nil
 	}
@@ -2431,27 +2462,29 @@ func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, proj
 		Presets:  config.Presets,
 	}
 
-	return a.getSpawnTool(ctx, projectID, spawnConfig)
+	return a.getSpawnTool(ctx, source, spawnConfig)
 }
 
 // getSpawnTool returns a spawn tool for orchestration workflows.
 // The spawn tool allows the LLM to delegate tasks to child workflows with specific presets.
 // config contains the workflow to spawn and available presets.
-func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, config *SpawnConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnTool(ctx context.Context, source spawnPresetSource, config *SpawnConfig) tools.Tool {
 	if config == nil || len(config.Presets) == 0 {
 		return nil
 	}
 
-	// Load preset descriptions from stored config (synced by daemon) + builtins.
-	// This runs on every turn of an orchestrating node, so it reads the one
-	// column it needs: the whole config row carries every indexed skill and
-	// was 3.3 GB of worker allocation per 22 minutes in prod.
+	// Load preset descriptions from the run's catalog (spawnPresetSource) +
+	// builtins. This runs on every turn of an orchestrating node, so it reads
+	// only presets: the whole config row carries every indexed skill and was
+	// 3.3 GB of worker allocation per 22 minutes in prod.
 	var storedPresets []cfgpkg.StoredPreset
-	if projectID != "" && a.repo != nil {
-		presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
-		if err == nil {
-			storedPresets, _ = cfgpkg.ParseStoredPresets(presetsJSON)
+	if source.projectID != "" && a.repo != nil {
+		presets, err := projectPresets(ctx, a.repo, source.projectID, source.daemonID, source.pin)
+		if err != nil {
+			logging.WarnContext(ctx, "[CallLLM] Could not read the run's presets for the spawn tool; listing names only",
+				"projectID", source.projectID, "catalogPin", source.pin, "error", err)
 		}
+		storedPresets = presets
 	}
 
 	var presetDescriptions []string
@@ -3119,6 +3152,67 @@ func (a *CallLLMActivity) logLLMUsage(ctx context.Context, chat *db.Chat, driver
 		"totalTokens", usage.TokenCount,
 	}
 	logging.InfoContext(ctx, "[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
+}
+
+// trackLLMCallCompleted emits the product.llm_call_completed event: provider,
+// model, token counts, latency and outcome. Never prompt or reply text.
+//
+// workflowID is the workflow that made the call (the runtime's), not the
+// chat's root: a spawned sub-agent's calls belong to the sub-agent, so they
+// join its own workflow events. Each call is its own event, even when two
+// carry identical counts (CallID).
+func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, workflowID, stepName string, latencyMs int64, usage llm.TokenUsage, streamErr error) {
+	metrics := analytics.LLMCallMetrics{
+		CallID:           uuid.NewString(),
+		Provider:         driver.Name(),
+		Model:            string(driver.Model().ID),
+		InputTokens:      int(usage.InputTokens),
+		OutputTokens:     int(usage.OutputTokens),
+		CacheReadTokens:  int(usage.CacheReadInputTokens),
+		CacheWriteTokens: int(usage.CacheCreationInputTokens),
+		LatencyMs:        latencyMs,
+		Success:          streamErr == nil,
+		ErrorType:        classifyLLMError(streamErr),
+		IsStreaming:      true,
+		ChatID:           chat.ID,
+		StepName:         stepName,
+	}
+	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
+		metrics.InputTokens = int(usage.TokenCount)
+	}
+	metrics.WorkflowID = workflowID
+	if metrics.WorkflowID == "" && chat.WorkflowID != nil {
+		metrics.WorkflowID = *chat.WorkflowID
+	}
+	trackerFor := a.trackerFor
+	if trackerFor == nil {
+		trackerFor = analytics.ForUser
+	}
+	trackerFor(ctx, chat.UserID).TrackLLMCallCompleted(metrics)
+}
+
+// classifyLLMError maps an LLM error to a coarse category for analytics.
+func classifyLLMError(err error) string {
+	if err == nil {
+		return ""
+	}
+	errMsg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "429"):
+		return "rate_limit"
+	case strings.Contains(errMsg, "context length") || strings.Contains(errMsg, "too many tokens") || strings.Contains(errMsg, "maximum context"):
+		return "context_length"
+	case strings.Contains(errMsg, "auth") || strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") || strings.Contains(errMsg, "invalid api key"):
+		return "auth"
+	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
+		return "timeout"
+	case strings.Contains(errMsg, "cancelled") || strings.Contains(errMsg, "canceled"):
+		return "cancelled"
+	case strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network") || strings.Contains(errMsg, "eof"):
+		return "network"
+	default:
+		return "unknown"
+	}
 }
 
 // trimBashWorkspaceCD removes redundant "cd <workspace> && " prefix from Bash tool input.

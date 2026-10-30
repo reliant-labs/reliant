@@ -110,12 +110,12 @@ var _ MachineWorkflowResolver = LaunchWorkflows{}
 
 // ResolveRunWorkflow implements WorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveValidatedRunWorkflow(ctx, w.Repo, userID, workflow, projectID)
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, launch.AutomationScope(userID, projectID, ""), workflow)
 }
 
 // ResolveRunWorkflowOn implements MachineWorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflowOn(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, launch.Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID}, workflow)
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, launch.AutomationScope(userID, projectID, daemonID), workflow)
 }
 
 // ResolveDeclaration reads the declaration t activates from its workflow and

@@ -35815,6 +35815,11 @@
             {
               "name": "webhook_managed",
               "kind": "bool"
+            },
+            {
+              "name": "definition_source",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerDefinitionSource"
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -35954,6 +35959,33 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            }
+          ],
+          "reliant.v1.TriggerDefinitionSource": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.TriggerEvent": [
@@ -36277,6 +36309,7 @@
           "reliant.v1.Trigger": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
@@ -43735,6 +43768,17 @@
           }
         },
         {
+          "id": "method1:eb6a75ecd4a8bab175475121594ca17885fdb00267911aa31a2b9b067bdc73c7",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
+          }
+        },
+        {
           "id": "method1:165860683a307dacc4bcc9fb153fe7cc165ab71ee50b67012ef1350efe1244a4",
           "name": "resolveDaemonID",
           "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (string, error)",
@@ -50614,6 +50658,17 @@
           }
         },
         {
+          "id": "method1:67d71ff1e2230a6f4f1a9e0f79cdb6b20c00f641746c54841c29a212fce4daa7",
+          "name": "GetPinnedProjectCatalog",
+          "signature": "func(ctx context.Context, pin string) (*github.com/reliant-labs/reliant/internal/db.PinnedCatalog, bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetPinnedProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.GetPinnedProjectCatalog"
+          }
+        },
+        {
           "id": "method1:ca3375d2f2cb6ef496b2be82f03c1dbe7389f305900262eebb9486ffbea5bd21",
           "name": "GetPlan",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Plan, error)",
@@ -50776,6 +50831,17 @@
           "source": {
             "path": "internal/db/project_machine_catalog.go",
             "symbol": "Repo.GetProjectMachineCatalogPushedAt"
+          }
+        },
+        {
+          "id": "method1:f8cb4e8a0112b9244117898ffc98399ae9c8bf01b12b211353e94c963a1ef8dd",
+          "name": "GetProjectMachineConfigRecord",
+          "signature": "func(ctx context.Context, projectID string, daemonID string) (*github.com/reliant-labs/reliant/internal/db.ProjectConfigRecord, bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetProjectMachineConfigRecord",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "symbol": "Repo.GetProjectMachineConfigRecord"
           }
         },
         {
@@ -52902,6 +52968,17 @@
           }
         },
         {
+          "id": "method1:ec0c0fc40519ff6c6859f69d0d31a63858396cc52aef98f4802eb92ac1bb7bf5",
+          "name": "PinProjectCatalog",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.PinProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.PinProjectCatalog"
+          }
+        },
+        {
           "id": "method1:4911a81bb3075a3d65683613d7e3edf1e120bff27c2b3c47911859eeb0ea64a9",
           "name": "Ping",
           "signature": "func(ctx context.Context) error",
@@ -54516,6 +54593,28 @@
           "source": {
             "path": "internal/db/workflow_source_diagnostic.go",
             "symbol": "Repo.machineNames"
+          }
+        },
+        {
+          "id": "method1:dfc05674d456155c06ff7972ae3c84d75f9de80864c7e4b6d09bd412a80abbd0",
+          "name": "pinnableUserWorkflows",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (*string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.pinnableUserWorkflows",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.pinnableUserWorkflows"
+          }
+        },
+        {
+          "id": "method1:b504e5b207704236d775cddabb98688703718993f0bc006913939637ba60913c",
+          "name": "projectFilesUnion",
+          "signature": "func(ctx context.Context, projectID string) (github.com/reliant-labs/reliant/internal/store.ProjectConfigUnion, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.projectFilesUnion",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "symbol": "Repo.projectFilesUnion"
           }
         },
         {
@@ -59496,7 +59595,7 @@
         {
           "id": "method1:b70d4b28a1366357f1ac4a81175728f0e12ecb04d136cba42e0adca4f8eb9751",
           "name": "validateWorkflowTree",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event) error",
+          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event, projectFirst bool) error",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.validateWorkflowTree",
           "source": {
@@ -60465,12 +60564,34 @@
         {
           "id": "method1:006c5b8bd77097c66e078d8c5ea7b5260640d86e7ba1889d042f3103607bcffc",
           "name": "load",
-          "signature": "func(ctx context.Context, projectID string) (cfg *github.com/reliant-labs/reliant/internal/config.Config, size int64, err error)",
+          "signature": "func(ctx context.Context, ref github.com/reliant-labs/reliant/internal/config.ProjectRef) (cfg *github.com/reliant-labs/reliant/internal/config.Config, size int64, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/config",
           "legacy_name": "config.load",
           "source": {
             "path": "internal/config/provider.go",
             "symbol": "StoredConfigProvider.load"
+          }
+        },
+        {
+          "id": "method1:a06a0c03058ceb6855b38aa8cee7b661d68f02c4c49dbb9c2760cc1173d48852",
+          "name": "machineScoped",
+          "signature": "func(ref github.com/reliant-labs/reliant/internal/config.ProjectRef) bool",
+          "scope": "github.com/reliant-labs/reliant/internal/config",
+          "legacy_name": "config.machineScoped",
+          "source": {
+            "path": "internal/config/provider.go",
+            "symbol": "StoredConfigProvider.machineScoped"
+          }
+        },
+        {
+          "id": "method1:99fec7122a6d138f770070065049de75277affeea6a3ccbca408e7c8071ef293",
+          "name": "readRecord",
+          "signature": "func(ctx context.Context, ref github.com/reliant-labs/reliant/internal/config.ProjectRef) (*github.com/reliant-labs/reliant/internal/config.StoredProjectConfigRecord, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/config",
+          "legacy_name": "config.readRecord",
+          "source": {
+            "path": "internal/config/provider.go",
+            "symbol": "StoredConfigProvider.readRecord"
           }
         }
       ],
@@ -62922,6 +63043,17 @@
           "source": {
             "path": "internal/handlers/trigger/trigger.go",
             "symbol": "Service.connections"
+          }
+        },
+        {
+          "id": "method1:72ad8b7704df15f5258e653665a157e0f2ef3dd2ffb0568ce038802b5db6ed61",
+          "name": "definitionSource",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger) *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinitionSource",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.definitionSource",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.definitionSource"
           }
         },
         {
@@ -65758,6 +65890,17 @@
           }
         },
         {
+          "id": "method1:7daa1314a0d84255eb73ca0eb1ad91f58d9d5d942419f4928f44c0522530805f",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
+          }
+        },
+        {
           "id": "method1:170f7b30fc1bdb3342c8a57502c992ddbcf9fd1205e7437b62af1d8d78d17f73",
           "name": "resolveDaemonID",
           "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (string, error)",
@@ -67555,6 +67698,17 @@
           "source": {
             "path": "internal/handlers/trigger/trigger.go",
             "symbol": "Service.connections"
+          }
+        },
+        {
+          "id": "method1:74627450db692e8b2fec1081ac1588f2a4d37c168b32da0fd9dd5c51b4cbbb32",
+          "name": "definitionSource",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger) *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinitionSource",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.definitionSource",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.definitionSource"
           }
         },
         {

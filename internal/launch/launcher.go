@@ -299,6 +299,13 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
+	// The chat's origin (set above) decides the precedence its tree, inputs
+	// and the run's own loads resolve under (AutomationPrecedence).
+	if ev.TriggerID != "" {
+		triggerID := ev.TriggerID
+		chat.TriggerID = &triggerID
+	}
+
 	chat.NoMachine = spec.NoMachine
 
 	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
@@ -326,11 +333,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
 	// read from the catalog of the machine the chat is pinned to, which is what the run's
 	// own loads read.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev, AutomationPrecedence(chat)); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -680,11 +687,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			checked.ActiveDaemonID = &target
 		}
 	}
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev, AutomationPrecedence(&checked)); err != nil {
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
 			return nil, err
 		}
 	}

@@ -89,6 +89,10 @@ type ResumeInput struct {
 	// NodeID is the top-level node recorded in the position checkpoint.
 	// May be empty when the predecessor died before entering any node.
 	NodeID string `json:"node_id,omitempty"`
+	// CatalogPin is the workflow catalog the interrupted run started with,
+	// read from its checkpoint (ResumeInputFromDurableState): the restart's
+	// root load reads it, so the resumed position runs the same definitions.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 	// LoopIteration is the loop iteration recorded in the checkpoint when
 	// NodeID is a loop node (0 otherwise). The resumed loop re-enters at this
 	// iteration so max-iteration guards keep counting from where they were;
@@ -940,6 +944,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// Notify user of the workflow parsing/loading error
 		notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "workflow_parse_error", err.Error())
 		return nil, fmt.Errorf("failed to load workflow definition: %w", err)
+	}
+	// Every later load of this run reads the catalog the root resolved
+	// against (catalog_pin.go); a continue-as-new successor carries it in
+	// the execution context.
+	if loadedWf.CatalogPin != "" {
+		if execCtx := input.ExecContext; execCtx != nil {
+			execCtx.CatalogPin = loadedWf.CatalogPin
+		}
+		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
 
 	// Parse the placeholder-resolved workflow to get input schemas
@@ -3120,6 +3133,9 @@ type LoadedWorkflow struct {
 	YAML         []byte `json:"yaml"`
 	WorkflowJSON []byte `json:"workflow_json"`
 	HasTemplates bool   `json:"has_templates"`
+	// CatalogPin is the project catalog the load resolved against
+	// (catalog_pin.go); empty from a worker that predates pins.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 }
 
 // loadWorkflowDefinition loads the workflow YAML definition and returns both raw YAML
@@ -3143,6 +3159,11 @@ func loadWorkflowDefinition(ctx workflow.Context, input WorkflowInput) (*LoadedW
 	loadInput := map[string]string{
 		"chat_id":       input.ChatID,
 		"workflow_name": input.WorkflowName,
+	}
+	// A continue-as-new successor of a pinned run, or a restart from its
+	// checkpoint, loads its root from the pin too.
+	if pin := rootCatalogPin(input); pin != "" {
+		loadInput["catalog_pin"] = pin
 	}
 	var result LoadedWorkflow
 	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(ctx, &result); err != nil {
@@ -5307,6 +5328,11 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 		"node_id":        nodeID,
 		"loop_iteration": loopIteration,
 	}
+	// The run's catalog rides its position: a restart from this checkpoint
+	// loads the definitions the run started with (ResumeInput.CatalogPin).
+	if pin := catalogPinFrom(ctx); pin != "" {
+		input["catalog_pin"] = pin
+	}
 
 	var result map[string]interface{}
 	if err := workflow.ExecuteActivity(activityCtx, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
@@ -6031,4 +6057,18 @@ func preflightSliceInput(preflightInput map[string]interface{}, slice, budget ti
 	in["wait_budget_seconds"] = int(budget / time.Second)
 	in["final"] = final
 	return in
+}
+
+// rootCatalogPin is the catalog a run's root load reads: the one its
+// execution context carries (a continue-as-new successor), else the one its
+// interrupted predecessor's checkpoint recorded (a restart), else "" (a new
+// run, which pins the current catalog).
+func rootCatalogPin(input WorkflowInput) string {
+	if input.ExecContext != nil && input.ExecContext.CatalogPin != "" {
+		return input.ExecContext.CatalogPin
+	}
+	if input.Resume != nil {
+		return input.Resume.CatalogPin
+	}
+	return ""
 }

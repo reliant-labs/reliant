@@ -17,7 +17,7 @@ import type { DashboardKind, DashboardRef, DashboardSummary } from "@/services/c
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { renderWithApi } from "../../Observability/__tests__/obsTestUtils";
 import { DashboardsList, type DashboardsAppFilter } from "../../Observability/Dashboards/DashboardsList";
-import { orgDashboardHref, orgReleaseHref } from "../OrgDashboards";
+import { orgDashboardHref } from "../OrgDashboards";
 
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 
@@ -48,7 +48,7 @@ const INDEX: DashboardSummary[] = [
   summary("workspace", "", "legacy", "Legacy board"),
 ];
 
-const hrefs = { dashboard: orgDashboardHref, release: orgReleaseHref };
+const hrefs = { dashboard: orgDashboardHref };
 
 function renderOrgList(appFilter?: DashboardsAppFilter, dashboards = INDEX) {
   const onCall = vi.fn();
@@ -87,17 +87,12 @@ describe("org dashboard links", () => {
     expect(orgDashboardHref({ kind: "template", projectId: "shop", key: "t" } satisfies DashboardRef)).toBe("");
   });
 
-  it("opens a release in its app's console", () => {
-    expect(orgReleaseHref("v1.2.0", "api")).toBe("/forge/p/api/releases/v1.2.0");
-    expect(orgReleaseHref("v1.2.0")).toBe("");
-    expect(orgReleaseHref("v1.2.0", "")).toBe("");
-  });
 });
 
 describe("DashboardsList, org mode", () => {
   it("asks for the whole org: no project, no environment", async () => {
     const { listed } = renderOrgList();
-    await screen.findByTestId("dashboards-release");
+    await screen.findByTestId("dashboards-group-overview");
     expect(listed).toHaveBeenCalledTimes(1);
     const req = listed.mock.calls[0]![0] as Record<string, unknown>;
     expect(req.orgId).toBeTruthy();
@@ -105,28 +100,29 @@ describe("DashboardsList, org mode", () => {
     expect(req.envId).toBeUndefined();
   });
 
-  it("lists every app's dashboards with the app named, each linking into its app", async () => {
+  it("lists every app's dashboards, grouped, with the app named, each linking into its app, and no Overview", async () => {
     renderOrgList();
-    const workspace = await screen.findByTestId("dashboards-workspace");
-    const release = screen.getByTestId("dashboards-release");
+    // Generated overviews are Overview; saved ones are Custom (no group from this server).
+    const overview = await screen.findByTestId("dashboards-group-overview");
+    const custom = screen.getByTestId("dashboards-group-custom");
+    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dashboards-hub")).not.toBeInTheDocument();
 
-    const links = (root: HTMLElement) => within(root).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")]);
-    expect(links(release).filter(([, href]) => href?.includes("/observability/dashboards/"))).toEqual([
+    const links = (root: HTMLElement) => within(root).getAllByRole("link").map((a) => [a.getAttribute("aria-label"), a.getAttribute("href")]);
+    expect(links(overview)).toEqual([
       ["shop: overview", "/forge/p/shop/observability/dashboards/release/shop-overview"],
       ["api: overview", "/forge/p/api/observability/dashboards/release/api-overview"],
     ]);
-    expect(links(workspace)).toEqual([["Checkout latency", "/forge/p/shop/observability/dashboards/workspace/checkout"]]);
-    // Releases link to their app's Releases page, not the (absent) current app's.
-    expect(within(release).getAllByRole("link", { name: "v1.2.0" })[0]).toHaveAttribute("href", "/forge/p/shop/releases/v1.2.0");
+    expect(links(custom)).toEqual([["Checkout latency", "/forge/p/shop/observability/dashboards/workspace/checkout"]]);
 
-    expect(within(release).getAllByText("shop").length).toBeGreaterThan(0);
-    expect(within(release).getByText("api")).toBeInTheDocument();
+    expect(within(overview).getAllByText("shop").length).toBeGreaterThan(0);
+    expect(within(overview).getByText("api")).toBeInTheDocument();
     expect(within(screen.getByTestId("dashboards")).getByText("4 dashboards across 3 apps")).toBeInTheDocument();
   });
 
   it("shows a dashboard with no app as plain text under Unassigned", async () => {
     renderOrgList();
-    const workspace = await screen.findByTestId("dashboards-workspace");
+    const workspace = await screen.findByTestId("dashboards-group-custom");
     const row = within(workspace).getByText("Legacy board").closest("tr")!;
     expect(within(row).queryByRole("link")).not.toBeInTheDocument();
     expect(within(row).getByText("Unassigned")).toBeInTheDocument();
@@ -134,14 +130,14 @@ describe("DashboardsList, org mode", () => {
 
   it("does not navigate on a click of a row with nowhere to go", async () => {
     const { navigateTo } = renderOrgList();
-    const workspace = await screen.findByTestId("dashboards-workspace");
+    const workspace = await screen.findByTestId("dashboards-group-custom");
     await userEvent.setup().click(within(workspace).getByText("Legacy board").closest("tr")!);
     expect(navigateTo).not.toHaveBeenCalled();
   });
 
   it("offers nothing that writes: no New dashboard, no template gallery, no read-only note", async () => {
     renderOrgList();
-    await screen.findByTestId("dashboards-release");
+    await screen.findByTestId("dashboards-group-overview");
     expect(screen.queryByTestId("dashboards-new")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dashboards-templates")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dashboards-read-only")).not.toBeInTheDocument();
@@ -150,24 +146,24 @@ describe("DashboardsList, org mode", () => {
 
   it("does not fetch the template gallery", async () => {
     const { onCall } = renderOrgList();
-    await screen.findByTestId("dashboards-release");
+    await screen.findByTestId("dashboards-group-overview");
     expect(onCall).not.toHaveBeenCalledWith("ListDashboardTemplates", expect.anything());
   });
 
   it("narrows to the picked apps through the App filter", async () => {
     const onChange = vi.fn();
     renderOrgList({ selected: ["api"], onChange });
-    const release = await screen.findByTestId("dashboards-release");
-    expect(within(release).getAllByRole("row").slice(1)).toHaveLength(1);
-    expect(within(release).getByText("api: overview")).toBeInTheDocument();
-    expect(screen.queryByTestId("dashboards-workspace")).not.toBeInTheDocument();
+    const overview = await screen.findByTestId("dashboards-group-overview");
+    expect(within(overview).getAllByRole("row").slice(1)).toHaveLength(1);
+    expect(within(overview).getByText("api: overview")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboards-group-custom")).not.toBeInTheDocument();
     expect(screen.getByTestId("dashboards-chip-app")).toHaveTextContent("App: api");
   });
 
   it("offers every app that has a dashboard, Unassigned last, and reports a pick", async () => {
     const onChange = vi.fn();
     renderOrgList({ selected: [], onChange });
-    await screen.findByTestId("dashboards-release");
+    await screen.findByTestId("dashboards-group-overview");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("dashboards-chip-app"));
     const options = screen.getAllByRole("menuitemradio").map((o) => o.textContent);
@@ -179,10 +175,10 @@ describe("DashboardsList, org mode", () => {
   it("clears the app filter along with the others", async () => {
     const onChange = vi.fn();
     const { onSearch } = renderOrgList({ selected: ["api"], onChange });
-    await screen.findByTestId("dashboards-release");
+    await screen.findByTestId("dashboards-group-overview");
     await userEvent.setup().click(screen.getByTestId("dashboards-clear"));
     expect(onChange).toHaveBeenCalledWith([]);
-    expect(onSearch).toHaveBeenCalledWith({ q: undefined, source: undefined, owner: undefined });
+    expect(onSearch).toHaveBeenCalledWith({ q: undefined, group: undefined, source: undefined, owner: undefined });
   });
 
   it("has a designed empty state when no app has a dashboard", async () => {

@@ -770,7 +770,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// On the machine the activation targets: its runs execute there, so a
 	// workflow only another machine provides is refused here, naming both.
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo,
-		launch.Scope{UserID: userID, ProjectID: def.ProjectId, DaemonID: def.DaemonId}, def.Workflow)
+		launch.AutomationScope(userID, def.ProjectId, def.DaemonId), def.Workflow)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -847,7 +847,8 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 	if workflowName == "" {
 		workflowName = workflow.DefaultWorkflow
 	}
-	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, workflowName, def.ProjectId)
+	scope := launch.AutomationScope(userID, def.ProjectId, def.DaemonId)
+	wf, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, scope, workflowName)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -858,7 +859,7 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 		return nil
 	}
 	loader := func(ref string) (*reliantv1.Workflow, error) {
-		return launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, ref, def.ProjectId)
+		return launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, scope, ref)
 	}
 	req := v2.MachineRequirements(wf, triggers.ParamsFromProto(def.Params), loader, tools.PreflightConfig())
 	if req.None() {
@@ -913,6 +914,7 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		}
 		return proto
 	}
+	proto.DefinitionSource = s.definitionSource(ctx, t)
 	// Broken wins over this (a broken declaration cannot be set up); this wins
 	// over everything the firings say, because nothing launches until the
 	// activation is finished.
@@ -920,6 +922,18 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		proto.Health = needsSetup
 	}
 	return proto
+}
+
+// definitionSource says where an activation's runs read its workflow from,
+// resolved exactly as they resolve it (on its machine, project first), and
+// what about that choice the owner should know. Nil when it does not resolve
+// right now: the declaration's health already says so.
+func (s *Service) definitionSource(ctx context.Context, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
+	desc, err := launch.DescribeRunWorkflow(ctx, s.deps.Repo, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
+	if err != nil {
+		return nil
+	}
+	return triggers.DefinitionSource(desc, t)
 }
 
 // requireSetupComplete refuses to turn on or run an activation whose params do

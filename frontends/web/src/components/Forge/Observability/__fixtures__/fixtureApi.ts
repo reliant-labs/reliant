@@ -33,6 +33,7 @@ import type {
   WorkloadDetail,
   WorkloadHealth,
   WorkloadEvent,
+  WorkloadJob,
   WorkloadMetric,
   WorkloadSeries,
   Flamegraph,
@@ -677,6 +678,39 @@ function summary(
  * near the limit), a `worker` (crash-looping in staging) and a `web` with no
  * limits set — the three shapes the Workloads view has to draw.
  */
+/**
+ * The fixture app's job runs, newest first, as ListWorkloads answers them:
+ * in prod the search reindex keeps failing and the nightly report failed once
+ * then recovered; the migration succeeds everywhere.
+ */
+export function fixtureJobs(scope: Pick<ObsScope, "envIds">, now: number): WorkloadJob[] {
+  const run = (env: (typeof FIXTURE_ENVS)[number], workload: string, suffix: string, result: WorkloadJob["result"], hoursAgo: number, reason = ""): WorkloadJob => ({
+    envId: env.id,
+    envName: env.name,
+    name: `${workload}-${suffix}`,
+    workload,
+    result,
+    reason,
+    releaseVersion: VERSIONS[1],
+    startedAtMs: now - hoursAgo * 3_600_000 - 90_000,
+    finishedAtMs: now - hoursAgo * 3_600_000,
+    durationSeconds: 90,
+  });
+  return envsOf(scope)
+    .flatMap((env) =>
+      env.name === "prod"
+        ? [
+            run(env, "search-reindex", "c41f", "failed", 1, "BackoffLimitExceeded"),
+            run(env, "nightly-report", "9a20", "succeeded", 3),
+            run(env, "shop-migrate", "b9e1", "succeeded", 5),
+            run(env, "search-reindex", "77d2", "failed", 7, "DeadlineExceeded"),
+            run(env, "nightly-report", "41cc", "failed", 20, "BackoffLimitExceeded"),
+          ]
+        : [run(env, "shop-migrate", "b9e1", "succeeded", 6)]
+    )
+    .sort((a, b) => (b.finishedAtMs ?? 0) - (a.finishedAtMs ?? 0));
+}
+
 export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): Workload[] {
   return envsOf(scope).flatMap((env, envIndex): Workload[] => {
     const prod = env.name === "prod";
@@ -985,7 +1019,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
       call("ListWorkloads", req, () => {
         if (options.empty) return { workloads: [], truncated: false, jobs: [], jobsTruncated: false };
         const all = fixtureWorkloads(req, req.window.endMs);
-        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: [], jobsTruncated: false };
+        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: fixtureJobs(req, req.window.endMs), jobsTruncated: false };
       }),
     getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
   };
