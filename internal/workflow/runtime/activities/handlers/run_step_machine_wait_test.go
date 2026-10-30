@@ -67,14 +67,17 @@ type blippingDaemon struct {
 	sends int
 	ran   int
 	looks int
+	// timeouts is the command timeout each send carried.
+	timeouts []int
 }
 
 func (d *blippingDaemon) up() bool { return !d.removed && !d.clock.Now().Before(d.backAt) }
 
-func (d *blippingDaemon) ExecuteCommand(_ context.Context, command, _ string, _ int, _ map[string]string) (string, string, int, bool, error) {
+func (d *blippingDaemon) ExecuteCommand(_ context.Context, command, _ string, timeoutMs int, _ map[string]string) (string, string, int, bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.sends++
+	d.timeouts = append(d.timeouts, timeoutMs)
 	if !d.up() {
 		return "", "", -1, false, &toolexec.TransportError{
 			Code: toolexec.ErrorCodeDaemonUnreached, Command: command,
@@ -122,6 +125,31 @@ func TestRunStep_MachineBackAfterMinutes_CommandRunsOnce(t *testing.T) {
 	assert.Equal(t, 2, sends, "sent once, held while the machine was away (not re-sent blind), sent again when it was back")
 	assert.GreaterOrEqual(t, clock.Now().Sub(start), 12*time.Minute)
 	assert.Less(t, clock.Now().Sub(start), 13*time.Minute, "sent again promptly once the machine was attached")
+}
+
+// The node's 30s timeout bounds the command on the machine, every time it is
+// sent; the wait for an unreachable machine is extra, and outlasts it. A
+// healthy machine (backAt now) gets the command once, bounded by 30s.
+func TestRunStep_CommandTimeoutBoundsTheCommandNotTheWait(t *testing.T) {
+	t.Parallel()
+	for name, away := range map[string]time.Duration{"healthy machine": 0, "machine away 12m": 12 * time.Minute} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			clock := newFakeClock()
+			daemon := &blippingDaemon{clock: clock, backAt: clock.Now().Add(away)}
+
+			_, err := runStepActivityTimed(t, daemon, daemon, clock, 30_000)
+
+			require.NoError(t, err, "a wait longer than the command timeout is not a command timeout")
+			daemon.mu.Lock()
+			defer daemon.mu.Unlock()
+			require.NotEmpty(t, daemon.timeouts)
+			for _, got := range daemon.timeouts {
+				assert.Equal(t, 30_000, got, "every send carries the node's command timeout, not the 5m default")
+			}
+			assert.Equal(t, 1, daemon.ran)
+		})
+	}
 }
 
 // The machine never comes back. The step fails once the 30-minute wait is

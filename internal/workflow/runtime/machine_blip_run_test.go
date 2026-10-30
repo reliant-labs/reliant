@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,6 +61,14 @@ func (g *gateCalls) count() int {
 // setup runs machineBlipRunYAML, answering the gate's Nth dispatch (1-based)
 // with gate(n).
 func (s *MachineBlipRunSuite) setup(chatID string, unattended bool, gate func(n int) (map[string]interface{}, error)) (*subAgentFailureEnv, *gateCalls, WorkflowInput) {
+	return s.setupYAML(chatID, machineBlipRunYAML, unattended, func(_ context.Context, _ map[string]interface{}, n int) (map[string]interface{}, error) {
+		return gate(n)
+	})
+}
+
+// setupYAML is setup for any definition, with the gate's activity context and
+// input in hand.
+func (s *MachineBlipRunSuite) setupYAML(chatID, yaml string, unattended bool, gate func(ctx context.Context, in map[string]interface{}, n int) (map[string]interface{}, error)) (*subAgentFailureEnv, *gateCalls, WorkflowInput) {
 	env := s.NewTestWorkflowEnvironment()
 	env.SetTestTimeout(30 * time.Second)
 	input := spawnE2EWorkflowInput(chatID)
@@ -67,7 +76,7 @@ func (s *MachineBlipRunSuite) setup(chatID string, unattended bool, gate func(n 
 		input.Inputs[InputKeyUnattended] = true
 	}
 	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
-	e.workflowYAMLs = map[string]string{"agent": machineBlipRunYAML}
+	e.workflowYAMLs = map[string]string{"agent": yaml}
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 		return map[string]interface{}{"daemon_available": true}, nil
 	}, activity.RegisterOptions{Name: "PreflightDaemonCheck"})
@@ -76,12 +85,12 @@ func (s *MachineBlipRunSuite) setup(chatID string, unattended bool, gate func(n 
 	}, activity.RegisterOptions{Name: "MachineResumeWake"})
 
 	calls := &gateCalls{e: e}
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	env.RegisterActivityWithOptions(func(ctx context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 		e.mu.Lock()
 		calls.n++
 		n := calls.n
 		e.mu.Unlock()
-		return gate(n)
+		return gate(ctx, in, n)
 	}, activity.RegisterOptions{Name: "ExecuteRunStep"})
 	return e, calls, input
 }
@@ -168,6 +177,48 @@ func (s *MachineBlipRunSuite) TestUnattended_PauseThatNeverClearsEndsTheRun() {
 	s.Equal(1+len(selfPauseBackoff), calls.count(), "the first attempt and one per rung, then no more")
 	s.GreaterOrEqual(e.env.Now().Sub(start), 33*time.Minute, "it gave up only after the whole ladder")
 	s.Less(e.env.Now().Sub(start), time.Hour, "and not long after it")
+}
+
+// A node's timeout bounds its COMMAND on a healthy machine: it reaches the run
+// step as the command timeout the machine enforces. The machine-wait
+// allowance goes on the activity alone, for a command that never reached its
+// machine — never extra time for one that is running.
+func (s *MachineBlipRunSuite) TestNodeTimeoutBoundsTheCommandAndTheWaitIsExtra() {
+	const timedGateYAML = `
+name: agent
+entry: [gate]
+daemon:
+  id: daemon-1
+nodes:
+  - id: gate
+    type: run
+    command: task ci
+    timeout: 30s
+`
+	var (
+		mu             sync.Mutex
+		commandTimeout interface{}
+		activityBound  time.Duration
+	)
+	e, calls, input := s.setupYAML("chat-blip-timeout", timedGateYAML, true, func(ctx context.Context, in map[string]interface{}, _ int) (map[string]interface{}, error) {
+		info := activity.GetInfo(ctx)
+		mu.Lock()
+		defer mu.Unlock()
+		commandTimeout = in["timeout"]
+		activityBound = info.Deadline.Sub(info.StartedTime)
+		return gatePassed(), nil
+	})
+
+	e.env.ExecuteWorkflow(DynamicWorkflow, input)
+	mu.Lock()
+	defer mu.Unlock()
+
+	s.Require().True(e.env.IsWorkflowCompleted())
+	s.Require().NoError(e.env.GetWorkflowError())
+	s.Equal(1, calls.count())
+	s.EqualValues(30000, commandTimeout, "the node's 30s is the command's timeout, not the 5m default")
+	s.Equal(30*time.Second+30*time.Minute, activityBound.Round(time.Second),
+		"the activity may also wait out an unreachable machine (RunStepMachineWaitBudget)")
 }
 
 // A blip that clears while the ladder is still climbing: the next rung's retry

@@ -25,6 +25,13 @@ func runStepWith(t *testing.T, responses ...mockRunResponse) (*mockRunExecutor, 
 // machine through machines (nil: unobservable), on clock.
 func runStepActivity(t *testing.T, executor RunExecutor, machines MachineObserver, clock *fakeClock) (ExecuteRunStepOutput, error) {
 	t.Helper()
+	return runStepActivityTimed(t, executor, machines, clock, 0)
+}
+
+// runStepActivityTimed is runStepActivity for a step whose command timeout is
+// timeoutMs (0: the default).
+func runStepActivityTimed(t *testing.T, executor RunExecutor, machines MachineObserver, clock *fakeClock, timeoutMs int) (ExecuteRunStepOutput, error) {
+	t.Helper()
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	act := NewExecuteRunStepActivity(repo, nil, executor)
@@ -38,7 +45,7 @@ func runStepActivity(t *testing.T, executor RunExecutor, machines MachineObserve
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(act.Execute)
 	val, err := env.ExecuteActivity(act.Execute, ExecuteRunStepInput{
-		WorkflowID: "wf-1", ChatID: chatID, StepID: "gate", Command: "task ci",
+		WorkflowID: "wf-1", ChatID: chatID, StepID: "gate", Command: "task ci", Timeout: timeoutMs,
 	})
 	var out ExecuteRunStepOutput
 	if err == nil {

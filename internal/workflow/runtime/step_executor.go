@@ -1041,11 +1041,32 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs[types.RunStepSaveMessageKey] = saveReq
 	}
 
-	// A command that never reached its machine waits for it inside the
-	// attempt (RunStepMachineWaitBudget), so a node timeout bounds the
-	// command, not the command plus that wait.
+	// The node's timeout bounds the COMMAND: it is the command timeout the
+	// machine enforces (ExecuteRunStepInput.Timeout, in ms). The activity gets
+	// RunStepMachineWaitBudget on top of it, for a command that never reached
+	// its machine to wait for it inside the attempt — an allowance for that
+	// wait only, never extra time for a command running on a healthy machine.
+	if timeout, ok := nodeTimeout(node); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	}
 	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep", saveReq != nil
+}
+
+// nodeTimeout is the node's own `timeout`, when it sets a positive one.
+func nodeTimeout(node *reliantv1.Node) (time.Duration, bool) {
+	if node == nil {
+		return 0, false
+	}
+	timeoutStr := model.TimeoutExpr(node)
+	if timeoutStr == "" {
+		return 0, false
+	}
+	parsed, err := time.ParseDuration(timeoutStr)
+	if err != nil || parsed <= 0 {
+		return 0, false
+	}
+	return parsed, true
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.
@@ -1058,12 +1079,8 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 func (e *StepExecutor) activityOptionsWithSlack(node *reliantv1.Node, slack time.Duration) workflow.Context {
 	// Default to 30 days - we have our own timeout mechanism via heartbeats
 	timeout := 30 * 24 * time.Hour
-	if node != nil {
-		if timeoutStr := model.TimeoutExpr(node); timeoutStr != "" {
-			if parsed, err := time.ParseDuration(timeoutStr); err == nil {
-				timeout = parsed + slack
-			}
-		}
+	if parsed, ok := nodeTimeout(node); ok {
+		timeout = parsed + slack
 	}
 
 	// HeartbeatTimeout controls how quickly Temporal detects a worker that died
