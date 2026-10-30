@@ -41,8 +41,10 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"chat_update_hub",
 		"user_update_hub",
 		"streaming_hub",
-		"nats_conn",
+		// The Temporal client publishes stop nudges on NATS (stopnudge),
+		// so it stops first.
 		"temporal_client",
+		"nats_conn",
 		"api_debug_server",
 		"db_repo",
 		"probe_listener",
@@ -82,7 +84,7 @@ func TestAPIReadiness(t *testing.T) {
 			ready = append(ready, n.Name)
 		}
 	}
-	require.Equal(t, []string{"probe_listener", "db_repo", "temporal_client", "nats_conn", "streaming_hub", "api_listener"}, ready)
+	require.Equal(t, []string{"probe_listener", "db_repo", "nats_conn", "temporal_client", "streaming_hub", "api_listener"}, ready)
 }
 
 // The process-wide state is installed before anything could read it: the

@@ -34912,6 +34912,11 @@
               "Name": "acting_identity",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "triggers",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "EnableWorkflowResponse": [
@@ -35339,6 +35344,11 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "triggers",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.EnableWorkflowResponse": [

@@ -190,7 +190,7 @@ export async function mapReplayPage(res: GetSessionReplayResponse): Promise<Repl
 // ── RPCs ─────────────────────────────────────────────────────────────────────
 
 /** One page of the sessions that started in the window, newest first. */
-export async function listSessions(req: ListSessionsRequest): Promise<SessionList> {
+export async function listSessions(req: ListSessionsRequest, options: { signal?: AbortSignal } = {}): Promise<SessionList> {
   const res = await client().listSessions({
     scope: wireRumScope(req, req.window),
     hasError: req.hasError,
@@ -199,35 +199,35 @@ export async function listSessions(req: ListSessionsRequest): Promise<SessionLis
     pathContains: req.pathContains,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  });
+  }, options);
   return { sessions: res.sessions.map(mapSessionSummary), nextPageToken: res.nextPageToken };
 }
 
 /** One session's summary. NotFound when the scope cannot see it. */
-export async function getSession(req: SessionRequest): Promise<SessionSummary> {
-  const res = await client().getSession({ scope: wireRumScope(req), sessionId: req.sessionId });
+export async function getSession(req: SessionRequest, options: { signal?: AbortSignal } = {}): Promise<SessionSummary> {
+  const res = await client().getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, options);
   if (!res.session) throw new Error("GetSession answered without a session");
   return mapSessionSummary(res.session);
 }
 
 /** One page of a session's timeline, oldest first. */
-export async function getSessionTimeline(req: TimelineRequest): Promise<Timeline> {
+export async function getSessionTimeline(req: TimelineRequest, options: { signal?: AbortSignal } = {}): Promise<Timeline> {
   const res = await client().getSessionTimeline({
     scope: wireRumScope(req),
     sessionId: req.sessionId,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  });
+  }, options);
   return { entries: res.entries.map(mapTimelineEntry), nextPageToken: res.nextPageToken };
 }
 
 /** One byte-bounded page of a session's rrweb events, parsed. */
-export async function getSessionReplay(req: ReplayRequest): Promise<ReplayPage> {
+export async function getSessionReplay(req: ReplayRequest, options: { signal?: AbortSignal } = {}): Promise<ReplayPage> {
   const res = await client().getSessionReplay({
     scope: wireRumScope(req),
     sessionId: req.sessionId,
     maxBytes: req.maxBytes ?? 0,
     pageToken: req.pageToken ?? "",
-  });
+  }, options);
   return mapReplayPage(res);
 }
