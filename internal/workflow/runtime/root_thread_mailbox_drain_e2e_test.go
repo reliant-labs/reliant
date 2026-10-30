@@ -101,45 +101,7 @@ type rootDrainEnv struct {
 func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns int) *rootDrainEnv {
 	t.Helper()
 	e := &rootDrainEnv{t: t, turns: turns}
-
-	wf, err := wfyaml.ParseWorkflow([]byte(rootDrainAgentYAML))
-	require.NoError(t, err)
-	wfJSON, err := protojson.Marshal(wf)
-	require.NoError(t, err)
-
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
-			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
-		},
-		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
-	)
-	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "EmitToolCallStatus"} {
-		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
-				return map[string]interface{}{"success": true}, nil
-			},
-			activity.RegisterOptions{Name: name},
-		)
-	}
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
-			return map[string]interface{}{}, nil
-		},
-		activity.RegisterOptions{Name: "Cleanup"},
-	)
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
-			return nil, nil
-		},
-		activity.RegisterOptions{Name: "EmitThreadEvent"},
-	)
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (interface{}, error) {
-			tid, _ := input["thread_id"].(string)
-			return map[string]interface{}{"message_id": "msg-" + tid}, nil
-		},
-		activity.RegisterOptions{Name: "CreateWorkflowWithThread"},
-	)
+	registerRootDrainSupportActivities(t, env)
 
 	// The message writer is the row-writer whose ordering relative to the
 	// drain is the whole invariant. call_llm and execute_tools write their
@@ -180,6 +142,51 @@ func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns
 		})
 
 	return e
+}
+
+// registerRootDrainSupportActivities registers every activity a root agent run
+// dispatches other than CallLLM, ExecuteTools and SaveMessage, which each test
+// supplies itself.
+func registerRootDrainSupportActivities(t *testing.T, env *testsuite.TestWorkflowEnvironment) {
+	t.Helper()
+	wf, err := wfyaml.ParseWorkflow([]byte(rootDrainAgentYAML))
+	require.NoError(t, err)
+	wfJSON, err := protojson.Marshal(wf)
+	require.NoError(t, err)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
+		},
+		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
+	)
+	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "EmitToolCallStatus"} {
+		env.RegisterActivityWithOptions(
+			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+				return map[string]interface{}{"success": true}, nil
+			},
+			activity.RegisterOptions{Name: name},
+		)
+	}
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{}, nil
+		},
+		activity.RegisterOptions{Name: "Cleanup"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "EmitThreadEvent"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input map[string]interface{}) (interface{}, error) {
+			tid, _ := input["thread_id"].(string)
+			return map[string]interface{}{"message_id": "msg-" + tid}, nil
+		},
+		activity.RegisterOptions{Name: "CreateWorkflowWithThread"},
+	)
 }
 
 func (e *rootDrainEnv) record(kind, thread string) {

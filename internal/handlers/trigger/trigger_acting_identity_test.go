@@ -36,11 +36,21 @@ func TestActingIdentityFor_SourceDefaultsAndStoredChoices(t *testing.T) {
 		{name: "stored owner unchanged", source: github, existing: &core.Trigger{ActingIdentity: core.ActingIdentityOwner}, hosted: true, want: core.ActingIdentityOwner},
 		{name: "legacy stored owner unchanged", source: github, existing: &core.Trigger{}, want: core.ActingIdentityOwner},
 		{name: "stored app unchanged", source: github, existing: &core.Trigger{ActingIdentity: core.ActingIdentityApp}, hosted: true, want: core.ActingIdentityApp},
-		{name: "other integration unchanged", source: &triggers.Source{Kind: core.TriggerKindIntegration, Integration: "slack"}, want: core.ActingIdentityOwner},
-		{name: "schedule unchanged", source: &triggers.Source{Kind: core.TriggerKindSchedule}, want: core.ActingIdentityOwner},
-		{name: "webhook unchanged", source: &triggers.Source{Kind: core.TriggerKindWebhook}, want: core.ActingIdentityOwner},
-		{name: "workflow event unchanged", source: &triggers.Source{Kind: core.TriggerKindWorkflowEvent}, want: core.ActingIdentityOwner},
+		// Every new source defaults to the bot where the deployment has one:
+		// a scheduled or Slack-triggered workflow's GitHub writes are the bot's too.
+		{name: "new other integration defaults app", source: &triggers.Source{Kind: core.TriggerKindIntegration, Integration: "slack"}, hosted: true, want: core.ActingIdentityApp},
+		{name: "new schedule defaults app", source: &triggers.Source{Kind: core.TriggerKindSchedule}, hosted: true, want: core.ActingIdentityApp},
+		{name: "new webhook defaults app", source: &triggers.Source{Kind: core.TriggerKindWebhook}, hosted: true, want: core.ActingIdentityApp},
+		{name: "new workflow event defaults app", source: &triggers.Source{Kind: core.TriggerKindWorkflowEvent}, hosted: true, want: core.ActingIdentityApp},
+		{name: "explicit owner on a schedule", source: &triggers.Source{Kind: core.TriggerKindSchedule}, chosen: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, hosted: true, want: core.ActingIdentityOwner},
+		{name: "stored owner schedule unchanged", source: &triggers.Source{Kind: core.TriggerKindSchedule}, existing: &core.Trigger{ActingIdentity: core.ActingIdentityOwner}, hosted: true, want: core.ActingIdentityOwner},
+		// A deployment with no control plane has no bot to default to.
+		{name: "no control plane: other integration owner", source: &triggers.Source{Kind: core.TriggerKindIntegration, Integration: "slack"}, want: core.ActingIdentityOwner},
+		{name: "no control plane: schedule owner", source: &triggers.Source{Kind: core.TriggerKindSchedule}, want: core.ActingIdentityOwner},
+		{name: "no control plane: webhook owner", source: &triggers.Source{Kind: core.TriggerKindWebhook}, want: core.ActingIdentityOwner},
+		{name: "no control plane: workflow event owner", source: &triggers.Source{Kind: core.TriggerKindWorkflowEvent}, want: core.ActingIdentityOwner},
 		{name: "missing bot infrastructure fails closed", source: github, refused: true},
+		{name: "explicit app without control plane fails closed", source: &triggers.Source{Kind: core.TriggerKindSchedule}, chosen: reliantv1.ActingIdentity_ACTING_IDENTITY_APP, refused: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &Service{}
@@ -88,7 +98,7 @@ func TestCreateTrigger_GitHubIdentityDefaultAndExplicitOwner(t *testing.T) {
 	}
 }
 
-func TestEnableWorkflow_IdentityDefaultsPerSourceAndPreservesStoredOwner(t *testing.T) {
+func TestEnableWorkflow_IdentityDefaultsToTheBotAndPreservesStoredOwner(t *testing.T) {
 	t.Parallel()
 	env, _ := setupInboundTriggerTest(t)
 	env.hosted(t).configure(t, func(d *Deps) { d.Catalog = fakeCatalog{"github": true, "slack": true} })
@@ -102,31 +112,25 @@ func TestEnableWorkflow_IdentityDefaultsPerSourceAndPreservesStoredOwner(t *test
 	})
 	resp := env.enable(t, req)
 	require.True(t, resp.Enabled, "%v", resp.Results)
+	require.Len(t, resp.Results, 4)
 	for _, result := range resp.Results {
-		want := reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
-		if result.Trigger == "new-issue" {
-			want = reliantv1.ActingIdentity_ACTING_IDENTITY_APP
-		}
-		assert.Equal(t, want, result.Activation.GetActingIdentity(), result.Trigger)
+		// GitHub, schedule, webhook and Slack sources alike: the bot by default.
+		assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, result.Activation.GetActingIdentity(), result.Trigger)
 	}
-	// An existing GitHub activation deliberately set to owner must stay owner
-	// when the workflow is enabled again without a shared identity choice.
+	// Existing activations deliberately set to owner must stay owner when the
+	// workflow is enabled again without a shared identity choice.
 	for _, row := range env.storedTriggers(t) {
-		if row.WorkflowTrigger != nil && *row.WorkflowTrigger == "new-issue" {
+		if row.WorkflowTrigger != nil && (*row.WorkflowTrigger == "new-issue" || *row.WorkflowTrigger == "nightly") {
 			row.ActingIdentity = core.ActingIdentityOwner
-			require.NoError(t, env.repo.UpdateTrigger(env.ctx, row))
-		}
-		if row.WorkflowTrigger != nil && *row.WorkflowTrigger == "nightly" {
-			row.ActingIdentity = core.ActingIdentityApp // explicitly chosen for a scheduled GitHub writer
 			require.NoError(t, env.repo.UpdateTrigger(env.ctx, row))
 		}
 	}
 	resp = env.enable(t, req)
 	require.True(t, resp.Enabled, "%v", resp.Results)
 	for _, result := range resp.Results {
-		want := reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
-		if result.Trigger == "nightly" {
-			want = reliantv1.ActingIdentity_ACTING_IDENTITY_APP
+		want := reliantv1.ActingIdentity_ACTING_IDENTITY_APP
+		if result.Trigger == "new-issue" || result.Trigger == "nightly" {
+			want = reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
 		}
 		assert.Equal(t, want, result.Activation.GetActingIdentity(), result.Trigger)
 	}
@@ -150,9 +154,19 @@ func asApp(d *reliantv1.TriggerDefinition) {
 	d.ActingIdentity = reliantv1.ActingIdentity_ACTING_IDENTITY_APP
 }
 
-// Nothing chose an identity: the activation is the owner's, exactly as every
-// activation was before the field existed.
-func TestCreateTrigger_ActingIdentityDefaultsToTheOwner(t *testing.T) {
+// Nothing chose an identity on a deployment with the GitHub App: the
+// automation's GitHub writes are the bot's, whatever its source.
+func TestCreateTrigger_ActingIdentityDefaultsToTheBot(t *testing.T) {
+	t.Parallel()
+
+	env := setupTriggerTest(t).hosted(t)
+	got := env.create(t, env.definition(nil))
+	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, got.GetActingIdentity(), "never UNSPECIFIED on a stored trigger")
+	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, got.GetId()))
+}
+
+// No control plane, so no bot: a non-GitHub source defaults to the owner.
+func TestCreateTrigger_ActingIdentityDefaultsToTheOwnerWithoutAControlPlane(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -219,7 +233,7 @@ func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
 
 	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(nil))
-	require.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
+	require.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, created.GetId()))
 
 	update := func(identity reliantv1.ActingIdentity) {
 		t.Helper()
@@ -228,10 +242,10 @@ func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
 		}))
 		require.NoError(t, err)
 	}
-	update(reliantv1.ActingIdentity_ACTING_IDENTITY_APP)
-	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, created.GetId()))
 	update(reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER)
 	assert.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
+	update(reliantv1.ActingIdentity_ACTING_IDENTITY_APP)
+	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, created.GetId()))
 }
 
 // Choosing the bot on an existing activation is refused where it could never
@@ -253,7 +267,10 @@ func TestListTriggers_CarriesTheIdentity(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t).hosted(t)
-	owner := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "mine" }))
+	owner := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
+		d.Name = "mine"
+		d.ActingIdentity = reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+	}))
 	bot := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "the bot's"; asApp(d) }))
 
 	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))

@@ -659,6 +659,9 @@ export const forgeConsoleDashboardSearchSchema = z.object({
   tv: z.boolean().optional().catch(undefined),
   version: z.number().int().positive().optional().catch(undefined),
   release: z.string().optional().catch(undefined),
+  // An org-scoped dashboard's project/env picker ("<project>/<env>" names):
+  // undeclared, zod would strip it and every routed view would read all envs.
+  orgEnvs: z.array(z.string()).optional().catch(undefined),
 });
 
 /**
