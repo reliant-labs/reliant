@@ -891,7 +891,7 @@ tasks:
       - ./scripts/release-tag.sh --dry-run
 
   release:lock:test:
-    desc: Self-test of scripts/release-lock.sh (one cut of a version at a time) against a bare remote
+    desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote
     cmds:
       - ./scripts/test-release-lock.sh
 
