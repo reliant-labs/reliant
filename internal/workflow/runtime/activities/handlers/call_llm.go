@@ -1323,7 +1323,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		for _, spawnConfig := range spawnConfigs {
-			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
 				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
@@ -2440,9 +2440,18 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 	return ownChildren, len(inherited) > 0
 }
 
+// spawnPresetSource is where the spawn tool reads the project presets it
+// describes: the run's pinned catalog when it has one, else its machine's (the
+// union when the machine never synced), exactly where LoadPresetParams loads
+// the preset a spawn then runs (projectPresets). The model is shown the
+// presets the run will actually spawn with, not a later push.
+type spawnPresetSource struct {
+	projectID, daemonID, pin string
+}
+
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.
 // Used when spawn configurations come from tool_filter syntax.
-func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, projectID string, config tools.SpawnFilterConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig) tools.Tool {
 	if len(config.Presets) == 0 {
 		return nil
 	}
@@ -2453,27 +2462,29 @@ func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, proj
 		Presets:  config.Presets,
 	}
 
-	return a.getSpawnTool(ctx, projectID, spawnConfig)
+	return a.getSpawnTool(ctx, source, spawnConfig)
 }
 
 // getSpawnTool returns a spawn tool for orchestration workflows.
 // The spawn tool allows the LLM to delegate tasks to child workflows with specific presets.
 // config contains the workflow to spawn and available presets.
-func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, config *SpawnConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnTool(ctx context.Context, source spawnPresetSource, config *SpawnConfig) tools.Tool {
 	if config == nil || len(config.Presets) == 0 {
 		return nil
 	}
 
-	// Load preset descriptions from stored config (synced by daemon) + builtins.
-	// This runs on every turn of an orchestrating node, so it reads the one
-	// column it needs: the whole config row carries every indexed skill and
-	// was 3.3 GB of worker allocation per 22 minutes in prod.
+	// Load preset descriptions from the run's catalog (spawnPresetSource) +
+	// builtins. This runs on every turn of an orchestrating node, so it reads
+	// only presets: the whole config row carries every indexed skill and was
+	// 3.3 GB of worker allocation per 22 minutes in prod.
 	var storedPresets []cfgpkg.StoredPreset
-	if projectID != "" && a.repo != nil {
-		presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
-		if err == nil {
-			storedPresets, _ = cfgpkg.ParseStoredPresets(presetsJSON)
+	if source.projectID != "" && a.repo != nil {
+		presets, err := projectPresets(ctx, a.repo, source.projectID, source.daemonID, source.pin)
+		if err != nil {
+			logging.WarnContext(ctx, "[CallLLM] Could not read the run's presets for the spawn tool; listing names only",
+				"projectID", source.projectID, "catalogPin", source.pin, "error", err)
 		}
+		storedPresets = presets
 	}
 
 	var presetDescriptions []string
