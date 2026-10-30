@@ -109,7 +109,9 @@ func lateWakeSuccessorInput(input WorkflowInput) WorkflowInput {
 	inputs := maps.Clone(input.Inputs)
 	delete(inputs, InputKeyLaunchRun)
 	DropActingIdentity(inputs)
-	// A fresh run loads the definitions as they are now: it pins anew.
+	// A fresh run loads the definitions as they are now: it pins anew. A
+	// successor that continues the tree (stoppedAgentsSuccessorInput) keeps
+	// the pin through its ResumeInput.
 	execCtx := input.ExecContext
 	if execCtx != nil && execCtx.CatalogPin != "" {
 		execCtx = execCtx.Clone()

@@ -191,3 +191,24 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	assert.Empty(t, ResumeInputFromDurableState(ctx, repo, chatID, workflowID).CatalogPin,
 		"a pin no longer stored is dropped: the restart pins the current catalog")
 }
+
+// A late wake's fresh run pins the current catalog, but the successor that
+// resumes stopped agents continues the interrupted tree: it keeps the pin the
+// predecessor ran under, so a push while the agents were stopped does not
+// reach the definitions they resume in.
+func TestStoppedAgentsSuccessorKeepsTheCatalogPin(t *testing.T) {
+	t.Parallel()
+	in := WorkflowInput{ChatID: "c", Inputs: map[string]interface{}{}, ExecContext: &ExecutionContext{CatalogPin: "pin-v1"}}
+
+	fresh := lateWakeSuccessorInput(in)
+	assert.Empty(t, rootCatalogPin(fresh), "a late wake's fresh run pins anew")
+	assert.Equal(t, "pin-v1", in.ExecContext.CatalogPin, "the predecessor's context is not mutated")
+
+	resumed := stoppedAgentsSuccessorInput(in, nil, &ChildWorkflowTracker{}, false)
+	require.NotNil(t, resumed.Resume)
+	assert.Equal(t, "pin-v1", rootCatalogPin(resumed), "resuming stopped agents keeps the catalog they started with")
+
+	restarted := WorkflowInput{ChatID: "c", Inputs: map[string]interface{}{}, ExecContext: &ExecutionContext{}, Resume: &ResumeInput{CatalogPin: "pin-v0"}}
+	assert.Equal(t, "pin-v0", rootCatalogPin(stoppedAgentsSuccessorInput(restarted, nil, &ChildWorkflowTracker{}, false)),
+		"a restarted run's pin, held in its ResumeInput, carries on too")
+}
