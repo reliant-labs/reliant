@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -75,6 +76,9 @@ func (s *Service) EnableWorkflow(
 	}
 	declared, err = selectDeclaredTriggers(wf, msg.Triggers)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkConnectionIntegrations(declared, msg.ConnectionIds); err != nil {
 		return nil, err
 	}
 
@@ -591,6 +595,45 @@ func selectDeclaredTriggers(wf *reliantv1.Workflow, names []string) ([]*reliantv
 		}
 	}
 	return out, nil
+}
+
+// checkConnectionIntegrations refuses, before anything is written, a
+// connection for an integration none of the enabled triggers listens
+// through. Connections are looked up by each trigger's integration, so an
+// unmatched key (`--connection gitub=conn-1`) would otherwise be ignored and
+// the trigger would listen through the default connection instead of the one
+// the caller named.
+func checkConnectionIntegrations(enabled []*reliantv1.WorkflowTrigger, connectionIDs map[string]string) error {
+	if len(connectionIDs) == 0 {
+		return nil
+	}
+	listens := map[string]bool{}
+	for _, wt := range enabled {
+		if integ := wt.GetIntegration(); integ != nil {
+			listens[integ.GetIntegration()] = true
+		}
+	}
+	var unmatched []string
+	for integration := range connectionIDs {
+		if !listens[integration] {
+			unmatched = append(unmatched, integration)
+		}
+	}
+	if len(unmatched) == 0 {
+		return nil
+	}
+	sort.Strings(unmatched)
+	through := "no integration"
+	if len(listens) > 0 {
+		names := make([]string, 0, len(listens))
+		for name := range listens {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		through = strings.Join(names, ", ")
+	}
+	return svcerr.InvalidArgument(fmt.Sprintf("a connection was given for %s, which no enabled trigger listens through (they listen through: %s)",
+		strings.Join(unmatched, ", "), through))
 }
 
 func declaresSelected(selected []*reliantv1.WorkflowTrigger, name string) bool {

@@ -525,6 +525,23 @@ func TestEnableWorkflowNamedTriggersUpdatesInPlaceAndLeavesTheRest(t *testing.T)
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an override for a trigger the request does not enable is refused")
 
+	// A connection for an integration no enabled trigger listens through is
+	// a typo to refuse, not a key to ignore (the trigger would listen through
+	// the default connection instead), and nothing is written.
+	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"new-issue"}
+		r.ConnectionIds = map[string]string{"tset": conn.ID}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an unmatched connection key is refused")
+	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"nightly"}
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a connection for a trigger the request does not enable is refused")
+	assert.Len(t, env.storedTriggers(t), 2)
+
 	// A second trigger of an existing name is the caller's conflict, not an
 	// internal error.
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
