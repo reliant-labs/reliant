@@ -10094,6 +10094,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.DaemonRegistryService/SetDefaultDaemon",
+          "name": "SetDefaultDaemon",
+          "input": "reliant.v1.SetDefaultDaemonRequest",
+          "output": "reliant.v1.SetDefaultDaemonResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.DaemonRegistryService/SetLocalModelEndpoints",
           "name": "SetLocalModelEndpoints",
           "input": "reliant.v1.SetLocalModelEndpointsRequest",
@@ -10241,6 +10251,27 @@
               "TargetKind": "daemon",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "SetDefaultDaemon",
+            "InputType": "SetDefaultDaemonRequest",
+            "OutputType": "SetDefaultDaemonResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
+            "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_default",
+              "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -10364,6 +10395,14 @@
               "IsOptional": false
             }
           ],
+          "SetDefaultDaemonRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "SetDefaultDaemonResponse": null,
           "SetLocalModelEndpointsRequest": [
             {
               "Name": "daemon_id",
@@ -10541,6 +10580,10 @@
             {
               "name": "forge_version",
               "kind": "string"
+            },
+            {
+              "name": "is_default",
+              "kind": "bool"
             }
           ],
           "reliant.v1.DiscoveredProject": [
@@ -10838,6 +10881,13 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.SetDefaultDaemonRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.SetDefaultDaemonResponse": [],
           "reliant.v1.SetLocalModelEndpointsRequest": [
             {
               "name": "daemon_id",
@@ -10879,6 +10929,8 @@
           "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetDefaultDaemonRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetDefaultDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
         },
@@ -31633,6 +31685,16 @@
           "auth_required": false
         },
         {
+          "id": "reliant.v1.TokenService/GetGitHubBotToken",
+          "name": "GetGitHubBotToken",
+          "input": "reliant.v1.GetGitHubBotTokenRequest",
+          "output": "reliant.v1.GetGitHubBotTokenResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": false
+        },
+        {
           "id": "reliant.v1.TokenService/GetGitToken",
           "name": "GetGitToken",
           "input": "reliant.v1.GetGitTokenRequest",
@@ -31794,6 +31856,23 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "GetGitHubBotToken",
+            "InputType": "GetGitHubBotTokenRequest",
+            "OutputType": "GetGitHubBotTokenResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": false,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetGitHubBotTokenRequest",
+            "OutputTypeFQ": "reliant.v1.GetGitHubBotTokenResponse",
+            "InputProtoFile": "reliant/v1/token.proto",
+            "OutputProtoFile": "reliant/v1/token.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/token.proto",
@@ -31869,6 +31948,50 @@
             },
             {
               "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetGitHubBotTokenRequest": [
+            {
+              "Name": "owner",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repo",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "permissions",
+              "ProtoType": "message",
+              "IsOptional": false
+            }
+          ],
+          "GetGitHubBotTokenResponse": [
+            {
+              "Name": "token",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expires_at",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "bot_login",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "acting_for_login",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repository",
               "ProtoType": "string",
               "IsOptional": false
             }
@@ -32009,6 +32132,44 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.GetGitHubBotTokenRequest": [
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "permissions",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.GetGitHubBotTokenResponse": [
+            {
+              "name": "token",
+              "kind": "string"
+            },
+            {
+              "name": "expires_at",
+              "kind": "string"
+            },
+            {
+              "name": "bot_login",
+              "kind": "string"
+            },
+            {
+              "name": "acting_for_login",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.GetGitTokenRequest": [
             {
               "name": "provider",
@@ -32129,6 +32290,8 @@
           "reliant.v1.CreateTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.ExchangeTokenRequest": "reliant/v1/token.proto",
           "reliant.v1.ExchangeTokenResponse": "reliant/v1/token.proto",
+          "reliant.v1.GetGitHubBotTokenRequest": "reliant/v1/token.proto",
+          "reliant.v1.GetGitHubBotTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.GetGitTokenRequest": "reliant/v1/token.proto",
           "reliant.v1.GetGitTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.ListTokensRequest": "reliant/v1/token.proto",
@@ -39960,6 +40123,11 @@
               "name": "on_failure",
               "kind": "message",
               "type_name": "reliant.v1.Workflow"
+            },
+            {
+              "name": "requires",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowRequirements"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -40084,6 +40252,23 @@
               "name": "triggers",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowTrigger",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.WorkflowRequirements": [
+            {
+              "name": "tools",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "integrations",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "repos",
+              "kind": "string",
               "repeated": true
             }
           ],
@@ -40271,6 +40456,7 @@
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
+          "reliant.v1.WorkflowRequirements": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowUI": "reliant/v1/workflow_v2.proto"
         },
@@ -43780,6 +43966,17 @@
           }
         },
         {
+          "id": "method1:075c562a852417c588d8e75185fa3f77a7e51ce917a2ba7503719ce74fcbc063",
+          "name": "defaultSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.defaultSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.defaultSelector"
+          }
+        },
+        {
           "id": "method1:a83f6c4f86d1b1220a8f056649621f44e38cd7f6ae5385db0a10479774843bb2",
           "name": "dispatchDaemonCommand",
           "signature": "func(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32, data []byte, requestID string, resolve func() (daemonID string, waitFor string, err error)) ([]byte, error)",
@@ -43931,6 +44128,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:fe01872e58ef37e10bde52a4d4fcbf2662e26391f40394c3f8b534bbab75b6bf",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
@@ -48737,6 +48945,17 @@
           "source": {
             "path": "internal/handlers/daemon_registry/daemon_registry.go",
             "symbol": "Service.ResumeDaemon"
+          }
+        },
+        {
+          "id": "method1:e35d38484e50f5ca9497a91f89bcd2bb49d4c8727dd7c6700a0c644a2938e267",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.SetDefaultDaemonRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.SetDefaultDaemonResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetDefaultDaemon",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_set_default_daemon.go",
+            "symbol": "Service.SetDefaultDaemon"
           }
         },
         {
@@ -53659,6 +53878,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetDaemonStorageState"
+          }
+        },
+        {
+          "id": "method1:d98e72ceeee71902b90f809a3a47ff0a28a8b40d955e4353d7424c0e6dac77d1",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetDefaultDaemon",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetDefaultDaemon"
           }
         },
         {
@@ -61460,6 +61690,17 @@
           }
         },
         {
+          "id": "method1:ee28a23340e5e466ce8bf5b019a86af0d41a7fe88c5e7ccbda8ec64b46123878",
+          "name": "GetGitHubBotToken",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitHubBotTokenRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitHubBotTokenResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/token",
+          "legacy_name": "token.GetGitHubBotToken",
+          "source": {
+            "path": "internal/handlers/token/token_github_bot.go",
+            "symbol": "Service.GetGitHubBotToken"
+          }
+        },
+        {
           "id": "method1:4d95b07aa7e2906c7f93445495eec0529d9758e86b009d5700fe58e1fe7dee6e",
           "name": "GetGitToken",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitTokenRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitTokenResponse], error)",
@@ -65957,6 +66198,17 @@
           }
         },
         {
+          "id": "method1:fab2b6c3e0b2829b6d156d824f75532325e12755e7ff7ede3d6f06ce706286fe",
+          "name": "defaultSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.defaultSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.defaultSelector"
+          }
+        },
+        {
           "id": "method1:348a2191ee7116cd07dbc8a0199a9fc7f01f47902e290e53b84ae53db94b5fdb",
           "name": "dispatchDaemonCommand",
           "signature": "func(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32, data []byte, requestID string, resolve func() (daemonID string, waitFor string, err error)) ([]byte, error)",
@@ -66108,6 +66360,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:1675b7bd33af6a83d9deaa72d7ef8d41201382dcf388599a0fe2164eab1ea0ac",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
@@ -72899,6 +73162,17 @@
             "path": "internal/handlers/daemon_registry/deps.go",
             "symbol": "Repository.ListFreshDaemonAttachmentsForUser"
           }
+        },
+        {
+          "id": "method1:58dc4630765cb61be61dd724b197a2afea8f88901029a9c192930beb12a86a38",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetDefaultDaemon",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.SetDefaultDaemon"
+          }
         }
       ],
       "candidates": [
@@ -77973,6 +78247,27 @@
     },
     {
       "consumer": "Token",
+      "field": "GitBotTokens",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/token.GitBotTokenSource",
+      "methods": [
+        {
+          "id": "method1:368403021b0dbb37984dc0999ed93badba331111bd2719127adc2d02ea7a3426",
+          "name": "MintInstallationToken",
+          "signature": "func(ctx context.Context, req github.com/reliant-labs/reliant/internal/gitcredentialclient.InstallationRequest) (github.com/reliant-labs/reliant/internal/gitcredentialclient.InstallationToken, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/token",
+          "legacy_name": "token.MintInstallationToken",
+          "source": {
+            "path": "internal/handlers/token/service.go",
+            "symbol": "GitBotTokenSource.MintInstallationToken"
+          }
+        }
+      ],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Token",
       "field": "GitTokens",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/token.GitTokenSource",
       "methods": [
@@ -81685,6 +81980,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewTemporalClient"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Token.GitBotTokens",
+      "source": {
+        "path": "internal/handlers/token/service.go",
+        "symbol": "New"
       }
     },
     {

@@ -19,6 +19,7 @@ type Repository interface {
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
 	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
+	SetDefaultDaemon(ctx context.Context, userID, daemonID string) error
 }
 
 // Router is the slice of toolexec.DaemonRouter the daemon_registry handlers

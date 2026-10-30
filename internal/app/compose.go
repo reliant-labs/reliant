@@ -830,6 +830,12 @@ func (g *Graph) newReliantKeySweep() (*ReliantKeySweep, error) {
 	})
 }
 
+func (g *Graph) newLLMUsageRetention() (*LLMUsageRetention, error) {
+	return NewLLMUsageRetention(LLMUsageRetentionDeps{
+		DB: g.Database(),
+	})
+}
+
 func (g *Graph) newPayloadGC() (*PayloadGC, error) {
 	return NewPayloadGC(PayloadGCDeps{
 		Store:    g.PayloadStore(),
@@ -1264,7 +1270,8 @@ func (g *Graph) newToken() (*token.Service, error) {
 		ControlPlane: token.TokenControlPlane{
 			Issuer: g.APISettings().AuthorizationServer,
 		},
-		GitTokens: git,
+		GitTokens:    git,
+		GitBotTokens: git,
 	})
 }
 
