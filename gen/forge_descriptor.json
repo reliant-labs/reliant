@@ -16819,6 +16819,27 @@
             "TargetKind": "daemon",
             "Writer": "INTERCEPTOR"
           }
+        },
+        {
+          "Name": "SetDefaultDaemon",
+          "InputType": "SetDefaultDaemonRequest",
+          "OutputType": "SetDefaultDaemonResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
+          "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_default",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -16942,6 +16963,14 @@
             "IsOptional": false
           }
         ],
+        "SetDefaultDaemonRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "SetDefaultDaemonResponse": null,
         "SetLocalModelEndpointsRequest": [
           {
             "Name": "daemon_id",
@@ -17119,6 +17148,10 @@
           {
             "name": "forge_version",
             "kind": "string"
+          },
+          {
+            "name": "is_default",
+            "kind": "bool"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -17416,6 +17449,13 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.SetDefaultDaemonRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.SetDefaultDaemonResponse": [],
         "reliant.v1.SetLocalModelEndpointsRequest": [
           {
             "name": "daemon_id",
@@ -17457,6 +17497,8 @@
         "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
       },
@@ -42471,7 +42513,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/daemon_registry.proto": "a7bfb3522a4acd7a538c44c4d5f33b78a73f17438090c505830d874fe776f8c9",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
