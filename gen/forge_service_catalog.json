@@ -33703,6 +33703,12 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "bytes"
+            },
+            {
+              "name": "repo_states",
+              "kind": "message",
+              "type_name": "reliant.v1.SyncedRepoState",
+              "repeated": true
             }
           ],
           "reliant.v1.ProjectDiscovery": [
@@ -33916,6 +33922,32 @@
               "kind": "message",
               "type_name": "reliant.v1.ToolResultAck",
               "oneof": "message"
+            }
+          ],
+          "reliant.v1.SyncedRepoState": [
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "commit_sha",
+              "kind": "string"
+            },
+            {
+              "name": "dirty",
+              "kind": "bool"
+            },
+            {
+              "name": "default_branch",
+              "kind": "string"
+            },
+            {
+              "name": "error",
+              "kind": "string"
             }
           ],
           "reliant.v1.TerminalInputMessage": [
@@ -34139,6 +34171,7 @@
           "reliant.v1.ReportToolResultResponse": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerHeartbeat": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerMessage": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.SyncedRepoState": "reliant/v1/tools_daemon.proto",
           "reliant.v1.TerminalInputMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.TerminalOutputMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.TerminalOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
@@ -50713,7 +50746,7 @@
           "legacy_name": "db.GetProjectMachineCatalogPushedAt",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 153
+            "line": 181
           }
         },
         {
@@ -50724,7 +50757,7 @@
           "legacy_name": "db.GetProjectMachinePresetsJSON",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 176
+            "line": 204
           }
         },
         {
@@ -50735,7 +50768,7 @@
           "legacy_name": "db.GetProjectMachineWorkflowsJSON",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 167
+            "line": 195
           }
         },
         {
@@ -52869,7 +52902,29 @@
           "legacy_name": "db.ProjectMachineCatalogs",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 128
+            "line": 156
+          }
+        },
+        {
+          "id": "method1:75686c18c4d9b09109b08501eb575c92bae649c378fb1a27e31099ab84873e06",
+          "name": "ProjectMachineRepoStates",
+          "signature": "func(ctx context.Context, projectID string) (map[string][]github.com/reliant-labs/reliant/internal/config.SyncedRepoState, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ProjectMachineRepoStates",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "line": 134
+          }
+        },
+        {
+          "id": "method1:e807353f2d8bd17edbe65f8a3950892252e8bd69c7bd1f2ba4f1ae74d68ae15d",
+          "name": "ProjectWorkflowProvenance",
+          "signature": "func(ctx context.Context, projectID string) ([]github.com/reliant-labs/reliant/internal/config.WorkflowProvenance, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ProjectWorkflowProvenance",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "line": 256
           }
         },
         {
@@ -53002,6 +53057,17 @@
           "source": {
             "path": "internal/db/hosted_http_action_tickets.go",
             "line": 17
+          }
+        },
+        {
+          "id": "method1:163030c629544a4676ebf51bf1e64f5243930a847410112c5cb766f880791204",
+          "name": "ReleaseClosedTriggerCapacityExecution",
+          "signature": "func(ctx context.Context, e github.com/reliant-labs/reliant/internal/store.TriggerCapacityExecution) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ReleaseClosedTriggerCapacityExecution",
+          "source": {
+            "path": "internal/db/trigger_capacity.go",
+            "line": 40
           }
         },
         {
@@ -53584,7 +53650,7 @@
           "legacy_name": "db.SyncProjectConfigSnapshot",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 34
+            "line": 35
           }
         },
         {
@@ -54398,7 +54464,7 @@
           "legacy_name": "db.machineCatalogRow",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 184
+            "line": 212
           }
         },
         {
@@ -54431,7 +54497,7 @@
           "legacy_name": "db.projectMachineCatalogs",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 135
+            "line": 163
           }
         },
         {
@@ -54442,7 +54508,7 @@
           "legacy_name": "db.projectMachineRemovals",
           "source": {
             "path": "internal/db/project_machine_catalog.go",
-            "line": 209
+            "line": 237
           }
         },
         {
@@ -61766,7 +61832,7 @@
           "legacy_name": "tools_daemon.SendLoadProjectConfigs",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 687
+            "line": 688
           }
         },
         {
@@ -61843,7 +61909,7 @@
           "legacy_name": "tools_daemon.SendUnwatchProjectConfigs",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 727
+            "line": 728
           }
         },
         {
@@ -61854,7 +61920,7 @@
           "legacy_name": "tools_daemon.SendWatchProjectConfigs",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 709
+            "line": 710
           }
         },
         {
@@ -61964,7 +62030,7 @@
           "legacy_name": "tools_daemon.ensureOwnedProjectForPath",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 397
+            "line": 398
           }
         },
         {
@@ -62327,7 +62393,7 @@
           "legacy_name": "tools_daemon.sendLoadAndWatchProjectConfig",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 675
+            "line": 676
           }
         },
         {
@@ -62371,7 +62437,7 @@
           "legacy_name": "tools_daemon.shouldApplyProjectConfigUpdate",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_project_config.go",
-            "line": 469
+            "line": 470
           }
         },
         {

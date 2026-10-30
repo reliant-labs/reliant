@@ -237,7 +237,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// daemon's other logs, for investigations of shared-state damage. A log
 	// that cannot be opened is reported and skipped: auditing never stops work.
 	if auditLog, err := shellaudit.Open(filepath.Join(opts.BootstrapConfig.DataDir, "logs", shellaudit.FileName), shellaudit.Options{}); err != nil {
-		logging.Warn(logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
+		logging.WarnContext(ctx, logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
 	} else {
 		defer auditLog.Close() //nolint:errcheck
 		previous := shellaudit.SetDefault(auditLog)
@@ -492,7 +492,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	SetHeavyGate(heavyGate)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
-	egressLimiter, err := egresslimit.New(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})
 	if err != nil {
 		return nil, fmt.Errorf("creating egress limiter: %w", err)
 	}
@@ -2349,6 +2349,8 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
+	heads := readRepoHeads(projectPath, discoverRepoSources(ctx, projectPath))
+	states := repoStates(ctx, projectPath, heads)
 
 	version := hashBytes(
 		userConfigYAML,
@@ -2364,6 +2366,8 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		scenarioBytes,
 		skillBytes,
 		repoMemoriesBytes,
+		headsVersion(heads),
+		statesVersion(states),
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -2385,6 +2389,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
 		RepoMemoriesMd:  repoMemories,
+		RepoStates:      states,
 	}, nil
 }
 
