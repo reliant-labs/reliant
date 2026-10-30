@@ -94,6 +94,116 @@ func (ClaimableState) EnumDescriptor() ([]byte, []int) {
 	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{0}
 }
 
+// Which site keeps the claimer's one free static slot.
+type FreeSiteChoice int32
+
+const (
+	FreeSiteChoice_FREE_SITE_CHOICE_UNSPECIFIED FreeSiteChoice = 0
+	// The claimed site is live; the caller's existing free site is paused.
+	FreeSiteChoice_FREE_SITE_CHOICE_CLAIMED FreeSiteChoice = 1
+	// The caller's existing free site stays live; the claimed site is claimed but
+	// paused.
+	FreeSiteChoice_FREE_SITE_CHOICE_EXISTING FreeSiteChoice = 2
+)
+
+// Enum value maps for FreeSiteChoice.
+var (
+	FreeSiteChoice_name = map[int32]string{
+		0: "FREE_SITE_CHOICE_UNSPECIFIED",
+		1: "FREE_SITE_CHOICE_CLAIMED",
+		2: "FREE_SITE_CHOICE_EXISTING",
+	}
+	FreeSiteChoice_value = map[string]int32{
+		"FREE_SITE_CHOICE_UNSPECIFIED": 0,
+		"FREE_SITE_CHOICE_CLAIMED":     1,
+		"FREE_SITE_CHOICE_EXISTING":    2,
+	}
+)
+
+func (x FreeSiteChoice) Enum() *FreeSiteChoice {
+	p := new(FreeSiteChoice)
+	*p = x
+	return p
+}
+
+func (x FreeSiteChoice) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FreeSiteChoice) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_claimable_v1_claimable_proto_enumTypes[1].Descriptor()
+}
+
+func (FreeSiteChoice) Type() protoreflect.EnumType {
+	return &file_services_claimable_v1_claimable_proto_enumTypes[1]
+}
+
+func (x FreeSiteChoice) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FreeSiteChoice.Descriptor instead.
+func (FreeSiteChoice) EnumDescriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{1}
+}
+
+// What a membership claim did about the free slot.
+type FreeSiteOutcome int32
+
+const (
+	FreeSiteOutcome_FREE_SITE_OUTCOME_UNSPECIFIED FreeSiteOutcome = 0
+	// Nothing was paused: the caller had no other free site, or the situation
+	// changed since they chose (the other site was deleted, or they subscribed).
+	FreeSiteOutcome_FREE_SITE_OUTCOME_NO_CONFLICT FreeSiteOutcome = 1
+	// The claimed site is live; paused_site is the caller's other site.
+	FreeSiteOutcome_FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE FreeSiteOutcome = 2
+	// The caller's other site is live; paused_site is the claimed site.
+	FreeSiteOutcome_FREE_SITE_OUTCOME_EXISTING_SITE_LIVE FreeSiteOutcome = 3
+)
+
+// Enum value maps for FreeSiteOutcome.
+var (
+	FreeSiteOutcome_name = map[int32]string{
+		0: "FREE_SITE_OUTCOME_UNSPECIFIED",
+		1: "FREE_SITE_OUTCOME_NO_CONFLICT",
+		2: "FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE",
+		3: "FREE_SITE_OUTCOME_EXISTING_SITE_LIVE",
+	}
+	FreeSiteOutcome_value = map[string]int32{
+		"FREE_SITE_OUTCOME_UNSPECIFIED":        0,
+		"FREE_SITE_OUTCOME_NO_CONFLICT":        1,
+		"FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE":  2,
+		"FREE_SITE_OUTCOME_EXISTING_SITE_LIVE": 3,
+	}
+)
+
+func (x FreeSiteOutcome) Enum() *FreeSiteOutcome {
+	p := new(FreeSiteOutcome)
+	*p = x
+	return p
+}
+
+func (x FreeSiteOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FreeSiteOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_claimable_v1_claimable_proto_enumTypes[2].Descriptor()
+}
+
+func (FreeSiteOutcome) Type() protoreflect.EnumType {
+	return &file_services_claimable_v1_claimable_proto_enumTypes[2]
+}
+
+func (x FreeSiteOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FreeSiteOutcome.Descriptor instead.
+func (FreeSiteOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{2}
+}
+
 type StartClaimableDeployRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The project name (forge.yaml name). Part of the idempotency key.
@@ -880,16 +990,162 @@ func (x *OpenClaimSessionResponse) GetExpiresIn() int64 {
 	return 0
 }
 
+// One static site, named for a person deciding which to keep.
+type FreeSite struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	OrgId        string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Project      string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
+	// The environment's name and the deployment's.
+	Env  string `protobuf:"bytes,4,opt,name=env,proto3" json:"env,omitempty"`
+	Name string `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	// The platform URL (with scheme); empty until one is allocated.
+	Url           string `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FreeSite) Reset() {
+	*x = FreeSite{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FreeSite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FreeSite) ProtoMessage() {}
+
+func (x *FreeSite) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FreeSite.ProtoReflect.Descriptor instead.
+func (*FreeSite) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FreeSite) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *FreeSite) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *FreeSite) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *FreeSite) GetEnv() string {
+	if x != nil {
+		return x.Env
+	}
+	return ""
+}
+
+func (x *FreeSite) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FreeSite) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+// FreeSiteChoiceRequired is the error detail (svcerr.WithDetail) on a
+// FailedPrecondition/claimable_free_site_choice_required refusal.
+type FreeSiteChoiceRequired struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The caller's site that holds their free slot now.
+	ExistingSite *FreeSite `protobuf:"bytes,1,opt,name=existing_site,json=existingSite,proto3" json:"existing_site,omitempty"`
+	// The site the claim would add.
+	ClaimedSite   *FreeSite `protobuf:"bytes,2,opt,name=claimed_site,json=claimedSite,proto3" json:"claimed_site,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FreeSiteChoiceRequired) Reset() {
+	*x = FreeSiteChoiceRequired{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FreeSiteChoiceRequired) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FreeSiteChoiceRequired) ProtoMessage() {}
+
+func (x *FreeSiteChoiceRequired) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FreeSiteChoiceRequired.ProtoReflect.Descriptor instead.
+func (*FreeSiteChoiceRequired) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *FreeSiteChoiceRequired) GetExistingSite() *FreeSite {
+	if x != nil {
+		return x.ExistingSite
+	}
+	return nil
+}
+
+func (x *FreeSiteChoiceRequired) GetClaimedSite() *FreeSite {
+	if x != nil {
+		return x.ClaimedSite
+	}
+	return nil
+}
+
 type CompleteClaimRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimToken    string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ClaimToken string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
+	// Which site keeps the free slot when the caller already has a free site.
+	// Ignored (and may be unset) when they do not.
+	FreeSite      FreeSiteChoice `protobuf:"varint,2,opt,name=free_site,json=freeSite,proto3,enum=controlplane.v1.FreeSiteChoice" json:"free_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteClaimRequest) Reset() {
 	*x = CompleteClaimRequest{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -901,7 +1157,7 @@ func (x *CompleteClaimRequest) String() string {
 func (*CompleteClaimRequest) ProtoMessage() {}
 
 func (x *CompleteClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -914,7 +1170,7 @@ func (x *CompleteClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaimRequest.ProtoReflect.Descriptor instead.
 func (*CompleteClaimRequest) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{12}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompleteClaimRequest) GetClaimToken() string {
@@ -922,6 +1178,119 @@ func (x *CompleteClaimRequest) GetClaimToken() string {
 		return x.ClaimToken
 	}
 	return ""
+}
+
+func (x *CompleteClaimRequest) GetFreeSite() FreeSiteChoice {
+	if x != nil {
+		return x.FreeSite
+	}
+	return FreeSiteChoice_FREE_SITE_CHOICE_UNSPECIFIED
+}
+
+type GetClaimFreeSiteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClaimToken    string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetClaimFreeSiteRequest) Reset() {
+	*x = GetClaimFreeSiteRequest{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetClaimFreeSiteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetClaimFreeSiteRequest) ProtoMessage() {}
+
+func (x *GetClaimFreeSiteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetClaimFreeSiteRequest.ProtoReflect.Descriptor instead.
+func (*GetClaimFreeSiteRequest) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetClaimFreeSiteRequest) GetClaimToken() string {
+	if x != nil {
+		return x.ClaimToken
+	}
+	return ""
+}
+
+type GetClaimFreeSiteResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True when claiming now needs a free_site choice.
+	ChoiceRequired bool `protobuf:"varint,1,opt,name=choice_required,json=choiceRequired,proto3" json:"choice_required,omitempty"`
+	// Set when choice_required.
+	ExistingSite  *FreeSite `protobuf:"bytes,2,opt,name=existing_site,json=existingSite,proto3" json:"existing_site,omitempty"`
+	ClaimedSite   *FreeSite `protobuf:"bytes,3,opt,name=claimed_site,json=claimedSite,proto3" json:"claimed_site,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetClaimFreeSiteResponse) Reset() {
+	*x = GetClaimFreeSiteResponse{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetClaimFreeSiteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetClaimFreeSiteResponse) ProtoMessage() {}
+
+func (x *GetClaimFreeSiteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetClaimFreeSiteResponse.ProtoReflect.Descriptor instead.
+func (*GetClaimFreeSiteResponse) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetClaimFreeSiteResponse) GetChoiceRequired() bool {
+	if x != nil {
+		return x.ChoiceRequired
+	}
+	return false
+}
+
+func (x *GetClaimFreeSiteResponse) GetExistingSite() *FreeSite {
+	if x != nil {
+		return x.ExistingSite
+	}
+	return nil
+}
+
+func (x *GetClaimFreeSiteResponse) GetClaimedSite() *FreeSite {
+	if x != nil {
+		return x.ClaimedSite
+	}
+	return nil
 }
 
 type CompleteClaimResponse struct {
@@ -934,14 +1303,22 @@ type CompleteClaimResponse struct {
 	Hostnames []string `protobuf:"bytes,3,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
 	// Open holds on the claimed org's deploys, if any: the claimed org is
 	// ordinary, so billing rules apply from here on.
-	Holds         []*v1.DeployHold `protobuf:"bytes,4,rep,name=holds,proto3" json:"holds,omitempty"`
+	Holds []*v1.DeployHold `protobuf:"bytes,4,rep,name=holds,proto3" json:"holds,omitempty"`
+	// Path "membership" only: what the claim did about the caller's one free
+	// static slot. This is what happened, which can differ from what was asked
+	// when the situation changed between the choice and the claim.
+	FreeSiteOutcome FreeSiteOutcome `protobuf:"varint,5,opt,name=free_site_outcome,json=freeSiteOutcome,proto3,enum=controlplane.v1.FreeSiteOutcome" json:"free_site_outcome,omitempty"`
+	// The site that is paused because of it (the other one holds the slot). Unset
+	// unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
+	// it runs again when the person subscribes or deletes the other site.
+	PausedSite    *FreeSite `protobuf:"bytes,6,opt,name=paused_site,json=pausedSite,proto3" json:"paused_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteClaimResponse) Reset() {
 	*x = CompleteClaimResponse{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -953,7 +1330,7 @@ func (x *CompleteClaimResponse) String() string {
 func (*CompleteClaimResponse) ProtoMessage() {}
 
 func (x *CompleteClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -966,7 +1343,7 @@ func (x *CompleteClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaimResponse.ProtoReflect.Descriptor instead.
 func (*CompleteClaimResponse) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{13}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CompleteClaimResponse) GetOrgId() string {
@@ -993,6 +1370,20 @@ func (x *CompleteClaimResponse) GetHostnames() []string {
 func (x *CompleteClaimResponse) GetHolds() []*v1.DeployHold {
 	if x != nil {
 		return x.Holds
+	}
+	return nil
+}
+
+func (x *CompleteClaimResponse) GetFreeSiteOutcome() FreeSiteOutcome {
+	if x != nil {
+		return x.FreeSiteOutcome
+	}
+	return FreeSiteOutcome_FREE_SITE_OUTCOME_UNSPECIFIED
+}
+
+func (x *CompleteClaimResponse) GetPausedSite() *FreeSite {
+	if x != nil {
+		return x.PausedSite
 	}
 	return nil
 }
@@ -1058,30 +1449,61 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
-	"expires_in\x18\x03 \x01(\x03R\texpiresIn\"7\n" +
+	"expires_in\x18\x03 \x01(\x03R\texpiresIn\"\x98\x01\n" +
+	"\bFreeSite\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x18\n" +
+	"\aproject\x18\x03 \x01(\tR\aproject\x12\x10\n" +
+	"\x03env\x18\x04 \x01(\tR\x03env\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\x12\x10\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\"\x96\x01\n" +
+	"\x16FreeSiteChoiceRequired\x12>\n" +
+	"\rexisting_site\x18\x01 \x01(\v2\x19.controlplane.v1.FreeSiteR\fexistingSite\x12<\n" +
+	"\fclaimed_site\x18\x02 \x01(\v2\x19.controlplane.v1.FreeSiteR\vclaimedSite\"u\n" +
 	"\x14CompleteClaimRequest\x12\x1f\n" +
 	"\vclaim_token\x18\x01 \x01(\tR\n" +
-	"claimToken\"\x9e\x01\n" +
+	"claimToken\x12<\n" +
+	"\tfree_site\x18\x02 \x01(\x0e2\x1f.controlplane.v1.FreeSiteChoiceR\bfreeSite\":\n" +
+	"\x17GetClaimFreeSiteRequest\x12\x1f\n" +
+	"\vclaim_token\x18\x01 \x01(\tR\n" +
+	"claimToken\"\xc1\x01\n" +
+	"\x18GetClaimFreeSiteResponse\x12'\n" +
+	"\x0fchoice_required\x18\x01 \x01(\bR\x0echoiceRequired\x12>\n" +
+	"\rexisting_site\x18\x02 \x01(\v2\x19.controlplane.v1.FreeSiteR\fexistingSite\x12<\n" +
+	"\fclaimed_site\x18\x03 \x01(\v2\x19.controlplane.v1.FreeSiteR\vclaimedSite\"\xa8\x02\n" +
 	"\x15CompleteClaimResponse\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1d\n" +
 	"\n" +
 	"claim_path\x18\x02 \x01(\tR\tclaimPath\x12\x1c\n" +
 	"\thostnames\x18\x03 \x03(\tR\thostnames\x121\n" +
-	"\x05holds\x18\x04 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds*\xc4\x01\n" +
+	"\x05holds\x18\x04 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\x12L\n" +
+	"\x11free_site_outcome\x18\x05 \x01(\x0e2 .controlplane.v1.FreeSiteOutcomeR\x0ffreeSiteOutcome\x12:\n" +
+	"\vpaused_site\x18\x06 \x01(\v2\x19.controlplane.v1.FreeSiteR\n" +
+	"pausedSite*\xc4\x01\n" +
 	"\x0eClaimableState\x12\x1f\n" +
 	"\x1bCLAIMABLE_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CLAIMABLE_STATE_LIVE\x10\x01\x12\x1d\n" +
 	"\x19CLAIMABLE_STATE_SUSPENDED\x10\x02\x12\x1b\n" +
 	"\x17CLAIMABLE_STATE_CLAIMED\x10\x03\x12\x1e\n" +
 	"\x1aCLAIMABLE_STATE_TAKEN_DOWN\x10\x04\x12\x1b\n" +
-	"\x17CLAIMABLE_STATE_EXPIRED\x10\x052\x9a\x05\n" +
+	"\x17CLAIMABLE_STATE_EXPIRED\x10\x05*o\n" +
+	"\x0eFreeSiteChoice\x12 \n" +
+	"\x1cFREE_SITE_CHOICE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18FREE_SITE_CHOICE_CLAIMED\x10\x01\x12\x1d\n" +
+	"\x19FREE_SITE_CHOICE_EXISTING\x10\x02*\xaa\x01\n" +
+	"\x0fFreeSiteOutcome\x12!\n" +
+	"\x1dFREE_SITE_OUTCOME_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dFREE_SITE_OUTCOME_NO_CONFLICT\x10\x01\x12'\n" +
+	"#FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE\x10\x02\x12(\n" +
+	"$FREE_SITE_OUTCOME_EXISTING_SITE_LIVE\x10\x032\x83\x06\n" +
 	"\x10ClaimableService\x12s\n" +
 	"\x14StartClaimableDeploy\x12,.controlplane.v1.StartClaimableDeployRequest\x1a-.controlplane.v1.StartClaimableDeployResponse\x12v\n" +
 	"\x15GetClaimableChallenge\x12-.controlplane.v1.GetClaimableChallengeRequest\x1a..controlplane.v1.GetClaimableChallengeResponse\x12\x7f\n" +
 	"\x18GetClaimableAvailability\x120.controlplane.v1.GetClaimableAvailabilityRequest\x1a1.controlplane.v1.GetClaimableAvailabilityResponse\x12O\n" +
 	"\bGetClaim\x12 .controlplane.v1.GetClaimRequest\x1a!.controlplane.v1.GetClaimResponse\x12g\n" +
 	"\x10OpenClaimSession\x12(.controlplane.v1.OpenClaimSessionRequest\x1a).controlplane.v1.OpenClaimSessionResponse\x12^\n" +
-	"\rCompleteClaim\x12%.controlplane.v1.CompleteClaimRequest\x1a&.controlplane.v1.CompleteClaimResponseB\xd9\x01\n" +
+	"\rCompleteClaim\x12%.controlplane.v1.CompleteClaimRequest\x1a&.controlplane.v1.CompleteClaimResponse\x12g\n" +
+	"\x10GetClaimFreeSite\x12(.controlplane.v1.GetClaimFreeSiteRequest\x1a).controlplane.v1.GetClaimFreeSiteResponseB\xd9\x01\n" +
 	"\x13com.controlplane.v1B\x0eClaimableProtoP\x01ZUgithub.com/reliant-labs/reliant/gen/controlplane/services/claimable/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -1096,55 +1518,70 @@ func file_services_claimable_v1_claimable_proto_rawDescGZIP() []byte {
 	return file_services_claimable_v1_claimable_proto_rawDescData
 }
 
-var file_services_claimable_v1_claimable_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_services_claimable_v1_claimable_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_services_claimable_v1_claimable_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_services_claimable_v1_claimable_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_services_claimable_v1_claimable_proto_goTypes = []any{
 	(ClaimableState)(0),                      // 0: controlplane.v1.ClaimableState
-	(*StartClaimableDeployRequest)(nil),      // 1: controlplane.v1.StartClaimableDeployRequest
-	(*StartClaimableDeployResponse)(nil),     // 2: controlplane.v1.StartClaimableDeployResponse
-	(*ClaimableThrottle)(nil),                // 3: controlplane.v1.ClaimableThrottle
-	(*GetClaimableChallengeRequest)(nil),     // 4: controlplane.v1.GetClaimableChallengeRequest
-	(*GetClaimableAvailabilityRequest)(nil),  // 5: controlplane.v1.GetClaimableAvailabilityRequest
-	(*GetClaimableAvailabilityResponse)(nil), // 6: controlplane.v1.GetClaimableAvailabilityResponse
-	(*ClaimableUnavailableCause)(nil),        // 7: controlplane.v1.ClaimableUnavailableCause
-	(*GetClaimableChallengeResponse)(nil),    // 8: controlplane.v1.GetClaimableChallengeResponse
-	(*GetClaimRequest)(nil),                  // 9: controlplane.v1.GetClaimRequest
-	(*GetClaimResponse)(nil),                 // 10: controlplane.v1.GetClaimResponse
-	(*OpenClaimSessionRequest)(nil),          // 11: controlplane.v1.OpenClaimSessionRequest
-	(*OpenClaimSessionResponse)(nil),         // 12: controlplane.v1.OpenClaimSessionResponse
-	(*CompleteClaimRequest)(nil),             // 13: controlplane.v1.CompleteClaimRequest
-	(*CompleteClaimResponse)(nil),            // 14: controlplane.v1.CompleteClaimResponse
-	(*timestamppb.Timestamp)(nil),            // 15: google.protobuf.Timestamp
-	(*v1.DeployHold)(nil),                    // 16: controlplane.v1.DeployHold
+	(FreeSiteChoice)(0),                      // 1: controlplane.v1.FreeSiteChoice
+	(FreeSiteOutcome)(0),                     // 2: controlplane.v1.FreeSiteOutcome
+	(*StartClaimableDeployRequest)(nil),      // 3: controlplane.v1.StartClaimableDeployRequest
+	(*StartClaimableDeployResponse)(nil),     // 4: controlplane.v1.StartClaimableDeployResponse
+	(*ClaimableThrottle)(nil),                // 5: controlplane.v1.ClaimableThrottle
+	(*GetClaimableChallengeRequest)(nil),     // 6: controlplane.v1.GetClaimableChallengeRequest
+	(*GetClaimableAvailabilityRequest)(nil),  // 7: controlplane.v1.GetClaimableAvailabilityRequest
+	(*GetClaimableAvailabilityResponse)(nil), // 8: controlplane.v1.GetClaimableAvailabilityResponse
+	(*ClaimableUnavailableCause)(nil),        // 9: controlplane.v1.ClaimableUnavailableCause
+	(*GetClaimableChallengeResponse)(nil),    // 10: controlplane.v1.GetClaimableChallengeResponse
+	(*GetClaimRequest)(nil),                  // 11: controlplane.v1.GetClaimRequest
+	(*GetClaimResponse)(nil),                 // 12: controlplane.v1.GetClaimResponse
+	(*OpenClaimSessionRequest)(nil),          // 13: controlplane.v1.OpenClaimSessionRequest
+	(*OpenClaimSessionResponse)(nil),         // 14: controlplane.v1.OpenClaimSessionResponse
+	(*FreeSite)(nil),                         // 15: controlplane.v1.FreeSite
+	(*FreeSiteChoiceRequired)(nil),           // 16: controlplane.v1.FreeSiteChoiceRequired
+	(*CompleteClaimRequest)(nil),             // 17: controlplane.v1.CompleteClaimRequest
+	(*GetClaimFreeSiteRequest)(nil),          // 18: controlplane.v1.GetClaimFreeSiteRequest
+	(*GetClaimFreeSiteResponse)(nil),         // 19: controlplane.v1.GetClaimFreeSiteResponse
+	(*CompleteClaimResponse)(nil),            // 20: controlplane.v1.CompleteClaimResponse
+	(*timestamppb.Timestamp)(nil),            // 21: google.protobuf.Timestamp
+	(*v1.DeployHold)(nil),                    // 22: controlplane.v1.DeployHold
 }
 var file_services_claimable_v1_claimable_proto_depIdxs = []int32{
-	15, // 0: controlplane.v1.StartClaimableDeployResponse.expires_at:type_name -> google.protobuf.Timestamp
-	15, // 1: controlplane.v1.StartClaimableDeployResponse.purge_after:type_name -> google.protobuf.Timestamp
-	7,  // 2: controlplane.v1.GetClaimableAvailabilityResponse.causes:type_name -> controlplane.v1.ClaimableUnavailableCause
-	7,  // 3: controlplane.v1.GetClaimableAvailabilityResponse.compute_causes:type_name -> controlplane.v1.ClaimableUnavailableCause
-	15, // 4: controlplane.v1.GetClaimableChallengeResponse.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 0: controlplane.v1.StartClaimableDeployResponse.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 1: controlplane.v1.StartClaimableDeployResponse.purge_after:type_name -> google.protobuf.Timestamp
+	9,  // 2: controlplane.v1.GetClaimableAvailabilityResponse.causes:type_name -> controlplane.v1.ClaimableUnavailableCause
+	9,  // 3: controlplane.v1.GetClaimableAvailabilityResponse.compute_causes:type_name -> controlplane.v1.ClaimableUnavailableCause
+	21, // 4: controlplane.v1.GetClaimableChallengeResponse.expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: controlplane.v1.GetClaimResponse.state:type_name -> controlplane.v1.ClaimableState
-	15, // 6: controlplane.v1.GetClaimResponse.expires_at:type_name -> google.protobuf.Timestamp
-	15, // 7: controlplane.v1.GetClaimResponse.purge_after:type_name -> google.protobuf.Timestamp
-	15, // 8: controlplane.v1.GetClaimResponse.claimed_at:type_name -> google.protobuf.Timestamp
-	16, // 9: controlplane.v1.CompleteClaimResponse.holds:type_name -> controlplane.v1.DeployHold
-	1,  // 10: controlplane.v1.ClaimableService.StartClaimableDeploy:input_type -> controlplane.v1.StartClaimableDeployRequest
-	4,  // 11: controlplane.v1.ClaimableService.GetClaimableChallenge:input_type -> controlplane.v1.GetClaimableChallengeRequest
-	5,  // 12: controlplane.v1.ClaimableService.GetClaimableAvailability:input_type -> controlplane.v1.GetClaimableAvailabilityRequest
-	9,  // 13: controlplane.v1.ClaimableService.GetClaim:input_type -> controlplane.v1.GetClaimRequest
-	11, // 14: controlplane.v1.ClaimableService.OpenClaimSession:input_type -> controlplane.v1.OpenClaimSessionRequest
-	13, // 15: controlplane.v1.ClaimableService.CompleteClaim:input_type -> controlplane.v1.CompleteClaimRequest
-	2,  // 16: controlplane.v1.ClaimableService.StartClaimableDeploy:output_type -> controlplane.v1.StartClaimableDeployResponse
-	8,  // 17: controlplane.v1.ClaimableService.GetClaimableChallenge:output_type -> controlplane.v1.GetClaimableChallengeResponse
-	6,  // 18: controlplane.v1.ClaimableService.GetClaimableAvailability:output_type -> controlplane.v1.GetClaimableAvailabilityResponse
-	10, // 19: controlplane.v1.ClaimableService.GetClaim:output_type -> controlplane.v1.GetClaimResponse
-	12, // 20: controlplane.v1.ClaimableService.OpenClaimSession:output_type -> controlplane.v1.OpenClaimSessionResponse
-	14, // 21: controlplane.v1.ClaimableService.CompleteClaim:output_type -> controlplane.v1.CompleteClaimResponse
-	16, // [16:22] is the sub-list for method output_type
-	10, // [10:16] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	21, // 6: controlplane.v1.GetClaimResponse.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 7: controlplane.v1.GetClaimResponse.purge_after:type_name -> google.protobuf.Timestamp
+	21, // 8: controlplane.v1.GetClaimResponse.claimed_at:type_name -> google.protobuf.Timestamp
+	15, // 9: controlplane.v1.FreeSiteChoiceRequired.existing_site:type_name -> controlplane.v1.FreeSite
+	15, // 10: controlplane.v1.FreeSiteChoiceRequired.claimed_site:type_name -> controlplane.v1.FreeSite
+	1,  // 11: controlplane.v1.CompleteClaimRequest.free_site:type_name -> controlplane.v1.FreeSiteChoice
+	15, // 12: controlplane.v1.GetClaimFreeSiteResponse.existing_site:type_name -> controlplane.v1.FreeSite
+	15, // 13: controlplane.v1.GetClaimFreeSiteResponse.claimed_site:type_name -> controlplane.v1.FreeSite
+	22, // 14: controlplane.v1.CompleteClaimResponse.holds:type_name -> controlplane.v1.DeployHold
+	2,  // 15: controlplane.v1.CompleteClaimResponse.free_site_outcome:type_name -> controlplane.v1.FreeSiteOutcome
+	15, // 16: controlplane.v1.CompleteClaimResponse.paused_site:type_name -> controlplane.v1.FreeSite
+	3,  // 17: controlplane.v1.ClaimableService.StartClaimableDeploy:input_type -> controlplane.v1.StartClaimableDeployRequest
+	6,  // 18: controlplane.v1.ClaimableService.GetClaimableChallenge:input_type -> controlplane.v1.GetClaimableChallengeRequest
+	7,  // 19: controlplane.v1.ClaimableService.GetClaimableAvailability:input_type -> controlplane.v1.GetClaimableAvailabilityRequest
+	11, // 20: controlplane.v1.ClaimableService.GetClaim:input_type -> controlplane.v1.GetClaimRequest
+	13, // 21: controlplane.v1.ClaimableService.OpenClaimSession:input_type -> controlplane.v1.OpenClaimSessionRequest
+	17, // 22: controlplane.v1.ClaimableService.CompleteClaim:input_type -> controlplane.v1.CompleteClaimRequest
+	18, // 23: controlplane.v1.ClaimableService.GetClaimFreeSite:input_type -> controlplane.v1.GetClaimFreeSiteRequest
+	4,  // 24: controlplane.v1.ClaimableService.StartClaimableDeploy:output_type -> controlplane.v1.StartClaimableDeployResponse
+	10, // 25: controlplane.v1.ClaimableService.GetClaimableChallenge:output_type -> controlplane.v1.GetClaimableChallengeResponse
+	8,  // 26: controlplane.v1.ClaimableService.GetClaimableAvailability:output_type -> controlplane.v1.GetClaimableAvailabilityResponse
+	12, // 27: controlplane.v1.ClaimableService.GetClaim:output_type -> controlplane.v1.GetClaimResponse
+	14, // 28: controlplane.v1.ClaimableService.OpenClaimSession:output_type -> controlplane.v1.OpenClaimSessionResponse
+	20, // 29: controlplane.v1.ClaimableService.CompleteClaim:output_type -> controlplane.v1.CompleteClaimResponse
+	19, // 30: controlplane.v1.ClaimableService.GetClaimFreeSite:output_type -> controlplane.v1.GetClaimFreeSiteResponse
+	24, // [24:31] is the sub-list for method output_type
+	17, // [17:24] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_services_claimable_v1_claimable_proto_init() }
@@ -1157,8 +1594,8 @@ func file_services_claimable_v1_claimable_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_claimable_v1_claimable_proto_rawDesc), len(file_services_claimable_v1_claimable_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   14,
+			NumEnums:      3,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

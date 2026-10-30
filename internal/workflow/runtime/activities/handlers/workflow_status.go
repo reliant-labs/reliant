@@ -96,12 +96,16 @@ type WorkflowStatusOutput struct {
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
 	repo WorkflowStatusStore
+	// trackerFor returns the product-event tracker for a user; analytics.ForUser
+	// outside tests.
+	trackerFor func(ctx context.Context, userID string) analytics.Tracker
 }
 
 // NewWorkflowStatusActivity creates a new WorkflowStatusActivity
 func NewWorkflowStatusActivity(repo WorkflowStatusStore) *WorkflowStatusActivity {
 	return &WorkflowStatusActivity{
-		repo: repo,
+		repo:       repo,
+		trackerFor: analytics.ForUser,
 	}
 }
 
@@ -892,15 +896,18 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	return a.repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeThread, input.WorkflowID, string(updateDataJSON))
 }
 
-// trackAnalytics records workflow product events (internal/analytics).
-// Only tracks root workflows to reduce event volume - child workflow data
-// can be derived from root workflow metrics if needed
+// isChildRun reports whether a run was started by another workflow or agent
+// (a spawned sub-agent, or a node of a parent graph) rather than by a user,
+// trigger or API call. The product dashboards count a run once by excluding
+// is_child=true.
+func isChildRun(input WorkflowStatusInput) bool {
+	return input.ParentWorkflowID != "" || input.SpawnedByToolCallID != "" || input.SpawnedByNodeID != ""
+}
+
+// trackAnalytics records workflow product events (internal/analytics). Child
+// runs are recorded too, flagged is_child, so a consumer can count either.
 func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input WorkflowStatusInput) {
-	// Skip child workflows to reduce event volume
-	isChild := input.ParentWorkflowID != ""
-	if isChild {
-		return
-	}
+	isChild := isChildRun(input)
 
 	// Determine workflow type
 	workflowType := "custom"
@@ -932,10 +939,14 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		IsWorkspace:  chat != nil && chat.WorktreeID != nil && *chat.WorktreeID != "",
 		Presets:      presets,
 		PresetTypes:  classifyPresetTypes(presets),
-		IsChild:      false, // Always false now since we skip children
+		IsChild:      isChild,
 	}
 
-	analyticsClient := analytics.ForUser(ctx, userID)
+	trackerFor := a.trackerFor
+	if trackerFor == nil {
+		trackerFor = analytics.ForUser
+	}
+	analyticsClient := trackerFor(ctx, userID)
 	switch input.Status {
 	case "started":
 		analyticsClient.TrackWorkflowStarted(metrics)

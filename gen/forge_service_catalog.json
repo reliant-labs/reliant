@@ -46450,6 +46450,17 @@
           }
         },
         {
+          "id": "method1:8ed77343cd8eafce5fe9605a8c5fa8823533cca5af847b0b26e4d5573491826c",
+          "name": "archiveChat",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, reason string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.archiveChat",
+          "source": {
+            "path": "internal/handlers/chat/chat_crud.go",
+            "symbol": "Service.archiveChat"
+          }
+        },
+        {
           "id": "method1:fca4908d483f94af8df53e4fe327205a082989214ffa8f3f53389e190414d58f",
           "name": "attachThreadsWithoutWorkflowRow",
           "signature": "func(threads []*github.com/reliant-labs/reliant/internal/db.Thread, roots []*github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowExecution)",
@@ -64517,6 +64528,17 @@
           }
         },
         {
+          "id": "method1:1eae3e6be5246652a9f451169d54d7886fd3658d61d4e516e0ae6b79b83f8fb3",
+          "name": "archiveChat",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, reason string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.archiveChat",
+          "source": {
+            "path": "internal/handlers/chat/chat_crud.go",
+            "symbol": "Service.archiveChat"
+          }
+        },
+        {
           "id": "method1:6b54e587b20204c239c77ef7a79d70c37e45b9c62a3179eb1b2858894c353f37",
           "name": "attachThreadsWithoutWorkflowRow",
           "signature": "func(threads []*github.com/reliant-labs/reliant/internal/db.Thread, roots []*github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowExecution)",
@@ -68689,6 +68711,17 @@
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
             "symbol": "Service.UpdateWorktree"
+          }
+        },
+        {
+          "id": "method1:b3bda0f42fac5d03e36d2258f3915adc417bcad30f38054c444dd7e2df5ea155",
+          "name": "archiveWorktreeChat",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.archiveWorktreeChat",
+          "source": {
+            "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
+            "symbol": "Service.archiveWorktreeChat"
           }
         },
         {
@@ -81238,6 +81271,17 @@
           "source": {
             "path": "internal/workspacecreate/contract.go",
             "symbol": "Store.ListWorktreesByBranch"
+          }
+        },
+        {
+          "id": "method1:d885af11fb537ca4ea7eb5b9d642e99eb68fad617e7c1156f7e2ddac7a89092b",
+          "name": "LockChatRunControl",
+          "signature": "func(ctx context.Context, chatID string) (release func(), err error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.LockChatRunControl",
+          "source": {
+            "path": "internal/handlers/worktree/deps.go",
+            "symbol": "Repository.LockChatRunControl"
           }
         },
         {
