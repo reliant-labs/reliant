@@ -242,7 +242,7 @@ func TestPreflightWait_QueueRecordsTheMachineTheRunWaitedFor(t *testing.T) {
 	a, repo, chatID := newWaitFixture(t, false, router)
 
 	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5,
-		DaemonSelector: &toolexec.DaemonSelector{Name: "cicd"}})
+		DaemonSelector: &activitytypes.DaemonSelector{Name: "cicd"}})
 	require.Error(t, err)
 
 	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
