@@ -321,7 +321,7 @@ func TestAuthLogin_DeviceFlowOnACloudMachine(t *testing.T) {
 	cp.mu.Lock()
 	form, browserLogins := cp.deviceForm, len(cp.requests)
 	cp.mu.Unlock()
-	wantScope := strings.Join(append([]string{cliauth.ScopeAPI}, cliauth.ForgeScopes()...), " ")
+	wantScope := strings.Join(append([]string{cliauth.ScopeAPI, cliauth.ScopeMachines}, cliauth.ForgeScopes()...), " ")
 	if form.Get("client_id") != cliauth.ClientID || form.Get("scope") != wantScope ||
 		form.Get("device") != cliLoginName() || form.Get("hostname") != instanceid.Hostname() || form.Get("platform") == "" {
 		t.Errorf("device authorization request: %v", form)
