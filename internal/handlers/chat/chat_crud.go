@@ -199,6 +199,15 @@ func (s *Service) startChat(
 			wakeChat = &pinnedCopy
 		}
 	}
+	// A new chat's workspace is a checkout on one machine: a chosen machine
+	// must be that one, and an unattributed workspace is settled first so the
+	// launcher pins a chat that names none to where its checkout is. A
+	// branch's worktree was checked by its pin above.
+	if msg.GetChatId() == "" && !spec.NoMachine {
+		if err := s.checkWorkspaceMachine(ctx, userID, msg.GetWorktreeId(), chosen); err != nil {
+			return nil, err
+		}
+	}
 	// A new chat has no row yet; the wake still has to target the machine the
 	// launcher will pin it to, so it is asked about the chat it will be. A run
 	// with no machine skips the wake outright rather than relying on the row.
@@ -420,6 +429,13 @@ func (s *Service) UpdateChat(
 		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve worktree"))
+		}
+		// A chat pinned to one machine cannot move into a workspace whose
+		// checkout is on another.
+		if chat.ActiveDaemonID != nil && resolved != nil {
+			if err := s.checkWorkspaceMachine(ctx, userID, *resolved, *chat.ActiveDaemonID); err != nil {
+				return nil, err
+			}
 		}
 		chat.WorktreeID = resolved
 	}
@@ -720,7 +736,7 @@ func (s *Service) GetChatUpdates(
 	}
 
 	// Get chat with ownership check (defense-in-depth via single query)
-	_, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	err := s.requireChatOwner(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -773,7 +789,7 @@ func (s *Service) ListChatPlans(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

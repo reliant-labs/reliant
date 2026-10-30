@@ -24093,6 +24093,10 @@
             {
               "name": "archived",
               "kind": "bool"
+            },
+            {
+              "name": "failure_detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.RunNodeExecution": [
@@ -31295,16 +31299,6 @@
           "server_streaming": false,
           "idempotency": "UNKNOWN",
           "auth_required": true
-        },
-        {
-          "id": "reliant.v1.TerminalService/StreamTerminal",
-          "name": "StreamTerminal",
-          "input": "reliant.v1.TerminalStreamInput",
-          "output": "reliant.v1.TerminalStreamOutput",
-          "client_streaming": true,
-          "server_streaming": true,
-          "idempotency": "UNKNOWN",
-          "auth_required": true
         }
       ],
       "descriptor": {
@@ -31348,25 +31342,6 @@
               "Declared": true,
               "None": "closes a terminal session on the daemon: interactive transport, not project history"
             }
-          },
-          {
-            "Name": "StreamTerminal",
-            "InputType": "TerminalStreamInput",
-            "OutputType": "TerminalStreamOutput",
-            "ClientStreaming": true,
-            "ServerStreaming": true,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.TerminalStreamInput",
-            "OutputTypeFQ": "reliant.v1.TerminalStreamOutput",
-            "InputProtoFile": "reliant/v1/terminal.proto",
-            "OutputProtoFile": "reliant/v1/terminal.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "None": "terminal I/O to and from the daemon: interactive transport, not project history"
-            }
           }
         ],
         "ProtoFile": "reliant/v1/terminal.proto",
@@ -31377,6 +31352,11 @@
               "Name": "session_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CloseTerminalSessionResponse": [
@@ -31404,58 +31384,6 @@
               "ProtoType": "int32",
               "IsOptional": false
             }
-          ],
-          "TerminalStreamInput": [
-            {
-              "Name": "create",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCreateRequest"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataInput"
-            },
-            {
-              "Name": "resize",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalResizeInput"
-            },
-            {
-              "Name": "close_session",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCloseRequest"
-            }
-          ],
-          "TerminalStreamOutput": [
-            {
-              "Name": "created",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionCreated"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataOutput"
-            },
-            {
-              "Name": "closed",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionClosed"
-            },
-            {
-              "Name": "error",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalError"
-            }
           ]
         },
         "Audience": "user",
@@ -31464,6 +31392,11 @@
             {
               "name": "session_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CloseTerminalSessionResponse": [
@@ -31489,62 +31422,6 @@
               "kind": "int32"
             }
           ],
-          "reliant.v1.TerminalCloseRequest": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalCreateRequest": [
-            {
-              "name": "working_dir",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalDataInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalDataOutput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalError": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "message",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalResizeInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "cols",
-              "kind": "uint32"
-            },
-            {
-              "name": "rows",
-              "kind": "uint32"
-            }
-          ],
           "reliant.v1.TerminalSession": [
             {
               "name": "id",
@@ -31567,78 +31444,6 @@
               "kind": "int32",
               "optional": true
             }
-          ],
-          "reliant.v1.TerminalSessionClosed": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "exit_code",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalSessionCreated": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "pid",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalStreamInput": [
-            {
-              "name": "create",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCreateRequest",
-              "oneof": "input"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataInput",
-              "oneof": "input"
-            },
-            {
-              "name": "resize",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalResizeInput",
-              "oneof": "input"
-            },
-            {
-              "name": "close_session",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCloseRequest",
-              "oneof": "input"
-            }
-          ],
-          "reliant.v1.TerminalStreamOutput": [
-            {
-              "name": "created",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionCreated",
-              "oneof": "output"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataOutput",
-              "oneof": "output"
-            },
-            {
-              "name": "closed",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionClosed",
-              "oneof": "output"
-            },
-            {
-              "name": "error",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalError",
-              "oneof": "output"
-            }
           ]
         },
         "SchemaFiles": {
@@ -31646,17 +31451,7 @@
           "reliant.v1.CloseTerminalSessionResponse": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsRequest": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsResponse": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCloseRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCreateRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataOutput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalError": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalResizeInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionClosed": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionCreated": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamOutput": "reliant/v1/terminal.proto"
+          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto"
         }
       }
     },
@@ -41495,6 +41290,11 @@
               "Name": "idempotency_key",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateWorktreeResponse": [
@@ -41564,6 +41364,11 @@
               "Name": "background",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DiscoverWorktreesResponse": [
@@ -41833,6 +41638,11 @@
               "Name": "confirm_move",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorktreeResponse": [
@@ -41963,6 +41773,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "PruneWorktreesResponse": [
@@ -42387,6 +42202,11 @@
               "name": "idempotency_key",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateWorktreeResponse": [
@@ -42451,6 +42271,11 @@
             {
               "name": "background",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DiscoverWorktreesResponse": [
@@ -42745,6 +42570,11 @@
             {
               "name": "confirm_move",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ImportWorktreeResponse": [
@@ -42872,6 +42702,11 @@
             {
               "name": "project_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.PruneWorktreesResponse": [
@@ -43187,6 +43022,11 @@
             {
               "name": "failure_reason",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorktreeFileChange": [
@@ -46841,6 +46681,17 @@
           }
         },
         {
+          "id": "method1:9f02eca1a5afcf7129df6443d8bdcf425f6e7d43dc05992f0314d477bc37bd86",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "symbol": "Service.checkWorkspaceMachine"
+          }
+        },
+        {
           "id": "method1:11eb3ef7e854ecaf4d24c2b31ec7af13dcbb095f1f7b74296474c345330fe60b",
           "name": "copyPlanAndTasks",
           "signature": "func(ctx context.Context, sourceChatID string, targetThreadID string) error",
@@ -49064,7 +48915,7 @@
         {
           "id": "method1:6d37c38e1b74436055f1bd23af744864c3b6017225df0952da24acfbf4fa7e1d",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.AdoptWorktreeDaemon",
           "source": {
@@ -53998,6 +53849,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetWorkflowDraftStatus"
+          }
+        },
+        {
+          "id": "method1:71e9926f7713d4a5bb7d7bdbc8979727349cd039d810ae279fedda72353975cd",
+          "name": "SetWorkflowFailureDetail",
+          "signature": "func(ctx context.Context, id string, detail string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetWorkflowFailureDetail",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetWorkflowFailureDetail"
           }
         },
         {
@@ -61577,17 +61439,6 @@
           }
         },
         {
-          "id": "method1:9bb04040844ae6ec4d857ef3c362329d5a5c33c946159e60073aa1719a46321a",
-          "name": "StreamTerminal",
-          "signature": "func(ctx context.Context, stream *connectrpc.com/connect.BidiStream[github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamInput, github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamOutput]) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.StreamTerminal",
-          "source": {
-            "path": "internal/handlers/terminal/terminal_proxy.go",
-            "symbol": "Service.StreamTerminal"
-          }
-        },
-        {
           "id": "method1:8a3ceb3bbd76e8e4d50df0e1b2dfb429780702d65c53f6893be195585ba31a7c",
           "name": "getUserID",
           "signature": "func(ctx context.Context) (string, error)",
@@ -64949,6 +64800,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
             "symbol": "Service.checkParamsActuallyChanged"
+          }
+        },
+        {
+          "id": "method1:00b78386984d8a248e2750ee7f88f2c6c45c983947cb53bc0bf1fedd7d0ebe5a",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "symbol": "Service.checkWorkspaceMachine"
           }
         },
         {
@@ -69096,12 +68958,23 @@
         {
           "id": "method1:95457a721a8174749faf9fec150974319ca39c2102889f107514b62156131798",
           "name": "placeNewWorktree",
-          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested *string, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.placeNewWorktree",
           "source": {
             "path": "internal/handlers/worktree/worktree_placement.go",
             "symbol": "Service.placeNewWorktree"
+          }
+        },
+        {
+          "id": "method1:a620e7edea6c0a979af28545d2c56214398b40a2b3c2e6c6b44e0172e761fbc7",
+          "name": "placeOnRequestedMachine",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.placeOnRequestedMachine",
+          "source": {
+            "path": "internal/handlers/worktree/worktree_placement.go",
+            "symbol": "Service.placeOnRequestedMachine"
           }
         },
         {
@@ -69272,7 +69145,7 @@
         {
           "id": "method1:a6afc1620a32bb0637bd91d162d525466094479447c90820ee70bc7aef18ead3",
           "name": "trackedWorktreePaths",
-          "signature": "func(ctx context.Context, projectID string) ([]string, error)",
+          "signature": "func(ctx context.Context, projectID string, daemonID string) ([]string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.trackedWorktreePaths",
           "source": {
@@ -73657,7 +73530,7 @@
         {
           "id": "method1:d2f8f4893928808811030d4798274fb34e4a258dfd6ef7076925590f415be635",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/inbox",
           "legacy_name": "inbox.AdoptWorktreeDaemon",
           "source": {
@@ -78056,36 +77929,14 @@
           }
         },
         {
-          "id": "method1:a87a7fe45999eab37325759479892febd2425a3873a4a90cf607f158bca9dc32",
-          "name": "SendTerminalInput",
-          "signature": "func(ctx context.Context, userID string, sessionID string, data []byte) error",
+          "id": "method1:566092835e7e4597590720eea7a0dce468e17d7eccc5cf04326c09a5ff88a6b3",
+          "name": "SendDaemonCommandToDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalInput",
+          "legacy_name": "terminal.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SendTerminalInput"
-          }
-        },
-        {
-          "id": "method1:2331f70f01f4ed4ee04b860988a2cd1013c312f9ed26327e4c366a85b56c5f4b",
-          "name": "SendTerminalResize",
-          "signature": "func(ctx context.Context, userID string, sessionID string, cols uint32, rows uint32) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalResize",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SendTerminalResize"
-          }
-        },
-        {
-          "id": "method1:71528251b1d5cd09394b61db7d0558b78cb8691d62a695ffa97b36898f63a5e1",
-          "name": "SubscribeTerminalOutput",
-          "signature": "func(ctx context.Context, userID string, sessionID string) (\u003c-chan *github.com/reliant-labs/reliant/internal/toolexec.TerminalOutputEvent, func(), error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SubscribeTerminalOutput",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SubscribeTerminalOutput"
+            "symbol": "SessionRouter.SendDaemonCommandToDaemon"
           }
         }
       ],

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -116,7 +117,7 @@ func (f *chatMachineRecovery) count(id string) int {
 	return f.deliveries[id]
 }
 
-func (f *chatMachineRecovery) run(selector *toolexec.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
+func (f *chatMachineRecovery) run(selector *activitytypes.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
 	var out ExecuteRunStepOutput
 	err := f.h.ExecuteActivity(NewExecuteRunStepActivity(f.h.Repo(), executor, nil).Execute, ExecuteRunStepInput{
 		ChatID: f.chat, WorkflowID: "live-workflow", StepID: "run", Command: "pwd", Timeout: 5000,
@@ -154,7 +155,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	out, err = f.run(nil, f.remote)
 	require.NoError(t, err)
 	require.Equal(t, f.original, out.Stdout, "old run snapshot must honor the chat pin")
-	out, err = f.run(&toolexec.DaemonSelector{ID: f.ci}, f.remote)
+	out, err = f.run(&activitytypes.DaemonSelector{ID: f.ci}, f.remote)
 	require.NoError(t, err)
 	require.Equal(t, f.ci, out.Stdout, "explicit node selector overrides pin without rewriting it")
 	f.pinIs(t, f.original)
@@ -257,7 +258,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	// command: that refusal precedes selector overrides in ExecuteRunStep.
 	_, err = f.h.sqlDB.ExecContext(ctx, `UPDATE chats SET active_daemon_id = NULL, no_machine = true WHERE id = $1`, f.chat)
 	require.NoError(t, err)
-	out, err = f.run(&toolexec.DaemonSelector{ID: f.ci}, f.remote)
+	out, err = f.run(&activitytypes.DaemonSelector{ID: f.ci}, f.remote)
 	require.NoError(t, err)
 	assert.Equal(t, -1, out.ExitCode)
 	assert.NotEmpty(t, out.Stderr)

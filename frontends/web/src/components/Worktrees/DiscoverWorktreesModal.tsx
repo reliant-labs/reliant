@@ -18,6 +18,12 @@ interface DiscoverWorktreesModalProps {
   onClose: () => void;
   onWorktreesImported: (importedWorktreeIds?: string[]) => void | Promise<void>;
   projectId: string;
+  /**
+   * The machine to look on and adopt onto (the new-chat composer's "Runs
+   * on"). Each machine has its own checkouts; unset uses the project's
+   * default machine.
+   */
+  daemonId?: string;
 }
 
 const EMPTY_DISCOVERED: DiscoveredWorktree[] = [];
@@ -28,9 +34,10 @@ export function DiscoverWorktreesModal({
   onClose,
   onWorktreesImported,
   projectId,
+  daemonId,
 }: DiscoverWorktreesModalProps) {
   // Discovery reads the checkouts on disk: fresh every time the modal opens.
-  const discovery = useDiscoveredWorktrees(projectId, { enabled: isOpen, staleTime: 0 });
+  const discovery = useDiscoveredWorktrees(projectId, { enabled: isOpen, staleTime: 0, daemonId });
   const discovered = discovery.data?.discovered ?? EMPTY_DISCOVERED;
   const stale = discovery.data?.stale ?? EMPTY_STALE;
   const workspacesRoot = discovery.data?.workspacesRoot ?? "";
@@ -72,6 +79,7 @@ export function DiscoverWorktreesModal({
         project_id: projectId,
         repo_id: entry.repo_id,
         confirm_move: entry.moves_on_import,
+        daemon_id: daemonId,
       });
       setItemErrors((prev) => {
         const { [entry.path]: _gone, ...rest } = prev;
@@ -91,7 +99,7 @@ export function DiscoverWorktreesModal({
     setPruning(true);
     setPruneError(null);
     try {
-      const pruned = await pruneWorktrees(projectId);
+      const pruned = await pruneWorktrees(projectId, undefined, daemonId);
       setPrunedPaths(pruned.map((w) => w.path));
     } catch (err) {
       setPruneError(err instanceof Error ? err.message : "Failed to clean up");

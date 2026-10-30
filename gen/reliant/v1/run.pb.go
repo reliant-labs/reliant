@@ -231,7 +231,13 @@ type Run struct {
 	// it is an automation run that finished successfully and was archived on
 	// its own. Filled by the cross-cutting list like title above. An archived
 	// run is history, still listed when the request asks for archived runs.
-	Archived      bool `protobuf:"varint,23,opt,name=archived,proto3" json:"archived,omitempty"`
+	Archived bool `protobuf:"varint,23,opt,name=archived,proto3" json:"archived,omitempty"`
+	// FailureDetail is why a FAILED run failed: the error it ended with,
+	// recorded on the run with its status. It is the only account of a run
+	// that failed before any node ran (input validation, a definition that
+	// would not load), which has no node attempt to carry the error. Empty
+	// for a run that did not fail.
+	FailureDetail string `protobuf:"bytes,24,opt,name=failure_detail,json=failureDetail,proto3" json:"failure_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -425,6 +431,13 @@ func (x *Run) GetArchived() bool {
 		return x.Archived
 	}
 	return false
+}
+
+func (x *Run) GetFailureDetail() string {
+	if x != nil {
+		return x.FailureDetail
+	}
+	return ""
 }
 
 type StartRunRequest struct {
@@ -1885,7 +1898,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\x88\a\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xaf\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -1915,7 +1928,8 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\rdisplay_state\x18\x14 \x01(\x0e2\x1b.reliant.v1.RunDisplayStateR\fdisplayState\x12)\n" +
 	"\x0eparent_chat_id\x18\x15 \x01(\tH\x00R\fparentChatId\x88\x01\x01\x12/\n" +
 	"\x11parent_chat_title\x18\x16 \x01(\tH\x01R\x0fparentChatTitle\x88\x01\x01\x12\x1a\n" +
-	"\barchived\x18\x17 \x01(\bR\barchivedB\x11\n" +
+	"\barchived\x18\x17 \x01(\bR\barchived\x12%\n" +
+	"\x0efailure_detail\x18\x18 \x01(\tR\rfailureDetailB\x11\n" +
 	"\x0f_parent_chat_idB\x14\n" +
 	"\x12_parent_chat_title\"\xaa\x03\n" +
 	"\x0fStartRunRequest\x12\x1a\n" +

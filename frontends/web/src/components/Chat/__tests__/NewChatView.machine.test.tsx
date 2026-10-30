@@ -28,6 +28,22 @@ const daemonState = vi.hoisted(() => ({
   },
 }));
 const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
+// The app's current workspace (switching context moves it, as the real store
+// does) and the machine holding the "feature" checkout (undefined: none recorded).
+const workspace = vi.hoisted(() => {
+  const state = {
+    currentId: "w-feature",
+    machine: undefined as string | undefined,
+    rows: () => [
+      { id: "w-main", branch: "main", name: "main", is_main: true },
+      { id: "w-feature", branch: "feature", name: "feature", daemon_id: state.machine },
+    ],
+    switchTo: async (_projectId: string, worktree: { id: string }) => {
+      state.currentId = worktree.id;
+    },
+  };
+  return state;
+});
 
 function storeMock(state: () => any) {
   return Object.assign((selector?: any) => (selector ? selector(state()) : state()), {
@@ -61,7 +77,7 @@ vi.mock("../../../store/worktreeStore", () => ({
       { id: "w-main", branch: "main", name: "main", is_main: true },
       { id: "w-feature", branch: "feature", name: "feature" },
     ],
-    switchWorktreeContext: vi.fn(),
+    switchWorktreeContext: workspace.switchTo,
     loadWorktrees: vi.fn(),
   })),
 }));
@@ -70,12 +86,9 @@ vi.mock("../../../store/worktreeStore", () => ({
 vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
   ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
-    currentWorktree: { id: "w-feature", branch: "feature", name: "feature" },
-    worktrees: [
-      { id: "w-main", branch: "main", name: "main", is_main: true },
-      { id: "w-feature", branch: "feature", name: "feature" },
-    ],
-    switchWorktreeContext: vi.fn(),
+    currentWorktree: workspace.rows().find((w) => w.id === workspace.currentId),
+    worktrees: workspace.rows(),
+    switchWorktreeContext: workspace.switchTo,
     loadWorktrees: vi.fn(),
   })),
 }));
@@ -140,6 +153,8 @@ const laptop = { daemonId: "d-laptop", hostname: "laptop", status: 1 };
 
 beforeEach(() => {
   startChat.mockClear();
+  workspace.currentId = "w-feature";
+  workspace.machine = undefined;
   daemonState.current = { activeDaemon: laptop, daemons: [laptop], loading: false };
 });
 
@@ -230,5 +245,48 @@ describe("NewChatView: where the chat runs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(startChat).toHaveBeenCalled());
     expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
+  });
+
+  // The owner's report: with two machines, the page let a chat start in a
+  // workspace on one machine while running on the other, whose disk does not
+  // have it. Selecting a workspace selects its machine.
+  describe("a workspace that lives on one machine", () => {
+    const gpu = { daemonId: "d-gpu", hostname: "gpu-box", status: 1 };
+
+    beforeEach(() => {
+      workspace.machine = "d-gpu";
+      daemonState.current = { activeDaemon: laptop, daemons: [laptop, gpu], loading: false };
+    });
+
+    it("runs on the workspace's machine and says why", async () => {
+      render(<NewChatView tabId="t1" />);
+      expect(screen.getByTestId("machine-picker")).toHaveTextContent("gpu-box");
+      expect(screen.getByTestId("new-chat-workspace-machine-note")).toHaveTextContent(
+        "Runs on gpu-box, where this workspace lives.",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-feature");
+      // The server pins the chat to its workspace's machine.
+      expect(machineArg()).toEqual({ daemonId: undefined, noMachine: undefined });
+    });
+
+    it("moves to the main workspace, and offers only that machine's workspaces, when another machine is chosen", async () => {
+      render(<NewChatView tabId="t1" />);
+      fireEvent.click(screen.getByTestId("machine-picker"));
+      fireEvent.click(screen.getByRole("option", { name: /laptop/ }));
+      await waitFor(() => expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop"));
+      expect(screen.queryByTestId("new-chat-workspace-machine-note")).toBeNull();
+
+      // The gpu-box workspace is not offered on the laptop.
+      fireEvent.click(screen.getByRole("button", { name: /^main$/ }));
+      expect(screen.getByText("No other workspaces on laptop")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-main");
+      expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
+    });
   });
 });

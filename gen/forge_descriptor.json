@@ -3150,6 +3150,11 @@
             "Name": "idempotency_key",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CreateWorktreeResponse": [
@@ -3219,6 +3224,11 @@
             "Name": "background",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "DiscoverWorktreesResponse": [
@@ -3488,6 +3498,11 @@
             "Name": "confirm_move",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ImportWorktreeResponse": [
@@ -3618,6 +3633,11 @@
             "Name": "project_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PruneWorktreesResponse": [
@@ -4042,6 +4062,11 @@
             "name": "idempotency_key",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CreateWorktreeResponse": [
@@ -4106,6 +4131,11 @@
           {
             "name": "background",
             "kind": "bool"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.DiscoverWorktreesResponse": [
@@ -4400,6 +4430,11 @@
           {
             "name": "confirm_move",
             "kind": "bool"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ImportWorktreeResponse": [
@@ -4527,6 +4562,11 @@
           {
             "name": "project_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PruneWorktreesResponse": [
@@ -4842,6 +4882,11 @@
           {
             "name": "failure_reason",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.WorktreeFileChange": [
@@ -34644,25 +34689,6 @@
             "Declared": true,
             "None": "closes a terminal session on the daemon: interactive transport, not project history"
           }
-        },
-        {
-          "Name": "StreamTerminal",
-          "InputType": "TerminalStreamInput",
-          "OutputType": "TerminalStreamOutput",
-          "ClientStreaming": true,
-          "ServerStreaming": true,
-          "AuthRequired": true,
-          "Errors": null,
-          "Idempotency": "IDEMPOTENCY_UNKNOWN",
-          "InputTypeFQ": "reliant.v1.TerminalStreamInput",
-          "OutputTypeFQ": "reliant.v1.TerminalStreamOutput",
-          "InputProtoFile": "reliant/v1/terminal.proto",
-          "OutputProtoFile": "reliant/v1/terminal.proto",
-          "Activity": {
-            "Mutating": true,
-            "Declared": true,
-            "None": "terminal I/O to and from the daemon: interactive transport, not project history"
-          }
         }
       ],
       "ProtoFile": "reliant/v1/terminal.proto",
@@ -34673,6 +34699,11 @@
             "Name": "session_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CloseTerminalSessionResponse": [
@@ -34700,58 +34731,6 @@
             "ProtoType": "int32",
             "IsOptional": false
           }
-        ],
-        "TerminalStreamInput": [
-          {
-            "Name": "create",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalCreateRequest"
-          },
-          {
-            "Name": "data",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalDataInput"
-          },
-          {
-            "Name": "resize",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalResizeInput"
-          },
-          {
-            "Name": "close_session",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalCloseRequest"
-          }
-        ],
-        "TerminalStreamOutput": [
-          {
-            "Name": "created",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalSessionCreated"
-          },
-          {
-            "Name": "data",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalDataOutput"
-          },
-          {
-            "Name": "closed",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalSessionClosed"
-          },
-          {
-            "Name": "error",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.TerminalError"
-          }
         ]
       },
       "Audience": "user",
@@ -34760,6 +34739,11 @@
           {
             "name": "session_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CloseTerminalSessionResponse": [
@@ -34785,62 +34769,6 @@
             "kind": "int32"
           }
         ],
-        "reliant.v1.TerminalCloseRequest": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.TerminalCreateRequest": [
-          {
-            "name": "working_dir",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.TerminalDataInput": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "data",
-            "kind": "bytes"
-          }
-        ],
-        "reliant.v1.TerminalDataOutput": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "data",
-            "kind": "bytes"
-          }
-        ],
-        "reliant.v1.TerminalError": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.TerminalResizeInput": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "cols",
-            "kind": "uint32"
-          },
-          {
-            "name": "rows",
-            "kind": "uint32"
-          }
-        ],
         "reliant.v1.TerminalSession": [
           {
             "name": "id",
@@ -34863,78 +34791,6 @@
             "kind": "int32",
             "optional": true
           }
-        ],
-        "reliant.v1.TerminalSessionClosed": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "exit_code",
-            "kind": "int32"
-          }
-        ],
-        "reliant.v1.TerminalSessionCreated": [
-          {
-            "name": "session_id",
-            "kind": "string"
-          },
-          {
-            "name": "pid",
-            "kind": "int32"
-          }
-        ],
-        "reliant.v1.TerminalStreamInput": [
-          {
-            "name": "create",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalCreateRequest",
-            "oneof": "input"
-          },
-          {
-            "name": "data",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalDataInput",
-            "oneof": "input"
-          },
-          {
-            "name": "resize",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalResizeInput",
-            "oneof": "input"
-          },
-          {
-            "name": "close_session",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalCloseRequest",
-            "oneof": "input"
-          }
-        ],
-        "reliant.v1.TerminalStreamOutput": [
-          {
-            "name": "created",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalSessionCreated",
-            "oneof": "output"
-          },
-          {
-            "name": "data",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalDataOutput",
-            "oneof": "output"
-          },
-          {
-            "name": "closed",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalSessionClosed",
-            "oneof": "output"
-          },
-          {
-            "name": "error",
-            "kind": "message",
-            "type_name": "reliant.v1.TerminalError",
-            "oneof": "output"
-          }
         ]
       },
       "SchemaFiles": {
@@ -34942,17 +34798,7 @@
         "reliant.v1.CloseTerminalSessionResponse": "reliant/v1/terminal.proto",
         "reliant.v1.ListTerminalSessionsRequest": "reliant/v1/terminal.proto",
         "reliant.v1.ListTerminalSessionsResponse": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalCloseRequest": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalCreateRequest": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalDataInput": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalDataOutput": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalError": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalResizeInput": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalSession": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalSessionClosed": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalSessionCreated": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalStreamInput": "reliant/v1/terminal.proto",
-        "reliant.v1.TerminalStreamOutput": "reliant/v1/terminal.proto"
+        "reliant.v1.TerminalSession": "reliant/v1/terminal.proto"
       }
     },
     {
@@ -42841,7 +42687,7 @@
     "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
-    "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
+    "reliant/v1/terminal.proto": "37fc0d8a7a78dd8b08da87948e12fe5e573b9c3062b7f769f4dbbd416eea4f26",
     "reliant/v1/token.proto": "4817e691d2716f164c1b939d53f7f6fe0865646915a5e1147310ceaf8a983de5",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
@@ -42849,6 +42695,6 @@
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3bcad76df7a432554afd232c539cc8a4238876f950d727e9c39f3f7deb6bb94e",
-    "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
+    "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
   }
 }
