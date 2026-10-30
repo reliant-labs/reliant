@@ -14,9 +14,13 @@
 # tree, and commits the merge plus the regenerate as one commit.
 #
 # USAGE
-#   scripts/merge-regen.sh (--pr <n> | --branch <head-branch>) [--base main] [--push]
+#   scripts/merge-regen.sh (--pr <n> | --branch <head-branch>) [--base main] [--push | --out <ref>]
 #
-# Without --push it reports what it would do and changes nothing remote.
+# Without --push or --out it reports what it would do and changes nothing.
+# --out <ref> builds the commit and points <ref> (in the caller's repository)
+# at it instead of pushing, for a caller that pushes as someone else (the PR
+# pipeline's git_publish node, as the GitHub App). Either way the base and head
+# the run used are left in refs/merge-regen/base and refs/merge-regen/head.
 #
 # CONTRACT (stable; callers branch on the exit code, and the last stdout line)
 #   exit 0  `merge-regen: no-drift <head-sha>`   head merges with base cleanly and
@@ -25,7 +29,11 @@
 #   exit 0  `merge-regen: pushed <new-sha>`      (--push) a "chore: regenerate on
 #                                                 merge" merge commit was pushed to
 #                                                 the branch; the PR's head moved.
-#   exit 0  `merge-regen: would-push <tree-sha>` (no --push) the same, not pushed.
+#   exit 0  `merge-regen: ready <new-sha>`       (--out) the same commit, not pushed:
+#                                                 <ref> points at it; push it with
+#                                                 --force-with-lease against
+#                                                 refs/merge-regen/head.
+#   exit 0  `merge-regen: would-push <tree-sha>` (neither) the same, not kept.
 #   exit 2  `merge-regen: refused-conflict <paths>`  a hand-written file conflicts;
 #                                                 the author must merge main.
 #   exit 3  `merge-regen: refused-drift <paths>`     generate changed hand-written
@@ -51,13 +59,14 @@ set -euo pipefail
 say() { echo "merge-regen: $*"; }
 die() { say "error $*"; exit 1; }
 
-pr="" branch="" base="main" push=0
+pr="" branch="" base="main" push=0 out=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr) pr=${2:?}; shift 2 ;;
     --branch) branch=${2:?}; shift 2 ;;
     --base) base=${2:?}; shift 2 ;;
     --push) push=1; shift ;;
+    --out) out=${2:?}; shift 2 ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//;$d'; exit 0 ;;
     *) die "unknown argument $1" ;;
   esac
@@ -66,6 +75,8 @@ if [ -n "$pr" ] && [ -z "$branch" ]; then
   branch=$(gh pr view "$pr" --json headRefName --jq .headRefName) || die "cannot resolve PR #$pr"
 fi
 [ -n "$branch" ] || die "--pr or --branch is required"
+[ "$push" = 1 ] && [ -n "$out" ] && die "--push and --out are mutually exclusive"
+case "$out" in ""|refs/*) ;; *) die "--out takes a full ref name (refs/...), got $out" ;; esac
 
 repo=$(git rev-parse --show-toplevel) || die "not in a git repository"
 remote=${MERGE_REGEN_REMOTE:-origin}
@@ -168,6 +179,13 @@ else
   git commit -q --no-verify -m "chore: regenerate on merge with $base ($(git rev-parse --short "$base_sha"))"
 fi
 new=$(git rev-parse HEAD)
+if [ -n "$out" ]; then
+  # The worktree shares the repository's object store, so the commit outlives
+  # the worktree once a ref in the caller's repository names it.
+  git -C "$repo" update-ref "$out" "$new" || die "cannot update $out"
+  say "ready $new"
+  exit 0
+fi
 if [ "$push" = 0 ]; then
   say "would-push $(git rev-parse HEAD^{tree})"
   exit 0

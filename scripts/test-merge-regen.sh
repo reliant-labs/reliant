@@ -102,4 +102,26 @@ edit pr in/b.txt b2 B2
 MERGE_REGEN_GENERATE='sh ./gen.sh && echo drift >>in/a.txt' run --branch pr --push >"$tmp/out" && fail "drift into hand-written files was accepted"
 tail -1 "$tmp/out" | grep -q '^merge-regen: refused-drift in/a.txt' || fail "drift refusal: $(cat "$tmp/out")"
 echo "ok   generate touching hand-written files is refused"
+
+# 7. --out builds the same commit without pushing: the ref names it in the
+#    caller's repo after the worktree is gone, and base/head are recorded.
+setup
+edit pr in/b.txt b3 B3
+edit main in/a.txt a2 A2
+before=$(git rev-parse origin/pr)
+out=$(run --branch pr --out refs/merge-regen/out 2>&1) || fail "--out exited $?: $out"
+new=$(echo "$out" | tail -1 | sed -n 's/^merge-regen: ready //p')
+[ -n "$new" ] || fail "--out should print ready: $out"
+[ "$(git rev-parse refs/merge-regen/out)" = "$new" ] || fail "--out ref does not name the commit"
+git cat-file -e "$new^{commit}" || fail "the commit did not survive the worktree"
+git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$before" ] || fail "--out pushed"
+[ "$(git rev-parse refs/merge-regen/head)" = "$before" ] || fail "refs/merge-regen/head is not the head used"
+[ "$(git rev-parse refs/merge-regen/base)" = "$(git rev-parse origin/main)" ] || fail "refs/merge-regen/base is not the base used"
+git show "$new":in/a.txt | grep -q '^A2$' || fail "--out commit lacks main"
+git push -q origin "$new:refs/heads/pr" --force-with-lease="refs/heads/pr:$(git rev-parse refs/merge-regen/head)" || fail "caller push of the --out commit"
+out=$(run --branch pr --out refs/merge-regen/out 2>&1) || fail "--out rerun: $out"
+echo "$out" | tail -1 | grep -q '^merge-regen: no-drift ' || fail "--out rerun after the caller pushed should be no-drift: $out"
+set +e; (cd "$tmp/w" && "$script" --branch pr --push --out refs/x) >/dev/null 2>&1; rc=$?; set -e
+[ $rc = 1 ] || fail "--push with --out should be refused, exit $rc"
+echo "ok   --out leaves the commit in a ref for the caller to push"
 echo PASS
