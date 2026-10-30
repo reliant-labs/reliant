@@ -110,6 +110,12 @@ func planFor(integration, action string, params map[string]any) plan {
 		case "open":
 			p.correlation.Events = []string{"pull_request.reopened"}
 		}
+	case "pr.merge":
+		onNumber("pull_number")
+		p.correlation = provenance.Correlation{ObjectKind: provenance.KindPullRequest}
+		if provenance.IDString(params["action"]) == "merge" {
+			p.correlation.Events = []string{"pull_request.closed"}
+		}
 	case "pr.review.create":
 		onNumber("pull_number")
 		p.correlation = provenance.Correlation{

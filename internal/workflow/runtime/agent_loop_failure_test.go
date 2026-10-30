@@ -64,7 +64,7 @@ func (s *agentLoopStubs) lastStatus(t *testing.T) map[string]interface{} {
 func registerAgentLoopStubs(t *testing.T, env *testsuite.TestWorkflowEnvironment, wfJSON []byte, toolResult map[string]interface{}) *agentLoopStubs {
 	t.Helper()
 	s := &agentLoopStubs{}
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (interface{}, error) {
@@ -73,7 +73,7 @@ func registerAgentLoopStubs(t *testing.T, env *testsuite.TestWorkflowEnvironment
 		s.mu.Unlock()
 		return nil, nil
 	}, activity.RegisterOptions{Name: "WorkflowStatus"})
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {

@@ -39,7 +39,7 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import { useObsReadApi } from "@/hooks/observability-queries";
@@ -94,11 +94,11 @@ function useResources(scope: ObsScope, side: "before" | "after", window: TimeWin
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
-    queryFn: () =>
-      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
+    queryFn: ({ signal }) =>
+      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }, { signal }),
     enabled: usable,
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
