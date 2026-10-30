@@ -70,6 +70,7 @@ import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
 import { OrganizationCostsView } from "./OrganizationCostsView";
+import { useNearViewport } from "./useNearViewport";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -311,7 +312,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
               {
                 label: "Ask Reliant",
                 detail: "in a new chat",
-                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: range, env: env === ENV_ALL ? null : env }),
+                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: panel.minStep ? rangeForBucket(range, panel.minStep).range : range, env: env === ENV_ALL ? null : env }),
                 testId: `dashboard-panel-ask-${panel.id}`,
               },
               ...(editable && !layout
@@ -976,13 +977,13 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
-  // A panel that buckets by a fixed span (minStep: "1d") cannot be drawn from a
-  // window shorter than that span: it would return one bucket. Widen it to the
-  // smallest range holding two, and say so under the title; the other panels
-  // stay on the dashboard's range.
   const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
   const range = widening?.range ?? rangeOfCard;
-  const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
+  // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
+  const [bodyRef, near] = useNearViewport();
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  // Not yet near is "not loaded yet", not "no data".
+  const query = near || queryPanel.kind === "search" ? rawQuery : { ...rawQuery, isLoading: true };
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
@@ -990,7 +991,7 @@ function DashboardPanelCard({
     offsetMs:
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
-    enabled: comparable,
+    enabled: comparable && near,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1068,7 +1069,7 @@ function DashboardPanelCard({
           />
         )}
       </div>
-      <div className="px-4 pb-4 pt-2">
+      <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <PanelBody
           panel={queryPanel}
           query={query}

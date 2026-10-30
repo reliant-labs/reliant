@@ -31,17 +31,28 @@ func activityFixture(t *testing.T) (*ActivityObserver, string, *activityClock) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { watcher.Close() })
 	root, key, err := activityKey(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.running[key] = &activityWatch{watcher: watcher, cancel: func() {}, watched: map[string]bool{}, root: root}
-	t.Cleanup(func() { delete(o.running, key) })
+	// A registered observation without its event loop, so each test drives
+	// Observe by hand.
+	o.mu.Lock()
+	if err := o.ensureWatcherLocked(); err != nil {
+		o.mu.Unlock()
+		t.Fatal(err)
+	}
+	watcher := o.watcher
+	o.running[key] = newActivityWatch(root, "", func() {})
+	o.publishRoutesLocked()
+	o.mu.Unlock()
+	t.Cleanup(func() {
+		o.mu.Lock()
+		delete(o.running, key)
+		o.publishRoutesLocked()
+		o.mu.Unlock()
+		watcher.Close()
+	})
 	return o, root, c
 }
 func observeActivity(t *testing.T, o *ActivityObserver, root string) RecoveryActivity {
