@@ -300,7 +300,7 @@ func (t Tracker) TrackLLMCallCompleted(m LLMCallMetrics) {
 	if m.CacheWriteTokens > 0 {
 		fields = append(fields, slog.Int("cache_write_tokens", m.CacheWriteTokens))
 	}
-	t.emit(EventLLMCallCompleted, "", fields...)
+	t.emit(EventLLMCallCompleted, m.CallID, fields...)
 }
 
 // TrackAPIKeyConfigured records a provider API key being configured.

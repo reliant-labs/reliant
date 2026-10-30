@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -52,7 +53,9 @@ func newAnalyticsCallLLM(t *testing.T, h *IdempotencyTestHelper, driver llm.Driv
 	t.Helper()
 	activity := NewCallLLMActivity(
 		h.Repo(), nil, nil, &staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) { return driver, nil },
+		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			return driver, nil
+		},
 		nil,
 	)
 	activity.trackerFor = rec.trackerFor
@@ -145,4 +148,25 @@ func TestClassifyLLMError(t *testing.T) {
 		assert.Equal(t, want, classifyLLMError(errors.New(err)), err)
 	}
 	assert.Empty(t, classifyLLMError(nil))
+}
+
+// A spawned sub-agent's model calls belong to the sub-agent's workflow (the
+// runtime's), not the chat's root workflow, so they join its own workflow
+// events. Two calls with identical counts in one step are two events.
+func TestTrackLLMCallCompleted_RuntimeWorkflowAndOneEventPerCall(t *testing.T) {
+	rec := newProductEventRecorder()
+	activity := &CallLLMActivity{trackerFor: rec.trackerFor}
+	root := "root-wf"
+	chat := &db.Chat{ID: "chat-1", UserID: "user-1", WorkflowID: &root}
+	usage := llm.TokenUsage{InputTokens: 10, OutputTokens: 2}
+
+	for range 2 {
+		activity.trackLLMCallCompleted(context.Background(), chat, &usageDriver{}, "child-wf", "agent", 5, usage, nil)
+	}
+
+	events := rec.events(t, "product.llm_call_completed")
+	require.Len(t, events, 2, "identical calls are still two calls")
+	for _, evt := range events {
+		assert.Equal(t, "child-wf", evt["product.workflow_id"])
+	}
 }

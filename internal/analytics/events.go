@@ -43,6 +43,10 @@ const (
 // LLMCallMetrics describes one model call finishing: counts and metadata
 // only, never prompt or reply text.
 type LLMCallMetrics struct {
+	// CallID identifies this one call attempt; it is the event's identity,
+	// not a field. Two calls with identical counts in one step are two
+	// events, which value-based deduplication would otherwise collapse.
+	CallID           string
 	Provider         string // anthropic, openai, gemini, ...
 	Model            string
 	InputTokens      int

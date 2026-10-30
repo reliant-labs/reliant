@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
@@ -1850,7 +1852,7 @@ streamLoop:
 		usageErr = nil
 	}
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
-	a.trackLLMCallCompleted(ctx, chat, driver, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
+	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -3129,8 +3131,14 @@ func (a *CallLLMActivity) logLLMUsage(ctx context.Context, chat *db.Chat, driver
 
 // trackLLMCallCompleted emits the product.llm_call_completed event: provider,
 // model, token counts, latency and outcome. Never prompt or reply text.
-func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, stepName string, latencyMs int64, usage llm.TokenUsage, streamErr error) {
+//
+// workflowID is the workflow that made the call (the runtime's), not the
+// chat's root: a spawned sub-agent's calls belong to the sub-agent, so they
+// join its own workflow events. Each call is its own event, even when two
+// carry identical counts (CallID).
+func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, workflowID, stepName string, latencyMs int64, usage llm.TokenUsage, streamErr error) {
 	metrics := analytics.LLMCallMetrics{
+		CallID:           uuid.NewString(),
 		Provider:         driver.Name(),
 		Model:            string(driver.Model().ID),
 		InputTokens:      int(usage.InputTokens),
@@ -3147,7 +3155,8 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
 		metrics.InputTokens = int(usage.TokenCount)
 	}
-	if chat.WorkflowID != nil {
+	metrics.WorkflowID = workflowID
+	if metrics.WorkflowID == "" && chat.WorkflowID != nil {
 		metrics.WorkflowID = *chat.WorkflowID
 	}
 	trackerFor := a.trackerFor
