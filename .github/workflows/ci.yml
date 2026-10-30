@@ -31,9 +31,9 @@ name: CI
 #
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
-# control-plane contract. Main runs all of them; the merge queue runs only the
-# control-plane contract (when its paths change), so the queue stays a fast
-# tier; a `ci:run` pull request runs those its paths reach.
+# control-plane contract. Main runs all of them; the merge queue runs none, so
+# the queue stays a fast tier that only this PR's own diff can turn red; a
+# `ci:run` pull request runs those its paths reach.
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
@@ -276,7 +276,10 @@ jobs:
   cp-contract:
     name: Vendored control-plane contract matches control-plane main
     needs: lanes
-    if: needs.lanes.outputs.cp_contract == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    # Not in the merge queue: its verdict moves with control-plane main, so a
+    # control-plane merge would turn every queued reliant PR red (it did on
+    # 2026-10-30: claimable.proto). Main judges it and the release waits on it.
+    if: needs.lanes.outputs.cp_contract == 'true' && github.event_name != 'merge_group' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
