@@ -24,12 +24,14 @@ func SaveWorkflowCheckpoint(ctx context.Context, db orm.Context, cp *core.Workfl
 			ChatID:        cp.ChatID,
 			NodeID:        cp.NodeID,
 			LoopIteration: cp.LoopIteration,
+			CatalogPin:    checkpointPin(cp.CatalogPin),
 		}).
 		Value(WorkflowCheckpointFieldUpdatedAt, "NOW()").
 		On("CONFLICT (workflow_id) DO UPDATE").
 		Set("chat_id = EXCLUDED.chat_id").
 		Set("node_id = EXCLUDED.node_id").
 		Set("loop_iteration = EXCLUDED.loop_iteration").
+		Set("catalog_pin = EXCLUDED.catalog_pin").
 		Set("updated_at = NOW()").
 		Returning("NULL").
 		Exec(ctx)
@@ -51,6 +53,7 @@ func LoadWorkflowCheckpoint(ctx context.Context, db orm.Context, workflowID stri
 		ChatID:        row.ChatID,
 		NodeID:        row.NodeID,
 		LoopIteration: row.LoopIteration,
+		CatalogPin:    deref(row.CatalogPin),
 		UpdatedAt:     row.UpdatedAt,
 	}, nil
 }
@@ -70,4 +73,12 @@ func ClearWorkflowCheckpoint(ctx context.Context, db orm.Context, workflowID str
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type WorkflowCheckpointExtra struct {
+}
+
+// checkpointPin is a checkpoint's catalog pin as its column: NULL for none.
+func checkpointPin(pin string) *string {
+	if pin == "" {
+		return nil
+	}
+	return &pin
 }
