@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -34,26 +35,211 @@ const activityMaxBytes int64 = 1 << 30
 // Its state directory MUST be outside the observed workspace. An observer is
 // daemon-lifetime scoped: reopening it never inherits a previous process's proof.
 // Start must run continuously; Observe alone cannot establish watcher coverage.
+//
+// Every observed workspace shares ONE inotify instance. inotify instances are
+// a per-user kernel budget (fs.inotify.max_user_instances, 128 by default) that
+// the user's own dev servers, gopls and test runs draw on too. A watcher per
+// workspace, held for the daemon's lifetime, spent that budget on its own: a
+// managed machine with a few hundred worktrees had all 128 held by the daemon
+// (52 of them for worktrees already deleted), and every other inotify user on
+// the machine failed with "too many open files".
 type ActivityObserver struct {
 	mu        sync.Mutex
 	statePath string
 	now       func() time.Time
 	records   map[string]*recoveryActivityRecord
 	running   map[string]*activityWatch
+	// watcher is the shared inotify instance, created by the first Start.
+	// watchRefs counts the observations holding each watched path, so one
+	// workspace releasing a path never removes another's watch on it.
+	watcher   *fsnotify.Watcher
+	watchRefs map[string]int
+	// routes is a snapshot of running for the dispatcher, which must never
+	// wait on mu: mu is held across state fsyncs, and a stalled dispatcher
+	// lets the shared kernel queue overflow for every workspace.
+	routes atomic.Pointer[[]*activityWatch]
 }
 type recoveryActivityRecord struct {
 	Evidence RecoveryActivity `json:"evidence"`
 	Digest   string           `json:"digest"`
 }
+
+// activityEventBuffer bounds one workspace's undelivered events. A full
+// buffer is lost coverage for that workspace alone (see dispatch).
+const activityEventBuffer = 1024
+
 type activityWatch struct {
-	watcher        *fsnotify.Watcher
 	cancel         context.CancelFunc
 	seq            uint64
 	watched        map[string]bool
 	scanMu         sync.Mutex
 	root           string
 	gitDir         string
-	injectedErrors <-chan error // deterministic coverage-failure test seam
+	gone           bool                // workspace deleted or moved away; guarded by ActivityObserver.mu
+	events         chan fsnotify.Event // this workspace's share of the shared watcher's events
+	errors         chan error          // coverage loss; one pending error is enough
+	injectedErrors <-chan error        // deterministic coverage-failure test seam
+}
+
+func newActivityWatch(root, gitDir string, cancel context.CancelFunc) *activityWatch {
+	return &activityWatch{
+		cancel:  cancel,
+		watched: map[string]bool{},
+		root:    root,
+		gitDir:  gitDir,
+		events:  make(chan fsnotify.Event, activityEventBuffer),
+		errors:  make(chan error, 1),
+	}
+}
+
+// covers reports whether an event path belongs to this observation: its
+// workspace or its (possibly external) git administration directory.
+func (w *activityWatch) covers(path string) bool {
+	return overlapActivityPath(w.root, path) || (w.gitDir != "" && overlapActivityPath(w.gitDir, path))
+}
+
+// lose records lost coverage without blocking the dispatcher.
+func (w *activityWatch) lose(err error) {
+	select {
+	case w.errors <- err:
+	default:
+	}
+}
+
+// ensureWatcherLocked creates the shared inotify instance and its dispatcher
+// on first use. Caller holds o.mu.
+func (o *ActivityObserver) ensureWatcherLocked() error {
+	if o.watcher != nil {
+		return nil
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	o.watcher = watcher
+	o.watchRefs = map[string]int{}
+	go o.dispatch(watcher)
+	return nil
+}
+
+// publishRoutesLocked republishes the dispatcher's view of running.
+// Caller holds o.mu.
+func (o *ActivityObserver) publishRoutesLocked() {
+	routes := make([]*activityWatch, 0, len(o.running))
+	for _, w := range o.running {
+		routes = append(routes, w)
+	}
+	o.routes.Store(&routes)
+}
+
+// dispatch routes the shared watcher's events to every observation whose
+// workspace or git directory contains the path. Delivering to more than one
+// is safe: an extra event only ever counts as activity, which delays reclaim
+// and never certifies idleness. A watcher error (a kernel queue overflow)
+// cannot be attributed, so every observation loses coverage.
+func (o *ActivityObserver) dispatch(watcher *fsnotify.Watcher) {
+	broadcast := func(err error) {
+		if routes := o.routes.Load(); routes != nil {
+			for _, w := range *routes {
+				w.lose(err)
+			}
+		}
+	}
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				broadcast(errors.New("activity watcher closed"))
+				o.dropWatcher(watcher)
+				return
+			}
+			routes := o.routes.Load()
+			if routes == nil {
+				continue
+			}
+			for _, w := range *routes {
+				if !w.covers(event.Name) {
+					continue
+				}
+				select {
+				case w.events <- event:
+				default:
+					w.lose(errors.New("activity event buffer overflow"))
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				broadcast(errors.New("activity watcher closed"))
+				o.dropWatcher(watcher)
+				return
+			}
+			broadcast(err)
+		}
+	}
+}
+
+// dropWatcher forgets a closed shared watcher so the next Start makes a new one.
+func (o *ActivityObserver) dropWatcher(watcher *fsnotify.Watcher) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.watcher == watcher {
+		o.watcher = nil
+		o.watchRefs = nil
+	}
+}
+
+// addWatch adds path to the shared watcher on behalf of w.
+func (o *ActivityObserver) addWatch(w *activityWatch, path string) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if w.watched[path] {
+		return nil
+	}
+	if o.watcher == nil {
+		return errors.New("activity watcher closed")
+	}
+	if o.watchRefs[path] == 0 {
+		if err := o.watcher.Add(path); err != nil {
+			return err
+		}
+	}
+	o.watchRefs[path]++
+	w.watched[path] = true
+	return nil
+}
+
+// forgetWatchLocked drops w's hold on path, removing the kernel watch when no
+// other observation holds it. A deleted directory's watch is already gone, so
+// the removal error is expected and ignored. Caller holds o.mu.
+func (o *ActivityObserver) forgetWatchLocked(w *activityWatch, path string) {
+	if !w.watched[path] {
+		return
+	}
+	delete(w.watched, path)
+	if o.watchRefs == nil {
+		return
+	}
+	o.watchRefs[path]--
+	if o.watchRefs[path] > 0 {
+		return
+	}
+	delete(o.watchRefs, path)
+	if o.watcher != nil {
+		_ = o.watcher.Remove(path)
+	}
+}
+
+// Running reports whether root has a live observation. An observation ends
+// when its context ends, its coverage is lost, or its workspace is deleted;
+// the caller must Start it again, which begins a new epoch.
+func (o *ActivityObserver) Running(root string) bool {
+	_, key, err := activityKey(root)
+	if err != nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.running[key] != nil
 }
 
 func NewActivityObserver(statePath string, now func() time.Time) (*ActivityObserver, error) {
@@ -198,37 +384,35 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 	if overlapActivityPath(root, state) {
 		return errors.New("activity state must be outside workspace")
 	}
-	watcher, err := fsnotify.NewWatcher()
+	gitDir, err := activityGitDir(root)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	gitDir, err := activityGitDir(root)
-	if err != nil {
-		cancel()
-		_ = watcher.Close()
-		return err
-	}
-	w := &activityWatch{watcher: watcher, cancel: cancel, watched: map[string]bool{}, root: root, gitDir: gitDir}
+	w := newActivityWatch(root, gitDir, cancel)
 	o.mu.Lock()
 	if o.running[key] != nil {
 		o.mu.Unlock()
 		cancel()
-		_ = watcher.Close()
 		return errors.New("workspace observation already running")
 	}
+	if err := o.ensureWatcherLocked(); err != nil {
+		o.mu.Unlock()
+		cancel()
+		return err
+	}
 	o.running[key] = w
+	o.publishRoutesLocked()
 	o.resetLocked(o.recordLocked(key))
 	err = o.saveLocked()
-	o.mu.Unlock()
 	if err != nil {
 		cancel()
-		_ = watcher.Close()
-		o.mu.Lock()
 		delete(o.running, key)
+		o.publishRoutesLocked()
 		o.mu.Unlock()
 		return err
 	}
+	o.mu.Unlock()
 	go o.events(ctx, key, w)
 	_, err = o.Observe(ctx, root)
 	return err
@@ -236,14 +420,24 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWatch) {
 	ticker := time.NewTicker(activityPoll)
 	defer ticker.Stop()
-	defer func() { _ = w.watcher.Close() }()
 	defer func() {
+		w.cancel()
 		o.mu.Lock()
 		defer o.mu.Unlock()
 		if o.running[key] == w {
 			delete(o.running, key)
+			o.publishRoutesLocked()
 		}
-		o.resetLocked(o.recordLocked(key))
+		for path := range w.watched {
+			o.forgetWatchLocked(w, path)
+		}
+		if w.gone {
+			// Nothing left to prove idle; keep the state file from growing
+			// with every worktree this daemon ever saw.
+			delete(o.records, key)
+		} else {
+			o.resetLocked(o.recordLocked(key))
+		}
 		// A failed persistence cannot resurrect evidence: restart resets it again.
 		_ = o.saveLocked()
 	}()
@@ -251,15 +445,17 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 		select {
 		case <-ctx.Done():
 			return
-		case _, ok := <-w.watcher.Errors:
-			if !ok {
-				return
-			}
+		case <-w.errors:
 			// Coverage is no longer trustworthy. Require explicit Start after stopping,
 			// rather than pretending one subsequent status poll repairs an overflow.
 			return
-		case event, ok := <-w.watcher.Events:
-			if !ok {
+		case event := <-w.events:
+			if event.Name == w.root && event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+				// The workspace itself was deleted or moved away: end the
+				// observation and release its watches.
+				o.mu.Lock()
+				w.gone = true
+				o.mu.Unlock()
 				return
 			}
 			// Git administration writes are reconciled semantically below. An index
@@ -274,7 +470,7 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 			o.mu.Lock()
 			w.seq++
 			if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
-				delete(w.watched, event.Name)
+				o.forgetWatchLocked(w, event.Name)
 			}
 			r := o.recordLocked(key)
 			r.Evidence.Generation++
@@ -329,7 +525,7 @@ func (o *ActivityObserver) Observe(ctx context.Context, root string) (RecoveryAc
 	// Drain queued watcher errors before issuing any complete evidence. A later
 	// overflow still invalidates the epoch in the event loop.
 	select {
-	case <-w.watcher.Errors:
+	case <-w.errors:
 		scanErr = errors.New("activity watcher coverage lost")
 		w.cancel()
 	default:
@@ -348,19 +544,19 @@ func (o *ActivityObserver) Observe(ctx context.Context, root string) (RecoveryAc
 	draining := true
 	for draining {
 		select {
-		case event, ok := <-w.watcher.Events:
-			if !ok {
-				scanErr = errors.New("activity watcher closed")
-				draining = false
-				break
-			}
+		case event := <-w.events:
 			w.seq++
+			if event.Name == w.root && event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+				w.gone = true
+				scanErr = errors.New("workspace removed during observation")
+				w.cancel()
+			}
 			if w.gitDir == "" || !overlapActivityPath(w.gitDir, event.Name) {
 				r.Evidence.Generation++
 				r.Evidence.LastActivity = o.now()
 				if event.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
 					o.resetLocked(r)
-					delete(w.watched, event.Name)
+					o.forgetWatchLocked(w, event.Name)
 				}
 			}
 		default:
@@ -449,12 +645,9 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 			watched := w.watched[path]
 			o.mu.Unlock()
 			if !watched {
-				if err := w.watcher.Add(path); err != nil {
+				if err := o.addWatch(w, path); err != nil {
 					return err
 				}
-				o.mu.Lock()
-				w.watched[path] = true
-				o.mu.Unlock()
 			}
 			return nil // Directory timestamps are deliberately not activity evidence.
 		}
@@ -522,12 +715,9 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 		watched := w.watched[w.gitDir]
 		o.mu.Unlock()
 		if !watched {
-			if err := w.watcher.Add(w.gitDir); err != nil {
+			if err := o.addWatch(w, w.gitDir); err != nil {
 				return "", err
 			}
-			o.mu.Lock()
-			w.watched[w.gitDir] = true
-			o.mu.Unlock()
 		}
 		metadata, err := activityGitDigest(ctx, w.gitDir)
 		if err != nil {
