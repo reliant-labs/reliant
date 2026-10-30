@@ -67,3 +67,24 @@ func TestRunDaemonSelectorMarksTheSessionPin(t *testing.T) {
 
 	assert.Nil(t, (&StepExecutor{}).runDaemonSelector(run), "no selector anywhere")
 }
+
+// The preflight and resume wake take the chat's pin marked as one, so they
+// wake the machine the run's tools will use (the workspace owner when the pin
+// is stale); a workflow-configured selector is not marked.
+func TestPreflightTargetMarksTheSessionPin(t *testing.T) {
+	decode := func(target map[string]interface{}) types.DaemonSelector {
+		var sel types.DaemonSelector
+		raw, err := json.Marshal(target["daemon_selector"])
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &sel))
+		return sel
+	}
+	fromInputs := preflightTarget(WorkflowInput{ChatID: "c", Inputs: map[string]interface{}{"session_daemon_id": "pinned"}}, &ExecutionContext{})
+	assert.Equal(t, types.DaemonSelector{ID: "pinned", Session: true}, decode(fromInputs))
+
+	resolved := preflightTarget(WorkflowInput{ChatID: "c"}, &ExecutionContext{DaemonSelector: &DaemonSelectorValue{ID: "pinned", Session: true}})
+	assert.Equal(t, types.DaemonSelector{ID: "pinned", Session: true}, decode(resolved))
+
+	configured := preflightTarget(WorkflowInput{ChatID: "c"}, &ExecutionContext{DaemonSelector: &DaemonSelectorValue{ID: "cicd"}})
+	assert.Equal(t, types.DaemonSelector{ID: "cicd"}, decode(configured))
+}
