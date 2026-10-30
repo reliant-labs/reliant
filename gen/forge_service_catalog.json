@@ -59529,7 +59529,7 @@
         {
           "id": "method1:b70d4b28a1366357f1ac4a81175728f0e12ecb04d136cba42e0adca4f8eb9751",
           "name": "validateWorkflowTree",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event) error",
+          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event, projectFirst bool) error",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.validateWorkflowTree",
           "source": {

@@ -115,14 +115,6 @@ func (k TriggerEventKind) IsInbound() bool {
 // test fails until it is classified.
 func (k TriggerEventKind) Unattended() bool { return eventKindUnattended[k] }
 
-// FiredByTrigger reports whether an event of this kind is a stored trigger
-// firing: the launch of an automation's run, which resolves a workflow name
-// project-first. It is the kind, not the event's trigger id, that says so for
-// good: deleting the trigger clears the id (ON DELETE SET NULL) but not what
-// started the run, so a running or paused automation keeps loading the
-// project's definitions after its trigger is gone.
-func (k TriggerEventKind) FiredByTrigger() bool { return eventKindUnattended[k] }
-
 // UnattendedEventKinds lists, sorted, the kinds Unattended reports true for:
 // the same rule, for a query that has to apply it in SQL.
 func UnattendedEventKinds() []string {

@@ -299,11 +299,8 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
-	// The chat's launch event, as the chat reads it back once stored: its
-	// kind decides the precedence the inputs are built and validated under
-	// (AutomationPrecedence), the same rule tree admission (admissionScope)
-	// and the run's own loads use.
-	chat.LaunchKind = string(ev.Kind)
+	// The chat's origin (set above) decides the precedence its tree, inputs
+	// and the run's own loads resolve under (AutomationPrecedence).
 	if ev.TriggerID != "" {
 		triggerID := ev.TriggerID
 		chat.TriggerID = &triggerID
@@ -336,11 +333,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
 	// read from the catalog of the machine the chat is pinned to, which is what the run's
 	// own loads read.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev, AutomationPrecedence(chat)); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev), workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -680,10 +677,6 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it and ends no-machine. Every admission read below is scoped by it, so
 	// the tree, the presets and the input schema all come from that machine.
 	checked := *chat
-	// A pending chat has no launch event yet: this start is it.
-	if checked.LaunchKind == "" {
-		checked.LaunchKind = string(ev.Kind)
-	}
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
@@ -694,11 +687,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			checked.ActiveDaemonID = &target
 		}
 	}
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev, AutomationPrecedence(&checked)); err != nil {
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev), workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
 			return nil, err
 		}
 	}

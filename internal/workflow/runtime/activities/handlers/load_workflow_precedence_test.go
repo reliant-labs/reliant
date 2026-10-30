@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // A run its trigger started loads the project's workflow of a name before
@@ -44,14 +45,14 @@ func TestLoadWorkflowActivity_AutomationRunsTheProjectsWorkflow(t *testing.T) {
 		return string(out.YAML)
 	}
 
-	assert.Contains(t, load(&db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, LaunchKind: "schedule"}), "the project's")
+	assert.Contains(t, load(&db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, Origin: core.ChatOriginAutomation}), "the project's")
 	// Deleting the trigger clears the chat's trigger id (ON DELETE SET NULL),
 	// not what launched it: a running or paused automation keeps loading the
 	// project's definitions.
-	assert.Contains(t, load(&db.Chat{ID: "auto", UserID: "u", ProjectID: "p", LaunchKind: "webhook"}), "the project's",
+	assert.Contains(t, load(&db.Chat{ID: "auto", UserID: "u", ProjectID: "p", Origin: core.ChatOriginAutomation}), "the project's",
 		"an automation whose trigger was deleted stays project-first")
 	assert.Contains(t, load(&db.Chat{ID: "chat", UserID: "u", ProjectID: "p"}), "mine")
-	assert.Contains(t, load(&db.Chat{ID: "run", UserID: "u", ProjectID: "p", LaunchKind: "manual.run"}), "mine", "a person's Run now keeps yours-first")
+	assert.Contains(t, load(&db.Chat{ID: "run", UserID: "u", ProjectID: "p", Origin: core.ChatOriginManualRun}), "mine", "a person's Run now keeps yours-first")
 }
 
 // Both rules at once, on two machines: an automation's run on cicd loads
@@ -67,7 +68,7 @@ func TestLoadWorkflowActivity_AutomationOnAMachineRunsThatMachinesProjectWorkflo
 		return &j
 	}
 	triggerID, cicd := "trigger-1", "cicd"
-	chat := &db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, LaunchKind: "schedule", ActiveDaemonID: &cicd}
+	chat := &db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, Origin: core.ChatOriginAutomation, ActiveDaemonID: &cicd}
 	store := &MockLoadWorkflowStore{
 		GetChatFunc:                 func(context.Context, string) (*db.Chat, error) { return chat, nil },
 		GetProjectFunc:              func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil },
