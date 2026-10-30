@@ -3,6 +3,7 @@ package toolexec
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,32 @@ func TestDefaultMachine_NoDefaultKeepsTheMachineStateRule(t *testing.T) {
 	id, err = router.PlacementDaemonID(context.Background(), "u", "")
 	require.NoError(t, err)
 	assert.Equal(t, "cicd", id)
+}
+
+// failingRecords is a registry whose reads fail.
+type failingRecords struct{ fakeDaemonRecords }
+
+func (failingRecords) ListDaemonsByUserID(context.Context, string) ([]*db.Daemon, error) {
+	return nil, errors.New("registry unavailable")
+}
+
+// A registry read that fails is not "no default": the default (perhaps
+// asleep) is unknown, so nothing is routed, rather than an unqualified
+// command reaching whichever other machine is connected.
+func TestDefaultMachine_RegistryFailureRoutesNowhere(t *testing.T) {
+	router := NewNATSDaemonRouter(nil, WithDatabase(&failingRecords{}), WithResolver(NewConnectedDaemonResolver(connectedList{
+		{DaemonID: "cicd", Name: "cicd", Type: "cloud"},
+	})))
+	ctx := context.Background()
+
+	id, err := router.resolveDaemonID(ctx, "u", nil)
+	require.Error(t, err)
+	assert.Empty(t, id)
+	_, err = router.Wake(ctx, "u", nil)
+	require.Error(t, err)
+	_, err = router.WakeForRun(ctx, "u", nil)
+	require.Error(t, err)
+	state, err := router.MachineState(ctx, "u", nil)
+	require.Error(t, err)
+	assert.Empty(t, state.DaemonID)
 }

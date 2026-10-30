@@ -43756,7 +43756,7 @@
         {
           "id": "method1:075c562a852417c588d8e75185fa3f77a7e51ce917a2ba7503719ce74fcbc063",
           "name": "defaultSelector",
-          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.defaultSelector",
           "source": {
@@ -43916,6 +43916,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:fe01872e58ef37e10bde52a4d4fcbf2662e26391f40394c3f8b534bbab75b6bf",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
@@ -65911,7 +65922,7 @@
         {
           "id": "method1:fab2b6c3e0b2829b6d156d824f75532325e12755e7ff7ede3d6f06ce706286fe",
           "name": "defaultSelector",
-          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
           "scope": "github.com/reliant-labs/reliant/internal/app",
           "legacy_name": "app.defaultSelector",
           "source": {
@@ -66071,6 +66082,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:1675b7bd33af6a83d9deaa72d7ef8d41201382dcf388599a0fe2164eab1ea0ac",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
