@@ -38915,6 +38915,11 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "requires",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowRequirements"
           }
         ],
         "reliant.v1.WorkflowConcurrency": [
@@ -39039,6 +39044,23 @@
             "name": "triggers",
             "kind": "message",
             "type_name": "reliant.v1.WorkflowTrigger",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.WorkflowRequirements": [
+          {
+            "name": "tools",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "integrations",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repos",
+            "kind": "string",
             "repeated": true
           }
         ],
@@ -39226,6 +39248,7 @@
         "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
+        "reliant.v1.WorkflowRequirements": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowUI": "reliant/v1/workflow_v2.proto"
       },

@@ -6,12 +6,21 @@ nodes:
 - id: gate
   type: run
   args: {command: task ci}
-- id: approve
-  type: approval
-  args: {title: 'Merge it?'}
+- id: retry_ci
+  type: loop
+  while: outputs.exit_code != 0
+  inline:
+    entry: [retry]
+    outputs:
+      exit_code: '{{ nodes.retry.exit_code }}'
+    nodes:
+    - id: retry
+      type: run
+      timeout: 10m
+      args: {command: task ci}
 - id: done
   type: save_message
   args: {role: assistant, content: 'exit {{ nodes.gate.exit_code }}'}
 edges:
-- {from: gate, default: approve}
-- {from: approve, default: done}
+- {from: gate, default: retry_ci}
+- {from: retry_ci, default: done}

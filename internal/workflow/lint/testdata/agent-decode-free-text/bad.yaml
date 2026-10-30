@@ -4,7 +4,6 @@ nodes:
 - id: triage
   type: workflow
   ref: builtin://autopilot-agent
-  timeout: 20m
   args:
     max_turns: 20
     system_prompt: 'Reply with JSON: {"severity": "..."}'

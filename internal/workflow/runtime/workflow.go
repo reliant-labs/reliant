@@ -1264,6 +1264,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
+	// STEP 6.7: The workflow's declared requires: (tools, integrations,
+	// checkouts), checked on the machine preflight just made ready, before any
+	// node can have a side effect.
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread); err != nil {
+		return nil, err
+	}
+
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
 	// and after preflight so a daemon preflight just woke can answer it.

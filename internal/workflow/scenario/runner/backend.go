@@ -1075,6 +1075,9 @@ var infrastructureActivities = []string{
 	"EmitStreamFinalized",
 	"EmitToolCallStatus",
 	"PreflightDaemonCheck",
+	// A scenario has no machine or connections: its requirements are what
+	// the run would check, not what a scenario tests.
+	"PreflightRequirements",
 	"MachineResumeWake",
 	"ValidateThreadOwnership",
 	// QuestionCreate is NOT here: it resolves an ask_question node from the
