@@ -95,7 +95,7 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 		CanonicalWorkflowRef: input.WorkflowName,
 	}
 	if wfCtx.projectID != "" {
-		validateOpts.PresetLoader = a.createPresetLoader(ctx, wfCtx.projectID)
+		validateOpts.PresetLoader = a.createPresetLoader(ctx, wfCtx)
 	}
 
 	validationResult := validation.StaticAnalysisWithOptions(loaded.Workflow, validateOpts)
@@ -129,6 +129,10 @@ type workflowContext struct {
 	// draftRoot is the one workflow that may be loaded from an unfinished
 	// draft: the root of a builder test run. Empty for every other chat.
 	draftRoot string
+	// daemonID is the machine the run executes on (the chat's pin). Its
+	// workflows and presets are that machine's own synced catalog, the one
+	// a trigger was admitted against, not the union of every machine's.
+	daemonID string
 }
 
 // sourceOptions is whose workflows, in which project, a ref resolves against.
@@ -136,7 +140,7 @@ func (c *workflowContext) sourceOptions() workflowsource.Options {
 	if c == nil {
 		return workflowsource.Options{}
 	}
-	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DraftRoot: c.draftRoot}
+	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, DraftRoot: c.draftRoot}
 }
 
 // resolveWorkflowContext resolves user, project, and path from a chat ID
@@ -160,6 +164,9 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	}
 	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
 		wfCtx.draftRoot = *chat.WorkflowName
+	}
+	if !chat.NoMachine && chat.ActiveDaemonID != nil {
+		wfCtx.daemonID = *chat.ActiveDaemonID
 	}
 
 	if chat.ProjectID == "" {
@@ -238,23 +245,23 @@ func (a *LoadWorkflowActivity) createWorkflowLoader(ctx context.Context, wfCtx *
 }
 
 // createPresetLoader creates a PresetLoader function for validation.
-// Loads from stored project config (synced by daemon), then falls back to builtins.
-func (a *LoadWorkflowActivity) createPresetLoader(ctx context.Context, projectID string) validation.PresetLoader {
+// Loads from the presets the run's machine synced (the union when it has
+// never synced the project; see workflowsource.ProjectPresets), then falls
+// back to builtins.
+func (a *LoadWorkflowActivity) createPresetLoader(ctx context.Context, wfCtx *workflowContext) validation.PresetLoader {
 	return func(presetName string) (map[string]interface{}, error) {
-		// Try stored project presets from daemon config sync. One column, not
-		// the whole config row (see GetProjectPresetsJSON).
-		if projectID != "" && a.repo != nil {
-			presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
+		// One column, not the whole config row (see GetProjectPresetsJSON).
+		if wfCtx.projectID != "" && a.repo != nil {
+			presets, err := workflowsource.ProjectPresets(ctx, a.repo, wfCtx.projectID, wfCtx.daemonID)
 			if err == nil {
-				presets, err := cfg.ParseStoredPresets(presetsJSON)
-				if err == nil {
-					sp := cfg.FindStoredPresetByName(presets, presetName)
-					if sp != nil {
-						p, err := preset.ParsePreset([]byte(sp.YAMLContent), presetName)
-						if err == nil {
-							return p.Params, nil
-						}
+				if sp := cfg.FindStoredPresetByName(presets, presetName); sp != nil {
+					p, err := preset.ParsePreset([]byte(sp.YAMLContent), presetName)
+					if err != nil {
+						// The run's machine's preset is broken: fail closed
+						// rather than run a builtin of the same name.
+						return nil, fmt.Errorf("preset %s (%s): %w", presetName, sp.RelativePath, err)
 					}
+					return p.Params, nil
 				}
 			}
 		}

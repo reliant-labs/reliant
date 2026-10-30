@@ -4408,7 +4408,10 @@ Exit codes (release deploys):
      database it runs). Nothing failed and nothing is to be re-run: it goes
      live on its own once they act. The output names what it waits on and
      the action URL (--json: .queued). --wait blocks until it is live instead
-  8  the wait's budget expired while the rollout was still progressing
+  8  the wait's budget expired while the rollout was still progressing, or
+     a hosted deploy is STILL APPLYING: published and accepted, and not yet
+     reported applied by the platform. Nothing failed (--json: .applying);
+     keep watching with forge env status <env> --wait
 
 5 USED TO MEAN THE TIMEOUT, which is now 8. The confirmation gate took 5
 because it is the one outcome that must be impossible to misread as success:

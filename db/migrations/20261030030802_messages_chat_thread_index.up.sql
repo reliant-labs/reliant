@@ -1,0 +1,23 @@
+-- forge:backward-compatible — additive index; the previous release's queries read through it or through the indexes it leaves in place.
+
+-- Migration: messages_chat_thread_index
+--
+-- ListMessages' total counts the chat's messages off its main thread
+-- (store.CountMessagesInChatOutsideThread):
+--
+--   SELECT count(*) FROM messages WHERE chat_id = $1 AND thread_id <> $2
+--
+-- No index carried thread_id after chat_id, so Postgres read every one of
+-- the chat's rows from the heap to test thread_id. On long chats that was
+-- the slowest statement on the chat-open path in prod (7d: p50 3.9s, max
+-- 5.1s, ~95% of each slow ListMessages; the rest of the call was ~100ms).
+-- (chat_id, thread_id) answers it as an index-only scan, and the sibling
+-- page read (ListTranscriptSiblingMessagesInRange) gets the same filter
+-- from the index.
+--
+-- It also serves every chat_id-only lookup idx_messages_chat_id served, so
+-- the next migration drops that one.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_chat_thread ON public.messages USING btree (chat_id, thread_id);
