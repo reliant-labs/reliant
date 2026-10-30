@@ -131,10 +131,11 @@ service DeployService {
       }
     };
   }
-  // DeleteEnvironment tears down the environment and its namespace. Refuses
-  // with FailedPrecondition while the environment still has deployments,
-  // unless force is set — deleting a namespace out from under running
-  // workloads is the kind of thing a user should have to say twice.
+  // DeleteEnvironment tears down the environment: its deployments, workloads,
+  // URLs, namespaces and (unless keep_data) its managed databases' data.
+  // Refuses with FailedPrecondition while the environment still has
+  // deployments, unless force is set — deleting a namespace out from under
+  // running workloads is the kind of thing a user should have to say twice.
   rpc DeleteEnvironment(DeleteDeployEnvironmentRequest) returns (DeleteDeployEnvironmentResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -145,14 +146,14 @@ service DeployService {
           id: "environment_id"
         }
         env: "environment_id"
-        detail: ["delete_data"]
+        detail: ["keep_data"]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
   }
   // ListRetainedDatabases lists the caller's org's databases that outlived a
-  // deleted environment (DeleteEnvironment without delete_data). Their data
-  // still exists and still bills as storage.
+  // deleted environment (DeleteEnvironment with keep_data). Their data still
+  // exists and still bills as storage.
   rpc ListRetainedDatabases(ListRetainedDatabasesRequest) returns (ListRetainedDatabasesResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -970,13 +971,16 @@ message DeleteDeployEnvironmentRequest {
   // Delete the environment's deployments along with it. Without this, an
   // environment that still has deployments is refused.
   bool force = 2;
-  // Also destroy the environment's DATA: its managed databases' Postgres
-  // clusters, volumes and credentials, and the workload-cluster namespace.
-  // IRREVERSIBLE. Default false RETAINS the data: the databases keep running
-  // in their namespace (and keep billing as storage) and are listed by
-  // ListRetainedDatabases until purged with DeleteRetainedDatabase. A
-  // re-deploy creates a NEW environment and does not reattach them.
-  bool delete_data = 3;
+  reserved 3;
+  reserved "delete_data";
+  // Keep the environment's DATA. By default (false) a delete removes
+  // EVERYTHING the environment runs: workloads, URLs, namespaces AND its
+  // managed databases' Postgres clusters, volumes and credentials
+  // (IRREVERSIBLE). keep_data=true RETAINS the databases instead: they keep
+  // running in their workload namespace, keep billing as storage, and are
+  // listed by ListRetainedDatabases until purged with DeleteRetainedDatabase.
+  // A re-deploy creates a NEW environment and does not reattach them.
+  bool keep_data = 5;
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
@@ -985,8 +989,8 @@ message DeleteDeployEnvironmentRequest {
 
 message DeleteDeployEnvironmentResponse {}
 
-// RetainedDatabase is a managed database whose environment was deleted
-// without delete_data. Its data still exists and still costs storage.
+// RetainedDatabase is a managed database whose environment was deleted with
+// keep_data. Its data still exists and still costs storage.
 message RetainedDatabase {
   string id = 1;
   // The deleted environment it belonged to.

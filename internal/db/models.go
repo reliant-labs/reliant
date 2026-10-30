@@ -20,6 +20,12 @@ const (
 	ChatStateArchived ChatState = core.ChatStateArchived
 )
 
+// ChatOrigin is who started a chat; see core.ChatOrigin.
+type ChatOrigin = core.ChatOrigin
+
+// ChatOriginUser is a conversation a person started; see core.ChatOriginUser.
+const ChatOriginUser = core.ChatOriginUser
+
 // ProviderOAuthMarker is the api_keys value an OAuth provider stores when it
 // connects; never a credential. See core.ProviderOAuthMarker.
 const ProviderOAuthMarker = core.ProviderOAuthMarker
@@ -47,6 +53,10 @@ const (
 
 // Chat represents a top-level conversation.
 type Chat = core.Chat
+
+// ChatRow is core.ChatRow.
+type ChatRow = core.ChatRow
+
 type ChatActivityState = core.ChatActivityState
 
 // ArchivedChatInfo represents an archived chat with worktree information.

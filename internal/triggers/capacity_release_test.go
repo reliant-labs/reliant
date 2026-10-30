@@ -21,6 +21,9 @@ type capacityBoundary struct {
 	released bool
 	desc     *workflowservice.DescribeWorkflowExecutionResponse
 	err      error
+	// young makes the occupied row's last start attempt newer than
+	// core.StartAttemptBound.
+	young bool
 }
 
 func (b *capacityBoundary) EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error {
@@ -39,9 +42,13 @@ func (b *capacityBoundary) GetTriggerEventByDedupe(context.Context, core.Trigger
 	return b.event, nil
 }
 func (b *capacityBoundary) ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error) {
-	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: true}}, nil
+	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: !b.young}}, nil
 }
 func (b *capacityBoundary) ReleaseTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error {
+	b.released = true
+	return nil
+}
+func (b *capacityBoundary) ReleaseClosedTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error {
 	b.released = true
 	return nil
 }
@@ -62,7 +69,7 @@ func (b *failingReleaseBoundary) ListTriggerCapacityExecutions(context.Context, 
 		{EventID: "good", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: true},
 	}, nil
 }
-func (b *failingReleaseBoundary) ReleaseTriggerCapacityExecution(_ context.Context, e store.TriggerCapacityExecution) error {
+func (b *failingReleaseBoundary) ReleaseClosedTriggerCapacityExecution(_ context.Context, e store.TriggerCapacityExecution) error {
 	if e.EventID == "bad" {
 		return errors.New("bind conflict")
 	}
@@ -116,6 +123,45 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 			require.NoError(t, err)
 			if tc.want {
 				require.Empty(t, reason)
+			} else {
+				require.Equal(t, capacityWaiting, reason)
+			}
+		})
+	}
+}
+
+// A run that finished within core.StartAttemptBound of its launch frees its
+// slot on the next reconcile. Holding it until the bound passed made a queue
+// of release runs that each finish in seconds ("main moved past; nothing to
+// do") drain one launch per five minutes (2026-10-29: a release-reliant merge
+// waited 18 minutes behind three such runs). Absence is still not evidence
+// while a start may be in flight.
+func TestCapacityClosedChainReleasesBeforeStartAttemptBound(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status enums.WorkflowExecutionStatus
+		first  string
+		absent bool
+		want   bool
+	}{
+		{"completed", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "first", false, true},
+		{"failed", enums.WORKFLOW_EXECUTION_STATUS_FAILED, "first", false, true},
+		{"different-chain", enums.WORKFLOW_EXECUTION_STATUS_RUNNING, "other", false, true},
+		{"running", enums.WORKFLOW_EXECUTION_STATUS_RUNNING, "first", false, false},
+		{"absent", enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, "first", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &capacityBoundary{young: true, event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending}, desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow"}, FirstRunId: tc.first, Status: tc.status}}}
+			if tc.absent {
+				b.err = serviceerror.NewNotFound("workflow execution not found")
+			}
+			spec := launch.Spec{}
+			require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, 1, &spec))
+			require.Equal(t, tc.want, b.released)
+			reason, err := spec.Guard(context.Background())
+			require.NoError(t, err)
+			if tc.want {
+				require.Empty(t, reason, "the queued head launches as soon as the holder closed")
 			} else {
 				require.Equal(t, capacityWaiting, reason)
 			}

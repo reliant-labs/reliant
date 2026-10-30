@@ -382,7 +382,12 @@ type AccessToken struct {
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// display_prefix ("rlat_A3f9Kd2p") identifies the token without the secret.
-	DisplayPrefix   string                 `protobuf:"bytes,3,opt,name=display_prefix,json=displayPrefix,proto3" json:"display_prefix,omitempty"`
+	DisplayPrefix string `protobuf:"bytes,3,opt,name=display_prefix,json=displayPrefix,proto3" json:"display_prefix,omitempty"`
+	// scopes is the authority the token holds as of this response. For a
+	// wildcard credential (all_scopes) that is the wildcard resolved now —
+	// every scope its acting user holds on its binding, under any ceiling set
+	// on its daemon — never the floor stored on the row. A revoked token holds
+	// nothing; it lists the scopes it was minted with, for the audit trail.
 	Scopes          []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	CreatedByUserId string                 `protobuf:"bytes,5,opt,name=created_by_user_id,json=createdByUserId,proto3" json:"created_by_user_id,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -391,9 +396,15 @@ type AccessToken struct {
 	RevokedAt       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
 	OrgId           string                 `protobuf:"bytes,10,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// acting_user_id is empty for an org automation token.
-	ActingUserId  string           `protobuf:"bytes,11,opt,name=acting_user_id,json=actingUserId,proto3" json:"acting_user_id,omitempty"`
-	Resource      *ResourceBinding `protobuf:"bytes,12,opt,name=resource,proto3" json:"resource,omitempty"`
-	Ephemeral     bool             `protobuf:"varint,13,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	ActingUserId string           `protobuf:"bytes,11,opt,name=acting_user_id,json=actingUserId,proto3" json:"acting_user_id,omitempty"`
+	Resource     *ResourceBinding `protobuf:"bytes,12,opt,name=resource,proto3" json:"resource,omitempty"`
+	Ephemeral    bool             `protobuf:"varint,13,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	// all_scopes marks a daemon credential, which holds every scope its acting
+	// user holds INCLUDING scopes added after this response: scopes is a
+	// snapshot of a set that follows the person's grants. A UI shows it as "all
+	// permissions". Saving scopes back unchanged (UpdateMyToken) keeps the
+	// wildcard; removing any scope turns it into exactly the list submitted.
+	AllScopes     bool `protobuf:"varint,14,opt,name=all_scopes,json=allScopes,proto3" json:"all_scopes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -515,6 +526,13 @@ func (x *AccessToken) GetResource() *ResourceBinding {
 func (x *AccessToken) GetEphemeral() bool {
 	if x != nil {
 		return x.Ephemeral
+	}
+	return false
+}
+
+func (x *AccessToken) GetAllScopes() bool {
+	if x != nil {
+		return x.AllScopes
 	}
 	return false
 }
@@ -1005,7 +1023,9 @@ func (x *CreateMyTokenResponse) GetRotated() bool {
 type ListMyTokensRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	IncludeRevoked *bool                  `protobuf:"varint,1,opt,name=include_revoked,json=includeRevoked,proto3,oneof" json:"include_revoked,omitempty"`
-	// scope, when set, restricts to tokens holding it.
+	// scope, when set, restricts to tokens holding it: matched against the
+	// scopes each token LISTS, so a wildcard credential matches every scope it
+	// resolves to, not only the floor stored on its row.
 	Scope *string `protobuf:"bytes,2,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
@@ -1308,6 +1328,11 @@ type UpdateMyTokenRequest struct {
 	// the empty list". Without it a request omitting scopes is indistinguishable
 	// from one clearing them, and a token with no scopes cannot be minted at
 	// all (accesstoken.NewSet refuses it).
+	//
+	// On a wildcard credential (AccessToken.all_scopes) a set covering
+	// everything it holds now keeps the wildcard, so a save of the list as
+	// shown changes nothing; a set that removes any scope replaces the wildcard
+	// with exactly that list.
 	UpdateScopes bool `protobuf:"varint,4,opt,name=update_scopes,json=updateScopes,proto3" json:"update_scopes,omitempty"`
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
@@ -1551,7 +1576,7 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06member\x18\x01 \x01(\v2 .controlplane.v1.OrgMemberGrantsR\x06member\"5\n" +
 	"\x0fResourceBinding\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xa5\x04\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xc4\x04\n" +
 	"\vAccessToken\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -1570,7 +1595,9 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	" \x01(\tR\x05orgId\x12$\n" +
 	"\x0eacting_user_id\x18\v \x01(\tR\factingUserId\x12<\n" +
 	"\bresource\x18\f \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
-	"\tephemeral\x18\r \x01(\bR\tephemeral\"\xa2\x01\n" +
+	"\tephemeral\x18\r \x01(\bR\tephemeral\x12\x1d\n" +
+	"\n" +
+	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xa2\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +

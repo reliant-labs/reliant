@@ -54,7 +54,6 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }))
 
-vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 const PROVIDER_URL = 'https://accounts.google.com/o/oauth2/auth?client_id=x'

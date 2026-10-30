@@ -223,13 +223,16 @@ func (s *Service) BranchChat(
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
 	branchChat := &db.Chat{
-		ID:             branchChatID,
-		UserID:         sourceChat.UserID,
-		Title:          title,
-		ProjectID:      sourceChat.ProjectID,
-		WorktreeID:     worktreeID,
-		WorkflowName:   sourceChat.WorkflowName,
-		State:          db.ChatStateIdle,
+		ID:           branchChatID,
+		UserID:       sourceChat.UserID,
+		Title:        title,
+		ProjectID:    sourceChat.ProjectID,
+		WorktreeID:   worktreeID,
+		WorkflowName: sourceChat.WorkflowName,
+		State:        db.ChatStateIdle,
+		// The person who branched owns the branch: it is a conversation
+		// whatever started the chat it came from.
+		Origin:         db.ChatOriginUser,
 		WorkflowID:     &branchWorkflowID, // Root workflow ID = chat ID for UI identification
 		ActiveDaemonID: activeDaemonID,    // Pin to the worktree's owning daemon
 		NoMachine:      noMachine,
@@ -705,7 +708,7 @@ func (s *Service) ListBranches(
 	}
 
 	// Verify user owns the parent chat
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

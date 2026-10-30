@@ -82,6 +82,12 @@ const (
 	// automation-only workflow by hand. Its dedupe key is the chat id. A replay
 	// of a past event records the event it replayed in its payload.
 	TriggerEventKindManualRun TriggerEventKind = "manual.run"
+	// TriggerEventKindCLIRun is a run started from the command line
+	// (`reliant workflow run`) — by a script, or by an agent shelling out. It
+	// is attended (a person owns it and may answer it) but nobody is in it as
+	// a conversation, so like agent.start_run it lists under Runs, not in the
+	// sidebar, until adopted. Its dedupe key is the chat id, like chat.start.
+	TriggerEventKindCLIRun TriggerEventKind = "cli.run"
 )
 
 // IsInbound reports whether events of this kind are recorded by a receiver as
@@ -134,6 +140,33 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindAgentStartRun: false,
 	TriggerEventKindBuilderTest:   false,
 	TriggerEventKindManualRun:     false,
+	TriggerEventKindCLIRun:        false,
+}
+
+// eventKindOrigin takes a position on every TriggerEventKind: who started a
+// chat its launch event launches. The migration that added chats.origin
+// (20261030033817_chat_origin) backfills with the same mapping.
+var eventKindOrigin = map[TriggerEventKind]ChatOrigin{
+	TriggerEventKindChatStart:     ChatOriginUser,
+	TriggerEventKindSchedule:      ChatOriginAutomation,
+	TriggerEventKindWebhook:       ChatOriginAutomation,
+	TriggerEventKindIntegration:   ChatOriginAutomation,
+	TriggerEventKindWorkflowEvent: ChatOriginAutomation,
+	TriggerEventKindAgentStartRun: ChatOriginAgent,
+	TriggerEventKindManualRun:     ChatOriginManualRun,
+	TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
+	TriggerEventKindCLIRun:        ChatOriginCLI,
+}
+
+// ChatOriginOf is the origin of a chat launched by an event of this kind. A
+// kind missing from eventKindOrigin reads as AUTOMATION, so a new launch path
+// that was never classified keeps its runs out of the chat list rather than
+// flooding it — and a test fails until it is classified.
+func ChatOriginOf(kind TriggerEventKind) ChatOrigin {
+	if origin, ok := eventKindOrigin[kind]; ok {
+		return origin
+	}
+	return ChatOriginAutomation
 }
 
 // TriggerEventOutcome records what a firing did.

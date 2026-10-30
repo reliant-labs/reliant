@@ -1,21 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
-// trackEvent reaches ClickStack (as a `product.<event>` span) and, while web
-// Sentry is on, Sentry. These tests pin that each sink is independent of the
-// other, and that the user's consent and dev mode gate both.
-
-vi.mock("@sentry/react", () => ({
-  addBreadcrumb: vi.fn(),
-  captureMessage: vi.fn(),
-  withScope: vi.fn((fn: (scope: unknown) => void) =>
-    fn({
-      setLevel: vi.fn(),
-      setTag: vi.fn(),
-      setContext: vi.fn(),
-    }),
-  ),
-}));
+// trackEvent reaches ClickStack as a `product.<event>` span when the build
+// ships browser telemetry. These tests pin that, and that the user's consent
+// and dev mode gate it.
 
 vi.mock("../hooks/privacy-queries", () => ({
   privacyConsent: () => ({ analyticsEnabled: true }),
@@ -28,69 +16,11 @@ vi.mock("@reliantlabs/forge-web-runtime", () => ({
   track: vi.fn(),
 }));
 
-import * as Sentry from "@sentry/react";
 import { track } from "@reliantlabs/forge-web-runtime";
 import { toSnakeCaseKey, trackEvent } from "./analytics";
 
-describe("trackEvent to Sentry", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("still delivers the event to Sentry as a breadcrumb", () => {
-    trackEvent("onboarding_flow_step_viewed", { step: "compute" });
-
-    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: "funnel",
-        message: "onboarding_flow_step_viewed",
-        data: { step: "compute" },
-      }),
-    );
-  });
-
-  it("emits an explicit Sentry message for funnel-defining events, so an alert rule can match", () => {
-    trackEvent("onboarding_completed", { provider: "github" });
-
-    expect(Sentry.captureMessage).toHaveBeenCalledWith(
-      "funnel: onboarding_completed",
-      "info",
-    );
-  });
-
-  it("does NOT emit a message for ordinary events, which would only add noise", () => {
-    trackEvent("onboarding_flow_step_viewed", { step: "compute" });
-
-    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
-  });
-
-  it("coerces metadata values to strings", () => {
-    trackEvent("onboarding_flow_step_completed", {
-      step: "compute",
-      duration_ms: 1234,
-      skipped: false,
-    });
-
-    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: { step: "compute", duration_ms: "1234", skipped: "false" },
-      }),
-    );
-  });
-
-  it("never throws when Sentry itself fails — analytics must not break the app", () => {
-    vi.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
-      throw new Error("sentry exploded");
-    });
-
-    expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
-  });
-});
-
-// The sinks flag (telemetrySinks.ts) decides which of Sentry and ClickStack an
-// event reaches. Both run in parallel until web Sentry is removed.
-describe("TELEMETRY_SINKS", () => {
+// OTEL_ENDPOINT decides whether an event goes anywhere (telemetryEndpoint.ts).
+describe("OTEL_ENDPOINT", () => {
   const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
 
   beforeEach(() => {
@@ -102,54 +32,32 @@ describe("TELEMETRY_SINKS", () => {
     vi.unstubAllEnvs();
   });
 
-  it("sends to both Sentry and ClickStack for `sentry,clickstack`", () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
+  it("sends the event to ClickStack when an endpoint is configured", () => {
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
 
     trackEvent("onboarding_completed", { provider: "github" });
 
     expect(track).toHaveBeenCalledWith("product.onboarding_completed", { provider: "github" });
-    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
-    expect(Sentry.captureMessage).toHaveBeenCalledWith("funnel: onboarding_completed", "info");
   });
 
-  it("sends only to ClickStack for `clickstack`", () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "clickstack" });
-
-    trackEvent("onboarding_completed");
-
-    expect(track).toHaveBeenCalledWith("product.onboarding_completed", {});
-    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
-  });
-
-  it("sends only to Sentry for `sentry`", () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry" });
+  it("sends nothing for a build that configures no endpoint", () => {
+    setRuntimeConfig({ OTEL_ENDPOINT: "" });
 
     trackEvent("onboarding_completed");
 
     expect(track).not.toHaveBeenCalled();
-    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
   });
 
-  it("changes nothing for a build that configures no endpoint: Sentry only", () => {
+  it("sends nothing when the endpoint is `off`", () => {
+    setRuntimeConfig({ OTEL_ENDPOINT: "off" });
+
     trackEvent("onboarding_completed");
 
     expect(track).not.toHaveBeenCalled();
-    expect(Sentry.addBreadcrumb).toHaveBeenCalled();
-  });
-
-  it("still reaches ClickStack when Sentry fails", () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
-    vi.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
-      throw new Error("sentry exploded");
-    });
-
-    expect(() => trackEvent("onboarding_flow_started")).not.toThrow();
-    expect(track).toHaveBeenCalledWith("product.onboarding_flow_started", {});
   });
 
   it("never throws when the runtime does", () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "clickstack" });
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
     vi.mocked(track).mockImplementationOnce(() => {
       throw new Error("runtime exploded");
     });
@@ -165,7 +73,7 @@ describe("TELEMETRY_SINKS", () => {
 describe("ClickStack prop keys", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setRuntimeConfig({ OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x", TELEMETRY_SINKS: "clickstack" });
+    setRuntimeConfig({ OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x" });
   });
 
   afterEach(() => {
@@ -229,36 +137,5 @@ describe("ClickStack prop keys", () => {
     gated("onboarding_completed");
 
     expect(runtime.track).not.toHaveBeenCalled();
-  });
-});
-
-describe("privacy and dev gating", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("sends nothing when the user has disabled analytics", async () => {
-    vi.resetModules();
-    vi.doMock("../hooks/privacy-queries", () => ({
-      privacyConsent: () => ({ analyticsEnabled: false }),
-    }));
-    vi.doMock("./constants", () => ({ isDev: false }));
-
-    const { trackEvent: gated } = await import("./analytics");
-    gated("onboarding_completed");
-
-    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
-  });
-
-  it("sends nothing in dev", async () => {
-    vi.resetModules();
-    vi.doMock("../hooks/privacy-queries", () => ({
-      privacyConsent: () => ({ analyticsEnabled: true }),
-    }));
-    vi.doMock("./constants", () => ({ isDev: true }));
-
-    const { trackEvent: gated } = await import("./analytics");
-    gated("onboarding_completed");
-
-    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
 });

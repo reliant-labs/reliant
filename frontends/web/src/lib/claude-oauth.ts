@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/react'
+import { reportError, reportFailure } from '@/lib/errorReporting'
 import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
 import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
@@ -73,9 +73,7 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
       error instanceof InsecureContextError
         ? error.message
         : 'Could not generate the PKCE challenge required to sign in.'
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'claude', stage: 'pkce' },
-    })
+    reportError(error, { component: 'oauth', provider: 'claude', stage: 'pkce' })
     return errorResult('pkce_generation_failed', message)
   }
 
@@ -113,10 +111,7 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
 
     // Validate state
     if (oauthResp.state !== state) {
-      Sentry.captureMessage('Claude OAuth state mismatch', {
-        tags: { component: 'oauth', provider: 'claude' },
-        level: 'warning',
-      })
+      reportFailure('Claude OAuth state mismatch', { component: 'oauth', provider: 'claude' })
       return errorResult('state_mismatch', 'OAuth state mismatch')
     }
 
@@ -132,10 +127,7 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
     if (result.success) {
       return { ok: true, message: result.message || 'Claude connected successfully', outcome: result }
     }
-    Sentry.captureMessage('Claude OAuth token exchange failed', {
-      tags: { component: 'oauth', provider: 'claude' },
-      level: 'warning',
-    })
+    reportFailure('Claude OAuth token exchange failed', { component: 'oauth', provider: 'claude' })
     return errorResult('token_exchange_failed', result.message || 'Token exchange failed')
   } catch (error: any) {
     // A cancelled flow is not a failure — see isAbort. Clicking Connect twice
@@ -145,10 +137,7 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
     if (isAbort(error, options.signal)) {
       return errorResult('cancelled', 'Sign-in cancelled.')
     }
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'claude' },
-      level: 'warning',
-    })
+    reportError(error, { component: 'oauth', provider: 'claude' })
     return errorResult('daemon_error', error.message || 'OAuth flow failed')
   }
 }

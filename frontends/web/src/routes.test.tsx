@@ -2,7 +2,7 @@
  * Smoke tests for the tanstack-router setup defined in `routes.tsx`.
  *
  * We can't import the full route tree from `routes.tsx` (it transitively
- * pulls in App, Monaco, Sentry, gRPC clients, etc. and turns the test into
+ * pulls in App, Monaco, telemetry, gRPC clients, etc. and turns the test into
  * an integration harness). But we DO import the search schemas directly so
  * a schema-drift regression in routes.tsx is caught here without us having
  * to re-mirror anything. The structural pieces — layout-route nesting,

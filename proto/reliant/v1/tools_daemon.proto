@@ -603,6 +603,31 @@ message ProjectConfigSnapshot {
   // concatenated content of {repo}/reliant.md + {repo}/reliant.local.md.
   // Populated eagerly by the daemon so cloud workers don't need filesystem access.
   map<string, bytes> repo_memories_md = 14;
+
+  // The git state the snapshot's .reliant files were read from: the project
+  // root's, then each nested repo's that holds a .reliant directory. It is
+  // what lets the server say which commit an automation's definition comes
+  // from, and warn when that is a feature branch or an uncommitted edit.
+  repeated SyncedRepoState repo_states = 15;
+}
+
+// SyncedRepoState is one repository's git state at snapshot time.
+message SyncedRepoState {
+  // The repo's slash-separated path relative to the project root; "" for
+  // the project root itself.
+  string repo = 1;
+  // The checked-out branch, "" when HEAD is detached.
+  string branch = 2;
+  // HEAD's commit SHA (full), "" for a repository with no commits.
+  string commit_sha = 3;
+  // True when the repo's .reliant directory has uncommitted changes
+  // (modified, staged or untracked files): what syncs is not what is
+  // committed.
+  bool dirty = 4;
+  // origin's default branch ("main"), "" when the clone does not know it.
+  string default_branch = 5;
+  // Why the state could not be read in full, "" when it was.
+  string error = 6;
 }
 
 message ProjectConfigDelta {

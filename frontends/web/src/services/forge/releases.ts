@@ -208,6 +208,25 @@ export interface WorkloadRollout {
   desiredReplicas: number;
   convergedAt?: string;
   lastError: string;
+  /** One human line explaining the row's phase, as the control plane judged it. */
+  reason: string;
+}
+
+/**
+ * A runtime slot on a cluster FORGE applies (a self-managed environment the
+ * hub does not converge). The control plane makes no observation of it, so it
+ * carries no phase or verdict: the wire's are UNSPECIFIED ("not judged here",
+ * which is not UNKNOWN), and folding them through the phase mapping would
+ * call a part nobody is watching "Cannot be observed". Reported, never gating.
+ */
+export interface ForgeAppliedSlot {
+  /** `<cluster>/<workload>/<slot>`. */
+  name: string;
+  artifact: string;
+  /** The snapshot's content for this slot. */
+  pinnedDigest: string;
+  /** "applied by forge (not observed by the control plane)". */
+  reason: string;
 }
 
 export interface ReleaseRollout {
@@ -219,6 +238,8 @@ export interface ReleaseRollout {
   workloads: WorkloadRollout[];
   /** Workloads the promotion pinned nothing for (not part of this release). */
   unpinned: WorkloadRollout[];
+  /** Slots forge applies itself: reported apart, never judged into `phase`. */
+  forgeApplied: ForgeAppliedSlot[];
 }
 
 export interface ReleaseBundle {
@@ -481,7 +502,13 @@ function toWorkloadRollout(msg: DeployWorkloadRollout): WorkloadRollout {
     desiredReplicas: msg.desiredReplicas,
     convergedAt: toISO(msg.convergedAt),
     lastError: msg.lastError,
+    reason: msg.reason,
   };
+}
+
+/** Deliberately reads no phase or verdict: see ForgeAppliedSlot. */
+function toForgeAppliedSlot(msg: DeployWorkloadRollout): ForgeAppliedSlot {
+  return { name: msg.name, artifact: msg.artifact, pinnedDigest: msg.pinnedDigest, reason: msg.reason };
 }
 
 export function toReleaseRollout(msg: DeployRollout): ReleaseRollout {
@@ -493,6 +520,7 @@ export function toReleaseRollout(msg: DeployRollout): ReleaseRollout {
     finishedAt: toISO(msg.finishedAt),
     workloads: (msg.workloads ?? []).map(toWorkloadRollout),
     unpinned: (msg.unpinned ?? []).map(toWorkloadRollout),
+    forgeApplied: (msg.forgeApplied ?? []).map(toForgeAppliedSlot),
   };
 }
 

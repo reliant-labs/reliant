@@ -283,12 +283,15 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Create chat object (not yet persisted) - model/temperature/max_tokens are workflow input params, not stored on chat
 	chat := &db.Chat{
-		ID:              chatID,
-		UserID:          userID,
-		Title:           title,
-		ProjectID:       spec.ProjectID,
-		WorkflowName:    &workflowName,
-		State:           db.ChatStateIdle,
+		ID:           chatID,
+		UserID:       userID,
+		Title:        title,
+		ProjectID:    spec.ProjectID,
+		WorkflowName: &workflowName,
+		State:        db.ChatStateIdle,
+		// Who started it decides whether it is a conversation (the chat
+		// list) or a run (Runs), for the life of the chat.
+		Origin:          core.ChatOriginOf(ev.Kind),
 		WorkflowID:      &workflowID,
 		SelectedPresets: spec.Presets,
 		CreatedAt:       now,
@@ -296,30 +299,54 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
+	// The chat's origin (set above) decides the precedence its tree, inputs
+	// and the run's own loads resolve under (AutomationPrecedence).
+	if ev.TriggerID != "" {
+		triggerID := ev.TriggerID
+		chat.TriggerID = &triggerID
+	}
+
+	chat.NoMachine = spec.NoMachine
+
+	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
+	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
+	// the project's main worktree. Its error is reported after the request
+	// validators below, so a malformed request still reports its own error
+	// rather than a project-state precondition; it is resolved first because
+	// it decides the machine the chat is pinned to.
+	worktreeID, worktreeErr := l.ResolveChatWorktreeID(ctx, spec.ProjectID, spec.WorktreeID)
+	if worktreeErr == nil {
+		chat.WorktreeID = worktreeID
+		if spec.DaemonID != "" {
+			chat.ActiveDaemonID = &spec.DaemonID
+		} else if l.pinner != nil && !chat.NoMachine {
+			// No machine chosen: the chat still lands on exactly one, decided now
+			// and stored with the row, not left to default resolution on every
+			// tool call (which moves it when another machine connects).
+			if target := l.pinner.Target(ctx, chat); target != "" {
+				chat.ActiveDaemonID = &target
+			}
+		}
+	}
+
 	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
-	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
+	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
+	// read from the catalog of the machine the chat is pinned to, which is what the run's
+	// own loads read.
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev, AutomationPrecedence(chat)); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
 			return nil, err
 		}
-		chat.NoMachine = true
 	}
 
 	if err := ValidateWorkflowParamStructure(spec.Params); err != nil {
 		return nil, &ValidationError{Reason: err.Error()}
 	}
-
-	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
-	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
-	// the project's main worktree. Resolved after the request validators so a
-	// malformed request still reports its own error rather than a project-state
-	// precondition, but before GetEffectiveWorkingPath below, which reads it.
-	worktreeID, err := l.ResolveChatWorktreeID(ctx, spec.ProjectID, spec.WorktreeID)
-	if err != nil {
-		return nil, err
+	if worktreeErr != nil {
+		return nil, worktreeErr
 	}
 	// A branch worktree's checkout lives on one machine (worktree.DaemonID
 	// routes its tools there), so a chat with no machine cannot run in one,
@@ -329,17 +356,6 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if spec.NoMachine && spec.WorktreeID != nil && *spec.WorktreeID != "" {
 		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
 			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
-		}
-	}
-	chat.WorktreeID = worktreeID
-	if spec.DaemonID != "" {
-		chat.ActiveDaemonID = &spec.DaemonID
-	} else if l.pinner != nil && !chat.NoMachine {
-		// No machine chosen: the chat still lands on exactly one, decided now
-		// and stored with the row, not left to default resolution on every
-		// tool call (which moves it when another machine connects).
-		if target := l.pinner.Target(ctx, chat); target != "" {
-			chat.ActiveDaemonID = &target
 		}
 	}
 
@@ -657,11 +673,25 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it would run. A pending chat has produced nothing, so its workflow can
 	// still change; this is the one place the system allows it.
 	workflowName, _, _ := effectiveStart(chat, spec)
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
+	// The chat as this start leaves it: a daemon named at the first send pins
+	// it and ends no-machine. Every admission read below is scoped by it, so
+	// the tree, the presets and the input schema all come from that machine.
+	checked := *chat
+	if spec.DaemonID != "" {
+		checked.ActiveDaemonID = &spec.DaemonID
+		checked.NoMachine = false
+	} else if RunMachine(&checked) == "" && !checked.NoMachine && l.pinner != nil {
+		// An unpinned pending chat is pinned when it starts (start); admit it
+		// against the machine that pin will choose, not the union.
+		if target := l.pinner.Target(ctx, &checked); target != "" {
+			checked.ActiveDaemonID = &target
+		}
+	}
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev, AutomationPrecedence(&checked)); err != nil {
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -669,11 +699,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, &ValidationError{Reason: err.Error()}
 	}
 	{
-		checked := *chat
 		_, presets, _ := effectiveStart(chat, spec)
-		if spec.DaemonID != "" {
-			checked.ActiveDaemonID = &spec.DaemonID
-		}
 		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, presets, spec.Params); err != nil {
 			return nil, err
 		}
@@ -800,10 +826,16 @@ func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[
 
 // isAttendedStartKind reports whether a launch kind is a human starting a chat
 // by hand: the interactive start, a test run pressed in the workflow builder,
-// and "Run now" on a workflow. All dedupe on the chat id, so a second call with different content
-// is a second thing the user said rather than a retry.
+// "Run now" on a workflow, and `reliant workflow run`. All go through
+// ChatService.StartChat's path and dedupe on the chat id, so a second call with
+// different content is a second thing the user said rather than a retry.
 func isAttendedStartKind(kind core.TriggerEventKind) bool {
-	return kind == core.TriggerEventKindChatStart || kind == core.TriggerEventKindBuilderTest || kind == core.TriggerEventKindManualRun
+	switch kind {
+	case core.TriggerEventKindChatStart, core.TriggerEventKindBuilderTest,
+		core.TriggerEventKindManualRun, core.TriggerEventKindCLIRun:
+		return true
+	}
+	return false
 }
 
 // isRetryOf reports whether a call carrying fingerprint is a retry of the
@@ -845,6 +877,11 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		return nil, &InternalError{Reason: "failed to read the recorded start", Err: err}
 	}
 
+	// Pin an unpinned chat before its inputs are built: they are read from
+	// its machine's catalog, the one the run's own loads resolve against.
+	if l.pinner != nil {
+		l.pinner.Pin(ctx, chat)
+	}
 	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, chat.SelectedPresets, params)
 	if err != nil {
 		return nil, err
@@ -1055,10 +1092,13 @@ func (l *Launcher) buildInputs(
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
-	initialData := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	initialData, err := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			if errors.Is(e, drivers.ErrDriverLookupFailed) {

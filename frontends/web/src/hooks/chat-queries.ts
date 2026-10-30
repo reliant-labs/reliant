@@ -275,7 +275,7 @@ export function removeChatFromListCache(
 export function useChatList(projectId?: string) {
   return useQuery({
     queryKey: chatKeys.list(projectId),
-    queryFn: () => chatActions.listChats(projectId),
+    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal }),
     enabled: !!projectId,
     select: (data) => data.chats,
   });
@@ -290,7 +290,7 @@ export function useChatList(projectId?: string) {
 export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: chatKeys.list(scope),
-    queryFn: () => chatActions.listChats(scope ?? undefined),
+    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal }),
     enabled: options.enabled ?? true,
   });
 }

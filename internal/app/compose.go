@@ -1260,8 +1260,7 @@ func (g *Graph) newToken() (*token.Service, error) {
 		Config:    g.Cfg,
 		Authority: g.TokenAuthority(),
 		ControlPlane: token.TokenControlPlane{
-			Issuer:      g.APISettings().AuthorizationServer,
-			ClipsGrants: ControlPlaneEndpoint(cp).Hosted(),
+			Issuer: g.APISettings().AuthorizationServer,
 		},
 		GitTokens: git,
 	})

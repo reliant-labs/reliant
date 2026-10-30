@@ -47,22 +47,16 @@ cannot be read, gets a tracker that emits nothing (fail closed).
 Duplicate suppression: an identical event for the same user within 5 seconds
 is dropped (React StrictMode double effects, retried RPCs).
 
-## Web: `trackEvent` → ClickStack span (and Sentry while it is on)
+## Web: `trackEvent` → ClickStack span
 
-`frontends/web/src/lib/analytics.ts` `trackEvent(name, props)` sends to the sinks
-`telemetrySinks.ts` selects:
+`frontends/web/src/lib/analytics.ts` `trackEvent(name, props)` sends the event
+through the forge web runtime: `track("product.<name>", props)` — one span from
+the browser SDK's `custom-action` tracer, on the same session as the page's
+errors and replay. Props are snake_cased and bounded by the runtime. The user is
+the `userId` attribute set by `setTelemetryUserId`.
 
-- **ClickStack**: forge web runtime `track("product.<name>", props)` — one span
-  from the browser SDK's `custom-action` tracer, on the same session as the
-  page's errors and replay. Props are snake_cased and bounded by the runtime.
-  The user is the `userId` attribute set by `setTelemetryUserId`.
-- **Sentry**, while web Sentry is still enabled (until
-  `research/frontend-observability/DESIGN.md` §6.6): a breadcrumb per event
-  and a message for the funnel-marker events the alert rules match on.
-
-The user's in-app analytics toggle gates both. The ClickStack sink is live only
-in a build that sets `VITE_OTEL_ENDPOINT`; until a deploy sets it, web events
-reach Sentry alone.
+The user's in-app analytics toggle gates it, and it is live only in a deployment
+whose runtime config sets `OTEL_ENDPOINT` (`telemetryEndpoint.ts`).
 
 ## Who emits what
 
@@ -70,8 +64,30 @@ Each event has exactly one producer, so a count never has to be de-duplicated.
 `message_sent` (and `first_message_sent`) are the backend's: it knows the
 message id, workflow and thread, sees every client (web, desktop, CLI,
 triggers) and is immune to ad blockers. The web has no `message_sent`.
-`llm_call_completed` is not a product event: LLM usage lives in control-plane
-usage records and metrics.
+`llm_call_completed` is the worker's: `CallLLMActivity` emits one per model call
+(success or failure) from the one place that has the provider, the usage and the
+latency. Its fields are counts and metadata only, never prompt or reply text:
+`provider`, `model`, `input_tokens`, `output_tokens`, `cache_read_tokens` and
+`cache_write_tokens` (omitted at 0), `latency_ms`, `success`, `error_type`
+(omitted on success), `is_streaming`, `chat_id`, `workflow_id` and `step_name`.
+It is an observability event, not a ledger: it is a log record with the
+retention above, and spend and quota accounting stays in control-plane usage
+records. (#1360 removed the emitter on 2026-10-23, which is why the event
+stopped on 2026-10-24.)
+
+`workflow_started` and `workflow_ended` are the worker's too, one pair per run.
+`is_child` is true for a run another workflow or agent started (a spawned
+sub-agent, or a node of a parent graph) and false for one a user, trigger or API
+call started, so a panel counting runs filters `is_child != 'true'`.
+
+`page_visited` is the web's: one per navigation, from the router root
+(`components/PageVisitTracker.tsx`). `page_name` is the matched route template
+(`/project/$projectId`), never the URL, so ids, query strings and hashes (a claim
+link's token rides the hash) cannot reach the event's own properties;
+`previous_page` is the previous template. (The browser SDK separately stamps the
+page URL as `location.href` on every span, product events included; the runtime
+leaves scrubbing that attribute to the ingest side.) A search-only change is not a visit. It goes through `trackEvent`, so
+the analytics toggle, dev mode and `OTEL_ENDPOINT` gate it like every web event.
 
 `product.app_first_launch` is the desktop app's, once per install, from the
 renderer (it owns consent and the telemetry pipeline) with `install_id`,

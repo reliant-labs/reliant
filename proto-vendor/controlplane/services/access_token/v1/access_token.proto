@@ -241,6 +241,11 @@ message AccessToken {
   string name = 2;
   // display_prefix ("rlat_A3f9Kd2p") identifies the token without the secret.
   string display_prefix = 3;
+  // scopes is the authority the token holds as of this response. For a
+  // wildcard credential (all_scopes) that is the wildcard resolved now —
+  // every scope its acting user holds on its binding, under any ceiling set
+  // on its daemon — never the floor stored on the row. A revoked token holds
+  // nothing; it lists the scopes it was minted with, for the audit trail.
   repeated string scopes = 4;
   string created_by_user_id = 5;
   google.protobuf.Timestamp created_at = 6;
@@ -252,6 +257,12 @@ message AccessToken {
   string acting_user_id = 11;
   ResourceBinding resource = 12;
   bool ephemeral = 13;
+  // all_scopes marks a daemon credential, which holds every scope its acting
+  // user holds INCLUDING scopes added after this response: scopes is a
+  // snapshot of a set that follows the person's grants. A UI shows it as "all
+  // permissions". Saving scopes back unchanged (UpdateMyToken) keeps the
+  // wildcard; removing any scope turns it into exactly the list submitted.
+  bool all_scopes = 14;
 }
 
 message CreateTokenRequest {
@@ -321,7 +332,9 @@ message CreateMyTokenResponse {
 
 message ListMyTokensRequest {
   optional bool include_revoked = 1;
-  // scope, when set, restricts to tokens holding it.
+  // scope, when set, restricts to tokens holding it: matched against the
+  // scopes each token LISTS, so a wildcard credential matches every scope it
+  // resolves to, not only the floor stored on its row.
   optional string scope = 2;
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it; a machine credential may name only
@@ -367,6 +380,11 @@ message UpdateMyTokenRequest {
   // the empty list". Without it a request omitting scopes is indistinguishable
   // from one clearing them, and a token with no scopes cannot be minted at
   // all (accesstoken.NewSet refuses it).
+  //
+  // On a wildcard credential (AccessToken.all_scopes) a set covering
+  // everything it holds now keeps the wildcard, so a save of the list as
+  // shown changes nothing; a set that removes any scope replaces the wildcard
+  // with exactly that list.
   bool update_scopes = 4;
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it; a machine credential may name only

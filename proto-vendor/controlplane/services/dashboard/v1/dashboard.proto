@@ -321,6 +321,14 @@ message DashboardSummary {
   // ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
   // Such a view has no SQL panel spec and cannot be copied into one.
   DashboardViewKind view_kind = 13;
+  // The list section the dashboard is shown under: one of overview, services,
+  // jobs, product, platform, releases, custom (the spec's group). Always set
+  // by the server: a dashboard that declares none, or one this server does not
+  // know, is "custom". Presentation only.
+  string group = 14;
+  // The spec's free-form labels (lowercase letters, digits, '.', '_', '-'), at
+  // most 8. Presentation only.
+  repeated string tags = 15;
 }
 
 message DashboardVersionInfo {

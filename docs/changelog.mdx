@@ -13,6 +13,46 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.13" description="October 30, 2026">
+### Dashboards together, workflows on the right machine
+
+- **Explore dashboards from one hub** The dashboards Overview hub and grouped list bring your dashboards together. Panels queue within the server's read limit and offer Retry when a request fails.
+- **Use the workflow catalog a run started with** Runs load workflow definitions from their original catalog. Automations use the project's workflow rather than a same-named account workflow, and skills, memories and MCP configuration stay scoped to each machine.
+- **Select the intended machine** A daemon: shorthand containing a machine ID now selects that machine correctly.
+- **More accurate usage analytics** Page visits and completed model calls are recorded again, and workflow events correctly identify child runs.
+</Update>
+
+<Update label="v1.8.12" description="October 30, 2026">
+### A cleaner chat list and steadier machines
+
+- **Keep automation runs out of the chat list** Runs started by automations, agents and the CLI no longer crowd the chat list. Each chat records where it came from, and only the conversations you start appear there.
+- **Refresh chat lists without request storms** Streaming updates are coalesced into one list refresh, and a superseded chat-list request is cancelled instead of racing the new one.
+- **Load long chats faster** A new index on messages makes counting a chat's messages an index-only read.
+- **Run workflows from the machine's own catalog** A run loads its workflow, child workflows and presets from the catalog of the machine it runs on, so a machine's local changes apply to its own runs.
+- **See each repository's state from the daemon** Daemons report every repository's branch, commit and uncommitted changes with each snapshot.
+- **See forge-applied rollout slots separately** The Rollout tab groups slots that Forge applies apart from the rest.
+- **Reliant Forge v1.0.6** The embedded `reliant forge` moves to v1.0.6 plus the environment validation fix: the service catalog no longer records source lines, and environments have no arbitrary entry-count limit.
+</Update>
+
+<Update label="v1.8.11" description="October 29, 2026">
+### Faster chats and clearer workflow failures
+
+- **Open chats with less waiting** Opening a chat no longer loads workflow state, ownership reads are leaner, and the connection pool stays warm.
+- **Fail invalid workflows safely** A workflow file that cannot be parsed blocks its name instead of allowing another workflow with the same name to run.
+- **Use one browser error pipeline** ClickStack is the browser error sink; the separate web Sentry integration has been removed.
+- **Understand environment deletion** The confirmation dialog explicitly warns that deleting an environment also deletes its databases.
+</Update>
+
+<Update label="v1.8.10" description="October 29, 2026">
+### Device login and richer observability
+
+- **Sign in with a device code** The CLI supports device-code login, and daemon credentials inherit the signed-in user's scopes.
+- **Inspect traces and RPC traffic** New tracing, RPC explorer, service graph, errors, and alerts views help explain what the system is doing.
+- **Browse consistent tables and custom-domain links** Shared tables bring consistent navigation across the web interface, including custom-domain links.
+- **Recover tool commands without duplicate execution** Shell commands are resent only when there is proof they never ran, and pending daemon commands are delivered when their consumer is created.
+- **Keep conversations responsive** Streaming snapshot and replay work is reduced, and agent messaging supports a subject.
+</Update>
+
 <Update label="v1.8.9" description="October 29, 2026">
 ### Workflows stay with their machine
 

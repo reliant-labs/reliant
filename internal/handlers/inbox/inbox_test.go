@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -273,6 +274,30 @@ func (f *inboxFixture) launchedAs(t *testing.T, kind core.TriggerEventKind, even
 	})
 	require.NoError(t, err)
 	require.True(t, created)
+	// As the launcher stamps it at birth.
+	dbtest.SetChatOrigin(t, f.repo, chatID, core.ChatOriginOf(kind))
+}
+
+// A run an automation started is not in the chat list, so the Inbox is how
+// its question or approval reaches the user: both are listed, and count as
+// blocking, whatever the run's origin.
+func TestListInbox_AutomationRunOutOfTheChatListStillReachesTheUser(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "trg-review")
+	now := time.Now().UTC().Add(-time.Minute)
+	f.launchedAs(t, core.TriggerEventKindIntegration, "ev-review", "chat-review", "trg-review", now, db.Active())
+	f.question(t, "q-review", "chat-review", now)
+	f.approval(t, "appr-review", "chat-review", now)
+
+	chat, err := f.repo.GetChat(f.ctx, "chat-review")
+	require.NoError(t, err)
+	require.Equal(t, core.ChatOriginAutomation, chat.Origin)
+	require.False(t, chat.ListInSidebar, "the run is not in the chat list")
+
+	resp := f.list(t, nil)
+	assert.Len(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION), 1)
+	assert.Len(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL), 1)
+	assert.EqualValues(t, 2, resp.BlockingCount)
 }
 
 func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing.T) {

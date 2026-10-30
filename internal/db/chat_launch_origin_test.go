@@ -32,6 +32,21 @@ func recordLaunchEvent(t *testing.T, repo *Repo, chatID string, kind core.Trigge
 	})
 	require.NoError(t, err)
 	require.True(t, created)
+	// The launcher writes chats.origin from the launch event (the chat's
+	// earliest) when it creates the chat; a test that records the event by
+	// hand stamps it the same way.
+	launch, err := repo.GetTriggerEventByChatID(context.Background(), chatID)
+	require.NoError(t, err)
+	setTestChatOrigin(t, repo, chatID, core.ChatOriginOf(launch.Kind))
+}
+
+// setTestChatOrigin is dbtest.SetChatOrigin for this package's own tests
+// (dbtest imports db, so they cannot import it).
+func setTestChatOrigin(t *testing.T, repo *Repo, chatID string, origin core.ChatOrigin) {
+	t.Helper()
+	_, err := repo.ORM().Bun().NewRaw(`UPDATE chats SET origin = ? WHERE id = ?`, int32(origin), chatID).
+		Exec(context.Background())
+	require.NoError(t, err)
 }
 
 func TestChatReadsCarryLaunchOrigin(t *testing.T) {

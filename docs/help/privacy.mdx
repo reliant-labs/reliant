@@ -53,7 +53,7 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes, encrypted at the application layer | No. The results of integration actions are sent, like any other tool output |
 | Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
 | Your Reliant sign-in tokens (desktop) | Yes, in storage encrypted by your OS | No | No |
-| Analytics and crash reports | No | Yes, in our own telemetry store. While we move off Sentry, crash reports from the app's interface also go to Sentry (both on by default; see [Telemetry](#telemetry)) | No |
+| Analytics and crash reports | No | Yes, in our own telemetry store (both on by default; see [Telemetry](#telemetry)) | No |
 
 <Warning>
 Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/features/secrets). If a key has been exposed, rotate it.
@@ -109,18 +109,18 @@ Whichever provider you use, the conversation is also stored in your chat history
 
 Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.
 
-Telemetry goes to **our own telemetry store**: ClickStack (ClickHouse with OpenTelemetry), which we run ourselves in Google Cloud (us-central1). The apps and our servers send to it over the standard OpenTelemetry protocol (OTLP), and no third party sees it. One exception is temporary. We're moving error reporting off **Sentry**, and while we do, the app's interface (the web app, and the window of the desktop app, which runs the same code) sends crash reports to both places. Our servers and the desktop app's background process report only to our own store.
+Telemetry goes to **our own telemetry store**: ClickStack (ClickHouse with OpenTelemetry), which we run ourselves in Google Cloud (us-central1). The apps and our servers send to it over the standard OpenTelemetry protocol (OTLP), and no third party sees it.
 
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
-| **Analytics and Usage Data** | Our own telemetry store. During the move off Sentry, the app's interface also attaches recent activity to the error reports it sends Sentry, while crash reporting is on | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
-| **Crash and Error Reporting** | Our own telemetry store. During the move off Sentry, the app's interface also sends Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings) and sampled Sentry session replays during the transition. Sentry replay is configured to mask text and form inputs, block media and omit canvas recording; this is not a guarantee that every secret is removed from telemetry. Separately, our ClickStack recorder supports masked web replays, but replay is not enabled in the packaged desktop configuration. The desktop background process does not record session replays. |
+| **Analytics and Usage Data** | Our own telemetry store | Product-usage events such as message sent, model call completed (provider, model, token counts, latency, and whether it succeeded), project opened and page visited, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text, and a "model call completed" event records counts, never the prompt or the reply. A "page visited" event records which screen you opened (for example, the settings page), not what is on it. |
+| **Crash and Error Reporting** | Our own telemetry store | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings). Our ClickStack recorder supports masked web replays, but replay is not enabled in the packaged desktop configuration. The desktop background process does not record session replays. |
 
 Crash reports contain error details and stack traces; we don't create or upload memory dumps.
 
-**During the Sentry transition:** **Crash and Error Reporting**, not the analytics switch, controls whether Sentry starts, including its replay recorder. Turning it off stops ClickStack telemetry and prevents Sentry error events from being sent, but does not stop an already-running Sentry replay recorder or its performance tracing. After the setting saves, reload the web page or quit and reopen the desktop app so Sentry starts with reporting disabled. Turning off analytics alone does not disable replays.
+**Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it.
 
-For deployment administrators, the renderer runtime configuration can prevent Sentry initialization with `SENTRY_ENABLED="false"` or `TELEMETRY_SINKS="clickstack"`. An empty or unrecognized `TELEMETRY_SINKS` value falls back to including Sentry; it is not an opt-out. `OTEL_REPLAY` controls the separate ClickStack recorder, not Sentry replay. Setting only `SENTRY_REPLAYS_SESSION_SAMPLE_RATE="0"` is not a complete opt-out either: error-triggered replay has a separate rate, and prerelease desktop builds override the session rate. These configuration changes take effect on the next app initialization.
+For deployment administrators, the renderer runtime configuration's `OTEL_ENDPOINT` decides whether browser telemetry is sent at all (empty or `off`: none), and `OTEL_REPLAY` controls the ClickStack replay recorder. These configuration changes take effect on the next app initialization.
 
 Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
@@ -169,7 +169,7 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Analytics events | Up to 14 days |
 | Crash and error data in our telemetry store | 30 days |
 | Web session replays in our telemetry store | 14 days |
-| Crash and error data and session replays sent to Sentry (web app and desktop window) during the move off it | According to Sentry's retention settings for our account |
+| Crash and error data and session replays sent to Sentry (web app and desktop window) before we moved error reporting off it | According to Sentry's retention settings for our account |
 | Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 
 The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete list.

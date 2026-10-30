@@ -352,7 +352,8 @@ func unmarshalCelDaemonSelector(node *yaml.Node) (*reliantv1.CelDaemonSelector, 
 		case "local", "cloud", "any":
 			ds.Type = node.Value
 		default:
-			// Could be a UUID (id) or a name — use name for user-friendliness
+			// A machine id or a name. Name carries both: resolution tries
+			// it as an exact id first, then as a name (toolexec.DaemonSelector).
 			ds.Name = node.Value
 		}
 		cds.Value = &reliantv1.CelDaemonSelector_Literal{Literal: ds}

@@ -3,6 +3,7 @@ package token
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -279,32 +280,42 @@ func TestExchangeToken_NeverCrossesOrgs(t *testing.T) {
 	}
 }
 
-func TestCreateToken_DaemonCarriesTheClippedCeilingOnlyWhereClipped(t *testing.T) {
-	for _, clips := range []bool{true, false} {
-		authority := tokenauthority.NewMemory()
-		svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane, ClipsGrants: clips})
-		resp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
-			Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
-		}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if p.Scopes.Has(fat.ScopeReliantAPI) {
-			t.Errorf("clips=%v: a daemon credential must not become an API credential", clips)
-		}
-		if got := p.Scopes.Has(fat.ScopeDeployWrite); got != clips {
-			t.Errorf("clips=%v: deploy:write present = %v — the ceiling is applied only where control-plane clips it", clips, got)
-		}
-		if strings.Join(resp.Msg.GetInfo().GetScopes(), ",") != p.Scopes.String() {
-			t.Errorf("clips=%v: response scopes %v != stored %s", clips, resp.Msg.GetInfo().GetScopes(), p.Scopes)
-		}
-		if resp.Msg.GetInfo().GetKind() != reliantv1.TokenKind_TOKEN_KIND_DAEMON {
-			t.Errorf("clips=%v: kind = %v", clips, resp.Msg.GetInfo().GetKind())
-		}
+// recordingMint remembers what a mint asked the authority for.
+type recordingMint struct {
+	*tokenauthority.Memory
+	asked [][]fat.Scope
+}
+
+func (r *recordingMint) MintForUser(ctx context.Context, req tokenauthority.MintRequest) (tokenauthority.Minted, error) {
+	r.asked = append(r.asked, req.Scopes)
+	return r.Memory.MintForUser(ctx, req)
+}
+
+// A daemon credential holds "*": the control plane keys its wildcard on
+// daemon:connect and resolves it at every use, so the mint names daemon:connect
+// ALONE. Any list here is a snapshot the next forge scope would be missing
+// from. The response reports what the authority says the token holds.
+func TestCreateToken_DaemonAsksForDaemonConnectAlone(t *testing.T) {
+	authority := &recordingMint{Memory: tokenauthority.NewMemory()}
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
+	resp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
+		Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(authority.asked) != 1 || !reflect.DeepEqual(authority.asked[0], []fat.Scope{fat.ScopeDaemonConnect}) {
+		t.Fatalf("a daemon mint asked for %v, want [daemon:connect]", authority.asked)
+	}
+	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(resp.Msg.GetInfo().GetScopes(), ",") != p.Scopes.String() {
+		t.Errorf("response scopes %v != stored %s", resp.Msg.GetInfo().GetScopes(), p.Scopes)
+	}
+	if resp.Msg.GetInfo().GetKind() != reliantv1.TokenKind_TOKEN_KIND_DAEMON {
+		t.Errorf("kind = %v", resp.Msg.GetInfo().GetKind())
 	}
 }
 

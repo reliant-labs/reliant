@@ -110,39 +110,16 @@ message ReliantWebConfig {
   }];
 
   // ── Telemetry ─────────────────────────────────────────────────────────
-  string sentry_dsn = 11 [(forge.v1.config) = {
-    env_var: "SENTRY_DSN"
-    description: "Sentry DSN for this surface (the hosted SPA and the desktop app report to different projects). Browser-public by design. Unset: no Sentry."
-  }];
-
-  string sentry_enabled = 12 [(forge.v1.config) = {
-    env_var: "SENTRY_ENABLED"
-    description: "\"false\" turns Sentry off even with a DSN. Anything else leaves it to SENTRY_DSN, TELEMETRY_SINKS and the user's privacy setting."
-  }];
-
-  string sentry_traces_sample_rate = 13 [(forge.v1.config) = {
-    env_var: "SENTRY_TRACES_SAMPLE_RATE"
-    description: "Sentry trace sample rate, 0-1. Unset or 0: 1.0 for a prerelease desktop build, else 0.1."
-  }];
-
-  string sentry_replays_session_sample_rate = 14 [(forge.v1.config) = {
-    env_var: "SENTRY_REPLAYS_SESSION_SAMPLE_RATE"
-    description: "Sentry session-replay sample rate, 0-1, overriding the new-user funnel policy. Unset: the policy (1.0 for a new user's first sessions, then 0.1)."
-  }];
-
-  string sentry_replays_error_sample_rate = 15 [(forge.v1.config) = {
-    env_var: "SENTRY_REPLAYS_ERROR_SAMPLE_RATE"
-    description: "Sentry on-error replay sample rate, 0-1. Unset or 0: 1.0."
-  }];
+  // 11-15 and 17 were the web Sentry keys (SENTRY_DSN, SENTRY_ENABLED, the
+  // three SENTRY_*_SAMPLE_RATE keys) and TELEMETRY_SINKS, which chose between
+  // Sentry and ClickStack while both ran. ClickStack is the one sink now.
+  reserved 11, 12, 13, 14, 15, 17;
+  reserved "sentry_dsn", "sentry_enabled", "sentry_traces_sample_rate",
+    "sentry_replays_session_sample_rate", "sentry_replays_error_sample_rate", "telemetry_sinks";
 
   string otel_endpoint = 16 [(forge.v1.config) = {
     env_var: "OTEL_ENDPOINT"
     description: "Browser telemetry (ClickStack) ingest base, normally the same-origin `/_otel`. Empty or `off`: none. forge's generated otel_gen.ts reads the same key."
-  }];
-
-  string telemetry_sinks = 17 [(forge.v1.config) = {
-    env_var: "TELEMETRY_SINKS"
-    description: "Comma-separated sinks: `sentry`, `clickstack`. Unset or unrecognised: Sentry, plus ClickStack when OTEL_ENDPOINT is set (src/lib/telemetrySinks.ts)."
   }];
 
   string otel_replay = 18 [(forge.v1.config) = {

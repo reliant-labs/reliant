@@ -137,7 +137,7 @@ export function AccountNameCell({
       {renaming ? (
         <RenameField account={account} mobile={mobile} onRename={onRename} onDone={onRenameEnd} />
       ) : (
-        <span data-sentry-mask className="min-w-0 truncate text-sm font-medium text-foreground">
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">
           {account.label}
         </span>
       )}
@@ -304,7 +304,7 @@ export function AccountDetail({
   return (
     <div id={accountDetailId(account)} className={cn("space-y-2", indent && (mobile ? "pl-10" : "pl-16"))}>
       {secondary.length > 0 && (
-        <p data-sentry-mask className="truncate font-mono text-xs text-muted-foreground">
+        <p className="truncate font-mono text-xs text-muted-foreground">
           {secondary.join(" · ")}
         </p>
       )}

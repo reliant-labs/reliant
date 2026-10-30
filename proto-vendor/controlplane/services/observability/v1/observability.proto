@@ -347,6 +347,17 @@ message QueryScope {
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
   // Generic attribute predicates, ANDed with each other and with everything else.
   repeated AttributeFilter filters = 7 [(buf.validate.field).repeated.max_items = 20];
+  // Read platform telemetry: the signals of a dashboard whose spec says
+  // `scope: "platform"` (a database, a message bus, a collector). They belong
+  // to no environment and carry no reliant.env.id, so the environment predicate
+  // is the one thing dropped. Nothing else is: the org's database, the caller's
+  // membership and every other predicate apply as always.
+  //
+  // Only the platform organization (tenant zero) has such telemetry, so any
+  // other org is refused PermissionDenied, as is a credential bound to one
+  // environment. It takes no env_ids and no project_id (both narrow by
+  // environment): sending either is InvalidArgument.
+  bool platform_scope = 8;
 }
 
 // === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
@@ -500,6 +511,7 @@ message GraphRPCMethod {
   // or when observations disagreed on histogram version/bounds.
   GraphHistogram duration = 17;
 }
+
 // Exact frozen release-bundle artifact; no current-runtime/version assignment implied.
 // Catalog JSON has schema forge.dev/service-catalog/v1, preserving the existing
 // forge_descriptor schema graph and validation dialect without a second schema.

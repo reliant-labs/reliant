@@ -46,8 +46,7 @@ import { WorkflowExecutionView, WorkflowState, WorkflowStopReason } from "../../
 import { triggerRefetch } from "../../store/refetchStore";
 import type { WorkflowExecutionData } from "../chat-model";
 
-// Build a minimal execution node — only `status` matters for the derived
-// hasRunningWorkflow flag; the rest is cast away.
+// Build a minimal execution node; the rest is cast away.
 function wf(
   overrides: Partial<WorkflowExecutionData> = {},
 ): WorkflowExecutionData {
@@ -116,40 +115,6 @@ describe("useWorkflowExecutions (characterization)", () => {
     expect(getWorkflowExecutionsMock).not.toHaveBeenCalled();
     expect(result.current.allWorkflows).toEqual([]);
     expect(result.current.data).toBeNull();
-  });
-
-  it("derives hasRunningWorkflow=true when any workflow is RUNNING", async () => {
-    const chatId = nextChatId();
-    const running = wf({ id: "r", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED });
-    getWorkflowExecutionsMock.mockResolvedValue({
-      latest: running,
-      all: [wf({ id: "done" }), running],
-    });
-
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useWorkflowExecutions(chatId), {
-      wrapper: Wrapper,
-    });
-
-    await waitFor(() =>
-      expect(result.current.hasRunningWorkflow).toBe(true),
-    );
-  });
-
-  it("derives hasRunningWorkflow=false when no workflow is RUNNING", async () => {
-    const chatId = nextChatId();
-    getWorkflowExecutionsMock.mockResolvedValue({
-      latest: wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED }),
-      all: [wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED })],
-    });
-
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useWorkflowExecutions(chatId), {
-      wrapper: Wrapper,
-    });
-
-    await waitFor(() => expect(result.current.allWorkflows).toHaveLength(1));
-    expect(result.current.hasRunningWorkflow).toBe(false);
   });
 
   it("re-fetches when a workflow_executions refetch pulse fires", async () => {

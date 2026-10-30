@@ -24,7 +24,7 @@ import (
 func failingStreamRepo(logErr, chatErr error) *streaming.MockRepository {
 	return &streaming.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, logErr },
-		GetChatFunc:                     func(context.Context, string) (*db.Chat, error) { return nil, chatErr },
+		GetChatRowFunc:                  func(context.Context, string) (*db.ChatRow, error) { return nil, chatErr },
 	}
 }
 

@@ -461,7 +461,15 @@ type DashboardSummary struct {
 	Category string `protobuf:"bytes,12,opt,name=category,proto3" json:"category,omitempty"`
 	// ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
 	// Such a view has no SQL panel spec and cannot be copied into one.
-	ViewKind      DashboardViewKind `protobuf:"varint,13,opt,name=view_kind,json=viewKind,proto3,enum=controlplane.v1.DashboardViewKind" json:"view_kind,omitempty"`
+	ViewKind DashboardViewKind `protobuf:"varint,13,opt,name=view_kind,json=viewKind,proto3,enum=controlplane.v1.DashboardViewKind" json:"view_kind,omitempty"`
+	// The list section the dashboard is shown under: one of overview, services,
+	// jobs, product, platform, releases, custom (the spec's group). Always set
+	// by the server: a dashboard that declares none, or one this server does not
+	// know, is "custom". Presentation only.
+	Group string `protobuf:"bytes,14,opt,name=group,proto3" json:"group,omitempty"`
+	// The spec's free-form labels (lowercase letters, digits, '.', '_', '-'), at
+	// most 8. Presentation only.
+	Tags          []string `protobuf:"bytes,15,rep,name=tags,proto3" json:"tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -585,6 +593,20 @@ func (x *DashboardSummary) GetViewKind() DashboardViewKind {
 		return x.ViewKind
 	}
 	return DashboardViewKind_DASHBOARD_VIEW_KIND_UNSPECIFIED
+}
+
+func (x *DashboardSummary) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *DashboardSummary) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
 }
 
 type DashboardVersionInfo struct {
@@ -2208,7 +2230,7 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\vforked_from\x18\x06 \x01(\tR\n" +
 	"forkedFrom\x12&\n" +
 	"\x0fpromoted_pr_url\x18\a \x01(\tR\rpromotedPrUrl\x12\x17\n" +
-	"\aenv_ids\x18\b \x03(\tR\x06envIds\"\xf4\x04\n" +
+	"\aenv_ids\x18\b \x03(\tR\x06envIds\"\x9e\x05\n" +
 	"\x10DashboardSummary\x12/\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1d.controlplane.v1.DashboardRefR\x03ref\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -2224,7 +2246,9 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	" \x01(\v2%.controlplane.v1.DashboardReleaseInfoR\arelease\x12E\n" +
 	"\tworkspace\x18\v \x01(\v2'.controlplane.v1.DashboardWorkspaceInfoR\tworkspace\x12\x1a\n" +
 	"\bcategory\x18\f \x01(\tR\bcategory\x12?\n" +
-	"\tview_kind\x18\r \x01(\x0e2\".controlplane.v1.DashboardViewKindR\bviewKind\"\x80\x02\n" +
+	"\tview_kind\x18\r \x01(\x0e2\".controlplane.v1.DashboardViewKindR\bviewKind\x12\x14\n" +
+	"\x05group\x18\x0e \x01(\tR\x05group\x12\x12\n" +
+	"\x04tags\x18\x0f \x03(\tR\x04tags\"\x80\x02\n" +
 	"\x14DashboardVersionInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x126\n" +

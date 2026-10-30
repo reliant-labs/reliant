@@ -147,6 +147,10 @@ export function AuthScreen() {
     setError(null)
 
     try {
+      // linkState carries a mid-flow `redirect` (the device-code approval
+      // page, a CLI login's consent) through the provider and back via
+      // /auth/callback; without it the person lands on the home page and
+      // the approval they came to make is lost.
       if (provider === 'google') {
         await signInWithGoogle(linkState)
         // For web, OAuth will redirect. For Electron, window will open.

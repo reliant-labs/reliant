@@ -37,6 +37,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { PageVisitTracker } from './components/PageVisitTracker'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -275,6 +276,7 @@ function RootShell() {
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
       <ActiveOrgBinding />
+      <PageVisitTracker />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>

@@ -322,13 +322,13 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		require.NoError(t, os.Unsetenv(name))
 	}
 	api := loadServerAPIOptions(t)
-	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 10, SchemaWait: 300 * time.Second}, api.DatabasePool)
+	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 10, SchemaWait: 300 * time.Second, KeepIdleWarm: true}, api.DatabasePool)
 
 	t.Setenv("RELIANT_DB_MAX_OPEN_CONNS", "8")
 	t.Setenv("RELIANT_DB_MAX_IDLE_CONNS", "2")
 	t.Setenv("RELIANT_DB_SCHEMA_WAIT_SECONDS", "25")
 	t.Setenv("DB_CONNECT_TIMEOUT", "90s")
-	want := db.Pool{MaxOpenConns: 8, MaxIdleConns: 2, ConnectTimeout: 90 * time.Second, SchemaWait: 25 * time.Second}
+	want := db.Pool{MaxOpenConns: 8, MaxIdleConns: 2, ConnectTimeout: 90 * time.Second, SchemaWait: 25 * time.Second, KeepIdleWarm: true}
 	for _, role := range serverRoles {
 		opts, err := role.load(t)
 		require.NoError(t, err)

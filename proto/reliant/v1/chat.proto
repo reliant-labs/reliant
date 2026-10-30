@@ -500,6 +500,12 @@ service ChatService {
   // forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
   rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
   
+  // GetWorkflowNodeExecutions returns the newest node_execution update of each
+  // node of one of a chat's workflow runs: the node state a run-status view
+  // starts from, before it follows the chat stream's live node events. The
+  // chat snapshot does not carry node state.
+  rpc GetWorkflowNodeExecutions(GetWorkflowNodeExecutionsRequest) returns (GetWorkflowNodeExecutionsResponse) {}
+
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
   rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
 
@@ -590,6 +596,34 @@ message Chat {
   // > 0 needs the user AND still has agents running. Also carried by the
   // CHAT_ACTIVITY_CHANGED update ("working_threads").
   int32 working_threads = 42;
+  // Who started this chat (chats.origin, written once at launch and never
+  // rewritten). The chat list (ListChats, SearchChats, the Archived tab) holds
+  // USER chats plus runs the user adopted; every other origin lives in Runs.
+  ChatOrigin origin = 43;
+}
+
+// ChatOrigin is who started a chat. It is the chat list's policy key: a USER
+// chat is a conversation and lists in the sidebar; any other origin is a run,
+// which lists under Runs (and its automation's history) until the user adopts
+// it. A run that asks a question or needs an approval still reaches the user
+// through the Inbox and its notification, whatever its origin.
+enum ChatOrigin {
+  CHAT_ORIGIN_UNSPECIFIED = 0;
+  // A person typing: the first send of a chat (launch kind chat.start), a
+  // branch, or a chat that predates launch events.
+  CHAT_ORIGIN_USER = 1;
+  // An automation's trigger fired it: a schedule, a webhook delivery, a
+  // provider (GitHub, Slack, ...) event or another run's outcome.
+  CHAT_ORIGIN_AUTOMATION = 2;
+  // An agent's start_run tool.
+  CHAT_ORIGIN_AGENT = 3;
+  // A person pressed Run now on a workflow. Adopted at birth, so it lists.
+  CHAT_ORIGIN_MANUAL_RUN = 4;
+  // A workflow builder's test run.
+  CHAT_ORIGIN_BUILDER_TEST = 5;
+  // The command line (`reliant workflow run`): a script, or an agent shelling
+  // out.
+  CHAT_ORIGIN_CLI = 6;
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.
@@ -780,9 +814,18 @@ message StartChatRequest {
   // the run stays out of the sidebar and the default Runs list. It is still an
   // attended run. `workflow` must name a workflow draft the caller owns; the
   // draft runs as saved even if it is not marked complete. The client does not
-  // choose the launch kind: this flag is the only way to ask for builder.test,
-  // and no other kind can be claimed through StartChat.
+  // choose the launch kind: this flag and cli_run are the only ways to ask for
+  // a non-default kind, and no other kind can be claimed through StartChat.
   optional bool builder_test = 19;
+
+  // cli_run marks this start as a run launched from the command line
+  // (`reliant workflow run`), by a script or by an agent shelling out. The
+  // launch event is recorded as kind "cli.run" instead of "chat.start", so the
+  // run lists under Runs and stays out of the sidebar until the user adopts
+  // it, like an agent's start_run. With no title it is titled
+  // "<workflow> · <first line of the message>". Not allowed with chat_id (a
+  // branch's first send is a chat turn) or builder_test.
+  optional bool cli_run = 22;
 
   // Client-chosen UUID for the first user message, which makes the start
   // idempotent: a repeat with the same id (a retry after a lost response, a
@@ -869,11 +912,13 @@ message ListChatsRequest {
   // so a project id that is not the caller's lists nothing.
   string project_id = 1;
   optional int32 limit = 2;
-  // When true, return only chats the sidebar lists (chats_with_activity.
-  // list_in_sidebar): interactive chats and adopted chats. An automation or
-  // agent-started run appears only once adopted; one awaiting input surfaces
-  // in the Inbox instead.
-  optional bool sidebar_only = 3;
+  // ListChats is the chat list: it returns only chats the sidebar lists
+  // (chats_with_activity.list_in_sidebar), USER-origin chats and adopted runs.
+  // Runs of any other origin are listed by RunService.ListRuns; one awaiting
+  // input surfaces in the Inbox. There is no opt-out: the chat list never
+  // pages runs in.
+  reserved 3;
+  reserved "sidebar_only";
 }
 
 // ListChatsResponse returns the list of chats
@@ -945,7 +990,9 @@ message DeleteChatResponse {
   bool permanently_deleted = 3;        // True if hard deleted, false if archived
 }
 
-// SearchChatsRequest searches chats
+// SearchChatsRequest searches the chat list: the same chats ListChats returns
+// (USER-origin chats and adopted runs). Runs are searched in Runs
+// (RunService.ListRuns query).
 message SearchChatsRequest {
   // The project to search. Empty searches every project the caller owns; each
   // result carries its project_id.
@@ -961,7 +1008,7 @@ message SearchChatsResponse {
 }
 
 // ListArchivedChatsRequest lists the caller's archived chats: the sidebar's
-// Archived tab. It applies the same policy as ListChats' sidebar_only
+// Archived tab. It applies the same policy as ListChats
 // (chats_with_activity.list_in_sidebar), so an archived automation run — an
 // automation archives its runs once they finish successfully — is not listed
 // here; it stays browsable in Runs (RunService.ListRuns, include_archived).
@@ -1544,6 +1591,19 @@ message ListStepExecutionsResponse {
   repeated StepExecution step_executions = 1;
   // True when older executions were left out to bound the response.
   bool truncated = 2;
+}
+
+message GetWorkflowNodeExecutionsRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  // The run: a workflows.id of the chat (WorkflowExecution.id).
+  string workflow_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetWorkflowNodeExecutionsResponse {
+  // One per node that has run, its newest node_execution update, in sequence
+  // order. update_type is "CHAT_UPDATE_TYPE_NODE_EXECUTION" and data the event
+  // JSON, as the chat stream carries it.
+  repeated ChatUpdate updates = 1;
 }
 
 // SetChatDaemonRequest sets the active daemon for a chat session.

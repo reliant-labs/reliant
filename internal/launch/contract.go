@@ -204,6 +204,13 @@ func (e *DeclinedError) Error() string { return "launch declined: " + e.Reason }
 // Is makes errors.Is(err, ErrDeclined) match.
 func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
 
+// TxOutcome marks a decline as the launch transaction's intended rollback,
+// not a failure: the repo logs it quietly (a trigger waiting for workflow
+// capacity is declined on every poll, and each one was an ERROR and an issue).
+func (e *DeclinedError) TxOutcome() {}
+
+var _ db.TxOutcome = (*DeclinedError)(nil)
+
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.
 var ErrNotPending = svcerr.FailedPrecondition("chat has already started; use SendMessage")

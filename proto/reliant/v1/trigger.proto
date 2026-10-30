@@ -267,6 +267,11 @@ enum TriggerEventKind {
   // (RunService.RunNow). Attended, with the chat id as its dedupe key. When it
   // replays a past event, its payload names that event.
   TRIGGER_EVENT_KIND_MANUAL_RUN = 8;
+  // CLI_RUN is a run started from the command line (`reliant workflow run`):
+  // by a script, or by an agent shelling out. Attended, with the chat id as
+  // its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
+  // the sidebar until adopted.
+  TRIGGER_EVENT_KIND_CLI_RUN = 9;
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -737,6 +742,41 @@ message Trigger {
   // the user to configure, and RotateWebhookToken re-provisions rather than
   // returning a token.
   bool webhook_managed = 29;
+
+  // Read-only, activations only: where the definition this activation runs
+  // comes from, as resolved now. Unset when it does not resolve (Health says
+  // why) or for an ad hoc trigger.
+  TriggerDefinitionSource definition_source = 32;
+}
+
+// TriggerDefinitionSource is where an activation's workflow definition is
+// read from when it fires: which kind of workflow, which file on which
+// machine, and anything about that choice the owner should know.
+message TriggerDefinitionSource {
+  // "project" (a synced .reliant/workflows file), "user" (the owner's own
+  // account workflow) or "builtin".
+  string kind = 1;
+
+  // project only: the file, relative to the project root
+  // ("control-plane/.reliant/workflows/release.yaml").
+  string path = 2;
+
+  // project only: the machine whose synced catalog the file was read from;
+  // empty when the catalog was every machine's union (the activation has no
+  // machine, or its machine has never synced the project).
+  string daemon_id = 3;
+
+  // daemon_id's name, for display.
+  string daemon_name = 4;
+
+  // One line for display: "project workflow at
+  // control-plane/.reliant/workflows/release.yaml on machine cicd".
+  string summary = 5;
+
+  // Things about this source the owner should act on, one sentence each:
+  // a same-named account workflow that an automation does not run, a
+  // machine that has never synced the project.
+  repeated string warnings = 6;
 }
 
 // TriggerChange is a configuration audit entry, not a firing.

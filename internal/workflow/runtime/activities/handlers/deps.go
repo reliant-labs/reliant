@@ -130,6 +130,10 @@ type CallLLMStore interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// The spawn tool lists presets from the run's pinned catalog, or its
+	// machine's, as LoadPresetParams loads them (projectPresets).
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)
@@ -284,19 +288,28 @@ type GitPublishStore interface {
 	WorktreeOwnerReader
 }
 
-// LoadPresetParamsStore is what LoadPresetParamsActivity reads.
+// LoadPresetParamsStore is what LoadPresetParamsActivity reads: the run's
+// chat, and the presets its machine synced (or the union of every machine's).
 type LoadPresetParamsStore interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
 }
 
 // LoadWorkflowStore is what LoadWorkflowActivity reads: the chat's project or
-// worktree, its presets, and the workflow itself through workflowsource.
+// worktree, its presets, and the workflow itself through workflowsource, from
+// the catalog the run's machine synced (workflowsource.MachineStore).
 type LoadWorkflowStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 	workflowsource.Store
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
+	// PinProjectCatalog stores the catalog a run starts with (db.Repo).
+	PinProjectCatalog(ctx context.Context, scope db.CatalogPinScope) (string, error)
 }
 
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.

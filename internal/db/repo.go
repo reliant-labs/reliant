@@ -529,9 +529,10 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		}
 
 		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
-		// inside the tx) are expected control flow for callers — log them
-		// quietly so genuine transaction failures stand out.
-		if errors.Is(result.err, sql.ErrNoRows) {
+		// inside the tx, or a TxOutcome such as a declined launch) are
+		// expected control flow for callers — log them quietly so genuine
+		// transaction failures stand out.
+		if isExpectedTxOutcome(result.err) {
 			logging.DebugContext(ctx, "Transaction returned business error (not retryable)",
 				"error", result.err,
 				"attempts", attempt+1,
@@ -556,6 +557,27 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		return errors.New("transaction failed after retries: " + lastErr.Error())
 	}
 	return errors.New("transaction failed after retries")
+}
+
+// TxOutcome marks an error a RunTx body returns to roll its transaction back ON
+// PURPOSE: a decision the caller acts on, not a failure. launch.DeclinedError
+// is one — a trigger waiting for workflow capacity declines its launch every
+// poll until a slot frees. RunTx logs such an error at DEBUG instead of ERROR
+// (an ERROR here becomes an issue in the error tracker, and the caller, which
+// owns the decision, reports it however it should be reported).
+type TxOutcome interface {
+	error
+	TxOutcome()
+}
+
+// isExpectedTxOutcome reports whether a RunTx body's error is expected
+// control flow rather than a transaction failure.
+func isExpectedTxOutcome(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	var outcome TxOutcome
+	return errors.As(err, &outcome)
 }
 
 // attemptTransaction tries to begin and execute a single transaction
@@ -823,8 +845,8 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// the measured chat and dominated both the sort and the payload; the
 	// snapshot now synthesizes the few it needs from the durable tool_calls
 	// table (see snapshotToolCalls). Excluding them also lets this read use a
-	// skip-scan: types 1, 4 and 19 are excluded by the partial predicate of
-	// idx_chat_updates_snapshot_heads.
+	// skip-scan over idx_chat_updates_snapshot_entity_heads, whose partial
+	// predicate excludes exactly the types this read does not walk.
 	//
 	// Shape: a recursive skip-scan (one index probe per DISTINCT entity_id)
 	// for every type that dedups by entity_id, plus a separate small read of
@@ -844,6 +866,13 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
 	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
 	// query. With it, ~3ms.
+	//
+	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
+	// keyed per workflow and per workflow node, so every run a chat ever made
+	// added entities to walk (prod: this read at p50 0.2s, p95 2.5s, max 11s),
+	// and nothing a chat open renders reads them. The client only logs workflow
+	// status; node state feeds the run-status views, which read their one
+	// workflow's nodes through GetLatestWorkflowNodeUpdates when they open.
 	//
 	// AGENT_MESSAGES_DRAINED is excluded too. It is a live-only signal: it
 	// tells an open pending-queue strip to retire mailbox rows in the same
@@ -870,6 +899,16 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
 	// pins its literals to the enum values and to both index predicates.
 	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
+}
+
+// GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
+// each node of one workflow of a chat, in sequence order: the node state a
+// run-status view starts from before it follows the chat stream. The chat
+// snapshot does not carry node state (GetLatestNonMessageUpdatesPerEntity):
+// a chat accumulates one entity per node of every run it ever made, and only
+// a view of one run reads any of it.
+func (r *Repo) GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]ChatUpdate, error) {
+	return store.LatestWorkflowNodeUpdates(ctx, r.ORM(), chatID, workflowID)
 }
 
 // GetUpdatesSince returns all updates since a given sequence number

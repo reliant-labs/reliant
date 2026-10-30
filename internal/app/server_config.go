@@ -69,6 +69,9 @@ func DatabasePool(cfg *configv1.DatabaseConfig) db.Pool {
 		MaxOpenConns: int(cfg.GetDbMaxOpenConns()),
 		MaxIdleConns: int(cfg.GetDbMaxIdleConns()),
 		SchemaWait:   time.Duration(cfg.GetDbSchemaWaitSeconds()) * time.Second,
+		// A server keeps its idle connections dialled: a request that has
+		// to open one pays the dial (db.Pool.KeepIdleWarm).
+		KeepIdleWarm: true,
 	}
 	if d := cfg.GetDbConnectTimeout(); d != nil {
 		pool.ConnectTimeout = d.AsDuration()
