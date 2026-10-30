@@ -1,5 +1,14 @@
 # The merge gate and the release gate
 
+**Review first (owner, 2026-10-30).** No CI minutes are spent on a head nobody
+has reviewed. A pull request push runs nothing heavy; `pr-review` reads the
+diff, not CI results; a passed PR enters GitHub's merge queue, where the merge
+gate runs **once**, on main plus the entry, and decides the merge. The whole
+suite runs on main after the merge and never blocks one: a red main is filed
+and fixed by pipeline-health (`pipeline:slo`), and `task release:tag` refuses a
+commit without a green release-gate record, so it is fixed before the next
+release. Details: [CI](#ci).
+
 **Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
 2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
 scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
@@ -363,14 +372,23 @@ Say so in the release notes. There is no waiver for a red run: fix it.
 
 `main` merges only through GitHub's native merge queue. The ruleset
 "main: CI result + merge queue" requires the `CI result` check, squash-merges,
-and has **no bypass actors**. `ci.yml` runs on `merge_group`, so each queued PR
-is tested on main plus the entries ahead of it, and lands only if that run is
-green. Queue a PR with `gh pr merge <pr> --squash --auto --match-head-commit <sha>`;
-the `pr-review` workflow does this when a review passes (control-plane
-`docs/pr-pipeline.md`).
+and lists one bypass actor, the `reliant-01` account the pipeline acts as
+(never use it to bypass: no `--admin`). `ci.yml` runs on `merge_group`, so each
+queued PR is tested on main plus the entries ahead of it, and lands only if that
+run is green. That `merge_group` run is the only run of the merge gate an
+unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
+first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
+required checks are green on its head. Queue a PR with
+`gh pr merge <pr> --squash --auto --match-head-commit <sha>`; the `pr-review`
+workflow does this when a review passes (control-plane `docs/pr-pipeline.md`).
+In the queue, `CI result` also requires `pr-review`'s pass marker on every PR
+head in the group (`scripts/ci-review-marker.sh`). A queue failure dequeues the
+PR, which the pipeline's fixer picks up.
 
 Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
-`Merge gate` job runs, and a red queue run costs every PR behind yours a retry.
+`Merge gate` job runs, and a red queue run costs every PR behind yours a retry
+(the queue builds up to five entries at once; a failure rebuilds those behind
+it).
 
 The fleet's old local queue (`.fm-tools/merge_queue3.sh`), the `merge-gate`
 commit status and its audited waiver (`merge_gate_waive.sh`) are retired.
@@ -386,15 +404,25 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 
 | Event | Job | Runs |
 |---|---|---|
-| `pull_request` | `Merge gate` | `task ci:merge -- --base <the PR's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks` |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate` | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag` |
+| `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
+| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`; the vendored control-plane contract when its paths change; the review marker must pass. Target ≤10 minutes |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate` and every lane | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag`. Never required for a merge |
 
-Beside them run the lanes neither gate covers, selected by path
-(`scripts/ci-lanes.sh`, `task ci:lanes`) on a pull request and all of them off
-one (the contract only when a push changed what it checks): the renderer's release build (`task build:web:verify`), Playwright
-(`task test:web:e2e`), the electron package (`task build:electron:smoke`) and
-the vendored control-plane contract (`task contract:controlplane:check`, which
-reads private control-plane with a deploy key). `CI result` is the one verdict.
+Beside them run the lanes neither gate covers (`scripts/ci-lanes.sh`,
+`task ci:lanes`): the renderer's release build (`task build:web:verify`),
+Playwright (`task test:web:e2e`), the electron package
+(`task build:electron:smoke`) and the vendored control-plane contract
+(`task contract:controlplane:check`, which reads private control-plane with a
+deploy key). Main runs all of them (the contract only when a push changed what
+it checks). The merge queue runs only the contract, when its paths change:
+the queue is the fast tier, and a red web build, Playwright run or electron
+package on main is fixed before the release like any other red main. A `ci:run`
+pull request runs those its paths reach. `CI result` is the one verdict.
+
+`license-gate.yml`, `pin-drift.yml` and `release-tag-guard.yml` still run on a
+pull request that touches their inputs (dependency manifests, the forge pin,
+the release scripts): they are path-filtered, informational (not required), and
+take seconds to about three minutes.
 DB-backed tests boot forge pgtest's embedded Postgres on the runner: there is
 no Postgres service container and no `DATABASE_URL`.
 
