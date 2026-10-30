@@ -1,0 +1,52 @@
+name: budget_warning_then_submit
+description: >-
+  With max_turns 3 and finish_warning_turns 1, the turn that leaves one turn
+  is followed by the budget warning, and the agent's next call submits. The
+  outputs say how many turns ran.
+inputs:
+  max_turns: 3
+  finish_warning_turns: 1
+  response_tool_name: submit_result
+events:
+- node: agent_loop.call_llm
+  output:
+    message: {role: assistant, text: ''}
+    response_text: ''
+    stop_reason: tool_use
+    tool_calls: [{id: c0, name: view, input: '{"file_path":"a.go"}'}]
+- node: agent_loop.execute_tools
+  output:
+    message: {role: tool, text: ''}
+    tool_results: [{tool_call_id: c0, content: 'package a'}]
+    thread_token_count: 1000
+- node: agent_loop.call_llm
+  output:
+    message: {role: assistant, text: ''}
+    response_text: ''
+    stop_reason: tool_use
+    tool_calls: [{id: c1, name: view, input: '{"file_path":"b.go"}'}]
+- node: agent_loop.execute_tools
+  output:
+    message: {role: tool, text: ''}
+    tool_results: [{tool_call_id: c1, content: 'package b'}]
+    thread_token_count: 1000
+- node: agent_loop.budget
+  output: {}
+- node: agent_loop.call_llm
+  output:
+    message: {role: assistant, text: ''}
+    response_text: ''
+    stop_reason: tool_use
+    tool_calls: [{id: c2, name: submit_result, input: '{"summary":"done"}'}]
+- node: agent_loop.execute_tools
+  output:
+    message: {role: tool, text: ''}
+    tool_results: [{tool_call_id: c2, content: 'ok'}]
+    response_data: {submit_result: {summary: done}}
+    thread_token_count: 1000
+expect:
+  outcome: completed
+  completed: [agent_loop.budget]
+  outputs:
+    completed: true
+    turns: 3

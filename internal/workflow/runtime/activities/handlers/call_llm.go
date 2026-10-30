@@ -214,6 +214,24 @@ func (a *CallLLMActivity) Name() string {
 	return "CallLLM"
 }
 
+// OutlivesHeartbeatRPCFailure keeps a running LLM stream alive when a
+// heartbeat RPC to the Temporal server merely times out (runtime's
+// shieldFromSpuriousHeartbeatCancel). Real cancels — pause, interrupt, reset,
+// an attempt the server has re-dispatched — still stop it.
+//
+// Without it, one heartbeat RPC that missed the SDK's 2s deadline killed the
+// stream, discarded the partial turn, and re-ran it from the start
+// (heartbeatKilledStream). On 2026-10-30 that was 669 streams in 25 minutes
+// against a Temporal server whose persistence was slow, and every re-run added
+// history events, heartbeats and provider spend to the load that caused it;
+// the step ladders ran out and agents failed with "heartbeat RPC cancelled the
+// LLM stream". A stream outlasting a slow heartbeat costs nothing: its
+// message is keyed by runtime.callLLMIdempotencyKey, so a server-side
+// re-dispatch cannot double-record the turn.
+func (a *CallLLMActivity) OutlivesHeartbeatRPCFailure() bool {
+	return true
+}
+
 // DisplayName returns human-readable name for UI
 func (a *CallLLMActivity) DisplayName() string {
 	return "Call LLM"
