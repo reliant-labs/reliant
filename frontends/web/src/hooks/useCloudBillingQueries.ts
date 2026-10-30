@@ -20,15 +20,26 @@ import type { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/bill
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
 import { hasErrorReason } from "@/lib/errorReasons";
+import { useMachineSaleTerms, type MachineSaleTerms } from "@/lib/machine-sale-terms";
+import { getActiveOrgId } from "@/store/activeOrgStore";
 
 function billingClient() {
   return getControlPlaneClient(BillingService);
 }
 
 /** Candidate sales require versioned commissioned terms, never incumbent-price fallback. */
-async function assertVersionedMachineSale(): Promise<void> {
-  const state = await billingClient().getCurrentUserComputeSubscription({});
-  if (!state.subscription) throw new Error("New paid machine checkout is held until commissioned pricing and explicit versioned terms can be verified. Existing machines and your own computer remain available.");
+async function machineSaleRequest(planId: string, consent: MachineSaleTerms | null) {
+  const orgId = consent?.orgId ?? getActiveOrgId() ?? undefined;
+  if (consent && consent.planId !== planId) throw new Error("Machine plan changed. Review terms again.");
+  const currentOrg = getActiveOrgId();
+  if (consent && currentOrg && currentOrg !== consent.orgId) throw new Error("Organization changed. Review machine terms again.");
+  const ready = await billingClient().getMachinePricingReadiness({ orgId, planId, pricingVersion: consent?.pricingVersion ?? "" });
+  if (getActiveOrgId() !== currentOrg) throw new Error("Organization changed. Review machine terms again.");
+  if (ready.effectivePeriodStart) throw new Error("Existing subscriptions require separate next-period terms acceptance, not new-subscription checkout.");
+  if (!consent) throw new Error("New paid machine checkout is held until commissioned pricing and explicit versioned terms can be verified.");
+  if (!ready.activationReady || ready.activationState !== "ready_for_explicit_signup_checkout" || ready.effectivePeriodStart || ready.holdReasons.length || ready.pricingVersion !== consent.pricingVersion || ready.termsSha256 !== consent.termsSha256) throw new Error("Machine terms changed or checkout is held. Review current pricing before authorizing payment.");
+  if (getActiveOrgId() && getActiveOrgId() !== consent.orgId) throw new Error("Organization changed. Review machine terms again.");
+  return { orgId: consent.orgId, pricingVersion: consent.pricingVersion, termsSha256: consent.termsSha256 };
 }
 
 /**
@@ -222,11 +233,12 @@ export interface CheckoutArgs {
 
 export function useCreateCheckoutSession() {
   const queryClient = useQueryClient();
+  const consent = useMachineSaleTerms();
   return useMutation({
     mutationFn: async (args: CheckoutArgs) => {
       assertPurchaseIdentity();
-      await assertVersionedMachineSale();
-      return billingClient().createCurrentUserCheckoutSession(args);
+      const terms = await machineSaleRequest(args.planId, consent);
+      return billingClient().createCurrentUserCheckoutSession({ ...args, ...terms });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -295,13 +307,12 @@ export function useCreateWalletTopupPaymentIntent() {
  * subscription that cannot have changed yet and teach the UI to expect one.
  */
 export function useCreateComputeSubscriptionIntent() {
+  const consent = useMachineSaleTerms();
   return useMutation({
     mutationFn: async (planId: string) => {
       assertPurchaseIdentity();
-      await assertVersionedMachineSale();
-      return billingClient().createCurrentUserComputeSubscriptionIntent({
-        planId,
-      });
+      const terms = await machineSaleRequest(planId, consent);
+      return billingClient().createCurrentUserComputeSubscriptionIntent({ planId, ...terms });
     },
   });
 }

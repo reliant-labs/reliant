@@ -1717,9 +1717,12 @@ type CreateCurrentUserCheckoutSessionRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OrgId *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Explicit authoritative machine terms; candidate admission never infers them.
+	PricingVersion string `protobuf:"bytes,7,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	TermsSha256    string `protobuf:"bytes,8,opt,name=terms_sha256,json=termsSha256,proto3" json:"terms_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateCurrentUserCheckoutSessionRequest) Reset() {
@@ -1790,6 +1793,20 @@ func (x *CreateCurrentUserCheckoutSessionRequest) GetReturnUrl() string {
 func (x *CreateCurrentUserCheckoutSessionRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserCheckoutSessionRequest) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserCheckoutSessionRequest) GetTermsSha256() string {
+	if x != nil {
+		return x.TermsSha256
 	}
 	return ""
 }
@@ -2777,15 +2794,14 @@ func (x *GetCurrentUserComputeSubscriptionResponse) GetSubscription() *v1.Subscr
 }
 
 type CreateCurrentUserComputeSubscriptionIntentRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The compute plan to subscribe to.
-	PlanId string `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
-	// The org this request acts in (docs/orgs.md). Unset: the caller's default
-	// org. A person must be a member of it; a machine credential may name only
-	// its own org.
-	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	PlanId string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	OrgId  *string                `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Explicit exact future/current sale terms disclosed by readiness.
+	PricingVersion string `protobuf:"bytes,3,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	TermsSha256    string `protobuf:"bytes,4,opt,name=terms_sha256,json=termsSha256,proto3" json:"terms_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) Reset() {
@@ -2828,6 +2844,20 @@ func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetPlanId() string {
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetTermsSha256() string {
+	if x != nil {
+		return x.TermsSha256
 	}
 	return ""
 }
@@ -6806,7 +6836,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"g\n" +
 	"\"GetCurrentUserSubscriptionResponse\x12A\n" +
-	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"\x82\x02\n" +
+	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"\xce\x02\n" +
 	"'CreateCurrentUserCheckoutSessionRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x1f\n" +
 	"\vsuccess_url\x18\x02 \x01(\tR\n" +
@@ -6816,7 +6846,9 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\aui_mode\x18\x04 \x01(\x0e2\x1f.controlplane.v1.CheckoutUiModeR\x06uiMode\x12\x1d\n" +
 	"\n" +
 	"return_url\x18\x05 \x01(\tR\treturnUrl\x12\x1a\n" +
-	"\x06org_id\x18\x06 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12'\n" +
+	"\x0fpricing_version\x18\a \x01(\tR\x0epricingVersion\x12!\n" +
+	"\fterms_sha256\x18\b \x01(\tR\vtermsSha256B\t\n" +
 	"\a_org_id\"\xcb\x01\n" +
 	"(CreateCurrentUserCheckoutSessionResponse\x12!\n" +
 	"\fcheckout_url\x18\x01 \x01(\tR\vcheckoutUrl\x12#\n" +
@@ -6896,10 +6928,12 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\fcheckout_url\x18\x01 \x01(\tR\vcheckoutUrl\"*\n" +
 	"(GetCurrentUserComputeSubscriptionRequest\"n\n" +
 	")GetCurrentUserComputeSubscriptionResponse\x12A\n" +
-	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"s\n" +
+	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"\xbf\x01\n" +
 	"1CreateCurrentUserComputeSubscriptionIntentRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x1a\n" +
-	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12'\n" +
+	"\x0fpricing_version\x18\x03 \x01(\tR\x0epricingVersion\x12!\n" +
+	"\fterms_sha256\x18\x04 \x01(\tR\vtermsSha256B\t\n" +
 	"\a_org_id\"\xd7\x01\n" +
 	"2CreateCurrentUserComputeSubscriptionIntentResponse\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x122\n" +

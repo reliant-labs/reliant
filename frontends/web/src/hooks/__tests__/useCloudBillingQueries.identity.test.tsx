@@ -20,6 +20,7 @@ const subscription = vi.fn();
 vi.mock("@/services/controlPlane/client", () => ({
   getControlPlaneClient: () => ({
     getCurrentUserComputeSubscription: subscription,
+    getMachinePricingReadiness: async () => (await subscription())?.subscription ? { effectivePeriodStart: { seconds: 1900000000n } } : {},
     createCurrentUserCheckoutSession: createCheckout,
     createCurrentUserWalletTopupSession: createTopup,
   }),
@@ -103,34 +104,34 @@ describe("checkout identity guard", () => {
     expect(createTopup).not.toHaveBeenCalled();
   });
 
-  it("lets a signed-in user through to Stripe", async () => {
+  it("does not turn an existing signed-in subscription into an unconsented new purchase", async () => {
     authState.user = { is_anonymous: false };
 
     const { result } = renderHook(() => useCreateCheckoutSession(), { wrapper });
 
-    await result.current.mutateAsync({
+    await expect(result.current.mutateAsync({
       planId: "compute-standard",
       successUrl: "https://app.example.test/settings/billing?checkout=success",
       cancelUrl: "https://app.example.test/settings/billing?checkout=cancelled",
-    });
+    })).rejects.toThrow(/next-period terms acceptance/);
 
-    await waitFor(() => expect(createCheckout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createCheckout).not.toHaveBeenCalled());
   });
 
   // api-key / mock / dev synthetic users set is_anonymous: false, and a session
   // with no user at all is not an anonymous SUPABASE session. Same rule as
   // useGoToBilling used to apply: ONLY is_anonymous === true counts.
-  it("treats a user with no is_anonymous flag as signed in", async () => {
+  it("does not confuse absent anonymous flag with machine pricing consent", async () => {
     authState.user = {};
 
     const { result } = renderHook(() => useCreateCheckoutSession(), { wrapper });
 
-    await result.current.mutateAsync({
+    await expect(result.current.mutateAsync({
       planId: "compute-standard",
       successUrl: "https://app.example.test/settings/billing?checkout=success",
       cancelUrl: "https://app.example.test/settings/billing?checkout=cancelled",
-    });
+    })).rejects.toThrow(/next-period terms acceptance/);
 
-    await waitFor(() => expect(createCheckout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createCheckout).not.toHaveBeenCalled());
   });
 });

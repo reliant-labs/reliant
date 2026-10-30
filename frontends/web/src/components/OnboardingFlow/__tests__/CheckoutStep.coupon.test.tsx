@@ -27,6 +27,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: null }) }));
+
 import type { LaunchPlan } from "../types";
 import type { PaymentFacts } from "../requiresPayment";
 

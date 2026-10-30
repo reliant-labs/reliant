@@ -15,6 +15,8 @@ You buy a **compute plan**, a monthly subscription, and the plan decides the lar
 
 Settings shows the authoritative current subscription price, machine guarantees, included disk and extra running-hour rate. Guaranteed CPU and memory are reserved together; do not assume spare-host bursting is part of the offer. Persistent disk is one machine volume, not a separate hidden image-cache fee.
 
+**New subscriptions and next-period changes are different authorizations.** For a new paid machine subscription, an organization owner or admin must review the server's exact monthly/hourly terms and explicitly accept that version before payment can appear. Readiness is checked again at checkout; stale terms, a changed organization, missing API support or a commercial hold prevent payment. An existing subscription instead uses the separate next-period acceptance flow; it cannot be replaced through new-signup checkout. Coupons and your own computer remain accessible when paid signup is held.
+
 **Proposed pricing is not current pricing.** The proposed machine catalog remains held until its capacity is commissioned and published prices and billing reconciliation are verified. Settings presents proposed terms separately from your current subscription. An owner or admin may accept the exact proposed terms for a reported next-period boundary when the server allows it; acceptance remains pending and does not itself activate pricing or change this period's charges. Missing readiness information means unavailable, not permission to buy an old plan as a fallback. No additional machine size or machine-PAYG offer is introduced here.
 
 ## Included hours and extra time

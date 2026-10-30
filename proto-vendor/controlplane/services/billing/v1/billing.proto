@@ -595,6 +595,9 @@ message CreateCurrentUserCheckoutSessionRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 6;
+  // Explicit authoritative machine terms; candidate admission never infers them.
+  string pricing_version = 7;
+  string terms_sha256 = 8;
 }
 
 message CreateCurrentUserCheckoutSessionResponse {
@@ -710,12 +713,11 @@ message GetCurrentUserComputeSubscriptionResponse {
 }
 
 message CreateCurrentUserComputeSubscriptionIntentRequest {
-  // The compute plan to subscribe to.
   string plan_id = 1;
-  // The org this request acts in (docs/orgs.md). Unset: the caller's default
-  // org. A person must be a member of it; a machine credential may name only
-  // its own org.
   optional string org_id = 2;
+  // Explicit exact future/current sale terms disclosed by readiness.
+  string pricing_version = 3;
+  string terms_sha256 = 4;
 }
 
 message CreateCurrentUserComputeSubscriptionIntentResponse {

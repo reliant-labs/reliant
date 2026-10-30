@@ -86,6 +86,8 @@ const SETTLE_POLL_MS = 2_000;
 // existing importers of this module keep working.
 export type { ComputePlanOption };
 
+import { MachineSaleConsent } from "./MachineSaleConsent";
+
 export interface ComputeSubscriptionCheckoutProps {
   plans: ComputePlanOption[];
   selectedPlanId: string | undefined;
@@ -176,12 +178,12 @@ export function ComputeSubscriptionCheckout({
           Pay with card
         </h3>
         {selected ? (
-          <SubscriptionPaymentForm
-            plan={selected}
+          <MachineSaleConsent planId={selected.planId}>{monthlyPriceCents => <SubscriptionPaymentForm
+            plan={monthlyPriceCents === undefined ? selected : { ...selected, monthlyPriceCents }}
             confirmSettlement={confirmSettlement}
             onSettled={() => setSettled(true)}
             renderIdentityRequired={renderIdentityRequired}
-          />
+          />}</MachineSaleConsent>
         ) : (
           /* An empty catalog is OUR problem, and the copy has to say so.
              It once read "No plans are available in this setup. Go back and
