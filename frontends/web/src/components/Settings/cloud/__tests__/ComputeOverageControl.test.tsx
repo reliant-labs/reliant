@@ -15,7 +15,7 @@ import {
 
 const defaults = {
   enabled: false,
-  pricing: { sizes: [{ size: 'small', hourlyPriceCents: '13', multiplier: 1, storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false },
+  pricing: { pricingVersion: 'test-version', sizes: [{ size: 'small', hourlyPriceCents: '13', exactHourlyPriceCents: '13/1', costWeight: '1/1', storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false },
   overageSpentCents: 0,
   monthlyPriceCents: 4000, // $40/mo
   onSave: vi.fn(),

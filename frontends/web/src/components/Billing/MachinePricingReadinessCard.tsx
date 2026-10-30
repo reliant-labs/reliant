@@ -53,6 +53,6 @@ export function MachinePricingReadinessCard(props: MachinePricingReadinessCardPr
           <Button disabled={!accepted || props.isSubmitting} loading={props.isSubmitting} onClick={() => { if (accepted) props.onAccept({ pricingVersion: terms.pricingVersion, termsSha256: terms.termsSha256 }); }}>Accept next-period terms</Button></>}
       </>}
     </>}
-    <p className="text-xs text-muted-foreground">Commissioning, published prices and period reconciliation must all be verified before activation. A billing hold must not destroy machine data or interrupt conversation recovery.</p>
+    <p className="text-xs text-muted-foreground">These are proposed terms, not an approved live offer. Commercial approval, commissioning, published prices and period reconciliation must all be verified before activation. A billing hold must not destroy machine data or interrupt conversation recovery.</p>
   </CardContent></Card>;
 }
