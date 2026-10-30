@@ -174,8 +174,11 @@ func TestFileSystemProxy_ChatInOwnedWorktree_ReadsFromOwner(t *testing.T) {
 	f.assertBrowsedOn(t, "daemon-b")
 }
 
-// The chat's pin beats its worktree's owner, as it does for the chat's tools.
-func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
+// An owned worktree's checkout is on its owner and nowhere else, so its files
+// come from there even for a chat pinned to another machine (a row from before
+// StartChat refused that combination). Reading the chat's machine reported the
+// workspace as removed.
+func TestFileSystemProxy_WorktreeOwnerBeatsAMismatchedChatPin(t *testing.T) {
 	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
@@ -184,7 +187,7 @@ func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
 	chatID := f.chat(t, f.userID, "daemon-c", wt.ID)
 
 	require.NoError(t, f.browse(t, &wt.ID, &chatID))
-	f.assertBrowsedOn(t, "daemon-c")
+	f.assertBrowsedOn(t, "daemon-b")
 }
 
 // Without a chat, an owned worktree is read from its owner: no other machine

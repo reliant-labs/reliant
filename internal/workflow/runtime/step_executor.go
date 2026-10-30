@@ -977,6 +977,56 @@ func (e *StepExecutor) startCompute(node *reliantv1.Node, evalResult *reliantv1.
 // It is not a registered activity: nothing is dispatched under it.
 const computeActivityName = "Compute"
 
+// runDaemonSelector is the daemon_selector a run node's activity input
+// carries: the node's own selector, else the workflow-level one. The chat's
+// pin (the session_daemon_id fallback) stays marked as one, so ExecuteRunStep
+// lets it yield to a branch workspace's owner as ExecuteTools does: a pin
+// goes stale when the chat moves to the workspace's machine while the run
+// lives. nil means no selector.
+func (e *StepExecutor) runDaemonSelector(node *reliantv1.Node) map[string]interface{} {
+	if node.GetDaemon() != nil {
+		if lit := node.GetDaemon().GetLiteral(); lit != nil {
+			return map[string]interface{}{
+				"id":     lit.GetId(),
+				"name":   lit.GetName(),
+				"type":   lit.GetType(),
+				"labels": lit.GetLabels(),
+			}
+		}
+		if node.GetDaemon().GetExpr() == "" {
+			return nil
+		}
+		ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
+		if err != nil {
+			logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
+			return nil
+		}
+		if ds == nil {
+			return nil
+		}
+		return map[string]interface{}{
+			"id":     ds.ID,
+			"name":   ds.Name,
+			"type":   ds.Type,
+			"labels": ds.Labels,
+		}
+	}
+	if e.execContext == nil || e.execContext.DaemonSelector == nil {
+		return nil
+	}
+	ds := e.execContext.DaemonSelector
+	sel := map[string]interface{}{
+		"id":     ds.ID,
+		"name":   ds.Name,
+		"type":   ds.Type,
+		"labels": ds.Labels,
+	}
+	if ds.Session {
+		sel["session"] = true
+	}
+	return sel
+}
+
 // startRun starts a run (shell command) activity.
 func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool) {
 	runArgs, _ := model.NodeArgsAsMap(evalResult)
@@ -997,35 +1047,8 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	}
 
 	// Daemon selector: node-level override takes priority over workflow-level default
-	if node.GetDaemon() != nil {
-		if lit := node.GetDaemon().GetLiteral(); lit != nil {
-			runInputs["daemon_selector"] = map[string]interface{}{
-				"id":     lit.GetId(),
-				"name":   lit.GetName(),
-				"type":   lit.GetType(),
-				"labels": lit.GetLabels(),
-			}
-		} else if node.GetDaemon().GetExpr() != "" {
-			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
-			if err != nil {
-				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
-			} else if ds != nil {
-				runInputs["daemon_selector"] = map[string]interface{}{
-					"id":     ds.ID,
-					"name":   ds.Name,
-					"type":   ds.Type,
-					"labels": ds.Labels,
-				}
-			}
-		}
-	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
-		ds := e.execContext.DaemonSelector
-		runInputs["daemon_selector"] = map[string]interface{}{
-			"id":     ds.ID,
-			"name":   ds.Name,
-			"type":   ds.Type,
-			"labels": ds.Labels,
-		}
+	if sel := e.runDaemonSelector(node); sel != nil {
+		runInputs["daemon_selector"] = sel
 	}
 
 	logging.Debug("[StepExecutor] startRun",
@@ -1347,10 +1370,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
 		// Fall back to workflow-level daemon selector
 		rtx.DaemonSelector = &types.DaemonSelector{
-			ID:     e.execContext.DaemonSelector.ID,
-			Name:   e.execContext.DaemonSelector.Name,
-			Type:   e.execContext.DaemonSelector.Type,
-			Labels: e.execContext.DaemonSelector.Labels,
+			ID:      e.execContext.DaemonSelector.ID,
+			Name:    e.execContext.DaemonSelector.Name,
+			Type:    e.execContext.DaemonSelector.Type,
+			Labels:  e.execContext.DaemonSelector.Labels,
+			Session: e.execContext.DaemonSelector.Session,
 		}
 	}
 

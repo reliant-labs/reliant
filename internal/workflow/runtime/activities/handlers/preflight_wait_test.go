@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -368,7 +369,7 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 	a, repo, chatID := newWaitFixture(t, false, router)
 
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{
-		ChatID: chatID, DaemonSelector: &toolexec.DaemonSelector{ID: "daemon-b"}})
+		ChatID: chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: "daemon-b"}})
 	require.NoError(t, err)
 	assert.True(t, out.Waiting)
 	assert.False(t, out.DaemonAvailable)
@@ -380,7 +381,7 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 	// Once B itself attaches, the wait ends.
 	router.onlineIDs.Store("daemon-b", true)
 	out, err = runPreflight(t, a, PreflightDaemonCheckInput{
-		ChatID: chatID, DaemonSelector: &toolexec.DaemonSelector{ID: "daemon-b"}})
+		ChatID: chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: "daemon-b"}})
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
 }

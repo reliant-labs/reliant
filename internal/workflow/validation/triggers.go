@@ -200,7 +200,7 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			validateWorkflowEventRefs(ev, path, opts.WorkflowLoader, result)
 		}
 		validateTriggerDedupe(wt, path, result)
-		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, shape, result)
+		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, shape, opts.valueTypes(), result)
 		warnUnmappedRequiredInputs(wt.GetInputs(), scopeInputNames(wt), declaredInputs, path, result)
 		if err := triggerspec.CompilePrompt(wt.GetPrompt()); err != nil {
 			result.AddErrorWithSuggestion(CategoryTrigger, path, "prompt", strings.TrimPrefix(err.Error(), "prompt: "),
@@ -615,9 +615,11 @@ func validateWorkflowEventRefs(src *reliantv1.WorkflowEventSource, path []string
 }
 
 // validateTriggerInputs checks the inputs mapping: every key is a declared
-// workflow input, and every value compiles as a template over `trigger` —
-// against the payload's declared shape, when there is one.
-func validateTriggerInputs(inputs map[string]string, declared map[string]*reliantv1.Input, path []string, shape *payloadShape, result *Result) {
+// workflow input, every value compiles as a template over `trigger` — against
+// the payload's declared shape, when there is one — and every value whose
+// type is known before an event arrives fits its input by the rule the launch
+// applies (validateTriggerInputType).
+func validateTriggerInputs(inputs map[string]string, declared map[string]*reliantv1.Input, path []string, shape *payloadShape, vt ValueTypes, result *Result) {
 	if len(inputs) == 0 {
 		return
 	}
@@ -647,19 +649,118 @@ func validateTriggerInputs(inputs map[string]string, declared map[string]*relian
 		result.AddErrorWithSuggestion(CategoryTrigger, path, "inputs."+e.Input, e.Reason,
 			"an input mapping reads only `trigger` (e.g. {{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
 	}
-	if shape == nil {
-		return
-	}
 	for _, name := range names {
 		if _, ok := declared[name]; !ok || failed[name] {
 			continue
 		}
 		// A value that does not scan was reported by CompileInputs above.
 		exprs, _ := triggerspec.InputExpressions(inputs[name])
-		for _, expr := range exprs {
-			shape.report(result, path, "inputs."+name, expr, shape.CheckExpr(expr))
+		if shape != nil {
+			typeErrs := false
+			for _, expr := range exprs {
+				errs := shape.CheckExpr(expr)
+				typeErrs = typeErrs || len(errs) > 0
+				shape.report(result, path, "inputs."+name, expr, errs)
+			}
+			if typeErrs {
+				continue
+			}
+		}
+		if msg := validateTriggerInputType(name, inputs[name], exprs, declared[name], shape, vt); msg != "" {
+			result.AddError(CategoryTrigger, path, "inputs."+name, msg)
 		}
 	}
+}
+
+// validateTriggerInputType checks one inputs value against its declared input
+// by the rule every launch applies (InputValue, validateProtoInputType),
+// wherever the value's type is known before an event arrives:
+//
+//   - a literal ("main", 'true') is that text, so it is checked whole, type
+//     and constraints, exactly as a firing would check it. A bare YAML
+//     boolean or number is not a literal: the parser keeps its type as a
+//     {{ }} expression.
+//   - a pure expression ({{ expr }}) yields expr's type, when the checker
+//     knows it;
+//   - text with expressions in it yields a string.
+//
+// Only plain value inputs are checked: a model, message, preset, group or
+// tools input is shaped by the launch before it is validated. It returns the
+// problem, or "" when there is none or the type is not known until the event.
+func validateTriggerInputType(name, value string, exprs []string, input *reliantv1.Input, shape *payloadShape, vt ValueTypes) string {
+	if input == nil || !isSuppliedByParams(input) {
+		return ""
+	}
+	trimmed := strings.TrimSpace(value)
+	if len(exprs) == 0 {
+		// A literal is passed to the run as its trimmed text.
+		if err := validateProtoInputType(name, trimmed, input, vt); err != nil {
+			return err.Error()
+		}
+		return ""
+	}
+	yields, sample := "", any(nil)
+	mixed := len(exprs) != 1 || !strings.HasPrefix(trimmed, "{{") || !strings.HasSuffix(trimmed, "}}") ||
+		strings.TrimSpace(trimmed[2:len(trimmed)-2]) != strings.TrimSpace(exprs[0])
+	if mixed {
+		yields, sample = "string", ""
+	} else if shape != nil {
+		switch yields = shape.ExprType(exprs[0]); yields {
+		case "bool":
+			sample = false
+		case "int":
+			sample = int64(0)
+		case "double":
+			// A double may be whole at run time (JSON numbers are doubles),
+			// which an integer input accepts: only its non-number uses are
+			// known wrong now.
+			sample = float64(0)
+		case "string":
+			sample = ""
+		}
+	}
+	if sample == nil {
+		return ""
+	}
+	switch model.GetInputType(input) {
+	case "boolean", "integer", "number", "string", "message", "enum":
+	default:
+		return "" // a list, object or integration value: checked when it fires
+	}
+	if _, ok := InputValue(sample, input); ok {
+		return ""
+	}
+	if mixed {
+		return fmt.Sprintf("input '%s' is %s, and %q interpolates into text, so it yields a string; write one expression alone, {{ ... }}, yielding %s",
+			name, model.GetInputType(input), value, withArticle(model.GetInputType(input)))
+	}
+	msg := fmt.Sprintf("input '%s' is %s, and %q yields %s, which is never read as %s",
+		name, model.GetInputType(input), value, withArticle(celTypeNoun(yields)), withArticle(model.GetInputType(input)))
+	if _, ok := InputValue("", input); ok {
+		msg += fmt.Sprintf("; convert it, {{ string(%s) }}", strings.TrimSpace(exprs[0]))
+	}
+	return msg
+}
+
+// withArticle is noun with its indefinite article: "an integer", "a string".
+func withArticle(noun string) string {
+	if noun != "" && strings.ContainsRune("aeiou", rune(noun[0])) {
+		return "an " + noun
+	}
+	return "a " + noun
+}
+
+// celTypeNoun is how a CEL scalar type is named to an author.
+func celTypeNoun(t string) string {
+	switch t {
+	case "bool":
+		return "boolean"
+	case "int":
+		return "integer"
+	case "double":
+		return "number"
+	}
+	return t
 }
 
 func declaredInputsHint(declared map[string]*reliantv1.Input) string {

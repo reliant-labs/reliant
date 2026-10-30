@@ -38,6 +38,7 @@
       "TokenService",
       "ToolCallService",
       "TriggerService",
+      "UsageService",
       "WorkflowService",
       "WorktreeService"
     ]

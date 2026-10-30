@@ -66,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
@@ -884,6 +885,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Workflow:        g.Workflow(),
 		Logger:          g.Log,
 		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
+		Usage:           g.Usage(),
 	})
 }
 
@@ -1270,7 +1272,8 @@ func (g *Graph) newToken() (*token.Service, error) {
 		ControlPlane: token.TokenControlPlane{
 			Issuer: g.APISettings().AuthorizationServer,
 		},
-		GitTokens: git,
+		GitTokens:    git,
+		GitBotTokens: git,
 	})
 }
 
@@ -1295,5 +1298,15 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Repo:        g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
+	})
+}
+
+// newUsage constructs the usage handler (internal/handlers/usage).
+func (g *Graph) newUsage() (*usage.Service, error) {
+	return usage.New(usage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
 	})
 }

@@ -17,6 +17,9 @@ inputs:
   issue_number:
     type: integer
     default: 0
+  title:
+    type: string
+    default: ""
 entry: [a]
 nodes:
   - id: a
@@ -75,6 +78,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
     integration: {integration: github, events: [issues.opened]}
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
+      title: "{{ trigger.payload.data.issue.title }}"
 `)
 	complete := true
 	input, _ := json.Marshal(CreateWorkflowParams{Content: &content, Complete: &complete})
@@ -84,18 +88,30 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 	var meta CreateWorkflowResult
 	require.NoError(t, json.Unmarshal([]byte(created.Metadata), &meta))
 
-	// A warning (a literal that looks like an expression) does not block,
-	// but the agent is shown it.
+	// A warning (a literal that looks like an expression, into a string
+	// input, which takes the text) does not block, but the agent is shown it.
 	edit, _ := json.Marshal(EditWorkflowParams{
 		ID:        meta.ID,
-		OldString: `issue_number: "{{ trigger.payload.data.issue.number }}"`,
-		NewString: `issue_number: trigger.payload.data.issue.number`,
+		OldString: `title: "{{ trigger.payload.data.issue.title }}"`,
+		NewString: `title: trigger.payload.data.issue.title`,
 	})
 	resp, err := NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "Warnings")
-	assert.Contains(t, resp.Content, "triggers[0](new-issue).inputs.issue_number")
+	assert.Contains(t, resp.Content, "triggers[0](new-issue).inputs.title")
+
+	// The same literal into an integer input would fail every firing, so it
+	// is an error, as the launch would refuse it (bug 5b73a559).
+	edit, _ = json.Marshal(EditWorkflowParams{
+		ID:        meta.ID,
+		OldString: `issue_number: "{{ trigger.payload.data.issue.number }}"`,
+		NewString: `issue_number: trigger.payload.data.issue.number`,
+	})
+	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e1", Name: ToolEditWorkflow, Input: string(edit)})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, `input 'issue_number' expects integer, got string "trigger.payload.data.issue.number"`)
 
 	// An integration outside the catalog is shown, not blocked: whether it
 	// delivers events is the deployment's to say, at activation.
