@@ -1242,6 +1242,11 @@
             "Name": "new_only",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ]
       },
@@ -1457,6 +1462,11 @@
           {
             "name": "new_only",
             "kind": "bool"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ]
       },
@@ -23136,6 +23146,11 @@
             "Name": "process_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "GetPackageProcessLogsResponse": [
@@ -23161,6 +23176,11 @@
             "Name": "process_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "GetPackageProcessResponse": [
@@ -23176,6 +23196,11 @@
             "Name": "process_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "KillPackageProcessResponse": [
@@ -23200,6 +23225,11 @@
             "Name": "custom_directories",
             "ProtoType": "[]string",
             "IsOptional": false
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ListPackageCommandsResponse": [
@@ -23217,6 +23247,11 @@
         "ListPackageProcessesRequest": [
           {
             "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": true
           }
@@ -23259,6 +23294,11 @@
             "Name": "working_dir",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "RunPackageCommandResponse": [
@@ -23274,6 +23314,11 @@
           },
           {
             "Name": "start_time",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -23330,6 +23375,11 @@
           {
             "name": "process_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.GetPackageProcessLogsResponse": [
@@ -23352,6 +23402,11 @@
           {
             "name": "process_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.GetPackageProcessResponse": [
@@ -23365,6 +23420,11 @@
           {
             "name": "process_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.KillPackageProcessResponse": [
@@ -23388,6 +23448,11 @@
             "name": "custom_directories",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListPackageCommandsResponse": [
@@ -23407,6 +23472,11 @@
         "reliant.v1.ListPackageProcessesRequest": [
           {
             "name": "worktree_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "chat_id",
             "kind": "string",
             "optional": true
           }
@@ -23506,6 +23576,10 @@
             "name": "exit_code",
             "kind": "int32",
             "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.RunPackageCommandRequest": [
@@ -23538,6 +23612,11 @@
             "name": "working_dir",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.RunPackageCommandResponse": [
@@ -23551,6 +23630,10 @@
           },
           {
             "name": "start_time",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_id",
             "kind": "string"
           }
         ],
@@ -42150,7 +42233,7 @@
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4d455295dc786a51bb13f302b34a6b60ac70d131b5b6c1bd91967f17f37c7d72",
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
-    "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
+    "reliant/v1/background.proto": "3e90f167d551e6878bbc239c778af61670f5696ae3f05d1fe2005813252fc93e",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
     "reliant/v1/chat.proto": "fe0b11ed3af99228527c6e61cd01b99be86e12af1800444804e21333247682bd",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
@@ -42165,7 +42248,7 @@
     "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
     "reliant/v1/model_endpoint.proto": "78c975ea77eacab893b2389073746b4cc29f298c44a9b80543a74b13d1c649cc",
-    "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
+    "reliant/v1/package_commands.proto": "63f70b8000967f2174757d104d5a8a73b164bc16f5a5d4c71039083b4b990949",
     "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
     "reliant/v1/preset.proto": "4a4d7a48d45412e11b50bac80bbdc2d2e5c9a86596f680598efa312cb9f300c5",
     "reliant/v1/project.proto": "f45510467e94c4ac68f0e393635699c4a44482058007647617096ec86c117dc9",
