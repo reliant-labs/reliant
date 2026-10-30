@@ -1,0 +1,19 @@
+# Pull request dequeued: the projection of the GitHub `pull_request.dequeued` webhook.
+id: pull_request.dequeued
+event: pull_request.dequeued
+display_name: Pull request removed from the merge queue
+summary: A pull request left a merge queue without merging.
+description: >-
+  Fires when GitHub removes a pull request from a merge queue: its merge
+  group's required checks failed, it no longer merges cleanly, someone
+  dequeued it, or the queue was reset. data.reason is GitHub's reason (for
+  example CI_FAILURE, MERGE_CONFLICT, MANUAL, ALREADY_MERGED or
+  GIT_TREE_INVALID). A pull request that merges from the queue sends
+  pull_request.closed instead.
+keywords: [pr, merge queue, dequeued, ejected, ci failure, merge conflict]
+attributes:
+  - { group: pr }
+data:
+  number: integer
+  reason: { kind: string, description: "Why GitHub removed the pull request from the merge queue, e.g. CI_FAILURE or MERGE_CONFLICT." }
+  pull_request: { kind: object, object: pr }

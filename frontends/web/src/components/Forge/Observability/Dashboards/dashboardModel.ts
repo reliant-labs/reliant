@@ -171,6 +171,8 @@ export interface DashboardSearch {
   alerts?: boolean;
   compare?: CompareMode;
   refresh?: RefreshInterval;
+  /** An org-scoped dashboard's picked environments, as `project/env` names; absent: every environment of the org. */
+  orgEnvs?: string[];
   /** Full screen, for a wall display. */
   tv?: boolean;
   /** Open a workspace dashboard's older version (read-only). */
