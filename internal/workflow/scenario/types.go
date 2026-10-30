@@ -361,6 +361,13 @@ type Scenario struct {
 	// Useful for testing different input configurations.
 	Inputs map[string]interface{} `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 
+	// Trigger starts the run the way one of the workflow's declared triggers
+	// would: its filter must pass the payload, and its inputs mapping supplies
+	// the run's inputs (Inputs, when set, are applied over them). Optional;
+	// without it the run starts from Inputs alone. A scenario that names a
+	// trigger is what covers that trigger (`reliant workflow lint`).
+	Trigger *TriggerFiring `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+
 	// StartAt begins execution at a specific node instead of the entry point. Optional.
 	// Use with State to test from a specific point with known context.
 	StartAt string `json:"start_at,omitempty" yaml:"start_at,omitempty"`
@@ -369,6 +376,26 @@ type Scenario struct {
 	// Key is node ID, value is the node's output map.
 	// Use with StartAt to test from a specific point with known state.
 	State map[string]map[string]interface{} `json:"state,omitempty" yaml:"state,omitempty"`
+}
+
+// TriggerFiring is the event a scenario's run is started by.
+//
+//	trigger:
+//	  name: queued
+//	  payload: {data: {label: 'merge:queue', pull_request: {number: 42}}}
+type TriggerFiring struct {
+	// Name is the declared trigger (triggers[].name). Required.
+	Name string `json:"name" yaml:"name"`
+	// Payload is trigger.payload. For an integration trigger it is merged over
+	// a sample generated from the event's declared payload, so give only the
+	// fields the trigger's expressions read.
+	Payload map[string]interface{} `json:"payload,omitempty" yaml:"payload,omitempty"`
+	// Sender is trigger.sender (kind, id, display_name, verified).
+	Sender map[string]interface{} `json:"sender,omitempty" yaml:"sender,omitempty"`
+	// ActivationParams is what the activation sets for the workflow's inputs
+	// (trigger.activation.params); params it leaves out read as the inputs'
+	// defaults.
+	ActivationParams map[string]interface{} `json:"activation_params,omitempty" yaml:"activation_params,omitempty"`
 }
 
 // ScenarioStatus represents the status of a scenario run

@@ -2152,6 +2152,26 @@ message Workflow {
   // had produced. The run still ends FAILED: the handler cannot mask the
   // failure, and an error in it is logged, never recursive.
   Workflow on_failure = 19;
+  // Requires declares what a run needs from outside the definition: the
+  // executables its commands call, the integrations its actions and agents
+  // authenticate to, the checkouts it reads. A run checks them after its
+  // machine is up and before its first node (preflight), and fails at once,
+  // with every missing item named, instead of an hour in.
+  WorkflowRequirements requires = 21;
+}
+
+// WorkflowRequirements is what a run checks before its first node.
+message WorkflowRequirements {
+  // Tools are executables that must be on the run machine's PATH (git, gh,
+  // task, jq).
+  repeated string tools = 1;
+  // Integrations are integration ids (github, slack) whose connection must
+  // resolve, authorized, for the run's owner and acting identity.
+  repeated string integrations = 2;
+  // Repos are checkouts, relative to the project root ("." for the root
+  // itself), that must exist and reach their origin. Reaching origin is
+  // checked with git ls-remote, which writes nothing into the checkout.
+  repeated string repos = 3;
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
