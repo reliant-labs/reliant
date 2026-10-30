@@ -143,6 +143,22 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 		}
 	}
 
+	// Validate the trigger a scenario fires through.
+	if t := scenario.Trigger; t != nil {
+		found := false
+		var names []string
+		for _, wt := range workflow.GetTriggers() {
+			names = append(names, wt.GetName())
+			found = found || wt.GetName() == t.Name
+		}
+		switch {
+		case t.Name == "":
+			result.AddError("trigger.name: required; name one of the workflow's triggers")
+		case !found:
+			result.AddError("trigger.name: the workflow declares no trigger %q (declared: %s)", t.Name, strings.Join(names, ", "))
+		}
+	}
+
 	// Validate scenario inputs against workflow input schema
 	validateScenarioInputs(result, scenario.Inputs, workflow.GetInputs(), "")
 

@@ -1,0 +1,12 @@
+name: fixture
+entry: [label]
+nodes:
+- id: label
+  type: action
+  uses: github/issue.labels.add@1
+  with: {owner: acme, repo: app, issue_number: 1, label: done}
+- id: ok
+  type: save_message
+  args: {role: assistant, content: labelled}
+edges:
+- {from: label, default: ok}

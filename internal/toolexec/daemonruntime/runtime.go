@@ -41,6 +41,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/procguard"
+	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -139,6 +141,11 @@ type daemonClient struct {
 	// one threshold and refuses new heavy commands past another
 	// (internal/diskguard). Its state rides on the heartbeat's disk report.
 	diskGuard *diskguard.Guard
+
+	// procGuard counts the machine's processes against its limit and refuses
+	// new background heavy commands near it (internal/procguard). Its count
+	// and the largest process trees ride on the heartbeat's disk report.
+	procGuard *procguard.Guard
 
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
@@ -322,6 +329,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 		client.diskGuard.Register(client.diskWatcher)
 	}
 	go client.diskGuard.Run(ctx)
+	go client.procGuard.Run(ctx)
 
 	// Repair what a crash left in the shared clones (empty objects, torn
 	// indexes, stale gc.log, dead registrations) before agents run git there.
@@ -476,13 +484,19 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// and refused on a nearly full disk. A gate that cannot queue (slots
 	// switched off, own binary not found) runs them unqueued: a broken
 	// limiter must never stop work.
+	// The capacity guard refuses new background heavy commands once the
+	// machine passes 70% of its process limit (2026-10-30: a machine ran out
+	// of processes and every agent's work died with it).
+	procGuard := procguard.New(procguard.Config{})
+
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.
-		Env:       os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
-		Admission: diskGuard,
+		Env:                 os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
+		Admission:           diskGuard,
+		BackgroundAdmission: procGuard,
 	})
 	if err != nil {
 		logging.Warn(logPrefix+" Heavy commands run unqueued and unguarded", "error", err)
@@ -490,6 +504,15 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		logging.Info(logPrefix + " " + heavyGate.String())
 	}
 	SetHeavyGate(heavyGate)
+
+	// Every command an agent runs gets a process limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command), and every
+	// command's RLIMIT_NPROC leaves the daemon a reserve, so one runaway
+	// command fails alone instead of exhausting the user's process limit for
+	// every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{})
+	proctree.SetDefault(limiter)
+	logging.Info(logPrefix + " " + limiter.String())
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
 	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})
@@ -564,6 +587,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
+		procGuard:         procGuard,
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -1719,6 +1743,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// false until the first sample).
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
+			rep.Processes = d.procGuard.Report()
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -1761,6 +1786,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			// commands, or finished a reclaim pass.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logSendFailure(logPrefix+" Failed to send disk-guard heartbeat", err)
+				return
+			}
+		case <-d.procGuard.Changed():
+			// The machine crossed its process-limit line: heavy background
+			// commands are refused, or accepted again.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send process-guard heartbeat", err)
 				return
 			}
 		case <-d.portWatcher.Changed():

@@ -121,6 +121,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "concurrency":
 			wf.Concurrency, err = unmarshalWorkflowConcurrency(val)
 
+		case "requires":
+			wf.Requires, err = unmarshalWorkflowRequirements(val)
+
 		case "on_failure", "onFailure":
 			wf.OnFailure, err = unmarshalWorkflow(val)
 
@@ -410,6 +413,9 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			return nil, err
 		}
 		m.Content = append(m.Content, scalarNode("concurrency", ""), policy)
+	}
+	if req := marshalWorkflowRequirements(wf.Requires); req != nil {
+		m.Content = append(m.Content, scalarNode("requires", ""), req)
 	}
 
 	// apiVersion

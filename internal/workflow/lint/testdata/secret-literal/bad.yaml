@@ -1,0 +1,17 @@
+name: fixture
+entry: [comment]
+nodes:
+# __FAKE_GITHUB_TOKEN__ is replaced by the test with a token-shaped string, so
+# no secret-shaped text is committed (secret scanning would flag it).
+- id: comment
+  type: run
+  timeout: 1m
+  env:
+    GH_TOKEN: plain-text-value
+  args:
+    command: 'curl -H "Authorization: token __FAKE_GITHUB_TOKEN__" https://api.github.com/user'
+- id: done
+  type: save_message
+  args: {role: assistant, content: 'exit {{ nodes.comment.exit_code }}'}
+edges:
+- {from: comment, default: done}

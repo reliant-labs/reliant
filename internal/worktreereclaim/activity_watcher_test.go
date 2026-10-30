@@ -2,6 +2,7 @@ package worktreereclaim
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,6 +37,7 @@ func startedObserver(t *testing.T) (*ActivityObserver, context.Context, context.
 	if runtime.GOOS != "linux" {
 		t.Skip("activity observation is linux-only")
 	}
+	skipWithoutInotify(t)
 	o, err := NewActivityObserver(filepath.Join(t.TempDir(), "state.json"), time.Now)
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +100,7 @@ func TestRecoveryActivityEndedInventoryCannotAcquireWatches(t *testing.T) {
 			o, ctx, cancel := startedObserver(t)
 			root := t.TempDir()
 			if err := o.Start(ctx, root); err != nil {
-				t.Fatal(err)
+				skipIfInotifyExhausted(t, err)
 			}
 			_, key, err := activityKey(root)
 			if err != nil {
@@ -152,7 +154,7 @@ func TestRecoveryActivityWorkspacesShareOneInotifyInstance(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := o.Start(ctx, root); err != nil {
-			t.Fatalf("Start %d: %v", i, err)
+			skipIfInotifyExhausted(t, fmt.Errorf("Start %d: %w", i, err))
 		}
 	}
 	if got := inotifyInstances(t) - before; got != 1 {
@@ -178,14 +180,14 @@ func TestRecoveryActivityReleasesDeletedWorkspace(t *testing.T) {
 	o, ctx, _ := startedObserver(t)
 	keep := t.TempDir()
 	if err := o.Start(ctx, keep); err != nil {
-		t.Fatal(err)
+		skipIfInotifyExhausted(t, err)
 	}
 	root := filepath.Join(t.TempDir(), "worktree")
 	if err := os.MkdirAll(filepath.Join(root, "pkg"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := o.Start(ctx, root); err != nil {
-		t.Fatal(err)
+		skipIfInotifyExhausted(t, err)
 	}
 	canonical, key, err := activityKey(root)
 	if err != nil {
@@ -228,7 +230,7 @@ func TestRecoveryActivityRoutesEventsToTheirWorkspace(t *testing.T) {
 	o.mu.Lock()
 	if err := o.ensureWatcherLocked(); err != nil {
 		o.mu.Unlock()
-		t.Fatal(err)
+		skipIfInotifyExhausted(t, err)
 	}
 	wa, wb := newActivityWatch(a, "", func() {}), newActivityWatch(b, "", func() {})
 	o.running["a"], o.running["b"] = wa, wb
@@ -242,10 +244,10 @@ func TestRecoveryActivityRoutesEventsToTheirWorkspace(t *testing.T) {
 		o.mu.Unlock()
 	}()
 	if err := o.addWatch(wa, a); err != nil {
-		t.Fatal(err)
+		skipIfInotifyExhausted(t, err)
 	}
 	if err := o.addWatch(wb, b); err != nil {
-		t.Fatal(err)
+		skipIfInotifyExhausted(t, err)
 	}
 	if err := os.WriteFile(filepath.Join(a, "edit"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -272,7 +274,7 @@ func TestRecoveryActivityOverflowEndsEveryObservation(t *testing.T) {
 	roots := []string{t.TempDir(), t.TempDir()}
 	for _, r := range roots {
 		if err := o.Start(ctx, r); err != nil {
-			t.Fatal(err)
+			skipIfInotifyExhausted(t, err)
 		}
 	}
 	o.mu.Lock()

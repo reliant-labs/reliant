@@ -1,0 +1,12 @@
+name: fixture
+entry: [build]
+nodes:
+- id: build
+  type: run
+  timeout: 20m
+  args: {command: make build}
+- id: ok
+  type: save_message
+  args: {role: assistant, content: built}
+edges:
+- {from: build, default: ok}

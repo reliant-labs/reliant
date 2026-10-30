@@ -50,6 +50,20 @@ type RetryWait struct {
 	// Reason is the driver's own retry-decision reason ("http_429",
 	// "transient_gateway_error", …) — the same string it logs.
 	Reason string
+	// Usage is what the failed request reported before it failed, when its
+	// stream got as far as a usage chunk: the provider billed those tokens even
+	// though the driver discards the attempt. Nil when it reported none.
+	Usage *TokenUsage
+}
+
+// FailedAttemptUsage is the usage a failed attempt's stream reported, or nil
+// when it reported none, for RetryWait.Usage.
+func FailedAttemptUsage(u TokenUsage) *TokenUsage {
+	if u.InputTokens == 0 && u.OutputTokens == 0 && u.CacheReadInputTokens == 0 &&
+		u.CachedInputTokens == 0 && u.CacheCreationInputTokens == 0 {
+		return nil
+	}
+	return &u
 }
 
 // TokenUsage contains token information from an LLM response.

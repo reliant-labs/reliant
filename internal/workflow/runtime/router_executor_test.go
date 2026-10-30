@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -239,7 +241,7 @@ func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
 		activity.RegisterOptions{Name: "CallLLM"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: workflowBytes}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -251,7 +253,7 @@ func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
 		activity.RegisterOptions{Name: "WorkflowStatus"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowCheckpoint"},
@@ -505,13 +507,13 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 
 		// Stubs for activities called by InlineWorkflowExecutor.
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+			func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 				return LoadedWorkflow{WorkflowJSON: emptyWorkflowJSON}, nil
 			},
 			activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 		)
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
 				return map[string]interface{}{}, nil
 			},
 			activity.RegisterOptions{Name: "LoadPresetParams"},
@@ -523,7 +525,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 			activity.RegisterOptions{Name: "WorkflowStatus"},
 		)
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 				return map[string]interface{}{"success": true}, nil
 			},
 			activity.RegisterOptions{Name: "WorkflowCheckpoint"},
@@ -609,13 +611,13 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 			activity.RegisterOptions{Name: "SaveMessage"},
 		)
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+			func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 				return LoadedWorkflow{WorkflowJSON: emptyWorkflowJSON}, nil
 			},
 			activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 		)
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
 				return map[string]interface{}{}, nil
 			},
 			activity.RegisterOptions{Name: "LoadPresetParams"},
@@ -627,7 +629,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 			activity.RegisterOptions{Name: "WorkflowStatus"},
 		)
 		env.RegisterActivityWithOptions(
-			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 				return map[string]interface{}{"success": true}, nil
 			},
 			activity.RegisterOptions{Name: "WorkflowCheckpoint"},

@@ -182,7 +182,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.Repo))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES
@@ -225,6 +225,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))

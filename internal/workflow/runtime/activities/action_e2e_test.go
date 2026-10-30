@@ -76,12 +76,12 @@ func TestActionNodeRunsEndToEnd(t *testing.T) {
 		var asMap map[string]interface{}
 		return asMap, json.Unmarshal(encoded, &asMap)
 	}, activity.RegisterOptions{Name: "Action"})
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (v2.LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (v2.LoadedWorkflow, error) {
 		return v2.LoadedWorkflow{WorkflowJSON: workflowBytes}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (interface{}, error) { return nil, nil },
 		activity.RegisterOptions{Name: "WorkflowStatus"})
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {

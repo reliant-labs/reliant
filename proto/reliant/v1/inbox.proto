@@ -5,7 +5,7 @@ package reliant.v1;
 
 import "forge/v1/forge.proto";
 import "reliant/v1/approval.proto";
-import "reliant/v1/tools_daemon.proto"; // for DiskVolume
+import "reliant/v1/tools_daemon.proto"; // for DiskVolume, ProcessReport
 import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -307,6 +307,10 @@ message InboxStorage {
   // pressure names itself ("build caches & docker") and, while it is, what is
   // using it.
   repeated DiskVolume volumes = 9;
+  // Set while the machine is refusing new background heavy commands because
+  // it is near its process limit: the count, the limit, and the largest
+  // process trees by the agent that started them.
+  ProcessReport processes = 10;
 }
 
 // HeldWorktree is one archived workspace kept on a machine, and why.

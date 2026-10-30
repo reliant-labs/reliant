@@ -36,12 +36,15 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"workflow_reconciler",
 		"reliant_key_sweep",
 		"payload_gc",
+		"llm_usage_retention",
 		"api_daemon_router",
 		"chat_update_hub",
 		"user_update_hub",
 		"streaming_hub",
-		"nats_conn",
+		// The Temporal client publishes stop nudges on NATS (stopnudge),
+		// so it stops first.
 		"temporal_client",
+		"nats_conn",
 		"api_debug_server",
 		"db_repo",
 		"probe_listener",
@@ -49,7 +52,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 
 	loops := []string{
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "llm_usage_retention",
 	}
 	for _, n := range plan {
 		switch {
@@ -81,7 +84,7 @@ func TestAPIReadiness(t *testing.T) {
 			ready = append(ready, n.Name)
 		}
 	}
-	require.Equal(t, []string{"probe_listener", "db_repo", "temporal_client", "nats_conn", "streaming_hub", "api_listener"}, ready)
+	require.Equal(t, []string{"probe_listener", "db_repo", "nats_conn", "temporal_client", "streaming_hub", "api_listener"}, ready)
 }
 
 // The process-wide state is installed before anything could read it: the
@@ -113,7 +116,7 @@ func TestAPIVariantsStayInTheAPI(t *testing.T) {
 		"user_auth", "user_chain", "user_routes", "http_routes", "api_listener", "api_debug_server",
 		"reset_guard", "queued_deliverer", "github_access", "trigger_inbound", "trigger_senders",
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "llm_usage_retention",
 	} {
 		require.Contains(t, api, name)
 		require.False(t, slices.Contains(others, name), "another root builds the api's %s", name)

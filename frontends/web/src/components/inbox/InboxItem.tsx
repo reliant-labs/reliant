@@ -250,7 +250,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
-    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
+    const what = item.payload.value.processes ? "processes" : "storage";
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} ${what}`;
   }
   return item.chatTitle || item.triggerName || "Untitled run";
 }
@@ -430,6 +431,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
  * nothing about why every build was failing.
  */
 export function storageDetail(storage: InboxStorageData): string {
+  if (storage.processes) return processesDetail(storage);
   const parts: string[] = [];
   const full = pressuredVolume(storage);
   if (full) {
@@ -443,6 +445,32 @@ export function storageDetail(storage: InboxStorageData): string {
     const size = totalHeldBytes(storage.held);
     const noun = storage.held.length === 1 ? "workspace" : "workspaces";
     parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
+  }
+  if (!storage.online) parts.push("offline");
+  return parts.join(" · ");
+}
+
+/**
+ * "7,120 of 7,650 processes (93%) · heavy background commands paused · Fix the
+ * gate: `bash scripts/ci-gate.sh all` 4,950 · …". The machine is near its
+ * process limit; the item names the largest process trees by the agent that
+ * started each, so the person can stop the one at fault.
+ */
+export function processesDetail(storage: InboxStorageData): string {
+  const procs = storage.processes;
+  if (!procs) return "";
+  const parts: string[] = [];
+  const count = Number(procs.count);
+  const limit = Number(procs.limit);
+  parts.push(
+    limit > 0
+      ? `${count.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} processes (${Math.round((100 * count) / limit)}%)`
+      : `${count.toLocaleString("en-US")} processes`,
+  );
+  if (procs.refusingHeavy) parts.push("heavy background commands paused");
+  for (const tree of procs.top.slice(0, 3)) {
+    const who = tree.chatTitle || (tree.chatId ? `agent ${tree.chatId.slice(0, 8)}` : "untracked");
+    parts.push(`${who}: \`${tree.command}\` ${Number(tree.tasks).toLocaleString("en-US")}`);
   }
   if (!storage.online) parts.push("offline");
   return parts.join(" · ");

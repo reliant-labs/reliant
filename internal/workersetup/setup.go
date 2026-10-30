@@ -43,11 +43,17 @@ import (
 
 // maxHeartbeatThrottleInterval is worker.Options.MaxHeartbeatThrottleInterval.
 // Pulled out as a named constant, rather than inlined in workerOpts below, so
-// TestMaxHeartbeatThrottleInterval can pin it: this one value sets BOTH the
-// heartbeat RPC's own deadline and how fast a pending Temporal cancellation
-// reaches a running activity, and those two pull in opposite directions. See
-// the comment on its use below before changing it.
-const maxHeartbeatThrottleInterval = 2 * time.Second
+// TestMaxHeartbeatThrottleInterval can pin it: this one value sets the
+// heartbeat RPC's own deadline, how many heartbeat writes Temporal's database
+// takes per running activity, and — for a stop no nudge reached — how late a
+// cancellation arrives. See the comment on its use below before changing it.
+const maxHeartbeatThrottleInterval = 15 * time.Second
+
+// StopNudgeSource is Config.StopNudges: per workflow, a channel that receives
+// a value whenever a stop is requested for it.
+type StopNudgeSource interface {
+	Watch(workflowID string) (nudged <-chan struct{}, unwatch func())
+}
 
 // Config holds the dependencies needed to create and start a Temporal worker.
 type Config struct {
@@ -108,6 +114,13 @@ type Config struct {
 	// requests and benches one the provider refused. Optional: nil records
 	// nothing and a refused account is waited out, not switched away from.
 	AccountLimits handlers.AccountLimitRecorder
+
+	// StopNudges tells running activities that a stop was just requested
+	// for their workflow, so they ask the server for the cancel at once
+	// instead of a heartbeat window later (workflow/runtime/stop_nudge.go).
+	// Normally a *stopnudge.Hub fed over NATS. nil leaves cancellation to
+	// the regular heartbeat (maxHeartbeatThrottleInterval).
+	StopNudges StopNudgeSource
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -184,6 +197,9 @@ func (c *Config) taskQueueName() string {
 func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
 	registry := v2.NewActivityRegistry(cfg.Database)
+	if cfg.StopNudges != nil {
+		registry.SetStopNudges(cfg.StopNudges)
+	}
 
 	// Create threads service
 	threadsService := threads.NewService(cfg.Database)
@@ -317,56 +333,41 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		// is time for them to report, so Temporal re-dispatches them at once.
 		// Must fit the shutdown budget (SHUTDOWN_TIMEOUT) the Drain runs in.
 		WorkerStopTimeout: activityReleaseGrace + activityReportReserve,
-		// This is the SDK's heartbeat batching window. Ticks from
-		// ActivityWrapper's background heartbeater (activityHeartbeatInterval,
-		// 500ms, workflow/runtime/registry.go) that land inside an open window
-		// are swallowed locally (temporalInvoker.Heartbeat) — no RPC, no
-		// cancellation check — until the window closes and the last details are
-		// sent. Temporal delivers a pending cancellation ONLY in a heartbeat
-		// RPC's response, so cancel latency for anything on this path is
-		// bounded by this value, not by how often RecordHeartbeat is called.
-		// Verified against SDK v1.37.0 and v1.47.0 source; see
-		// specs/fast-cancel-briefing.md for the full trace.
+		// This is the SDK's heartbeat batching window: ticks from
+		// ActivityWrapper's heartbeat loop (activityHeartbeatInterval,
+		// workflow/runtime/registry.go) that land inside an open window are
+		// swallowed locally (temporalInvoker.Heartbeat), so the server sees ONE
+		// heartbeat per running activity per window. Each heartbeat is one
+		// UpdateWorkflowExecution in Temporal's database, serialized on the
+		// workflow's lock. Verified against SDK v1.37.0, v1.47.0 and v1.50.0
+		// source; see specs/fast-cancel-briefing.md.
 		//
-		// This value is ALSO the heartbeat RPC's own deadline, and that is the
-		// budget that actually breaks under load (internal_task_handlers.go
-		// internalHeartBeat):
+		// It is also the heartbeat RPC's own deadline, max(value,
+		// minRPCTimeout=1s) (internal_task_handlers.go internalHeartBeat). At
+		// 500ms that 1s budget was blown 872 times in one day whenever the
+		// Postgres behind Temporal got busy, each one cancelling a healthy
+		// activity; 2s halved it but on 2026-10-30 still lost 2,609 heartbeats
+		// (669 LLM streams) to the 2s deadline. A wider window widens the
+		// budget too.
 		//
-		//	recordTimeout := i.heartbeatThrottleInterval
-		//	if recordTimeout < minRPCTimeout { recordTimeout = minRPCTimeout }
-		//	ctx, cancel := context.WithTimeout(ctx, recordTimeout)
+		// It used to be held at 2s because Temporal delivers a pending
+		// cancellation ONLY in a heartbeat response, which made this value the
+		// cancel latency of pause and interrupt. That is no longer its job:
+		// every stop request is nudged to the worker out of band
+		// (internal/temporal/stopnudge), and the nudged activity asks the
+		// server for its verdict at once (workflow/runtime/stop_nudge.go). So
+		// this is sized for liveness alone. 15s cuts heartbeat writes 7.5x
+		// against 2s — measured 13.6 of prod's 25.5 UpdateWorkflowExecution/s
+		// on 2026-10-30, so roughly 46% of them — while
+		// activityHeartbeatTimeout (60s) still allows four windows before a live
+		// worker could be declared dead.
 		//
-		// So the per-heartbeat budget is max(thisValue, minRPCTimeout=1s). An
-		// earlier revision set this to 500ms and justified it with the claim
-		// that the 1s floor made the budget insensitive to this value — that
-		// the previous 3s setting "never widened that 1s budget at all". That
-		// reading is WRONG: the floor only applies BELOW 1s. At 3s the budget
-		// is 3s. The revert therefore narrowed a 3s budget to 1s while
-		// believing it changed nothing, and it undid a fix that had been
-		// correctly targeted at this exact failure.
-		//
-		// The consequence, measured: 872 "RecordActivityHeartbeat with error /
-		// context deadline exceeded" in a single day's worker log, arriving in
-		// bursts of 50-60 per minute whenever the shared Postgres behind
-		// Temporal got busy. Each one cancels a healthy activity mid-stream.
-		// Chat ee527bdd lost all five of a step's retry attempts inside one
-		// burst and auto-paused.
-		//
-		// Raised to 2s, which doubles the RPC budget that was being blown. The
-		// cost is real and is the reason this is not higher: this value is the
-		// sole determinant of how fast a cancel reaches a running activity, so
-		// pause and interrupt now take up to 2s instead of 500ms.
-		//
-		// Do NOT try to fix heartbeat RPC failures by LOWERING a timeout. The
-		// budget is a max() with a 1s floor, so it only moves upward. Lowering
-		// HeartbeatTimeout (registry.go) to squeeze the 0.8x derivation is
-		// worse than useless: it cannot widen this budget, and it shortens the
-		// window before Temporal declares a live worker dead and re-dispatches
-		// its activities — which during one of these bursts means ExecuteTools
-		// running the same shell commands and file edits twice.
-		//
-		// spuriousHeartbeatCancel (workflow/runtime/registry.go) remains the
-		// backstop that converts whatever still slips through into a retry
+		// Do NOT fix heartbeat RPC failures by LOWERING a timeout: the budget is
+		// a max() with a 1s floor, so it only moves upward, and a shorter
+		// HeartbeatTimeout only shortens the window before Temporal re-dispatches
+		// a live worker's activities (ExecuteTools running the same shell
+		// commands twice). spuriousHeartbeatCancel (workflow/runtime/registry.go)
+		// remains the backstop that turns a failed heartbeat into a retry
 		// rather than a user-visible cancellation.
 		MaxHeartbeatThrottleInterval: maxHeartbeatThrottleInterval,
 		// The binary's release version, so a workflow task's history event and
