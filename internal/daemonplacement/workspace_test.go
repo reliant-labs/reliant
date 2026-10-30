@@ -168,3 +168,15 @@ func TestWorkspaceDaemon_ChatOnlySettlesTheChatsWorkspace(t *testing.T) {
 	assert.Equal(t, Workspace{DaemonID: "a"}, ws)
 	assert.Equal(t, map[string]string{"wt-1": "a"}, f.adopted, "settled and recorded on first use")
 }
+
+// ChatDaemonID is where the chat's tools run: a branch workspace's owner
+// beats a pin naming another machine (a session pin yields, as in
+// toolDaemonSelector); the main checkout and no workspace keep the pin.
+func TestChatDaemonID_TheWorkspaceOwnerBeatsAStalePin(t *testing.T) {
+	r := workspaces()
+	for chatID, want := range map[string]string{"chat-branch": "daemon-b", "chat-c": "daemon-c", "chat-other-p": "daemon-c"} {
+		got, err := ChatDaemonID(context.Background(), r, r.chats[chatID])
+		require.NoError(t, err)
+		assert.Equal(t, want, got, chatID)
+	}
+}

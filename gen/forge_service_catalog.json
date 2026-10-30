@@ -68755,6 +68755,17 @@
           }
         },
         {
+          "id": "method1:6282521b945f511a9bbf792cd35d8f189d741653af88663c5a428c224e2fe717",
+          "name": "chatMachine",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.chatMachine",
+          "source": {
+            "path": "internal/handlers/worktree/worktree_placement.go",
+            "symbol": "Service.chatMachine"
+          }
+        },
+        {
           "id": "method1:4308ea676ecff96d07e281a400952b8cd0d6804667ba815615fb3f1aea4aca73",
           "name": "cleanupWorktreeBranch",
           "signature": "func(ctx context.Context, userID string, daemonID string, projectPath string, branch string) bool",

@@ -156,3 +156,33 @@ func TestWorktreeProto_CarriesItsMachine(t *testing.T) {
 	assert.Equal(t, owner, worktreeToProto(&db.Worktree{ID: "w", DaemonID: &owner}).GetDaemonId())
 	assert.Nil(t, worktreeToProto(&db.Worktree{ID: "main", IsMain: true}).DaemonId)
 }
+
+// A chat pinned to A whose branch workspace is B's: an unattributed row the
+// migration left with the chat's pin, settled on B the first time it is used.
+// The chat's tools run on B, so branching it to a new workspace (copying
+// files from it) is made on B, where its files are, and the copy is read
+// there; naming B is accepted and naming A is refused.
+func TestCreateWorktree_AChatPinnedOffItsWorkspaceBranchesOnTheOwner(t *testing.T) {
+	t.Parallel()
+
+	f := newPlacementFixture(t)
+	machineA := f.ownedDaemon(t, f.userID)
+	machineB := f.ownedDaemon(t, f.userID)
+	source := f.worktree(t, "") // unattributed: no daemon_id
+	chatID := f.chat(t, f.userID, machineA, source.ID)
+	router := &probingRouter{holder: machineB, held: map[string]bool{source.Path: true}}
+	f.svc = newWorktreeService(t, f.repo, router)
+
+	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{
+		ChatId: &chatID, SourceWorktreeId: &source.ID, CopyFiles: []string{".env"},
+	})
+	require.NoError(t, err)
+	assertPlacedOn(t, &router.placementRouter, wt, machineB)
+	assert.Equal(t, []string{machineB}, router.daemonsFor("worktree.copy_paths"), "the files are copied where they are")
+
+	_, err = f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID, SourceWorktreeId: &source.ID, DaemonId: &machineB})
+	require.NoError(t, err, "the workspace's machine is the chat's machine")
+	_, err = f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID, DaemonId: &machineA})
+	require.Error(t, err, "the stale pin is not the chat's machine")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+}

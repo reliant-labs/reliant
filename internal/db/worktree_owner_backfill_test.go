@@ -78,3 +78,57 @@ func TestWorktreeOwnerBackfill(t *testing.T) {
 	assert.Equal(t, a, pin(onOwner))
 	assert.Equal(t, a, pin(inUnattributed), "a chat in an unattributed workspace keeps its pin")
 }
+
+// When a workspace's owner is recorded after the migration (the Resolver or
+// the sweep finds its directory on a machine), the chats in it pinned to
+// another of their owner's machines move to the owner in the same statement,
+// so every reader of a chat's pin agrees with where its checkout is. Only the
+// winning adoption moves them.
+func TestAdoptWorktreeDaemonMovesStalePins(t *testing.T) {
+	repo, _, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	user := "u-" + uuid.NewString()
+	projectID := uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &Project{ID: projectID, Name: "P", Path: "/p", UserID: user,
+		CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	a, b := "machine-a"+user, "machine-b"+user
+	for _, id := range []string{a, b} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: id, UserID: user}))
+	}
+	worktreeID := uuid.NewString()
+	require.NoError(t, repo.CreateWorktree(ctx, &Worktree{ID: worktreeID, Name: "w", Path: "/wt/w", Branch: "w",
+		BaseBranch: "main", ProjectID: projectID, Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	chat := func(pin *string, noMachine bool) string {
+		id := uuid.NewString()
+		require.NoError(t, repo.CreateChat(ctx, &Chat{ID: id, ProjectID: projectID, UserID: user,
+			WorktreeID: &worktreeID, ActiveDaemonID: pin, NoMachine: noMachine,
+			CreatedAt: now, UpdatedAt: now, LastActive: now}))
+		return id
+	}
+	pinnedA := chat(&a, false)
+	noMachine := chat(nil, true)
+
+	owner, err := repo.AdoptWorktreeDaemon(ctx, worktreeID, b)
+	require.NoError(t, err)
+	require.Equal(t, b, owner)
+
+	c, err := repo.GetChat(ctx, pinnedA)
+	require.NoError(t, err)
+	require.NotNil(t, c.ActiveDaemonID)
+	assert.Equal(t, b, *c.ActiveDaemonID, "the stale pin moves to the recorded owner")
+	c, err = repo.GetChat(ctx, noMachine)
+	require.NoError(t, err)
+	assert.Nil(t, c.ActiveDaemonID, "a no-machine chat stays without one")
+
+	// A losing adoption moves nothing.
+	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, pinnedA, &a))
+	owner, err = repo.AdoptWorktreeDaemon(ctx, worktreeID, a)
+	require.NoError(t, err)
+	assert.Equal(t, b, owner)
+	c, err = repo.GetChat(ctx, pinnedA)
+	require.NoError(t, err)
+	assert.Equal(t, a, *c.ActiveDaemonID)
+}
