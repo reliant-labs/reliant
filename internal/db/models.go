@@ -62,9 +62,11 @@ type ChatActivityState = core.ChatActivityState
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo
 
-// QueuedForMachineChat, PausedForMachineChat and WaitingForMachineRun: see core.
+// QueuedForMachineChat, QueuedMachine, PausedForMachineChat and
+// WaitingForMachineRun: see core.
 type (
 	QueuedForMachineChat = core.QueuedForMachineChat
+	QueuedMachine        = core.QueuedMachine
 	PausedForMachineChat = core.PausedForMachineChat
 	WaitingForMachineRun = core.WaitingForMachineRun
 )
