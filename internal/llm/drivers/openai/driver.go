@@ -533,6 +533,9 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				return
 			}
 			logging.WarnContext(ctx, "OpenAI stream request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			// The attempt's accumulator is dropped with it; what it billed goes
+			// out on the wait, so the usage ledger counts this request too.
+			wait.Usage = llm.FailedAttemptUsage(o.usage(acc.ChatCompletion))
 			select {
 			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 			case <-ctx.Done():
