@@ -39016,6 +39016,11 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "requires",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowRequirements"
           }
         ],
         "reliant.v1.WorkflowConcurrency": [
@@ -39140,6 +39145,23 @@
             "name": "triggers",
             "kind": "message",
             "type_name": "reliant.v1.WorkflowTrigger",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.WorkflowRequirements": [
+          {
+            "name": "tools",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "integrations",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repos",
+            "kind": "string",
             "repeated": true
           }
         ],
@@ -39327,6 +39349,7 @@
         "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
+        "reliant.v1.WorkflowRequirements": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowUI": "reliant/v1/workflow_v2.proto"
       },
@@ -42475,7 +42498,7 @@
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
     "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "e147f09969abaec0d629efccfce0964975cd97a169b0553bf1600a0b9a4ecf2a",
+    "reliant/v1/workflow_v2.proto": "3bcad76df7a432554afd232c539cc8a4238876f950d727e9c39f3f7deb6bb94e",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }

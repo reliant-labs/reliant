@@ -26,6 +26,10 @@ const cgroupFS = "/sys/fs/cgroup"
 // cmdPrefix names the cgroups this package creates: cmd-<daemon pid>-<seq>.
 const cmdPrefix = "cmd-"
 
+// trackLive: the daemon's trees are listed for internal/procguard, which
+// prunes the list on each /proc scan.
+const trackLive = true
+
 // minPidsMax keeps the derived per-command limit usable on a small machine.
 const minPidsMax = 256
 

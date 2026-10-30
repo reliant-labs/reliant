@@ -10,6 +10,7 @@ package shell
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -355,6 +356,10 @@ type StartProcessOptions struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
+	// AgentID is the agent whose tool call started the command, for
+	// attributing its processes only (internal/procguard). Unlike ChatID it
+	// scopes nothing.
+	AgentID string
 	// GrantID scopes the process to a connector grant. Empty for first-party
 	// callers; see BackgroundProcess.GrantID.
 	GrantID string
@@ -427,7 +432,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		env[key] = value
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
-	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy}); err != nil {
+	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy, Background: true}); err != nil {
 		// Refused (a nearly full disk): it never starts, and says why.
 		cancel()
 		return nil, err
@@ -483,7 +488,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// and — where the machine allows — its own cgroup with a process limit,
 	// so a runaway command fails alone (internal/proctree). Last before
 	// Start: everything above may still rewrite what cmd execs.
-	process.tree = proctree.Default().Prepare(cmd)
+	process.tree = proctree.Default().Prepare(cmd, proctree.Owner{ChatID: cmp.Or(opts.AgentID, opts.ChatID), Command: opts.Command})
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
