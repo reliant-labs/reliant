@@ -507,6 +507,42 @@ func TestDrainPendingCommands_Cluster_ExactlyOnceInOrderWithExistingConsumer(t *
 	}, 10*time.Second, 100*time.Millisecond, "acked commands must leave the WorkQueue stream")
 }
 
+// The drain that creates a daemon's consumer delivers what is queued, every
+// time. Pulling right after the create can reach a member that has not yet
+// heard of the new leader's pull subscription (fetchFoundNoConsumerLeader);
+// one create per test made that a 1-in-70 flake, so this makes many. The
+// drains run at once, as they do when a gateway restarts with every daemon
+// reconnecting: each one ends only after an empty pull's FetchMaxWait, and
+// one after another they would outlast the first consumer's
+// InactiveThreshold.
+func TestDrainPendingCommands_Cluster_DrainThatCreatesTheConsumerDelivers(t *testing.T) {
+	env := newPendingClusterEnv(t)
+	mgr := &recordingDaemonMgr{}
+	bridge := env.newBridge(mgr)
+	defer bridge.cancel()
+
+	const daemons = 16
+	var want []string
+	for d := 0; d < daemons; d++ {
+		req := fmt.Sprintf("req-%d", d)
+		env.publish(t, fmt.Sprintf("daemon-fresh-%d", d), req)
+		want = append(want, req)
+	}
+	var wg sync.WaitGroup
+	for d := 0; d < daemons; d++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bridge.drainPendingCommands(context.Background(), pendingDrainUser, fmt.Sprintf("daemon-fresh-%d", d))
+		}()
+	}
+	wg.Wait()
+
+	assert.ElementsMatch(t, want, requestIDs(mgr), "the drain that created each daemon's consumer delivers its command")
+	assert.Equal(t, daemons, env.consumerCount(t), "one consumer per daemon")
+	env.cluster.assertHealthy(t, "after creating a consumer per daemon")
+}
+
 // A durable left behind by the previous release (same name, same filter,
 // created by the old per-poll CreateOrUpdate and never deleted because a drain
 // was interrupted or had a Nak) is adopted, not duplicated or rejected.
@@ -626,7 +662,11 @@ func TestStartNATSCluster_RetriesAStalledFormation(t *testing.T) {
 
 	c := startNATSCluster(t, 3)
 	require.Len(t, c.servers, 3)
-	assert.Equal(t, int32(2), attempts.Load(), "the stalled attempt is retried once, on a fresh cluster")
+	// At least one retry: the stalled first attempt. A later attempt may also
+	// be retried for its own reason (another process took a route port between
+	// allocation and bind, which startNATSCluster retries by design), so the
+	// count is a floor, not an exact 2 (release gate a2726fa83: 3 attempts).
+	assert.GreaterOrEqual(t, attempts.Load(), int32(2), "the stalled attempt is retried, on a fresh cluster")
 	formed, state := c.formation()
 	assert.True(t, formed, "the retried cluster is fully formed: %s", state)
 }

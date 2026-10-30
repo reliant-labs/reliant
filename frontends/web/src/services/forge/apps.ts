@@ -20,15 +20,25 @@
  */
 
 import type { CloudEnv, CloudEnvStatus } from "./cloudEnvs";
-import { hostedVerdictOf, type ForgeHostedWorkload, type HostedVerdict } from "./topology";
+import {
+  hostedVerdictOf,
+  workloadCustomDomain,
+  workloadOpenUrl,
+  type ForgeHostedWorkload,
+  type HostedVerdict,
+} from "./topology";
 
-/** One URL a human can open: a frontend (a static site) or an API (a backend with a public URL). */
+/**
+ * One site a person can open: a frontend (a static site), at its custom
+ * domain when that is live and healthy, else at its generated address.
+ */
 export interface AppLink {
   workload: string;
   url: string;
   /** The URL without its scheme or trailing slash, for display. */
   host: string;
-  kind: "frontend" | "api";
+  /** `url` is the tenant's own domain rather than the platform's generated hostname. */
+  custom: boolean;
 }
 
 export interface AppEnv {
@@ -41,7 +51,7 @@ export interface AppEnv {
   release: string;
   /** When that release was promoted here: the last deploy. */
   deployedAt?: string;
-  /** Frontends first. Empty while the status loads, and for an environment with no public URL. */
+  /** Its sites. Empty while the status loads, and for an environment with no frontend. */
   links: AppLink[];
   /** The status read has not answered yet. */
   loading: boolean;
@@ -72,25 +82,25 @@ export function hostOf(url: string): string {
 }
 
 /**
- * The URLs a human can open in one environment, frontends first.
+ * The sites a person can open in one environment, by workload name.
  *
- * Only the tiers that serve people: a static site is the frontend, a backend
- * with a URL is an API. A database has no URL, and a workload whose URL is not
- * allocated yet has nothing to link to — it is left out rather than linked to
- * an empty string.
+ * Frontends only. An API is a backend's address for the frontend and other
+ * programs to call, not a destination for a person — its URL lives on the
+ * workload's page in the console. A database has no URL, and a site whose
+ * address is not allocated yet has nothing to link to: it is left out rather
+ * than linked to an empty string. Each link goes through workloadOpenUrl, so a
+ * live custom domain wins over the generated hostname here exactly as it does
+ * everywhere else.
  */
 export function appLinksOf(workloads: ForgeHostedWorkload[]): AppLink[] {
   const links: AppLink[] = [];
   for (const workload of workloads) {
-    const url = (workload.url ?? "").trim();
+    if (workload.tier !== "static") continue;
+    const url = workloadOpenUrl(workload);
     if (!url) continue;
-    const kind = workload.tier === "static" ? "frontend" : workload.tier === "backend" ? "api" : null;
-    if (!kind) continue;
-    links.push({ workload: workload.name ?? "", url, host: hostOf(url), kind });
+    links.push({ workload: workload.name ?? "", url, host: hostOf(url), custom: workloadCustomDomain(workload) !== "" });
   }
-  return links.sort(
-    (a, b) => Number(a.kind === "api") - Number(b.kind === "api") || a.workload.localeCompare(b.workload)
-  );
+  return links.sort((a, b) => a.workload.localeCompare(b.workload));
 }
 
 const ENV_RANK: Record<string, number> = { prod: 0, production: 0, staging: 1 };
@@ -179,15 +189,19 @@ export function buildApps(
   });
 }
 
-/** The one link that stands for the app: prod's frontend, else the first frontend anywhere, else the first API. */
+/** The one link that stands for the app: prod's site, else the first site in any environment. */
 export function primaryLink(app: Pick<AppSummary, "envs">): AppLink | undefined {
-  const all = app.envs.flatMap((env) => env.links);
-  return all.find((link) => link.kind === "frontend") ?? all[0];
+  return app.envs.flatMap((env) => env.links)[0];
 }
 
-/** Whether anything of the app is reachable at a URL right now. */
+/** Whether the app has a site a person can open right now. */
 export function isLive(app: Pick<AppSummary, "envs">): boolean {
   return app.envs.some((env) => env.links.length > 0);
+}
+
+/** Whether any long-lived environment has had a release promoted to it. */
+export function isDeployed(app: Pick<AppSummary, "envs" | "lastDeployedAt">): boolean {
+  return !!app.lastDeployedAt || app.envs.some((env) => env.release !== "");
 }
 
 // ── A deploy in a chat ──────────────────────────────────────────────────────

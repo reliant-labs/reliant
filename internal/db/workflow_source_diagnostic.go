@@ -5,79 +5,145 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path"
-	"time"
+	"sort"
+	"strings"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
-// WorkflowSourceDiagnostic is read only after workflow resolution fails. It
-// reads the small workflow column, never the whole config/skill payload.
-func (r *Repo) WorkflowSourceDiagnostic(ctx context.Context, projectID, ref string) (string, error) {
+// WorkflowSourceDiagnostic says where a project workflow that failed to
+// resolve lives, read only after resolution misses. daemonID is the machine
+// the resolution was for ("" for the project's union of every machine):
+//
+//	machine "cicd" has no workflow "release"; it is defined on machine "default" at control-plane/.reliant/workflows/release.yaml
+//
+// When no machine carries it, it names the file and machine it was last
+// synced from, which each machine's catalog retains when a file leaves it.
+func (r *Repo) WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID, ref string) (string, error) {
 	if projectID == "" {
 		return "", nil
 	}
-	value, legacyID, err := store.GetProjectWorkflowSnapshot(ctx, r.ORM(), projectID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "no project workflow snapshot has been synced; connect the project's machine", nil
-	}
+	catalogs, err := r.projectMachineCatalogs(ctx, projectID)
 	if err != nil {
 		return "", err
 	}
-	workflows, err := config.ParseStoredWorkflows(value)
-	if err != nil {
-		return "", err
+	if len(catalogs) == 0 {
+		return "no machine has synced this project's workflows yet; connect a machine that has the project checked out", nil
 	}
-	var relative string
 	slug := workflowref.ProjectSlug(ref)
-	for _, w := range workflows {
-		repo, _, _ := workflowref.SplitRelativePath(w.RelativePath)
-		if workflowref.Slug(w.Name) == slug || workflowref.QualifiedSlug(repo+"/"+w.Name) == slug {
-			relative = w.RelativePath
-			break
+	names := r.machineNames(ctx, catalogs)
+
+	var providers []string
+	for _, c := range catalogs {
+		if c.DaemonID == daemonID {
+			continue
+		}
+		for _, w := range c.Workflows {
+			if storedWorkflowAnswers(w, slug) {
+				providers = append(providers, fmt.Sprintf("machine %q at %s", names[c.DaemonID], w.RelativePath))
+				break
+			}
 		}
 	}
-	p, e := r.GetProject(ctx, projectID)
-	if e != nil {
-		return "", e
+	sort.Strings(providers)
+
+	removals, err := r.projectMachineRemovals(ctx, projectID)
+	if err != nil {
+		return "", err
 	}
-	name, state := legacyID, "offline"
-	daemon, e := r.GetDaemon(ctx, legacyID)
+	removedFrom := lastRemoval(removals, names, slug)
+
+	var b strings.Builder
+	if daemonID != "" {
+		fmt.Fprintf(&b, "machine %q has no workflow %q", r.machineName(ctx, names, daemonID), slug)
+	} else {
+		fmt.Fprintf(&b, "no machine provides a workflow %q", slug)
+	}
 	switch {
-	case (e != nil && (errors.Is(e, sql.ErrNoRows) || svcerr.IsNotFound(e))) || (e == nil && daemon == nil):
-		state = "removed"
-	case e != nil:
-		return "", e
-	case daemon != nil:
-		if daemon.Name != "" {
-			name = daemon.Name
-		} else if daemon.Hostname != nil {
-			name = *daemon.Hostname
+	case len(providers) > 0:
+		fmt.Fprintf(&b, "; it is defined on %s", strings.Join(providers, " and on "))
+		if daemonID != "" {
+			b.WriteString("; check that repository out on this machine, or point the trigger at a machine that has it")
 		}
-		online, e := r.IsDaemonIDAttached(ctx, legacyID, 90*time.Second)
-		if e != nil {
-			return "", e
-		}
-		if online {
-			state = "online"
-		}
+	case removedFrom != "":
+		fmt.Fprintf(&b, "; it was last synced from %s, which no machine provides any more", removedFrom)
+	default:
+		b.WriteString("; no machine has ever synced a workflow by that name for this project")
 	}
-	if name == "" {
-		name = legacyID
-	}
-	return workflowSnapshotDiagnostic(name, legacyID, state, p.Path, relative), nil
+	return b.String(), nil
 }
 
-// Do not invent a source filename for a missing definition: workflow names
-// need not match filenames. The current schema only remembers the last
-// PROJECT snapshot source, not the erased workflow's previous provenance.
-func workflowSnapshotDiagnostic(name, daemonID, state, projectPath, relative string) string {
-	where := path.Join(projectPath, workflowref.Dir) + " (searched along with each nested repository's .reliant/workflows; missing definition's original path is not retained)"
-	if relative != "" {
-		where = path.Join(projectPath, relative)
+// storedWorkflowAnswers reports whether a synced workflow is the one a
+// project ref's slug names: by its name:, bare or qualified by its repo.
+func storedWorkflowAnswers(w config.StoredWorkflow, slug string) bool {
+	repo, _, _ := workflowref.SplitRelativePath(w.RelativePath)
+	return workflowref.Slug(w.Name) == slug || (repo != "" && workflowref.QualifiedSlug(repo+"/"+w.Name) == slug)
+}
+
+// lastRemoval is the most recent "<path> on machine <name> (removed <when>)"
+// among the machines' removal histories for a workflow named slug.
+func lastRemoval(removals map[string][]config.RemovedCatalogFile, names map[string]string, slug string) string {
+	var best *config.RemovedCatalogFile
+	bestMachine := ""
+	for daemonID, files := range removals {
+		for i := range files {
+			f := &files[i]
+			if f.Kind != config.CatalogKindWorkflow {
+				continue
+			}
+			if !storedWorkflowAnswers(config.StoredWorkflow{Name: f.Name, RelativePath: f.RelativePath}, slug) {
+				continue
+			}
+			if best == nil || f.RemovedAt.After(best.RemovedAt) {
+				best, bestMachine = f, daemonID
+			}
+		}
 	}
-	return fmt.Sprintf("last project snapshot: machine %q (%s, %s), path %s; a snapshot from another machine can replace the workflow catalog, and unchanged files are not re-sent; reconnect the source machine or save the committed workflow again to sync it", name, daemonID, state, where)
+	if best == nil {
+		return ""
+	}
+	name := names[bestMachine]
+	if name == "" {
+		name = bestMachine
+	}
+	return fmt.Sprintf("%s on machine %q (removed %s)", best.RelativePath, name, best.RemovedAt.UTC().Format("2006-01-02 15:04 UTC"))
+}
+
+// machineNames is each catalog's machine's display name.
+func (r *Repo) machineNames(ctx context.Context, catalogs []config.MachineCatalog) map[string]string {
+	names := make(map[string]string, len(catalogs))
+	for _, c := range catalogs {
+		names[c.DaemonID] = r.machineName(ctx, names, c.DaemonID)
+	}
+	return names
+}
+
+// MachineDisplayName is a machine's name, then hostname, then id, for
+// display: a failed read names it by id.
+func (r *Repo) MachineDisplayName(ctx context.Context, daemonID string) string {
+	return r.machineName(ctx, nil, daemonID)
+}
+
+// machineName is a machine's name, then hostname, then id. A diagnostic is
+// best effort: a failed read names the machine by id rather than failing.
+func (r *Repo) machineName(ctx context.Context, known map[string]string, daemonID string) string {
+	if n := known[daemonID]; n != "" {
+		return n
+	}
+	daemon, err := r.GetDaemon(ctx, daemonID)
+	if err != nil || daemon == nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !svcerr.IsNotFound(err) {
+			return daemonID
+		}
+		return daemonID + " (removed)"
+	}
+	if daemon.Name != "" {
+		return daemon.Name
+	}
+	if daemon.Hostname != nil && *daemon.Hostname != "" {
+		return *daemon.Hostname
+	}
+	return daemonID
 }

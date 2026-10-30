@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -300,6 +301,7 @@ func (s *Service) ConnectDaemon(
 		attachedAt:          now,
 		stream:              &inboundStream{stream: stream, ctx: ctx},
 		attachSource:        db.DaemonAttachmentSourceInbound,
+		network:             daemonNetworkOf(stream.RequestHeader(), stream.Peer().Addr),
 		movesOnDrain:        reg.GetMovesOnDrain(),
 		build:               daemonBuildFromRegister(reg),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
@@ -310,6 +312,8 @@ func (s *Service) ConnectDaemon(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
+	// The stream's server span: which daemon this is and where it dialed from.
+	trace.SpanFromContext(ctx).SetAttributes(daemonConnAttributes(conn)...)
 	// Register connection: keyed by daemonID, with secondary index by userID.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]

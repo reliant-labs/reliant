@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -32,6 +34,12 @@ const (
 	defaultHeartbeatInterval = 30 * time.Second
 	batchSize                = 100
 
+	// chatReplayBatchSize is how many chat updates one replay read returns
+	// and one replay frame carries. Every batch is a serial database round
+	// trip before the client is caught up, so a reopen maxChatReplayGap
+	// behind costs gap/chatReplayBatchSize of them: 20 at 100 rows, 4 here.
+	chatReplayBatchSize = 500
+
 	// snapshotMessageLimit bounds the initial chat snapshot to a window of
 	// recent messages rather than the chat's entire history. The client
 	// backfills older messages on scroll-back via ChatService.ListMessages
@@ -48,10 +56,10 @@ const (
 	// the client's cursor before the server sends a fresh snapshot instead.
 	//
 	// Replay costs grow with the gap; a snapshot's do not. Replay reads
-	// batchSize (100) rows per round trip and enriches every message row with
-	// its own message + content-block reads, so 2,000 updates is 20 sequential
-	// batches and on the order of a few hundred enrichment reads — roughly the
-	// cost of one snapshot build on a long chat (~0.5s measured on chat
+	// chatReplayBatchSize rows per round trip and enriches every message row
+	// that lacks its blocks with its own message + content-block reads, so
+	// 2,000 updates is several sequential batches plus any enrichment reads —
+	// roughly the cost of one snapshot build on a long chat (~0.5s measured on chat
 	// 8bb0a875). Past that, replay is strictly worse: more server time, more
 	// bytes, and a client that has to apply thousands of superseded
 	// intermediate states (tool-call and node-execution churn is ~75% of
@@ -254,68 +262,38 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 	return nil
 }
 
-// buildChatSnapshot builds the chat sync snapshot data.
-// This is the shared logic for initial sync that assembles messages, approvals, etc.
-func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*reliantv1.ChatSyncSnapshot, int64, error) {
-	// ── Phase 1: parallel queries with no interdependencies ──
-	var (
-		latestSeq         int64
-		chat              *db.Chat
-		otherUpdates      []*reliantv1.ChatUpdateData
-		totalMessageCount int
-		liveToolCalls     []*db.ToolCall
-	)
-
-	g1, gctx := errgroup.WithContext(ctx)
-
-	g1.Go(func() error {
-		var err error
-		latestSeq, err = s.deps.Repo.GetLatestUpdateSequence(gctx, chatID)
-		return err
-	})
-
-	g1.Go(func() error {
-		var err error
-		chat, err = s.deps.Repo.GetChat(gctx, chatID)
-		return err
-	})
-
-	g1.Go(func() error {
-		var err error
-		totalMessageCount, err = s.deps.Repo.CountMessagesInChat(gctx, chatID)
-		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
-			return nil // non-fatal; falls back to the assembled count below
+// buildChatSnapshot builds the chat sync snapshot: the newest window of the
+// transcript, the latest state of every other entity, and the chat sequence it
+// is current as of. chat is the row the caller already read to authorize the
+// stream; the snapshot does not read it again.
+//
+// The reads run in four rounds, each as wide as its dependencies allow,
+// because a snapshot's cost on a real deployment is its chain of serial
+// database round trips, not the work inside any one query:
+//
+//  1. the sequence high-water mark, alone (see below);
+//  2. everything that needs only the chat: entity heads, the main thread's
+//     window, context usage, live tool calls, the message count — of which
+//     only the window gates round 3; the rest joins at assembly;
+//  3. the sibling-thread rows inside the window, and the content blocks;
+//  4. what the blocks name: attachments, tool-call rows, sender titles.
+//
+// Each round, and each read inside it, has its own span (chat_snapshot.*), so
+// a slow open shows which read it waited on.
+func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
+	chatID := chat.ID
+	ctx, span := startSpan(ctx, "chat_snapshot.build", attribute.String("chat.id", chatID))
+	defer func() {
+		if snapshot != nil {
+			span.SetAttributes(
+				attribute.Int("chat_snapshot.messages", len(snapshot.Messages)),
+				attribute.Int("chat_snapshot.other_updates", len(snapshot.OtherUpdates)),
+				attribute.Bool("chat_snapshot.has_more", snapshot.HasMore),
+				attribute.Int64("chat_snapshot.latest_sequence", latestSeq))
 		}
-		return nil
-	})
-
-	g1.Go(func() error {
-		// Independent of the message window, so it rides phase 1. A failure
-		// degrades to "no out-of-window live calls" rather than failing the open.
-		var err error
-		liveToolCalls, err = s.deps.Repo.ListLiveToolCallsByChat(gctx, chatID)
-		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", chatID[:8])
-			liveToolCalls = nil
-		}
-		return nil
-	})
-
-	g1.Go(func() error {
-		var err error
-		otherUpdates, err = s.getNonMessageUpdates(gctx, chatID)
-		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", chatID[:8])
-			otherUpdates = []*reliantv1.ChatUpdateData{}
-			return nil // non-fatal
-		}
-		return nil
-	})
-
-	if err := g1.Wait(); err != nil {
-		return nil, 0, err
-	}
+		observe.RecordSpanError(span, err)
+		span.End()
+	}()
 
 	// Determine main thread ID (the root workflow's thread ID, which equals the
 	// workflow ID). A chat with no workflow id falls back to its own id, the
@@ -325,8 +303,28 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		mainThread = chatID
 	}
 
-	// ── Phase 2: queries that depend on mainThread (from GetChat) ──
+	// ── Round 1: the high-water mark, before anything it vouches for ──
+	//
+	// The live loop drops every update at or below latestSeq as already
+	// delivered, so every read below must be at least as new as it. Reading
+	// it concurrently with them (as the entity heads and live tool calls
+	// once were) lets an update commit after its row was read but before the
+	// mark was: counted as delivered, absent from the snapshot, and lost.
+	err = traced(ctx, "chat_snapshot.latest_seq", func(ctx context.Context) error {
+		var err error
+		latestSeq, err = s.deps.Repo.GetLatestUpdateSequence(ctx, chatID)
+		return err
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// ── Round 2: everything that needs only the chat ──
 	var (
+		otherUpdates      []*reliantv1.ChatUpdateData
+		totalMessageCount int
+		liveToolCalls     []*db.ToolCall
+
 		mainThreadMessages []*db.Message
 		// mainHasMore: the main thread has messages older than the window.
 		// mainReadOK is false when the main thread could not be read at all,
@@ -339,48 +337,90 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		compactionThreshold int64 = threads.DefaultCompactionThreshold
 	)
 
-	g2, gctx2 := errgroup.WithContext(ctx)
-
-	g2.Go(func() error {
-		threadsSvc := threads.NewService(s.deps.Repo)
-		// One row past the window answers "is there older history?" exactly,
-		// without a second query.
-		recent, err := threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit+1)
-		if err != nil {
-			if err.Error() != "thread not found" {
-				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
-					"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+	// Only the main window gates round 3. The rest of round 2 is read for the
+	// assembly alone, so it joins there (late.Wait below) and runs alongside
+	// rounds 3 and 4 instead of holding them up. The update heads are the
+	// reason: their cost grows with every entity the chat has ever had
+	// (measured in prod: p50 0.2s, p95 2.5s), against ~0.1-0.3s for the
+	// window's blocks and lookups, so waiting on them before the blocks made
+	// the open the sum of the two rather than the longer.
+	late := new(errgroup.Group)
+	late.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.message_count", func(ctx context.Context) error {
+			var err error
+			totalMessageCount, err = s.deps.Repo.CountMessagesInChat(ctx, chatID)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", shortID(chatID))
 			}
-			mainThreadMessages = []*db.Message{}
-			return nil // non-fatal
-		}
-		if len(recent) > snapshotMessageLimit {
-			mainHasMore = true
-			recent = recent[len(recent)-snapshotMessageLimit:]
-		}
-		mainThreadMessages = recent
-		mainReadOK = true
+			return err // non-fatal; falls back to the assembled count below
+		})
 		return nil
 	})
-
-	g2.Go(func() error {
-		contextUsage, err := s.deps.Repo.GetContextUsage(gctx2, chatID, mainThread)
-		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
-			return nil // non-fatal
-		}
-		if contextUsage != nil {
-			threadTokenCount = contextUsage.ThreadTokenCount
-			compactionThreshold = contextUsage.CompactionThreshold
-		}
+	late.Go(func() error {
+		// A failure degrades to "no out-of-window live calls" rather than
+		// failing the open.
+		_ = traced(ctx, "chat_snapshot.live_tool_calls", func(ctx context.Context) error {
+			var err error
+			liveToolCalls, err = s.deps.Repo.ListLiveToolCallsByChat(ctx, chatID)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", shortID(chatID))
+				liveToolCalls = nil
+			}
+			return err
+		})
 		return nil
 	})
+	late.Go(func() error {
+		otherUpdates = s.getNonMessageUpdates(ctx, chatID)
+		return nil
+	})
+	late.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.context_usage", func(ctx context.Context) error {
+			contextUsage, err := s.deps.Repo.GetContextUsage(ctx, chatID, mainThread)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
+				return err // non-fatal
+			}
+			if contextUsage != nil {
+				threadTokenCount = contextUsage.ThreadTokenCount
+				compactionThreshold = contextUsage.CompactionThreshold
+			}
+			return nil
+		})
+		return nil
+	})
+	// Every late read is non-fatal; waiting is all that is left. Deferred as
+	// well as awaited below, so an early return cannot leave one running.
+	defer func() { _ = late.Wait() }()
 
-	if err := g2.Wait(); err != nil {
-		return nil, 0, err
-	}
+	g := new(errgroup.Group)
+	g.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.main_window", func(ctx context.Context) error {
+			threadsSvc := threads.NewService(s.deps.Repo)
+			// One row past the window answers "is there older history?"
+			// exactly, without a second query.
+			recent, err := threadsSvc.LoadRecentDisplayMessages(ctx, mainThread, snapshotMessageLimit+1)
+			if err != nil {
+				if err.Error() != "thread not found" {
+					logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
+						"error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
+				}
+				mainThreadMessages = []*db.Message{}
+				return err // non-fatal
+			}
+			if len(recent) > snapshotMessageLimit {
+				mainHasMore = true
+				recent = recent[len(recent)-snapshotMessageLimit:]
+			}
+			mainThreadMessages = recent
+			mainReadOK = true
+			return nil
+		})
+		return nil
+	})
+	_ = g.Wait() // non-fatal: a failed window degrades to an empty one
 
-	// ── Phase 3: sibling threads inside the window, then content blocks ──
+	// ── Round 3: sibling threads inside the window, and content blocks ──
 	//
 	// The window is measured on the MAIN THREAD: the newest N main-thread
 	// messages, plus the sibling-thread messages inside that seq range.
@@ -401,18 +441,43 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	//
 	// What remains are the threads the transcript renders inline (workflow
 	// node and fork threads), capped at the same bound as the main window.
+	//
+	// The main window's blocks do not wait for the sibling query: the two
+	// run side by side, and only the siblings' own blocks follow it.
 	var fromSeq int64
+	mainIDs := make([]string, 0, len(mainThreadMessages))
 	for i, msg := range mainThreadMessages {
 		if i == 0 || msg.Seq < fromSeq {
 			fromSeq = msg.Seq
 		}
+		mainIDs = append(mainIDs, msg.ID)
 	}
-	siblingMessages, err := s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
-	if err != nil {
-		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
-			"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
-		siblingMessages = nil // non-fatal: the transcript still renders
-	}
+	var siblingMessages []*db.Message
+	var mainBlocks, siblingBlocks []*db.MessageContentBlock
+	g = new(errgroup.Group)
+	g.Go(func() error {
+		mainBlocks = s.contentBlocks(ctx, chatID, mainIDs)
+		return nil
+	})
+	g.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.siblings", func(ctx context.Context) error {
+			var err error
+			siblingMessages, err = s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
+					"error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
+				siblingMessages = nil // non-fatal: the transcript still renders
+			}
+			return err
+		})
+		siblingIDs := make([]string, 0, len(siblingMessages))
+		for _, msg := range siblingMessages {
+			siblingIDs = append(siblingIDs, msg.ID)
+		}
+		siblingBlocks = s.contentBlocks(ctx, chatID, siblingIDs)
+		return nil
+	})
+	_ = g.Wait()
 
 	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(siblingMessages))
 	for _, msg := range mainThreadMessages {
@@ -432,21 +497,9 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		return messages[i].Seq < messages[j].Seq
 	})
 
-	// Batch fetch all content blocks for all messages
-	messageIDs := make([]string, 0, len(messages))
-	for _, msg := range messages {
-		messageIDs = append(messageIDs, msg.ID)
-	}
-
-	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
-	if err != nil {
-		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
-			"error", err, "chatID", chatID[:8], "messageCount", len(messages))
-		// Fallback: return empty blocks rather than fail
-		allBlocks = []*db.MessageContentBlock{}
-	}
-
-	// Group blocks by message ID
+	// Group blocks by message ID. A message on both reads (it cannot be: the
+	// sibling query excludes the main thread) would have its blocks once.
+	allBlocks := append(mainBlocks, siblingBlocks...)
 	attachmentIDSet := make(map[string]bool)
 	messageBlocks := make(map[string][]*db.MessageContentBlock)
 	for _, block := range allBlocks {
@@ -456,45 +509,59 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 		}
 	}
 
-	// ── Phase 4: fetch attachments (sequential, depends on content blocks) ──
-	attachmentIDs := make([]string, 0, len(attachmentIDSet))
-	for id := range attachmentIDSet {
-		attachmentIDs = append(attachmentIDs, id)
-	}
-
-	attachmentMap := make(map[string]*db.Attachment)
-	if len(attachmentIDs) > 0 {
-		attachmentsData, err := s.deps.Repo.GetAttachmentsByIDs(ctx, attachmentIDs)
-		if err == nil {
-			for _, att := range attachmentsData {
-				attachmentMap[att.ID] = att
-			}
-		}
-	}
-
 	// A message with no content blocks renders as nothing, so drop it here
 	// rather than shipping an empty card. (Kept separate from assembly: it is
 	// a snapshot-specific concern, and it logs.)
 	displayable := make([]*db.Message, 0, len(messages))
-	displayableIDs := make([]string, 0, len(messages))
 	messagesSkipped := 0
 	for _, msg := range messages {
 		if len(messageBlocks[msg.ID]) == 0 {
 			messagesSkipped++
 			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Skipping message with no content blocks",
-				"chatID", chatID[:8], "messageID", msg.ID[:8], "role", msg.Role, "seq", msg.Seq)
+				"chatID", shortID(chatID), "messageID", shortID(msg.ID), "role", msg.Role, "seq", msg.Seq)
 			continue
 		}
 		displayable = append(displayable, msg)
-		displayableIDs = append(displayableIDs, msg.ID)
 	}
+
+	// ── Round 4: what the blocks name ──
+	attachmentIDs := make([]string, 0, len(attachmentIDSet))
+	for id := range attachmentIDSet {
+		attachmentIDs = append(attachmentIDs, id)
+	}
+	attachmentMap := make(map[string]*db.Attachment)
+	var lookups messageproto.DisplayLookups
+	g = new(errgroup.Group)
+	if len(attachmentIDs) > 0 {
+		g.Go(func() error {
+			_ = traced(ctx, "chat_snapshot.attachments", func(ctx context.Context) error {
+				attachmentsData, err := s.deps.Repo.GetAttachmentsByIDs(ctx, attachmentIDs)
+				for _, att := range attachmentsData {
+					attachmentMap[att.ID] = att
+				}
+				return err
+			})
+			return nil
+		})
+	}
+	g.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.display_lookups", func(ctx context.Context) error {
+			lookups = messageproto.LoadDisplayLookups(ctx, s.deps.Repo, displayable, messageBlocks)
+			return nil
+		})
+		return nil
+	})
+	_ = g.Wait()
+	_ = late.Wait() // the rest of round 2: heads, count, live calls, usage
 
 	// Assembled exactly like every other display read — including durable
 	// tool-call status and a spawn's child_workflow_id. This snapshot used to
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
-	assembledMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
+	_, assembleSpan := startSpan(ctx, "chat_snapshot.assemble")
+	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq)
+	otherUpdates = append(otherUpdates, snapshotToolCalls(allBlocks, lookups.ToolCalls, liveToolCalls, mainThread, latestSeq)...)
+	assembleSpan.End()
 
 	// Calculate pagination metadata.
 	//
@@ -530,12 +597,10 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 
 	if messagesSkipped > 0 {
 		logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Snapshot built",
-			"chatID", chatID[:8], "messages", len(assembledMessages), "skipped", messagesSkipped)
+			"chatID", shortID(chatID), "messages", len(assembledMessages), "skipped", messagesSkipped)
 	}
 
-	otherUpdates = append(otherUpdates, s.snapshotToolCalls(ctx, allBlocks, liveToolCalls, mainThread, latestSeq)...)
-
-	snapshot := &reliantv1.ChatSyncSnapshot{
+	snapshot = &reliantv1.ChatSyncSnapshot{
 		Messages:            assembledMessages,
 		OtherUpdates:        otherUpdates,
 		LatestSequence:      latestSeq,
@@ -549,7 +614,29 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	return snapshot, latestSeq, nil
 }
 
-// getNonMessageUpdates fetches approvals, threads, and other non-message updates.
+// contentBlocks reads the blocks of messageIDs in one query. A failure is
+// logged and yields none: the messages are dropped as blockless rather than
+// failing the open.
+func (s *Service) contentBlocks(ctx context.Context, chatID string, messageIDs []string) []*db.MessageContentBlock {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	ctx, span := startSpan(ctx, "chat_snapshot.content_blocks", attribute.Int("chat_snapshot.message_ids", len(messageIDs)))
+	defer span.End()
+	blocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
+	if err != nil {
+		observe.RecordSpanError(span, err)
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
+			"error", err, "chatID", shortID(chatID), "messageCount", len(messageIDs))
+		return nil
+	}
+	return blocks
+}
+
+// getNonMessageUpdates fetches approvals, threads, and other non-message
+// updates: the newest update per entity, with each thread update's identity
+// fields reconciled against the threads table. A failure is logged and yields
+// none; it is not worth failing the open over.
 //
 // The type filter and the per-entity dedup both happen in SQL. The previous
 // implementation read GetUpdatesSince(chatID, 0, 10000) — every update TYPE,
@@ -558,13 +645,57 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 // non-message updates past the cap silently never reached the client (measured:
 // 8,465 updates dropped on a real 24k-update chat), and the snapshot's separate
 // sequence high-water mark meant gap detection never backfilled them.
-func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) ([]*reliantv1.ChatUpdateData, error) {
-	updates, err := s.deps.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
+//
+// The thread rows are read AFTER the heads, never alongside them:
+// withThreadMetadata overwrites a head's status with the row's, so a row read
+// first can be older than the head it patches. A thread that completes
+// between the two reads would then show its completed head as "running", and
+// the live loop drops that completion as already delivered (it is at or
+// below the high-water mark), leaving a finished spawn running forever. Read
+// in this order the row is at least as new as every head. The spawn links are
+// written once at dispatch and never change, so that read overlaps the chain.
+func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*reliantv1.ChatUpdateData {
+	var (
+		updates     []db.ChatUpdate
+		threadRows  []*db.Thread
+		spawnCallBy map[string]string
+	)
+	g := new(errgroup.Group)
+	g.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.update_heads", func(ctx context.Context) error {
+			var err error
+			updates, err = s.deps.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", shortID(chatID))
+			}
+			return err
+		})
+		_ = traced(ctx, "chat_snapshot.threads", func(ctx context.Context) error {
+			var err error
+			threadRows, err = s.deps.Repo.ListThreadsByConversation(ctx, chatID)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
+					"error", err, "chatID", shortID(chatID))
+			}
+			return err
+		})
+		return nil
+	})
+	g.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.spawn_tool_calls", func(ctx context.Context) error {
+			var err error
+			spawnCallBy, err = s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
+					"error", err, "chatID", shortID(chatID))
+			}
+			return err
+		})
+		return nil
+	})
+	_ = g.Wait()
 
-	metadata := s.threadMetadata(ctx, chatID)
+	metadata := threadMetadata(threadRows, spawnCallBy)
 
 	result := make([]*reliantv1.ChatUpdateData, 0, len(updates))
 	for _, update := range updates {
@@ -581,8 +712,7 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) ([]*r
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
 		})
 	}
-
-	return result, nil
+	return result
 }
 
 type threadSnapshotMetadata struct {
@@ -598,18 +728,20 @@ type threadSnapshotMetadata struct {
 	spawnedByToolCallID string
 }
 
-// threadMetadata maps thread id -> authoritative thread-table metadata for one chat.
+// threadMetadata maps thread id -> authoritative thread-table metadata for
+// one chat, from its thread rows and its spawn calls by child thread.
 //
-// Returns an empty map on error: reconciliation below is an enhancement of the
+// A read that failed arrives empty: reconciliation is an enhancement of the
 // stored payload, so losing it degrades the snapshot to exactly what it was
 // before rather than failing the whole initial sync.
-func (s *Service) threadMetadata(ctx context.Context, chatID string) map[string]threadSnapshotMetadata {
-	threadRows, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
-	if err != nil {
-		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
-			"error", err, "chatID", chatID[:8])
-		return map[string]threadSnapshotMetadata{}
-	}
+//
+// The spawn link is tool_calls.child_workflow_id -> workflows.id ->
+// workflows.thread (SpawnToolCallIDsByChildThread), written by the spawn path
+// at dispatch and already trusted by cancelChildWorkflowForToolCall (which
+// cancels through exactly this join) and by ListSpawnChildrenForThread.
+// Nothing new has to be persisted; the durable fact was always there, it just
+// never reached the snapshot payload.
+func threadMetadata(threadRows []*db.Thread, spawnToolCallIDsByThread map[string]string) map[string]threadSnapshotMetadata {
 	metadata := make(map[string]threadSnapshotMetadata, len(threadRows))
 	for _, row := range threadRows {
 		if row == nil {
@@ -627,48 +759,10 @@ func (s *Service) threadMetadata(ctx context.Context, chatID string) map[string]
 		}
 		entry.status = row.Status
 		entry.completedAt = row.CompletedAt
+		entry.spawnedByToolCallID = spawnToolCallIDsByThread[row.ID]
 		metadata[row.ID] = entry
 	}
-
-	if len(metadata) == 0 {
-		return metadata
-	}
-
-	for threadID, toolCallID := range s.spawnToolCallIDsByThread(ctx, chatID) {
-		entry, ok := metadata[threadID]
-		if !ok {
-			continue
-		}
-		entry.spawnedByToolCallID = toolCallID
-		metadata[threadID] = entry
-	}
-
 	return metadata
-}
-
-// spawnToolCallIDsByThread maps spawn child thread id -> the tool call that
-// started it, for one chat.
-//
-// The link is tool_calls.child_workflow_id -> workflows.id -> workflows.thread,
-// written by the spawn path at dispatch and already trusted by
-// cancelChildWorkflowForToolCall (which cancels through exactly this join) and
-// by ListSpawnChildrenForThread. Nothing new has to be persisted; the durable
-// fact was always there, it just never reached the snapshot payload.
-//
-// The join runs in SQL rather than in Go: this is the page-load path, and a
-// busy chat holds ~10k tool calls with large input jsonb against ~60 spawns.
-//
-// Returns an empty map on error, matching threadMetadata: reconciliation is an
-// enhancement of the stored payload, so losing it degrades the snapshot to what
-// it was before rather than failing the whole initial sync.
-func (s *Service) spawnToolCallIDsByThread(ctx context.Context, chatID string) map[string]string {
-	byThread, err := s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
-	if err != nil {
-		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
-			"error", err, "chatID", chatID[:8])
-		return map[string]string{}
-	}
-	return byThread
 }
 
 // withThreadMetadata fills missing identity fields from the threads table.
@@ -795,7 +889,10 @@ func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshot
 // live calls have no block in the snapshot to contradict, so they keep their
 // real status; they stay correct if a scroll-back page later renders them,
 // because that block path computes the same status from the same row.
-func (s *Service) snapshotToolCalls(ctx context.Context, blocks []*db.MessageContentBlock, liveCalls []*db.ToolCall, viewingThreadID string, latestSeq int64) []*reliantv1.ChatUpdateData {
+//
+// callsByID holds the durable row of every call a block in the window names
+// (messageproto.DisplayLookups.ToolCalls), already read for the transcript.
+func snapshotToolCalls(blocks []*db.MessageContentBlock, callsByID map[string]*db.ToolCall, liveCalls []*db.ToolCall, viewingThreadID string, latestSeq int64) []*reliantv1.ChatUpdateData {
 	blockCallIDs := make([]string, 0)
 	inWindow := make(map[string]struct{})
 	for _, block := range blocks {
@@ -820,14 +917,8 @@ func (s *Service) snapshotToolCalls(ctx context.Context, blocks []*db.MessageCon
 		}
 		calls[call.ID] = call
 	}
-	if len(blockCallIDs) > 0 {
-		byID, err := s.deps.Repo.ListToolCallsByIDs(ctx, blockCallIDs)
-		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot", "error", err, "toolCallCount", len(blockCallIDs))
-		}
-		for _, call := range byID {
-			add(call)
-		}
+	for _, id := range blockCallIDs {
+		add(callsByID[id])
 	}
 	for _, call := range liveCalls {
 		add(call)
@@ -894,6 +985,14 @@ func toolCallStatusString(status core.ToolCallStatus) string {
 // formatChatUpdateDataJSON wraps message updates in a {message: ...} envelope
 // so the frontend can detect them consistently, and previews their large tool
 // results.
+//
+// The envelope is spliced around the payload's own bytes rather than built by
+// decoding and re-encoding it. A replay sends up to maxChatReplayGap of these,
+// each carrying its message's content blocks, and the decode-to-map /
+// re-marshal it replaced was most of the replay's CPU (and turned every
+// number in the payload into a float64 on the way through). Only the top
+// level is decoded, to see whether the payload is already wrapped and to
+// reject one that is not a JSON object.
 func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage) string {
 	if updateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 		return string(rawData)
@@ -902,21 +1001,14 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 	// snapshot and ListMessages send (GetToolResult has the rest).
 	rawData = messageproto.PreviewMessageUpdate(rawData)
 
-	var payload map[string]any
-	if err := json.Unmarshal(rawData, &payload); err != nil {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(rawData, &top); err != nil || top == nil {
 		return string(rawData)
 	}
-
-	if _, hasMessage := payload["message"]; hasMessage {
+	if _, hasMessage := top["message"]; hasMessage {
 		return string(rawData)
 	}
-
-	wrapped, err := json.Marshal(map[string]any{"message": payload})
-	if err != nil {
-		return string(rawData)
-	}
-
-	return string(wrapped)
+	return `{"message":` + string(rawData) + `}`
 }
 
 // sendUserUpdateBatches replays the user updates in (startSeq, latestSeq]

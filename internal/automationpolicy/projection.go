@@ -2,6 +2,7 @@ package automationpolicy
 
 import (
 	"encoding/json"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 

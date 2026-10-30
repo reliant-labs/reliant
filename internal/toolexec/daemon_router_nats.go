@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -224,6 +225,10 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 	if nomachine.Is(ctx) {
 		return "", nomachine.ErrNoMachine
 	}
+	selector, err := r.routingSelector(ctx, userID, selector)
+	if err != nil {
+		return "", err
+	}
 
 	// Step 1: Try local resolver (connected daemons).
 	if r.resolver != nil {
@@ -366,7 +371,11 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 	for _, id := range attachedIDs {
 		attached[id] = true
 	}
+	if selector == nil {
+		selector = userDefaultSelector(daemons)
+	}
 
+	selector = recordSelector(daemons, selector)
 	var lifecycleDown, unconfirmed *daemonRecord
 	for _, d := range daemons {
 		if !daemonRecordMatches(d, selector) {
@@ -406,6 +415,51 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 	return daemonRecord{}, false, sawDaemonRecord, nil
 }
 
+// defaultSelector is the selector default resolution (a nil selector)
+// stands for: the user's chosen default machine (DaemonRegistryService
+// SetDefaultDaemon) when they have one, in whatever state it is — a
+// suspended default is woken, never passed over for whichever other machine
+// happens to be connected. With no default, or no registry to read, it stays
+// nil and the machine-state rule applies (lookupDaemonRecord, the local
+// resolver's local-first preference). An explicit selector is returned as is.
+//
+// A registry read failure is returned, never read as "no default": falling
+// back to the machine-state rule then would send an unqualified command to
+// whichever other machine is connected while the default sleeps, and run it
+// in the wrong checkout.
+func (r *NATSDaemonRouter) defaultSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	if selector != nil || r.db == nil {
+		return selector, nil
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("reading the user's default machine: %w", err)
+	}
+	return userDefaultSelector(daemons), nil
+}
+
+// routingSelector is the selector both resolution stages read: the user's
+// default machine for a nil selector, and a Name that is one of the user's
+// machine ids read as that id.
+func (r *NATSDaemonRouter) routingSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	selector, err := r.defaultSelector(ctx, userID, selector)
+	if err != nil {
+		return nil, err
+	}
+	return r.normalizeSelector(ctx, userID, selector)
+}
+
+// userDefaultSelector selects the daemon the user made their default, or is
+// nil when none is.
+func userDefaultSelector(daemons []*db.Daemon) *DaemonSelector {
+	for _, d := range daemons {
+		if d.IsDefault {
+			return &DaemonSelector{ID: d.ID}
+		}
+	}
+	return nil
+}
+
 // daemonRecordMatches applies a selector to a registry record. Records carry
 // no labels, so label criteria are not applied here (the connected resolver,
 // which has them, already ran).
@@ -416,7 +470,7 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 	if selector.ID != "" && selector.ID != d.ID {
 		return false
 	}
-	if selector.Name != "" && (d.Hostname == nil || *d.Hostname != selector.Name) {
+	if selector.Name != "" && !recordAnswersToName(d, selector.Name) {
 		return false
 	}
 	if want := canonicalDaemonType(selector.Type); want != "" {
@@ -425,6 +479,42 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 		}
 	}
 	return true
+}
+
+// recordAnswersToName reports whether a record is the machine a caller means
+// by name: the name its owner gave it, or its hostname. Matching the hostname
+// alone missed every named managed machine (`cicd`, hostname ws-ws-…), the
+// same rule the registry's own lookup applies (daemonAnswersToName).
+func recordAnswersToName(d *db.Daemon, name string) bool {
+	if d.Name != "" && d.Name == name {
+		return true
+	}
+	return d.Hostname != nil && *d.Hostname == name
+}
+
+// normalizeSelector reads a Name that is one of the user's machine ids as that
+// id, against the user's COMPLETE registry, before either resolution stage
+// sees the selector. The connected resolver alone cannot decide it: with
+// machine A suspended (or attached to another gateway) and a connected
+// machine B named A's id, A's id is not among the connected ids, so the
+// resolver would keep it a name and route A's requests to B.
+func (r *NATSDaemonRouter) normalizeSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	if selector == nil || selector.ID != "" || selector.Name == "" || r.db == nil {
+		return selector, nil
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing daemons to resolve %q: %w", selector.Name, err)
+	}
+	return recordSelector(daemons, selector), nil
+}
+
+// recordSelector is the selector as the user's records read it: a Name that
+// is one of their daemon ids selects that daemon by id (resolveNameAsID).
+func recordSelector(daemons []*db.Daemon, selector *DaemonSelector) *DaemonSelector {
+	return resolveNameAsID(selector, func(id string) bool {
+		return slices.ContainsFunc(daemons, func(d *db.Daemon) bool { return d.ID == id })
+	})
 }
 
 // canonicalDaemonType folds the two spellings of daemon type onto the
@@ -568,6 +658,10 @@ type MachineState struct {
 // it is the machine a waiting run is actually waiting for. Like resolution it
 // reads this process's database only, wakes nothing and asks nobody.
 func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, selector *DaemonSelector) (MachineState, error) {
+	selector, err := r.routingSelector(ctx, userID, selector)
+	if err != nil {
+		return MachineState{}, err
+	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
 			return MachineState{DaemonID: daemons[0].DaemonID, Exists: true}, nil
@@ -638,6 +732,10 @@ func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selec
 func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *DaemonSelector) (WakeResult, error) {
 	if nomachine.Is(ctx) {
 		return WakeResult{}, nomachine.ErrNoMachine
+	}
+	selector, err := r.routingSelector(ctx, userID, selector)
+	if err != nil {
+		return WakeResult{}, err
 	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
@@ -753,6 +851,10 @@ func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string, se
 // isSelectedDaemonOnline answers IsDaemonOnline for a non-nil selector: is a
 // daemon the selector names connected right now.
 func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID string, selector *DaemonSelector) (bool, error) {
+	selector, err := r.normalizeSelector(ctx, userID, selector)
+	if err != nil {
+		return false, err
+	}
 	// The gateway-local resolver sees connected daemons and honours labels.
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
@@ -769,6 +871,7 @@ func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID st
 	if err != nil {
 		return false, fmt.Errorf("listing daemons for liveness: %w", err)
 	}
+	selector = recordSelector(daemons, selector)
 	var candidates []string
 	for _, d := range daemons {
 		if daemonRecordMatches(d, selector) {
@@ -1344,18 +1447,36 @@ func (r *NATSDaemonRouter) sendToolRequestSync(ctx context.Context, userID strin
 	}
 
 	var resp *ToolExecutionResponse
+	// reached turns true once any round trip may have put the request in
+	// front of a daemon; until then a failure proves it never ran.
+	reached := false
+	// target is the machine the last round trip was addressed to, for a
+	// caller that waits for it to come back.
+	target := ""
 	waited, err := r.rideOutDisconnect(ctx, userID, reissue, func() (string, dispatchOutcome, error) {
 		resp = nil
 		daemonID, err := r.resolveDaemonID(ctx, userID, selector)
 		if err != nil {
-			return r.startingDaemonID(ctx, userID, selector, err), dispatchUndelivered, fmt.Errorf("%s: %w", resolveOp, err)
+			starting := r.startingDaemonID(ctx, userID, selector, err)
+			if starting != "" {
+				target = starting
+			}
+			return starting, dispatchUndelivered, fmt.Errorf("%s: %w", resolveOp, err)
 		}
+		target = daemonID
 		var outcome dispatchOutcome
 		resp, outcome, err = r.toolRequestRoundTrip(ctx, userID, daemonID, attempt, metric)
+		if outcome != dispatchUndelivered {
+			reached = true
+		}
 		return daemonID, outcome, err
 	})
 	if err != nil {
-		return nil, withWaitNote(err, waited)
+		err = withWaitNote(err, waited)
+		if !reached {
+			err = notDispatched(err, target)
+		}
+		return nil, err
 	}
 	if waited > 0 && resp.ErrorMessage != "" {
 		resp.ErrorMessage = withWaitNote(errors.New(resp.ErrorMessage), waited).Error()

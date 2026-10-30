@@ -89,6 +89,17 @@ const scheduledStartTimeAttr = "TemporalScheduledStartTime"
 // fire a durable identity: its workflow id is unique per scheduled time, and
 // that id is the event row's dedupe key, which is what makes a retried fire
 // idempotent rather than a second run.
+// TriggerCapacityRedriveWorkflow retries the ORIGINAL scheduled event identity.
+// A normal schedule workflow derives identity from itself and cannot redrive it.
+func TriggerCapacityRedriveWorkflow(ctx workflow.Context, request FireRequest) (*FireOutput, error) {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 2 * time.Minute, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 3}})
+	var out FireOutput
+	if err := workflow.ExecuteActivity(ctx, FireActivityName, request).Get(ctx, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func TriggerFireWorkflow(ctx workflow.Context, input FireInput) (*FireOutput, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,

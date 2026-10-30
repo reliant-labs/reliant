@@ -100,17 +100,29 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 			return os.ErrProcessDone
 		}
 
+		// Who is in the group now, while the leader is unreaped and the
+		// group id is therefore certainly the command's (GroupMember).
+		members, _ := GroupMembers(proc.Pid)
+
 		err := terminateGracefully(proc)
 
 		// Escalate on our own clock so WaitDelay keeps meaning only the pipe
-		// drain. Kill() (not a raw group kill) because this fires
-		// asynchronously and may land after Wait has reaped the child.
+		// drain. The escalation kills the GROUP, and it outlives the
+		// leader: a `bash -c` dies on SIGTERM at once while a child that
+		// trapped or ignored it runs on, and stopping the timer the moment
+		// Wait returned left exactly that child orphaned. So when the
+		// command finishes inside the grace period the timer is stopped
+		// only if none of those members is left; otherwise it fires and
+		// SIGKILLs the rest — the group only while one of them still proves
+		// the id is the command's (killGroup).
 		timer := time.AfterFunc(grace, func() {
-			_ = proc.Kill()
+			killGroup(proc, members)
 		})
 		go func() {
 			<-done
-			timer.Stop()
+			if !GroupOwned(proc.Pid, members) {
+				timer.Stop()
+			}
 		}()
 
 		return err

@@ -38,6 +38,7 @@
       "TokenService",
       "ToolCallService",
       "TriggerService",
+      "UsageService",
       "WorkflowService",
       "WorktreeService"
     ]
@@ -72,7 +73,6 @@
     "@opentelemetry/api": "^1.9.1",
     "@reliantlabs/forge-web-runtime": "^0.12.0",
     "@rrweb/replay": "2.1.7",
-    "@sentry/react": "^10.47.0",
     "@stripe/react-stripe-js": "3.10.0",
     "@stripe/stripe-js": "5.10.0",
     "@supabase/auth-js": "^2.90.1",

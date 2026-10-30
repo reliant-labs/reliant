@@ -98,18 +98,11 @@ func verifyGate(planPath, dir string) []string {
 			subdir = true
 		}
 	}
-	if (!pl.Merge && (pl.Web.Full || len(pl.Web.Tests) > 0)) || web {
+	if pl.Web.Full || len(pl.Web.Tests) > 0 || web {
 		obliged["typecheck"] = "a web lane or frontends/web/ change needs the type-check"
 	}
-	if pl.Merge {
-		migration = false
-		for _, f := range pl.Files {
-			migration = migration || strings.HasPrefix(f.Path, "db/migrations/")
-		}
-		obliged["proto"] = "every merge lints proto"
-		if len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 {
-			obliged["vet"] = "production build reach and affected test packages are vetted"
-		}
+	if len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full {
+		obliged["vet"] = "production build reach and affected test packages are vetted"
 	}
 	if migration {
 		obliged["migsafety"] = "a migration or forge.yaml changed"

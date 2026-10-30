@@ -57,13 +57,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 )
 
 const routesTestAPIKey = "api-routes-test-key"
 
-// userServices are the 35 services the api-server has always mounted on its
+// userServices are the 36 services the api-server has always mounted on its
 // listener (grpc.NewAPI's list, before the api became a root).
 var userServices = []string{
 	reliantv1connect.SystemServiceName, reliantv1connect.PlanServiceName, reliantv1connect.TaskServiceName,
@@ -77,7 +78,7 @@ var userServices = []string{
 	reliantv1connect.TriggerServiceName, reliantv1connect.InboxServiceName, reliantv1connect.DaemonRegistryServiceName,
 	reliantv1connect.ModelEndpointServiceName, reliantv1connect.TokenServiceName, reliantv1connect.DaemonServiceName,
 	reliantv1connect.AccountServiceName, reliantv1connect.ConnectionServiceName, reliantv1connect.ConnectorServiceName,
-	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName,
+	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName, reliantv1connect.UsageServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -96,9 +97,9 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		ProviderAccount: &provider_account.Service{}, Question: &question.Service{}, Repo: &repo.Service{},
 		Scenario: &scenario.Service{}, Settings: &settings.Service{}, Streaming: &streaminghandler.Service{},
 		System: &system.Service{}, Terminal: &terminal.Service{}, Token: &token.Service{}, ToolCall: &tool_call.Service{},
-		Workflow: &workflowhandler.Service{},
-		Logger:   slog.Default(),
-		Options:  opts,
+		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{},
+		Logger:  slog.Default(),
+		Options: opts,
 	})
 	require.NoError(t, err)
 	return routes

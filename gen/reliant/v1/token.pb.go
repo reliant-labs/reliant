@@ -642,7 +642,12 @@ type ExchangeTokenRequest struct {
 	Audience string `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
 	// scopes requested. Empty asks for every exchangeable scope the calling
 	// token holds.
-	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Scopes []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// org_id is the org the minted token acts in, which must be one the calling
+	// session's person belongs to. Unset: the org the calling session itself
+	// acts in. The control plane checks membership and clips the scopes to the
+	// person's grants IN that org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,12 +696,20 @@ func (x *ExchangeTokenRequest) GetScopes() []string {
 	return nil
 }
 
+func (x *ExchangeTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type ExchangeTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // Raw rlat_ token — returned once
 	TokenPrefix   string                 `protobuf:"bytes,2,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // Display identifier, e.g. "rlat_A3f9Kd2p"
 	ExpiresAt     string                 `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`       // RFC 3339
 	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                              // What was actually granted
+	OrgId         string                 `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`                   // The org the token acts in
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,6 +770,13 @@ func (x *ExchangeTokenResponse) GetScopes() []string {
 		return x.Scopes
 	}
 	return nil
+}
+
+func (x *ExchangeTokenResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 type GetGitTokenRequest struct {
@@ -860,6 +880,154 @@ func (x *GetGitTokenResponse) GetExpiresAt() string {
 	return ""
 }
 
+type GetGitHubBotTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// owner and repo name the one repository the token is scoped to.
+	Owner string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Repo  string `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	// permissions narrows the token: issues, pull_requests, contents -> read or
+	// write. Empty means all three at write.
+	Permissions   map[string]string `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGitHubBotTokenRequest) Reset() {
+	*x = GetGitHubBotTokenRequest{}
+	mi := &file_reliant_v1_token_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGitHubBotTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGitHubBotTokenRequest) ProtoMessage() {}
+
+func (x *GetGitHubBotTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGitHubBotTokenRequest.ProtoReflect.Descriptor instead.
+func (*GetGitHubBotTokenRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetGitHubBotTokenRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenRequest) GetPermissions() map[string]string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+type GetGitHubBotTokenResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// token is the plaintext installation token. A credential: apply it to the
+	// requests you make, never log or persist it.
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// expires_at is when token stops working (RFC 3339; GitHub issues
+	// one-hour tokens).
+	ExpiresAt string `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// bot_login is who GitHub shows as the author of writes made with token,
+	// e.g. `reliant-labs[bot]`.
+	BotLogin string `protobuf:"bytes,3,opt,name=bot_login,json=botLogin,proto3" json:"bot_login,omitempty"`
+	// acting_for_login is the caller's own GitHub login, whose push access
+	// gated the mint.
+	ActingForLogin string `protobuf:"bytes,4,opt,name=acting_for_login,json=actingForLogin,proto3" json:"acting_for_login,omitempty"`
+	// repository is the owner/name the token is scoped to, as GitHub spells it.
+	Repository    string `protobuf:"bytes,5,opt,name=repository,proto3" json:"repository,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGitHubBotTokenResponse) Reset() {
+	*x = GetGitHubBotTokenResponse{}
+	mi := &file_reliant_v1_token_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGitHubBotTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGitHubBotTokenResponse) ProtoMessage() {}
+
+func (x *GetGitHubBotTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGitHubBotTokenResponse.ProtoReflect.Descriptor instead.
+func (*GetGitHubBotTokenResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetGitHubBotTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenResponse) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenResponse) GetBotLogin() string {
+	if x != nil {
+		return x.BotLogin
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenResponse) GetActingForLogin() string {
+	if x != nil {
+		return x.ActingForLogin
+	}
+	return ""
+}
+
+func (x *GetGitHubBotTokenResponse) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
 var File_reliant_v1_token_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_token_proto_rawDesc = "" +
@@ -906,26 +1074,45 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tScopeList\x12\x16\n" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"@\n" +
 	"\x13UpdateTokenResponse\x12)\n" +
-	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"J\n" +
+	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"q\n" +
 	"\x14ExchangeTokenRequest\x12\x1a\n" +
 	"\baudience\x18\x01 \x01(\tR\baudience\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\x87\x01\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x9e\x01\n" +
 	"\x15ExchangeTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
 	"\ftoken_prefix\x18\x02 \x01(\tR\vtokenPrefix\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x16\n" +
-	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"0\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12\x15\n" +
+	"\x06org_id\x18\x05 \x01(\tR\x05orgId\"0\n" +
 	"\x12GetGitTokenRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"W\n" +
 	"\x13GetGitTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\tR\texpiresAt*R\n" +
+	"expires_at\x18\x02 \x01(\tR\texpiresAt\"\xdd\x01\n" +
+	"\x18GetGitHubBotTokenRequest\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12W\n" +
+	"\vpermissions\x18\x03 \x03(\v25.reliant.v1.GetGitHubBotTokenRequest.PermissionsEntryR\vpermissions\x1a>\n" +
+	"\x10PermissionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\x01\n" +
+	"\x19GetGitHubBotTokenResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\tR\texpiresAt\x12\x1b\n" +
+	"\tbot_login\x18\x03 \x01(\tR\bbotLogin\x12(\n" +
+	"\x10acting_for_login\x18\x04 \x01(\tR\x0eactingForLogin\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x05 \x01(\tR\n" +
+	"repository*R\n" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\xad\x06\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\x97\a\n" +
 	"\fTokenService\x12\x93\x01\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"C\xa2\xbb\x18?:=\n" +
 	"\x06create\x12-\n" +
@@ -939,7 +1126,8 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\x06update\x12\x1f\n" +
 	"\x05token\x12\x02id\x1a\x12response.info.name\x12\xf1\x01\n" +
 	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x9a\x01\xa2\xbb\x18\x95\x01\b\x00:\x90\x01:\x8d\x01per-command credential exchange: forge mints one short-lived, attenuated token for each control-plane call, so an event per exchange is noise\x12V\n" +
-	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12h\n" +
+	"\x11GetGitHubBotToken\x12$.reliant.v1.GetGitHubBotTokenRequest\x1a%.reliant.v1.GetGitHubBotTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_token_proto_rawDescOnce sync.Once
@@ -954,23 +1142,26 @@ func file_reliant_v1_token_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_reliant_v1_token_proto_goTypes = []any{
-	(TokenKind)(0),                // 0: reliant.v1.TokenKind
-	(*CreateTokenRequest)(nil),    // 1: reliant.v1.CreateTokenRequest
-	(*TokenInfo)(nil),             // 2: reliant.v1.TokenInfo
-	(*CreateTokenResponse)(nil),   // 3: reliant.v1.CreateTokenResponse
-	(*ListTokensRequest)(nil),     // 4: reliant.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),    // 5: reliant.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),    // 6: reliant.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),   // 7: reliant.v1.RevokeTokenResponse
-	(*UpdateTokenRequest)(nil),    // 8: reliant.v1.UpdateTokenRequest
-	(*ScopeList)(nil),             // 9: reliant.v1.ScopeList
-	(*UpdateTokenResponse)(nil),   // 10: reliant.v1.UpdateTokenResponse
-	(*ExchangeTokenRequest)(nil),  // 11: reliant.v1.ExchangeTokenRequest
-	(*ExchangeTokenResponse)(nil), // 12: reliant.v1.ExchangeTokenResponse
-	(*GetGitTokenRequest)(nil),    // 13: reliant.v1.GetGitTokenRequest
-	(*GetGitTokenResponse)(nil),   // 14: reliant.v1.GetGitTokenResponse
+	(TokenKind)(0),                    // 0: reliant.v1.TokenKind
+	(*CreateTokenRequest)(nil),        // 1: reliant.v1.CreateTokenRequest
+	(*TokenInfo)(nil),                 // 2: reliant.v1.TokenInfo
+	(*CreateTokenResponse)(nil),       // 3: reliant.v1.CreateTokenResponse
+	(*ListTokensRequest)(nil),         // 4: reliant.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),        // 5: reliant.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),        // 6: reliant.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),       // 7: reliant.v1.RevokeTokenResponse
+	(*UpdateTokenRequest)(nil),        // 8: reliant.v1.UpdateTokenRequest
+	(*ScopeList)(nil),                 // 9: reliant.v1.ScopeList
+	(*UpdateTokenResponse)(nil),       // 10: reliant.v1.UpdateTokenResponse
+	(*ExchangeTokenRequest)(nil),      // 11: reliant.v1.ExchangeTokenRequest
+	(*ExchangeTokenResponse)(nil),     // 12: reliant.v1.ExchangeTokenResponse
+	(*GetGitTokenRequest)(nil),        // 13: reliant.v1.GetGitTokenRequest
+	(*GetGitTokenResponse)(nil),       // 14: reliant.v1.GetGitTokenResponse
+	(*GetGitHubBotTokenRequest)(nil),  // 15: reliant.v1.GetGitHubBotTokenRequest
+	(*GetGitHubBotTokenResponse)(nil), // 16: reliant.v1.GetGitHubBotTokenResponse
+	nil,                               // 17: reliant.v1.GetGitHubBotTokenRequest.PermissionsEntry
 }
 var file_reliant_v1_token_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.CreateTokenRequest.kind:type_name -> reliant.v1.TokenKind
@@ -980,23 +1171,26 @@ var file_reliant_v1_token_proto_depIdxs = []int32{
 	2,  // 4: reliant.v1.ListTokensResponse.tokens:type_name -> reliant.v1.TokenInfo
 	9,  // 5: reliant.v1.UpdateTokenRequest.scopes:type_name -> reliant.v1.ScopeList
 	2,  // 6: reliant.v1.UpdateTokenResponse.info:type_name -> reliant.v1.TokenInfo
-	1,  // 7: reliant.v1.TokenService.CreateToken:input_type -> reliant.v1.CreateTokenRequest
-	4,  // 8: reliant.v1.TokenService.ListTokens:input_type -> reliant.v1.ListTokensRequest
-	6,  // 9: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
-	8,  // 10: reliant.v1.TokenService.UpdateToken:input_type -> reliant.v1.UpdateTokenRequest
-	11, // 11: reliant.v1.TokenService.ExchangeToken:input_type -> reliant.v1.ExchangeTokenRequest
-	13, // 12: reliant.v1.TokenService.GetGitToken:input_type -> reliant.v1.GetGitTokenRequest
-	3,  // 13: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
-	5,  // 14: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
-	7,  // 15: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
-	10, // 16: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
-	12, // 17: reliant.v1.TokenService.ExchangeToken:output_type -> reliant.v1.ExchangeTokenResponse
-	14, // 18: reliant.v1.TokenService.GetGitToken:output_type -> reliant.v1.GetGitTokenResponse
-	13, // [13:19] is the sub-list for method output_type
-	7,  // [7:13] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	17, // 7: reliant.v1.GetGitHubBotTokenRequest.permissions:type_name -> reliant.v1.GetGitHubBotTokenRequest.PermissionsEntry
+	1,  // 8: reliant.v1.TokenService.CreateToken:input_type -> reliant.v1.CreateTokenRequest
+	4,  // 9: reliant.v1.TokenService.ListTokens:input_type -> reliant.v1.ListTokensRequest
+	6,  // 10: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
+	8,  // 11: reliant.v1.TokenService.UpdateToken:input_type -> reliant.v1.UpdateTokenRequest
+	11, // 12: reliant.v1.TokenService.ExchangeToken:input_type -> reliant.v1.ExchangeTokenRequest
+	13, // 13: reliant.v1.TokenService.GetGitToken:input_type -> reliant.v1.GetGitTokenRequest
+	15, // 14: reliant.v1.TokenService.GetGitHubBotToken:input_type -> reliant.v1.GetGitHubBotTokenRequest
+	3,  // 15: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
+	5,  // 16: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
+	7,  // 17: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
+	10, // 18: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
+	12, // 19: reliant.v1.TokenService.ExchangeToken:output_type -> reliant.v1.ExchangeTokenResponse
+	14, // 20: reliant.v1.TokenService.GetGitToken:output_type -> reliant.v1.GetGitTokenResponse
+	16, // 21: reliant.v1.TokenService.GetGitHubBotToken:output_type -> reliant.v1.GetGitHubBotTokenResponse
+	15, // [15:22] is the sub-list for method output_type
+	8,  // [8:15] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_token_proto_init() }
@@ -1006,13 +1200,14 @@ func file_reliant_v1_token_proto_init() {
 	}
 	file_reliant_v1_token_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_token_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_token_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_token_proto_rawDesc), len(file_reliant_v1_token_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

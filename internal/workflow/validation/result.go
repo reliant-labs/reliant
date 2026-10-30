@@ -44,6 +44,7 @@ const (
 	CategoryNodeOrdering      Category = "node_ordering"      // nodes.<id> references to nodes not guaranteed to have executed
 	CategorySkillRef          Category = "skill_ref"          // skills: names that do not resolve in the skill catalog
 	CategoryToolBinding       Category = "tool_binding"       // tools_config.tools: unknown tool, or a parameter that tool cannot bind
+	CategoryToolTag           Category = "tool_tag"           // a tools-typed input value names a tag outside the vocabulary (an error only when authoring)
 	CategoryTrigger           Category = "trigger"            // triggers: a declared trigger that cannot be activated or cannot run
 )
 
@@ -134,6 +135,15 @@ func (r *Result) AddWarning(category Category, path []string, field, message str
 		Field:    field,
 		Message:  message,
 	})
+}
+
+// demote turns every error of category into a warning.
+func (r *Result) demote(category Category) {
+	for _, e := range r.errors {
+		if e.Category == category {
+			e.Severity = SeverityWarning
+		}
+	}
 }
 
 // Merge combines another result into this one.

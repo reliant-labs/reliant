@@ -59,8 +59,8 @@ func (r *snapshotGateRepo) GetLatestUserUpdateSequence(context.Context, string) 
 	return 0, nil
 }
 
-func (r *snapshotGateRepo) GetChat(context.Context, string) (*db.Chat, error) {
-	return &db.Chat{ID: raceTestChatID, UserID: raceTestUserID}, nil
+func (r *snapshotGateRepo) GetChatRow(context.Context, string) (*db.ChatRow, error) {
+	return &db.ChatRow{ID: raceTestChatID, UserID: raceTestUserID}, nil
 }
 
 // GetLatestUpdateSequence stands in for the whole snapshot build. It reports
@@ -116,12 +116,6 @@ func (r *snapshotGateRepo) GetContextUsage(context.Context, string, string) (*db
 	return nil, nil
 }
 
-// The snapshot enriches tool-call blocks with their durable rows (status and,
-// for a spawn, the thread it owns) via messageproto.AssembleForDisplay.
-func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
-	return nil, nil
-}
-
 func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) ([]db.ChatUpdate, error) {
 	return nil, nil
 }
@@ -130,6 +124,11 @@ func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) 
 // window chain. sql.ErrNoRows is how the store reports a thread with no
 // context window yet — an empty thread, which is what this chat is.
 func (r *snapshotGateRepo) GetLatestContextWindow(context.Context, string) (*db.ContextWindow, error) {
+	return nil, sql.ErrNoRows
+}
+
+// The main thread's row is read alongside its context-window walk.
+func (r *snapshotGateRepo) GetThread(context.Context, string) (*db.Thread, error) {
 	return nil, sql.ErrNoRows
 }
 

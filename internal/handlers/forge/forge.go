@@ -577,7 +577,8 @@ func (s *Service) GetTopology(
 		ProjectPath string   `json:"project_path"`
 		Verify      bool     `json:"verify,omitempty"`
 		Envs        []string `json:"envs,omitempty"`
-	}{ProjectPath: path, Verify: verify, Envs: req.Msg.Envs}
+		OrgID       string   `json:"org_id,omitempty"`
+	}{ProjectPath: path, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.topology", payload, timeout, verify)
 	if err != nil {
@@ -612,7 +613,8 @@ func (s *Service) VerifyEnv(
 	payload := struct {
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
-	}{ProjectPath: path, Env: env}
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
@@ -660,7 +662,8 @@ func (s *Service) ListSecrets(
 	payload := struct {
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
-	}{ProjectPath: path, Env: env}
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
 
 	// readsCluster=false: secret presence is resolved from the declaration and
 	// the provider's metadata, not by reading cluster workloads, so a timeout
@@ -697,7 +700,8 @@ func (s *Service) GetEnvStatus(
 	payload := struct {
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
-	}{ProjectPath: path, Env: env}
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
@@ -743,7 +747,8 @@ func (s *Service) GetEnvShape(
 	payload := struct {
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
-	}{ProjectPath: path, Env: env}
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_shape", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
@@ -843,7 +848,8 @@ func (s *Service) PlanPromote(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		Release     string `json:"release"`
-	}{ProjectPath: path, Env: env, Release: release}
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, Release: release, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, "forge.promote_plan", payload, forgePromotePlanTimeoutMs, false)
@@ -918,12 +924,14 @@ func (s *Service) ApplyPromote(
 		Release                string `json:"release"`
 		ExpectedCurrentRelease string `json:"expected_current_release,omitempty"`
 		ExpectUnbound          bool   `json:"expect_unbound,omitempty"`
+		OrgID                  string `json:"org_id,omitempty"`
 	}{
 		ProjectPath:            path,
 		Env:                    env,
 		Release:                release,
 		ExpectedCurrentRelease: expected,
 		ExpectUnbound:          req.Msg.ExpectUnbound,
+		OrgID:                  req.Msg.GetOrgId(),
 	}
 
 	// The apply reply has a field the shared forgeDispatch envelope does not
@@ -1207,7 +1215,8 @@ func (s *Service) PlanDeploy(
 		ProjectPath  string `json:"project_path"`
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
-	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath)}
+		OrgID        string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
@@ -1257,7 +1266,8 @@ func (s *Service) StartDeployPlan(
 		ProjectPath  string `json:"project_path"`
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
-	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath)}
+		OrgID        string `json:"org_id,omitempty"`
+	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
 
 	// Dispatched directly, and WITHOUT the reachability escape hatch, for the
 	// same reason StartDeploy is: a start that timed out may or may not have
@@ -1391,6 +1401,7 @@ func (s *Service) StartDeploy(
 		AcknowledgedFindings    []string `json:"acknowledged_findings,omitempty"`
 		ReleaseVersion          string   `json:"release_version"`
 		CheckoutPath            string   `json:"checkout_path,omitempty"`
+		OrgID                   string   `json:"org_id,omitempty"`
 	}{
 		ProjectPath:             path,
 		Env:                     env,
@@ -1401,6 +1412,7 @@ func (s *Service) StartDeploy(
 		AcknowledgedFindings:    req.Msg.AcknowledgedFindings,
 		ReleaseVersion:          releaseVersion,
 		CheckoutPath:            strings.TrimSpace(req.Msg.CheckoutPath),
+		OrgID:                   req.Msg.GetOrgId(),
 	}
 
 	// Dispatched directly rather than through forgeDispatch: the reply carries

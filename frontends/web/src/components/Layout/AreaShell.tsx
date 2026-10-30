@@ -20,6 +20,7 @@ import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { cn } from "@/lib/utils";
 import ErrorBoundary from "../ErrorBoundary";
 import Tooltip from "../forge-ui/tooltip";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 
 interface AreaShellProps {
   /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
@@ -105,6 +106,9 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
           </div>
         </div>
         <div className="flex-1 self-stretch" style={dragRegionStyle} />
+        <div className="max-w-64 pr-3" style={noDragRegionStyle}>
+          <OrgSwitcher />
+        </div>
       </header>
 
       {/* `relative`, so an absolutely positioned descendant (every sr-only

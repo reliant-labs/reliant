@@ -44,7 +44,7 @@ import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
 import { useRovingFocus } from "./useRovingFocus";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 
 const features = tableFeatures({
@@ -89,6 +89,7 @@ export function TracesView(props: {
         subject={props.subject}
         traceId={props.traceId}
         spanId={props.spanId}
+        range={props.range}
         navigate={props.navigate}
       />
     );
@@ -196,52 +197,41 @@ function TraceList({
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
 
+type RedGroupRow = { label: string; group: Record<string, string>; red: TraceRed };
+
 /** The RED summary per group, worst error rate first: the comparison a group-by asks for. */
 function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; groupBy: string[]; onNarrow: (group: Record<string, string>) => void }) {
-  const sorted = [...groups].sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount);
+  const rows: RedGroupRow[] = [...groups]
+    .sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount)
+    .map(({ group, red }) => ({ label: groupLabel(group, groupBy), group, red }));
+  const columns: DataTableColumn<RedGroupRow>[] = [
+    { key: "label", header: groupBy.map(attributeLabel).join(" · "), render: (_, { label }) => <span className="font-mono">{label}</span> },
+    { key: "traces", header: "Traces", numeric: true, render: (_, { red }) => formatCount(red.traceCount) },
+    { key: "rate", header: "Rate", numeric: true, render: (_, { red }) => formatRate(red.ratePerSecond) },
+    {
+      key: "failed",
+      header: "Failed",
+      numeric: true,
+      render: (_, { red }) => <span className={cn(red.errorRate >= 0.05 && "text-danger-ink")}>{formatPercent(red.errorRate)}</span>,
+    },
+    { key: "p50", header: "p50", numeric: true, render: (_, { red }) => formatDuration(red.p50Ms) },
+    { key: "p95", header: "p95", numeric: true, render: (_, { red }) => formatDuration(red.p95Ms) },
+    { key: "p99", header: "p99", numeric: true, render: (_, { red }) => formatDuration(red.p99Ms) },
+  ];
   return (
-    <Card padding="none" data-testid="obs-trace-red-groups">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">Rate, errors and latency of the matching traces per {groupBy.map(attributeLabel).join(" and ")}</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-            <th scope="col" className="px-4 py-2 font-medium">
-              {groupBy.map(attributeLabel).join(" · ")}
-            </th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Traces</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Rate</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Failed</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p50</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p95</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p99</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(({ group, red }) => {
-            const label = groupLabel(group, groupBy);
-            return (
-              <tr key={label} className="border-b border-border/60 last:border-b-0" data-testid={`obs-trace-red-group-${label}`}>
-                <th scope="row" className="px-4 py-1.5 text-left font-normal">
-                  <button
-                    type="button"
-                    onClick={() => onNarrow(group)}
-                    title="Narrow to this group"
-                    className="rounded-sm font-mono text-sm text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {label}
-                  </button>
-                </th>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(red.traceCount)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatRate(red.ratePerSecond)}</td>
-                <td className={cn("px-4 py-1.5 text-right tabular-nums", red.errorRate >= 0.05 && "text-danger-ink")}>{formatPercent(red.errorRate)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p50Ms)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p95Ms)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p99Ms)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </StackedTable>
+    <Card padding="none" className="overflow-hidden" data-testid="obs-trace-red-groups">
+      <DataTable<RedGroupRow>
+        flush
+        stacked
+        compact
+        ariaLabel={`Rate, errors and latency of the matching traces per ${groupBy.map(attributeLabel).join(" and ")}`}
+        columns={columns}
+        data={rows}
+        getRowKey={(row) => row.label}
+        getRowAction={(row) => () => onNarrow(row.group)}
+        getRowLabel={(row) => `Narrow to ${row.label}`}
+        getRowProps={(row) => ({ "data-testid": `obs-trace-red-group-${row.label}` })}
+      />
     </Card>
   );
 }
@@ -463,7 +453,7 @@ function TraceTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
   // On a phone the five columns do not fit, so each trace is a stacked card
-  // (StackedTable) whose height depends on its content: measure, don't assume.
+  // (DataTable's STACK) whose height depends on its content: measure, don't assume.
   const narrow = useNarrowViewport();
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -506,16 +496,19 @@ function TraceTable({
           0px, the virtualizer would render no rows into it, and it would stay
           0px: the floor breaks that loop (as LogList's does). */}
       <div ref={scrollRef} className="max-h-[60vh] overflow-auto max-md:min-h-[12rem]" onKeyDown={onKeyDown}>
-        <StackedTable className="w-full table-fixed text-sm" data-testid="obs-trace-table">
+        {/* Not a DataTable: it is virtualized (spacer rows) with roving focus,
+            which DataTable does not do. It stacks on a phone with DataTable's
+            own STACK classes, so the two layouts cannot drift apart. */}
+        <table className={cn("w-full table-fixed text-sm", STACK.table)} data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
-          <colgroup>
+          <colgroup className="max-md:hidden">
             <col className="w-36" />
             <col />
             <col className="w-64" />
             <col className="w-20" />
             <col className="w-24" />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-surface">
+          <thead className={cn("sticky top-0 z-10 bg-surface", STACK.head)}>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-border">
                 {group.headers.map((header) => {
@@ -542,7 +535,7 @@ function TraceTable({
               </tr>
             ))}
           </thead>
-          <tbody>
+          <tbody className={STACK.body}>
             {padTop > 0 && (
               <tr aria-hidden="true">
                 <td colSpan={5} style={{ height: padTop }} />
@@ -555,7 +548,7 @@ function TraceTable({
               return (
                 <tr
                   key={row.id}
-                  className="border-b border-border/50 hover:bg-ink/5"
+                  className={cn("border-b border-border/50 hover:bg-ink/5", STACK.row)}
                   style={narrow ? undefined : { height: ROW_HEIGHT }}
                   data-index={item.index}
                   ref={narrow ? virtualizer.measureElement : undefined}
@@ -563,7 +556,7 @@ function TraceTable({
                 >
                   {row.getAllCells().map((cell) =>
                     cell.column.id === "rootOperation" ? (
-                      <th key={cell.id} scope="row" data-stack-title className="px-3 py-1 text-left font-normal">
+                      <th key={cell.id} scope="row" className={cn("px-3 py-1 text-left font-normal", STACK.cell, STACK.title)}>
                         <button
                           type="button"
                           data-trace-index={item.index}
@@ -577,7 +570,11 @@ function TraceTable({
                         </button>
                       </th>
                     ) : (
-                      <td key={cell.id} className="truncate px-3 py-1">
+                      <td
+                        key={cell.id}
+                        data-label={typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined}
+                        className={cn("truncate px-3 py-1", STACK.cell, STACK.labelled)}
+                      >
                         <table.FlexRender cell={cell} />
                       </td>
                     )
@@ -591,7 +588,7 @@ function TraceTable({
               </tr>
             )}
           </tbody>
-        </StackedTable>
+        </table>
       </div>
       {hasMore && (
         <div className="border-t border-border px-3 py-2">

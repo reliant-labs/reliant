@@ -31,12 +31,13 @@ import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { formatInputDefault } from "@/lib/inputDefaultDisplay";
-import { getInputDefault, getInputDescription } from "@/lib/inputHelpers";
+import { getInputDefault, getInputDescription, type InputDef } from "@/lib/inputHelpers";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { useScopePreferences } from "@/hooks/settings-queries";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
+import DataTable, { type DataTableColumn } from "../../forge-ui/data_table";
 import PageHeader from "../../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
 import { AutomationStateNotice } from "../../Automations/AutomationStateNotice";
@@ -393,37 +394,17 @@ function DefinitionCard({
                 <p className="text-sm text-muted-foreground">This workflow takes no inputs beyond the prompt.</p>
               ) : (
                 <CardInset padding="none" className="overflow-hidden">
-                  <table className="w-full table-fixed text-xs" aria-label="Inputs" data-testid="workflow-detail-inputs">
-                    <thead className="border-b border-border/60 text-left font-semibold uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th scope="col" className="w-[28%] px-3 py-1.5">Name</th>
-                        <th scope="col" className="w-20 px-3 py-1.5">Type</th>
-                        <th scope="col" className="w-[24%] px-3 py-1.5">Default</th>
-                        <th scope="col" className="px-3 py-1.5">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {inputs.map(({ name, schema }) => {
-                        const fallback = formatInputDefault(getInputDefault(schema));
-                        const description = getInputDescription(schema);
-                        return (
-                          <tr key={name} className="align-top">
-                            <td className="truncate px-3 py-1.5 font-mono text-foreground" title={name}>{name}</td>
-                            <td className="px-3 py-1.5 text-muted-foreground">{schema.type ?? ""}</td>
-                            <td className="truncate px-3 py-1.5 text-foreground" title={fallback}>
-                              {fallback ?? (
-                                <span className="text-muted-foreground">
-                                  <span aria-hidden="true">—</span>
-                                  <span className="sr-only">None</span>
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-1.5 text-muted-foreground">{description}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="forge-ui" data-testid="workflow-detail-inputs">
+                    <DataTable<InputRow>
+                      flush
+                      compact
+                      layout="fixed"
+                      ariaLabel="Inputs"
+                      columns={INPUT_COLUMNS}
+                      data={inputs.map(({ name, schema }) => ({ name, schema }))}
+                      getRowKey={(row) => row.name}
+                    />
+                  </div>
                 </CardInset>
               )}
             </div>
@@ -433,6 +414,42 @@ function DefinitionCard({
     </section>
   );
 }
+
+type InputRow = { name: string; schema: InputDef };
+
+const INPUT_COLUMNS: DataTableColumn<InputRow>[] = [
+  {
+    key: "name",
+    header: "Name",
+    width: "28%",
+    className: "truncate font-mono text-xs",
+    render: (_, { name }) => <span title={name}>{name}</span>,
+  },
+  { key: "type", header: "Type", width: "5rem", className: "text-xs text-muted-foreground", render: (_, { schema }) => schema.type ?? "" },
+  {
+    key: "default",
+    header: "Default",
+    width: "24%",
+    className: "truncate text-xs",
+    render: (_, { schema }) => {
+      const fallback = formatInputDefault(getInputDefault(schema));
+      return fallback ? (
+        <span title={fallback}>{fallback}</span>
+      ) : (
+        <span className="text-muted-foreground">
+          <span aria-hidden="true">—</span>
+          <span className="sr-only">None</span>
+        </span>
+      );
+    },
+  },
+  {
+    key: "description",
+    header: "Description",
+    className: "whitespace-normal py-1.5 align-top text-xs text-muted-foreground",
+    render: (_, { schema }) => getInputDescription(schema),
+  },
+];
 
 function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflowRef?: string; projectId?: string; scopeProjectId?: string }) {
   return (

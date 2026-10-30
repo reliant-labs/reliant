@@ -57,10 +57,10 @@ import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
-import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { ENV_ALL } from "../../Console/envScope";
+import { ENV_ALL, PLATFORM_SCOPE_LABEL } from "../../Console/envScope";
 import { ObsChartMarkersProvider, type ChartBand, type ChartMarker } from "../charts/UPlotChart";
 import { deliveryScopeOf } from "../deliveryScope";
 import { formatAgo } from "../format";
@@ -70,6 +70,10 @@ import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
 import { OrganizationCostsView } from "./OrganizationCostsView";
+import { OrganizationUsageView } from "./OrganizationUsageView";
+import { OrganizationBillingView } from "./OrganizationBillingView";
+import { LLMUsageView } from "./LLMUsageView";
+import { useNearViewport } from "./useNearViewport";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -98,6 +102,8 @@ import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
+import { OrgEnvPicker } from "./OrgEnvPicker";
+import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 
@@ -117,6 +123,11 @@ export interface DashboardViewProps {
   env: string;
   /** The project's recorded environments (id ↔ name). */
   environments: readonly ObsEnvironment[];
+  /** Every environment of the org, named `project/env`: what a `scope: "org"` dashboard reads and offers. */
+  orgEnvironments?: readonly ObsEnvironment[];
+  orgEnvironmentsLoading?: boolean;
+  orgEnvironmentsError?: Error | null;
+  onRetryOrgEnvironments?: () => void;
   search: DashboardSearch;
   onSearch: (next: Partial<DashboardSearch>) => void;
   onEnvChange: (env: string) => void;
@@ -126,26 +137,54 @@ export interface DashboardViewProps {
 
 const NO_MARKERS: readonly ChartMarker[] = [];
 
-export function DashboardView({ project, dashRef, env, environments, search, onSearch, onEnvChange, hrefs, navigateTo }: DashboardViewProps) {
+/** Release comparison on a platform dashboard: no environment, so no release. */
+const PLATFORM_NO_RELEASE: CompareTarget = {
+  mode: "unavailable",
+  reason: "A platform dashboard belongs to no environment, so there is no release to compare with.",
+};
+
+const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
+
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
-  const exploreLink = useExploreHref();
-
-  const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
-  const unrecorded = env !== ENV_ALL && !envId;
-  const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded && dashRef.kind !== "builtin" ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, project, envId, unrecorded, dashRef.kind]
-  );
+  const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
+  // The dashboard's own default when the URL names no range: a day-grained one
+  // declares "7d" and so never opens on a window that holds a single bucket.
+  const defaultRange = dashboardDefaultRange(spec?.defaultRange);
+  const range: RangePreset = search.range ?? defaultRange;
+
+  // A platform dashboard's signals belong to no environment: it reads them
+  // platform-wide whatever environment the top bar names.
+  const platform = spec?.scope === "platform";
+  // An org dashboard reads every project's environments: it names no project,
+  // lists the org's environments as project/env, and narrows by its own picker
+  // (the top bar's control is the route project's).
+  const orgScoped = spec?.scope === "org";
+  const orgRosterBlocked = orgScoped && (orgEnvironmentsLoading || !!orgEnvironmentsError);
+  const orgPick = useMemo(() => orgSelection(orgEnvironments, search.orgEnvs), [orgEnvironments, search.orgEnvs]);
+  const env = orgScoped ? orgPick.env : consoleEnv;
+  const environments = orgScoped ? orgEnvironments : projectEnvironments;
+  const envId = orgScoped ? (orgPick.ids.length === 1 ? orgPick.ids[0] : null) : env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
+  const unrecorded = !orgScoped && !platform && env !== ENV_ALL && !envId;
+  const envLabel = platform ? PLATFORM_SCOPE_LABEL : orgScoped ? orgScopeLabel(orgPick) : env === ENV_ALL ? "All environments" : env;
+  // Its drill-downs and explorers read the same org-wide scope: the org's
+  // pages on the picked environments, not the route project's console.
+  const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
+  const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
+  const scope = useMemo<ObsScope | null>(() => {
+    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
+    if (platform) return { orgId, envIds: [], filters: [], platformScope: true };
+    return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -165,19 +204,26 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const starred = starredHere ?? !!summary?.starred;
 
   // ── Markers, bands, comparison ──
-  const marks = !!spec && marksReleases(spec) && search.releases !== false;
+  const marks = !!spec && !platform && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
-  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
-  const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
+  // A platform dashboard belongs to no environment: the environment the top
+  // bar names (hidden for it) must not lend it that environment's alert bands
+  // or its last release to compare with. Previous-period comparison stays.
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
+  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  const scopeEnvIds = useMemo(
+    () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
+    [envId, environments, orgScoped, orgPick.ids]
+  );
   const bands = useMemo(
-    () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
-    [history.data, scopeEnvIds, search.service, search.alerts]
+    () => platform || search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
+    [platform, history.data, scopeEnvIds, search.service, search.alerts]
   );
   const now = Date.now();
-  const target = compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
-  const releaseCompare = compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);
@@ -214,7 +260,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const exitTv = useCallback(() => onSearch({ tv: undefined }), [onSearch]);
   const tvLayer = useEscapeLayer(tv, exitTv);
 
-  if (doc.isLoading || org.isLoading) return <DashboardSkeleton />;
+  if (doc.isLoading || org.isLoading || (orgScoped && orgEnvironmentsLoading)) return <DashboardSkeleton />;
+  if (orgScoped && orgEnvironmentsError) return <ObsError error={orgEnvironmentsError} subject="organization environments" onRetry={onRetryOrgEnvironments} />;
   if (!orgId && org.error) return <ObsError error={org.error} subject={project} onRetry={() => void org.refetch()} />;
   if (doc.error || !spec || !summary) {
     const missing = doc.error instanceof ConnectError && doc.error.code === Code.NotFound;
@@ -239,6 +286,9 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   }
 
   if (summary.viewKind === "organization-costs") return <OrganizationCostsView orgId={orgId!} />;
+  if (summary.viewKind === "organization-usage") return <OrganizationUsageView orgId={orgId!} />;
+  if (summary.viewKind === "organization-billing") return <OrganizationBillingView orgId={orgId!} />;
+  if (summary.viewKind === "llm-usage") return <LLMUsageView orgId={orgId!} />;
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
@@ -253,7 +303,10 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const refreshEvery = refreshMs(refresh);
   const processForPanel = (panel: Panel) => viewerQuery(spec, panel, search).services[0];
   const exploreHref = (panel: Panel): string | null =>
-    exploreLink?.(dashboardPivot(viewerQuery(spec, panel, search).panel, { service: processForPanel(panel), compare }), { range: search.range ? range : undefined }) ?? null;
+    // The range this dashboard is showing, explicit or its own default: the
+    // explorer link omits only the explorer's default, so a "7d" dashboard
+    // opens Explore on seven days, not one hour.
+    exploreLink?.(dashboardPivot(viewerQuery(spec, panel, search).panel, { service: processForPanel(panel), compare }), { range }) ?? null;
   const links = {
     traceHref: hrefs.trace,
     sessionHref: hrefs.session,
@@ -305,7 +358,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
               {
                 label: "Ask Reliant",
                 detail: "in a new chat",
-                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: range, env: env === ENV_ALL ? null : env }),
+                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: panel.minStep ? rangeForBucket(range, panel.minStep).range : range, env: env === ENV_ALL ? null : env }),
                 testId: `dashboard-panel-ask-${panel.id}`,
               },
               ...(editable && !layout
@@ -336,6 +389,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       env={env}
       environments={environments}
       range={range}
+      defaultRange={defaultRange}
       service={search.service}
       hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
       compare={compare}
@@ -345,6 +399,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       onEnvChange={onEnvChange}
       onSearch={onSearch}
       tv={tv}
+      orgPicker={orgScoped ? <OrgEnvPicker environments={orgEnvironments} selection={orgPick} onChange={(names) => onSearch({ orgEnvs: names.length ? names : undefined })} /> : undefined}
     />
   );
 
@@ -361,7 +416,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold tracking-tight text-ink">{summary.title}</h1>
             <p className="text-sm text-ink-muted">
-              {env === ENV_ALL ? "All environments" : env} · {RANGE_LABELS[range].toLowerCase()}
+              {envLabel} · {RANGE_LABELS[range].toLowerCase()}
               {refreshEvery ? ` · refreshes every ${refresh}` : ""}
             </p>
           </div>
@@ -584,7 +639,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           services={services}
           environments={environments}
           env={env}
-          scopeLabel={`${env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
+          scopeLabel={`${platform ? PLATFORM_SCOPE_LABEL : orgScoped ? envLabel : env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
           version={currentVersion}
           envScope={workspaceScope}
           saving={save.isPending}
@@ -793,6 +848,7 @@ function VariablesBar({
   env,
   environments,
   range,
+  defaultRange,
   service,
   hasProcessFilter,
   compare,
@@ -802,11 +858,13 @@ function VariablesBar({
   onEnvChange,
   onSearch,
   tv,
+  orgPicker,
 }: {
   scope: ObsScope | null;
   env: string;
   environments: readonly ObsEnvironment[];
   range: RangePreset;
+  defaultRange: RangePreset;
   service: string | undefined;
   hasProcessFilter: boolean;
   compare: CompareMode;
@@ -816,6 +874,8 @@ function VariablesBar({
   onEnvChange: (env: string) => void;
   onSearch: (next: Partial<DashboardSearch>) => void;
   tv: boolean;
+  /** An org dashboard's own environment picker; it replaces the console's one. */
+  orgPicker?: ReactNode;
 }) {
   const overview = useServiceOverview(scope, range);
   const names = useMemo(() => {
@@ -839,7 +899,8 @@ function VariablesBar({
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
       {/* The console's top bar is the one environment selector. Full screen
           hides the top bar, so only there does the dashboard offer its own. */}
-      {tv && (
+      {orgPicker}
+      {tv && !orgPicker && (
         <VariableSelect
           id="dashboard-var-env"
           label="env"
@@ -860,7 +921,7 @@ function VariablesBar({
         label="time"
         value={range}
         options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-        onChange={(value) => onSearch({ range: value === DEFAULT_RANGE ? undefined : (value as RangePreset) })}
+        onChange={(value) => onSearch({ range: value === defaultRange ? undefined : (value as RangePreset) })}
       />
       <Segmented
         label="Compare"
@@ -945,7 +1006,7 @@ function DashboardPanelCard({
   panel,
   queryPanel,
   scope,
-  range,
+  range: rangeOfCard,
   services,
   refreshEvery,
   target,
@@ -967,7 +1028,17 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
-  const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
+  // A panel that buckets by a fixed span (minStep: "1d") cannot be drawn from a
+  // window shorter than that span: it would return one bucket. Widen it to the
+  // smallest range holding two, and say so under the title; the other panels
+  // stay on the dashboard's range.
+  const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
+  const range = widening?.range ?? rangeOfCard;
+  // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
+  const [bodyRef, near] = useNearViewport();
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  // Not yet near is "not loaded yet", not "no data".
+  const query = near || queryPanel.kind === "search" ? rawQuery : { ...rawQuery, isLoading: true };
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
@@ -975,7 +1046,7 @@ function DashboardPanelCard({
     offsetMs:
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
-    enabled: comparable,
+    enabled: comparable && near,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1014,6 +1085,11 @@ function DashboardPanelCard({
             <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
             {query.data && <ObsAsOf updatedAt={query.dataUpdatedAt} className="mt-0.5" />}
             {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
+            {widening?.widened && (
+              <p className="truncate text-xs text-warning-ink" data-testid={`dashboard-panel-widened-${panel.id}`} title={`This panel groups by a ${bucketLabel(queryPanel.minStep)} bucket, so it shows ${RANGE_LABELS[range].toLowerCase()} instead of ${RANGE_LABELS[rangeOfCard].toLowerCase()}.`}>
+                Window smaller than this panel&apos;s {bucketLabel(queryPanel.minStep)} bucket: showing {RANGE_LABELS[range].toLowerCase()}
+              </p>
+            )}
           </div>
         </div>
         {layout ? (
@@ -1048,7 +1124,7 @@ function DashboardPanelCard({
           />
         )}
       </div>
-      <div className="px-4 pb-4 pt-2">
+      <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <PanelBody
           panel={queryPanel}
           query={query}
@@ -1081,7 +1157,9 @@ function DrillMenu({
     { label: "View logs", detail: "filtered to this series", href: hrefs.logs(searches.logs), testId: "drill-logs" },
     { label: "View traces", detail: "filtered to this series", href: hrefs.traces(searches.traces), testId: "drill-traces" },
   ];
-  if (searches.service) entries.push({ label: "Open workload", detail: searches.service, href: hrefs.workload(searches.service), testId: "drill-workload" });
+  // "" when no single workload is meant (an org dashboard over several environments).
+  const workload = searches.service ? hrefs.workload(searches.service) : "";
+  if (searches.service && workload) entries.push({ label: "Open workload", detail: searches.service, href: workload, testId: "drill-workload" });
   return (
     <PointMenu
       at={drill.at}

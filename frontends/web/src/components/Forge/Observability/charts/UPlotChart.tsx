@@ -176,6 +176,19 @@ export interface UPlotChartProps {
   onExemplarOpen?: (index: number, at: { x: number; y: number }) => void;
   /** After each layout: the indexes of the exemplars drawn on the plot. Every other one lies outside the axes. */
   onExemplarsPlaced?: (placed: readonly number[]) => void;
+  /**
+   * The window that was asked for, in epoch seconds. The x axis spans it, so
+   * one bucket sits where it falls in the window instead of filling a
+   * viewport sized around itself. Absent: the axis follows the data.
+   */
+  window?: { startSec: number; endSec: number };
+  /**
+   * The timestamps are calendar dates (a SQL Date column), not instants: each
+   * is that date's midnight in `timezone`. The axis and cursor label them as
+   * dates in that zone, whatever zone the browser is in, and a note under the
+   * chart says which. `bucketSeconds` names the bucket in that note.
+   */
+  calendar?: { timezone: "UTC"; bucketSeconds?: number };
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
@@ -195,6 +208,8 @@ export function UPlotChart({
   exemplars,
   onExemplarOpen,
   onExemplarsPlaced,
+  window: requested,
+  calendar,
 }: UPlotChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<ExemplarLayout | null>(null);
@@ -208,7 +223,12 @@ export function UPlotChart({
     [compact, own, inherited, timestamps]
   );
   const shown = useMemo(() => visibleBands(bands, timestamps), [bands, timestamps]);
-  const extent = useMemo(() => timeExtent(timestamps, markers), [timestamps, markers]);
+  const requestedStart = requested?.startSec;
+  const requestedEnd = requested?.endSec;
+  const extent = useMemo(
+    () => timeExtent(timestamps, markers, requestedStart === undefined || requestedEnd === undefined ? undefined : { startSec: requestedStart, endSec: requestedEnd }),
+    [timestamps, markers, requestedStart, requestedEnd]
+  );
   const annotationCounts = [
     markers.length ? `${markers.length} release${markers.length === 1 ? "" : "s"}` : "",
     shown.length ? `${shown.length} alert${shown.length === 1 ? "" : "s"}` : "",
@@ -243,6 +263,9 @@ export function UPlotChart({
       width,
       height,
       pxAlign: false,
+      // A calendar date is its UTC midnight: read in the browser's zone it is
+      // the previous evening for anyone west of Greenwich.
+      ...(calendar ? { tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), calendar.timezone) } : {}),
       cursor: compact ? { show: false } : { drag: { x: false, y: false } },
       legend: { show: legend ?? !compact },
       // The x axis reaches a marker in the last (or first) bucket's span: a
@@ -287,7 +310,7 @@ export function UPlotChart({
             },
           ],
       series: [
-        {},
+        calendar ? { value: "{YYYY}-{MM}-{DD}" } : {},
         ...series.map((s, index) => {
           const stroke = palette.tones[tones[index]];
           const solid = series.filter((candidate) => !candidate.dashed).length;
@@ -299,9 +322,12 @@ export function UPlotChart({
             fill: seriesFill(s, index, series, stroke, { area, compact, stacked, solid }),
             // A line cannot show a singleton or an observation surrounded
             // by nulls. Draw just those glyphs, never connect across a gap.
+            // A series with under two observations has no line at all: its
+            // marker is the whole series, so it is larger and solid.
             points: {
               show: false,
-              size: compact ? 4 : 6,
+              size: presentCount(s.values) < 2 ? (compact ? 5 : 9) : compact ? 4 : 6,
+              fill: stroke,
               filter: (u: uPlot, seriesIdx: number) => isolatedIndexes(u.data[seriesIdx]),
             },
             spanGaps: false,
@@ -337,13 +363,15 @@ export function UPlotChart({
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars, extent]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars, extent, calendar]);
 
   useEffect(() => {
     if (exemplars && layout) placedCallback.current?.(layout.dots.map((dot) => dot.index));
   }, [layout, exemplars]);
 
-  const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown)].filter(Boolean).join(" ");
+  const bucket = calendar ? bucketName(calendar.bucketSeconds) : "";
+  const calendarNote = calendar ? `${bucket ? `${bucket} buckets` : "Buckets"}: ${calendar.timezone} calendar dates` : "";
+  const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
 
   return (
     <figure className={exemplars ? cn("relative", className) : className} aria-label={label} role="group">
@@ -377,6 +405,11 @@ export function UPlotChart({
             );
           })}
         </div>
+      )}
+      {!compact && calendarNote && (
+        <p className="min-w-0 truncate text-xs text-ink-muted" data-testid="chart-bucket-note" aria-hidden="true">
+          {calendarNote}
+        </p>
       )}
       {!compact && annotationSummary && (
         <p className="min-w-0 truncate text-xs text-ink-muted" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
@@ -466,18 +499,43 @@ function layoutOf(u: uPlot, exemplars: readonly ChartExemplar[]): ExemplarLayout
 }
 
 /**
- * Bounds come from observations, never uPlot's pre-expanded singleton range.
- * With no second timestamp there is no known bucket cadence: use a one-minute
- * viewport centered on the observation, not a fabricated daily history.
- * Markers have already been filtered to the observed bucket span.
+ * The x axis. With the window the caller asked for, that window: a bucket sits
+ * where it falls in it, so one bucket of a day panel is one dot in a week, not
+ * a chart sized around itself. A bucket is labelled by its start, which can
+ * precede the window's (a calendar day that began before it did), so the axis
+ * reaches back to the first one, and out to a marker or bucket past the end.
+ *
+ * Without a window, bounds come from observations, never uPlot's pre-expanded
+ * singleton range. With no second timestamp there is no known bucket cadence:
+ * use a one-minute viewport centered on the observation, not a fabricated
+ * daily history. Markers have already been filtered to the observed bucket span.
  */
-export function timeExtent(timestamps: readonly number[], markers: readonly ChartMarker[] = []): [number, number] {
+export function timeExtent(
+  timestamps: readonly number[],
+  markers: readonly ChartMarker[] = [],
+  window?: { startSec: number; endSec: number }
+): [number, number] {
   const first = timestamps[0];
   const last = timestamps[timestamps.length - 1];
-  if (!Number.isFinite(first) || !Number.isFinite(last)) return [0, 60];
-  const min = Math.min(first, ...markers.map((m) => m.timeSec));
-  const max = Math.max(last, ...markers.map((m) => m.timeSec));
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return window ? [window.startSec, window.endSec] : [0, 60];
+  const min = Math.min(first, ...markers.map((m) => m.timeSec), ...(window ? [window.startSec] : []));
+  const max = Math.max(last, ...markers.map((m) => m.timeSec), ...(window ? [window.endSec] : []));
   return min === max ? [min - 30, max + 30] : [min, max];
+}
+
+function presentCount(values: ArrayLike<number | null | undefined>): number {
+  let n = 0;
+  for (let i = 0; i < values.length; i++) if (values[i] != null && Number.isFinite(values[i])) n++;
+  return n;
+}
+
+/** "1-day", "6-hour": how a bucket is named; empty when unknown. */
+export function bucketName(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return "";
+  if (seconds % 86_400 === 0) return `${seconds / 86_400}-day`;
+  if (seconds % 3_600 === 0) return `${seconds / 3_600}-hour`;
+  if (seconds % 60 === 0) return `${seconds / 60}-minute`;
+  return `${seconds}-second`;
 }
 
 /** Only observations with no adjacent measured neighbour need a glyph. */

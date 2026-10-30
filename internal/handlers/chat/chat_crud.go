@@ -10,6 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -41,16 +43,43 @@ func (s *Service) StartChat(
 ) (*connect.Response[reliantv1.StartChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	// The launch kind is the server's decision. A client can ask for exactly
-	// one non-default kind, builder.test, through builder_test; schedule,
-	// agent.start_run and manual.run have no way in through this RPC.
+	// two non-default kinds, builder.test through builder_test and cli.run
+	// through cli_run; schedule, agent.start_run and manual.run have no way in
+	// through this RPC.
 	eventKind := core.TriggerEventKindChatStart
-	if req.Msg.GetBuilderTest() {
-		if err := s.validateBuilderTest(ctx, userID, req.Msg); err != nil {
+	msg := req.Msg
+	switch {
+	case msg.GetBuilderTest() && msg.GetCliRun():
+		return nil, svcerr.InvalidArgument("builder_test and cli_run are different launch kinds; set at most one")
+	case msg.GetBuilderTest():
+		if err := s.validateBuilderTest(ctx, userID, msg); err != nil {
 			return nil, err
 		}
 		eventKind = core.TriggerEventKindBuilderTest
+	case msg.GetCliRun():
+		if msg.GetChatId() != "" {
+			return nil, svcerr.InvalidArgument("cli_run starts a new run; chat_id must be empty")
+		}
+		eventKind = core.TriggerEventKindCLIRun
+		if msg.Title == nil {
+			// A command-line run's first message is usually an instruction
+			// to the workflow, not a subject a generated title could name.
+			msg = proto.Clone(msg).(*reliantv1.StartChatRequest)
+			title := launch.RunTitle(msg.GetWorkflow(), firstUserContent(msg.GetMessages()), time.Now())
+			msg.Title = &title
+		}
 	}
-	return s.startChat(ctx, userID, req.Msg, eventKind, nil)
+	return s.startChat(ctx, userID, msg, eventKind, nil)
+}
+
+// firstUserContent is the text of the first user message, or "".
+func firstUserContent(messages []*reliantv1.InputMessage) string {
+	for _, m := range messages {
+		if m.GetRole() == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+			return m.GetContent()
+		}
+	}
+	return ""
 }
 
 // startChat is the start path every attended launch kind shares: StartChat's
@@ -118,8 +147,10 @@ func (s *Service) startChat(
 		ClientMessageID: clientID,
 
 		// An interactive start always had both of these, and still does. A
-		// branch is not a first turn of new work, so it skips the probe.
-		GenerateTitle:   true,
+		// branch is not a first turn of new work, so it skips the probe. A
+		// command-line run is always titled by StartChat (RunTitle), and a
+		// generated title would replace it with "Run X Workflow".
+		GenerateTitle:   eventKind != core.TriggerEventKindCLIRun,
 		GreenfieldProbe: msg.GetChatId() == "",
 	}
 	if jwt, ok := auth.GetUserJWT(userID); ok {
@@ -166,6 +197,15 @@ func (s *Service) startChat(
 			pinnedCopy := *wakeChat
 			pinnedCopy.ActiveDaemonID = &chosen
 			wakeChat = &pinnedCopy
+		}
+	}
+	// A new chat's workspace is a checkout on one machine: a chosen machine
+	// must be that one, and an unattributed workspace is settled first so the
+	// launcher pins a chat that names none to where its checkout is. A
+	// branch's worktree was checked by its pin above.
+	if msg.GetChatId() == "" && !spec.NoMachine {
+		if err := s.checkWorkspaceMachine(ctx, userID, msg.GetWorktreeId(), chosen); err != nil {
+			return nil, err
 		}
 	}
 	// A new chat has no row yet; the wake still has to target the machine the
@@ -249,7 +289,9 @@ func (s *Service) ListChats(
 		ProjectID:       projectID,
 		Limit:           limit,
 		ExcludeArchived: true,
-		SidebarOnly:     req.Msg.GetSidebarOnly(),
+		// The chat list holds conversations: USER-origin chats and adopted
+		// runs. Every other run lists under Runs (RunService.ListRuns).
+		SidebarOnly: true,
 	}
 
 	chats, err := s.deps.Repo.ListChats(ctx, filters)
@@ -387,6 +429,13 @@ func (s *Service) UpdateChat(
 		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve worktree"))
+		}
+		// A chat pinned to one machine cannot move into a workspace whose
+		// checkout is on another.
+		if chat.ActiveDaemonID != nil && resolved != nil {
+			if err := s.checkWorkspaceMachine(ctx, userID, *resolved, *chat.ActiveDaemonID); err != nil {
+				return nil, err
+			}
 		}
 		chat.WorktreeID = resolved
 	}
@@ -535,17 +584,39 @@ func (s *Service) DeleteChat(
 	}
 
 	// Otherwise, archive the chat
-	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, db.ChatStateArchived, "user_archived"); err != nil {
+	if err := s.archiveChat(ctx, chat, "user_archived"); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to archive chat"))
 	}
-
-	s.cancelArchivedChatWorkflow(ctx, chat)
 
 	return connect.NewResponse(&reliantv1.DeleteChatResponse{
 		Success:            true,
 		Message:            "Chat archived successfully",
 		PermanentlyDeleted: false,
 	}), nil
+}
+
+// archiveChat archives a chat and stops its run.
+//
+// The state change is made under the chat's run-control lock, the lock every
+// path that starts a run for the chat holds while it decides to (a send,
+// ContinueQueued's delivery of a message queued for the machine,
+// ResumePausedForMachine). So a delivery either finishes starting its run
+// before the archive — and the cancel below stops it — or reads the chat as
+// archived and drops the queued message. Without the lock a delivery that had
+// read the chat a moment earlier could start a run after the cancel, on a
+// chat the user had put away. The archive itself drops the chat's queued and
+// paused-for-machine markers (Repo.UpdateChatState), so nothing redelivers it
+// later either.
+func (s *Service) archiveChat(ctx context.Context, chat *db.Chat, reason string) error {
+	if s.runs != nil {
+		release := s.runs.LockRunControl(ctx, chat.ID)
+		defer release()
+	}
+	if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, reason); err != nil {
+		return err
+	}
+	s.cancelArchivedChatWorkflow(ctx, chat)
+	return nil
 }
 
 // cancelArchivedChatWorkflow stops the run of a chat that was just archived.
@@ -665,7 +736,7 @@ func (s *Service) GetChatUpdates(
 	}
 
 	// Get chat with ownership check (defense-in-depth via single query)
-	_, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	err := s.requireChatOwner(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -718,7 +789,7 @@ func (s *Service) ListChatPlans(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

@@ -3,7 +3,9 @@
 /**
  * "Runs on": the machine a new chat starts on, or No machine
  * (research/NO_MACHINE_CHATS.md §2.1). The default is decided by the caller
- * (lib/chatMachine.ts defaultChatMachine); this only renders the choice.
+ * (lib/chatMachine.ts defaultChatMachine); this only renders the choice, and
+ * offers "Make default" on each machine (DaemonInfo.is_default) when the
+ * caller wires onMakeDefault.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -22,13 +24,15 @@ import { machineDisplayName } from "@/lib/machineName";
 interface MachinePickerProps {
   value: ChatMachineChoice;
   onChange: (choice: ChatMachineChoice) => void;
-  daemons: ReadonlyArray<Pick<DaemonInfo, "daemonId" | "hostname" | "status">>;
+  daemons: ReadonlyArray<Pick<DaemonInfo, "daemonId" | "hostname" | "status"> & Partial<Pick<DaemonInfo, "isDefault">>>;
   /** The machine DEFAULT_MACHINE resolves to, for its label. */
   defaultDaemon?: Pick<DaemonInfo, "daemonId" | "hostname">;
+  /** Make a machine the user's default (SetDefaultDaemon). Absent: not offered. */
+  onMakeDefault?: (daemonId: string) => void;
   disabled?: boolean;
 }
 
-export function MachinePicker({ value, onChange, daemons, defaultDaemon, disabled }: MachinePickerProps) {
+export function MachinePicker({ value, onChange, daemons, defaultDaemon, onMakeDefault, disabled }: MachinePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +49,7 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, disable
   }, [isOpen]);
 
   const options = chatMachineOptions(daemons);
+  const userDefaultId = daemons.find((d) => d.isDefault)?.daemonId;
   const noMachine = value === NO_MACHINE;
   const selectedLabel = noMachine
     ? "No machine"
@@ -93,26 +98,43 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, disable
             {options.map((option) => {
               const selected =
                 value === option.value || (value === DEFAULT_MACHINE && defaultDaemon?.daemonId === option.value);
+              const isUserDefault = option.value === userDefaultId;
               return (
-                <button
+                <div
                   key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => choose(option.value)}
-                  className={cn(
-                    "w-full px-3 py-2 text-left text-xs transition-colors border-b border-border/50 hover:bg-muted",
-                    selected && "bg-muted",
-                  )}
+                  className={cn("group flex items-center border-b border-border/50 hover:bg-muted", selected && "bg-muted")}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{option.label}</div>
-                      <div className="text-xs text-muted-foreground">{option.statusLabel}</div>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => choose(option.value)}
+                    className="min-w-0 flex-1 px-3 py-2 text-left text-xs transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="truncate">{option.label}</span>
+                          {isUserDefault && (
+                            <span className="flex-shrink-0 text-2xs font-normal text-muted-foreground">Default</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{option.statusLabel}</div>
+                      </div>
+                      {selected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
                     </div>
-                    {selected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
-                  </div>
-                </button>
+                  </button>
+                  {onMakeDefault && !isUserDefault && (
+                    <button
+                      type="button"
+                      onClick={() => onMakeDefault(option.value)}
+                      aria-label={`Make ${option.label} your default machine`}
+                      className="mr-2 flex-shrink-0 rounded px-1.5 py-0.5 text-2xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      Make default
+                    </button>
+                  )}
+                </div>
               );
             })}
             <button

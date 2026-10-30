@@ -41,6 +41,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -173,6 +174,28 @@ func ListChatProviderBackoff(ctx context.Context, db orm.Context, chatID string)
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ProviderBackoffExtra struct {
+}
+
+// listChatsHeldOnUsageLimitSQL: which of the chats ?0 have a thread parked on
+// a usage-limit wait right now that began after ?1.
+const listChatsHeldOnUsageLimitSQL = `
+SELECT DISTINCT b.chat_id
+FROM provider_backoff b
+WHERE b.chat_id = ANY(?0::text[])
+  AND b.waiting_since IS NOT NULL
+  AND b.waiting_since > ?1
+  AND b.reason IN ('` + core.ReasonUsageLimit + `', '` + core.ReasonUsageLimitProbe + `')
+ORDER BY b.chat_id`
+
+// ListChatsHeldOnUsageLimit returns the chats among chatIDs with a thread
+// parked on a usage-limit wait that began after since
+// (listChatsHeldOnUsageLimitSQL).
+func ListChatsHeldOnUsageLimit(ctx context.Context, db orm.Context, chatIDs []string, since time.Time) ([]string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(listChatsHeldOnUsageLimitSQL, pgdialect.Array(chatIDs), since.UTC()).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 // listCapacityWakeTargetsSQL: the root workflow ids of userID's chats whose run

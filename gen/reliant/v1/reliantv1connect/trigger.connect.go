@@ -169,6 +169,11 @@ type TriggerServiceClient interface {
 	// trigger's filter and origin_filter are not evaluated, because the person
 	// replaying has decided the event is wanted.
 	//
+	// With trigger_id, previews an owned inline or declared automation against
+	// a sample payload using the actual event-fire mapping, including the full
+	// seeded user message. Works while paused and never enables it. Neither
+	// preview mode tests delivery, authentication, filters or workflow execution.
+	//
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
 	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
@@ -477,6 +482,11 @@ type TriggerServiceHandler interface {
 	// prompt, as a fire of that event would. Only the mapping applies: the
 	// trigger's filter and origin_filter are not evaluated, because the person
 	// replaying has decided the event is wanted.
+	//
+	// With trigger_id, previews an owned inline or declared automation against
+	// a sample payload using the actual event-fire mapping, including the full
+	// seeded user message. Works while paused and never enables it. Neither
+	// preview mode tests delivery, authentication, filters or workflow execution.
 	//
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.

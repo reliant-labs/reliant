@@ -1,7 +1,11 @@
 /**
  * The sidebar's half of the chat-list policy (WORKFLOW_UI.md §6.2, §6.3):
  *
- *  - The OPEN chat keeps its row even when ListChats({sidebarOnly}) omits it
+ *  - A run (origin other than USER: an automation's trigger, an agent, Run
+ *    now, a builder test) never renders as a chat row unless adopted, even
+ *    when one reaches the list cache: the PR pipeline alone starts tens an
+ *    hour, and they belong in Runs.
+ *  - The OPEN chat keeps its row even when ListChats omits it
  *    (rule 4, the L2 bug). An automation chat opened from Runs or the Inbox is
  *    never in the server list, and one that was listed only while awaiting
  *    input drops out of the next refetch once the user answers. Either way the
@@ -16,7 +20,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
-import { ChatState } from "../../gen/reliant/v1/chat_pb";
+import { ChatOrigin, ChatState } from "../../gen/reliant/v1/chat_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -299,5 +303,55 @@ describe("Move back to Runs", () => {
     );
 
     expect(rowFor(adoptedRun.id)).toBeNull();
+  });
+});
+
+describe("runs stay out of the chat list", () => {
+  const prReview = chat({
+    id: "chat-pr-review",
+    title: "Review queued reliant-labs/reliant#1870.",
+    origin: ChatOrigin.AUTOMATION,
+    launchKind: "integration",
+    triggerId: "trg-nightly",
+  });
+  const agentRun = chat({ id: "chat-agent-run", title: "cicd-probe", origin: ChatOrigin.AGENT, launchKind: "agent.start_run" });
+  const builderTest = chat({ id: "chat-builder-test", title: "test run", origin: ChatOrigin.BUILDER_TEST, launchKind: "builder.test" });
+  const userChat = chat({ id: "chat-user", title: "Fix the sidebar", origin: ChatOrigin.USER, launchKind: "chat.start" });
+  const adoptedPrReview = {
+    ...prReview,
+    id: "chat-pr-review-adopted",
+    title: "Review I took over",
+    adoptedAt: "2024-01-02T00:00:00.000Z",
+  };
+
+  it("renders a person's chat and an adopted run, and no unadopted run", () => {
+    // A list that somehow holds runs (a stale cache, an upsert): the client
+    // applies the same rule as the server.
+    fixtures.listed = [userChat, prReview, agentRun, builderTest, adoptedPrReview];
+    renderSidebar();
+
+    expect(rowFor(userChat.id)).not.toBeNull();
+    expect(rowFor(adoptedPrReview.id)).not.toBeNull();
+    expect(rowFor(prReview.id)).toBeNull();
+    expect(rowFor(agentRun.id)).toBeNull();
+    expect(rowFor(builderTest.id)).toBeNull();
+    expect(screen.queryByText("Review queued reliant-labs/reliant#1870.")).toBeNull();
+  });
+
+  it("keys on origin, not on the launch kind", () => {
+    // An automation's run continued with a chat.start event is still a run.
+    fixtures.listed = [userChat, { ...prReview, launchKind: "chat.start" }];
+    renderSidebar();
+
+    expect(rowFor(prReview.id)).toBeNull();
+  });
+
+  it("still shows the run the user has open (deep link, Inbox, Runs)", () => {
+    fixtures.listed = [userChat, prReview];
+    fixtures.detail = prReview;
+    openChat(prReview.id);
+    renderSidebar();
+
+    expect(rowFor(prReview.id)).not.toBeNull();
   });
 });

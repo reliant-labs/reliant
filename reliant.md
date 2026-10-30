@@ -38,36 +38,37 @@ Reliant is a **multi-tenant distributed system** with three server roles — **A
 
 Every log — backend, browser console, Electron — is under `.forge/logs/dev/` of the checkout that ran `forge env up dev`: `./.forge/logs/dev/` for this checkout's stack, `../control-plane/.forge/logs/dev/` for control-plane's (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_web.log` / `frontend_reliant-web.log` = UI `[browser:<level>]` lines). Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep. `./.reliant/tools/log-search.sh` greps them.
 
-## Merging to main: the merge-gate status is required
+## Merging to main: GitHub's native merge queue
 
-Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed, ~5 min), before every merge; the **release gate**, `task release:gate` (`scripts/release-gate.sh`: everything, `-race`, slow tests, integration, e2e; recorded per sha), before every release — `task release:tag` refuses a commit without a green record.
+Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed), before you ask for a merge; the **release gate**, `task release:gate`, before every release.
 
-GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
-commit status (ruleset "main: merge-gate required", head must be up to date
-with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
-merge queue merges main into the branch (never a rebase), squashes, runs
-`scripts/merge-gate.sh --amend` on that exact commit and posts the status:
+`main` merges only through GitHub's merge queue (ruleset "main: CI result +
+merge queue"; never bypass it, no `--admin`). It requires the `CI result` check,
+which CI (`.github/workflows/ci.yml`) runs on the queue's own merge group, so the
+commit that lands is the commit that was tested. **Review first:** a PR push runs
+nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
+runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
+main after the merge and gates the release, never the merge. Label a PR `ci:run`
+(then push) to run the merge gate on it before review.
 
-```bash
-/home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
-```
+**GitHub identity (owner, 2026-10-30):** implementation is yours: commit, push
+and open PRs as the user, with plain `git` and `gh`. Every review, label, comment
+on someone else's PR, enqueue and merge is the Reliant bot's (`reliant-labs[bot]`):
+run it through `reliant github gh --repo <owner/name> -- <gh args>`, or take a
+one-hour token scoped to that repository from `reliant github token --as app
+--repo <owner/name>`. Never review, label or merge as the owner's account
+(`reliant-01`): its ruleset bypass is the owner's alone. Fall back to the user
+only where the bot cannot act at all, and say so.
 
-Pool checkouts are granted first come, first served: a run prints its place in
-line and an estimated wait, and `merge_queue3.sh --status` shows the whole
-queue. A run you kill loses its place. When a run failed on a host flake or a
-test timeout, rerun it and it gets its old place back. For a test failure
-unrelated to your diff, rerun with `--flake-retry`.
-
-The only other way in is an audited waiver — a hotfix that cannot wait, or a
-gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
-comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:
-
-```bash
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
-```
-
-GitHub CI (`.github/workflows/ci.yml`) is a thin wrapper over the same tasks: `task ci:merge` on a PR, `task release:gate` on main and nightly.
+**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included.** Label
+the PR `merge:queue` and stop. The `pr-review` workflow reviews the exact head;
+on `review:passed` it enqueues it (`gh pr merge --auto --match-head-commit`).
+`CI result` is green on a PR within a minute, so auto-merge armed before the
+review puts the unreviewed head straight into the queue, where the review
+marker check (`scripts/ci-review-marker.sh`) fails it and every group behind
+it. `review:changes` means fix, push, and re-add `merge:queue`. Design:
+control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
+script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
 
 ## Load these skills before touching their area
 
@@ -99,14 +100,24 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `task test -- ./internal/<pkg>/...` (no `-short`, `-race`) once at the end;
   never the unscoped `task test` as a quick check (the whole module, web and
   electron).
-- **Two gate tiers.** The merge gate (and a PR's CI) runs only what the diff
+- **Two gate tiers.** The merge gate (and the merge queue's CI) runs only what the diff
   reaches, `-short`, direct importers only. The release gate on main runs
   everything in full: `-race`, every slow test, integration, e2e. So a slow
   test, or a package two imports away from your change, runs only there: when
   you touch code one covers, run its package with `task test -- ./<pkg>/...`.
-  New and changed tests run 3x (`task test:flake`): a test that fails on a
-  repeat is a flake to fix, never to re-run. A red main opens a `ci:main-red`
-  issue. Details: `dev-docs/merge-and-release-gates.md`.
+  New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
+  repeat does not merge. A red main opens a `ci:main-red` issue. Details:
+  `dev-docs/merge-and-release-gates.md`.
+- **A flaky test never blocks a merge or keeps main red** (owner, 2026-10-30:
+  "I'd rather remove a test than have it be flaky"). An existing test that
+  fails intermittently is fixed within the day, or deleted (the test, or just
+  its flaky assertion) in the same PR that finds it, with an issue labelled
+  `flake:removed` holding the test body, the failure signature and its
+  frequency, so coverage is restored on purpose later. A failure caused by the
+  host (inotify or fd budget exhausted, disk full) makes the test `t.Skip` with
+  a message naming the missing resource, never fail. Never re-run to green: the
+  `Flake report` workflow on main reruns failed tests once and files a
+  `flake:suspected` issue for each that then passes, without turning anything red.
 - **DB-backed tests need no database from you.** They use forge pgtest's
   shared embedded Postgres (the major `forge.yaml` declares, booted on first
   use and shared by every test process on the machine; each test gets its own
@@ -124,3 +135,9 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `testkit.Slow(t, "<why>")` first, which moves it off the merge gate into the
   release gate. Gate it, never weaken the assertion.
 - Anything expected to run >~2 min: `run_in_background` + `shell_wait`.
+- **Never start long work with `nohup`, a trailing `&`, `setsid` or `disown`.**
+  Use `run_in_background`: the daemon then owns the command's whole process
+  group, limits it, and `shell_kill` takes all of it down. What you detach
+  yourself is invisible to the daemon and to every other agent. On 2026-10-30
+  the shared machine ran out of processes (~5,200 bash) and was restarted,
+  killing every agent's work; gates started with `nohup … &` were part of it.

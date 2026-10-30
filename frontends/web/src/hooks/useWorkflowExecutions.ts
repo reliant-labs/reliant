@@ -20,7 +20,6 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { WorkflowExecutionData } from "../types/chat";
 import {
   WorkflowExecutionView,
-  WorkflowState,
   type GetWorkflowExecutionsResponse,
 } from "../gen/reliant/v1/chat_pb";
 import { subscribeToRefetch } from "../store/refetchStore";
@@ -31,8 +30,6 @@ interface UseWorkflowExecutionsResult {
   data: WorkflowExecutionData | null;
   /** All root workflows for this chat, sorted newest first */
   allWorkflows: WorkflowExecutionData[];
-  /** Whether any workflow is currently running */
-  hasRunningWorkflow: boolean;
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
@@ -194,14 +191,9 @@ export function useWorkflowExecutions(
   const all = query.data?.all ?? EMPTY_ALL;
   const latest = query.data?.latest ?? null;
 
-  const hasRunningWorkflow = all.some(
-    (wf) => wf.state === WorkflowState.ACTIVE,
-  );
-
   return {
     data: latest,
     allWorkflows: all,
-    hasRunningWorkflow,
     isLoading: query.isLoading,
     error: query.error,
     refetch: async () => {

@@ -1,0 +1,30 @@
+# Check suite requested: the projection of the GitHub `check_suite.requested` webhook.
+id: check_suite.requested
+event: check_suite.requested
+display_name: Check suite requested
+summary: A commit was pushed and asks the App for its checks.
+description: >-
+  Fires when a push creates a check suite for the App on a commit, asking it
+  to run its checks: every push to a branch, and every merge group GitHub's
+  merge queue builds (branch gh-readonly-queue/<base>/pr-<number>-<base sha>).
+  It is how an App reports a required check on a merge group, which the
+  pull_request events never name. Match branch and app; data.check_suite.head_sha
+  is the commit to report on. Fires for every push to every repository the
+  App is installed on, so filter on the branch.
+keywords: [check, suite, requested, merge queue, merge group, required check, commit]
+attributes:
+  - { name: branch, description: The branch the commit was pushed to., example: gh-readonly-queue/main/pr-42-6dcb09b5b57875f334f61aebed695e2e4193db5e, from: check_suite.head_branch }
+  - { name: app, description: The slug of the GitHub App the suite is for., example: reliant-labs, from: check_suite.app.slug }
+data:
+  check_suite:
+    kind: object
+    fields:
+      id: integer
+      status: string
+      head_sha: string
+      head_branch: string
+      before: string
+      after: string
+      app: { kind: object, object: app }
+      created_at: string
+      pull_requests: { kind: integers, pluck: number }

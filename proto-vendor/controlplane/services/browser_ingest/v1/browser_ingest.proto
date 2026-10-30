@@ -141,6 +141,10 @@ message EnsureKeyRequest {
     min_items: 1
     max_items: 32
   }];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message EnsureKeyResponse {
@@ -153,6 +157,10 @@ message ListKeysRequest {
   // Restrict to one environment. Empty lists every environment of the org.
   optional string environment_id = 1;
   optional bool include_revoked = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message ListKeysResponse {
@@ -161,6 +169,10 @@ message ListKeysResponse {
 
 message RevokeKeyRequest {
   string key_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RevokeKeyResponse {

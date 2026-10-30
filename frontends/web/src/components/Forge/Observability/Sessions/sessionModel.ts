@@ -155,6 +155,7 @@ export function sessionLink(sessionId: string, atMs?: number): ObsSearch {
     istatus: undefined,
     platform: undefined,
     isort: undefined,
+    assignee: undefined,
     q: undefined,
     errors: undefined,
     live: undefined,

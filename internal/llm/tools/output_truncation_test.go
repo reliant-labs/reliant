@@ -214,8 +214,10 @@ func TestOutputLimitsConstants(t *testing.T) {
 		assert.LessOrEqual(t, MaxReadSize, outputCeilingFor(ViewToolName),
 			"a read that outgrows its delivery ceiling is truncated twice, and the second "+
 				"cut is the one nobody accounted for")
+		assert.Equal(t, MaxReadSize, outputCeilingFor("github__repo_get_content"),
+			"reading a file through GitHub is the same act as view, so it carries the same ceiling")
 		assert.Equal(t, MaxOutputSize, outputCeilingFor(ShellToolName),
-			"only the read tool gets the larger ceiling — shell output volume is not chosen by the agent")
+			"only the read tools get the larger ceiling — shell output volume is not chosen by the agent")
 	})
 
 	t.Run("per-line and per-read limits stay positive", func(t *testing.T) {

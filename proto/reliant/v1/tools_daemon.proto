@@ -344,6 +344,48 @@ message DiskReport {
   // The worktree sweep re-checks a machine's kept workspaces once per episode
   // instead of waiting out their back-off.
   int64 guard_since_ms = 4;
+  // The machine's process count against its process limit (the daemon's
+  // capacity guard, internal/procguard). It travels with the disk report
+  // because both are the machine's resources and both feed its storage inbox
+  // item; unset for daemons that cannot count processes (macOS, Windows).
+  ProcessReport processes = 5;
+}
+
+// ProcessReport is how close a machine is to its process limit, and whose
+// processes are using it. On 2026-10-30 a machine ran out of processes (one
+// command re-running a CI gate inside itself) and had to be restarted; this is
+// what lets the daemon refuse new heavy work first, and the person see which
+// agent's command is the problem.
+message ProcessReport {
+  // Tasks (processes and threads) counted against the limit.
+  uint64 count = 1;
+  // The limit they are counted against: the daemon user's RLIMIT_NPROC, or
+  // the kernel's threads-max where that is tighter. 0 when unknown.
+  uint64 limit = 2;
+  // The daemon is refusing new background heavy commands: count passed 70%
+  // of limit, and has not fallen back below 60%.
+  bool refusing_heavy = 3;
+  // When the current refusal episode began (unix ms). Gateway-stamped and
+  // carried forward like DiskReport.pressure_since_ms; 0 while not refusing.
+  int64 refusing_since_ms = 4;
+  // The largest process trees, largest first (at most five).
+  repeated ProcessTree top = 5;
+}
+
+// ProcessTree is one command's processes on a machine.
+message ProcessTree {
+  // The agent (chat or sub-agent thread) whose tool call started the
+  // command; empty for processes the daemon did not start or cannot place.
+  string chat_id = 1;
+  // The command line, shortened.
+  string command = 2;
+  // Tasks (processes and threads) in the tree.
+  uint64 tasks = 3;
+  // False for processes no daemon command owns: started outside the daemon,
+  // or detached from their command (nohup, setsid).
+  bool tracked = 4;
+  // The chat's title, filled in by the server for display.
+  string chat_title = 5;
 }
 
 // DiskGuardState is what the daemon's disk guard (internal/diskguard) is doing
@@ -603,6 +645,31 @@ message ProjectConfigSnapshot {
   // concatenated content of {repo}/reliant.md + {repo}/reliant.local.md.
   // Populated eagerly by the daemon so cloud workers don't need filesystem access.
   map<string, bytes> repo_memories_md = 14;
+
+  // The git state the snapshot's .reliant files were read from: the project
+  // root's, then each nested repo's that holds a .reliant directory. It is
+  // what lets the server say which commit an automation's definition comes
+  // from, and warn when that is a feature branch or an uncommitted edit.
+  repeated SyncedRepoState repo_states = 15;
+}
+
+// SyncedRepoState is one repository's git state at snapshot time.
+message SyncedRepoState {
+  // The repo's slash-separated path relative to the project root; "" for
+  // the project root itself.
+  string repo = 1;
+  // The checked-out branch, "" when HEAD is detached.
+  string branch = 2;
+  // HEAD's commit SHA (full), "" for a repository with no commits.
+  string commit_sha = 3;
+  // True when the repo's .reliant directory has uncommitted changes
+  // (modified, staged or untracked files): what syncs is not what is
+  // committed.
+  bool dirty = 4;
+  // origin's default branch ("main"), "" when the clone does not know it.
+  string default_branch = 5;
+  // Why the state could not be read in full, "" when it was.
+  string error = 6;
 }
 
 message ProjectConfigDelta {
@@ -778,6 +845,12 @@ message DaemonCommandRequest {
   // sender to have filtered, so any caller that speaks this protocol is
   // covered.
   optional ConnectorPolicy policy = 5;
+
+  // trace_context is the W3C trace context (traceparent/tracestate/baggage)
+  // of the gateway span that forwarded this command, as ToolRequest's is. The
+  // daemon continues it, so every log line it writes for the command carries
+  // the dispatching request's trace_id.
+  map<string, string> trace_context = 6;
 }
 
 // ConnectorPolicy is the wire form of a connector grant, resolved by the
@@ -817,6 +890,12 @@ message DaemonCommandResponse {
   bool success = 3;
   bytes payload = 4; // JSON-encoded response
   string error_message = 5;
+  // handler_elapsed_ms is how long the daemon spent running the command, from
+  // receipt to the response being built. The daemon exports no spans, so this
+  // is the gateway span's only view of the daemon side: the rest of the round
+  // trip is the stream in both directions and the daemon's send backlog.
+  // 0 when the daemon refused the command before running it.
+  int64 handler_elapsed_ms = 7;
 }
 
 // ============================================

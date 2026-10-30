@@ -73,7 +73,7 @@ function message(index: number, role: MessageRole, overrides: Partial<Message> =
   } as Message;
 }
 
-const fromAgent = (index: number, body = `message ${index}`): Message =>
+const fromAgent = (index: number, body = `message ${index}`, subject = ""): Message =>
   message(index, MessageRole.USER, {
     contentBlocks: [{ id: `m${index}-text`, index: 0, type: ContentBlockType.TEXT, content: body }],
     sender: {
@@ -81,6 +81,7 @@ const fromAgent = (index: number, body = `message ${index}`): Message =>
       threadId: "thread-reviewer",
       title: "Reviewer",
       kind: AgentMessageKind.MESSAGE,
+      subject,
     },
   });
 
@@ -108,7 +109,7 @@ describe("a sender-tagged USER message in the timeline", () => {
     expect(screen.getByTestId("user-or-assistant-m0")).toBeTruthy();
     expect(screen.queryByTestId("user-or-assistant-m1")).toBeNull();
     const card = screen.getByTestId("agent-message-card");
-    expect(card.textContent).toContain("Message from");
+    expect(card.textContent).toContain("from");
     expect(card.textContent).toContain("Reviewer");
     expect(card.textContent).toContain("message 1");
   });
@@ -129,27 +130,44 @@ describe("a sender-tagged USER message in the timeline", () => {
     expect(onSelectThread).toHaveBeenCalledWith("thread-reviewer");
   });
 
-  it("collapses a long body behind a toggle", () => {
+  it("shows only the subject, collapsed, and expands to the full body", () => {
     render(
       <InterleavedTimeline
-        messages={[fromAgent(1, "x".repeat(2000))]}
+        messages={[fromAgent(1, "The full report.\n\nWith a second paragraph.", "Tests pass; PR ready")]}
         chatId="chat-1"
         isStreaming={false}
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: /show more/i });
+    expect(screen.getByTestId("agent-message-subject").textContent).toBe("Tests pass; PR ready");
+    expect(screen.queryByTestId("agent-message-body")).toBeNull();
+    expect(screen.queryByText(/The full report/)).toBeNull();
+
+    const toggle = screen.getByRole("button", { name: /Tests pass; PR ready/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: /show less/i }).getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("agent-message-body").textContent).toContain("With a second paragraph.");
+
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId("agent-message-body")).toBeNull();
   });
 
-  it("keeps a short body uncollapsed", () => {
+  it("falls back to a truncated first line when the message has no subject", () => {
     render(
-      <InterleavedTimeline messages={[fromAgent(1, "ack")]} chatId="chat-1" isStreaming={false} />,
+      <InterleavedTimeline
+        messages={[fromAgent(1, `\n## ${"Long heading ".repeat(20)}\n\nbody text`)]}
+        chatId="chat-1"
+        isStreaming={false}
+      />,
     );
 
-    expect(screen.queryByRole("button", { name: /show (more|less)/i })).toBeNull();
+    const subject = screen.getByTestId("agent-message-subject").textContent ?? "";
+    expect(subject.startsWith("Long heading Long heading")).toBe(true);
+    expect(subject.endsWith("…")).toBe(true);
+    expect(subject.length).toBeLessThanOrEqual(100);
+    expect(subject).not.toContain("#");
+    expect(screen.queryByText(/body text/)).toBeNull();
   });
 
   it("does not take a user bubble's place as a turn boundary", () => {

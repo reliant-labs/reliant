@@ -22,7 +22,11 @@ func ParseWorkflow(data []byte) (*reliantv1.Workflow, error) {
 		return nil, fmt.Errorf("v2yaml: expected document node")
 	}
 
-	return unmarshalWorkflow(doc.Content[0])
+	wf, err := unmarshalWorkflow(doc.Content[0])
+	if err != nil {
+		return nil, withVersionSkewHint(err)
+	}
+	return wf, nil
 }
 
 // MarshalWorkflow serializes a *reliantv1.Workflow to YAML bytes.
@@ -114,6 +118,12 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "triggers":
 			wf.Triggers, err = unmarshalWorkflowTriggers(val)
 
+		case "concurrency":
+			wf.Concurrency, err = unmarshalWorkflowConcurrency(val)
+
+		case "requires":
+			wf.Requires, err = unmarshalWorkflowRequirements(val)
+
 		case "on_failure", "onFailure":
 			wf.OnFailure, err = unmarshalWorkflow(val)
 
@@ -123,7 +133,7 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			sequenceNode = val
 
 		default:
-			return nil, fmt.Errorf("unknown workflow field: %q", key)
+			return nil, unknownField(key, "unknown workflow field: %q", key)
 		}
 
 		if err != nil {
@@ -396,6 +406,16 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// a chat starting the workflow is the default.
 	if wf.AutomationOnly {
 		m.Content = append(m.Content, scalarNode("automation_only", ""), scalarNode("true", "!!bool"))
+	}
+	if wf.Concurrency != nil {
+		policy, err := marshalWorkflowConcurrency(wf.Concurrency)
+		if err != nil {
+			return nil, err
+		}
+		m.Content = append(m.Content, scalarNode("concurrency", ""), policy)
+	}
+	if req := marshalWorkflowRequirements(wf.Requires); req != nil {
+		m.Content = append(m.Content, scalarNode("requires", ""), req)
 	}
 
 	// apiVersion

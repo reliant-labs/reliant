@@ -455,16 +455,17 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	req := &daemon.RunCommandRequest{
 		Command:     params.Command,
 		WorkingDir:  workingDir,
-		Env:         params.Env,
+		Env:         withChatEnv(params.Env, rctx.ChatID),
 		TimeoutMs:   params.Timeout,
 		Credentials: credentials,
 		Heavy:       params.Heavy,
+		ChatID:      chatID,
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
 		// so the neutral assignments keep it from failing open. A caller's own
 		// env cannot restore a credential: the daemon strips them again.
-		req.Env = neutralCredentialEnv(params.Env)
+		req.Env = neutralCredentialEnv(req.Env)
 	}
 
 	// Handle background execution
@@ -724,6 +725,31 @@ func shouldRunInBackground(command string) bool {
 	}
 
 	return true
+}
+
+// ChatIDEnv names the chat a shell command runs for. Every command a chat runs
+// carries it, so what the command makes can say whose it is: a pull request
+// opened from the shell embeds `<!-- reliant-chat: $RELIANT_CHAT_ID -->`
+// (github__pr_create adds the marker itself), and automations that react to
+// the pull request later (control-plane's pr-fix) hand their news to that
+// chat before starting anyone else.
+const ChatIDEnv = "RELIANT_CHAT_ID"
+
+// withChatEnv is the request env with ChatIDEnv set to chatID, unless the
+// caller set it. own is never modified.
+func withChatEnv(own map[string]string, chatID string) map[string]string {
+	if chatID == "" {
+		return own
+	}
+	if _, set := own[ChatIDEnv]; set {
+		return own
+	}
+	env := make(map[string]string, len(own)+1)
+	for k, v := range own {
+		env[k] = v
+	}
+	env[ChatIDEnv] = chatID
+	return env
 }
 
 // neutralCredentialEnv is a request env for a credentials-none command: the

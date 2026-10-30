@@ -113,10 +113,18 @@ type failureRecorder struct {
 	nodeID, nodePath string
 	attempt          int
 	set              bool
+	// parent is the enclosing scope's recorder: a ref'd child that has its
+	// own on_failure records its failures for itself AND for the run, so
+	// both handlers see where it happened.
+	parent *failureRecorder
 }
 
 func (r *failureRecorder) record(nodePath string, attempt int) {
-	if r == nil || r.set || nodePath == "" {
+	if r == nil || nodePath == "" {
+		return
+	}
+	r.parent.record(nodePath, attempt)
+	if r.set {
 		return
 	}
 	r.set = true
@@ -141,12 +149,18 @@ func withFailureRecorder(ctx workflow.Context, rec *failureRecorder) workflow.Co
 // recordFailedNode notes that the node at this path is where the run failed.
 // A no-op when no recorder is attached.
 func recordFailedNode(ctx workflow.Context, nodePath string, attempt int) {
-	if ctx == nil {
-		return
-	}
-	if rec, ok := ctx.Value(failureRecorderKey{}).(*failureRecorder); ok {
+	if rec := failureRecorderFrom(ctx); rec != nil {
 		rec.record(nodePath, attempt)
 	}
+}
+
+// failureRecorderFrom is the recorder attached to ctx, or nil.
+func failureRecorderFrom(ctx workflow.Context) *failureRecorder {
+	if ctx == nil {
+		return nil
+	}
+	rec, _ := ctx.Value(failureRecorderKey{}).(*failureRecorder)
+	return rec
 }
 
 // failureFor builds the Failure of a run that ended with retErr and the
@@ -221,6 +235,25 @@ func runOnFailure(
 	failure Failure,
 	record *OnFailureRecord,
 ) {
+	runOnFailureAt(ctx, handler, input, workflowID, execCtx, childTracker, nodeOutputs, failure, record, "")
+}
+
+// runOnFailureAt runs a handler whose workflow sits at scopePath in the run's
+// graph: "" for the root workflow, the node path of the `workflow:` node that
+// ran a ref'd child ("release"), so the handler's nodes are addressed
+// "release.on_failure.<id>" and never collide with the root handler's.
+func runOnFailureAt(
+	ctx workflow.Context,
+	handler *reliantv1.Workflow,
+	input WorkflowInput,
+	workflowID string,
+	execCtx *ExecutionContext,
+	childTracker *ChildWorkflowTracker,
+	nodeOutputs map[string]interface{},
+	failure Failure,
+	record *OnFailureRecord,
+	scopePath string,
+) {
 	logger := workflow.GetLogger(ctx)
 	*record = OnFailureRecord{Ran: true, NodeID: failure.NodeID, NodePath: failure.NodePath, Error: failure.Error,
 		ErrorCode: failure.ErrorCode, Attempt: failure.Attempt}
@@ -267,7 +300,8 @@ func runOnFailure(
 		return
 	}
 	// The handler's thread is the run's own: it reports where the run reports.
-	exec = exec.WithInvocationContract(inlineHandlerContract(input.WorkflowName)).
+	exec = exec.WithInvocationContract(inlineHandlerContract(input.WorkflowName, joinNodePath(scopePath, OnFailureNodeID))).
+		WithNodePathPrefix(scopePath).
 		WithSeedNodeOutputs(snapshot).
 		WithExecContext(execCtx.ForChild(OnFailureNodeID, model.ThreadModeInherit, input.WorkflowName, true)).
 		WithProjectPath(execCtx.ProjectPath).
@@ -275,6 +309,7 @@ func runOnFailure(
 
 	logger.Info("[Workflow Runtime] Running on_failure handler",
 		"workflowID", workflowID,
+		"scope", scopePath,
 		"failedNode", failure.NodePath,
 		"errorCode", failure.ErrorCode,
 	)
@@ -322,9 +357,9 @@ func failFastPauseController() *PauseController {
 
 // inlineHandlerContract is the semantic contract of the handler as an inline
 // body: it inherits the run's inputs by reference and carries its own graph.
-func inlineHandlerContract(workflowName string) core.SubWorkflowContract {
+func inlineHandlerContract(workflowName, nodePath string) core.SubWorkflowContract {
 	return core.SubWorkflowContract{
-		NodePath:          OnFailureNodeID,
+		NodePath:          nodePath,
 		NodeID:            OnFailureNodeID,
 		NodeType:          model.NodeTypeWorkflow,
 		InvocationMode:    core.InvocationModeInline,

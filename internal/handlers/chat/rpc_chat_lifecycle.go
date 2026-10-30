@@ -62,14 +62,14 @@ func (s *Service) UpdateChatState(
 		reason = "user_archived"
 	}
 
-	// Update the state
-	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, newState, reason); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
-	}
-
-	// If archiving, also cancel any running workflow
+	// Update the state; archiving also stops the chat's run.
 	if newState == db.ChatStateArchived {
-		s.cancelArchivedChatWorkflow(ctx, chat)
+		err = s.archiveChat(ctx, chat, reason)
+	} else {
+		err = s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, newState, reason)
+	}
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateChatStateResponse{
@@ -90,7 +90,7 @@ func (s *Service) TerminateChat(
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -122,7 +122,7 @@ func (s *Service) PauseChat(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -289,7 +289,7 @@ func (s *Service) DismissChat(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -330,7 +330,7 @@ func (s *Service) MarkUnreadChat(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -379,7 +379,7 @@ func (s *Service) CompactChat(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

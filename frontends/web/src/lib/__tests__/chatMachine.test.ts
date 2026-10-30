@@ -148,6 +148,28 @@ describe("defaultMachineDaemon", () => {
       expect(defaultMachineDaemon([cloud, laptop], undefined)?.daemonId).toBe("d-laptop");
     });
   });
+
+  // Prod 2026-10-29: the owner added a CI machine and new chats followed it,
+  // because "first connected" is whichever machine the list happens to put
+  // first. A machine the user made their default wins over that rule.
+  describe("with a default machine", () => {
+    const mine = { ...machine(DaemonStatus.SUSPENDED, "d-default", "default", "managed"), isDefault: true };
+    const cicd = machine(DaemonStatus.ACTIVE, "d-cicd", "cicd", "managed");
+    const laptop = machine(DaemonStatus.ACTIVE, "d-laptop");
+
+    it("names the default in any state, over connected machines", () => {
+      expect(defaultMachineDaemon([cicd, laptop, mine])?.daemonId).toBe("d-default");
+    });
+
+    it("yields to a machine that has the project when the default does not", () => {
+      expect(defaultMachineDaemon([cicd, mine], new Set(["d-cicd"]))?.daemonId).toBe("d-cicd");
+      expect(defaultMachineDaemon([cicd, mine], new Set(["d-cicd", "d-default"]))?.daemonId).toBe("d-default");
+    });
+
+    it("falls back to the machine-state rule once the default is gone", () => {
+      expect(defaultMachineDaemon([cicd, laptop])?.daemonId).toBe("d-laptop");
+    });
+  });
 });
 
 describe("installedDaemonIds", () => {

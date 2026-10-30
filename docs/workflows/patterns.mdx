@@ -680,6 +680,8 @@ on_failure:
 
 **What it cannot do.** It cannot change the verdict: the run still ends failed. An error in the handler is logged and recorded, never handled again, and a handler is cut off after five minutes. It has no `inputs`, `outputs` or nested `on_failure`, shares no node ids with the main graph, and may not contain `approval` or `ask_question` nodes.
 
+**A child's handler.** A workflow started by a `workflow:` node with `ref:` keeps its own `on_failure`. When that child fails (an unhandled error in it, or one of its nodes declares `outcome: failure`), its handler runs once, inside the child's scope (the child's `inputs` and `nodes`, and a `failure.node_path` relative to the child), before the failure reaches the parent. The parent's handler then runs as usual. So a wrapper like `release-cp`, whose only node runs `project://release`, still gets `release`'s cleanup. The child's handler nodes are named `<node>.on_failure.<id>` in scenarios (`release.on_failure.reconcile_tag`). An `inline:` body has no handler of its own, and a loop's `ref:` body's handler does not run.
+
 **Make failures reach it.** A path that ends normally after a "blocked" or "could not finish" message is a success to the platform: it is auto-archived and never reaches the handler. Give that terminal node `outcome: failure`.
 
 **Testing.** Name the handler's nodes `on_failure.<node>` in a scenario's `events`, `completed` and `messages`, and assert `expect.on_failure` (`ran`, `node_id`, `error_code`, `attempt`, `error_contains`, `handler_failed`).

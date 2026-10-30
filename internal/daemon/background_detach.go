@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // The "push to background" seam lives here, next to ClassifyExecOutcome,
@@ -79,6 +80,9 @@ type DetachOptions struct {
 	// exactly once, so on adoption the channel is handed to the background
 	// manager rather than waited on twice.
 	WaitErrCh chan error
+	// Tree is the command's process tree; on adoption the background manager
+	// takes it over (releases it, and kills all of it).
+	Tree *proctree.Tree
 }
 
 // PollForBackgroundDetach waits for the command to finish OR for the user to ask
@@ -129,6 +133,7 @@ func PollForBackgroundDetach(ctx context.Context, opts DetachOptions) (CommandRe
 				StdoutBuf:  opts.StdoutBuf,
 				StderrBuf:  opts.StderrBuf,
 				WaitErrCh:  opts.WaitErrCh,
+				Tree:       opts.Tree,
 			})
 			if adoptErr != nil {
 				// Adoption failed: the command is still running and still owned

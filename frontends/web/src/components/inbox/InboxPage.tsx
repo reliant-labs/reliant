@@ -62,12 +62,14 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.APPROVAL]: "Approvals",
   [InboxItemKind.QUESTION]: "Questions",
   [InboxItemKind.WAITING_FOR_MACHINE]: "Waiting for a machine",
-  [InboxItemKind.AUTOMATION_FAILING]: "Failing automations",
+  [InboxItemKind.AUTOMATION_FAILING]: "Failing or broken automations",
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
   [InboxItemKind.RUN_FINISHED]: "Finished runs",
   [InboxItemKind.STORAGE]: "Storage",
   [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
+  [InboxItemKind.AUTOMATION_RUN_PAUSED]: "Paused automation runs",
+  [InboxItemKind.AUTOMATION_DEFINITION_BROKEN]: "Broken workflow definitions",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */

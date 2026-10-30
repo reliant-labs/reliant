@@ -5,8 +5,12 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -53,10 +57,14 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	// test-scoped so a parallel run cannot steal our fires.
 	taskQueue := "trigger-e2e-" + uuid.NewString()
 
+	// Hold the root's real Temporal start after the launch transaction commits.
+	// This deterministically exercises the window where LAUNCHED is durable
+	// intent, but does not yet prove that Temporal has accepted the root run.
+	rootClient := &triggerRootStartBarrier{Client: temporalClient, release: make(chan struct{})}
 	launcher := launch.NewLauncher(
 		repo,
 		threads.NewService(repo),
-		temporalClient,
+		rootClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue,
 	)
@@ -153,12 +161,36 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	// would resolve to this same chat rather than a second one.
 	assert.Equal(t, *launched.ChatID, chat.ID)
 
-	// And Temporal actually started the root run — the step that turns a row
-	// into a running session.
+	// LAUNCHED is committed before the root's Temporal start. Wait for the
+	// real start within the SAME 90s budget, keeping the worker alive rather
+	// than treating a transient NotFound as a failed launch and cancelling it.
 	require.NotNil(t, chat.WorkflowID, "the chat must record its root workflow id")
-	desc, err := temporalClient.DescribeWorkflowExecution(ctx, *chat.WorkflowID, "")
-	require.NoError(t, err, "the chat's root workflow was never started in Temporal")
+	startCtx, cancelStart := context.WithDeadline(ctx, deadline)
+	defer cancelStart()
+	var desc *workflowservice.DescribeWorkflowExecutionResponse
+	for {
+		desc, err = rootClient.DescribeWorkflowExecution(startCtx, *chat.WorkflowID, "")
+		if err == nil {
+			break
+		}
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound, "unexpected error checking the chat's root workflow")
+		select {
+		case <-startCtx.Done():
+			t.Fatalf("the chat's root workflow was never started in Temporal within 90s: %v", err)
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 	assert.Equal(t, *chat.WorkflowID, desc.GetWorkflowExecutionInfo().GetExecution().GetWorkflowId())
+	assert.Equal(t, v2workflow.WorkflowDynamic, desc.GetWorkflowExecutionInfo().GetType().GetName())
+
+	// Accepted by Temporal is not the end of the fire activity: the launcher
+	// still records run ids. Await its result before teardown can cancel it.
+	var fire triggers.FireOutput
+	require.NoError(t, temporalClient.GetWorkflow(startCtx, launched.DedupeKey, "").Get(startCtx, &fire))
+	assert.Equal(t, string(core.TriggerEventLaunched), fire.Outcome)
+	assert.Equal(t, chat.ID, fire.ChatID)
+	assert.Equal(t, launched.ID, fire.EventID)
 
 	// The seed messages reached the thread: the prompt, plus the hidden note
 	// telling the agent nobody is watching.
@@ -367,6 +399,31 @@ func TestManualFireEndToEnd(t *testing.T) {
 	require.NotNil(t, launched, "a manual fire of a DISABLED trigger must still launch")
 	assert.Equal(t, fireID, launched.DedupeKey)
 	assert.Equal(t, true, launched.Payload["manual"])
+}
+
+// triggerRootStartBarrier delegates to real Temporal, but holds the launcher's
+// start until the first Describe has observed the committed-before-start window.
+// The old one-shot assertion must fail in that window; a completion barrier must
+// keep the worker alive until the real start has happened.
+type triggerRootStartBarrier struct {
+	client.Client
+	release chan struct{}
+	once    sync.Once
+}
+
+func (c *triggerRootStartBarrier) ExecuteWorkflow(ctx context.Context, opts client.StartWorkflowOptions, wf interface{}, args ...interface{}) (client.WorkflowRun, error) {
+	select {
+	case <-c.release:
+		return c.Client.ExecuteWorkflow(ctx, opts, wf, args...)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (c *triggerRootStartBarrier) DescribeWorkflowExecution(ctx context.Context, workflowID, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	desc, err := c.Client.DescribeWorkflowExecution(ctx, workflowID, runID)
+	c.once.Do(func() { close(c.release) })
+	return desc, err
 }
 
 // mockModelTriggerParams names the mock LLM driver, mirroring

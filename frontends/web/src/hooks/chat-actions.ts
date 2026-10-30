@@ -61,26 +61,32 @@ function chatOf<R extends { chat?: Parameters<typeof convertProtoChat>[0] }>(res
  * The sidebar's chat list: one project's chats, or every project's when
  * `projectId` is undefined (the "All projects" view). `mainWorktrees` carries
  * the main workspace of each project in that scope.
+ *
+ * Pass the query's `signal`: a refetch that supersedes this one aborts it, and
+ * the abort cancels the server's read too. Without it a cancelled fetch kept
+ * running to completion on the server, so a burst of invalidations piled up
+ * that many concurrent ListChats against the database.
  */
-export async function listChats(projectId?: string): Promise<{
+export async function listChats(
+  projectId?: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{
   chats: Chat[];
   lastUserUpdateSequence: number;
   mainWorktrees: WorktreeSummary[];
 }> {
   const response = await client.listChats({
     projectId: projectId ?? "",
-    // The chat list is the sidebar's: it lists conversations the
-    // user is having. Runs an automation started live on the Automations
-    // pages instead, and the server keeps any that are waiting on the user
-    // (pending approval/question) in this list so they cannot go unseen.
-    // Filtering server-side, not in the sidebar, is what stops a busy
-    // schedule from filling the default 100-chat page and pushing real
-    // conversations out of it. An automation chat is still reachable by id
-    // (GetChat) — see resolveChat in hooks/chat-queries.ts.
-    sidebarOnly: true,
+    // ListChats is the chat list: the server returns only conversations
+    // (USER-origin chats and runs the user adopted). Runs an automation,
+    // an agent or the CLI started live in Runs; one waiting on the user
+    // surfaces in the Inbox. Filtering server-side is what stops a busy
+    // automation from filling the page and pushing real conversations out
+    // of it. A run is still reachable by id (GetChat) — see resolveChat in
+    // hooks/chat-queries.ts.
     // Across every project a page has to hold more than one project's worth.
     ...(projectId ? {} : { limit: ALL_PROJECTS_CHAT_LIMIT }),
-  });
+  }, { signal: options.signal });
   return {
     chats: response.chats.map(convertProtoChat),
     lastUserUpdateSequence: Number(response.lastUserUpdateSequence),

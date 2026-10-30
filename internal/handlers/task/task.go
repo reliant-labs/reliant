@@ -45,7 +45,7 @@ func (s *Service) taskBelongsToUser(ctx context.Context, taskID string, userID s
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -79,7 +79,7 @@ func (s *Service) CreateTask(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -198,7 +198,7 @@ func (s *Service) ListTasks(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

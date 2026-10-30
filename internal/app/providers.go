@@ -51,9 +51,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
+	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -405,15 +408,31 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 	return claimcheck.NewPostgresStore(d.DB.ORM()), nil
 }
 
-// TemporalClient is the process's client of the external Temporal server.
-type TemporalClient struct{ Client client.Client }
+// TemporalClient is the process's client of the external Temporal server, and
+// the namespace it was dialed for (a raw workflowservice request, such as a
+// reset, must name it itself).
+type TemporalClient struct {
+	Client    client.Client
+	Namespace string
+}
 
 // TemporalClientDeps is the server, and the boot context the first dial
-// waits under.
+// waits under. NATS carries the stop nudges the client publishes.
 type TemporalClientDeps struct {
 	Ctx          context.Context
 	Temporal     *configv1.TemporalConfig
 	PayloadStore *claimcheck.PostgresStore
+	NATS         *NATSConn
+}
+
+// stopSignals are the signals that stop running activities of the workflow
+// they are sent to: a pause, an interrupt of a thread, a cancel of a spawned
+// thread. A successful one is nudged to the workers (stopnudge), so the
+// activities it cancels stop within a second instead of a heartbeat window.
+var stopSignals = []string{
+	v2workflow.SignalPause,
+	wfruntime.InterruptThreadSignalName,
+	threadcancel.SignalName,
 }
 
 // NewTemporalClient dials Temporal. A server that is not up YET is a wait,
@@ -441,8 +460,13 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
+	// Every stop this process requests (pause, interrupt, cancel, terminate,
+	// reset) is also nudged to the workers running the workflow's activities.
+	if d.NATS != nil {
+		c = stopnudge.Wrap(c, d.NATS.Conn, stopSignals...)
+	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c}, nil
+	return &TemporalClient{Client: c, Namespace: namespace}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.
@@ -565,7 +589,9 @@ type PauseServiceDeps struct {
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	return v2workflow.NewPauseService(d.Temporal.Client, d.DB), nil
+	ps := v2workflow.NewPauseService(d.Temporal.Client, d.DB)
+	ps.SetNamespace(d.Temporal.Namespace)
+	return ps, nil
 }
 
 // TriggerPollersDeps is which integrations this deployment serves.

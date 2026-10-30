@@ -88,8 +88,9 @@ describe("environment controls", () => {
     await userEvent.click(screen.getByTestId("env-danger-menu"));
     await userEvent.click(await screen.findByTestId("env-action-delete"));
     const note = screen.getByTestId("delete-environment-data-note").textContent ?? "";
-    expect(note).toContain("retained");
-    expect(note).toContain("not reattach");
+    expect(note).toContain("deleted");
+    expect(note).toContain("cannot be undone");
+    expect(note).toContain("forge env delete prod --keep-data");
     expect(screen.getByTestId("delete-environment-dialog").textContent).toContain("forge env deploy prod");
 
     const confirm = screen.getByTestId("delete-environment-confirm") as HTMLButtonElement;

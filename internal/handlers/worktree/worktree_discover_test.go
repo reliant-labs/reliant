@@ -342,3 +342,40 @@ func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
 	}))
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
+
+// A path is one machine's. A workspace B imported at /ws/same says nothing
+// about the checkout at the same absolute path on the machine discovery and
+// import run on (daemon-default here), so that row is not excluded there,
+// and the checkout stays discoverable and importable. A row this machine owns,
+// and a row no machine is recorded for (it might be this one's), still are.
+func TestDiscoverWorktrees_ExcludesOnlyThisMachinesRows(t *testing.T) {
+	t.Parallel()
+
+	f := newDiscoverTestFixture(t, "")
+	now := time.Now().UTC()
+	row := func(path string, owner *string) {
+		require.NoError(t, f.repo.CreateWorktree(context.Background(), &db.Worktree{
+			ID: uuid.NewString(), Name: "row-" + uuid.NewString()[:8], Path: path, Branch: "b",
+			ProjectID: f.projectID, DaemonID: owner, Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+			CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
+	}
+	other, here := "daemon-b", "daemon-default"
+	row("/ws/same", &other)
+	row("/ws/mine", &here)
+	row("/ws/legacy", nil)
+
+	sentRoots := func() []string {
+		var sent struct {
+			Roots []string `json:"exclude_roots"`
+		}
+		require.NoError(t, json.Unmarshal(f.router.payloads["worktree.discover_repos"], &sent))
+		return sent.Roots
+	}
+	f.discover(t)
+	assert.ElementsMatch(t, []string{"/ws/mine", "/ws/legacy"}, sentRoots(), "another machine's row does not hide this machine's checkout")
+
+	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/ws/same", "branch": "feat"}}
+	_, _ = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: f.projectID, Path: "/ws/same"}))
+	assert.ElementsMatch(t, []string{"/ws/mine", "/ws/legacy"}, sentRoots(), "import validates against the same machine's rows")
+}

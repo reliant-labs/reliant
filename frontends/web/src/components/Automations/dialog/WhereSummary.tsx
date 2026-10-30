@@ -139,6 +139,7 @@ export function WhereSummary(props: WhereSummaryProps) {
                 value={projectId}
                 onChange={(e) => onProjectChange(e.target.value)}
                 aria-invalid={!!projectError}
+                aria-describedby={projectError ? id("project-error") : undefined}
               >
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
@@ -146,7 +147,7 @@ export function WhereSummary(props: WhereSummaryProps) {
                   </option>
                 ))}
               </select>
-              {projectError && <p className={errorTextClass}>{projectError}</p>}
+              {projectError && <p id={id("project-error")} className={errorTextClass}>{projectError}</p>}
             </div>
           )}
           <div onBlur={() => onBlurField?.("machine")}>
@@ -164,6 +165,8 @@ export function WhereSummary(props: WhereSummaryProps) {
                 id={id("machine")}
                 role="group"
                 aria-labelledby={id("machine-label")}
+                aria-invalid={!!machineError}
+                aria-describedby={machineError ? id("machine-error") : undefined}
                 tabIndex={-1}
                 className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-muted-foreground focus:outline-none"
               >
@@ -203,7 +206,7 @@ export function WhereSummary(props: WhereSummaryProps) {
             )}
             {(hasDaemons || machine) && <p className={hintClass}>{machineHint}</p>}
             {machineError && (
-              <p className={errorTextClass} role="alert">
+              <p id={id("machine-error")} className={errorTextClass} role="alert">
                 {machineError}
               </p>
             )}
@@ -252,7 +255,7 @@ export interface MachineSelectProps {
 /** Runs on: every machine, then "No machine", always last (report 03 §7). */
 export function MachineSelect({ id, value, loading, choices, onChange, invalid, inheritLabel, noMachineBlocker }: MachineSelectProps) {
   return (
-    <select id={id} className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid}>
+    <select id={id} className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined}>
       <option value="" disabled={!inheritLabel}>
         {inheritLabel ?? (loading ? "Loading machines…" : "Choose a machine")}
       </option>

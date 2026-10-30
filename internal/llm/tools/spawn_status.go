@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -454,12 +455,22 @@ func (s *spawnStatusTool) waitForTerminal(rctx *rctx.ToolContext, params SpawnSt
 
 	thread, err := s.repo.GetThread(rctx.Context, params.AgentID)
 	if err != nil || thread == nil {
+		// Completion can preempt the call during its very first read, not
+		// just inside the polling loop. Retry only a cancelled read, never
+		// an unrelated store failure that happens to coincide with it.
+		if rctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			return s.stoppedEarly(rctx, nil, params, time.Since(start))
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Agent %q could not be found.", params.AgentID)), nil
 	}
 
 	for {
 		if core.ThreadStatusIsTerminal(thread.Status) {
-			return s.terminalResponse(rctx, thread, params, time.Since(start))
+			// The completion report itself can cancel the wait while reading
+			// its answer, even if the status read beat it by a moment.
+			checkCtx, cancel := context.WithTimeout(context.WithoutCancel(rctx.Context), stoppedEarlyCheckTimeout)
+			defer cancel()
+			return s.terminalResponse(rctx.WithContext(checkCtx), thread, params, time.Since(start))
 		}
 
 		if time.Now().After(deadline) {
@@ -534,6 +545,11 @@ func (s *spawnStatusTool) stoppedEarly(rctx *rctx.ToolContext, thread *db.Thread
 			return s.terminalResponse(settle, thread, params, waited)
 		}
 	}
+	if thread == nil {
+		// The initial read was cancelled and the bounded last look could not
+		// establish that the agent exists. Do not invent a running state.
+		return NewTextErrorResponse(fmt.Sprintf("Agent %q could not be found.", params.AgentID)), nil
+	}
 
 	output := fmt.Sprintf(
 		"Stopped waiting on agent %s after %s. It is STILL RUNNING and has not been stopped.\n\n"+
@@ -572,12 +588,36 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to read agent activity: %v", err)), nil
 	}
-	if !result.Found {
-		return WithResponseMetadata(NewTextResponse(fmt.Sprintf("Agent %s has no activity yet.", params.AgentID)), metadata), nil
+	// A missing assistant message does not mean execution never started. Surface
+	// the same persisted wait/activity signals as listing mode, including a
+	// provider wait before the first model response.
+	signals := s.loadSignals(rctx, thread.ChatID)
+	var wait db.ProviderBackoff
+	waiting := false
+	if !metadata.HasExited {
+		wait, waiting = signals.usageWaits[params.AgentID]
+		if waiting {
+			metadata.Status = "waiting for usage limit"
+		}
 	}
-
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "=== %s: %s ===\n\n", params.AgentID, metadata.Status)
+	if waiting {
+		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == db.ReasonUsageLimitProbe))
+	}
+	if last := signals.lastActivity[params.AgentID]; !last.IsZero() {
+		fmt.Fprintf(&sb, "Last activity: %s\n", last.UTC().Format(time.RFC3339))
+	}
+	if q := signals.pendingQuestions[params.AgentID]; q != nil {
+		sb.WriteString("Gated: pending question\n")
+	} else if signals.pendingApprovalThreads[params.AgentID] {
+		sb.WriteString("Gated: pending approval\n")
+	}
+	if !result.Found {
+		sb.WriteString("No assistant message yet. This alone does not establish whether execution has started or is blocked.\n")
+		return WithResponseMetadata(NewTextResponse(sb.String()), metadata), nil
+	}
+	sb.WriteString("\n")
 	if result.Warning != "" {
 		fmt.Fprintf(&sb, "[WORKFLOW_WARNING] %s\n\nLast response before warning:\n", result.Warning)
 	}

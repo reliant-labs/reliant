@@ -15,7 +15,7 @@ type plan struct {
 	correlation provenance.Correlation
 	// objectFrom says where the new object's id comes from in the response:
 	// "number" (an issue or pull request is created), "id" (a comment, review
-	// or reply), "queue_entry_id" (native queue receipt), or "" (an existing object).
+	// or reply), or "" (the write touches an existing object and creates none).
 	objectFrom string
 	scopeOnly  bool
 }
@@ -32,8 +32,6 @@ func (p plan) completion(data map[string]any) (target, objectID, url string) {
 		}
 	case "id":
 		objectID = provenance.IDString(data["id"])
-	case "queue_entry_id":
-		objectID = provenance.IDString(data["queue_entry_id"])
 	}
 	return target, objectID, url
 }
@@ -103,11 +101,6 @@ func planFor(integration, action string, params map[string]any) plan {
 			Branch: head, BodySHA256: bodyDigest(params["body"]),
 		}
 		p.objectFrom = "number"
-	case "pr.enqueue":
-		onNumber("pull_number")
-		// The queue entry is the provider receipt, not reviewer authority. No
-		// webhook correlation is claimed until queue events are supported.
-		p.objectFrom = "queue_entry_id"
 	case "pr.update":
 		onNumber("pull_number")
 		p.correlation = provenance.Correlation{ObjectKind: provenance.KindPullRequest, State: stateOf(params)}
@@ -116,6 +109,12 @@ func planFor(integration, action string, params map[string]any) plan {
 			p.correlation.Events = []string{"pull_request.closed"}
 		case "open":
 			p.correlation.Events = []string{"pull_request.reopened"}
+		}
+	case "pr.merge":
+		onNumber("pull_number")
+		p.correlation = provenance.Correlation{ObjectKind: provenance.KindPullRequest}
+		if provenance.IDString(params["action"]) == "merge" {
+			p.correlation.Events = []string{"pull_request.closed"}
 		}
 	case "pr.review.create":
 		onNumber("pull_number")

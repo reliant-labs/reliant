@@ -3,12 +3,14 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -262,6 +264,86 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, db.Completed(), updatedWorkflow.Status)
 	})
+}
+
+// Bugs fe84af3c / eef49267 and run 658dbba8: a run that failed before any node
+// ran (here, input validation) recorded its reason nowhere on the run, so
+// get_run and the run page said "failed" and nothing else. The failed status
+// writes the reason onto the run, and the next run of the chat (which reuses
+// the root workflow id) starts without it.
+func TestWorkflowStatus_FailedRecordsWhyOnTheRun(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
+		ID: chatID, ChatID: chatID, WorkflowName: "release-forge", Thread: chatID, Status: db.Active(),
+	}))
+	activity := NewWorkflowStatusActivity(h.Repo())
+
+	reason := "workflow input validation failed: validation failed with 1 error(s):\n  1. release-forge.inputs.asap: input 'asap' expects boolean, got string \"true\""
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "failed", Thread: chatID, Error: reason,
+	}, &output))
+
+	failed, err := h.Repo().GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.Failed(), failed.Status)
+	require.NotNil(t, failed.FailureDetail, "a failed run records why on the run")
+	assert.Equal(t, rundiagnostics.ErrorText(reason), *failed.FailureDetail)
+
+	// The chat's next run reuses the workflow id: it has not failed.
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "started", Thread: chatID,
+	}, &output))
+	revived, err := h.Repo().GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Nil(t, revived.FailureDetail, "a live run carries no earlier run's failure")
+}
+
+// A run that completes at an `outcome: failure` save_message: the status write
+// marks that node's attempt failed, so run diagnostics (get_run, trigger
+// health) show where the run ended and the text it wrote, instead of no failed
+// node (bug 938cc4e2). The "-save" companion of an agent step stays hidden and
+// unmarked, and a repeated (retried) status write changes nothing.
+func TestWorkflowStatus_FailureOutcomeMarksTheDeclaringNode(t *testing.T) {
+	t.Parallel()
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	userID, projectID, chatID, workflowID := uuid.New().String(), uuid.New().String(), uuid.New().String(), uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: chatID, WorkflowName: "pr-review", Thread: chatID, Status: db.Active()}))
+	now := time.Now()
+	for i, row := range []*db.StepExecution{
+		{StepID: "call_llm-save", NodePath: sql.NullString{String: "review.agent_loop.call_llm", Valid: true}, ActivityName: "SaveMessage",
+			OutputJSON: sql.NullString{String: `{"message":{"text":"agent turn"}}`, Valid: true}},
+		{StepID: "stopped", ActivityName: "SaveMessage", OutputJSON: sql.NullString{String: `{"message":{"text":"Review did not finish: incomplete"}}`, Valid: true}},
+	} {
+		row.ID, row.WorkflowID, row.CreatedAt = uuid.New().String(), workflowID, now.Add(time.Duration(i)*time.Millisecond)
+		row.Success = sql.NullBool{Bool: true, Valid: true}
+		require.NoError(t, h.Repo().CreateStepExecution(ctx, row))
+	}
+	input := WorkflowStatusInput{ChatID: chatID, WorkflowID: workflowID, WorkflowName: "pr-review", Status: "completed",
+		Thread: chatID, Outcome: "failure", OutcomeNode: "stopped"}
+	activity := NewWorkflowStatusActivity(h.Repo())
+	for range 2 {
+		var output WorkflowStatusOutput
+		require.NoError(t, h.ExecuteActivity(activity.Execute, input, &output))
+	}
+	rows, err := h.Repo().ListRunNodeExecutions(ctx, workflowID, 20)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the -save companion is not a node")
+	require.Equal(t, "Node stopped failed: declared the run's outcome: failure: Review did not finish: incomplete", rundiagnostics.Failure(rows))
 }
 
 // TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp tests that when a child workflow

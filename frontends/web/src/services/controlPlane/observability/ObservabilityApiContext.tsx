@@ -13,13 +13,15 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-import { getWalletOverview } from "../reliantAI";
+import { currentOrgId } from "../orgs";
 import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
+import * as graph from "./graphApi";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
+import * as members from "./membersApi";
 import * as metrics from "./metricsApi";
 import * as rum from "./rumApi";
 
@@ -31,6 +33,8 @@ export interface ObservabilityApi {
   getTrace: typeof rpc.getTrace;
   queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
+  getServiceGraph: typeof graph.getServiceGraph;
+  getServiceGraphCatalog: typeof graph.getServiceGraphCatalog;
   getFlamegraph: typeof rpc.getFlamegraph;
   getServiceSignals: typeof rpc.getServiceSignals;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
@@ -64,6 +68,16 @@ export interface ObservabilityApi {
   getIssue: typeof issues.getIssue;
   listIssueEvents: typeof issues.listIssueEvents;
   updateIssueStatus: typeof issues.updateIssueStatus;
+  // Discussion on an issue: comments, the assignee, chats started from it, the one timeline.
+  listIssueTimeline: typeof issues.listIssueTimeline;
+  addIssueComment: typeof issues.addIssueComment;
+  updateIssueComment: typeof issues.updateIssueComment;
+  deleteIssueComment: typeof issues.deleteIssueComment;
+  assignIssue: typeof issues.assignIssue;
+  linkIssueChat: typeof issues.linkIssueChat;
+  // People: who an issue can be assigned to (token:read to list), and the reader.
+  listOrgMembers: typeof members.listOrgMembers;
+  getCurrentIssueUser: typeof members.getCurrentIssueUser;
   // Activity (ActivityService): who changed what — an issue's history, the project feed.
   listActivity: typeof activity.listActivity;
   // Sessions (RumService): real-user sessions, their timelines and masked replays.
@@ -87,13 +101,15 @@ export interface ObservabilityApi {
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
-  // The org the billing surfaces resolve for the caller (the wallet overview).
-  currentOrgId: async () => (await getWalletOverview())?.organization?.id ?? null,
+  // The active org (the switcher's choice, else the person's default).
+  currentOrgId,
   searchLogs: rpc.searchLogs,
   listTraces: rpc.listTraces,
   getTrace: rpc.getTrace,
   queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
+  getServiceGraph: graph.getServiceGraph,
+  getServiceGraphCatalog: graph.getServiceGraphCatalog,
   getFlamegraph: rpc.getFlamegraph,
   getServiceSignals: rpc.getServiceSignals,
   getObservabilityUsage: rpc.getObservabilityUsage,
@@ -122,6 +138,14 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getIssue: issues.getIssue,
   listIssueEvents: issues.listIssueEvents,
   updateIssueStatus: issues.updateIssueStatus,
+  listIssueTimeline: issues.listIssueTimeline,
+  addIssueComment: issues.addIssueComment,
+  updateIssueComment: issues.updateIssueComment,
+  deleteIssueComment: issues.deleteIssueComment,
+  assignIssue: issues.assignIssue,
+  linkIssueChat: issues.linkIssueChat,
+  listOrgMembers: members.listOrgMembers,
+  getCurrentIssueUser: members.getCurrentIssueUser,
   listActivity: activity.listActivity,
   listSessions: rum.listSessions,
   getSession: rum.getSession,

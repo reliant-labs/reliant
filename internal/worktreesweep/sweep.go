@@ -97,7 +97,7 @@ type Store interface {
 	GetWorktree(ctx context.Context, id string) (*core.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
 	// ListDaemonStorageState is each of a user's daemons' stored disk
@@ -916,13 +916,16 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 	if err != nil || wt == nil {
 		return
 	}
-	// The daemon found this directory on its own disk, which is the proof of
-	// ownership an unattributed row never had. "gone" proves nothing.
-	if wt.DaemonID == nil && r.Outcome != worktreereclaim.OutcomeGone {
-		if err := s.store.AdoptWorktreeDaemon(ctx, wt.ID, daemonID); err != nil {
+	// The daemon found this checkout on its own disk, which is the proof of
+	// ownership an unattributed row never had. Recording it also moves the
+	// workspace's chats pinned elsewhere onto it (store.AdoptWorktreeDaemon),
+	// so only an outcome that found the checkout counts (foundCheckout).
+	if wt.DaemonID == nil && foundCheckout(r) {
+		if recorded, err := s.store.AdoptWorktreeDaemon(ctx, wt.ID, daemonID); err != nil {
 			logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree owner", "worktreeID", wt.ID, "error", err)
-		} else {
-			wt.DaemonID = &daemonID
+		} else if recorded != "" {
+			// The persisted owner, which another resolver may have set first.
+			wt.DaemonID = &recorded
 		}
 	}
 	if wt.DeletedAt == nil {
@@ -1177,4 +1180,18 @@ func union(a, b []string) []string {
 		}
 	}
 	return out
+}
+
+// foundCheckout reports whether a reclaim result proves the daemon found the
+// worktree's checkout on its disk. "gone" (no directory), "foreign" (not under
+// this machine's worktree root; the server must conclude nothing), "deferred"
+// (never reached) and a failed pass prove nothing.
+func foundCheckout(r worktreereclaim.Result) bool {
+	switch r.Outcome {
+	case worktreereclaim.OutcomeGone, worktreereclaim.OutcomeForeign, worktreereclaim.OutcomeDeferred, worktreereclaim.OutcomeError:
+		return false
+	case worktreereclaim.OutcomeHeld:
+		return r.Reason != worktreereclaim.ReasonError
+	}
+	return true
 }

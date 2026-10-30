@@ -82,7 +82,6 @@ export function renderList(
           })
         }
         releaseHref={(version, extra) => `/r/${version}${extra ? `?${new URLSearchParams(extra as Record<string, string>)}` : ""}`}
-        onSelectEnv={selectEnv}
         promote={control}
         scopeIsLocal={scopeIsLocal}
       />

@@ -66,7 +66,15 @@ type MachineStorage struct {
 	// Since is when the problem began: the pressure episode's start when the
 	// disk is low, otherwise when the oldest held worktree was archived.
 	Since time.Time
+	// Processes is set while the machine refuses background heavy commands
+	// for being near its process limit (internal/procguard): the count, the
+	// limit and the largest process trees. Its own inbox item.
+	Processes *reliantv1.ProcessReport
 }
+
+// StorageItem reports whether the machine has a disk or kept-workspace
+// problem to show (as opposed to only a process one).
+func (m *MachineStorage) StorageItem() bool { return m.DiskLow() || len(m.Held) > 0 }
 
 // DiskLow reports whether at least one volume is under pressure.
 func (m *MachineStorage) DiskLow() bool { return m.Severity > diskwatch.SeverityNone }
@@ -133,6 +141,9 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 			m.Since = time.UnixMilli(since)
 		} else if m := machines[id]; m != nil {
 			m.Disk = rep
+		}
+		if diskwatch.RefusingForProcesses(rep) {
+			get(id).Processes = rep.Processes
 		}
 	}
 

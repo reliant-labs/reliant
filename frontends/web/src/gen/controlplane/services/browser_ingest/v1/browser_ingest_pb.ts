@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/browser_ingest/v1/browser_ingest.proto.
  */
 export const file_services_browser_ingest_v1_browser_ingest: GenFile = /*@__PURE__*/
-  fileDesc("Ci9zZXJ2aWNlcy9icm93c2VyX2luZ2VzdC92MS9icm93c2VyX2luZ2VzdC5wcm90bxIPY29udHJvbHBsYW5lLnYxIpACChBCcm93c2VySW5nZXN0S2V5EgoKAmlkGAEgASgJEhYKDmVudmlyb25tZW50X2lkGAIgASgJEhAKCGZyb250ZW5kGAMgASgJEgsKA2tleRgEIAEoCRIQCghlbmRwb2ludBgFIAEoCRIXCg9hbGxvd2VkX29yaWdpbnMYBiADKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcmV2b2tlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiawoQRW5zdXJlS2V5UmVxdWVzdBIfCg5lbnZpcm9ubWVudF9pZBgBIAEoCUIHukgEcgIQARIZCghmcm9udGVuZBgCIAEoCUIHukgEcgIQARIbCgdvcmlnaW5zGAMgAygJQgq6SAeSAQQIARAgIlQKEUVuc3VyZUtleVJlc3BvbnNlEi4KA2tleRgBIAEoCzIhLmNvbnRyb2xwbGFuZS52MS5Ccm93c2VySW5nZXN0S2V5Eg8KB2NyZWF0ZWQYAiABKAgicwoPTGlzdEtleXNSZXF1ZXN0EhsKDmVudmlyb25tZW50X2lkGAEgASgJSACIAQESHAoPaW5jbHVkZV9yZXZva2VkGAIgASgISAGIAQFCEQoPX2Vudmlyb25tZW50X2lkQhIKEF9pbmNsdWRlX3Jldm9rZWQiQwoQTGlzdEtleXNSZXNwb25zZRIvCgRrZXlzGAEgAygLMiEuY29udHJvbHBsYW5lLnYxLkJyb3dzZXJJbmdlc3RLZXkiKwoQUmV2b2tlS2V5UmVxdWVzdBIXCgZrZXlfaWQYASABKAlCB7pIBHICEAEiQwoRUmV2b2tlS2V5UmVzcG9uc2USLgoDa2V5GAEgASgLMiEuY29udHJvbHBsYW5lLnYxLkJyb3dzZXJJbmdlc3RLZXkyjgQKFEJyb3dzZXJJbmdlc3RTZXJ2aWNlEqoBCglFbnN1cmVLZXkSIS5jb250cm9scGxhbmUudjEuRW5zdXJlS2V5UmVxdWVzdBoiLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVLZXlSZXNwb25zZSJWorsYUggBGAE6TAoJcHJvdmlzaW9uEi8KEmJyb3dzZXJfaW5nZXN0X2tleRIPcmVzcG9uc2Uua2V5LmlkGghmcm9udGVuZBoOZW52aXJvbm1lbnRfaWQSWQoITGlzdEtleXMSIC5jb250cm9scGxhbmUudjEuTGlzdEtleXNSZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkxpc3RLZXlzUmVzcG9uc2UiCKK7GAQIARgBEoQBCglSZXZva2VLZXkSIS5jb250cm9scGxhbmUudjEuUmV2b2tlS2V5UmVxdWVzdBoiLmNvbnRyb2xwbGFuZS52MS5SZXZva2VLZXlSZXNwb25zZSIworsYLAgBGAE6JgoGcmV2b2tlEhwKEmJyb3dzZXJfaW5nZXN0X2tleRIGa2V5X2lkGmeCtRhjChRCcm93c2VySW5nZXN0U2VydmljZRIFMS4wLjAaRFB1Ymxpc2hhYmxlIGtleXMgZm9yIGJyb3dzZXIgdGVsZW1ldHJ5IGluZ2VzdCBvbiB0aGUgd29ya3NwYWNlIHByb3h5QuIBChNjb20uY29udHJvbHBsYW5lLnYxQhJCcm93c2VySW5nZXN0UHJvdG9QAVpaZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2Jyb3dzZXJfaW5nZXN0L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("Ci9zZXJ2aWNlcy9icm93c2VyX2luZ2VzdC92MS9icm93c2VyX2luZ2VzdC5wcm90bxIPY29udHJvbHBsYW5lLnYxIpACChBCcm93c2VySW5nZXN0S2V5EgoKAmlkGAEgASgJEhYKDmVudmlyb25tZW50X2lkGAIgASgJEhAKCGZyb250ZW5kGAMgASgJEgsKA2tleRgEIAEoCRIQCghlbmRwb2ludBgFIAEoCRIXCg9hbGxvd2VkX29yaWdpbnMYBiADKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcmV2b2tlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiwEKEEVuc3VyZUtleVJlcXVlc3QSHwoOZW52aXJvbm1lbnRfaWQYASABKAlCB7pIBHICEAESGQoIZnJvbnRlbmQYAiABKAlCB7pIBHICEAESGwoHb3JpZ2lucxgDIAMoCUIKukgHkgEECAEQIBITCgZvcmdfaWQYBCABKAlIAIgBAUIJCgdfb3JnX2lkIlQKEUVuc3VyZUtleVJlc3BvbnNlEi4KA2tleRgBIAEoCzIhLmNvbnRyb2xwbGFuZS52MS5Ccm93c2VySW5nZXN0S2V5Eg8KB2NyZWF0ZWQYAiABKAgikwEKD0xpc3RLZXlzUmVxdWVzdBIbCg5lbnZpcm9ubWVudF9pZBgBIAEoCUgAiAEBEhwKD2luY2x1ZGVfcmV2b2tlZBgCIAEoCEgBiAEBEhMKBm9yZ19pZBgDIAEoCUgCiAEBQhEKD19lbnZpcm9ubWVudF9pZEISChBfaW5jbHVkZV9yZXZva2VkQgkKB19vcmdfaWQiQwoQTGlzdEtleXNSZXNwb25zZRIvCgRrZXlzGAEgAygLMiEuY29udHJvbHBsYW5lLnYxLkJyb3dzZXJJbmdlc3RLZXkiSwoQUmV2b2tlS2V5UmVxdWVzdBIXCgZrZXlfaWQYASABKAlCB7pIBHICEAESEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCJDChFSZXZva2VLZXlSZXNwb25zZRIuCgNrZXkYASABKAsyIS5jb250cm9scGxhbmUudjEuQnJvd3NlckluZ2VzdEtleTKOBAoUQnJvd3NlckluZ2VzdFNlcnZpY2USqgEKCUVuc3VyZUtleRIhLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVLZXlSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkVuc3VyZUtleVJlc3BvbnNlIlaiuxhSCAEYATpMCglwcm92aXNpb24SLwoSYnJvd3Nlcl9pbmdlc3Rfa2V5Eg9yZXNwb25zZS5rZXkuaWQaCGZyb250ZW5kGg5lbnZpcm9ubWVudF9pZBJZCghMaXN0S2V5cxIgLmNvbnRyb2xwbGFuZS52MS5MaXN0S2V5c1JlcXVlc3QaIS5jb250cm9scGxhbmUudjEuTGlzdEtleXNSZXNwb25zZSIIorsYBAgBGAEShAEKCVJldm9rZUtleRIhLmNvbnRyb2xwbGFuZS52MS5SZXZva2VLZXlSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLlJldm9rZUtleVJlc3BvbnNlIjCiuxgsCAEYATomCgZyZXZva2USHAoSYnJvd3Nlcl9pbmdlc3Rfa2V5EgZrZXlfaWQaZ4K1GGMKFEJyb3dzZXJJbmdlc3RTZXJ2aWNlEgUxLjAuMBpEUHVibGlzaGFibGUga2V5cyBmb3IgYnJvd3NlciB0ZWxlbWV0cnkgaW5nZXN0IG9uIHRoZSB3b3Jrc3BhY2UgcHJveHlC4gEKE2NvbS5jb250cm9scGxhbmUudjFCEkJyb3dzZXJJbmdlc3RQcm90b1ABWlpnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvYnJvd3Nlcl9pbmdlc3QvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.BrowserIngestKey
@@ -105,6 +105,15 @@ export type EnsureKeyRequest = Message<"controlplane.v1.EnsureKeyRequest"> & {
    * @generated from field: repeated string origins = 3;
    */
   origins: string[];
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 4;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -153,6 +162,15 @@ export type ListKeysRequest = Message<"controlplane.v1.ListKeysRequest"> & {
    * @generated from field: optional bool include_revoked = 2;
    */
   includeRevoked?: boolean | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -187,6 +205,15 @@ export type RevokeKeyRequest = Message<"controlplane.v1.RevokeKeyRequest"> & {
    * @generated from field: string key_id = 1;
    */
   keyId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**

@@ -107,10 +107,11 @@ export interface OrgShellProps extends OrgNavInput {
   user?: SidebarUserInfo;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  orgSwitcher?: ReactNode;
   children: ReactNode;
 }
 
-export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleCollapsed, children, ...nav }: OrgShellProps) {
+export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleCollapsed, orgSwitcher, children, ...nav }: OrgShellProps) {
   const { items } = buildOrgNav(nav);
   const crumbs = orgCrumbs(nav.page, nav.search);
 
@@ -130,6 +131,7 @@ export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleColla
         collapsed={collapsed}
         onToggle={onToggleCollapsed}
         headerContent={
+          <>
           <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
             {crumbs.map((crumb, index) => (
               <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5">
@@ -150,6 +152,8 @@ export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleColla
               </span>
             ))}
           </nav>
+          {orgSwitcher}
+          </>
         }
       >
         {children}

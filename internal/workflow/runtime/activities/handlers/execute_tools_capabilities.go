@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // capabilityRefusal is why a call may not run under its turn's capability set,
@@ -120,6 +121,14 @@ func (a *ExecuteToolsActivity) WithConfigProvider(provider cfgpkg.ConfigProvider
 	return a
 }
 
+// WithDaemonRouter gives the activity the router tool dispatch resolves
+// selectors through, so a call routed by name, type or labels reads the
+// config of the machine it runs on (configMachine).
+func (a *ExecuteToolsActivity) WithDaemonRouter(router toolexec.DaemonRouter) *ExecuteToolsActivity {
+	a.machines = router
+	return a
+}
+
 // projectSkills is the project's skill catalog, from the worker's config
 // provider — the same source, and so the same catalog, call_llm offered the
 // turn from. A project with no synced config, or one that cannot be read,
@@ -128,7 +137,7 @@ func (a *ExecuteToolsActivity) WithConfigProvider(provider cfgpkg.ConfigProvider
 // It used to read the whole config row and re-parse every skill on each skill
 // call: 18 MB per call in prod. The worker's provider is cached per config
 // version, so a call costs one version read.
-func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID string) []cfgpkg.StoredSkill {
+func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID, daemonID string) []cfgpkg.StoredSkill {
 	if projectID == "" {
 		return nil
 	}
@@ -136,7 +145,7 @@ func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID stri
 		logging.WarnContext(ctx, "[ExecuteTools] No config provider wired; the skill tool sees no project skills", "projectID", projectID)
 		return nil
 	}
-	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
+	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID, DaemonID: daemonID})
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Project skills could not be loaded", "projectID", projectID, "error", err)
 		return nil

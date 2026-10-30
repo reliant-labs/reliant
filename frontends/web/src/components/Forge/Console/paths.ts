@@ -69,10 +69,12 @@ export const APPS_PATH = "/apps";
 export const ORG_USAGE_PATH = "/settings/billing";
 
 /** The Observability sub-pages that are nav entries. */
-export const OBS_NAV_VIEWS = ["errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
+export const OBS_NAV_VIEWS = ["graph", "rpc", "errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
 export type ObsNavView = (typeof OBS_NAV_VIEWS)[number];
 
 export const OBS_NAV_LABELS: Record<ObsNavView, string> = {
+  graph: "Service graph",
+  rpc: "RPC explorer",
   errors: "Errors",
   sessions: "Sessions",
   logs: "Logs",

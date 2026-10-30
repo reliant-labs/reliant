@@ -884,3 +884,20 @@ func TestReachDirect(t *testing.T) {
 		t.Errorf("direct: a migration must still select the DB-backed packages, got %v", mig.Go.Packages)
 	}
 }
+
+// Deleting a whole Go package compiles the module (an importer left behind
+// no longer builds) instead of falling back to every lane.
+func TestDeletedGoPackageCompilesTheModule(t *testing.T) {
+	pl := Classify([]Change{{Path: "internal/gone/gone.go", Deleted: true}, {Path: "internal/gone/gone_test.go", Deleted: true}}, noWalkers())
+	if pl.Go.Full || pl.Web.Full || pl.Electron.Full {
+		t.Fatalf("a deleted package must not force full lanes: go %v web %v electron %v", pl.Go.Reasons, pl.Web.Reasons, pl.Electron.Reasons)
+	}
+	if !slices.Equal(pl.Go.Build, []string{"./..."}) {
+		t.Fatalf("build = %v, want the whole module", pl.Go.Build)
+	}
+	for _, f := range pl.Files {
+		if f.Note == "UNCLAIMED" {
+			t.Fatalf("%s left unclaimed", f.Path)
+		}
+	}
+}

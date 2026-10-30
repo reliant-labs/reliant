@@ -47,6 +47,7 @@ import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useIdentityMutation, useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
 import type {
+  IdentityApp,
   IdentityDeliveryState,
   IdentityEnvironmentRef,
   IdentityExportURL,
@@ -61,7 +62,7 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatIn } from "../Observability/format";
 import { Panel } from "./EnvTabPanels";
 import { IdentityUsers } from "./IdentityUsers";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 
 export interface IdentityTabProps {
   envName: string;
@@ -241,6 +242,25 @@ const DELIVERY_VARIANT: Record<IdentityDeliveryState, "success" | "warning" | "e
   unknown: "neutral",
 };
 
+type AppRow = { name: string; app: IdentityApp };
+
+const APP_COLUMNS: DataTableColumn<AppRow>[] = [
+  { key: "name", header: "Name", render: (_, { app }) => app.name },
+  { key: "clientId", header: "Client id", className: "font-mono text-xs", render: (_, { app }) => app.clientId || "—" },
+  {
+    key: "broker",
+    header: "Broker token",
+    className: "text-xs text-ink-muted",
+    render: (_, { app }) => {
+      if (app.brokerExpiresAtMs === null) return "none";
+      const expired = app.brokerExpiresAtMs <= Date.now();
+      return (
+        <span className={cn(expired && "text-danger-ink")}>{expired ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}</span>
+      );
+    },
+  },
+];
+
 function StatusPanel({
   envId,
   status: s,
@@ -363,32 +383,16 @@ function StatusPanel({
           {s.apps.length === 0 ? (
             <p className="text-xs text-ink-muted">No applications are registered yet.</p>
           ) : (
-            <StackedTable className="w-full text-left text-sm" data-testid="identity-apps">
-              <thead>
-                <tr className="text-xs text-ink-muted">
-                  <th className="pb-1.5 pr-4 font-normal">Name</th>
-                  <th className="pb-1.5 pr-4 font-normal">Client id</th>
-                  <th className="pb-1.5 font-normal">Broker token</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.apps.map((app) => (
-                  <tr key={app.name} className="border-t border-border/60">
-                    <td className="py-1.5 pr-4 text-ink">{app.name}</td>
-                    <td className="py-1.5 pr-4 font-mono text-xs text-ink">{app.clientId || "—"}</td>
-                    <td className="py-1.5 text-xs text-ink-muted">
-                      {app.brokerExpiresAtMs === null ? (
-                        "none"
-                      ) : (
-                        <span className={cn(app.brokerExpiresAtMs <= Date.now() && "text-danger-ink")}>
-                          {app.brokerExpiresAtMs <= Date.now() ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </StackedTable>
+            <div data-testid="identity-apps">
+              <DataTable<AppRow>
+                stacked
+                compact
+                ariaLabel="Identity applications"
+                columns={APP_COLUMNS}
+                data={s.apps.map((app) => ({ name: app.name, app }))}
+                getRowKey={(r) => r.name}
+              />
+            </div>
           )}
         </Section>
 

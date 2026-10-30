@@ -4,6 +4,8 @@ package core
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -82,6 +84,12 @@ const (
 	// automation-only workflow by hand. Its dedupe key is the chat id. A replay
 	// of a past event records the event it replayed in its payload.
 	TriggerEventKindManualRun TriggerEventKind = "manual.run"
+	// TriggerEventKindCLIRun is a run started from the command line
+	// (`reliant workflow run`) — by a script, or by an agent shelling out. It
+	// is attended (a person owns it and may answer it) but nobody is in it as
+	// a conversation, so like agent.start_run it lists under Runs, not in the
+	// sidebar, until adopted. Its dedupe key is the chat id, like chat.start.
+	TriggerEventKindCLIRun TriggerEventKind = "cli.run"
 )
 
 // IsInbound reports whether events of this kind are recorded by a receiver as
@@ -134,6 +142,33 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindAgentStartRun: false,
 	TriggerEventKindBuilderTest:   false,
 	TriggerEventKindManualRun:     false,
+	TriggerEventKindCLIRun:        false,
+}
+
+// eventKindOrigin takes a position on every TriggerEventKind: who started a
+// chat its launch event launches. The migration that added chats.origin
+// (20261030033817_chat_origin) backfills with the same mapping.
+var eventKindOrigin = map[TriggerEventKind]ChatOrigin{
+	TriggerEventKindChatStart:     ChatOriginUser,
+	TriggerEventKindSchedule:      ChatOriginAutomation,
+	TriggerEventKindWebhook:       ChatOriginAutomation,
+	TriggerEventKindIntegration:   ChatOriginAutomation,
+	TriggerEventKindWorkflowEvent: ChatOriginAutomation,
+	TriggerEventKindAgentStartRun: ChatOriginAgent,
+	TriggerEventKindManualRun:     ChatOriginManualRun,
+	TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
+	TriggerEventKindCLIRun:        ChatOriginCLI,
+}
+
+// ChatOriginOf is the origin of a chat launched by an event of this kind. A
+// kind missing from eventKindOrigin reads as AUTOMATION, so a new launch path
+// that was never classified keeps its runs out of the chat list rather than
+// flooding it — and a test fails until it is classified.
+func ChatOriginOf(kind TriggerEventKind) ChatOrigin {
+	if origin, ok := eventKindOrigin[kind]; ok {
+		return origin
+	}
+	return ChatOriginAutomation
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -150,6 +185,10 @@ const (
 
 // ErrTriggerNotFound is returned when a trigger id does not resolve.
 var ErrTriggerNotFound = svcerr.NotFound("trigger")
+
+// ErrTriggerNameTaken is returned when a create or update would give a trigger
+// the name another trigger of the same user already has in the project.
+var ErrTriggerNameTaken = svcerr.AlreadyExists("a trigger with this name already exists in this project; choose another name or update the existing trigger")
 
 // ErrTriggerEventNotFound is returned when a trigger event lookup misses.
 var ErrTriggerEventNotFound = svcerr.NotFound("trigger event")
@@ -202,6 +241,17 @@ type Trigger struct {
 	// workflow that needs a machine is refused when the trigger is written.
 	// See research/DAEMONLESS_RUNS.md.
 	NoMachine bool
+	// MachinePoolID is the machine pool whose members each launched run is
+	// placed on (dev-docs/design/machine-pools.md). Exactly one of DaemonID,
+	// NoMachine and MachinePoolID is set.
+	MachinePoolID string
+	// MachinePoolName is MachinePoolID's name, joined in by reads.
+	MachinePoolName string
+	// CatalogDaemonID is not stored. For a pool-bound trigger the fire paths
+	// set it to a member on the pool's agreed catalog, so the declaration,
+	// filter, inputs and concurrency are read from the catalog its runs are
+	// placed on (CatalogMachine), not the union of every machine's.
+	CatalogDaemonID string
 	// NotifyOnComplete opts the owner in to being told when a run of this
 	// trigger completes (unread + OS notification + a Run finished Inbox
 	// item). Unattended completions are otherwise silent.
@@ -394,6 +444,16 @@ type TriggerEvent struct {
 	OutcomeDetail string
 	ChatID        *string // the chat this firing launched, when it launched one
 	CreatedAt     time.Time
+	// CapacityOrder is non-nil only for intentionally queued workflow triggers.
+	// Such events have no delivery-age expiry. Scope survives activation deletion.
+	CapacityOrder       *int64
+	CapacityProjectID   *string
+	CapacityWorkflowRef *string
+	// CapacityKey is the rendered concurrency key under `waiting: latest`:
+	// enrolling an event with one supersedes the older waiting events of the
+	// same key. Nil is FIFO (or a key that could not be rendered): the event
+	// supersedes nothing and nothing supersedes it.
+	CapacityKey *string
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for
@@ -409,6 +469,104 @@ type TriggerEvent struct {
 	// at intake from the write ledger (see TriggerOrigin). Nil for an event no
 	// enricher looked at; readers treat nil as "not caused by Reliant".
 	Origin *TriggerOrigin
+	// Definition is which workflow definition the firing resolved: the file,
+	// its version and where it was synced from, read when the firing was
+	// decided. Nil for a firing recorded without one (an ad hoc start, or a
+	// firing recorded before definitions were).
+	Definition *TriggerEventDefinition
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved, so
+// "which version of which file did this run, from which machine and commit?"
+// has an answer after the file has changed again.
+type TriggerEventDefinition struct {
+	// Workflow is the ref the trigger names.
+	Workflow string `json:"workflow"`
+	// Source is where it resolved: "builtin", "user" (the owner's account
+	// workflow) or "project" (a synced .reliant/workflows file); "" when it
+	// did not resolve at all.
+	Source string `json:"source,omitempty"`
+	// Path is the project file, relative to the project root, for a project
+	// workflow; empty otherwise.
+	Path string `json:"path,omitempty"`
+	// DaemonID and Machine are the machine whose synced copy of Path was
+	// read (Machine is its display name); empty when no one machine's copy
+	// can be named.
+	DaemonID string `json:"daemon_id,omitempty"`
+	Machine  string `json:"machine,omitempty"`
+	// Repo, Branch, Commit and Dirty are the git state of the checkout the
+	// file was synced from (config.SyncedRepoState); empty when the machine
+	// reported none.
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Dirty  bool   `json:"dirty,omitempty"`
+	// ContentHash is the hex SHA-256 of the definition's bytes: the version,
+	// comparable with `sha256sum` of the file.
+	ContentHash string `json:"content_hash,omitempty"`
+	// Error is why this definition cannot run (it does not parse, or does not
+	// validate, or does not resolve); empty when it can.
+	Error string `json:"error,omitempty"`
+	// CatalogPin is the catalog snapshot (db.Repo.PinProjectCatalog) the
+	// firing read this definition in and launched its run on: the run loads
+	// exactly this version, whatever was synced after. Empty when the firing
+	// read the live catalog.
+	CatalogPin string `json:"catalog_pin,omitempty"`
+}
+
+// Broken reports a definition that resolved to one version of one file which
+// cannot run as written. A firing against it is refused, never run from some
+// other version.
+func (d *TriggerEventDefinition) Broken() bool {
+	return d != nil && d.Error != "" && d.Path != "" && d.ContentHash != ""
+}
+
+// Describe is the definition for display: "machine cicd at
+// .reliant/workflows/nightly.yaml @ main 1a2b3c4, clean (sha256 9f86d081884c)".
+func (d *TriggerEventDefinition) Describe() string {
+	if d == nil {
+		return ""
+	}
+	var b strings.Builder
+	switch {
+	case d.Path != "":
+		if d.Machine != "" {
+			b.WriteString("machine " + d.Machine + " at ")
+		}
+		b.WriteString(d.Path)
+	case d.Source == "builtin":
+		b.WriteString("builtin workflow " + d.Workflow)
+	case d.Source == "user":
+		b.WriteString("your account workflow " + strconv.Quote(d.Workflow))
+	default:
+		b.WriteString("workflow " + strconv.Quote(d.Workflow))
+	}
+	if d.Commit != "" || d.Branch != "" {
+		branch := d.Branch
+		if branch == "" {
+			branch = "detached HEAD"
+		}
+		b.WriteString(" @ " + branch)
+		if d.Commit != "" {
+			b.WriteString(" " + shortHash(d.Commit, 7))
+		}
+		if d.Dirty {
+			b.WriteString(", uncommitted changes")
+		} else {
+			b.WriteString(", clean")
+		}
+	}
+	if d.ContentHash != "" {
+		b.WriteString(" (sha256 " + shortHash(d.ContentHash, 12) + ")")
+	}
+	return b.String()
+}
+
+func shortHash(h string, n int) string {
+	if len(h) > n {
+		return h[:n]
+	}
+	return h
 }
 
 // TriggerSenderKind is what kind of party sent the event that fired a

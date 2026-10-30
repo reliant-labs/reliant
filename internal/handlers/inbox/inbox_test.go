@@ -3,7 +3,10 @@ package inbox
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -273,6 +277,30 @@ func (f *inboxFixture) launchedAs(t *testing.T, kind core.TriggerEventKind, even
 	})
 	require.NoError(t, err)
 	require.True(t, created)
+	// As the launcher stamps it at birth.
+	dbtest.SetChatOrigin(t, f.repo, chatID, core.ChatOriginOf(kind))
+}
+
+// A run an automation started is not in the chat list, so the Inbox is how
+// its question or approval reaches the user: both are listed, and count as
+// blocking, whatever the run's origin.
+func TestListInbox_AutomationRunOutOfTheChatListStillReachesTheUser(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "trg-review")
+	now := time.Now().UTC().Add(-time.Minute)
+	f.launchedAs(t, core.TriggerEventKindIntegration, "ev-review", "chat-review", "trg-review", now, db.Active())
+	f.question(t, "q-review", "chat-review", now)
+	f.approval(t, "appr-review", "chat-review", now)
+
+	chat, err := f.repo.GetChat(f.ctx, "chat-review")
+	require.NoError(t, err)
+	require.Equal(t, core.ChatOriginAutomation, chat.Origin)
+	require.False(t, chat.ListInSidebar, "the run is not in the chat list")
+
+	resp := f.list(t, nil)
+	assert.Len(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION), 1)
+	assert.Len(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL), 1)
+	assert.EqualValues(t, 2, resp.BlockingCount)
 }
 
 func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing.T) {
@@ -410,6 +438,43 @@ func TestListInbox_RunFinishedCanBeDismissedAndExcludesFailedAndRunning(t *testi
 	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{finished[0].ItemId}}))
 	require.NoError(t, err)
 	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED))
+}
+
+// A paused automation run holds its automation's capacity slot while it waits
+// (cp-merge, 2026-10-30: two hours, every later firing queued behind it), so
+// its owner is told: the run, and the failure that paused it. A run that is
+// still going, or that has ended, is not paused.
+func TestListInbox_PausedAutomationRunNamesTheRunAndTheCause(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "trg-merge")
+	at := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	f.launched(t, "ev-paused", "chat-paused", "trg-merge", at, db.Paused())
+	f.launched(t, "ev-running", "chat-running", "trg-merge", at, db.Active())
+	f.launched(t, "ev-failed", "chat-failed", "trg-merge", at, db.Failed())
+	failedAt := at.Add(5 * time.Minute)
+	cause := "failed to execute command: daemon transport failure (DAEMON_ERROR): no result came back, the command may have run"
+	for i, msg := range []string{"an earlier failure", cause} {
+		require.NoError(t, f.repo.CreateStepExecution(f.ctx, &db.StepExecution{
+			ID: fmt.Sprintf("se-%d", i), WorkflowID: "chat-paused", StepID: "gate", ActivityName: "ExecuteRunStep",
+			ErrorMessage: sql.NullString{String: msg, Valid: true},
+			CreatedAt:    failedAt.Add(time.Duration(i-1) * time.Minute),
+		}))
+	}
+
+	paused := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED)
+	require.Len(t, paused, 1, "only the paused run")
+	item := paused[0]
+	assert.Equal(t, "chat-paused", item.ChatId)
+	assert.Equal(t, "trg-merge", item.TriggerId)
+	assert.Equal(t, cause, item.GetAutomationRunPaused().GetReason(), "the newest failure is what paused it")
+	assert.True(t, strings.HasPrefix(item.ItemId, "automation_run_paused:chat-paused@"), item.ItemId)
+	assert.Equal(t, failedAt.Format(time.RFC3339Nano), item.WaitingSince)
+	resp := f.list(t, nil)
+	assert.EqualValues(t, 0, resp.BlockingCount, "informational: the run retries or ends on its own")
+
+	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{item.ItemId}}))
+	require.NoError(t, err)
+	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED))
 }
 
 func TestDismissInboxItem_RejectsIDsThatNameNoItem(t *testing.T) {

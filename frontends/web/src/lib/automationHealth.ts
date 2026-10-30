@@ -12,8 +12,11 @@
  * The display has more states than the server, because some facts are the
  * client's. Precedence, first match wins:
  *
- *   Broken               BROKEN: the workflow no longer declares the trigger
- *                        this activates. Resuming would not make it fire.
+ *   Broken               BROKEN: the activation cannot follow its workflow
+ *                        any more (gone, does not parse, no longer declares
+ *                        the trigger, or changed its kind); the detail says
+ *                        which. Resuming would not make it fire, so the
+ *                        action is Remove trigger; the switch pauses it.
  *   Needs setup          NEEDS_SETUP: a setting the workflow now requires is
  *                        missing. Outranks Off: Finish setup also turns it on.
  *   Off                  disabled ("paused" in code). Not firing, so not failing either.
@@ -120,8 +123,6 @@ export interface AutomationHealthInput {
   /** Tells a schedule (Next run) from an event trigger (Waiting for first event). */
   source?: Trigger["source"];
   nextFireAt?: string;
-  /** A built-in's broken activation is removed, a user workflow's is fixed. */
-  workflow?: string;
 }
 
 function detailOrUndefined(text: string | undefined): string | undefined {
@@ -135,14 +136,17 @@ function shortWhen(iso: string): string {
   return date.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-export function automationHealth({ enabled, health, lastEvent, source, nextFireAt, workflow }: AutomationHealthInput): AutomationHealthDisplay {
+export function automationHealth({ enabled, health, lastEvent, source, nextFireAt }: AutomationHealthInput): AutomationHealthDisplay {
   if (health.status === "broken") {
-    const reason = detailOrUndefined(health.lastFailureDetail) ?? "Its workflow no longer declares this trigger.";
-    const builtin = workflow?.startsWith("builtin://") ?? false;
+    const reason = detailOrUndefined(health.lastFailureDetail) ?? "It no longer matches its workflow.";
+    // Remove, not Open workflow: the workflow may be gone (deleted from the
+    // repo, or no longer parsing on this server), and the activation is what
+    // keeps firing into a refusal. Fixing the workflow file is the other way
+    // out; the reason says what changed.
     return {
       ...ROWS.broken,
       detail: enabled ? reason : `Off. ${reason}`,
-      cta: builtin ? { kind: "remove_trigger", label: "Remove trigger" } : { kind: "open_workflow", label: "Open workflow" },
+      cta: { kind: "remove_trigger", label: "Remove trigger" },
     };
   }
 

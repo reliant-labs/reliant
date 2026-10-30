@@ -95,6 +95,7 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import type { Chat } from "../../types/chat";
 import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
+import { chatListRows } from "../../lib/sidebarChatList";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
 import { archiveWorktree } from "../../hooks/worktree-actions";
@@ -435,7 +436,9 @@ export function MobileChatList() {
   const [browsing, setBrowsing] = useState<ChatGroup | null>(null);
   const canCreateWorkspace = useCapability("worktreeCreate");
 
-  const chats = chatList?.chats;
+  // The chat list's rule, applied to whatever reached the cache: a run lists
+  // only once adopted (lib/sidebarChatList).
+  const chats = useMemo(() => (chatList?.chats ? chatListRows(chatList.chats) : undefined), [chatList?.chats]);
   const groups = useMemo(
     () => buildGroups(chats ?? [], chatList?.mainWorktrees, sortOrder, { scope, projectNames }),
     [chats, chatList?.mainWorktrees, sortOrder, scope, projectNames],

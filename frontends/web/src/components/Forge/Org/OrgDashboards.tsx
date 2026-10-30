@@ -28,12 +28,7 @@ export function orgDashboardHref(ref: DashboardRef): string {
   return consolePath(ref.projectId, { kind: "dashboard", dashKind: ref.kind, key: ref.key });
 }
 
-/** Where a release opens: its app's Releases page. Empty for a release with no app. */
-export function orgReleaseHref(version: string, project?: string): string {
-  return project ? consolePath(project, { kind: "release", version }) : "";
-}
-
-const HREFS = { dashboard: orgDashboardHref, release: orgReleaseHref };
+const HREFS = { dashboard: orgDashboardHref };
 
 export function OrgDashboards({ environments }: { environments: readonly ObsEnvironment[] }) {
   const navigate = useNavigate();

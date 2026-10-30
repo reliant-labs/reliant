@@ -39,8 +39,6 @@ export interface SerializedViewer {
   browserTabId?: string; // for browser viewer
   worktreeId?: string; // for file context
   processId?: string; // for commands viewer
-  chatId?: string; // for workflow viewer
-  workflowName?: string; // for workflow viewer
 }
 
 /** Right sidebar tab options */

@@ -304,6 +304,19 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__check_run_list": {
+		Bindable: map[string]struct{}{
+			"app_id":     {},
+			"check_name": {},
+			"connection": {},
+			"filter":     {},
+			"head_sha":   {},
+			"owner":      {},
+			"repo":       {},
+			"status":     {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__code_search": {
 		Bindable: map[string]struct{}{
 			"connection": {},
@@ -442,17 +455,6 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
-	"github__pr_enqueue": {
-		Bindable: map[string]struct{}{
-			"connection":      {},
-			"expectedHeadOid": {},
-			"owner":           {},
-			"pull_number":     {},
-			"repo":            {},
-			"repository_id":   {},
-		},
-		Unbindable: map[string]string{},
-	},
 	"github__pr_get": {
 		Bindable: map[string]struct{}{
 			"connection":  {},
@@ -464,10 +466,12 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__pr_list_files": {
 		Bindable: map[string]struct{}{
-			"connection":  {},
-			"owner":       {},
-			"pull_number": {},
-			"repo":        {},
+			"connection":    {},
+			"include_patch": {},
+			"owner":         {},
+			"path_prefix":   {},
+			"pull_number":   {},
+			"repo":          {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -536,11 +540,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__repo_get_content": {
 		Bindable: map[string]struct{}{
-			"connection": {},
-			"owner":      {},
-			"path":       {},
-			"ref":        {},
-			"repo":       {},
+			"connection":   {},
+			"line_count":   {},
+			"owner":        {},
+			"path":         {},
+			"ref":          {},
+			"repo":         {},
+			"start_column": {},
+			"start_line":   {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -636,6 +643,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_machines": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_pending_questions": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -689,6 +700,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_machine": {
+		Bindable: map[string]struct{}{
+			"action":     {},
+			"machine_id": {},
+			"size":       {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1003,6 +1022,7 @@ var generatedToolParams = map[string]ToolParams{
 	"spawn_send": {
 		Bindable: map[string]struct{}{
 			"message": {},
+			"subject": {},
 		},
 		Unbindable: map[string]string{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",
@@ -1189,4 +1209,24 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+}
+
+// generatedKnownTags is the tool-tag vocabulary, projected from the
+// registry's TagDescriptions.
+var generatedKnownTags = []string{
+	"analysis",
+	"coding:default",
+	"coding:plan",
+	"execution",
+	"file",
+	"integration",
+	"mcp",
+	"media",
+	"planning",
+	"readonly",
+	"runs",
+	"search",
+	"shell",
+	"web",
+	"workflow",
 }

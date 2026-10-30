@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nats-io/nats.go"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -26,7 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
-	_ "github.com/reliant-labs/reliant/internal/integrations/githubqueue" // Register the native queue executor.
+	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -37,8 +39,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -70,7 +74,12 @@ import (
 // user — an unattended trigger fire has no user JWT — so it alone falls back
 // to the trigger's delegated token, and resumes a held run's machine as the
 // worker.
-type WorkerDaemonRouter struct{ *toolexec.NATSDaemonRouter }
+type WorkerDaemonRouter struct {
+	*toolexec.NATSDaemonRouter
+	// ControlPlane is the adapter the router resumes machines through, nil
+	// when self-hosted. manage_machine stops and resizes through it too.
+	ControlPlane controlplane.Service
+}
 
 // WorkerDaemonRouterDeps is the bus the router routes over, the database the
 // daemon records come from, and the control plane that wakes machines.
@@ -88,12 +97,14 @@ type WorkerDaemonRouterDeps struct {
 func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error) {
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
+	var cpService controlplane.Service
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
 		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
 		}
 		cpAdapter := controlplane.NewInstrumented(cpDeps)
+		cpService = cpAdapter
 		opts = append(opts,
 			toolexec.WithDaemonResumer(cpAdapter),
 			// The worker alone may fall back to a trigger's delegated
@@ -109,7 +120,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	}
 	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, opts...)
 	logging.Info("Tool execution routing via NATS")
-	return &WorkerDaemonRouter{router}, nil
+	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService}, nil
 }
 
 // WorkerIntegrationCredentials is the credential source the worker's
@@ -370,7 +381,9 @@ func NewAgentRuns(d AgentRunsDeps) (*agentruns.Runs, error) {
 type WorkerTrigger struct{ *trigger.Service }
 
 // WorkerTriggerDeps is the trigger service's wiring on the worker: its
-// inbound half needs the provider registry and the vault (signed webhooks).
+// inbound half needs the provider registry and the vault (signed webhooks),
+// and the control plane, which hosts the GitHub App and mints the tokens an
+// unattended fire wakes its machine with.
 type WorkerTriggerDeps struct {
 	Logger       *slog.Logger
 	Config       *config.Config
@@ -379,9 +392,16 @@ type WorkerTriggerDeps struct {
 	Vault        vault.Service
 	Pollers      *webhook.Registry
 	Integrations *IntegrationSettings
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
-// NewWorkerTrigger builds the trigger service list_triggers reads through.
+// NewWorkerTrigger builds the trigger service list_triggers reads through and
+// the activation tools (create_trigger_activation, …) write through. Those
+// writes must validate as the api-server's TriggerService does, so the
+// control plane and GitHub's access gate are wired here as there: without
+// them every GitHub activation was refused ("connect github first" — hosted
+// GitHub has no saved connection) or could not act as the App. The access
+// refresh loop and the input-option reachability check stay api-only.
 // PUBLIC_URL is used when the worker has it; without it a webhook's URL is
 // reported as a bare path.
 //
@@ -389,17 +409,28 @@ type WorkerTriggerDeps struct {
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
+	githubAccess, err := wireGitHubAccess(repo, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	if err != nil {
+		return nil, fmt.Errorf("trigger service: %w", err)
+	}
+	var access map[string]trigger.IntegrationAccess
+	if githubAccess != nil {
+		access = map[string]trigger.IntegrationAccess{ghaccess.IntegrationID: gitHubAccess{githubAccess}}
+	}
 	svc, err := trigger.New(trigger.Deps{
 		Logger:       d.Logger,
 		Config:       d.Config,
 		Repo:         repo,
 		Syncer:       syncer,
 		Fires:        fires,
+		ControlPlane: hostedControlPlane(d.ControlPlane),
+		Access:       access,
 		Integrations: d.Integrations.Config,
 		Sealer:       d.Vault,
 		Catalog:      d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
@@ -464,6 +495,9 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		TriggerFirer:       triggertools.New(d.Triggers.Service),
 		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		ActivationManager:  d.Triggers.Service,
+		// list_machines / manage_machine act on the user's machines as the
+		// user, through the router's control-plane adapter.
+		MachineController: newMachineController(repo, d.Router),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -583,6 +617,8 @@ type TemporalWorkerDeps struct {
 	// Worker carries the hosted-action controller's endpoint and trust
 	// bundle (hosted_actions_url, hosted_actions_ca_file); see HostedActions.
 	Worker *configv1.WorkerConfig
+	// NATS delivers the stop nudges the activities on this worker watch.
+	NATS *NATSConn
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -632,7 +668,16 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
 	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
+	// Stop nudges reach this worker's activities over NATS (stopnudge). If
+	// the subscription cannot be made, stops still arrive on the regular
+	// heartbeat, one throttle window later: degrade, never refuse to run.
+	nudges := stopnudge.NewHub()
+	if _, err := d.NATS.Conn.Subscribe(stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
+		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
+			"subject", stopnudge.Subject, "error", err)
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
+		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,

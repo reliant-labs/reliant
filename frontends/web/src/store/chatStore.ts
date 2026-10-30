@@ -36,7 +36,7 @@ import {
   toolStatusSurvivesStreamAbort,
 } from "../lib/chatStreamReducers";
 
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 
 // Chat streaming is handled by the per-chat stream globalUpdatesStore owns
 import type {
@@ -514,7 +514,8 @@ const applyNodeExecutionUpdates = (
   isSnapshot: boolean,
 ): NodeExecutionUpdate[] =>
   applyLogSlice(existing, updates, isSnapshot, {
-    key: (n) => `${n.node_id}:${n.event_type}`,
+    // Per run: two runs of one workflow share every node id.
+    key: (n) => `${n.workflow_id}:${n.node_id}:${n.event_type}`,
     sort: bySequenceNumber,
   });
 
@@ -2060,11 +2061,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
     } catch (error) {
       logger.error("[ChatStore] Failed to load messages:", error);
-      Sentry.captureMessage('Failed to load chat messages', {
-        level: 'warning',
-        tags: { component: 'chat', operation: 'load_messages' },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: 'chat', operation: 'load_messages', chat_id: chatId });
     }
   },
 
@@ -2192,11 +2189,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return !reachedStart;
     } catch (error) {
       logger.error("[ChatStore] Failed to load older messages:", error);
-      Sentry.captureMessage("Failed to load older chat messages", {
-        level: "warning",
-        tags: { component: "chat", operation: "load_older_messages" },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: "chat", operation: "load_older_messages", chat_id: chatId });
       // Leave hasMore alone: this is a transient failure, not end-of-history.
       // The next startReached retries.
       return true;
@@ -3404,6 +3397,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             );
             get().clearStreamingState(chatId);
           }
+          // A snapshot carries no node state and replaced the live node
+          // events: an open run-status view re-reads where its run stands,
+          // or the events the snapshot skipped past would be missing.
+          void queryClient.invalidateQueries({
+            queryKey: chatServiceKeys.getWorkflowNodeExecutions({ chatId }),
+          });
         }
 
         // Keep any open thread-scoped reader (a spawn preview, a selected

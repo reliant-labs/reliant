@@ -125,6 +125,7 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"active": true, "tokenId": p.TokenID, "orgId": p.OrgID, "actingUserId": p.ActingUserID,
 				"scopes": p.Scopes.Strings(), "resource": wireOf(p.Resource), "ephemeral": p.Ephemeral,
 				"expiresAt": p.ExpiresAt,
+				"allScopes": p.Scopes.Has(fat.ScopeDaemonConnect) && p.ActingUserID != "",
 			}
 		}
 	case "MintForUser":
@@ -143,6 +144,18 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if serr != nil {
 			writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
 			return
+		}
+		if requested.Has(fat.ScopeDaemonConnect) && in.UserID != "" {
+			// control-plane's wildcard (accesstoken/wildcard.go): a daemon
+			// credential holds every scope its person may hold on its binding.
+			// Resolved here at mint, which is enough for reliant's half of the
+			// chain; control-plane resolves it at every use.
+			for _, s := range fat.AllScopes {
+				probe := fat.Grant{OrgID: "o", Name: "n", ActingUserID: in.UserID, Resource: in.Resource.resource(), Scopes: fat.SetOf(s)}
+				if probe.Validate(time.Time{}) == nil {
+					requested[s] = struct{}{}
+				}
+			}
 		}
 		for s := range cp.clipToGrants(in.UserID, requested) {
 			scopes = append(scopes, s)
@@ -401,9 +414,10 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	require.Equal(t, userID, ack.GetUserId())
 	require.Equal(t, int64(1), cp.introspect.Load()-before, "the gateway introspects exactly once per connect")
 
-	// A daemon credential is not an API credential: the API refuses it.
+	// A daemon credential holds every scope its person holds ("*", owner
+	// decision 2026-10-29), reliant:api included: the API admits it as them.
 	_, err = tokens(daemonToken).ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "daemon:connect must not authenticate the API: %v", err)
+	require.NoError(t, err, "a daemon credential holds reliant:api like every other scope")
 
 	// 3. The user revokes it through the same facade.
 	_, err = tokens(session).RevokeToken(context.Background(), connect.NewRequest(&reliantv1.RevokeTokenRequest{

@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/access_token/v1/access_token.proto.
  */
 export const file_services_access_token_v1_access_token: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEiTwoPT3JnTWVtYmVyR3JhbnRzEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIOCgZzY29wZXMYBCADKAkiHAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QiYwobTGlzdE9yZ01lbWJlckdyYW50c1Jlc3BvbnNlEjEKB21lbWJlcnMYASADKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzEhEKCWdyYW50YWJsZRgCIAMoCSI/ChxVcGRhdGVPcmdNZW1iZXJHcmFudHNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSDgoGc2NvcGVzGAIgAygJIlEKHVVwZGF0ZU9yZ01lbWJlckdyYW50c1Jlc3BvbnNlEjAKBm1lbWJlchgBIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXJHcmFudHMiKwoPUmVzb3VyY2VCaW5kaW5nEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkinAMKC0FjY2Vzc1Rva2VuEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFgoOZGlzcGxheV9wcmVmaXgYAyABKAkSDgoGc2NvcGVzGAQgAygJEhoKEmNyZWF0ZWRfYnlfdXNlcl9pZBgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnJldm9rZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBm9yZ19pZBgKIAEoCRIWCg5hY3RpbmdfdXNlcl9pZBgLIAEoCRIyCghyZXNvdXJjZRgMIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZUJpbmRpbmcSEQoJZXBoZW1lcmFsGA0gASgIImIKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBnNjb3BlcxgCIAMoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJSChNDcmVhdGVUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCSJFChFMaXN0VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBAUISChBfaW5jbHVkZV9yZXZva2VkIkIKEkxpc3RUb2tlbnNSZXNwb25zZRIsCgZ0b2tlbnMYASADKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIkIKE1Jldm9rZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iuwEKFENyZWF0ZU15VG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSDgoGc2NvcGVzGAIgAygJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjIKCHJlc291cmNlGAQgASgLMiAuY29udHJvbHBsYW5lLnYxLlJlc291cmNlQmluZGluZxIRCgllcGhlbWVyYWwYBSABKAgSDgoGcm90YXRlGAYgASgIImUKFUNyZWF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkSDwoHcm90YXRlZBgDIAEoCCJlChNMaXN0TXlUb2tlbnNSZXF1ZXN0EhwKD2luY2x1ZGVfcmV2b2tlZBgBIAEoCEgAiAEBEhIKBXNjb3BlGAIgASgJSAGIAQFCEgoQX2luY2x1ZGVfcmV2b2tlZEIICgZfc2NvcGUiRAoUTGlzdE15VG9rZW5zUmVzcG9uc2USLAoGdG9rZW5zGAEgAygLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiIKFFJldm9rZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJldm9rZU15VG9rZW5SZXNwb25zZSIyCh1SZXNldERhZW1vblNjb3BlUG9saWN5UmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiIAoeUmVzZXREYWVtb25TY29wZVBvbGljeVJlc3BvbnNlImUKFFVwZGF0ZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIOCgZzY29wZXMYAyADKAkSFQoNdXBkYXRlX3Njb3BlcxgEIAEoCEIHCgVfbmFtZSJEChVVcGRhdGVNeVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iJgoURXhjaGFuZ2VUb2tlblJlcXVlc3QSDgoGc2NvcGVzGAEgAygJIlQKFUV4Y2hhbmdlVG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAky6wwKEkFjY2Vzc1Rva2VuU2VydmljZRKiAQoLQ3JlYXRlVG9rZW4SIy5jb250cm9scGxhbmUudjEuQ3JlYXRlVG9rZW5SZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiSKK7GEQIATpACgZjcmVhdGUSNgoMYWNjZXNzX3Rva2VuEhFyZXNwb25zZS50b2tlbi5pZBoTcmVzcG9uc2UudG9rZW4ubmFtZRJdCgpMaXN0VG9rZW5zEiIuY29udHJvbHBsYW5lLnYxLkxpc3RUb2tlbnNSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLkxpc3RUb2tlbnNSZXNwb25zZSIGorsYAggBEpUBCgtSZXZva2VUb2tlbhIjLmNvbnRyb2xwbGFuZS52MS5SZXZva2VUb2tlblJlcXVlc3QaJC5jb250cm9scGxhbmUudjEuUmV2b2tlVG9rZW5SZXNwb25zZSI7orsYNwgBGAE6MQoGcmV2b2tlEicKDGFjY2Vzc190b2tlbhICaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSswEKDUNyZWF0ZU15VG9rZW4SJS5jb250cm9scGxhbmUudjEuQ3JlYXRlTXlUb2tlblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuQ3JlYXRlTXlUb2tlblJlc3BvbnNlIlOiuxhPCAE6SwoGY3JlYXRlEjYKDGFjY2Vzc190b2tlbhIRcmVzcG9uc2UudG9rZW4uaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUqCWVwaGVtZXJhbBJjCgxMaXN0TXlUb2tlbnMSJC5jb250cm9scGxhbmUudjEuTGlzdE15VG9rZW5zUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0TXlUb2tlbnNSZXNwb25zZSIGorsYAggBEoYBCg1SZXZva2VNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLlJldm9rZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlJldm9rZU15VG9rZW5SZXNwb25zZSImorsYIggBGAE6HAoGcmV2b2tlEhIKDGFjY2Vzc190b2tlbhICaWQSmQEKDVVwZGF0ZU15VG9rZW4SJS5jb250cm9scGxhbmUudjEuVXBkYXRlTXlUb2tlblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuVXBkYXRlTXlUb2tlblJlc3BvbnNlIjmiuxg1CAE6MQoGdXBkYXRlEicKDGFjY2Vzc190b2tlbhICaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSrAEKFlJlc2V0RGFlbW9uU2NvcGVQb2xpY3kSLi5jb250cm9scGxhbmUudjEuUmVzZXREYWVtb25TY29wZVBvbGljeVJlcXVlc3QaLy5jb250cm9scGxhbmUudjEuUmVzZXREYWVtb25TY29wZVBvbGljeVJlc3BvbnNlIjGiuxgtCAE6KQoFcmVzZXQSIAoTZGFlbW9uX3Njb3BlX3BvbGljeRIJZGFlbW9uX2lkEq0BCg1FeGNoYW5nZVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXNwb25zZSJNorsYSQgBOkU6Q21pbnRzIGEgc2hvcnQtbGl2ZWQgc2Vzc2lvbiB0b2tlbiBmb3IgdGhlIENMSTsgYXVkaXRfbG9nIHJlY29yZHMgaXQSeAoTTGlzdE9yZ01lbWJlckdyYW50cxIrLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiBqK7GAIIARKfAQoVVXBkYXRlT3JnTWVtYmVyR3JhbnRzEi0uY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QaLi5jb250cm9scGxhbmUudjEuVXBkYXRlT3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiJ6K7GCMIATofCgpzZXRfZ3JhbnRzEhEKBm1lbWJlchIHdXNlcl9pZELeAQoTY29tLmNvbnRyb2xwbGFuZS52MUIQQWNjZXNzVG9rZW5Qcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvYWNjZXNzX3Rva2VuL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEiTwoPT3JnTWVtYmVyR3JhbnRzEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIOCgZzY29wZXMYBCADKAkiPAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQFCCQoHX29yZ19pZCJjChtMaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2USMQoHbWVtYmVycxgBIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXJHcmFudHMSEQoJZ3JhbnRhYmxlGAIgAygJIl8KHFVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzY29wZXMYAiADKAkSEwoGb3JnX2lkGAMgASgJSACIAQFCCQoHX29yZ19pZCJRCh1VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXNwb25zZRIwCgZtZW1iZXIYASABKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzIisKD1Jlc291cmNlQmluZGluZxIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJIrADCgtBY2Nlc3NUb2tlbhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhYKDmRpc3BsYXlfcHJlZml4GAMgASgJEg4KBnNjb3BlcxgEIAMoCRIaChJjcmVhdGVkX2J5X3VzZXJfaWQYBSABKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZvcmdfaWQYCiABKAkSFgoOYWN0aW5nX3VzZXJfaWQYCyABKAkSMgoIcmVzb3VyY2UYDCABKAsyIC5jb250cm9scGxhbmUudjEuUmVzb3VyY2VCaW5kaW5nEhEKCWVwaGVtZXJhbBgNIAEoCBISCgphbGxfc2NvcGVzGA4gASgIIoIBChJDcmVhdGVUb2tlblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoGb3JnX2lkGAQgASgJSACIAQFCCQoHX29yZ19pZCJSChNDcmVhdGVUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCSJlChFMaXN0VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARITCgZvcmdfaWQYAiABKAlIAYgBAUISChBfaW5jbHVkZV9yZXZva2VkQgkKB19vcmdfaWQiQgoSTGlzdFRva2Vuc1Jlc3BvbnNlEiwKBnRva2VucxgBIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiJAChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCJCChNSZXZva2VUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuItsBChRDcmVhdGVNeVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBnNjb3BlcxgCIAMoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCghyZXNvdXJjZRgEIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZUJpbmRpbmcSEQoJZXBoZW1lcmFsGAUgASgIEg4KBnJvdGF0ZRgGIAEoCBITCgZvcmdfaWQYByABKAlIAIgBAUIJCgdfb3JnX2lkImUKFUNyZWF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkSDwoHcm90YXRlZBgDIAEoCCKFAQoTTGlzdE15VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBARISCgVzY29wZRgCIAEoCUgBiAEBEhMKBm9yZ19pZBgDIAEoCUgCiAEBQhIKEF9pbmNsdWRlX3Jldm9rZWRCCAoGX3Njb3BlQgkKB19vcmdfaWQiRAoUTGlzdE15VG9rZW5zUmVzcG9uc2USLAoGdG9rZW5zGAEgAygLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIkIKFFJldm9rZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhMKBm9yZ19pZBgCIAEoCUgAiAEBQgkKB19vcmdfaWQiFwoVUmV2b2tlTXlUb2tlblJlc3BvbnNlIlIKHVJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIiAKHlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSKFAQoUVXBkYXRlTXlUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEg4KBnNjb3BlcxgDIAMoCRIVCg11cGRhdGVfc2NvcGVzGAQgASgIEhMKBm9yZ19pZBgFIAEoCUgBiAEBQgcKBV9uYW1lQgkKB19vcmdfaWQiRAoVVXBkYXRlTXlUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiYKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0Eg4KBnNjb3BlcxgBIAMoCSJUChVFeGNoYW5nZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4SDgoGc2VjcmV0GAIgASgJMusMChJBY2Nlc3NUb2tlblNlcnZpY2USogEKC0NyZWF0ZVRva2VuEiMuY29udHJvbHBsYW5lLnYxLkNyZWF0ZVRva2VuUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVUb2tlblJlc3BvbnNlIkiiuxhECAE6QAoGY3JlYXRlEjYKDGFjY2Vzc190b2tlbhIRcmVzcG9uc2UudG9rZW4uaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSXQoKTGlzdFRva2VucxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKVAQoLUmV2b2tlVG9rZW4SIy5jb250cm9scGxhbmUudjEuUmV2b2tlVG9rZW5SZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLlJldm9rZVRva2VuUmVzcG9uc2UiO6K7GDcIARgBOjEKBnJldm9rZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lErMBCg1DcmVhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXNwb25zZSJTorsYTwgBOksKBmNyZWF0ZRI2CgxhY2Nlc3NfdG9rZW4SEXJlc3BvbnNlLnRva2VuLmlkGhNyZXNwb25zZS50b2tlbi5uYW1lKgllcGhlbWVyYWwSYwoMTGlzdE15VG9rZW5zEiQuY29udHJvbHBsYW5lLnYxLkxpc3RNeVRva2Vuc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdE15VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKGAQoNUmV2b2tlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVzcG9uc2UiJqK7GCIIARgBOhwKBnJldm9rZRISCgxhY2Nlc3NfdG9rZW4SAmlkEpkBCg1VcGRhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXNwb25zZSI5orsYNQgBOjEKBnVwZGF0ZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lEqwBChZSZXNldERhZW1vblNjb3BlUG9saWN5Ei4uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLlJlc2V0RGFlbW9uU2NvcGVQb2xpY3lSZXNwb25zZSIxorsYLQgBOikKBXJlc2V0EiAKE2RhZW1vbl9zY29wZV9wb2xpY3kSCWRhZW1vbl9pZBKtAQoNRXhjaGFuZ2VUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5FeGNoYW5nZVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5FeGNoYW5nZVRva2VuUmVzcG9uc2UiTaK7GEkIATpFOkNtaW50cyBhIHNob3J0LWxpdmVkIHNlc3Npb24gdG9rZW4gZm9yIHRoZSBDTEk7IGF1ZGl0X2xvZyByZWNvcmRzIGl0EngKE0xpc3RPcmdNZW1iZXJHcmFudHMSKy5jb250cm9scGxhbmUudjEuTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdE9yZ01lbWJlckdyYW50c1Jlc3BvbnNlIgaiuxgCCAESnwEKFVVwZGF0ZU9yZ01lbWJlckdyYW50cxItLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ01lbWJlckdyYW50c1Jlc3BvbnNlIieiuxgjCAE6HwoKc2V0X2dyYW50cxIRCgZtZW1iZXISB3VzZXJfaWRC3gEKE2NvbS5jb250cm9scGxhbmUudjFCEEFjY2Vzc1Rva2VuUHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2FjY2Vzc190b2tlbi92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * OrgMemberGrants is one member and the org permissions they hold.
@@ -76,6 +76,14 @@ export const OrgMemberGrantsSchema: GenMessage<OrgMemberGrants> = /*@__PURE__*/
  * @generated from message controlplane.v1.ListOrgMemberGrantsRequest
  */
 export type ListOrgMemberGrantsRequest = Message<"controlplane.v1.ListOrgMemberGrantsRequest"> & {
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -128,6 +136,15 @@ export type UpdateOrgMemberGrantsRequest = Message<"controlplane.v1.UpdateOrgMem
    * @generated from field: repeated string scopes = 2;
    */
   scopes: string[];
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -201,6 +218,12 @@ export type AccessToken = Message<"controlplane.v1.AccessToken"> & {
   displayPrefix: string;
 
   /**
+   * scopes is the authority the token holds as of this response. For a
+   * wildcard credential (all_scopes) that is the wildcard resolved now —
+   * every scope its acting user holds on its binding, under any ceiling set
+   * on its daemon — never the floor stored on the row. A revoked token holds
+   * nothing; it lists the scopes it was minted with, for the audit trail.
+   *
    * @generated from field: repeated string scopes = 4;
    */
   scopes: string[];
@@ -251,6 +274,17 @@ export type AccessToken = Message<"controlplane.v1.AccessToken"> & {
    * @generated from field: bool ephemeral = 13;
    */
   ephemeral: boolean;
+
+  /**
+   * all_scopes marks a daemon credential, which holds every scope its acting
+   * user holds INCLUDING scopes added after this response: scopes is a
+   * snapshot of a set that follows the person's grants. A UI shows it as "all
+   * permissions". Saving scopes back unchanged (UpdateMyToken) keeps the
+   * wildcard; removing any scope turns it into exactly the list submitted.
+   *
+   * @generated from field: bool all_scopes = 14;
+   */
+  allScopes: boolean;
 };
 
 /**
@@ -278,6 +312,15 @@ export type CreateTokenRequest = Message<"controlplane.v1.CreateTokenRequest"> &
    * @generated from field: google.protobuf.Timestamp expires_at = 3;
    */
   expiresAt?: Timestamp | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 4;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -319,6 +362,15 @@ export type ListTokensRequest = Message<"controlplane.v1.ListTokensRequest"> & {
    * @generated from field: optional bool include_revoked = 1;
    */
   includeRevoked?: boolean | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -353,6 +405,15 @@ export type RevokeTokenRequest = Message<"controlplane.v1.RevokeTokenRequest"> &
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -418,6 +479,15 @@ export type CreateMyTokenRequest = Message<"controlplane.v1.CreateMyTokenRequest
    * @generated from field: bool rotate = 6;
    */
   rotate: boolean;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 7;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -467,11 +537,22 @@ export type ListMyTokensRequest = Message<"controlplane.v1.ListMyTokensRequest">
   includeRevoked?: boolean | undefined;
 
   /**
-   * scope, when set, restricts to tokens holding it.
+   * scope, when set, restricts to tokens holding it: matched against the
+   * scopes each token LISTS, so a wildcard credential matches every scope it
+   * resolves to, not only the floor stored on its row.
    *
    * @generated from field: optional string scope = 2;
    */
   scope?: string | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -506,6 +587,15 @@ export type RevokeMyTokenRequest = Message<"controlplane.v1.RevokeMyTokenRequest
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -536,6 +626,15 @@ export type ResetDaemonScopePolicyRequest = Message<"controlplane.v1.ResetDaemon
    * @generated from field: string daemon_id = 1;
    */
   daemonId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -592,9 +691,23 @@ export type UpdateMyTokenRequest = Message<"controlplane.v1.UpdateMyTokenRequest
    * from one clearing them, and a token with no scopes cannot be minted at
    * all (accesstoken.NewSet refuses it).
    *
+   * On a wildcard credential (AccessToken.all_scopes) a set covering
+   * everything it holds now keeps the wildcard, so a save of the list as
+   * shown changes nothing; a set that removes any scope replaces the wildcard
+   * with exactly that list.
+   *
    * @generated from field: bool update_scopes = 4;
    */
   updateScopes: boolean;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 5;
+   */
+  orgId?: string | undefined;
 };
 
 /**

@@ -5,6 +5,8 @@
  * in the UI with consistent parameter extraction and formatting.
  */
 
+import { agentMessageSubject } from './agentMessageSubject';
+
 /**
  * Tool categories for UI grouping and display logic
  */
@@ -719,6 +721,27 @@ export const formatSpawnStatusParams: ToolFormatter = (input) => {
 };
 
 /**
+ * Format spawn_send parameters as the message's one-line subject, addressed to
+ * the recipient. The full message is the expanded body (SpawnSendToolRenderer),
+ * never the row: agent-to-agent messages are long and the row is one line.
+ * ToolExecution augments the display-only input with the recipient's resolved
+ * title, as it does for spawn_status.
+ */
+export const formatSpawnSendParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'spawn_send()', structured: {} };
+  const agentId = input.agent_id as string | undefined;
+  const title = (input.title as string | undefined)?.trim();
+  const subject = agentMessageSubject(input.subject as string | undefined, input.message as string | undefined);
+  const recipient = title || (agentId ? 'agent' : '');
+  const summary = recipient && subject ? `to ${recipient}: ${subject}` : subject || (recipient ? `to ${recipient}` : '');
+  return {
+    summary,
+    fullText: `spawn_send(${summary})`,
+    structured: { agentId, title, subject },
+  };
+};
+
+/**
  * Format spawn tool parameters
  */
 export const formatSpawnParams: ToolFormatter = (input) => {
@@ -780,6 +803,7 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   shell_wait: formatShellWaitParams,
   wait_for_machine: formatWaitForMachineParams,
   spawn_status: formatSpawnStatusParams,
+  spawn_send: formatSpawnSendParams,
   spawn: formatSpawnParams,
 };
 
@@ -1111,4 +1135,14 @@ export function isSpawnTool(toolName: string): boolean {
   const lower = toolName.toLowerCase();
   const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
   return SPAWN_TOOLS.includes(baseName as typeof SPAWN_TOOLS[number]);
+}
+
+/**
+ * Check if a tool is spawn_send (bare or MCP-prefixed): an agent-to-agent
+ * message, rendered as its subject with the message as the expanded body.
+ */
+export function isSpawnSendTool(toolName: string): boolean {
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return baseName === 'spawn_send';
 }

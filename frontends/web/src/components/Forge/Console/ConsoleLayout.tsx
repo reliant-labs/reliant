@@ -30,7 +30,7 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
-import { useDashboardIndex } from "@/hooks/dashboard-queries";
+import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -42,8 +42,10 @@ import { useProjects } from "@/hooks/project-queries";
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
+import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
+import { useOptionalViews } from "./useOptionalViews";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
@@ -160,6 +162,11 @@ export function ConsoleLayout() {
   // The caller's starred dashboards, nested under Dashboards — the same index
   // (and cache entry) the Dashboards page reads for this scope.
   const scopedEnvId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
+  // An unregistered scoped environment must not accidentally probe the whole project.
+  const discoveryScope = useMemo(() => org.orgId && settled && (env === ENV_ALL || scopedEnvId)
+    ? { orgId: org.orgId, projectId: forgeProject, envIds: scopedEnvId ? [scopedEnvId] : [], filters: [] }
+    : null, [org.orgId, settled, env, forgeProject, scopedEnvId]);
+  const optionalViews = useOptionalViews(discoveryScope);
   const dashboards = useDashboardIndex(org.orgId, forgeProject, scopedEnvId);
   const starred = useMemo(
     () =>
@@ -172,6 +179,14 @@ export function ConsoleLayout() {
     page.kind === "dashboard"
       ? dashboards.data?.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title
       : undefined;
+
+  // The open dashboard's own scope (the same cached read the page makes): a
+  // platform dashboard is not per environment, and the control must not imply it is.
+  const openDashboard = useDashboard(
+    org.orgId,
+    page.kind === "dashboard" && page.dashKind !== "builtin" ? { kind: page.dashKind, projectId: forgeProject, key: page.key } : null
+  );
+  const platformWide = openDashboard.data?.spec.scope === "platform";
 
   const [collapsed, setCollapsed] = useState(() => readRail());
   const toggleCollapsed = useCallback(() => {
@@ -210,13 +225,16 @@ export function ConsoleLayout() {
   return (
     <ConsoleShell
       project={forgeProject}
+      orgSwitcher={<OrgSwitcher />}
       page={page}
       env={env}
       envs={navEnvs}
       alertsFiring={alertsFiring}
       starred={starred}
       dashboardTitle={dashboardTitle}
+      optionalViews={optionalViews}
       scope={scope}
+      platformWide={platformWide}
       onEnvChange={setEnv}
       user={user}
       collapsed={collapsed}

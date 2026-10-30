@@ -125,11 +125,16 @@ type ApprovalResolveStore interface {
 // to the local-model directory, threads.Service, the tool bindings, the mailbox
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// The spawn tool lists presets from the run's pinned catalog, or its
+	// machine's, as LoadPresetParams loads them (projectPresets).
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)
@@ -168,6 +173,7 @@ type CleanupStore interface {
 // CompactStore is what CompactActivity reads and writes; the summary goes
 // through threads.Service and the history through LoadMessagesForLLM.
 type CompactStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -274,6 +280,7 @@ type ExecuteToolsStore interface {
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.
 type GenerateTitleStore interface {
+	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
@@ -286,24 +293,35 @@ type GitPublishStore interface {
 	WorktreeOwnerReader
 }
 
-// LoadPresetParamsStore is what LoadPresetParamsActivity reads.
+// LoadPresetParamsStore is what LoadPresetParamsActivity reads: the run's
+// chat, and the presets its machine synced (or the union of every machine's).
 type LoadPresetParamsStore interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
 }
 
 // LoadWorkflowStore is what LoadWorkflowActivity reads: the chat's project or
-// worktree, its presets, and the workflow itself through workflowsource.
+// worktree, its presets, and the workflow itself through workflowsource, from
+// the catalog the run's machine synced (workflowsource.MachineStore).
 type LoadWorkflowStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 	workflowsource.Store
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
+	// PinProjectCatalog stores the catalog a run starts with (db.Repo).
+	PinProjectCatalog(ctx context.Context, scope db.CatalogPinScope) (string, error)
 }
 
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.
 type MachineResumeWakeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
@@ -313,8 +331,11 @@ type MachineResumeWakeStore interface {
 // writes.
 type PreflightDaemonCheckStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	QueueChatForMachine(ctx context.Context, chatID string, machine *db.QueuedMachine) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 }
@@ -378,6 +399,7 @@ type WorkflowCheckpointStore interface {
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
 	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
@@ -388,6 +410,7 @@ type WorkflowStatusStore interface {
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error

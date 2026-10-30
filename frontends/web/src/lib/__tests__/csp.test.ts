@@ -26,8 +26,6 @@ const PROD_CONFIG = {
   SUPABASE_URL: "https://dash.reliantlabs.io",
   APP_URL: "https://app.reliantlabs.io",
   OTEL_ENDPOINT: "/_otel",
-  SENTRY_DSN:
-    "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
 };
 
 /** Pull one directive's value out of a policy string. */
@@ -98,13 +96,22 @@ describe("runtime connect-src (from config.js)", () => {
     expect(connect).toContain("ws://127.0.0.1:*");
   });
 
-  it("allows the Sentry ingest host derived from the DSN", () => {
-    // A DSN is https://<key>@<host>/<project> — the credential must not end up
-    // in the origin, or the directive silently matches nothing.
+  it("allows a cross-origin telemetry ingest, as the desktop app's keyed one is", () => {
+    // The packaged renderer posts to https://<ingest host>/k/<key>; only the
+    // origin belongs in the directive, never the key in its path.
+    const connect = directive(
+      runtimePolicy({ ...PROD_CONFIG, OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x" }),
+      "connect-src",
+    );
+
+    expect(connect).toContain("https://ingest.example.dev");
+    expect(connect).not.toContain("rbk_x");
+  });
+
+  it("allows no Sentry ingest: the web app no longer reports to Sentry", () => {
     const connect = directive(runtimePolicy(PROD_CONFIG), "connect-src");
 
-    expect(connect).toContain("https://o4509000353447936.ingest.us.sentry.io");
-    expect(connect).not.toContain("c84a8011e134e0b905db7ba5f10dbc8f");
+    expect(connect).not.toContain("sentry.io");
   });
 
   it("narrows to 'self' and the fixed hosts when config.js did not load", () => {
@@ -122,7 +129,7 @@ describe("runtime connect-src (from config.js)", () => {
     // a bare "undefined" token that invalidates the directive.
     const policy = runtimePolicy({
       API_URL: "not-a-url",
-      SENTRY_DSN: "",
+      SUPABASE_URL: "",
       OTEL_ENDPOINT: "/_otel",
       GATEWAY_URL: 42,
       APP_URL: "app://bundle",

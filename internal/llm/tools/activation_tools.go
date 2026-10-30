@@ -4,7 +4,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -39,7 +42,7 @@ type ActivationParams struct {
 	Params          map[string]any    `json:"params,omitempty" jsonschema:"description=Typed workflow inputs; replaces the params map when supplied."`
 	Presets         map[string]string `json:"presets,omitempty" jsonschema:"description=Workflow preset assignments."`
 	Message         *string           `json:"message,omitempty" jsonschema:"description=Seed prompt; omitted uses declaration prompt on create."`
-	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=owner or app. Defaults to owner on create."`
+	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=Who GitHub writes speak as: app (the Reliant GitHub bot) or owner. Defaults to app on create and to unchanged on update; choose owner only to write under the owner's own account."`
 }
 
 // ActivationPreview is a validated, immutable approval description, never a grant.
@@ -47,6 +50,41 @@ type ActivationPreview struct {
 	Title    string    `json:"title"`
 	Hash     string    `json:"hash"`
 	Revision time.Time `json:"revision,omitempty"`
+}
+
+// ActivationRefusal is a failure to prepare an activation whose Reason may be
+// shown to the agent and the owner: a fixed classification that names at most
+// fields, input names and declared names, never an input, preset or graph
+// value. Err is the full cause, for server logs only. It unwraps to Err, so
+// a classified error keeps its svcerr code.
+type ActivationRefusal struct {
+	Reason string
+	Err    error
+}
+
+func (e *ActivationRefusal) Error() string { return e.Reason + ": " + e.Err.Error() }
+func (e *ActivationRefusal) Unwrap() error { return e.Err }
+
+// RefuseActivation classifies err under reason. A classification already on
+// err is more specific than the caller's, so it is kept.
+func RefuseActivation(reason string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var refusal *ActivationRefusal
+	if errors.As(err, &refusal) {
+		return err
+	}
+	return &ActivationRefusal{Reason: reason, Err: err}
+}
+
+// ActivationRefusalReason is err's safe classification, or "" when it has none.
+func ActivationRefusalReason(err error) string {
+	var refusal *ActivationRefusal
+	if errors.As(err, &refusal) {
+		return refusal.Reason
+	}
+	return ""
 }
 
 // ActivationManager adapts the app's service; no second validation implementation.
@@ -94,29 +132,61 @@ func NewActivationTool(repo runCallerStore, manager ActivationManager, name stri
 func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall, unattended bool) (ActivationPreview, bool, error) {
 	caller, failure := resolveRunCaller(ctx, t.repo)
 	if failure != nil {
-		return ActivationPreview{}, false, fmt.Errorf("%s", failure.Content)
+		return ActivationPreview{}, false, RefuseActivation("the calling chat could not be resolved", fmt.Errorf("%s", failure.Content))
 	}
 	if unattended {
-		return ActivationPreview{}, false, fmt.Errorf("%s", automationpolicy.Refusal())
+		return ActivationPreview{}, false, RefuseActivation(automationpolicy.Refusal(), errors.New("unattended"))
 	}
 	if t.manager == nil {
-		return ActivationPreview{}, false, fmt.Errorf("activation management is unavailable")
+		return ActivationPreview{}, false, RefuseActivation("activation management is unavailable on this server", errors.New("no activation manager"))
 	}
-	input := call.Input
+	// Decode exactly as Run will: a model that stringified params (common
+	// for an open object) is repaired here too, or the preview refuses a
+	// call its execution would have accepted.
+	input := normalizeModelInput(call.Input, t.ParamSchema())
 	if bindings := t.Bindings(); len(bindings) > 0 {
 		var err error
 		input, err = ApplyBindings(t.name, input, bindings)
 		if err != nil {
-			return ActivationPreview{}, false, err
+			return ActivationPreview{}, false, RefuseActivation("tool bindings could not be applied", err)
 		}
 	}
 	var p ActivationParams
-	if err := json.Unmarshal([]byte(input), &p); err != nil {
-		return ActivationPreview{}, false, err
+	decoder := json.NewDecoder(strings.NewReader(input))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&p); err != nil {
+		reason := "tool input is not a valid " + t.name + " call"
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) && typeErr.Field != "" {
+			reason = fmt.Sprintf("tool input field %s must be a JSON %s", typeErr.Field, jsonKind(typeErr.Type))
+		}
+		return ActivationPreview{}, false, RefuseActivation(reason, err)
 	}
 	preview, err := t.manager.PrepareActivation(ctx.Context, caller.userID, t.name, p)
 	return preview, true, err
 }
+
+// jsonKind names the JSON type a Go value decodes from.
+func jsonKind(t reflect.Type) string {
+	if t == nil {
+		return "value"
+	}
+	switch t.Kind() {
+	case reflect.Map, reflect.Struct:
+		return "object"
+	case reflect.Slice, reflect.Array:
+		return "array"
+	case reflect.String:
+		return "string"
+	case reflect.Bool:
+		return "boolean"
+	case reflect.Pointer:
+		return jsonKind(t.Elem())
+	default:
+		return "number"
+	}
+}
+
 func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams) (ToolResponse, error) {
 	o := t.outer
 	caller, failure := resolveRunCaller(ctx, o.repo)

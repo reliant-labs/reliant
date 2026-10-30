@@ -131,10 +131,11 @@ service DeployService {
       }
     };
   }
-  // DeleteEnvironment tears down the environment and its namespace. Refuses
-  // with FailedPrecondition while the environment still has deployments,
-  // unless force is set — deleting a namespace out from under running
-  // workloads is the kind of thing a user should have to say twice.
+  // DeleteEnvironment tears down the environment: its deployments, workloads,
+  // URLs, namespaces and (unless keep_data) its managed databases' data.
+  // Refuses with FailedPrecondition while the environment still has
+  // deployments, unless force is set — deleting a namespace out from under
+  // running workloads is the kind of thing a user should have to say twice.
   rpc DeleteEnvironment(DeleteDeployEnvironmentRequest) returns (DeleteDeployEnvironmentResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -145,14 +146,14 @@ service DeployService {
           id: "environment_id"
         }
         env: "environment_id"
-        detail: ["delete_data"]
+        detail: ["keep_data"]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
   }
   // ListRetainedDatabases lists the caller's org's databases that outlived a
-  // deleted environment (DeleteEnvironment without delete_data). Their data
-  // still exists and still bills as storage.
+  // deleted environment (DeleteEnvironment with keep_data). Their data still
+  // exists and still bills as storage.
   rpc ListRetainedDatabases(ListRetainedDatabasesRequest) returns (ListRetainedDatabasesResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -845,7 +846,12 @@ service DeployService {
 
 // === Tenant ===
 
-message GetDeployCapabilitiesRequest {}
+message GetDeployCapabilitiesRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetDeployCapabilitiesResponse {
   repeated string snapshot_schema_versions = 1;
@@ -858,7 +864,12 @@ message GetDeployCapabilitiesResponse {
   repeated string bundle_document_features = 4;
 }
 
-message GetDeployTenantRequest {}
+message GetDeployTenantRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetDeployTenantResponse {
   DeployTenant tenant = 1;
@@ -869,6 +880,10 @@ message CreateDeployTenantRequest {
   // publishes contains it. Must be an RFC-1123 label of at most 40 chars;
   // empty asks the server to derive one from the organization.
   string slug = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateDeployTenantResponse {
@@ -882,6 +897,10 @@ message CreateDeployEnvironmentRequest {
   // create takes a spec rather than a DeployEnvironment with fields the
   // server is trusted to ignore.
   DeployEnvironmentSpec spec = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateDeployEnvironmentResponse {
@@ -890,6 +909,10 @@ message CreateDeployEnvironmentResponse {
 
 message GetDeployEnvironmentRequest {
   string environment_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetDeployEnvironmentResponse {
@@ -916,6 +939,10 @@ message ListDeployEnvironmentsRequest {
   // Exact match on the environment's forge project. Unset lists every
   // project's environments; set to "" lists only the project-less ones.
   optional string project = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message ListDeployEnvironmentsResponse {
@@ -929,6 +956,10 @@ message UpdateDeployEnvironmentRequest {
   // was derived from the original, and a persistent environment mutating into
   // a preview would acquire a TTL on a production namespace.
   DeployEnvironmentSpec spec = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message UpdateDeployEnvironmentResponse {
@@ -940,19 +971,26 @@ message DeleteDeployEnvironmentRequest {
   // Delete the environment's deployments along with it. Without this, an
   // environment that still has deployments is refused.
   bool force = 2;
-  // Also destroy the environment's DATA: its managed databases' Postgres
-  // clusters, volumes and credentials, and the workload-cluster namespace.
-  // IRREVERSIBLE. Default false RETAINS the data: the databases keep running
-  // in their namespace (and keep billing as storage) and are listed by
-  // ListRetainedDatabases until purged with DeleteRetainedDatabase. A
-  // re-deploy creates a NEW environment and does not reattach them.
-  bool delete_data = 3;
+  reserved 3;
+  reserved "delete_data";
+  // Keep the environment's DATA. By default (false) a delete removes
+  // EVERYTHING the environment runs: workloads, URLs, namespaces AND its
+  // managed databases' Postgres clusters, volumes and credentials
+  // (IRREVERSIBLE). keep_data=true RETAINS the databases instead: they keep
+  // running in their workload namespace, keep billing as storage, and are
+  // listed by ListRetainedDatabases until purged with DeleteRetainedDatabase.
+  // A re-deploy creates a NEW environment and does not reattach them.
+  bool keep_data = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message DeleteDeployEnvironmentResponse {}
 
-// RetainedDatabase is a managed database whose environment was deleted
-// without delete_data. Its data still exists and still costs storage.
+// RetainedDatabase is a managed database whose environment was deleted with
+// keep_data. Its data still exists and still costs storage.
 message RetainedDatabase {
   string id = 1;
   // The deleted environment it belonged to.
@@ -969,7 +1007,12 @@ message RetainedDatabase {
   google.protobuf.Timestamp retained_at = 9;
 }
 
-message ListRetainedDatabasesRequest {}
+message ListRetainedDatabasesRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListRetainedDatabasesResponse {
   repeated RetainedDatabase retained_databases = 1;
@@ -977,6 +1020,10 @@ message ListRetainedDatabasesResponse {
 
 message DeleteRetainedDatabaseRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message DeleteRetainedDatabaseResponse {}
@@ -985,6 +1032,10 @@ message EnsureDeployEnvironmentRequest {
   // The environment is addressed by (spec.project, spec.name) within the
   // caller's org.
   DeployEnvironmentSpec spec = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message EnsureDeployEnvironmentResponse {
@@ -1030,6 +1081,10 @@ message CreateDeploymentRequest {
   string name = 2;
   DeployTier tier = 3;
   google.protobuf.Struct spec = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message CreateDeploymentResponse {
@@ -1038,6 +1093,10 @@ message CreateDeploymentResponse {
 
 message GetDeploymentRequest {
   string deployment_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetDeploymentResponse {
@@ -1057,6 +1116,10 @@ message ListDeploymentsRequest {
   optional DeployObservedState observed_state = 3;
   // See ListDeployEnvironmentsRequest.search.
   optional string search = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message ListDeploymentsResponse {
@@ -1070,6 +1133,10 @@ message UpdateDeploymentRequest {
   // change tier: the tiers differ in which controller reconciles them, so a
   // tier change is a delete and a create wearing one request's clothing.
   google.protobuf.Struct spec = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message UpdateDeploymentResponse {
@@ -1078,6 +1145,10 @@ message UpdateDeploymentResponse {
 
 message DeleteDeploymentRequest {
   string deployment_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message DeleteDeploymentResponse {}
@@ -1189,6 +1260,10 @@ message PromoteReleaseRequest {
   // moved everything this one names, so a whole deploy after a scoped one is a
   // real move and is recorded.
   repeated string targets = 15;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 16;
 }
 
 message PromoteReleaseResponse {
@@ -1212,6 +1287,10 @@ message RestartWorkloadRequest {
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 256
   ];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message RestartWorkloadResponse {
@@ -1229,6 +1308,10 @@ message ScaleDeploymentRequest {
   string deployment_id = 1;
   // RUNNING or SUSPENDED.
   controlplane.v1.DeployRunState run_state = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message ScaleDeploymentResponse {
@@ -1243,6 +1326,10 @@ message SetEnvironmentRunStateRequest {
   string environment_id = 1;
   // RUNNING or SUSPENDED. UNSPECIFIED is refused.
   controlplane.v1.DeployRunState run_state = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message SetEnvironmentRunStateResponse {
@@ -1257,6 +1344,10 @@ message SetEnvironmentRunStateResponse {
 message GetDeploymentStatusRequest {
   string deployment_id = 1;
   string environment_id = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 // DeploymentStatus is one deployment's status inside an environment-wide
@@ -1402,6 +1493,10 @@ message CutReleaseRequest {
   // Release, so the manifest rides here. A retry that carries one for a
   // release recorded without one fills it; it never replaces one.
   DeployMigrationManifest migrations = 11;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 12;
 }
 
 // RecordReleaseMigrationsRequest records the migration manifest of a release
@@ -1411,6 +1506,10 @@ message RecordReleaseMigrationsRequest {
   // The forge project, as on CutReleaseRequest; empty is the legacy namespace.
   string project = 2;
   DeployMigrationManifest migrations = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message RecordReleaseMigrationsResponse {
@@ -1446,6 +1545,10 @@ message CompareDeployReleasesRequest {
   // different objects, so there is no environment-free answer: unset leaves
   // objects.state NO_ENVIRONMENT and compares commits and artifacts only.
   string environment_id = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message CompareDeployReleasesResponse {
@@ -1585,6 +1688,10 @@ message ListDeployReleasesRequest {
   // Exact match on the release's forge project. Unset lists every project's
   // releases; set to "" lists only the pre-project ones.
   optional string project = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message ListDeployReleasesResponse {
@@ -1602,6 +1709,10 @@ message GetDeployReleaseRequest {
   // the pre-project namespace ("") rather than 404ing, so a project that has
   // not re-cut anything since the field existed still resolves its history.
   string project = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message GetDeployReleaseResponse {
@@ -1629,6 +1740,10 @@ message ListDeployPromotionsRequest {
 
   // Only promotions of this release version.
   optional string release_version = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message ListDeployPromotionsResponse {
@@ -1647,6 +1762,10 @@ message GetDeployRolloutRequest {
   string environment_id = 1;
   // Empty = the environment's current promotion.
   string promotion_id = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message GetDeployRolloutResponse {
@@ -1658,6 +1777,10 @@ message RecordDeployGateRequest {
   // `recorded_by` and `recorded_at` on this gate are IGNORED: the server sets
   // them from the caller's identity. See DeployGate.
   DeployGate gate = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message RecordDeployGateResponse {
@@ -1670,6 +1793,10 @@ message RecordDeployGateResponse {
 
 message ListDeployGatesRequest {
   string promotion_id = 1 [(buf.validate.field).required = true];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message ListDeployGatesResponse {
@@ -1679,6 +1806,10 @@ message ListDeployGatesResponse {
 
 message GetDeployRunRequest {
   string run_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetDeployRunResponse {
@@ -1703,6 +1834,10 @@ message ListDeployUsageRequest {
   // Bucket size in seconds. Zero/absent means the server's rollup
   // granularity (hourly).
   optional int32 granularity_seconds = 6;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 7;
 }
 
 message ListDeployUsageResponse {
@@ -1748,6 +1883,10 @@ message RecordDeployBundleRequest {
   // Compressed OCI manifests layer. Required for snapshot seals; capped at
   // 8 MiB, descriptor digest/size and exact snapshot inventory verified server-side.
   bytes manifests_layer = 6;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 7;
 }
 
 message RecordDeployBundleResponse {
@@ -1764,6 +1903,10 @@ message GetDeployBundleRequest {
   string bundle_id = 1;
   string environment_id = 2;
   string digest = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message GetDeployBundleResponse {
@@ -1787,6 +1930,10 @@ message ListDeployConvergencesRequest {
   // Keyset cursor: observations strictly older than this one. Keyset rather
   // than offset for ListDeployPromotionsRequest.before_promotion_id's reason.
   optional string before_id = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message ListDeployConvergencesResponse {
@@ -1832,6 +1979,10 @@ message OpenDeployAttemptRequest {
   string forge_version = 8 [(buf.validate.field).string.max_len = 100];
   // Automation label (--actor). The human half is the credential.
   string started_by_actor = 9 [(buf.validate.field).string.max_len = 200];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 10;
 }
 
 message OpenDeployAttemptResponse {
@@ -1849,6 +2000,10 @@ message ReportDeployAttemptRequest {
   // Output produced since the previous report. The server keeps a bounded
   // tail, so a client may send everything it has.
   string log_append = 5 [(buf.validate.field).string.max_len = 1048576];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message ReportDeployAttemptResponse {}
@@ -1873,6 +2028,10 @@ message CloseDeployAttemptRequest {
   // forge's `--json` document, verbatim.
   string report_json = 8 [(buf.validate.field).string.max_len = 1048576];
   string log_append = 9 [(buf.validate.field).string.max_len = 1048576];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 10;
 }
 
 message CloseDeployAttemptResponse {
@@ -1886,6 +2045,10 @@ message ListDeployAttemptsRequest {
   int32 limit = 3;
   // Keyset cursor: attempts strictly older than this one.
   optional string before_id = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message ListDeployAttemptsResponse {
@@ -1895,6 +2058,10 @@ message ListDeployAttemptsResponse {
 
 message GetDeployAttemptRequest {
   string id = 1 [(buf.validate.field).required = true];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetDeployAttemptResponse {
@@ -1916,6 +2083,10 @@ message GetDeployLiveViewRequest {
   // Include soft-deleted environments. Off by default — a retired environment
   // has history worth keeping and queryable, and no place on a Live screen.
   bool include_deleted = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message GetDeployLiveViewResponse {
@@ -1933,6 +2104,10 @@ message PlanDeployRequest {
   // The release whose pins this deploy would carry, when the plan covers a
   // promotion as well as a config change. Empty plans the config alone.
   string release_version = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message PlanDeployResponse {
@@ -1968,6 +2143,10 @@ message CheckDeployCapacityRequest {
   // excluded, and every static site the org already holds is counted.
   string environment_id = 1;
   DeployCapacityDemand demand = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 // DeployCapacityCode is why a verdict came out the way it did.
@@ -2069,6 +2248,10 @@ message ImportLedgerRequest {
   // it is the convenience that lets an operator see "39 releases, 16
   // promotions, 3 environments" before committing to any of it.
   bool dry_run = 8;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 9;
 }
 
 // LedgerImportRelease is one historical release, preserved verbatim.
@@ -2223,6 +2406,10 @@ message ImportLedgerResponse {
 
 message GetDeployDriftRequest {
   string environment_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetDeployDriftResponse {

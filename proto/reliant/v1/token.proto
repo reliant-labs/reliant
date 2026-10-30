@@ -146,6 +146,36 @@ service TokenService {
   rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {
     option (forge.v1.method) = {auth_required: false};
   }
+
+  // GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
+  // ONE repository, so an agent on a daemon can review, label and merge as
+  // the App's bot (`reliant-labs[bot]`) instead of as the user: `reliant
+  // github token --as app --repo owner/name` and `reliant github gh`.
+  //
+  // It is the interactive twin of an automation acting as the app. The same
+  // safety rule holds, enforced by control-plane at the mint: the CALLING
+  // session's acting user must have push access to the repository, so the bot
+  // is never a way past the user's own permissions. The token is scoped to
+  // that one repository and to the requested permissions (issues,
+  // pull_requests, contents; default all three at write), expires within an
+  // hour, and is never stored or logged here. control-plane's audit log
+  // records each mint.
+  //
+  // Daemon credential only, exactly as GetGitToken and for the same reason.
+  //
+  // Errors:
+  //   - UNAUTHENTICATED / PERMISSION_DENIED: not a live daemon credential.
+  //   - INVALID_ARGUMENT: owner or repo is missing or malformed, or a
+  //     permission is outside the three or a level other than read/write.
+  //   - FAILED_PRECONDITION, by `x-forge-error-reason`:
+  //     `git_credential_no_control_plane`, `github_app_not_configured`,
+  //     `github_app_not_installed`, `github_app_permissions`,
+  //     `git_credential_not_connected`, `git_credential_needs_reconnect`.
+  //   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
+  //   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+  rpc GetGitHubBotToken(GetGitHubBotTokenRequest) returns (GetGitHubBotTokenResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
 }
 
 enum TokenKind {
@@ -231,6 +261,11 @@ message ExchangeTokenRequest {
   // scopes requested. Empty asks for every exchangeable scope the calling
   // token holds.
   repeated string scopes = 2;
+  // org_id is the org the minted token acts in, which must be one the calling
+  // session's person belongs to. Unset: the org the calling session itself
+  // acts in. The control plane checks membership and clips the scopes to the
+  // person's grants IN that org.
+  optional string org_id = 3;
 }
 
 message ExchangeTokenResponse {
@@ -238,6 +273,7 @@ message ExchangeTokenResponse {
   string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
   string expires_at = 3;    // RFC 3339
   repeated string scopes = 4;  // What was actually granted
+  string org_id = 5;           // The org the token acts in
 }
 
 message GetGitTokenRequest {
@@ -252,4 +288,30 @@ message GetGitTokenResponse {
   // expires_at is when access_token stops working (RFC 3339). Empty for a token
   // the provider never said expires.
   string expires_at = 2;
+}
+
+message GetGitHubBotTokenRequest {
+  // owner and repo name the one repository the token is scoped to.
+  string owner = 1;
+  string repo = 2;
+  // permissions narrows the token: issues, pull_requests, contents -> read or
+  // write. Empty means all three at write.
+  map<string, string> permissions = 3;
+}
+
+message GetGitHubBotTokenResponse {
+  // token is the plaintext installation token. A credential: apply it to the
+  // requests you make, never log or persist it.
+  string token = 1;
+  // expires_at is when token stops working (RFC 3339; GitHub issues
+  // one-hour tokens).
+  string expires_at = 2;
+  // bot_login is who GitHub shows as the author of writes made with token,
+  // e.g. `reliant-labs[bot]`.
+  string bot_login = 3;
+  // acting_for_login is the caller's own GitHub login, whose push access
+  // gated the mint.
+  string acting_for_login = 4;
+  // repository is the owner/name the token is scoped to, as GitHub spells it.
+  string repository = 5;
 }

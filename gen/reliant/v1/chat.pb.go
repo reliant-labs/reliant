@@ -597,6 +597,81 @@ func (ChatActivity) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{8}
 }
 
+// ChatOrigin is who started a chat. It is the chat list's policy key: a USER
+// chat is a conversation and lists in the sidebar; any other origin is a run,
+// which lists under Runs (and its automation's history) until the user adopts
+// it. A run that asks a question or needs an approval still reaches the user
+// through the Inbox and its notification, whatever its origin.
+type ChatOrigin int32
+
+const (
+	ChatOrigin_CHAT_ORIGIN_UNSPECIFIED ChatOrigin = 0
+	// A person typing: the first send of a chat (launch kind chat.start), a
+	// branch, or a chat that predates launch events.
+	ChatOrigin_CHAT_ORIGIN_USER ChatOrigin = 1
+	// An automation's trigger fired it: a schedule, a webhook delivery, a
+	// provider (GitHub, Slack, ...) event or another run's outcome.
+	ChatOrigin_CHAT_ORIGIN_AUTOMATION ChatOrigin = 2
+	// An agent's start_run tool.
+	ChatOrigin_CHAT_ORIGIN_AGENT ChatOrigin = 3
+	// A person pressed Run now on a workflow. Adopted at birth, so it lists.
+	ChatOrigin_CHAT_ORIGIN_MANUAL_RUN ChatOrigin = 4
+	// A workflow builder's test run.
+	ChatOrigin_CHAT_ORIGIN_BUILDER_TEST ChatOrigin = 5
+	// The command line (`reliant workflow run`): a script, or an agent shelling
+	// out.
+	ChatOrigin_CHAT_ORIGIN_CLI ChatOrigin = 6
+)
+
+// Enum value maps for ChatOrigin.
+var (
+	ChatOrigin_name = map[int32]string{
+		0: "CHAT_ORIGIN_UNSPECIFIED",
+		1: "CHAT_ORIGIN_USER",
+		2: "CHAT_ORIGIN_AUTOMATION",
+		3: "CHAT_ORIGIN_AGENT",
+		4: "CHAT_ORIGIN_MANUAL_RUN",
+		5: "CHAT_ORIGIN_BUILDER_TEST",
+		6: "CHAT_ORIGIN_CLI",
+	}
+	ChatOrigin_value = map[string]int32{
+		"CHAT_ORIGIN_UNSPECIFIED":  0,
+		"CHAT_ORIGIN_USER":         1,
+		"CHAT_ORIGIN_AUTOMATION":   2,
+		"CHAT_ORIGIN_AGENT":        3,
+		"CHAT_ORIGIN_MANUAL_RUN":   4,
+		"CHAT_ORIGIN_BUILDER_TEST": 5,
+		"CHAT_ORIGIN_CLI":          6,
+	}
+)
+
+func (x ChatOrigin) Enum() *ChatOrigin {
+	p := new(ChatOrigin)
+	*p = x
+	return p
+}
+
+func (x ChatOrigin) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ChatOrigin) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_chat_proto_enumTypes[9].Descriptor()
+}
+
+func (ChatOrigin) Type() protoreflect.EnumType {
+	return &file_reliant_v1_chat_proto_enumTypes[9]
+}
+
+func (x ChatOrigin) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ChatOrigin.Descriptor instead.
+func (ChatOrigin) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{9}
+}
+
 // ToolCallStatus is the durable lifecycle state of a tool call, mirroring
 // internal/db/core.ToolCallStatus. Values are fixed: changing one silently
 // reinterprets every row already in the database.
@@ -645,11 +720,11 @@ func (x ToolCallStatus) String() string {
 }
 
 func (ToolCallStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_chat_proto_enumTypes[9].Descriptor()
+	return file_reliant_v1_chat_proto_enumTypes[10].Descriptor()
 }
 
 func (ToolCallStatus) Type() protoreflect.EnumType {
-	return &file_reliant_v1_chat_proto_enumTypes[9]
+	return &file_reliant_v1_chat_proto_enumTypes[10]
 }
 
 func (x ToolCallStatus) Number() protoreflect.EnumNumber {
@@ -658,7 +733,7 @@ func (x ToolCallStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ToolCallStatus.Descriptor instead.
 func (ToolCallStatus) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{10}
 }
 
 // RecoveryType indicates what kind of resume/recovery happened
@@ -698,11 +773,11 @@ func (x RecoveryType) String() string {
 }
 
 func (RecoveryType) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_chat_proto_enumTypes[10].Descriptor()
+	return file_reliant_v1_chat_proto_enumTypes[11].Descriptor()
 }
 
 func (RecoveryType) Type() protoreflect.EnumType {
-	return &file_reliant_v1_chat_proto_enumTypes[10]
+	return &file_reliant_v1_chat_proto_enumTypes[11]
 }
 
 func (x RecoveryType) Number() protoreflect.EnumNumber {
@@ -711,7 +786,7 @@ func (x RecoveryType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RecoveryType.Descriptor instead.
 func (RecoveryType) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{11}
 }
 
 // WorkflowExecutionView selects how much step history GetWorkflowExecutions
@@ -762,11 +837,11 @@ func (x WorkflowExecutionView) String() string {
 }
 
 func (WorkflowExecutionView) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_chat_proto_enumTypes[11].Descriptor()
+	return file_reliant_v1_chat_proto_enumTypes[12].Descriptor()
 }
 
 func (WorkflowExecutionView) Type() protoreflect.EnumType {
-	return &file_reliant_v1_chat_proto_enumTypes[11]
+	return &file_reliant_v1_chat_proto_enumTypes[12]
 }
 
 func (x WorkflowExecutionView) Number() protoreflect.EnumNumber {
@@ -775,7 +850,7 @@ func (x WorkflowExecutionView) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkflowExecutionView.Descriptor instead.
 func (WorkflowExecutionView) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{12}
 }
 
 type ProviderPolicy_OnLimit int32
@@ -811,11 +886,11 @@ func (x ProviderPolicy_OnLimit) String() string {
 }
 
 func (ProviderPolicy_OnLimit) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_chat_proto_enumTypes[12].Descriptor()
+	return file_reliant_v1_chat_proto_enumTypes[13].Descriptor()
 }
 
 func (ProviderPolicy_OnLimit) Type() protoreflect.EnumType {
-	return &file_reliant_v1_chat_proto_enumTypes[12]
+	return &file_reliant_v1_chat_proto_enumTypes[13]
 }
 
 func (x ProviderPolicy_OnLimit) Number() protoreflect.EnumNumber {
@@ -894,8 +969,12 @@ type Chat struct {
 	// > 0 needs the user AND still has agents running. Also carried by the
 	// CHAT_ACTIVITY_CHANGED update ("working_threads").
 	WorkingThreads int32 `protobuf:"varint,42,opt,name=working_threads,json=workingThreads,proto3" json:"working_threads,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Who started this chat (chats.origin, written once at launch and never
+	// rewritten). The chat list (ListChats, SearchChats, the Archived tab) holds
+	// USER chats plus runs the user adopted; every other origin lives in Runs.
+	Origin        ChatOrigin `protobuf:"varint,43,opt,name=origin,proto3,enum=reliant.v1.ChatOrigin" json:"origin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Chat) Reset() {
@@ -1136,6 +1215,13 @@ func (x *Chat) GetWorkingThreads() int32 {
 		return x.WorkingThreads
 	}
 	return 0
+}
+
+func (x *Chat) GetOrigin() ChatOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return ChatOrigin_CHAT_ORIGIN_UNSPECIFIED
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.
@@ -1534,8 +1620,12 @@ type MessageSender struct {
 	ThreadId string                 `protobuf:"bytes,1,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	// title is the sender thread's title, resolved when the message is read; empty
 	// when the thread is untitled or no longer exists.
-	Title         string           `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Kind          AgentMessageKind `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.AgentMessageKind" json:"kind,omitempty"`
+	Title string           `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Kind  AgentMessageKind `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.AgentMessageKind" json:"kind,omitempty"`
+	// subject is the one-line summary the sending agent gave the message
+	// (spawn_send's `subject`); the transcript shows the message collapsed to
+	// it. Empty for kinds that carry none.
+	Subject       string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1589,6 +1679,13 @@ func (x *MessageSender) GetKind() AgentMessageKind {
 		return x.Kind
 	}
 	return AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED
+}
+
+func (x *MessageSender) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
 }
 
 // ContentBlock represents a granular message content piece
@@ -1938,9 +2035,17 @@ type StartChatRequest struct {
 	// the run stays out of the sidebar and the default Runs list. It is still an
 	// attended run. `workflow` must name a workflow draft the caller owns; the
 	// draft runs as saved even if it is not marked complete. The client does not
-	// choose the launch kind: this flag is the only way to ask for builder.test,
-	// and no other kind can be claimed through StartChat.
+	// choose the launch kind: this flag and cli_run are the only ways to ask for
+	// a non-default kind, and no other kind can be claimed through StartChat.
 	BuilderTest *bool `protobuf:"varint,19,opt,name=builder_test,json=builderTest,proto3,oneof" json:"builder_test,omitempty"`
+	// cli_run marks this start as a run launched from the command line
+	// (`reliant workflow run`), by a script or by an agent shelling out. The
+	// launch event is recorded as kind "cli.run" instead of "chat.start", so the
+	// run lists under Runs and stays out of the sidebar until the user adopts
+	// it, like an agent's start_run. With no title it is titled
+	// "<workflow> · <first line of the message>". Not allowed with chat_id (a
+	// branch's first send is a chat turn) or builder_test.
+	CliRun *bool `protobuf:"varint,22,opt,name=cli_run,json=cliRun,proto3,oneof" json:"cli_run,omitempty"`
 	// Client-chosen UUID for the first user message, which makes the start
 	// idempotent: a repeat with the same id (a retry after a lost response, a
 	// timed-out call that had in fact committed) returns the chat the first
@@ -2071,6 +2176,13 @@ func (x *StartChatRequest) GetNoMachine() bool {
 func (x *StartChatRequest) GetBuilderTest() bool {
 	if x != nil && x.BuilderTest != nil {
 		return *x.BuilderTest
+	}
+	return false
+}
+
+func (x *StartChatRequest) GetCliRun() bool {
+	if x != nil && x.CliRun != nil {
+		return *x.CliRun
 	}
 	return false
 }
@@ -2422,13 +2534,8 @@ type ListChatsRequest struct {
 	// The project to list. Empty lists every project the caller owns: the
 	// sidebar's "All projects" view. Chats are scoped by the caller either way,
 	// so a project id that is not the caller's lists nothing.
-	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Limit     *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	// When true, return only chats the sidebar lists (chats_with_activity.
-	// list_in_sidebar): interactive chats and adopted chats. An automation or
-	// agent-started run appears only once adopted; one awaiting input surfaces
-	// in the Inbox instead.
-	SidebarOnly   *bool `protobuf:"varint,3,opt,name=sidebar_only,json=sidebarOnly,proto3,oneof" json:"sidebar_only,omitempty"`
+	ProjectId     string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Limit         *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2475,13 +2582,6 @@ func (x *ListChatsRequest) GetLimit() int32 {
 		return *x.Limit
 	}
 	return 0
-}
-
-func (x *ListChatsRequest) GetSidebarOnly() bool {
-	if x != nil && x.SidebarOnly != nil {
-		return *x.SidebarOnly
-	}
-	return false
 }
 
 // ListChatsResponse returns the list of chats
@@ -3047,7 +3147,9 @@ func (x *DeleteChatResponse) GetPermanentlyDeleted() bool {
 	return false
 }
 
-// SearchChatsRequest searches chats
+// SearchChatsRequest searches the chat list: the same chats ListChats returns
+// (USER-origin chats and adopted runs). Runs are searched in Runs
+// (RunService.ListRuns query).
 type SearchChatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The project to search. Empty searches every project the caller owns; each
@@ -3164,7 +3266,7 @@ func (x *SearchChatsResponse) GetTotal() int32 {
 }
 
 // ListArchivedChatsRequest lists the caller's archived chats: the sidebar's
-// Archived tab. It applies the same policy as ListChats' sidebar_only
+// Archived tab. It applies the same policy as ListChats
 // (chats_with_activity.list_in_sidebar), so an archived automation run — an
 // automation archives its runs once they finish successfully — is not listed
 // here; it stays browsable in Runs (RunService.ListRuns, include_archived).
@@ -6934,6 +7036,106 @@ func (x *ListStepExecutionsResponse) GetTruncated() bool {
 	return false
 }
 
+type GetWorkflowNodeExecutionsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// The run: a workflows.id of the chat (WorkflowExecution.id).
+	WorkflowId    string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWorkflowNodeExecutionsRequest) Reset() {
+	*x = GetWorkflowNodeExecutionsRequest{}
+	mi := &file_reliant_v1_chat_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkflowNodeExecutionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkflowNodeExecutionsRequest) ProtoMessage() {}
+
+func (x *GetWorkflowNodeExecutionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_chat_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkflowNodeExecutionsRequest.ProtoReflect.Descriptor instead.
+func (*GetWorkflowNodeExecutionsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *GetWorkflowNodeExecutionsRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *GetWorkflowNodeExecutionsRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+type GetWorkflowNodeExecutionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One per node that has run, its newest node_execution update, in sequence
+	// order. update_type is "CHAT_UPDATE_TYPE_NODE_EXECUTION" and data the event
+	// JSON, as the chat stream carries it.
+	Updates       []*ChatUpdate `protobuf:"bytes,1,rep,name=updates,proto3" json:"updates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWorkflowNodeExecutionsResponse) Reset() {
+	*x = GetWorkflowNodeExecutionsResponse{}
+	mi := &file_reliant_v1_chat_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkflowNodeExecutionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkflowNodeExecutionsResponse) ProtoMessage() {}
+
+func (x *GetWorkflowNodeExecutionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_chat_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkflowNodeExecutionsResponse.ProtoReflect.Descriptor instead.
+func (*GetWorkflowNodeExecutionsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *GetWorkflowNodeExecutionsResponse) GetUpdates() []*ChatUpdate {
+	if x != nil {
+		return x.Updates
+	}
+	return nil
+}
+
 // SetChatDaemonRequest sets the active daemon for a chat session.
 type SetChatDaemonRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -6946,7 +7148,7 @@ type SetChatDaemonRequest struct {
 
 func (x *SetChatDaemonRequest) Reset() {
 	*x = SetChatDaemonRequest{}
-	mi := &file_reliant_v1_chat_proto_msgTypes[85]
+	mi := &file_reliant_v1_chat_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6958,7 +7160,7 @@ func (x *SetChatDaemonRequest) String() string {
 func (*SetChatDaemonRequest) ProtoMessage() {}
 
 func (x *SetChatDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_chat_proto_msgTypes[85]
+	mi := &file_reliant_v1_chat_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6971,7 +7173,7 @@ func (x *SetChatDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatDaemonRequest.ProtoReflect.Descriptor instead.
 func (*SetChatDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{85}
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *SetChatDaemonRequest) GetChatId() string {
@@ -6998,7 +7200,7 @@ type SetChatDaemonResponse struct {
 
 func (x *SetChatDaemonResponse) Reset() {
 	*x = SetChatDaemonResponse{}
-	mi := &file_reliant_v1_chat_proto_msgTypes[86]
+	mi := &file_reliant_v1_chat_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7010,7 +7212,7 @@ func (x *SetChatDaemonResponse) String() string {
 func (*SetChatDaemonResponse) ProtoMessage() {}
 
 func (x *SetChatDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_chat_proto_msgTypes[86]
+	mi := &file_reliant_v1_chat_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7023,7 +7225,7 @@ func (x *SetChatDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatDaemonResponse.ProtoReflect.Descriptor instead.
 func (*SetChatDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{86}
+	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *SetChatDaemonResponse) GetChat() *Chat {
@@ -7038,7 +7240,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\x8e\f\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xbe\f\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -7080,7 +7282,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x13usage_limit_probing\x18' \x01(\bR\x11usageLimitProbing\x127\n" +
 	"\tselection\x18( \x01(\v2\x19.reliant.v1.ChatSelectionR\tselection\x127\n" +
 	"\bworktree\x18) \x01(\v2\x1b.reliant.v1.WorktreeSummaryR\bworktree\x12'\n" +
-	"\x0fworking_threads\x18* \x01(\x05R\x0eworkingThreads\x1aB\n" +
+	"\x0fworking_threads\x18* \x01(\x05R\x0eworkingThreads\x12.\n" +
+	"\x06origin\x18+ \x01(\x0e2\x16.reliant.v1.ChatOriginR\x06origin\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -7147,11 +7350,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\x10\n" +
 	"\x0e_display_styleB\n" +
 	"\n" +
-	"\b_node_id\"t\n" +
+	"\b_node_id\"\x8e\x01\n" +
 	"\rMessageSender\x12\x1b\n" +
 	"\tthread_id\x18\x01 \x01(\tR\bthreadId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x120\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x1c.reliant.v1.AgentMessageKindR\x04kind\"\xe1\x05\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x1c.reliant.v1.AgentMessageKindR\x04kind\x12\x18\n" +
+	"\asubject\x18\x04 \x01(\tR\asubject\"\xe1\x05\n" +
 	"\fContentBlock\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\x05R\x05index\x120\n" +
@@ -7197,7 +7401,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\x87\a\n" +
+	"\x0e_display_style\"\xb1\a\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -7214,8 +7418,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"no_machine\x18\x14 \x01(\bH\x05R\tnoMachine\x88\x01\x01\x12&\n" +
-	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12/\n" +
-	"\x11client_message_id\x18\x15 \x01(\tH\aR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
+	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12\x1c\n" +
+	"\acli_run\x18\x16 \x01(\bH\aR\x06cliRun\x88\x01\x01\x12/\n" +
+	"\x11client_message_id\x18\x15 \x01(\tH\bR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -7230,7 +7435,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"_daemon_idB\r\n" +
 	"\v_no_machineB\x0f\n" +
-	"\r_builder_testB\x14\n" +
+	"\r_builder_testB\n" +
+	"\n" +
+	"\b_cli_runB\x14\n" +
 	"\x12_client_message_id\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
@@ -7274,14 +7481,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x8f\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"j\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
-	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12&\n" +
-	"\fsidebar_only\x18\x03 \x01(\bH\x01R\vsidebarOnly\x88\x01\x01B\b\n" +
-	"\x06_limitB\x0f\n" +
-	"\r_sidebar_only\"\xe5\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01B\b\n" +
+	"\x06_limitJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +
 	"\x11ListChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x129\n" +
@@ -7669,7 +7874,13 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"_node_path\"~\n" +
 	"\x1aListStepExecutionsResponse\x12B\n" +
 	"\x0fstep_executions\x18\x01 \x03(\v2\x19.reliant.v1.StepExecutionR\x0estepExecutions\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"L\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"l\n" +
+	" GetWorkflowNodeExecutionsRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12'\n" +
+	"\vworkflow_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"workflowId\"U\n" +
+	"!GetWorkflowNodeExecutionsResponse\x120\n" +
+	"\aupdates\x18\x01 \x03(\v2\x16.reliant.v1.ChatUpdateR\aupdates\"L\n" +
 	"\x14SetChatDaemonRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\"=\n" +
@@ -7732,7 +7943,16 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x14CHAT_ACTIVITY_PAUSED\x10\x04\x12$\n" +
 	" CHAT_ACTIVITY_WAITING_FOR_DAEMON\x10\x05\x12$\n" +
 	" CHAT_ACTIVITY_QUEUED_FOR_MACHINE\x10\x06\x12)\n" +
-	"%CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT\x10\a*\xf0\x01\n" +
+	"%CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT\x10\a*\xc1\x01\n" +
+	"\n" +
+	"ChatOrigin\x12\x1b\n" +
+	"\x17CHAT_ORIGIN_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10CHAT_ORIGIN_USER\x10\x01\x12\x1a\n" +
+	"\x16CHAT_ORIGIN_AUTOMATION\x10\x02\x12\x15\n" +
+	"\x11CHAT_ORIGIN_AGENT\x10\x03\x12\x1a\n" +
+	"\x16CHAT_ORIGIN_MANUAL_RUN\x10\x04\x12\x1c\n" +
+	"\x18CHAT_ORIGIN_BUILDER_TEST\x10\x05\x12\x13\n" +
+	"\x0fCHAT_ORIGIN_CLI\x10\x06*\xf0\x01\n" +
 	"\x0eToolCallStatus\x12 \n" +
 	"\x1cTOOL_CALL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18TOOL_CALL_STATUS_PENDING\x10\x01\x12\x1e\n" +
@@ -7747,7 +7967,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x1bRECOVERY_TYPE_WORKFLOW_LOST\x10\x02*\\\n" +
 	"\x15WorkflowExecutionView\x12!\n" +
 	"\x1dWORKFLOW_EXECUTION_VIEW_BASIC\x10\x00\x12 \n" +
-	"\x1cWORKFLOW_EXECUTION_VIEW_FULL\x10\x012\xc2%\n" +
+	"\x1cWORKFLOW_EXECUTION_VIEW_FULL\x10\x012\xbe&\n" +
 	"\vChatService\x12\x90\x01\n" +
 	"\tStartChat\x12\x1c.reliant.v1.StartChatRequest\x1a\x1d.reliant.v1.StartChatResponse\"F\xa2\xbb\x18B:@\n" +
 	"\x05start\x12-\n" +
@@ -7810,7 +8030,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x0eGetChatUpdates\x12!.reliant.v1.GetChatUpdatesRequest\x1a\".reliant.v1.GetChatUpdatesResponse\"\x00\x12V\n" +
 	"\rListChatPlans\x12 .reliant.v1.ListChatPlansRequest\x1a!.reliant.v1.ListChatPlansResponse\"\x00\x12n\n" +
 	"\x15GetWorkflowExecutions\x12(.reliant.v1.GetWorkflowExecutionsRequest\x1a).reliant.v1.GetWorkflowExecutionsResponse\"\x00\x12e\n" +
-	"\x12ListStepExecutions\x12%.reliant.v1.ListStepExecutionsRequest\x1a&.reliant.v1.ListStepExecutionsResponse\"\x00\x12t\n" +
+	"\x12ListStepExecutions\x12%.reliant.v1.ListStepExecutionsRequest\x1a&.reliant.v1.ListStepExecutionsResponse\"\x00\x12z\n" +
+	"\x19GetWorkflowNodeExecutions\x12,.reliant.v1.GetWorkflowNodeExecutionsRequest\x1a-.reliant.v1.GetWorkflowNodeExecutionsResponse\"\x00\x12t\n" +
 	"\x17GetThreadWorkflowInputs\x12*.reliant.v1.GetThreadWorkflowInputsRequest\x1a+.reliant.v1.GetThreadWorkflowInputsResponse\"\x00\x12\x99\x01\n" +
 	"\rSetChatDaemon\x12 .reliant.v1.SetChatDaemonRequest\x1a!.reliant.v1.SetChatDaemonResponse\"C\xa2\xbb\x18?:=\n" +
 	"\n" +
@@ -7829,275 +8050,282 @@ func file_reliant_v1_chat_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_chat_proto_rawDescData
 }
 
-var file_reliant_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
-var file_reliant_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 96)
+var file_reliant_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 14)
+var file_reliant_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 98)
 var file_reliant_v1_chat_proto_goTypes = []any{
-	(ChatState)(0),                           // 0: reliant.v1.ChatState
-	(WorkflowState)(0),                       // 1: reliant.v1.WorkflowState
-	(WorkflowStopReason)(0),                  // 2: reliant.v1.WorkflowStopReason
-	(MessageRole)(0),                         // 3: reliant.v1.MessageRole
-	(StreamingState)(0),                      // 4: reliant.v1.StreamingState
-	(DisplayStyle)(0),                        // 5: reliant.v1.DisplayStyle
-	(AgentMessageKind)(0),                    // 6: reliant.v1.AgentMessageKind
-	(ContentBlockType)(0),                    // 7: reliant.v1.ContentBlockType
-	(ChatActivity)(0),                        // 8: reliant.v1.ChatActivity
-	(ToolCallStatus)(0),                      // 9: reliant.v1.ToolCallStatus
-	(RecoveryType)(0),                        // 10: reliant.v1.RecoveryType
-	(WorkflowExecutionView)(0),               // 11: reliant.v1.WorkflowExecutionView
-	(ProviderPolicy_OnLimit)(0),              // 12: reliant.v1.ProviderPolicy.OnLimit
-	(*Chat)(nil),                             // 13: reliant.v1.Chat
-	(*ChatSelection)(nil),                    // 14: reliant.v1.ChatSelection
-	(*ProviderPolicy)(nil),                   // 15: reliant.v1.ProviderPolicy
-	(*ArchivedChat)(nil),                     // 16: reliant.v1.ArchivedChat
-	(*Message)(nil),                          // 17: reliant.v1.Message
-	(*MessageSender)(nil),                    // 18: reliant.v1.MessageSender
-	(*ContentBlock)(nil),                     // 19: reliant.v1.ContentBlock
-	(*Attachment)(nil),                       // 20: reliant.v1.Attachment
-	(*InputMessage)(nil),                     // 21: reliant.v1.InputMessage
-	(*StartChatRequest)(nil),                 // 22: reliant.v1.StartChatRequest
-	(*StartChatResponse)(nil),                // 23: reliant.v1.StartChatResponse
-	(*ReplayEvent)(nil),                      // 24: reliant.v1.ReplayEvent
-	(*RunNowRequest)(nil),                    // 25: reliant.v1.RunNowRequest
-	(*RunNowResponse)(nil),                   // 26: reliant.v1.RunNowResponse
-	(*ListChatsRequest)(nil),                 // 27: reliant.v1.ListChatsRequest
-	(*ListChatsResponse)(nil),                // 28: reliant.v1.ListChatsResponse
-	(*GetChatRequest)(nil),                   // 29: reliant.v1.GetChatRequest
-	(*GetChatResponse)(nil),                  // 30: reliant.v1.GetChatResponse
-	(*UpdateChatRequest)(nil),                // 31: reliant.v1.UpdateChatRequest
-	(*UpdateChatResponse)(nil),               // 32: reliant.v1.UpdateChatResponse
-	(*AdoptChatRequest)(nil),                 // 33: reliant.v1.AdoptChatRequest
-	(*AdoptChatResponse)(nil),                // 34: reliant.v1.AdoptChatResponse
-	(*UnadoptChatRequest)(nil),               // 35: reliant.v1.UnadoptChatRequest
-	(*UnadoptChatResponse)(nil),              // 36: reliant.v1.UnadoptChatResponse
-	(*DeleteChatRequest)(nil),                // 37: reliant.v1.DeleteChatRequest
-	(*DeleteChatResponse)(nil),               // 38: reliant.v1.DeleteChatResponse
-	(*SearchChatsRequest)(nil),               // 39: reliant.v1.SearchChatsRequest
-	(*SearchChatsResponse)(nil),              // 40: reliant.v1.SearchChatsResponse
-	(*ListArchivedChatsRequest)(nil),         // 41: reliant.v1.ListArchivedChatsRequest
-	(*ListArchivedChatsResponse)(nil),        // 42: reliant.v1.ListArchivedChatsResponse
-	(*SendMessageRequest)(nil),               // 43: reliant.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),              // 44: reliant.v1.SendMessageResponse
-	(*SendAgentMessageRequest)(nil),          // 45: reliant.v1.SendAgentMessageRequest
-	(*SendAgentMessageResponse)(nil),         // 46: reliant.v1.SendAgentMessageResponse
-	(*ListQueuedAgentMessagesRequest)(nil),   // 47: reliant.v1.ListQueuedAgentMessagesRequest
-	(*QueuedAgentMessage)(nil),               // 48: reliant.v1.QueuedAgentMessage
-	(*ListQueuedAgentMessagesResponse)(nil),  // 49: reliant.v1.ListQueuedAgentMessagesResponse
-	(*CancelQueuedAgentMessageRequest)(nil),  // 50: reliant.v1.CancelQueuedAgentMessageRequest
-	(*CancelQueuedAgentMessageResponse)(nil), // 51: reliant.v1.CancelQueuedAgentMessageResponse
-	(*InterruptThreadRequest)(nil),           // 52: reliant.v1.InterruptThreadRequest
-	(*InterruptThreadResponse)(nil),          // 53: reliant.v1.InterruptThreadResponse
-	(*ListMessagesRequest)(nil),              // 54: reliant.v1.ListMessagesRequest
-	(*ListMessagesResponse)(nil),             // 55: reliant.v1.ListMessagesResponse
-	(*GetToolResultRequest)(nil),             // 56: reliant.v1.GetToolResultRequest
-	(*GetToolResultResponse)(nil),            // 57: reliant.v1.GetToolResultResponse
-	(*UpdateChatStateRequest)(nil),           // 58: reliant.v1.UpdateChatStateRequest
-	(*UpdateChatStateResponse)(nil),          // 59: reliant.v1.UpdateChatStateResponse
-	(*TerminateChatRequest)(nil),             // 60: reliant.v1.TerminateChatRequest
-	(*TerminateChatResponse)(nil),            // 61: reliant.v1.TerminateChatResponse
-	(*PauseChatRequest)(nil),                 // 62: reliant.v1.PauseChatRequest
-	(*PauseChatResponse)(nil),                // 63: reliant.v1.PauseChatResponse
-	(*ResumeChatRequest)(nil),                // 64: reliant.v1.ResumeChatRequest
-	(*RetryUsageLimitWaitRequest)(nil),       // 65: reliant.v1.RetryUsageLimitWaitRequest
-	(*RetryUsageLimitWaitResponse)(nil),      // 66: reliant.v1.RetryUsageLimitWaitResponse
-	(*ResumeChatResponse)(nil),               // 67: reliant.v1.ResumeChatResponse
-	(*DismissChatRequest)(nil),               // 68: reliant.v1.DismissChatRequest
-	(*DismissChatResponse)(nil),              // 69: reliant.v1.DismissChatResponse
-	(*MarkUnreadChatRequest)(nil),            // 70: reliant.v1.MarkUnreadChatRequest
-	(*MarkUnreadChatResponse)(nil),           // 71: reliant.v1.MarkUnreadChatResponse
-	(*CompactChatRequest)(nil),               // 72: reliant.v1.CompactChatRequest
-	(*CompactChatResponse)(nil),              // 73: reliant.v1.CompactChatResponse
-	(*WorkspaceBranchContext)(nil),           // 74: reliant.v1.WorkspaceBranchContext
-	(*BranchChatRequest)(nil),                // 75: reliant.v1.BranchChatRequest
-	(*BranchChatResponse)(nil),               // 76: reliant.v1.BranchChatResponse
-	(*BranchInfo)(nil),                       // 77: reliant.v1.BranchInfo
-	(*ListBranchesRequest)(nil),              // 78: reliant.v1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),             // 79: reliant.v1.ListBranchesResponse
-	(*UpdateWorkflowParamsRequest)(nil),      // 80: reliant.v1.UpdateWorkflowParamsRequest
-	(*UpdateWorkflowParamsResponse)(nil),     // 81: reliant.v1.UpdateWorkflowParamsResponse
-	(*UpdateChatProviderPolicyRequest)(nil),  // 82: reliant.v1.UpdateChatProviderPolicyRequest
-	(*UpdateChatProviderPolicyResponse)(nil), // 83: reliant.v1.UpdateChatProviderPolicyResponse
-	(*ChatUpdate)(nil),                       // 84: reliant.v1.ChatUpdate
-	(*GetChatUpdatesRequest)(nil),            // 85: reliant.v1.GetChatUpdatesRequest
-	(*GetChatUpdatesResponse)(nil),           // 86: reliant.v1.GetChatUpdatesResponse
-	(*ChatPlan)(nil),                         // 87: reliant.v1.ChatPlan
-	(*ListChatPlansRequest)(nil),             // 88: reliant.v1.ListChatPlansRequest
-	(*ListChatPlansResponse)(nil),            // 89: reliant.v1.ListChatPlansResponse
-	(*StepExecution)(nil),                    // 90: reliant.v1.StepExecution
-	(*WorkflowExecution)(nil),                // 91: reliant.v1.WorkflowExecution
-	(*GetThreadWorkflowInputsRequest)(nil),   // 92: reliant.v1.GetThreadWorkflowInputsRequest
-	(*GetThreadWorkflowInputsResponse)(nil),  // 93: reliant.v1.GetThreadWorkflowInputsResponse
-	(*GetWorkflowExecutionsRequest)(nil),     // 94: reliant.v1.GetWorkflowExecutionsRequest
-	(*GetWorkflowExecutionsResponse)(nil),    // 95: reliant.v1.GetWorkflowExecutionsResponse
-	(*ListStepExecutionsRequest)(nil),        // 96: reliant.v1.ListStepExecutionsRequest
-	(*ListStepExecutionsResponse)(nil),       // 97: reliant.v1.ListStepExecutionsResponse
-	(*SetChatDaemonRequest)(nil),             // 98: reliant.v1.SetChatDaemonRequest
-	(*SetChatDaemonResponse)(nil),            // 99: reliant.v1.SetChatDaemonResponse
-	nil,                                      // 100: reliant.v1.Chat.SelectedPresetsEntry
-	nil,                                      // 101: reliant.v1.StartChatRequest.WorkflowParamsEntry
-	nil,                                      // 102: reliant.v1.StartChatRequest.SelectedPresetsEntry
-	nil,                                      // 103: reliant.v1.RunNowRequest.InputsEntry
-	nil,                                      // 104: reliant.v1.RunNowRequest.PresetsEntry
-	nil,                                      // 105: reliant.v1.SendMessageRequest.WorkflowParamsEntry
-	nil,                                      // 106: reliant.v1.SendMessageRequest.SelectedPresetsEntry
-	nil,                                      // 107: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry
-	nil,                                      // 108: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry
-	(*WorktreeSummary)(nil),                  // 109: reliant.v1.WorktreeSummary
-	(*structpb.Struct)(nil),                  // 110: google.protobuf.Struct
-	(PlanStatus)(0),                          // 111: reliant.v1.PlanStatus
-	(*structpb.Value)(nil),                   // 112: google.protobuf.Value
+	(ChatState)(0),                            // 0: reliant.v1.ChatState
+	(WorkflowState)(0),                        // 1: reliant.v1.WorkflowState
+	(WorkflowStopReason)(0),                   // 2: reliant.v1.WorkflowStopReason
+	(MessageRole)(0),                          // 3: reliant.v1.MessageRole
+	(StreamingState)(0),                       // 4: reliant.v1.StreamingState
+	(DisplayStyle)(0),                         // 5: reliant.v1.DisplayStyle
+	(AgentMessageKind)(0),                     // 6: reliant.v1.AgentMessageKind
+	(ContentBlockType)(0),                     // 7: reliant.v1.ContentBlockType
+	(ChatActivity)(0),                         // 8: reliant.v1.ChatActivity
+	(ChatOrigin)(0),                           // 9: reliant.v1.ChatOrigin
+	(ToolCallStatus)(0),                       // 10: reliant.v1.ToolCallStatus
+	(RecoveryType)(0),                         // 11: reliant.v1.RecoveryType
+	(WorkflowExecutionView)(0),                // 12: reliant.v1.WorkflowExecutionView
+	(ProviderPolicy_OnLimit)(0),               // 13: reliant.v1.ProviderPolicy.OnLimit
+	(*Chat)(nil),                              // 14: reliant.v1.Chat
+	(*ChatSelection)(nil),                     // 15: reliant.v1.ChatSelection
+	(*ProviderPolicy)(nil),                    // 16: reliant.v1.ProviderPolicy
+	(*ArchivedChat)(nil),                      // 17: reliant.v1.ArchivedChat
+	(*Message)(nil),                           // 18: reliant.v1.Message
+	(*MessageSender)(nil),                     // 19: reliant.v1.MessageSender
+	(*ContentBlock)(nil),                      // 20: reliant.v1.ContentBlock
+	(*Attachment)(nil),                        // 21: reliant.v1.Attachment
+	(*InputMessage)(nil),                      // 22: reliant.v1.InputMessage
+	(*StartChatRequest)(nil),                  // 23: reliant.v1.StartChatRequest
+	(*StartChatResponse)(nil),                 // 24: reliant.v1.StartChatResponse
+	(*ReplayEvent)(nil),                       // 25: reliant.v1.ReplayEvent
+	(*RunNowRequest)(nil),                     // 26: reliant.v1.RunNowRequest
+	(*RunNowResponse)(nil),                    // 27: reliant.v1.RunNowResponse
+	(*ListChatsRequest)(nil),                  // 28: reliant.v1.ListChatsRequest
+	(*ListChatsResponse)(nil),                 // 29: reliant.v1.ListChatsResponse
+	(*GetChatRequest)(nil),                    // 30: reliant.v1.GetChatRequest
+	(*GetChatResponse)(nil),                   // 31: reliant.v1.GetChatResponse
+	(*UpdateChatRequest)(nil),                 // 32: reliant.v1.UpdateChatRequest
+	(*UpdateChatResponse)(nil),                // 33: reliant.v1.UpdateChatResponse
+	(*AdoptChatRequest)(nil),                  // 34: reliant.v1.AdoptChatRequest
+	(*AdoptChatResponse)(nil),                 // 35: reliant.v1.AdoptChatResponse
+	(*UnadoptChatRequest)(nil),                // 36: reliant.v1.UnadoptChatRequest
+	(*UnadoptChatResponse)(nil),               // 37: reliant.v1.UnadoptChatResponse
+	(*DeleteChatRequest)(nil),                 // 38: reliant.v1.DeleteChatRequest
+	(*DeleteChatResponse)(nil),                // 39: reliant.v1.DeleteChatResponse
+	(*SearchChatsRequest)(nil),                // 40: reliant.v1.SearchChatsRequest
+	(*SearchChatsResponse)(nil),               // 41: reliant.v1.SearchChatsResponse
+	(*ListArchivedChatsRequest)(nil),          // 42: reliant.v1.ListArchivedChatsRequest
+	(*ListArchivedChatsResponse)(nil),         // 43: reliant.v1.ListArchivedChatsResponse
+	(*SendMessageRequest)(nil),                // 44: reliant.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),               // 45: reliant.v1.SendMessageResponse
+	(*SendAgentMessageRequest)(nil),           // 46: reliant.v1.SendAgentMessageRequest
+	(*SendAgentMessageResponse)(nil),          // 47: reliant.v1.SendAgentMessageResponse
+	(*ListQueuedAgentMessagesRequest)(nil),    // 48: reliant.v1.ListQueuedAgentMessagesRequest
+	(*QueuedAgentMessage)(nil),                // 49: reliant.v1.QueuedAgentMessage
+	(*ListQueuedAgentMessagesResponse)(nil),   // 50: reliant.v1.ListQueuedAgentMessagesResponse
+	(*CancelQueuedAgentMessageRequest)(nil),   // 51: reliant.v1.CancelQueuedAgentMessageRequest
+	(*CancelQueuedAgentMessageResponse)(nil),  // 52: reliant.v1.CancelQueuedAgentMessageResponse
+	(*InterruptThreadRequest)(nil),            // 53: reliant.v1.InterruptThreadRequest
+	(*InterruptThreadResponse)(nil),           // 54: reliant.v1.InterruptThreadResponse
+	(*ListMessagesRequest)(nil),               // 55: reliant.v1.ListMessagesRequest
+	(*ListMessagesResponse)(nil),              // 56: reliant.v1.ListMessagesResponse
+	(*GetToolResultRequest)(nil),              // 57: reliant.v1.GetToolResultRequest
+	(*GetToolResultResponse)(nil),             // 58: reliant.v1.GetToolResultResponse
+	(*UpdateChatStateRequest)(nil),            // 59: reliant.v1.UpdateChatStateRequest
+	(*UpdateChatStateResponse)(nil),           // 60: reliant.v1.UpdateChatStateResponse
+	(*TerminateChatRequest)(nil),              // 61: reliant.v1.TerminateChatRequest
+	(*TerminateChatResponse)(nil),             // 62: reliant.v1.TerminateChatResponse
+	(*PauseChatRequest)(nil),                  // 63: reliant.v1.PauseChatRequest
+	(*PauseChatResponse)(nil),                 // 64: reliant.v1.PauseChatResponse
+	(*ResumeChatRequest)(nil),                 // 65: reliant.v1.ResumeChatRequest
+	(*RetryUsageLimitWaitRequest)(nil),        // 66: reliant.v1.RetryUsageLimitWaitRequest
+	(*RetryUsageLimitWaitResponse)(nil),       // 67: reliant.v1.RetryUsageLimitWaitResponse
+	(*ResumeChatResponse)(nil),                // 68: reliant.v1.ResumeChatResponse
+	(*DismissChatRequest)(nil),                // 69: reliant.v1.DismissChatRequest
+	(*DismissChatResponse)(nil),               // 70: reliant.v1.DismissChatResponse
+	(*MarkUnreadChatRequest)(nil),             // 71: reliant.v1.MarkUnreadChatRequest
+	(*MarkUnreadChatResponse)(nil),            // 72: reliant.v1.MarkUnreadChatResponse
+	(*CompactChatRequest)(nil),                // 73: reliant.v1.CompactChatRequest
+	(*CompactChatResponse)(nil),               // 74: reliant.v1.CompactChatResponse
+	(*WorkspaceBranchContext)(nil),            // 75: reliant.v1.WorkspaceBranchContext
+	(*BranchChatRequest)(nil),                 // 76: reliant.v1.BranchChatRequest
+	(*BranchChatResponse)(nil),                // 77: reliant.v1.BranchChatResponse
+	(*BranchInfo)(nil),                        // 78: reliant.v1.BranchInfo
+	(*ListBranchesRequest)(nil),               // 79: reliant.v1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),              // 80: reliant.v1.ListBranchesResponse
+	(*UpdateWorkflowParamsRequest)(nil),       // 81: reliant.v1.UpdateWorkflowParamsRequest
+	(*UpdateWorkflowParamsResponse)(nil),      // 82: reliant.v1.UpdateWorkflowParamsResponse
+	(*UpdateChatProviderPolicyRequest)(nil),   // 83: reliant.v1.UpdateChatProviderPolicyRequest
+	(*UpdateChatProviderPolicyResponse)(nil),  // 84: reliant.v1.UpdateChatProviderPolicyResponse
+	(*ChatUpdate)(nil),                        // 85: reliant.v1.ChatUpdate
+	(*GetChatUpdatesRequest)(nil),             // 86: reliant.v1.GetChatUpdatesRequest
+	(*GetChatUpdatesResponse)(nil),            // 87: reliant.v1.GetChatUpdatesResponse
+	(*ChatPlan)(nil),                          // 88: reliant.v1.ChatPlan
+	(*ListChatPlansRequest)(nil),              // 89: reliant.v1.ListChatPlansRequest
+	(*ListChatPlansResponse)(nil),             // 90: reliant.v1.ListChatPlansResponse
+	(*StepExecution)(nil),                     // 91: reliant.v1.StepExecution
+	(*WorkflowExecution)(nil),                 // 92: reliant.v1.WorkflowExecution
+	(*GetThreadWorkflowInputsRequest)(nil),    // 93: reliant.v1.GetThreadWorkflowInputsRequest
+	(*GetThreadWorkflowInputsResponse)(nil),   // 94: reliant.v1.GetThreadWorkflowInputsResponse
+	(*GetWorkflowExecutionsRequest)(nil),      // 95: reliant.v1.GetWorkflowExecutionsRequest
+	(*GetWorkflowExecutionsResponse)(nil),     // 96: reliant.v1.GetWorkflowExecutionsResponse
+	(*ListStepExecutionsRequest)(nil),         // 97: reliant.v1.ListStepExecutionsRequest
+	(*ListStepExecutionsResponse)(nil),        // 98: reliant.v1.ListStepExecutionsResponse
+	(*GetWorkflowNodeExecutionsRequest)(nil),  // 99: reliant.v1.GetWorkflowNodeExecutionsRequest
+	(*GetWorkflowNodeExecutionsResponse)(nil), // 100: reliant.v1.GetWorkflowNodeExecutionsResponse
+	(*SetChatDaemonRequest)(nil),              // 101: reliant.v1.SetChatDaemonRequest
+	(*SetChatDaemonResponse)(nil),             // 102: reliant.v1.SetChatDaemonResponse
+	nil,                                       // 103: reliant.v1.Chat.SelectedPresetsEntry
+	nil,                                       // 104: reliant.v1.StartChatRequest.WorkflowParamsEntry
+	nil,                                       // 105: reliant.v1.StartChatRequest.SelectedPresetsEntry
+	nil,                                       // 106: reliant.v1.RunNowRequest.InputsEntry
+	nil,                                       // 107: reliant.v1.RunNowRequest.PresetsEntry
+	nil,                                       // 108: reliant.v1.SendMessageRequest.WorkflowParamsEntry
+	nil,                                       // 109: reliant.v1.SendMessageRequest.SelectedPresetsEntry
+	nil,                                       // 110: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry
+	nil,                                       // 111: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry
+	(*WorktreeSummary)(nil),                   // 112: reliant.v1.WorktreeSummary
+	(*structpb.Struct)(nil),                   // 113: google.protobuf.Struct
+	(PlanStatus)(0),                           // 114: reliant.v1.PlanStatus
+	(*structpb.Value)(nil),                    // 115: google.protobuf.Value
 }
 var file_reliant_v1_chat_proto_depIdxs = []int32{
 	0,   // 0: reliant.v1.Chat.state:type_name -> reliant.v1.ChatState
-	100, // 1: reliant.v1.Chat.selected_presets:type_name -> reliant.v1.Chat.SelectedPresetsEntry
+	103, // 1: reliant.v1.Chat.selected_presets:type_name -> reliant.v1.Chat.SelectedPresetsEntry
 	8,   // 2: reliant.v1.Chat.activity:type_name -> reliant.v1.ChatActivity
 	1,   // 3: reliant.v1.Chat.workflow_state:type_name -> reliant.v1.WorkflowState
 	2,   // 4: reliant.v1.Chat.workflow_stop_reason:type_name -> reliant.v1.WorkflowStopReason
-	14,  // 5: reliant.v1.Chat.selection:type_name -> reliant.v1.ChatSelection
-	109, // 6: reliant.v1.Chat.worktree:type_name -> reliant.v1.WorktreeSummary
-	110, // 7: reliant.v1.ChatSelection.params:type_name -> google.protobuf.Struct
-	15,  // 8: reliant.v1.ChatSelection.provider_policy:type_name -> reliant.v1.ProviderPolicy
-	12,  // 9: reliant.v1.ProviderPolicy.on_limit:type_name -> reliant.v1.ProviderPolicy.OnLimit
-	13,  // 10: reliant.v1.ArchivedChat.chat:type_name -> reliant.v1.Chat
-	3,   // 11: reliant.v1.Message.role:type_name -> reliant.v1.MessageRole
-	4,   // 12: reliant.v1.Message.streaming_state:type_name -> reliant.v1.StreamingState
-	19,  // 13: reliant.v1.Message.content_blocks:type_name -> reliant.v1.ContentBlock
-	20,  // 14: reliant.v1.Message.attachments:type_name -> reliant.v1.Attachment
-	5,   // 15: reliant.v1.Message.display_style:type_name -> reliant.v1.DisplayStyle
-	18,  // 16: reliant.v1.Message.sender:type_name -> reliant.v1.MessageSender
-	6,   // 17: reliant.v1.MessageSender.kind:type_name -> reliant.v1.AgentMessageKind
-	7,   // 18: reliant.v1.ContentBlock.type:type_name -> reliant.v1.ContentBlockType
-	9,   // 19: reliant.v1.ContentBlock.tool_call_status:type_name -> reliant.v1.ToolCallStatus
-	3,   // 20: reliant.v1.InputMessage.role:type_name -> reliant.v1.MessageRole
-	5,   // 21: reliant.v1.InputMessage.display_style:type_name -> reliant.v1.DisplayStyle
-	101, // 22: reliant.v1.StartChatRequest.workflow_params:type_name -> reliant.v1.StartChatRequest.WorkflowParamsEntry
-	102, // 23: reliant.v1.StartChatRequest.selected_presets:type_name -> reliant.v1.StartChatRequest.SelectedPresetsEntry
-	21,  // 24: reliant.v1.StartChatRequest.messages:type_name -> reliant.v1.InputMessage
-	13,  // 25: reliant.v1.StartChatResponse.chat:type_name -> reliant.v1.Chat
-	110, // 26: reliant.v1.ReplayEvent.payload:type_name -> google.protobuf.Struct
-	103, // 27: reliant.v1.RunNowRequest.inputs:type_name -> reliant.v1.RunNowRequest.InputsEntry
-	104, // 28: reliant.v1.RunNowRequest.presets:type_name -> reliant.v1.RunNowRequest.PresetsEntry
-	24,  // 29: reliant.v1.RunNowRequest.replay:type_name -> reliant.v1.ReplayEvent
-	13,  // 30: reliant.v1.RunNowResponse.chat:type_name -> reliant.v1.Chat
-	13,  // 31: reliant.v1.ListChatsResponse.chats:type_name -> reliant.v1.Chat
-	109, // 32: reliant.v1.ListChatsResponse.main_worktrees:type_name -> reliant.v1.WorktreeSummary
-	13,  // 33: reliant.v1.GetChatResponse.chat:type_name -> reliant.v1.Chat
-	13,  // 34: reliant.v1.UpdateChatResponse.chat:type_name -> reliant.v1.Chat
-	13,  // 35: reliant.v1.AdoptChatResponse.chat:type_name -> reliant.v1.Chat
-	13,  // 36: reliant.v1.UnadoptChatResponse.chat:type_name -> reliant.v1.Chat
-	13,  // 37: reliant.v1.SearchChatsResponse.chats:type_name -> reliant.v1.Chat
-	16,  // 38: reliant.v1.ListArchivedChatsResponse.chats:type_name -> reliant.v1.ArchivedChat
-	105, // 39: reliant.v1.SendMessageRequest.workflow_params:type_name -> reliant.v1.SendMessageRequest.WorkflowParamsEntry
-	106, // 40: reliant.v1.SendMessageRequest.selected_presets:type_name -> reliant.v1.SendMessageRequest.SelectedPresetsEntry
-	21,  // 41: reliant.v1.SendMessageRequest.messages:type_name -> reliant.v1.InputMessage
-	6,   // 42: reliant.v1.QueuedAgentMessage.sender_kind:type_name -> reliant.v1.AgentMessageKind
-	48,  // 43: reliant.v1.ListQueuedAgentMessagesResponse.messages:type_name -> reliant.v1.QueuedAgentMessage
-	17,  // 44: reliant.v1.ListMessagesResponse.messages:type_name -> reliant.v1.Message
-	0,   // 45: reliant.v1.UpdateChatStateRequest.state:type_name -> reliant.v1.ChatState
-	0,   // 46: reliant.v1.UpdateChatStateResponse.state:type_name -> reliant.v1.ChatState
-	0,   // 47: reliant.v1.UpdateChatStateResponse.previous_state:type_name -> reliant.v1.ChatState
-	10,  // 48: reliant.v1.ResumeChatResponse.recovery_type:type_name -> reliant.v1.RecoveryType
-	0,   // 49: reliant.v1.DismissChatResponse.state:type_name -> reliant.v1.ChatState
-	0,   // 50: reliant.v1.MarkUnreadChatResponse.state:type_name -> reliant.v1.ChatState
-	74,  // 51: reliant.v1.BranchChatRequest.workspace_context:type_name -> reliant.v1.WorkspaceBranchContext
-	13,  // 52: reliant.v1.BranchChatResponse.chat:type_name -> reliant.v1.Chat
-	77,  // 53: reliant.v1.ListBranchesResponse.branches:type_name -> reliant.v1.BranchInfo
-	107, // 54: reliant.v1.UpdateWorkflowParamsRequest.params:type_name -> reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry
-	14,  // 55: reliant.v1.UpdateWorkflowParamsResponse.selection:type_name -> reliant.v1.ChatSelection
-	15,  // 56: reliant.v1.UpdateChatProviderPolicyRequest.provider_policy:type_name -> reliant.v1.ProviderPolicy
-	14,  // 57: reliant.v1.UpdateChatProviderPolicyResponse.selection:type_name -> reliant.v1.ChatSelection
-	84,  // 58: reliant.v1.GetChatUpdatesResponse.updates:type_name -> reliant.v1.ChatUpdate
-	111, // 59: reliant.v1.ChatPlan.status:type_name -> reliant.v1.PlanStatus
-	87,  // 60: reliant.v1.ListChatPlansResponse.plans:type_name -> reliant.v1.ChatPlan
-	91,  // 61: reliant.v1.WorkflowExecution.children:type_name -> reliant.v1.WorkflowExecution
-	90,  // 62: reliant.v1.WorkflowExecution.steps:type_name -> reliant.v1.StepExecution
-	1,   // 63: reliant.v1.WorkflowExecution.state:type_name -> reliant.v1.WorkflowState
-	2,   // 64: reliant.v1.WorkflowExecution.stop_reason:type_name -> reliant.v1.WorkflowStopReason
-	108, // 65: reliant.v1.GetThreadWorkflowInputsResponse.inputs:type_name -> reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry
-	11,  // 66: reliant.v1.GetWorkflowExecutionsRequest.view:type_name -> reliant.v1.WorkflowExecutionView
-	91,  // 67: reliant.v1.GetWorkflowExecutionsResponse.root_workflow:type_name -> reliant.v1.WorkflowExecution
-	91,  // 68: reliant.v1.GetWorkflowExecutionsResponse.all_root_workflows:type_name -> reliant.v1.WorkflowExecution
-	90,  // 69: reliant.v1.ListStepExecutionsResponse.step_executions:type_name -> reliant.v1.StepExecution
-	13,  // 70: reliant.v1.SetChatDaemonResponse.chat:type_name -> reliant.v1.Chat
-	112, // 71: reliant.v1.StartChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
-	112, // 72: reliant.v1.RunNowRequest.InputsEntry.value:type_name -> google.protobuf.Value
-	112, // 73: reliant.v1.SendMessageRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
-	112, // 74: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	112, // 75: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	22,  // 76: reliant.v1.ChatService.StartChat:input_type -> reliant.v1.StartChatRequest
-	25,  // 77: reliant.v1.ChatService.RunNow:input_type -> reliant.v1.RunNowRequest
-	33,  // 78: reliant.v1.ChatService.AdoptChat:input_type -> reliant.v1.AdoptChatRequest
-	35,  // 79: reliant.v1.ChatService.UnadoptChat:input_type -> reliant.v1.UnadoptChatRequest
-	27,  // 80: reliant.v1.ChatService.ListChats:input_type -> reliant.v1.ListChatsRequest
-	29,  // 81: reliant.v1.ChatService.GetChat:input_type -> reliant.v1.GetChatRequest
-	31,  // 82: reliant.v1.ChatService.UpdateChat:input_type -> reliant.v1.UpdateChatRequest
-	37,  // 83: reliant.v1.ChatService.DeleteChat:input_type -> reliant.v1.DeleteChatRequest
-	39,  // 84: reliant.v1.ChatService.SearchChats:input_type -> reliant.v1.SearchChatsRequest
-	41,  // 85: reliant.v1.ChatService.ListArchivedChats:input_type -> reliant.v1.ListArchivedChatsRequest
-	43,  // 86: reliant.v1.ChatService.SendMessage:input_type -> reliant.v1.SendMessageRequest
-	45,  // 87: reliant.v1.ChatService.SendAgentMessage:input_type -> reliant.v1.SendAgentMessageRequest
-	47,  // 88: reliant.v1.ChatService.ListQueuedAgentMessages:input_type -> reliant.v1.ListQueuedAgentMessagesRequest
-	50,  // 89: reliant.v1.ChatService.CancelQueuedAgentMessage:input_type -> reliant.v1.CancelQueuedAgentMessageRequest
-	52,  // 90: reliant.v1.ChatService.InterruptThread:input_type -> reliant.v1.InterruptThreadRequest
-	54,  // 91: reliant.v1.ChatService.ListMessages:input_type -> reliant.v1.ListMessagesRequest
-	56,  // 92: reliant.v1.ChatService.GetToolResult:input_type -> reliant.v1.GetToolResultRequest
-	58,  // 93: reliant.v1.ChatService.UpdateChatState:input_type -> reliant.v1.UpdateChatStateRequest
-	60,  // 94: reliant.v1.ChatService.TerminateChat:input_type -> reliant.v1.TerminateChatRequest
-	62,  // 95: reliant.v1.ChatService.PauseChat:input_type -> reliant.v1.PauseChatRequest
-	64,  // 96: reliant.v1.ChatService.ResumeChat:input_type -> reliant.v1.ResumeChatRequest
-	65,  // 97: reliant.v1.ChatService.RetryUsageLimitWait:input_type -> reliant.v1.RetryUsageLimitWaitRequest
-	68,  // 98: reliant.v1.ChatService.DismissChat:input_type -> reliant.v1.DismissChatRequest
-	70,  // 99: reliant.v1.ChatService.MarkUnreadChat:input_type -> reliant.v1.MarkUnreadChatRequest
-	72,  // 100: reliant.v1.ChatService.CompactChat:input_type -> reliant.v1.CompactChatRequest
-	75,  // 101: reliant.v1.ChatService.BranchChat:input_type -> reliant.v1.BranchChatRequest
-	78,  // 102: reliant.v1.ChatService.ListBranches:input_type -> reliant.v1.ListBranchesRequest
-	80,  // 103: reliant.v1.ChatService.UpdateWorkflowParams:input_type -> reliant.v1.UpdateWorkflowParamsRequest
-	82,  // 104: reliant.v1.ChatService.UpdateChatProviderPolicy:input_type -> reliant.v1.UpdateChatProviderPolicyRequest
-	85,  // 105: reliant.v1.ChatService.GetChatUpdates:input_type -> reliant.v1.GetChatUpdatesRequest
-	88,  // 106: reliant.v1.ChatService.ListChatPlans:input_type -> reliant.v1.ListChatPlansRequest
-	94,  // 107: reliant.v1.ChatService.GetWorkflowExecutions:input_type -> reliant.v1.GetWorkflowExecutionsRequest
-	96,  // 108: reliant.v1.ChatService.ListStepExecutions:input_type -> reliant.v1.ListStepExecutionsRequest
-	92,  // 109: reliant.v1.ChatService.GetThreadWorkflowInputs:input_type -> reliant.v1.GetThreadWorkflowInputsRequest
-	98,  // 110: reliant.v1.ChatService.SetChatDaemon:input_type -> reliant.v1.SetChatDaemonRequest
-	23,  // 111: reliant.v1.ChatService.StartChat:output_type -> reliant.v1.StartChatResponse
-	26,  // 112: reliant.v1.ChatService.RunNow:output_type -> reliant.v1.RunNowResponse
-	34,  // 113: reliant.v1.ChatService.AdoptChat:output_type -> reliant.v1.AdoptChatResponse
-	36,  // 114: reliant.v1.ChatService.UnadoptChat:output_type -> reliant.v1.UnadoptChatResponse
-	28,  // 115: reliant.v1.ChatService.ListChats:output_type -> reliant.v1.ListChatsResponse
-	30,  // 116: reliant.v1.ChatService.GetChat:output_type -> reliant.v1.GetChatResponse
-	32,  // 117: reliant.v1.ChatService.UpdateChat:output_type -> reliant.v1.UpdateChatResponse
-	38,  // 118: reliant.v1.ChatService.DeleteChat:output_type -> reliant.v1.DeleteChatResponse
-	40,  // 119: reliant.v1.ChatService.SearchChats:output_type -> reliant.v1.SearchChatsResponse
-	42,  // 120: reliant.v1.ChatService.ListArchivedChats:output_type -> reliant.v1.ListArchivedChatsResponse
-	44,  // 121: reliant.v1.ChatService.SendMessage:output_type -> reliant.v1.SendMessageResponse
-	46,  // 122: reliant.v1.ChatService.SendAgentMessage:output_type -> reliant.v1.SendAgentMessageResponse
-	49,  // 123: reliant.v1.ChatService.ListQueuedAgentMessages:output_type -> reliant.v1.ListQueuedAgentMessagesResponse
-	51,  // 124: reliant.v1.ChatService.CancelQueuedAgentMessage:output_type -> reliant.v1.CancelQueuedAgentMessageResponse
-	53,  // 125: reliant.v1.ChatService.InterruptThread:output_type -> reliant.v1.InterruptThreadResponse
-	55,  // 126: reliant.v1.ChatService.ListMessages:output_type -> reliant.v1.ListMessagesResponse
-	57,  // 127: reliant.v1.ChatService.GetToolResult:output_type -> reliant.v1.GetToolResultResponse
-	59,  // 128: reliant.v1.ChatService.UpdateChatState:output_type -> reliant.v1.UpdateChatStateResponse
-	61,  // 129: reliant.v1.ChatService.TerminateChat:output_type -> reliant.v1.TerminateChatResponse
-	63,  // 130: reliant.v1.ChatService.PauseChat:output_type -> reliant.v1.PauseChatResponse
-	67,  // 131: reliant.v1.ChatService.ResumeChat:output_type -> reliant.v1.ResumeChatResponse
-	66,  // 132: reliant.v1.ChatService.RetryUsageLimitWait:output_type -> reliant.v1.RetryUsageLimitWaitResponse
-	69,  // 133: reliant.v1.ChatService.DismissChat:output_type -> reliant.v1.DismissChatResponse
-	71,  // 134: reliant.v1.ChatService.MarkUnreadChat:output_type -> reliant.v1.MarkUnreadChatResponse
-	73,  // 135: reliant.v1.ChatService.CompactChat:output_type -> reliant.v1.CompactChatResponse
-	76,  // 136: reliant.v1.ChatService.BranchChat:output_type -> reliant.v1.BranchChatResponse
-	79,  // 137: reliant.v1.ChatService.ListBranches:output_type -> reliant.v1.ListBranchesResponse
-	81,  // 138: reliant.v1.ChatService.UpdateWorkflowParams:output_type -> reliant.v1.UpdateWorkflowParamsResponse
-	83,  // 139: reliant.v1.ChatService.UpdateChatProviderPolicy:output_type -> reliant.v1.UpdateChatProviderPolicyResponse
-	86,  // 140: reliant.v1.ChatService.GetChatUpdates:output_type -> reliant.v1.GetChatUpdatesResponse
-	89,  // 141: reliant.v1.ChatService.ListChatPlans:output_type -> reliant.v1.ListChatPlansResponse
-	95,  // 142: reliant.v1.ChatService.GetWorkflowExecutions:output_type -> reliant.v1.GetWorkflowExecutionsResponse
-	97,  // 143: reliant.v1.ChatService.ListStepExecutions:output_type -> reliant.v1.ListStepExecutionsResponse
-	93,  // 144: reliant.v1.ChatService.GetThreadWorkflowInputs:output_type -> reliant.v1.GetThreadWorkflowInputsResponse
-	99,  // 145: reliant.v1.ChatService.SetChatDaemon:output_type -> reliant.v1.SetChatDaemonResponse
-	111, // [111:146] is the sub-list for method output_type
-	76,  // [76:111] is the sub-list for method input_type
-	76,  // [76:76] is the sub-list for extension type_name
-	76,  // [76:76] is the sub-list for extension extendee
-	0,   // [0:76] is the sub-list for field type_name
+	15,  // 5: reliant.v1.Chat.selection:type_name -> reliant.v1.ChatSelection
+	112, // 6: reliant.v1.Chat.worktree:type_name -> reliant.v1.WorktreeSummary
+	9,   // 7: reliant.v1.Chat.origin:type_name -> reliant.v1.ChatOrigin
+	113, // 8: reliant.v1.ChatSelection.params:type_name -> google.protobuf.Struct
+	16,  // 9: reliant.v1.ChatSelection.provider_policy:type_name -> reliant.v1.ProviderPolicy
+	13,  // 10: reliant.v1.ProviderPolicy.on_limit:type_name -> reliant.v1.ProviderPolicy.OnLimit
+	14,  // 11: reliant.v1.ArchivedChat.chat:type_name -> reliant.v1.Chat
+	3,   // 12: reliant.v1.Message.role:type_name -> reliant.v1.MessageRole
+	4,   // 13: reliant.v1.Message.streaming_state:type_name -> reliant.v1.StreamingState
+	20,  // 14: reliant.v1.Message.content_blocks:type_name -> reliant.v1.ContentBlock
+	21,  // 15: reliant.v1.Message.attachments:type_name -> reliant.v1.Attachment
+	5,   // 16: reliant.v1.Message.display_style:type_name -> reliant.v1.DisplayStyle
+	19,  // 17: reliant.v1.Message.sender:type_name -> reliant.v1.MessageSender
+	6,   // 18: reliant.v1.MessageSender.kind:type_name -> reliant.v1.AgentMessageKind
+	7,   // 19: reliant.v1.ContentBlock.type:type_name -> reliant.v1.ContentBlockType
+	10,  // 20: reliant.v1.ContentBlock.tool_call_status:type_name -> reliant.v1.ToolCallStatus
+	3,   // 21: reliant.v1.InputMessage.role:type_name -> reliant.v1.MessageRole
+	5,   // 22: reliant.v1.InputMessage.display_style:type_name -> reliant.v1.DisplayStyle
+	104, // 23: reliant.v1.StartChatRequest.workflow_params:type_name -> reliant.v1.StartChatRequest.WorkflowParamsEntry
+	105, // 24: reliant.v1.StartChatRequest.selected_presets:type_name -> reliant.v1.StartChatRequest.SelectedPresetsEntry
+	22,  // 25: reliant.v1.StartChatRequest.messages:type_name -> reliant.v1.InputMessage
+	14,  // 26: reliant.v1.StartChatResponse.chat:type_name -> reliant.v1.Chat
+	113, // 27: reliant.v1.ReplayEvent.payload:type_name -> google.protobuf.Struct
+	106, // 28: reliant.v1.RunNowRequest.inputs:type_name -> reliant.v1.RunNowRequest.InputsEntry
+	107, // 29: reliant.v1.RunNowRequest.presets:type_name -> reliant.v1.RunNowRequest.PresetsEntry
+	25,  // 30: reliant.v1.RunNowRequest.replay:type_name -> reliant.v1.ReplayEvent
+	14,  // 31: reliant.v1.RunNowResponse.chat:type_name -> reliant.v1.Chat
+	14,  // 32: reliant.v1.ListChatsResponse.chats:type_name -> reliant.v1.Chat
+	112, // 33: reliant.v1.ListChatsResponse.main_worktrees:type_name -> reliant.v1.WorktreeSummary
+	14,  // 34: reliant.v1.GetChatResponse.chat:type_name -> reliant.v1.Chat
+	14,  // 35: reliant.v1.UpdateChatResponse.chat:type_name -> reliant.v1.Chat
+	14,  // 36: reliant.v1.AdoptChatResponse.chat:type_name -> reliant.v1.Chat
+	14,  // 37: reliant.v1.UnadoptChatResponse.chat:type_name -> reliant.v1.Chat
+	14,  // 38: reliant.v1.SearchChatsResponse.chats:type_name -> reliant.v1.Chat
+	17,  // 39: reliant.v1.ListArchivedChatsResponse.chats:type_name -> reliant.v1.ArchivedChat
+	108, // 40: reliant.v1.SendMessageRequest.workflow_params:type_name -> reliant.v1.SendMessageRequest.WorkflowParamsEntry
+	109, // 41: reliant.v1.SendMessageRequest.selected_presets:type_name -> reliant.v1.SendMessageRequest.SelectedPresetsEntry
+	22,  // 42: reliant.v1.SendMessageRequest.messages:type_name -> reliant.v1.InputMessage
+	6,   // 43: reliant.v1.QueuedAgentMessage.sender_kind:type_name -> reliant.v1.AgentMessageKind
+	49,  // 44: reliant.v1.ListQueuedAgentMessagesResponse.messages:type_name -> reliant.v1.QueuedAgentMessage
+	18,  // 45: reliant.v1.ListMessagesResponse.messages:type_name -> reliant.v1.Message
+	0,   // 46: reliant.v1.UpdateChatStateRequest.state:type_name -> reliant.v1.ChatState
+	0,   // 47: reliant.v1.UpdateChatStateResponse.state:type_name -> reliant.v1.ChatState
+	0,   // 48: reliant.v1.UpdateChatStateResponse.previous_state:type_name -> reliant.v1.ChatState
+	11,  // 49: reliant.v1.ResumeChatResponse.recovery_type:type_name -> reliant.v1.RecoveryType
+	0,   // 50: reliant.v1.DismissChatResponse.state:type_name -> reliant.v1.ChatState
+	0,   // 51: reliant.v1.MarkUnreadChatResponse.state:type_name -> reliant.v1.ChatState
+	75,  // 52: reliant.v1.BranchChatRequest.workspace_context:type_name -> reliant.v1.WorkspaceBranchContext
+	14,  // 53: reliant.v1.BranchChatResponse.chat:type_name -> reliant.v1.Chat
+	78,  // 54: reliant.v1.ListBranchesResponse.branches:type_name -> reliant.v1.BranchInfo
+	110, // 55: reliant.v1.UpdateWorkflowParamsRequest.params:type_name -> reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry
+	15,  // 56: reliant.v1.UpdateWorkflowParamsResponse.selection:type_name -> reliant.v1.ChatSelection
+	16,  // 57: reliant.v1.UpdateChatProviderPolicyRequest.provider_policy:type_name -> reliant.v1.ProviderPolicy
+	15,  // 58: reliant.v1.UpdateChatProviderPolicyResponse.selection:type_name -> reliant.v1.ChatSelection
+	85,  // 59: reliant.v1.GetChatUpdatesResponse.updates:type_name -> reliant.v1.ChatUpdate
+	114, // 60: reliant.v1.ChatPlan.status:type_name -> reliant.v1.PlanStatus
+	88,  // 61: reliant.v1.ListChatPlansResponse.plans:type_name -> reliant.v1.ChatPlan
+	92,  // 62: reliant.v1.WorkflowExecution.children:type_name -> reliant.v1.WorkflowExecution
+	91,  // 63: reliant.v1.WorkflowExecution.steps:type_name -> reliant.v1.StepExecution
+	1,   // 64: reliant.v1.WorkflowExecution.state:type_name -> reliant.v1.WorkflowState
+	2,   // 65: reliant.v1.WorkflowExecution.stop_reason:type_name -> reliant.v1.WorkflowStopReason
+	111, // 66: reliant.v1.GetThreadWorkflowInputsResponse.inputs:type_name -> reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry
+	12,  // 67: reliant.v1.GetWorkflowExecutionsRequest.view:type_name -> reliant.v1.WorkflowExecutionView
+	92,  // 68: reliant.v1.GetWorkflowExecutionsResponse.root_workflow:type_name -> reliant.v1.WorkflowExecution
+	92,  // 69: reliant.v1.GetWorkflowExecutionsResponse.all_root_workflows:type_name -> reliant.v1.WorkflowExecution
+	91,  // 70: reliant.v1.ListStepExecutionsResponse.step_executions:type_name -> reliant.v1.StepExecution
+	85,  // 71: reliant.v1.GetWorkflowNodeExecutionsResponse.updates:type_name -> reliant.v1.ChatUpdate
+	14,  // 72: reliant.v1.SetChatDaemonResponse.chat:type_name -> reliant.v1.Chat
+	115, // 73: reliant.v1.StartChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
+	115, // 74: reliant.v1.RunNowRequest.InputsEntry.value:type_name -> google.protobuf.Value
+	115, // 75: reliant.v1.SendMessageRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
+	115, // 76: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	115, // 77: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry.value:type_name -> google.protobuf.Value
+	23,  // 78: reliant.v1.ChatService.StartChat:input_type -> reliant.v1.StartChatRequest
+	26,  // 79: reliant.v1.ChatService.RunNow:input_type -> reliant.v1.RunNowRequest
+	34,  // 80: reliant.v1.ChatService.AdoptChat:input_type -> reliant.v1.AdoptChatRequest
+	36,  // 81: reliant.v1.ChatService.UnadoptChat:input_type -> reliant.v1.UnadoptChatRequest
+	28,  // 82: reliant.v1.ChatService.ListChats:input_type -> reliant.v1.ListChatsRequest
+	30,  // 83: reliant.v1.ChatService.GetChat:input_type -> reliant.v1.GetChatRequest
+	32,  // 84: reliant.v1.ChatService.UpdateChat:input_type -> reliant.v1.UpdateChatRequest
+	38,  // 85: reliant.v1.ChatService.DeleteChat:input_type -> reliant.v1.DeleteChatRequest
+	40,  // 86: reliant.v1.ChatService.SearchChats:input_type -> reliant.v1.SearchChatsRequest
+	42,  // 87: reliant.v1.ChatService.ListArchivedChats:input_type -> reliant.v1.ListArchivedChatsRequest
+	44,  // 88: reliant.v1.ChatService.SendMessage:input_type -> reliant.v1.SendMessageRequest
+	46,  // 89: reliant.v1.ChatService.SendAgentMessage:input_type -> reliant.v1.SendAgentMessageRequest
+	48,  // 90: reliant.v1.ChatService.ListQueuedAgentMessages:input_type -> reliant.v1.ListQueuedAgentMessagesRequest
+	51,  // 91: reliant.v1.ChatService.CancelQueuedAgentMessage:input_type -> reliant.v1.CancelQueuedAgentMessageRequest
+	53,  // 92: reliant.v1.ChatService.InterruptThread:input_type -> reliant.v1.InterruptThreadRequest
+	55,  // 93: reliant.v1.ChatService.ListMessages:input_type -> reliant.v1.ListMessagesRequest
+	57,  // 94: reliant.v1.ChatService.GetToolResult:input_type -> reliant.v1.GetToolResultRequest
+	59,  // 95: reliant.v1.ChatService.UpdateChatState:input_type -> reliant.v1.UpdateChatStateRequest
+	61,  // 96: reliant.v1.ChatService.TerminateChat:input_type -> reliant.v1.TerminateChatRequest
+	63,  // 97: reliant.v1.ChatService.PauseChat:input_type -> reliant.v1.PauseChatRequest
+	65,  // 98: reliant.v1.ChatService.ResumeChat:input_type -> reliant.v1.ResumeChatRequest
+	66,  // 99: reliant.v1.ChatService.RetryUsageLimitWait:input_type -> reliant.v1.RetryUsageLimitWaitRequest
+	69,  // 100: reliant.v1.ChatService.DismissChat:input_type -> reliant.v1.DismissChatRequest
+	71,  // 101: reliant.v1.ChatService.MarkUnreadChat:input_type -> reliant.v1.MarkUnreadChatRequest
+	73,  // 102: reliant.v1.ChatService.CompactChat:input_type -> reliant.v1.CompactChatRequest
+	76,  // 103: reliant.v1.ChatService.BranchChat:input_type -> reliant.v1.BranchChatRequest
+	79,  // 104: reliant.v1.ChatService.ListBranches:input_type -> reliant.v1.ListBranchesRequest
+	81,  // 105: reliant.v1.ChatService.UpdateWorkflowParams:input_type -> reliant.v1.UpdateWorkflowParamsRequest
+	83,  // 106: reliant.v1.ChatService.UpdateChatProviderPolicy:input_type -> reliant.v1.UpdateChatProviderPolicyRequest
+	86,  // 107: reliant.v1.ChatService.GetChatUpdates:input_type -> reliant.v1.GetChatUpdatesRequest
+	89,  // 108: reliant.v1.ChatService.ListChatPlans:input_type -> reliant.v1.ListChatPlansRequest
+	95,  // 109: reliant.v1.ChatService.GetWorkflowExecutions:input_type -> reliant.v1.GetWorkflowExecutionsRequest
+	97,  // 110: reliant.v1.ChatService.ListStepExecutions:input_type -> reliant.v1.ListStepExecutionsRequest
+	99,  // 111: reliant.v1.ChatService.GetWorkflowNodeExecutions:input_type -> reliant.v1.GetWorkflowNodeExecutionsRequest
+	93,  // 112: reliant.v1.ChatService.GetThreadWorkflowInputs:input_type -> reliant.v1.GetThreadWorkflowInputsRequest
+	101, // 113: reliant.v1.ChatService.SetChatDaemon:input_type -> reliant.v1.SetChatDaemonRequest
+	24,  // 114: reliant.v1.ChatService.StartChat:output_type -> reliant.v1.StartChatResponse
+	27,  // 115: reliant.v1.ChatService.RunNow:output_type -> reliant.v1.RunNowResponse
+	35,  // 116: reliant.v1.ChatService.AdoptChat:output_type -> reliant.v1.AdoptChatResponse
+	37,  // 117: reliant.v1.ChatService.UnadoptChat:output_type -> reliant.v1.UnadoptChatResponse
+	29,  // 118: reliant.v1.ChatService.ListChats:output_type -> reliant.v1.ListChatsResponse
+	31,  // 119: reliant.v1.ChatService.GetChat:output_type -> reliant.v1.GetChatResponse
+	33,  // 120: reliant.v1.ChatService.UpdateChat:output_type -> reliant.v1.UpdateChatResponse
+	39,  // 121: reliant.v1.ChatService.DeleteChat:output_type -> reliant.v1.DeleteChatResponse
+	41,  // 122: reliant.v1.ChatService.SearchChats:output_type -> reliant.v1.SearchChatsResponse
+	43,  // 123: reliant.v1.ChatService.ListArchivedChats:output_type -> reliant.v1.ListArchivedChatsResponse
+	45,  // 124: reliant.v1.ChatService.SendMessage:output_type -> reliant.v1.SendMessageResponse
+	47,  // 125: reliant.v1.ChatService.SendAgentMessage:output_type -> reliant.v1.SendAgentMessageResponse
+	50,  // 126: reliant.v1.ChatService.ListQueuedAgentMessages:output_type -> reliant.v1.ListQueuedAgentMessagesResponse
+	52,  // 127: reliant.v1.ChatService.CancelQueuedAgentMessage:output_type -> reliant.v1.CancelQueuedAgentMessageResponse
+	54,  // 128: reliant.v1.ChatService.InterruptThread:output_type -> reliant.v1.InterruptThreadResponse
+	56,  // 129: reliant.v1.ChatService.ListMessages:output_type -> reliant.v1.ListMessagesResponse
+	58,  // 130: reliant.v1.ChatService.GetToolResult:output_type -> reliant.v1.GetToolResultResponse
+	60,  // 131: reliant.v1.ChatService.UpdateChatState:output_type -> reliant.v1.UpdateChatStateResponse
+	62,  // 132: reliant.v1.ChatService.TerminateChat:output_type -> reliant.v1.TerminateChatResponse
+	64,  // 133: reliant.v1.ChatService.PauseChat:output_type -> reliant.v1.PauseChatResponse
+	68,  // 134: reliant.v1.ChatService.ResumeChat:output_type -> reliant.v1.ResumeChatResponse
+	67,  // 135: reliant.v1.ChatService.RetryUsageLimitWait:output_type -> reliant.v1.RetryUsageLimitWaitResponse
+	70,  // 136: reliant.v1.ChatService.DismissChat:output_type -> reliant.v1.DismissChatResponse
+	72,  // 137: reliant.v1.ChatService.MarkUnreadChat:output_type -> reliant.v1.MarkUnreadChatResponse
+	74,  // 138: reliant.v1.ChatService.CompactChat:output_type -> reliant.v1.CompactChatResponse
+	77,  // 139: reliant.v1.ChatService.BranchChat:output_type -> reliant.v1.BranchChatResponse
+	80,  // 140: reliant.v1.ChatService.ListBranches:output_type -> reliant.v1.ListBranchesResponse
+	82,  // 141: reliant.v1.ChatService.UpdateWorkflowParams:output_type -> reliant.v1.UpdateWorkflowParamsResponse
+	84,  // 142: reliant.v1.ChatService.UpdateChatProviderPolicy:output_type -> reliant.v1.UpdateChatProviderPolicyResponse
+	87,  // 143: reliant.v1.ChatService.GetChatUpdates:output_type -> reliant.v1.GetChatUpdatesResponse
+	90,  // 144: reliant.v1.ChatService.ListChatPlans:output_type -> reliant.v1.ListChatPlansResponse
+	96,  // 145: reliant.v1.ChatService.GetWorkflowExecutions:output_type -> reliant.v1.GetWorkflowExecutionsResponse
+	98,  // 146: reliant.v1.ChatService.ListStepExecutions:output_type -> reliant.v1.ListStepExecutionsResponse
+	100, // 147: reliant.v1.ChatService.GetWorkflowNodeExecutions:output_type -> reliant.v1.GetWorkflowNodeExecutionsResponse
+	94,  // 148: reliant.v1.ChatService.GetThreadWorkflowInputs:output_type -> reliant.v1.GetThreadWorkflowInputsResponse
+	102, // 149: reliant.v1.ChatService.SetChatDaemon:output_type -> reliant.v1.SetChatDaemonResponse
+	114, // [114:150] is the sub-list for method output_type
+	78,  // [78:114] is the sub-list for method input_type
+	78,  // [78:78] is the sub-list for extension type_name
+	78,  // [78:78] is the sub-list for extension extendee
+	0,   // [0:78] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_chat_proto_init() }
@@ -8138,8 +8366,8 @@ func file_reliant_v1_chat_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_chat_proto_rawDesc), len(file_reliant_v1_chat_proto_rawDesc)),
-			NumEnums:      13,
-			NumMessages:   96,
+			NumEnums:      14,
+			NumMessages:   98,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

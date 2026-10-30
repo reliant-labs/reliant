@@ -36,6 +36,9 @@ const state = vi.hoisted(() => ({
   panelNavigate: undefined as undefined | ((next: Record<string, unknown>) => void),
 }));
 
+// Org-switcher behavior is exercised in components/Orgs; this fixture has one org.
+vi.mock("@/components/Orgs/OrgSwitcher", () => ({ OrgSwitcher: () => null }));
+
 vi.mock("@/hooks/apps-queries", () => ({
   useOrgEnvironments: () => state.envs,
   useApps: () => ({ apps: state.appNames.map((name) => ({ name })), loading: false, availability: "available", detail: "" }),

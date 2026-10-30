@@ -44,6 +44,7 @@ import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import { cn } from "@/lib/utils";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
 import { authorLabel } from "@/services/forge/secretSurface";
+import { Ago } from "../Releases/releaseParts";
 
 export interface SecretVersionHistoryProps {
   name: string;
@@ -56,26 +57,6 @@ export interface SecretVersionHistoryProps {
   onDestroy: (version: number) => void;
   /** A version number currently being mutated, so its row can show pending state. */
   pendingVersion: number | null;
-}
-
-/**
- * Timestamps render as absolute local time, not "3 days ago".
- *
- * Relative time is friendlier for a feed and wrong for an audit trail: "2
- * months ago" cannot be correlated with a deploy log, an incident timeline, or
- * a colleague's screenshot, which is the entire use for this column.
- */
-function formatWhen(iso: string | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "—";
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 type VersionState = "live" | "deleted" | "destroyed";
@@ -153,11 +134,11 @@ export function SecretVersionHistory({
 
               <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
                 {state === "destroyed" ? (
-                  <>Destroyed — created {formatWhen(version.createdAt)}</>
+                  <>Destroyed — created <Ago at={version.createdAt} /></>
                 ) : state === "deleted" ? (
-                  <>Deleted {formatWhen(version.deletedAt)}</>
+                  <>Deleted <Ago at={version.deletedAt} /></>
                 ) : (
-                  <>Created {formatWhen(version.createdAt)}</>
+                  <>Created <Ago at={version.createdAt} /></>
                 )}
                 {/* Who set it, for every state: a destroyed version's author
                     is still the audit fact the row exists to keep. */}

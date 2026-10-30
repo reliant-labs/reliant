@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -54,6 +55,12 @@ func (e *DeclarationError) Error() string {
 	return fmt.Sprintf("declared trigger %q of workflow %q: %s", e.Name, e.Workflow, e.Reason)
 }
 
+// ErrorClass implements svcerr.Classed. A broken declaration is the trigger
+// owner's to fix, and they are told: the trigger reports BROKEN health and an
+// inbox item (BrokenHealth). As a server fault it was also an ERROR record and
+// an issue on every tick of the trigger.
+func (e *DeclarationError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
 // Declaration is an activation's effective WHEN, read from its workflow.
 type Declaration struct {
 	Name   string
@@ -83,13 +90,58 @@ type WorkflowResolver interface {
 	ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error)
 }
 
+// MachineWorkflowResolver is a WorkflowResolver that can also resolve against
+// what one machine synced. An activation targets a machine (Trigger.DaemonID)
+// and its runs execute there, so its declaration is read from that machine's
+// catalog, not from the union of every machine's: a workflow only another
+// machine provides is a verdict naming that machine and the file's path.
+type MachineWorkflowResolver interface {
+	WorkflowResolver
+	ResolveRunWorkflowOn(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error)
+}
+
+// resolveTriggerWorkflow loads the workflow t's runs execute: on t's target
+// machine when it has one and the resolver can read a machine's catalog.
+//
+// A pool-bound trigger has no machine of its own; it reads the pool's agreed
+// catalog through the member bindPoolCatalog chose (CatalogDaemonID).
+func resolveTriggerWorkflow(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*reliantv1.Workflow, error) {
+	machine := t.DaemonID
+	if machine == "" {
+		machine = t.CatalogDaemonID
+	}
+	if m, ok := workflows.(MachineWorkflowResolver); ok && machine != "" {
+		return m.ResolveRunWorkflowOn(ctx, t.UserID, t.Workflow, t.ProjectID, machine)
+	}
+	return workflows.ResolveRunWorkflow(ctx, t.UserID, t.Workflow, t.ProjectID)
+}
+
 // LaunchWorkflows is the WorkflowResolver over the launcher's store: the same
-// resolution every run start uses.
-type LaunchWorkflows struct{ Repo launch.WorkflowResolver }
+// resolution every run start uses. CatalogPin, when set, resolves against
+// that catalog snapshot instead of the live catalog: the one a firing was
+// decided against (FiringDefinition, PinnedTo).
+type LaunchWorkflows struct {
+	Repo       launch.WorkflowResolver
+	CatalogPin string
+}
+
+var _ MachineWorkflowResolver = LaunchWorkflows{}
 
 // ResolveRunWorkflow implements WorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveValidatedRunWorkflow(ctx, w.Repo, userID, workflow, projectID)
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, w.scope(userID, projectID, ""), workflow)
+}
+
+// scope is AutomationScope at w's catalog pin.
+func (w LaunchWorkflows) scope(userID, projectID, daemonID string) launch.Scope {
+	scope := launch.AutomationScope(userID, projectID, daemonID)
+	scope.CatalogPin = w.CatalogPin
+	return scope
+}
+
+// ResolveRunWorkflowOn implements MachineWorkflowResolver.
+func (w LaunchWorkflows) ResolveRunWorkflowOn(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error) {
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, w.scope(userID, projectID, daemonID), workflow)
 }
 
 // ResolveDeclaration reads the declaration t activates from its workflow and
@@ -100,7 +152,7 @@ func ResolveDeclaration(ctx context.Context, workflows WorkflowResolver, t *core
 	if t == nil || t.WorkflowTrigger == nil || *t.WorkflowTrigger == "" {
 		return nil, ErrNotAnActivation
 	}
-	wf, err := workflows.ResolveRunWorkflow(ctx, t.UserID, t.Workflow, t.ProjectID)
+	wf, err := resolveTriggerWorkflow(ctx, workflows, t)
 	if err != nil {
 		if isRetryableLookup(err) {
 			return nil, fmt.Errorf("load workflow %q for trigger %s: %w", t.Workflow, t.ID, err)
@@ -479,8 +531,16 @@ func BrokenHealth(err *DeclarationError) *reliantv1.TriggerHealth {
 // fifty activations of one workflow reads and parses it once.
 type CachedWorkflows struct {
 	inner WorkflowResolver
-	cache map[[3]string]cachedWorkflow
+	cache map[[4]string]cachedWorkflow
+	defs  map[[4]string]cachedDefinition
 }
+
+type cachedDefinition struct {
+	def *core.TriggerEventDefinition
+	err error
+}
+
+var _ MachineWorkflowResolver = (*CachedWorkflows)(nil)
 
 type cachedWorkflow struct {
 	wf  *reliantv1.Workflow
@@ -489,16 +549,37 @@ type cachedWorkflow struct {
 
 // NewCachedWorkflows wraps inner for the life of one request.
 func NewCachedWorkflows(inner WorkflowResolver) *CachedWorkflows {
-	return &CachedWorkflows{inner: inner, cache: map[[3]string]cachedWorkflow{}}
+	return &CachedWorkflows{inner: inner, cache: map[[4]string]cachedWorkflow{}, defs: map[[4]string]cachedDefinition{}}
 }
 
 // ResolveRunWorkflow implements WorkflowResolver.
 func (c *CachedWorkflows) ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error) {
-	key := [3]string{userID, workflow, projectID}
+	return c.resolve(ctx, userID, workflow, projectID, "")
+}
+
+// ResolveRunWorkflowOn implements MachineWorkflowResolver: on the inner
+// resolver's machine catalog when it can read one, else as ResolveRunWorkflow.
+func (c *CachedWorkflows) ResolveRunWorkflowOn(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error) {
+	if _, ok := c.inner.(MachineWorkflowResolver); !ok {
+		daemonID = ""
+	}
+	return c.resolve(ctx, userID, workflow, projectID, daemonID)
+}
+
+func (c *CachedWorkflows) resolve(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error) {
+	key := [4]string{userID, workflow, projectID, daemonID}
 	if hit, ok := c.cache[key]; ok {
 		return hit.wf, hit.err
 	}
-	wf, err := c.inner.ResolveRunWorkflow(ctx, userID, workflow, projectID)
+	var (
+		wf  *reliantv1.Workflow
+		err error
+	)
+	if m, ok := c.inner.(MachineWorkflowResolver); ok && daemonID != "" {
+		wf, err = m.ResolveRunWorkflowOn(ctx, userID, workflow, projectID, daemonID)
+	} else {
+		wf, err = c.inner.ResolveRunWorkflow(ctx, userID, workflow, projectID)
+	}
 	c.cache[key] = cachedWorkflow{wf: wf, err: err}
 	return wf, err
 }

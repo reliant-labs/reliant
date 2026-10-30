@@ -96,7 +96,7 @@ export function WhenField({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="group" aria-label="When it runs" aria-invalid={!!error} aria-describedby={error ? id("error") : undefined}>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={id("kind")} className="sr-only">
           What starts it
@@ -131,7 +131,7 @@ export function WhenField({
           timezone={when.timezone}
           onChange={(patch) => onChange({ ...when, schedule: { ...when.schedule, ...patch } })}
           onTimezoneChange={(timezone) => onChange({ ...when, timezone })}
-          error={error}
+          error={undefined}
         />
       )}
 
@@ -161,7 +161,7 @@ export function WhenField({
           ) : (
             <p className={hintClass}>Your default {integration.integration} account is used.</p>
           )}
-          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} allowApp={integration.integration === "github"} />
+          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} />
           <OnlyFromControl
             integration={integration.integration}
             filter={when.event?.filter ?? ""}
@@ -173,8 +173,8 @@ export function WhenField({
         </div>
       )}
 
-      {error && when.kind !== "schedule" && (
-        <p className={errorTextClass} role="alert">
+      {error && (
+        <p id={id("error")} className={errorTextClass} role="alert">
           {error}
         </p>
       )}

@@ -6,7 +6,6 @@ import { loadPrivacySettings } from "@/hooks/privacy-queries";
 import { fetchProjects } from "@/hooks/project-queries";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
-import { initSentry } from "@/lib/sentry";
 import { initTelemetry } from "@/lib/telemetry";
 import { settingsSync } from "@/services/settingsSync";
 
@@ -157,12 +156,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         settingsSync.applyAppearanceSettingsToDOM();
       } catch (error) {
         logger.warn("[AuthInitializer] Authenticated startup initialization failed:", error);
-      }
-
-      try {
-        await initSentry();
-      } catch (error) {
-        logger.warn("[AuthInitializer] Sentry initialization failed:", error);
       }
 
       // After loadPrivacySettings(): telemetry only starts with crash-reporting

@@ -48,7 +48,12 @@ type Repository interface {
 	// caller.
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
+
+	// The machine pool a pool-bound trigger names, and its members (each gets
+	// the trigger's automation grant).
+	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
+	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver

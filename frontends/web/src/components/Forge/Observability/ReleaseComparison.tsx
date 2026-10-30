@@ -27,6 +27,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Bell, CheckCircle2, CircleHelp, G
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { obsKeys, useReleaseHealth } from "@/hooks/observability-queries";
 import {
   HEALTH_WINDOW_MS,
@@ -38,7 +39,7 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import { useObsReadApi } from "@/hooks/observability-queries";
@@ -50,7 +51,6 @@ import { StatusBadge } from "./Errors/IssueBits";
 import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, formatPercent, formatRate, formatWhen } from "./format";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "./ObsStates";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 const WORKLOAD = "resource.attr.k8s.workload.name";
 
@@ -94,11 +94,11 @@ function useResources(scope: ObsScope, side: "before" | "after", window: TimeWin
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
-    queryFn: () =>
-      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
+    queryFn: ({ signal }) =>
+      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }, { signal }),
     enabled: usable,
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -455,48 +455,68 @@ function rateOf(requests: number | undefined, window: TimeWindow | null): number
   return seconds > 0 ? requests / seconds : null;
 }
 
+type ServiceRow = { service: ServiceHealthDelta };
+
 function ServiceTable({ services, before, after, version }: { services: ServiceHealthDelta[]; before: TimeWindow | null; after: TimeWindow | null; version: string }) {
   const rows = [...services].sort((a, b) => (b.after?.requests ?? b.before?.requests ?? 0) - (a.after?.requests ?? a.before?.requests ?? 0) || a.service.localeCompare(b.service));
+  const columns: DataTableColumn<ServiceRow>[] = [
+    { key: "service", header: "Service", render: (_, { service: s }) => <span className="font-mono text-xs font-medium">{s.service || "(unnamed)"}</span> },
+    {
+      key: "requests",
+      header: "Requests",
+      render: (_, { service: s }) => (
+        <span className="text-xs">
+          <Change before={rateOf(s.before?.requests, before)} after={rateOf(s.after?.requests, after)} format={formatRate} higherIsWorse={null} />
+        </span>
+      ),
+    },
+    {
+      key: "errors",
+      header: "Error rate",
+      render: (_, { service: s }) => (
+        <span className="text-xs">
+          <Change before={s.before?.errorRate ?? null} after={s.after?.errorRate ?? null} format={formatPercent} higherIsWorse kind="points" testId={`obs-compare-errors-${s.service}`} />
+        </span>
+      ),
+    },
+    {
+      key: "p95",
+      header: "p95 latency",
+      render: (_, { service: s }) => (
+        <span className="text-xs">
+          <Change before={s.before?.p95Ms ?? null} after={s.after?.p95Ms ?? null} format={formatDuration} higherIsWorse testId={`obs-compare-p95-${s.service}`} />
+        </span>
+      ),
+    },
+    {
+      key: "p99",
+      header: "p99 latency",
+      render: (_, { service: s }) => (
+        <span className="text-xs">
+          <Change before={s.before?.p99Ms ?? null} after={s.after?.p99Ms ?? null} format={formatDuration} higherIsWorse />
+        </span>
+      ),
+    },
+    {
+      key: "share",
+      header: version ? `Served by ${version}` : "Rollout",
+      render: (_, { service: s }) => (
+        <span className="text-xs tabular-nums" data-testid={`obs-compare-share-${s.service}`}>
+          {formatPercent(s.versionShare)}
+        </span>
+      ),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">Each service before and after the promotion</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-            <th scope="col" className="px-4 py-2 font-medium">Service</th>
-            <th scope="col" className="px-4 py-2 font-medium">Requests</th>
-            <th scope="col" className="px-4 py-2 font-medium">Error rate</th>
-            <th scope="col" className="px-4 py-2 font-medium">p95 latency</th>
-            <th scope="col" className="px-4 py-2 font-medium">p99 latency</th>
-            <th scope="col" className="px-4 py-2 font-medium">{version ? `Served by ${version}` : "Rollout"}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((s) => (
-            <tr key={s.service} className="border-b border-border/50 align-top last:border-b-0" data-testid={`obs-compare-service-${s.service}`}>
-              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-ink">
-                {s.service || "(unnamed)"}
-              </th>
-              <td className="px-4 py-2 text-xs">
-                <Change before={rateOf(s.before?.requests, before)} after={rateOf(s.after?.requests, after)} format={formatRate} higherIsWorse={null} />
-              </td>
-              <td className="px-4 py-2 text-xs">
-                <Change before={s.before?.errorRate ?? null} after={s.after?.errorRate ?? null} format={formatPercent} higherIsWorse kind="points" testId={`obs-compare-errors-${s.service}`} />
-              </td>
-              <td className="px-4 py-2 text-xs">
-                <Change before={s.before?.p95Ms ?? null} after={s.after?.p95Ms ?? null} format={formatDuration} higherIsWorse testId={`obs-compare-p95-${s.service}`} />
-              </td>
-              <td className="px-4 py-2 text-xs">
-                <Change before={s.before?.p99Ms ?? null} after={s.after?.p99Ms ?? null} format={formatDuration} higherIsWorse />
-              </td>
-              <td className="px-4 py-2 text-xs tabular-nums text-ink" data-testid={`obs-compare-share-${s.service}`}>
-                {formatPercent(s.versionShare)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
-    </div>
+    <DataTable<ServiceRow>
+      flush
+      stacked
+      ariaLabel="Each service before and after the promotion"
+      columns={columns}
+      data={rows.map((service) => ({ service }))}
+      getRowKey={({ service }) => service.service}
+      getRowProps={({ service }) => ({ className: "align-top", "data-testid": `obs-compare-service-${service.service}` })}
+    />
   );
 }
 
@@ -593,36 +613,41 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
       </p>
     );
   }
+  const columns: DataTableColumn<WorkloadRow>[] = [
+    { key: "workload", header: "Workload", render: (_, { row: r }) => <span className="font-mono text-xs font-medium">{r.workload || "(unnamed)"}</span> },
+    {
+      key: "cpu",
+      header: "CPU",
+      render: (_, { row: r }) => (
+        <span className="text-xs">
+          <Change before={r.cpu[0]} after={r.cpu[1]} format={formatCores} higherIsWorse />
+        </span>
+      ),
+    },
+    {
+      key: "memory",
+      header: "Memory",
+      render: (_, { row: r }) => (
+        <span className="text-xs">
+          <Change before={r.memory[0]} after={r.memory[1]} format={formatBytes} higherIsWorse testId={`obs-compare-memory-${r.workload}`} />
+        </span>
+      ),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">Each workload&apos;s resource use before and after the promotion</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-            <th scope="col" className="px-4 py-2 font-medium">Workload</th>
-            <th scope="col" className="px-4 py-2 font-medium">CPU</th>
-            <th scope="col" className="px-4 py-2 font-medium">Memory</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.workload} className="border-b border-border/50 last:border-b-0" data-testid={`obs-compare-workload-${r.workload}`}>
-              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-ink">
-                {r.workload || "(unnamed)"}
-              </th>
-              <td className="px-4 py-2 text-xs">
-                <Change before={r.cpu[0]} after={r.cpu[1]} format={formatCores} higherIsWorse />
-              </td>
-              <td className="px-4 py-2 text-xs">
-                <Change before={r.memory[0]} after={r.memory[1]} format={formatBytes} higherIsWorse testId={`obs-compare-memory-${r.workload}`} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
-    </div>
+    <DataTable<WorkloadRow>
+      flush
+      stacked
+      ariaLabel="Each workload's resource use before and after the promotion"
+      columns={columns}
+      data={rows.map((row) => ({ row }))}
+      getRowKey={({ row }) => row.workload}
+      getRowProps={({ row }) => ({ "data-testid": `obs-compare-workload-${row.workload}` })}
+    />
   );
 }
+
+type WorkloadRow = { row: WorkloadComparison };
 
 const SOURCE_LABEL: Record<string, string> = { release_shape: "declared in the release shape", default: "default", request: "this request" };
 

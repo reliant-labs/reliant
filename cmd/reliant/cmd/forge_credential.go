@@ -40,6 +40,10 @@ import (
 //
 // A value the user set themselves is never overwritten.
 
+// forgeOrgEnv names the org forge's credential must act in. It must equal
+// daemonruntime.ForgeOrgEnv (TestForgeOrgEnvMatchesTheDaemon).
+const forgeOrgEnv = "RELIANT_FORGE_ORG"
+
 const (
 	flagForgeCredServer  = "daemon-server"
 	flagForgeCredAccount = "daemon-account"
@@ -147,6 +151,7 @@ func forgeTokenCachePath() string {
 // newForgeCredentialService wires the helper over this machine's sessions.
 func newForgeCredentialService(cmd *cobra.Command, pin forgecred.Pin) forgecred.Service {
 	return forgecred.NewInstrumented(forgecred.Deps{
+		Org: forgeOrgFromEnv(),
 		Sessions: func() ([]forgecred.Session, error) {
 			preferred := ""
 			if conn, err := resolveServer(cmd); err == nil {
@@ -166,11 +171,11 @@ func newForgeCredentialService(cmd *cobra.Command, pin forgecred.Pin) forgecred.
 // connectExchanger calls TokenService.ExchangeToken over Connect.
 type connectExchanger struct{}
 
-func (connectExchanger) Exchange(ctx context.Context, server, bearer, audience string, scopes []string) (forgecred.Exchanged, error) {
+func (connectExchanger) Exchange(ctx context.Context, server, bearer, audience string, scopes []string, orgID string) (forgecred.Exchanged, error) {
 	httpClient := (&connection{ServerURL: server}).httpClientWithBearer(bearer)
 	httpClient.Timeout = 30 * time.Second
 	resp, err := reliantv1connect.NewTokenServiceClient(httpClient, strings.TrimRight(server, "/")).
-		ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: audience, Scopes: scopes}))
+		ExchangeToken(ctx, connect.NewRequest(exchangeRequest(audience, scopes, orgID)))
 	if err != nil {
 		return forgecred.Exchanged{}, err
 	}
@@ -179,6 +184,23 @@ func (connectExchanger) Exchange(ctx context.Context, server, bearer, audience s
 		out.ExpiresAt = at
 	}
 	return out, nil
+}
+
+// exchangeRequest names the org only when one was asked for: an unset org_id
+// keeps the exchange in the session's own org, as it always was.
+func exchangeRequest(audience string, scopes []string, orgID string) *reliantv1.ExchangeTokenRequest {
+	req := &reliantv1.ExchangeTokenRequest{Audience: audience, Scopes: scopes}
+	if orgID = strings.TrimSpace(orgID); orgID != "" {
+		req.OrgId = &orgID
+	}
+	return req
+}
+
+// forgeOrgFromEnv is the org the caller wants forge's token to act in:
+// $RELIANT_FORGE_ORG, which the daemon sets on the forge it runs for one
+// request (daemonruntime.ForgeOrgEnv). No process-global current org is changed.
+func forgeOrgFromEnv() string {
+	return strings.TrimSpace(os.Getenv(forgeOrgEnv)) //nolint:forbidigo // the credential-helper protocol's org channel, set per forge invocation
 }
 
 func newAuthForgeCredentialCmd() *cobra.Command {

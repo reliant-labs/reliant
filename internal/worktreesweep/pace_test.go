@@ -91,7 +91,9 @@ func (f *fakeStore) ListReposByProject(context.Context, string) ([]*core.Repo, e
 func (f *fakeStore) UpdateWorktreeCleanupMetadata(context.Context, string, *core.CleanupMetadata) error {
 	return nil
 }
-func (f *fakeStore) AdoptWorktreeDaemon(context.Context, string, string) error { return nil }
+func (f *fakeStore) AdoptWorktreeDaemon(_ context.Context, _ string, daemonID string) (string, error) {
+	return daemonID, nil
+}
 func (f *fakeStore) ListAttachedDaemonIDsForUser(context.Context, string, time.Duration) ([]string, error) {
 	return []string{f.daemon}, nil
 }

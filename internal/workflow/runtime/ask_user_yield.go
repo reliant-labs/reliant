@@ -80,6 +80,13 @@ const (
 type askUserThreadInput struct {
 	tracker   *ChildWorkflowTracker
 	interrupt *ThreadInterrupt
+	// park, when set, lets the wait park its background spawn for a
+	// continue-as-new handoff (ask_user_handoff.go).
+	park *askUserPark
+	// A pending batch was carried specifically from a blocking wait. Preserve
+	// that historical decision even when a flagless call's new-run default
+	// would now be asynchronous.
+	resumeBlocking bool
 }
 
 // awaitAskUserYield watches for new input for thread from the moment it is

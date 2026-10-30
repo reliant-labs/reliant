@@ -103,6 +103,52 @@ func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T)
 	}
 }
 
+// A run that ends at an `outcome: failure` save_message: once its node is
+// marked, the failure detail is that node and the text it wrote, and the
+// node's own message is not repeated by a fallback (bug 938cc4e2: every
+// surface said "declared failure without a recorded node error").
+func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
+	end := time.Now()
+	trigger := "t"
+	text := "Review did not finish: the review was incomplete"
+	detail := ""
+	repo := &MockWorkflowStatusStore{
+		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
+		},
+		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+			return []*db.StepExecution{{ID: "row", StepID: "stopped", ActivityName: "SaveMessage", CreatedAt: end,
+				Success:      sql.NullBool{Bool: false, Valid: true},
+				ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
+				OutputJSON:   sql.NullString{String: `{"message":"` + text + `"}`, Valid: true}}}, nil
+		},
+		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
+		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
+			return &db.Message{ID: "m", Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(-time.Millisecond)}, nil
+		},
+		ListContentBlocksFunc: func(context.Context, string) ([]*db.MessageContentBlock, error) {
+			return []*db.MessageContentBlock{{BlockType: pb.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &text}}, nil
+		},
+	}
+	NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(),
+		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "stopped"})
+	require.Equal(t, "Node stopped failed: declared the run's outcome: failure: "+text, detail)
+	require.Zero(t, repo.CallCount("SaveMessageToThreadOnce"))
+}
+
+// A declaring node with no attempt (a compute node) is still named.
+func TestAutomationFailureNamesADeclaringNodeWithNoAttempt(t *testing.T) {
+	detail := ""
+	repo := &MockWorkflowStatusStore{
+		GetChatFunc:                        func(context.Context, string) (*db.Chat, error) { return &db.Chat{ID: "c"}, nil },
+		ListRunNodeExecutionsFunc:          func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil },
+		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
+	}
+	NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(),
+		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "verdict"})
+	require.Equal(t, "Node verdict declared the run's outcome: failure.", detail)
+}
+
 func TestAutomationFailurePreservesAuthoredFailureMessage(t *testing.T) {
 	end := time.Now()
 	trigger := "t"

@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { createFixtureApi, FIXTURE_TRACE_ID } from "../__fixtures__/fixtureApi";
+import { createFixtureApi, fixtureTrace, FIXTURE_TRACE_ID } from "../__fixtures__/fixtureApi";
 import { renderPanel } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
@@ -71,6 +71,90 @@ describe("trace list", () => {
 });
 
 describe("trace waterfall", () => {
+  it("sends the selected range to GetTrace and refetches when the range changes", async () => {
+    const now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      const getTrace = vi.spyOn(api, "getTrace");
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      await screen.findByTestId("trace-detail");
+      expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        envIds: ["env-prod"],
+        window: { startMs: now - 60 * 60_000, endMs: now },
+      }));
+      await user.selectOptions(screen.getByTestId("obs-range"), "15m");
+      await waitFor(() => expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        window: { startMs: now - 15 * 60_000, endMs: now },
+      })));
+      expect(getTrace).toHaveBeenCalledTimes(2);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("finds late incoming links on stale revisit and on explicit Refresh without polling", async () => {
+    let now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      let arrived = false;
+      const getTrace = vi.spyOn(api, "getTrace").mockImplementation(async (req) => ({
+        ...fixtureTrace(req.traceId, now),
+        relatedTraces: arrived ? [{ traceId: "c".repeat(32), spanId: "d".repeat(16), linkedSpanId: "b0" }] : [],
+      }));
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      expect(await screen.findByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found");
+      await user.click(screen.getByTestId("trace-back"));
+      await screen.findAllByTestId("obs-trace-row");
+      arrived = true;
+      now += 16_000;
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
+      expect(getTrace).toHaveBeenCalledTimes(2);
+      arrived = false;
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(screen.getByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found"));
+      expect(getTrace).toHaveBeenCalledTimes(3);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("navigates outgoing span links without inventing a parent or losing scope/time", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const linkedTrace = "a".repeat(32);
+    api.getTrace = vi.fn(async (req) => {
+      const result = fixtureTrace(req.traceId, Date.now());
+      result.spans[0].links = [{ traceId: linkedTrace, spanId: "b".repeat(16) }];
+      return result;
+    });
+    const harness = renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, envs: ["prod"], apps: ["control-plane"], range: "1h" });
+    const tree = await screen.findByRole("tree");
+    await user.click(within(tree).getAllByRole("treeitem")[0]);
+    const links = screen.getByRole("region", { name: "Span links" });
+    expect(links).toHaveTextContent("not parent/child edges");
+    await user.click(within(links).getByRole("button"));
+    expect(harness.current()).toMatchObject({ trace: linkedTrace, span: "b".repeat(16), envs: ["prod"], apps: ["control-plane"], range: "1h" });
+  });
+
+  it("offers incoming related traces separately from the waterfall with bounded-result guidance", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const linkedTrace = "c".repeat(32);
+    api.getTrace = vi.fn(async (req) => ({
+      ...fixtureTrace(req.traceId, Date.now()),
+      relatedTraces: [{ traceId: linkedTrace, spanId: "d".repeat(16), linkedSpanId: "b0" }],
+      relatedTracesTruncated: true,
+    }));
+    const harness = renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, envs: ["prod"], range: "1h" });
+    const related = await screen.findByRole("region", { name: "Related traces" });
+    expect(related).toHaveTextContent("not parent/child spans");
+    expect(related).toHaveTextContent("first 100");
+    expect(within(await screen.findByRole("tree")).getAllByRole("treeitem")).toHaveLength(9);
+    await user.click(within(related).getByRole("button"));
+    expect(harness.current()).toMatchObject({ trace: linkedTrace, span: "d".repeat(16), envs: ["prod"], range: "1h" });
+  });
+
   it("draws every span as a tree item, with the failed ones said aloud", async () => {
     renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
     const tree = await screen.findByRole("tree", { name: "Spans of this trace" });

@@ -10,7 +10,7 @@
  *
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
- *   error-normalize → timeout → auth → missing-token → daemon-last-seen → trace
+ *   error-normalize → org-snapshot → timeout → auth → missing-token → daemon-last-seen → trace
  *     → error-logging → upgrade-modal → machine-wake → 401-signout
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
  * api-server transports — see TransportBackend; trace is the runtime's).
@@ -23,15 +23,19 @@
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
  *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
- *   - timeout next so the full request lifecycle (incl. retries through
- *     inner interceptors) is bounded;
+ *   - org snapshots synchronously before any auth await or timeout replacement:
+ *     an operation started in A cannot become a write in B after a switch.
+ *     Explicit caller orgs win; no selection stays unset across retries.
+ *     Authed routes only, since an unauthenticated call has no org;
+ *   - timeout bounds the remaining lifecycle (incl. retries through inner
+ *     interceptors) without recapturing the operation's org;
  *   - auth attaches the bearer before the trace stage;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
  *   - trace stamps the W3C traceparent; the span it names is the HyperDX
  *     SDK's fetch span, opened below this chain, so it covers network time;
- *   - errorInterceptor logs/reports to Sentry — sees the real failure the
- *     inner stages raise;
+ *   - errorInterceptor logs/reports the failure (lib/errorReporting) — sees
+ *     the real failure the inner stages raise;
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
  *   - machineWakeInterceptor records a machine the server woke for the request
@@ -43,7 +47,7 @@
  * Setting `withAuth: false` skips the auth stages AND
  * `unauthInterceptor` (a 401 with no session would loop). All other
  * interceptors stay on so the unauth transport still gets timeouts, tracing,
- * Sentry error reporting, and the upgrade modal — drift gone.
+ * error reporting, and the upgrade modal — drift gone.
  */
 
 import { ConnectError, Code } from "@connectrpc/connect";
@@ -53,10 +57,11 @@ import {
   errorNormalizeInterceptor,
   traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
-import * as Sentry from "@sentry/react";
+import { reportError, reportFailure } from "../lib/errorReporting";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
+import { orgInterceptor } from "./orgInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
@@ -268,7 +273,7 @@ export function timeoutForProcedure(serviceTypeName: string, methodName: string)
 
 export { formatInFlight } from "./rpcDeadline";
 
-// Rate-limit rpc-timeout Sentry events: a wedged connection times out many
+// Rate-limit rpc-timeout reports: a wedged connection times out many
 // queued RPCs in a burst, and each event would carry the same diagnostic
 // snapshot — one event per minute captures the incident without flooding.
 // This warning is the ONE report of a client timeout; errorInterceptor does
@@ -288,13 +293,9 @@ function reportRpcTimeout(
   const now = Date.now();
   if (now - _lastRpcTimeoutReportAt < RPC_TIMEOUT_REPORT_INTERVAL_MS) return;
   _lastRpcTimeoutReportAt = now;
-  // captureMessage on an uninitialized SDK is a safe no-op, and initSentry()
-  // is skipped in dev (see lib/sentry.ts), so this only reports from packaged
-  // builds where Sentry is actually running.
-  Sentry.captureMessage(
-    `rpc-timeout: ${method} after ${timeoutMs}ms (${diagnostics})`,
-    "warning",
-  );
+  // A no-op until browser telemetry is running, and it never starts in dev
+  // (lib/errorReporting.ts), so this only reports from deployed builds.
+  reportFailure(`rpc-timeout: ${method} after ${timeoutMs}ms (${diagnostics})`);
 }
 
 const deadline = createDeadlineInterceptor({
@@ -397,17 +398,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     if (kind === "version-skew") {
       noteVersionSkew(req.service.typeName, req.method.name);
     } else if (kind === "report") {
-      Sentry.captureException(error, {
-        tags: {
-          grpc_service: req.service.typeName,
-          grpc_method: req.method.name,
-          grpc_code:
-            error instanceof ConnectError ? Code[error.code] : "unknown",
-        },
-        extra: {
-          baseUrl: _currentBaseURL,
-          durationMs: duration,
-        },
+      reportError(error, {
+        grpc_service: req.service.typeName,
+        grpc_method: req.method.name,
+        grpc_code: error instanceof ConnectError ? Code[error.code] : "unknown",
+        base_url: _currentBaseURL ?? undefined,
+        duration_ms: duration,
       });
     }
 
@@ -529,12 +525,9 @@ async function runRecovery(
       message: error.message,
     },
   );
-  Sentry.captureMessage("Auto sign-out on 401 with active session", {
-    level: "warning",
-    tags: {
-      grpc_service: req.service.typeName,
-      grpc_method: req.method.name,
-    },
+  reportFailure("Auto sign-out on 401 with active session", {
+    grpc_service: req.service.typeName,
+    grpc_method: req.method.name,
   });
 
   try {
@@ -669,7 +662,7 @@ export type TransportBackend = "reliant-api" | "control-plane";
  * 401-auto-signout interceptor — every authenticated transport in the app
  * gets the full stack. `withAuth: false` is for the pre-auth DevAuth
  * bootstrap transport in `grpc-unauth.ts`; it skips both auth-coupled
- * interceptors but still gets timeouts, tracing, Sentry error logging, and
+ * interceptors but still gets timeouts, tracing, error reporting, and
  * the upgrade-modal interceptor so a quota-exhausted DevAuth call still
  * pops the modal.
  *
@@ -687,6 +680,7 @@ export function buildInterceptors(
 
   const chain: Interceptor[] = [
     normalizeInterceptor,
+    ...(withAuth ? [orgInterceptor] : []),
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
     backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,

@@ -378,13 +378,38 @@ type worktreeWithProject struct {
 // AdoptWorktreeDaemon records the daemon that found a workspace's directory
 // on its disk, which proves it owns it. Only a row created before daemon_id
 // was recorded is filled in, once.
-func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
+
+// It returns the owner the row records afterwards, which is daemonID only
+// when this call won: two resolvers (separate services or API replicas) can
+// nominate different machines for one row, and only the persisted one may be
+// routed to. The fallback read is its own statement, so under READ COMMITTED
+// it sees a concurrent winner that committed while the UPDATE waited on the
+// row. "" means the row is gone.
+func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) (string, error) {
+	var adopted []string
+	err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("daemon_id = ?", daemonID).
 		Where("id = ?", id).
 		Where("daemon_id IS NULL").
-		Exec(ctx)
-	return err
+		Returning("daemon_id").
+		Scan(ctx, &adopted)
+	if err != nil {
+		return "", err
+	}
+	if len(adopted) == 1 {
+		return adopted[0], nil
+	}
+	var owner []*string
+	if err := db.Bun().NewSelect().Model((*Worktree)(nil)).
+		Column("daemon_id").
+		Where("id = ?", id).
+		Scan(ctx, &owner); err != nil {
+		return "", err
+	}
+	if len(owner) == 0 || owner[0] == nil {
+		return "", nil
+	}
+	return *owner[0], nil
 }
 
 // ListLiveWorktreePathsForUser returns every path one user's unarchived

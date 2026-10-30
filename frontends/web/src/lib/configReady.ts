@@ -22,7 +22,6 @@ const FLAG_KEYS = [
   "DISABLE_TLS",
   "AUTO_ANON_SIGN_IN",
   "CLI_DEFAULTS_BAKED",
-  "SENTRY_ENABLED",
   "OTEL_REPLAY",
 ] as const;
 

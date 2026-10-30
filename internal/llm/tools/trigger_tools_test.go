@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -116,4 +117,27 @@ func TestTriggerToolRegistrationAndPermissions(t *testing.T) {
 	assert.False(t, unattended.CanLoad(ToolFireTrigger))
 	optedIn := unattendedCaps(PermissionOrchestrator, []string{ToolFireTrigger}, nil, true)
 	assert.True(t, optedIn.Offers(ToolFireTrigger))
+}
+
+type brokenTriggerLister struct{ list []TriggerSummary }
+
+func (l brokenTriggerLister) ListTriggers(context.Context, string, TriggerListFilter) ([]TriggerSummary, error) {
+	return l.list, nil
+}
+
+// An enabled BROKEN activation reads as live unless the listing says its
+// firings are refused (prod "Merge steward · queued" after its workflow was
+// deleted).
+func TestListTriggersSaysABrokenEnabledActivationLaunchesNothing(t *testing.T) {
+	ctx := rctx.NewToolContext(context.Background(), "chat", "chat", nil, nil)
+	repo := triggerCallerStore{chat: &db.Chat{UserID: "owner"}}
+	lister := brokenTriggerLister{list: []TriggerSummary{
+		{ID: "t1", Name: "Merge steward · queued", Enabled: true, Health: "BROKEN", HealthDetail: "the workflow does not resolve", NoMachine: true},
+		{ID: "t2", Name: "Paused broken", Enabled: false, Health: "BROKEN", HealthDetail: "gone", NoMachine: true},
+	}}
+	tool := NewListTriggersTool(repo, lister)
+	resp, err := tool.Run(ctx, ToolCall{Input: `{}`})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	assert.Equal(t, 1, strings.Count(resp.Content, "every firing is refused"), resp.Content)
 }

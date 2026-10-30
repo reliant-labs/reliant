@@ -57,6 +57,9 @@ type Event struct {
 	// Origin is trigger.origin, resolved at intake. nil for a source with no
 	// attribution.
 	Origin *core.TriggerOrigin
+	// Definition is which workflow definition the firing resolved, recorded
+	// on its event row. nil for a start that records none.
+	Definition *core.TriggerEventDefinition
 }
 
 // SeedMessage is one message written to the root thread before the run starts.
@@ -94,6 +97,14 @@ type Spec struct {
 	// generated id.
 	ClientMessageID string
 
+	// CatalogPin is the workflow catalog snapshot (db.Repo.PinProjectCatalog)
+	// this launch was decided against: a trigger pins the catalog when it
+	// fires, records the definition it read there, and launches on the same
+	// snapshot, so admission, inputs and every load of the run read exactly
+	// that definition. Empty resolves against the live catalog and pins it
+	// when the run first loads.
+	CatalogPin string
+
 	// DaemonID is the daemon every tool call in this run executes on. It
 	// becomes the chat's ActiveDaemonID, which the launcher injects as
 	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.
@@ -106,6 +117,14 @@ type Spec struct {
 	// with a node that cannot run without one (a shell `run`, a
 	// `create_worktree`, …) is refused here. Mutually exclusive with DaemonID.
 	NoMachine bool
+
+	// MachinePool records that a machine pool placed this run: DaemonID is
+	// the member it chose (empty when resuming a launch whose chat is already
+	// pinned). It becomes the chat's MachinePoolID, which is how the pool
+	// counts its members' live runs, and the run's inputs.machine_pool, so a
+	// workflow can address every member (sync-checkouts). Requires DaemonID
+	// on a new chat; mutually exclusive with NoMachine.
+	MachinePool *PoolPlacement
 
 	// Unattended sets inputs.unattended: no human will answer questions or
 	// approvals, so the run must not block on one, and it is withheld the
@@ -146,6 +165,28 @@ type Spec struct {
 	// transaction retries on a serialization conflict. Applies to new chats
 	// only; resuming an already-recorded launch never consults it.
 	Guard func(ctx context.Context) (declineReason string, err error)
+
+	// RecordExecution persists immutable admission identity after Temporal accepts
+	// the idempotent start. A failed write is retried, never treated as free capacity.
+	RecordExecution func(ctx context.Context, eventID, workflowID, firstRunID string) error
+	// PrepareExecution records the immutable workflow ID in the SAME launch
+	// transaction, before Temporal may accept it or the activation disappears.
+	PrepareExecution func(ctx context.Context, eventID, workflowID string) error
+}
+
+// PoolPlacement is the pool a run was placed by, and its members as
+// placement saw them.
+type PoolPlacement struct {
+	ID      string
+	Name    string
+	Members []PoolMember
+}
+
+// PoolMember is one member of a PoolPlacement.
+type PoolMember struct {
+	ID    string
+	Name  string
+	State string
 }
 
 // Result is what Launch produced.
@@ -196,6 +237,18 @@ func (e *DeclinedError) Error() string { return "launch declined: " + e.Reason }
 
 // Is makes errors.Is(err, ErrDeclined) match.
 func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
+
+// TxOutcome marks a decline as the launch transaction's intended rollback,
+// not a failure: the repo logs it quietly (a trigger waiting for workflow
+// capacity is declined on every poll, and each one was an ERROR and an issue).
+func (e *DeclinedError) TxOutcome() {}
+
+var _ db.TxOutcome = (*DeclinedError)(nil)
+
+// ErrorClass implements svcerr.Classed: a guard declining a launch ("waiting
+// for workflow capacity") is the system working, never a fault, wherever the
+// error surfaces. TxOutcome only quiets the transaction ladder's own log.
+func (e *DeclinedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.
@@ -323,7 +376,7 @@ type TriggerEventStore interface {
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
 	// as pending; claimed=false means another launch got it first.
-	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (claimed bool, err error)
 }
 
 // WorkflowStore is the root workflow row a launch starts.
@@ -348,6 +401,14 @@ type WorkflowResolver interface {
 	// db.Repo.GetProjectWorkflowsJSON.
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// One machine's own synced catalog (workflowsource.MachineStore), which a
+	// trigger's run on that machine resolves against; synced is false when
+	// the machine has never synced the project.
+	GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (workflows *string, synced bool, err error)
+	GetProjectMachinePresetsJSON(ctx context.Context, projectID, daemonID string) (presets *string, synced bool, err error)
+	// WorkflowSourceDiagnostic (workflowsource.SourceDiagnostics) says, on a
+	// miss, which machine provides the workflow and at which path.
+	WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID, ref string) (string, error)
 }
 
 // ProjectLookup resolves the project, worktrees and settings a launch runs in.

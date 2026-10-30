@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1003,6 +1004,67 @@ func TestDrainPendingCommands_EmptyDrainReturnsPromptly(t *testing.T) {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 	require.Empty(t, mgr.commands)
+}
+
+// A pull that no consumer leader answers yet (503, nats.ErrNoResponders) is
+// the normal state of a replicated consumer for a moment after it is created:
+// the create response and the leader's pull subscription cross the cluster on
+// different routes (see fetchFoundNoConsumerLeader). The drain must pull
+// again, not give up with the command still queued until the next poll —
+// the release-gate failure of the cluster test on 95415470b.
+func TestDrainPendingCommands_RefetchesUntilTheConsumerLeaderAnswers(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 1000)
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{err: nats.ErrNoResponders},
+			&stubMessageBatch{err: nats.ErrNoResponders},
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	bridge := newTestBridge(&stubJetStream{stream: stream}, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
+
+	assert.Equal(t, []string{"req-1"}, requestIDs(mgr), "delivered by the drain that created the consumer")
+	assert.True(t, msg.wasAcked())
+	assert.Equal(t, 1, stream.createCalls, "the consumer is created once; only the pull is repeated")
+}
+
+// A consumer leader that stays unreachable is not waited on past the fetch
+// budget, and nothing is lost: the command is neither acked nor dispatched, so
+// it stays on the WorkQueue stream for the next poll.
+func TestDrainPendingCommands_UnreachableConsumerLeaderStopsAtTheFetchBudget(t *testing.T) {
+	orig := pendingDrainFetchBudget
+	pendingDrainFetchBudget = 200 * time.Millisecond
+	defer func() { pendingDrainFetchBudget = orig }()
+
+	mgr := &recordingDaemonMgr{}
+	consumer := &noLeaderConsumer{}
+	bridge := newTestBridge(&stubJetStream{stream: &stubStream{consumer: consumer}}, mgr)
+	defer bridge.cancel()
+
+	start := time.Now()
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, pendingDrainFetchBudget+time.Second, "bounded by the fetch budget")
+	assert.Greater(t, consumer.fetches.Load(), int32(1), "pulled again within the budget")
+	assert.Empty(t, requestIDs(mgr))
+}
+
+// noLeaderConsumer answers every pull the way a member does before it has
+// heard of the consumer leader's pull subscription.
+type noLeaderConsumer struct {
+	stubConsumer
+	fetches atomic.Int32
+}
+
+func (c *noLeaderConsumer) Fetch(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+	c.fetches.Add(1)
+	return &stubMessageBatch{err: nats.ErrNoResponders}, nil
 }
 
 // TestPollPendingCommands_PicksUpCommandEnqueuedWhileAlreadyConnected is the

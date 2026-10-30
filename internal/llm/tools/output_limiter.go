@@ -181,6 +181,10 @@ func (e *OutputLimitError) Error() string {
 	return msg.String()
 }
 
+// githubGetContentToolName is the integration tool that reads one file of a
+// repository through GitHub.
+const githubGetContentToolName = "github__repo_get_content"
+
 // outputCeilingFor returns the delivered-size ceiling for one tool's result.
 //
 // Most tools share MaxOutputSize. The read tools are the deliberate exception:
@@ -193,13 +197,19 @@ func (e *OutputLimitError) Error() string {
 // bounds how much the wrapper DELIVERS. A larger read ceiling with the shared
 // delivery ceiling would truncate right back to 24KB and read as a no-op.
 //
+// github__repo_get_content is the same act as view against a repository
+// with no checkout (pr-review reads every changed file through it), so it
+// shares view's ceiling. Its result is the file as a JSON string, so escaping
+// spends some of that budget; a file the ceiling cannot carry still fails
+// loudly rather than arriving cut.
+//
 // The skill tool already caps each load to its own budget, footer included
 // (renderSkillDelivery). For that tool this ceiling is only a backstop, so it
 // admits the largest budget; otherwise it would cut the start-here allowance
 // back down.
 func outputCeilingFor(toolName string) int {
 	switch toolName {
-	case ViewToolName:
+	case ViewToolName, githubGetContentToolName:
 		return MaxReadSize
 	case ToolSkill:
 		return ForgeStartHereSkillBodySize

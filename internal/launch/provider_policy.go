@@ -126,7 +126,17 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 	}
 	delete(base, v2.InputKeyProviderPolicy)
 	if chat != nil && len(chat.SelectedPresets) > 0 {
-		fromPresets := l.applyPresets(ctx, userID, chat.ProjectID, map[string]interface{}{}, chat.SelectedPresets)
+		fromPresets, err := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), "", map[string]interface{}{}, chat.SelectedPresets)
+		if err != nil {
+			// The preset layer cannot be rebuilt (a preset disappeared, or
+			// the catalog could not be read), so the policy the run already
+			// holds stands. Recomputing it without that layer would let a
+			// Settings default replace a preset's wait or account pin: a
+			// change in spending and routing nobody asked for. A new launch
+			// on these presets is refused outright (applyPresets).
+			logging.WarnContext(ctx, "[ProviderPolicy] A selected preset did not resolve; keeping the run's current policy", "chatID", chat.ID, "error", err)
+			return v2.ProviderPolicy(inputs)
+		}
 		if value, ok := fromPresets[v2.InputKeyProviderPolicy]; ok {
 			base[v2.InputKeyProviderPolicy] = value
 		}

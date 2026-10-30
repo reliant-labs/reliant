@@ -108,6 +108,9 @@ var serverSafeTools = map[string]struct{}{
 	ToolRequestMachine: {},
 	// Database reads and a Sentry event.
 	ToolReportBug: {},
+	// The user's machines are acted on through the control plane, not by
+	// the run's own machine.
+	ToolListMachines: {}, ToolManageMachine: {},
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and

@@ -12,6 +12,15 @@ How it works:
 3. The helper exchanges your Reliant session (the daemon's credential, or your `reliant auth login`) with the Reliant server for a **short-lived token** — valid for at most an hour, carrying only requested control-plane capabilities your session holds and your organization currently grants you. The server refuses to mint one for any control plane other than its own, so a repository cannot point forge somewhere else to collect a token.
 4. forge uses that token. Your session credential never leaves Reliant's own files, and tokens are cached in `~/.reliant/forge-token-cache.json` (readable only by you) so forge does not mint one per command.
 
+## Which organization
+
+A token acts in exactly one organization. If you belong to several, forge uses the one you are working in:
+
+- From the web app, the organization chosen in the **organization switcher** (shown in the sidebar when you belong to more than one). Deploy, promote, secrets and status all act in it, from the same machine, with no sign-in per organization.
+- From an agent's shell or `reliant forge …` in a terminal, the organization the Reliant session credential was issued for. A web-triggered forge command overrides this with its active organization.
+
+You must be a member of the organization. Your permissions are those you hold **in that organization**: a deploy token for one organization never carries a permission you only hold in another. Tokens are cached per organization, so switching does not reuse a token minted for the other one.
+
 forge's own sources still come first, in this order: `--token`, the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` by default, for CI), a stored `forge login`, then your Reliant session, which also takes over when a stored login has expired. `forge cloud status <env>` shows which one a command will use — never the token itself.
 
 CI has no Reliant session to exchange. Give it an organization automation token instead: `forge cloud token create --env prod --name github-actions --scopes deploy:read,deploy:write` prints the secret once, and `forge cloud token list` / `revoke` manage it afterwards.

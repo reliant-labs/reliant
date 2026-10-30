@@ -146,12 +146,23 @@ func NewIndex(files []File) *Index {
 			where = "a synced workflow"
 		}
 		name, err := declaredName(f.Content)
+		if err != nil {
+			// A file that does not parse still claims the name it declares
+			// (or, failing that, its file name), so a ref to it fails with
+			// the parse error. Unclaimed, the ref would quietly resolve to
+			// another directory's workflow of the same name: an older copy
+			// running because the newest one is broken.
+			name = recoverDeclaredName(f.Content)
+			if name == "" {
+				name = e.Stem()
+			}
+		}
 		e.Name = name
 		e.Slug = Slug(name)
 		e.Address = e.Slug
 		switch {
 		case err != nil:
-			e.Problem = fmt.Errorf("%s: cannot read its name: %w", where, err)
+			e.Problem = fmt.Errorf("%s does not parse, so workflow %q cannot run until it is fixed: %w", where, name, err)
 		case name == "":
 			e.Problem = fmt.Errorf("%s has no name: field; a project workflow is addressed by its name: (project://<name>)", where)
 		case e.Slug == "":
@@ -344,6 +355,26 @@ func declaredName(content []byte) (string, error) {
 	}
 }
 
+// recoverDeclaredName reads the top-level name: out of a file that is not
+// valid YAML, or "" when there is none to read. Only the name: line itself is
+// decoded, as YAML, so quoting and comments mean what they mean in the file
+// ("Release #1" is a name; # starts a comment only outside quotes).
+func recoverDeclaredName(content []byte) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		if !strings.HasPrefix(line, "name:") {
+			continue
+		}
+		var doc struct {
+			Name yaml.Node `yaml:"name"`
+		}
+		if err := yaml.Unmarshal([]byte(line), &doc); err != nil || doc.Name.Kind != yaml.ScalarNode {
+			return ""
+		}
+		return strings.TrimSpace(doc.Name.Value)
+	}
+	return ""
+}
+
 // Entries returns every indexed file, addressable or not, sorted by repo
 // (the project root first) and then path.
 func (ix *Index) Entries() []*Entry {
@@ -421,13 +452,55 @@ func (ix *Index) Lookup(slug string) (*Entry, error) {
 	return nil, notFound("no project workflow is named %q", slug)
 }
 
+// FileError is a ref that names a project workflow file which cannot run as
+// written: it does not parse, or it claims a name it cannot hold. It names the
+// file and carries the content that was refused, so a caller can say which
+// version of which file broke, not only that something did. Its message is
+// Err's.
+type FileError struct {
+	// Path is the file, relative to the project root
+	// (".reliant/workflows/nightly.yaml", "<repo>/.reliant/workflows/…").
+	Path string
+	// Content is the file as it was synced: the version that was refused.
+	Content []byte
+	Err     error
+}
+
+func (e *FileError) Error() string { return e.Err.Error() }
+func (e *FileError) Unwrap() error { return e.Err }
+
+// fileError is err as a FileError naming e; nil stays nil.
+func fileError(e *Entry, err error) error {
+	if err == nil {
+		return nil
+	}
+	rel := ""
+	if e.Path != "" {
+		rel = RelativePath(e.Repo, e.Path)
+	}
+	return &FileError{Path: rel, Content: e.Content, Err: err}
+}
+
+// ProjectRelative is a Resolved.Path (Entry.Location) relative to the project
+// root: a root workflow's location is relative to its workflows directory, a
+// nested repo's already to the root.
+func ProjectRelative(location string) string {
+	if location == "" {
+		return ""
+	}
+	if _, _, ok := SplitRelativePath(location); ok {
+		return location
+	}
+	return RelativePath("", location)
+}
+
 // lookup is Lookup within one directory.
 func (g *group) lookup(slug string) (*Entry, error) {
 	if claimants := g.bySlug[slug]; len(claimants) > 0 {
 		if len(claimants) == 1 && claimants[0].Problem == nil {
 			return claimants[0], nil
 		}
-		return nil, claimants[0].Problem
+		return nil, fileError(claimants[0], claimants[0].Problem)
 	}
 	if err := g.stemHint(slug); err != nil {
 		return nil, err

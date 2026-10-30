@@ -41,6 +41,29 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 	return store.GetChat(ctx, r.ORM(), id)
 }
 
+// GetChatRow reads a chat's own row from the chats table — no activity view —
+// for a caller that needs none of the activity-derived fields (ChatRow).
+func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return store.GetChatRow(ctx, r.ORM(), id)
+}
+
+// GetChatRowWithUserCheck is an ownership check that reads only the chats
+// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
+// another user's. GetChatWithUserCheck is the same check over the activity
+// view, for a caller that needs a derived field.
+func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
 	if id == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -587,9 +610,10 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 
 // ListTranscriptSiblingMessagesInRange returns, ascending, every message of
 // the chat on a thread other than mainThreadID that is not a spawn thread,
-// with seq >= fromSeq and, when toSeq is set, seq < toSeq. It is the sibling
-// half of a ListMessages page, from the same filter the chat snapshot uses.
-func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
+// with seq >= fromSeq and, when toSeq is set, seq < toSeq; with limit > 0, the
+// newest limit of them. It is the sibling half of a ListMessages page, from the
+// same filter the chat snapshot uses.
+func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
@@ -597,7 +621,7 @@ func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID,
 		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq)
+	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq, limit)
 }
 
 // CountMessagesInChatOutsideThread counts the chat's messages that sit on
@@ -1164,6 +1188,27 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 	return applied, nil
 }
 
+// SetDefaultDaemon makes daemonID the user's default machine, replacing any
+// previous one; "" clears it. A machine the user does not own (or that does
+// not exist) is svcerr.NotFound, and nothing changes.
+func (r *Repo) SetDefaultDaemon(ctx context.Context, userID, daemonID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	// ReadCommitted: store.SetDefaultDaemon locks the user's rows first, and
+	// that lock is what makes the clear-then-set correct.
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		owned, err := store.SetDefaultDaemon(txCtx, r.ORM(), userID, daemonID)
+		if err != nil {
+			return fmt.Errorf("failed to set default daemon for user %s: %w", userID, err)
+		}
+		if !owned {
+			return svcerr.NotFound("daemon")
+		}
+		return nil
+	})
+}
+
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
@@ -1687,9 +1732,9 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
-		return fmt.Errorf("worktree and daemon IDs cannot be empty")
+		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
@@ -2443,7 +2488,28 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
 
-	// Get token count using unified function (handles fork inheritance)
+	// The common case: the thread's current window has a message carrying
+	// token data. That one row is both the count (its token_count) and the
+	// denominator (the threshold of the model that produced it), so read it
+	// once. The general path below reads it twice, behind a thread lookup it
+	// only needs for fork inheritance — four serial round trips on the chat
+	// open path where this is two.
+	if msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), nil); err == nil &&
+		msg != nil && msg.TokenCount != nil && *msg.TokenCount > 0 {
+		threshold := models.UnknownModelCompactionFloor
+		if msg.Model != nil {
+			threshold = models.CompactionThresholdForModel(*msg.Model)
+		}
+		return &ContextUsage{
+			ThreadTokenCount:    int64(*msg.TokenCount),
+			CompactionThreshold: int64(threshold),
+			CurrentContextSeq:   int64(contextSeq),
+		}, nil
+	}
+
+	// No local token data: the count and the threshold are inherited from a
+	// fork's parent, or are zero. Get token count using unified function
+	// (handles fork inheritance)
 	tokens, err := r.threadTokenCount(ctx, thread, nil, &contextSeq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get thread token count: %w", err)
@@ -2650,6 +2716,11 @@ func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
+// SetWorkflowFailureDetail records why a run failed, on the run.
+func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
+	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
+}
+
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
 // Designed to be called from the activity wrapper so that any Temporal activity
@@ -2765,13 +2836,26 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
 
+// mapTriggerNameConflict turns a unique violation on the trigger's
+// (user, project, name) key into core.ErrTriggerNameTaken: AlreadyExists to the
+// caller instead of an opaque Internal "database error". Like
+// mapWorkflowSlugConflict, the PgError is not wrapped (%w), so the retry ladder
+// does not re-run a permanent conflict.
+func mapTriggerNameConflict(err error, name string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == store.TriggerConstraintUserIDProjectIDNameKey {
+		return fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, name)
+	}
+	return err
+}
+
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
@@ -2826,7 +2910,7 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
 		}
 		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
@@ -3156,12 +3240,12 @@ func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
-func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
 
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
@@ -3213,6 +3297,12 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 // ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
 func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
+}
+
+// MarkDeclaredFailureNode records that a run's top-level node declared the
+// run's outcome: failure (store.MarkDeclaredFailureNode).
+func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
+	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
 }
 
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,

@@ -41,6 +41,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/procguard"
+	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -140,6 +142,11 @@ type daemonClient struct {
 	// (internal/diskguard). Its state rides on the heartbeat's disk report.
 	diskGuard *diskguard.Guard
 
+	// procGuard counts the machine's processes against its limit and refuses
+	// new background heavy commands near it (internal/procguard). Its count
+	// and the largest process trees ride on the heartbeat's disk report.
+	procGuard *procguard.Guard
+
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
 	// affordance in the UI). Only set for pod-hosted daemons — nil for
@@ -237,7 +244,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// daemon's other logs, for investigations of shared-state damage. A log
 	// that cannot be opened is reported and skipped: auditing never stops work.
 	if auditLog, err := shellaudit.Open(filepath.Join(opts.BootstrapConfig.DataDir, "logs", shellaudit.FileName), shellaudit.Options{}); err != nil {
-		logging.Warn(logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
+		logging.WarnContext(ctx, logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
 	} else {
 		defer auditLog.Close() //nolint:errcheck
 		previous := shellaudit.SetDefault(auditLog)
@@ -322,6 +329,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 		client.diskGuard.Register(client.diskWatcher)
 	}
 	go client.diskGuard.Run(ctx)
+	go client.procGuard.Run(ctx)
 
 	// Repair what a crash left in the shared clones (empty objects, torn
 	// indexes, stale gc.log, dead registrations) before agents run git there.
@@ -476,13 +484,19 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// and refused on a nearly full disk. A gate that cannot queue (slots
 	// switched off, own binary not found) runs them unqueued: a broken
 	// limiter must never stop work.
+	// The capacity guard refuses new background heavy commands once the
+	// machine passes 70% of its process limit (2026-10-30: a machine ran out
+	// of processes and every agent's work died with it).
+	procGuard := procguard.New(procguard.Config{})
+
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.
-		Env:       os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
-		Admission: diskGuard,
+		Env:                 os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
+		Admission:           diskGuard,
+		BackgroundAdmission: procGuard,
 	})
 	if err != nil {
 		logging.Warn(logPrefix+" Heavy commands run unqueued and unguarded", "error", err)
@@ -491,8 +505,17 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	}
 	SetHeavyGate(heavyGate)
 
+	// Every command an agent runs gets a process limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command), and every
+	// command's RLIMIT_NPROC leaves the daemon a reserve, so one runaway
+	// command fails alone instead of exhausting the user's process limit for
+	// every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{})
+	proctree.SetDefault(limiter)
+	logging.Info(logPrefix + " " + limiter.String())
+
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
-	egressLimiter, err := egresslimit.New(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})
 	if err != nil {
 		return nil, fmt.Errorf("creating egress limiter: %w", err)
 	}
@@ -564,6 +587,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
+		procGuard:         procGuard,
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -1417,9 +1441,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	// After the response is queued (the deferred sends below run first):
 	// a draining stream is held open until then.
 	defer d.requestDone(s)
-	ctx, cancel := context.WithCancel(context.Background())
+	// Continue the gateway span that forwarded the command, so every log line
+	// written for it carries the dispatching request's trace_id.
+	root := commandDispatchContext(req)
+	ctx, cancel := context.WithCancel(root)
 	if req.TimeoutMs > 0 {
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
+		cancel()
+		ctx, cancel = context.WithTimeout(root, time.Duration(req.TimeoutMs)*time.Millisecond)
 	}
 	defer cancel()
 	if strings.TrimSpace(req.RequestId) != "" {
@@ -1508,7 +1536,7 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	}
 
 	watchdog.Stop()
-	logDaemonCommandHandled(req, time.Since(start), err, d.sendBacklog())
+	logDaemonCommandHandled(ctx, req, time.Since(start), err, d.sendBacklog())
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
@@ -1517,6 +1545,9 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 				CommandType: req.CommandType,
 				Success:     err == nil,
 				Payload:     resultPayload,
+				// The gateway's span splits the round trip with it: the
+				// daemon exports no spans of its own.
+				HandlerElapsedMs: time.Since(start).Milliseconds(),
 			},
 		},
 	}
@@ -1552,7 +1583,7 @@ const slowDaemonCommandThreshold = 10 * time.Second
 // with a large backlog means the reply waited on the wire, not on the work.
 //
 // Payloads are never logged — they carry file contents and credentials.
-func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
+func logDaemonCommandHandled(ctx context.Context, req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
 	outcome := "ok"
 	if err != nil {
 		outcome = "error"
@@ -1567,7 +1598,7 @@ func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.D
 	if err != nil {
 		args = append(args, "error", err)
 	}
-	logging.Log(daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
+	logging.LogContext(ctx, daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
 }
 
 // filesystemMutatingCommands are daemon commands that create or remove a
@@ -1712,6 +1743,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// false until the first sample).
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
+			rep.Processes = d.procGuard.Report()
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -1756,6 +1788,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 				logSendFailure(logPrefix+" Failed to send disk-guard heartbeat", err)
 				return
 			}
+		case <-d.procGuard.Changed():
+			// The machine crossed its process-limit line: heavy background
+			// commands are refused, or accepted again.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send process-guard heartbeat", err)
+				return
+			}
 		case <-d.portWatcher.Changed():
 			// Listener set changed — surface the new port (or its
 			// disappearance) immediately so the UI preview affordance tracks
@@ -1776,6 +1815,12 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 // execution carries that trace's trace_id. A request with none is a bare
 // background context.
 func dispatchContext(req *reliantv1.ToolRequest) context.Context {
+	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
+}
+
+// commandDispatchContext is dispatchContext for a daemon command: it continues
+// the gateway's `gateway.daemon.command` span (DaemonCommandRequest.trace_context).
+func commandDispatchContext(req *reliantv1.DaemonCommandRequest) context.Context {
 	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
 }
 
@@ -2332,10 +2377,12 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		return nil, err
 	}
 	workflows, workflowBytes := indexWorkflows(workflowSources)
-	presets, presetBytes := indexPresets(projectPath)
+	presets, presetBytes := indexPresets(projectPath, workflowSources)
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
+	heads := readRepoHeads(projectPath, discoverRepoSources(ctx, projectPath))
+	states := repoStates(ctx, projectPath, heads)
 
 	version := hashBytes(
 		userConfigYAML,
@@ -2351,6 +2398,8 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		scenarioBytes,
 		skillBytes,
 		repoMemoriesBytes,
+		headsVersion(heads),
+		statesVersion(states),
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -2372,6 +2421,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
 		RepoMemoriesMd:  repoMemories,
+		RepoStates:      states,
 	}, nil
 }
 
@@ -2722,35 +2772,47 @@ func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []b
 	return results, []byte(acc.String())
 }
 
-func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
-	baseDir := filepath.Join(projectPath, ".reliant", "presets")
-	files := listYAMLFiles(baseDir)
-	results := make([]*reliantv1.IndexedPreset, 0, len(files))
+// indexPresets syncs the presets of the project root's .reliant/presets and of
+// every nested repository's, as workflows are (readWorkflowSources), each with
+// its project-relative path. A name two repos share is not resolved here: the
+// server addresses a nested preset as "<repo>/<name>" and lets the root shadow
+// the repos (config.FindStoredPresetByName).
+func indexPresets(projectPath string, sources []workflowSource) ([]*reliantv1.IndexedPreset, []byte) {
+	var results []*reliantv1.IndexedPreset
 	acc := strings.Builder{}
 
-	for _, path := range files {
-		rel, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
+	repos := []string{""}
+	for _, src := range sources {
+		if src.repo != "" {
+			repos = append(repos, src.repo)
 		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
+	}
+	for _, repo := range repos {
+		baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), ".reliant", "presets")
+		for _, path := range listYAMLFiles(baseDir) {
+			rel, err := filepath.Rel(projectPath, path)
+			if err != nil {
+				continue
+			}
+			st, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			blob, _ := os.ReadFile(path)
+			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			h := hashBytes(blob)
+			results = append(results, &reliantv1.IndexedPreset{
+				Name:         name,
+				RelativePath: filepath.ToSlash(rel),
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  blob,
+			})
+			acc.WriteString(filepath.ToSlash(rel))
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
 		}
-		blob, _ := os.ReadFile(path)
-		name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		h := hashBytes(blob)
-		results = append(results, &reliantv1.IndexedPreset{
-			Name:         name,
-			RelativePath: filepath.ToSlash(rel),
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
-		})
-		acc.WriteString(filepath.ToSlash(rel))
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
 	}
 
 	return results, []byte(acc.String())

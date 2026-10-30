@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -819,11 +820,21 @@ func success(p *page, data map[string]any) *Result {
 	return &Result{Content: truncate(string(content)), StatusCode: p.status, Data: data}
 }
 
+// truncate bounds the text an agent sees of a result (Data, which a workflow
+// node reads, is never cut). A cut result says so in words, with how much was
+// dropped, so the agent narrows the request instead of reasoning over a JSON
+// document that silently ends mid-string.
 func truncate(text string) string {
-	if len(text) > maxContentChars {
-		return text[:maxContentChars] + "…(truncated)"
+	if len(text) <= maxContentChars {
+		return text
 	}
-	return text
+	cut := maxContentChars
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + fmt.Sprintf("…(truncated: the first %d of %d characters are shown; the rest was dropped. "+
+		"Narrow the request to read it: a filter or path_prefix, include_patch false, or a start_line/line_count window.)",
+		cut, len(text))
 }
 
 // errorResult classifies a non-2xx response: the first matching rule, else

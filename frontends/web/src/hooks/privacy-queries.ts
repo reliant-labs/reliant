@@ -1,7 +1,7 @@
 /**
  * Privacy consent (crash reporting, analytics) on the generated
  * GetPrivacySettings entry: the Privacy settings switches read it with a
- * hook, and telemetry, Sentry, analytics and the error boundary read it
+ * hook, and telemetry, error reporting, analytics and the error boundary read it
  * imperatively (privacyConsent / subscribePrivacyConsent). There is no
  * zustand copy.
  *
@@ -15,8 +15,8 @@
  *  - a sign-out clears the query cache, so the last answer seen is kept for
  *    the signed-out stretch: an opt-out still holds on the sign-in screen.
  *
- * This module deliberately does not import the auth store: lib/sentry and
- * lib/telemetry import it, and the auth store imports them.
+ * This module deliberately does not import the auth store: lib/telemetry and
+ * lib/errorReporting import it, and the auth store imports them.
  */
 
 import { matchQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,6 +80,19 @@ export function privacyConsent(): PrivacyConsent {
   installCacheRules();
   const data = queryClient.getQueryData<GetPrivacySettingsResponse>(privacySettingsKey());
   return data ? consentOf(data) : (consentAfterClear ?? DEFAULT_CONSENT);
+}
+
+/**
+ * Whether the signed-in account's own settings are loaded, so privacyConsent()
+ * is that account's answer. Not the default, and not the answer kept across a
+ * sign-out: that one belongs to whoever signed out, and the next account to
+ * sign in may have opted out. Until it is, a reader that would act on consent
+ * (an event queued for replay) waits. A sign-out clears the cache, so a loaded
+ * entry is always the current account's.
+ */
+export function privacyConsentKnown(): boolean {
+  installCacheRules();
+  return queryClient.getQueryData(privacySettingsKey()) !== undefined;
 }
 
 /** Call `listener` with the consent each time the entry's answer changes (a load, a write, a rollback). */

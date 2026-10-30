@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
@@ -258,4 +259,66 @@ func TestReconcile_BackgroundedSweepNeverOverwritesASettledCall(t *testing.T) {
 	assert.Equal(t, core.ToolCallStatusCancelled, repo.toolCalls["tc-1"].Status,
 		"the user's cancel must survive the sweep's later view of the process")
 	assert.Empty(t, repo.emittedToolCallUpdates)
+}
+
+// fakeActivity records what the reconciler publishes as machine activity.
+type fakeActivity struct {
+	mu     sync.Mutex
+	events []string // daemonID|reason
+}
+
+func (f *fakeActivity) Activity(daemonID, _, _, reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, daemonID+"|"+reason)
+}
+
+func (f *fakeActivity) got() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.events...)
+}
+
+// A process an agent backgrounded keeps its machine awake while the agent's
+// run is held on a provider usage limit, and only then.
+//
+// 2026-10-28: agents parked on a usage limit sent the machine nothing, the
+// idle detector suspended it 30 minutes in, and a prod deploy the agent had
+// backgrounded died mid-apply — three suspends in one night.
+func TestReconcile_HeldRunBackgroundWorkKeepsItsMachineAwake(t *testing.T) {
+	run := func(t *testing.T, held bool, requestedAt time.Time, status string) []string {
+		t.Helper()
+		repo := newMockRepo()
+		repo.daemons = map[string]bool{"d-1": true}
+		repo.seedBackgroundedCall("tc-deploy", "u-1", strp("p-deploy"), strp("d-1"))
+		repo.backgroundedProcessCalls[0].RequestedAt = requestedAt
+		repo.heldChats = map[string]bool{"chat-1": held}
+		daemons := &fakeProcessDaemons{processes: map[string]map[string]daemon.ProcessStatusInfo{
+			"d-1": {"p-deploy": {Status: status}},
+		}}
+		activity := &fakeActivity{}
+		reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+		reconciler.SetBackgroundProcessDaemons(daemons)
+		reconciler.SetHeldRunActivity(activity)
+		_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+		require.Empty(t, errs)
+		for _, since := range repo.heldSince {
+			assert.WithinDuration(t, time.Now().Add(-heldRunAwakeFor), since, time.Minute, "the hold is bounded by heldRunAwakeFor")
+		}
+		return activity.got()
+	}
+	awake := []string{"d-1|" + daemonactivity.ReasonHeldRunBackgroundWork}
+
+	t.Run("running process of a held run", func(t *testing.T) {
+		assert.Equal(t, awake, run(t, true, time.Now().Add(-time.Hour), "running"))
+	})
+	t.Run("run not held: finished, or waiting on the user", func(t *testing.T) {
+		assert.Empty(t, run(t, false, time.Now().Add(-time.Hour), "running"))
+	})
+	t.Run("process already ended", func(t *testing.T) {
+		assert.Empty(t, run(t, true, time.Now().Add(-time.Hour), "completed"))
+	})
+	t.Run("process older than the bound (a dev server, a loop)", func(t *testing.T) {
+		assert.Empty(t, run(t, true, time.Now().Add(-heldRunProcessMaxAge-time.Minute), "running"))
+	})
 }

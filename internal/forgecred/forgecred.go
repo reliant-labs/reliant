@@ -72,14 +72,14 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 	// Any session's still-fresh token beats a mint: the candidates are all
 	// this machine's, and a cached token is one the server already scoped.
 	for _, s := range sessions {
-		if tok, ok := c.lookup(endpoint, req.Scopes, s, now); ok {
+		if tok, ok := c.lookup(endpoint, h.deps.Org, req.Scopes, s, now); ok {
 			return tok, nil
 		}
 	}
 
 	var attempts []attempt
 	for _, s := range sessions {
-		got, err := h.deps.Exchanger.Exchange(ctx, s.Server, s.Token, endpoint, req.Scopes)
+		got, err := h.deps.Exchanger.Exchange(ctx, s.Server, s.Token, endpoint, req.Scopes, h.deps.Org)
 		if err != nil {
 			why, scopes := structuredRefusal(err)
 			attempts = append(attempts, attempt{session: s, code: connect.CodeOf(err), reason: reasonOf(err), why: why, scopes: scopes})
@@ -102,7 +102,7 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 		// added any minute, and a cached narrow token would keep refusing for
 		// the rest of its life.
 		if grantedAll(req.Scopes, got.Scopes) {
-			c.store(endpoint, req.Scopes, s, tok, now)
+			c.store(endpoint, h.deps.Org, req.Scopes, s, tok, now)
 		}
 		return tok, nil
 	}

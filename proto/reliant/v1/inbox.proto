@@ -5,7 +5,7 @@ package reliant.v1;
 
 import "forge/v1/forge.proto";
 import "reliant/v1/approval.proto";
-import "reliant/v1/tools_daemon.proto"; // for DiskVolume
+import "reliant/v1/tools_daemon.proto"; // for DiskVolume, ProcessReport
 import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -93,6 +93,20 @@ enum InboxItemKind {
   INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP = 8;
   // Retained Git-host recovery, even if its source row/machine is gone.
   INBOX_ITEM_KIND_RECOVERY = 9;
+  // A run an automation launched is paused: a step failed and the run is
+  // waiting to retry it. While it is paused it holds its automation's
+  // capacity slot, so later firings queue behind it. An unattended run retries
+  // on its own and ends, failed, if the cause does not clear; this item says
+  // what paused it in the meantime. One item per pause. Informational.
+  INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED = 10;
+  // The newest version of a workflow file that enabled automations run does
+  // not parse or validate, so every firing of them is refused until a valid
+  // version is synced. ONE item per broken version (machine, file, content
+  // hash), however many automations and firings it refuses; it names the
+  // file, the error and the branch and commit, and leaves the list when a
+  // valid version lands. It replaces those automations' own failing items.
+  // Informational.
+  INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 11;
 }
 
 message ListInboxRequest {
@@ -131,7 +145,9 @@ message InboxItem {
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
   // "automation_launch_failed:", "run_finished:", "storage:",
-  // "automation_needs_setup:"). Approvals and questions
+  // "automation_needs_setup:", "automation_run_paused:"). An automation run
+  // paused embeds the chat id and when the failure that paused it happened,
+  // so a later pause is a new item. Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
   // block began, so a later block is a new item; run-finished embeds the chat
   // id. Automation failure items embed the id of the FIRST failing event of the
@@ -170,7 +186,18 @@ message InboxItem {
     InboxStorage storage = 26;
     InboxAutomationNeedsSetup automation_needs_setup = 27;
     RecoveryInboxItem recovery = 28;
+    InboxAutomationRunPaused automation_run_paused = 29;
+    InboxAutomationDefinitionBroken automation_definition_broken = 30;
   }
+}
+
+// InboxAutomationRunPaused is a paused run of an automation. The item's
+// chat_id is the run to open; waiting_since is when the step that paused it
+// failed.
+message InboxAutomationRunPaused {
+  // The failure that paused the run (the failing step's error), or empty
+  // when none was recorded.
+  string reason = 1;
 }
 
 // Catalog-backed information; RestoreInboxItem still only undismisses.
@@ -228,6 +255,23 @@ message InboxAutomationFailing {
 // InboxAutomationNeedsSetup is an automation waiting for its owner to finish
 // setting it up. The item's workflow_name and project_id locate the workflow
 // page's automation.
+// InboxAutomationDefinitionBroken is one broken version of one workflow file
+// and the enabled automations it refuses.
+message InboxAutomationDefinitionBroken {
+  // The broken version: path, machine, branch, commit, content hash and the
+  // error.
+  TriggerEventDefinition definition = 1;
+
+  // The enabled automations whose firings it refuses, by name.
+  repeated InboxRefusedAutomation automations = 2;
+}
+
+// InboxRefusedAutomation is one automation a broken definition refuses.
+message InboxRefusedAutomation {
+  string trigger_id = 1;
+  string trigger_name = 2;
+}
+
 message InboxAutomationNeedsSetup {
   // What is missing, one entry per workflow input, in input-name order.
   repeated TriggerSetupIssue issues = 1;
@@ -289,6 +333,10 @@ message InboxStorage {
   // pressure names itself ("build caches & docker") and, while it is, what is
   // using it.
   repeated DiskVolume volumes = 9;
+  // Set while the machine is refusing new background heavy commands because
+  // it is near its process limit: the count, the limit, and the largest
+  // process trees by the agent that started them.
+  ProcessReport processes = 10;
 }
 
 // HeldWorktree is one archived workspace kept on a machine, and why.

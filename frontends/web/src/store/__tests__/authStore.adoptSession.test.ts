@@ -26,7 +26,6 @@ vi.mock('@/api/grpc-unauth', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), error: loggerError, warn: vi.fn(), debug: vi.fn() },
 }))
-vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 const loadStore = async () => (await import('@/store/authStore')).useAuthStore

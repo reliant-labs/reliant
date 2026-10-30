@@ -116,8 +116,15 @@ func ListStepExecutionRecordsForChat(ctx context.Context, db orm.Context, chatID
 // run in the same chat. Inspect octet_length before any JSON cast: complete
 // output/error values over 16 KiB, or over the 128 KiB cumulative scan budget,
 // are omitted whole. Never take an unsanitized prefix/tail (it could split a
-// secret). Only then extract streams and the safe skipped boolean. Resolved
-// inputs and arbitrary output fields never leave Postgres.
+// secret). Only then extract streams, the safe skipped boolean and, for a
+// save_message NODE, the text it wrote (a failure-outcome node's text is the
+// run's explanation). Resolved inputs and arbitrary output fields never leave
+// Postgres.
+//
+// A save_message node is a graph node like any other — a run that ends at a
+// `outcome: failure` save_message has no other trace of where it ended — so
+// only the "<node>-save" companion rows (the message an agent/LLM step wrote,
+// already shown as that step) are dropped with the bookkeeping activities.
 func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID string, limit int) ([]*core.StepExecution, error) {
 	if limit <= 0 || limit > 201 {
 		limit = 201
@@ -127,11 +134,12 @@ func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID strin
     SELECT id, chat_id FROM workflows WHERE id = ?0
     UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
 ), picked AS (
- SELECT ` + columnsOf[StepExecution]("se") + ` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
- WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'SaveMessage', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
+ SELECT `+columnsOf[StepExecution]("se")+` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+ WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
+   AND NOT (se.activity_name = 'SaveMessage' AND right(se.step_id, 5) = '-save')
  ORDER BY se.created_at DESC, se.id DESC LIMIT ?1
 ), budgeted AS (
- SELECT ` + columnsOf[StepExecution]("picked") + `, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
+ SELECT `+columnsOf[StepExecution]("picked")+`, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
  OVER (ORDER BY created_at DESC, id DESC) AS scan_bytes FROM picked
 )
 SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
@@ -145,7 +153,8 @@ SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
          WHEN se.output_json IS JSON OBJECT THEN json_build_object(
            'skipped', se.output_json::jsonb->'skipped' = 'true'::jsonb,
            'stdout', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stdout' END,
-           'stderr', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stderr' END)::text
+           'stderr', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stderr' END,
+           'message', CASE WHEN se.activity_name = 'SaveMessage' THEN se.output_json::jsonb#>>'{message,text}' END)::text
          ELSE NULL END AS output_json
 FROM budgeted se
 ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
@@ -153,6 +162,34 @@ ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
+}
+
+// DeclaredFailureError is the error MarkDeclaredFailureNode records on the
+// node a run ended at with outcome: failure. rundiagnostics appends the text
+// a save_message node wrote.
+const DeclaredFailureError = "declared the run's outcome: failure"
+
+// MarkDeclaredFailureNode records, on the newest attempt of the top-level node
+// nodeID of workflow workflowID, that it declared the run failed. A run that
+// routes to an `outcome: failure` node completes with no error anywhere — the
+// node's own activity succeeded — so without this every diagnostic surface
+// (get_run, trigger health, the automation failure message) finds no failed
+// node and says "declared failure without a recorded node error". A row that
+// already carries an error keeps it. Reports whether a row was marked: a node
+// that runs no activity (compute, a sub-workflow) has none.
+func MarkDeclaredFailureNode(ctx context.Context, db orm.Context, workflowID, nodeID string) (bool, error) {
+	res, err := db.Bun().NewRaw(`UPDATE step_executions SET success = 0, error_message = ?2
+WHERE id = (
+    SELECT id FROM step_executions
+    WHERE workflow_id = ?0 AND step_id = ?1 AND (node_path IS NULL OR node_path = ?1)
+      AND activity_name <> 'SkippedStep'
+    ORDER BY created_at DESC, id DESC LIMIT 1)
+  AND coalesce(error_message, '') = ''`, workflowID, nodeID, DeclaredFailureError).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // chatStepExecutionsSQL is every step of every workflow of one chat, in one

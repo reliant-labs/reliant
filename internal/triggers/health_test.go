@@ -127,6 +127,22 @@ func TestComputeHealth(t *testing.T) {
 	}
 }
 
+// A trigger that failed once and has run cleanly since stays DEGRADED while the
+// failure is in the window, but its detail says the failure is history, with
+// when, so it does not read as a current fault (prod "Trader bot · trade": a
+// 2026-10-24 parse error followed by eight completed runs).
+func TestComputeHealth_RecoveredFailureSaysWhenAndThatLaterRunsSucceeded(t *testing.T) {
+	failed := outcomeOnly(core.TriggerEventFailed, "trader-bot.yaml does not parse")
+	failed.Event.OccurredAt = time.Date(2026, 10, 24, 15, 25, 0, 0, time.UTC)
+	got := ComputeHealth([]*core.TriggerEventWithRun{launched(core.RunDisplayCompleted), launched(core.RunDisplayCompleted), failed})
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, got.Status)
+	assert.Equal(t, "trader-bot.yaml does not parse (failed on 2026-10-24 15:25 UTC; 2 later run(s) succeeded)", got.LastFailureDetail)
+
+	// The newest firing failing is a current fault: no annotation.
+	current := ComputeHealth([]*core.TriggerEventWithRun{failed, launched(core.RunDisplayCompleted)})
+	assert.Equal(t, "trader-bot.yaml does not parse", current.LastFailureDetail)
+}
+
 func TestComputeHealth_OnlyReadsTheWindow(t *testing.T) {
 	// A failure just outside the 10-firing window must not count.
 	firings := make([]*core.TriggerEventWithRun, 0, HealthWindow+1)

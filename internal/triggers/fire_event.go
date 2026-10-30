@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // Names registered with Temporal for the inbound fire.
@@ -74,6 +75,15 @@ type EventFirer struct {
 	repo      EventRepo
 	launcher  Launcher
 	workflows WorkflowResolver
+	capacity  capacityDescriptions
+	pools     Placer
+}
+
+// WithPlacer lets the firer place a pool-bound trigger's runs. Without it,
+// such a fire fails (and is retried) rather than running on a guessed machine.
+func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
+	f.pools = p
+	return f
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
@@ -85,6 +95,12 @@ func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
 // mapping is evaluated against the event at launch.
 func (f *EventFirer) WithWorkflows(workflows WorkflowResolver) *EventFirer {
 	f.workflows = workflows
+	return f
+}
+
+// WithCapacityDescriptions supplies authoritative Temporal state for an opt-in run cap.
+func (f *EventFirer) WithCapacityDescriptions(reader capacityDescriptions) *EventFirer {
+	f.capacity = reader
 	return f
 }
 
@@ -115,38 +131,99 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	trigger, err := f.repo.GetTrigger(ctx, in.TriggerID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerNotFound) {
-			return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger deleted", nil)
+			return f.settle(ctx, ev, nil, core.TriggerEventSkipped, "trigger deleted", nil)
 		}
 		return nil, fmt.Errorf("load trigger %s: %w", in.TriggerID, err)
 	}
 	if !resuming && !manual && !trigger.Enabled {
-		return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger is disabled", nil)
+		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, "trigger is disabled", nil)
 	}
-	// A no-machine trigger names no daemon, by design.
-	if trigger.NoMachine {
+	// A no-machine trigger names no daemon, by design; a pool-bound one is
+	// placed on a member at launch (launchOnPool).
+	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
-		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
+		return f.settle(ctx, ev, nil, core.TriggerEventFailed, detail, err)
+	}
+
+	// A pool-bound trigger reads its declaration and concurrency from the
+	// pool's agreed catalog, the one its run is placed on.
+	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.settle(ctx, ev, nil, core.TriggerEventFailed, err.Error(), err)
+		}
+		return nil, err
+	}
+	if wait != "" {
+		return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: wait, EventID: ev.ID}, nil
+	}
+	trigger = bound
+
+	// Which definition this fire resolves, recorded on the event whatever the
+	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
+	// trusted from intake, like the declaration below.
+	def, err := firingDefinition(ctx, f.workflows, trigger, ev, resuming)
+	if err != nil {
+		return nil, err
+	}
+	if def.Broken() && !resuming {
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, RefusalDetail(def), errors.New(def.Error))
 	}
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	decl, err := activationFor(ctx, f.workflows, trigger)
+	workflows := PinnedTo(f.workflows, def)
+	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+			return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
 		}
 		return nil, err
 	}
 	spec, err := f.buildSpec(ctx, trigger, ev, decl)
 	if err != nil {
-		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
 	}
-	res, launchErr := f.launcher.Launch(ctx, launch.Event{
+	if def != nil {
+		// The run loads the definition this fire recorded (FiringDefinition).
+		spec.CatalogPin = def.CatalogPin
+	}
+	policy, err := capacityPolicy(ctx, workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	if err != nil {
+		return nil, err
+	}
+	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
+		return f.settle(ctx, ev, def, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
+	}
+	if capped {
+		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
+			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
+		})
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
+			if capacitySettled(err) {
+				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
+			}
+			return nil, err
+		}
+	}
+	if ev.CapacityOrder != nil && ev.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
+		if repo, ok := f.repo.(capacityRepository); ok {
+			spec.RecordExecution = repo.BindTriggerCapacityExecution
+			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+		} else {
+			return nil, errors.New("admitted retry storage unavailable")
+		}
+	}
+	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,
 		DedupeKey:  ev.DedupeKey,
@@ -154,7 +231,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
-	}, spec)
+		Definition: def,
+	}, spec, resuming, catalog)
 
 	switch {
 	case launchErr == nil:
@@ -172,19 +250,27 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
 		}
-		return f.settle(ctx, ev, core.TriggerEventSkipped, reason, nil)
+		if reason == capacityWaiting || isPoolWaiting(reason) {
+			// The event stays pending; the redriver fires it again.
+			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventSkipped, reason, nil)
 	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
-		return f.settle(ctx, ev, core.TriggerEventFailed, launchErr.Error(), launchErr)
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, launchErr.Error(), launchErr)
 	}
 	return nil, fmt.Errorf("launch trigger %s event %s: %w", trigger.ID, ev.ID, launchErr)
 }
 
 // settle records a verdict on an event that did not launch. With cause set,
 // the fire ends without retry: the event can never launch as written.
-func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome core.TriggerEventOutcome, detail string, cause error) (*FireOutput, error) {
-	settled, err := f.repo.SettlePendingTriggerEvent(ctx, ev.ID, outcome, detail)
+//
+// def is the definition the fire resolved, written in the same guarded update
+// (nil before it was read): a fire that lost the race to another never
+// rewrites the winner's record.
+func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, def *core.TriggerEventDefinition, outcome core.TriggerEventOutcome, detail string, cause error) (*FireOutput, error) {
+	settled, err := f.repo.SettlePendingTriggerEvent(ctx, ev.ID, outcome, detail, def)
 	if err != nil {
 		return nil, fmt.Errorf("record %s for event %s: %w", outcome, ev.ID, err)
 	}
@@ -202,12 +288,39 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 	return &FireOutput{Outcome: string(outcome), Reason: detail, EventID: ev.ID}, nil
 }
 
+// PreviewEvent maps a sample through the exact event-fire seed path. It does
+// not persist, enable, or launch anything. The caller must authorize the trigger.
+//
+// pools answers a pool-bound trigger's agreed catalog, so the preview reads
+// the definitions a real fire would; nil previews from the union.
+func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, pools PoolCatalogs, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+	if pools != nil {
+		bound, _, wait, err := bindPoolCatalog(ctx, pools, trigger)
+		if err != nil {
+			return launch.Spec{}, err
+		}
+		if wait != "" {
+			return launch.Spec{}, &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
+		}
+		trigger = bound
+	}
+	decl, err := activationFor(ctx, workflows, trigger)
+	if err != nil {
+		return launch.Spec{}, err
+	}
+	return eventSpec(ctx, repo, trigger, ev, decl)
+}
+
 // buildSpec is what an event-launched run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt followed by the event as
 // labelled, untrusted data.
 func (f *EventFirer) buildSpec(ctx context.Context, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
+	return eventSpec(ctx, f.repo, trigger, ev, decl)
+}
+
+func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
-	scope := ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
+	scope := ActivationScope(ctx, repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 	if decl != nil {
 		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, scope)
 		if err != nil {

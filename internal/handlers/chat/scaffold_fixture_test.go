@@ -45,6 +45,23 @@ func newChatRepo() *chat.MockRepository {
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return get(id)
 		},
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			c, err := get(id)
+			if err != nil {
+				return nil, err
+			}
+			return chatRowOf(c), nil
+		},
+		GetChatRowWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.ChatRow, error) {
+			c, err := get(id)
+			if err != nil {
+				return nil, err
+			}
+			if c.UserID != userID {
+				return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+			}
+			return chatRowOf(c), nil
+		},
 		GetChatWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Chat, error) {
 			c, err := get(id)
 			if err != nil {
@@ -55,5 +72,15 @@ func newChatRepo() *chat.MockRepository {
 			}
 			return c, nil
 		},
+	}
+}
+
+// chatRowOf is the chats-row part of a fixture chat.
+func chatRowOf(c *db.Chat) *db.ChatRow {
+	return &db.ChatRow{
+		ID: c.ID, Title: c.Title, ProjectID: c.ProjectID, UserID: c.UserID, State: c.State,
+		WorkflowID: c.WorkflowID, WorkflowName: c.WorkflowName, RunID: c.RunID, WorktreeID: c.WorktreeID,
+		ActiveDaemonID: c.ActiveDaemonID, Unread: c.Unread, NoMachine: c.NoMachine, AdoptedAt: c.AdoptedAt,
+		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, LastActive: c.LastActive,
 	}
 }

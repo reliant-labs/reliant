@@ -57,6 +57,12 @@ func executeWithActivationApprovals(ctx, activityCtx workflow.Context, rtx types
 				rtx.ActivationRefusals[tc.GetId()] = preview.Refusal
 				continue
 			}
+			if preview.NoApproval {
+				// The tool judged this call card-free (manage_machine's
+				// stop, or an unattended start of the activation's own
+				// machine); its execution re-checks the policy.
+				continue
+			}
 			if unattended {
 				rtx.ActivationRefusals[tc.GetId()] = "Unattended runs cannot manage activations."
 				continue
@@ -85,7 +91,8 @@ func executeWithActivationApprovals(ctx, activityCtx workflow.Context, rtx types
 }
 func isActivationCall(name string) bool {
 	switch name {
-	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger:
+	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger,
+		names.ToolManageMachine:
 		return true
 	}
 	return false

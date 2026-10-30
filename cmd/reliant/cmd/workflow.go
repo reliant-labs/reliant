@@ -8,21 +8,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/repo"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/lint"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
@@ -43,6 +47,7 @@ func newWorkflowCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newWorkflowValidateCmd())
+	cmd.AddCommand(newWorkflowLintCmd())
 	cmd.AddCommand(newWorkflowValidateTreeCmd())
 	cmd.AddCommand(newWorkflowEvalCmd())
 	cmd.AddCommand(newWorkflowListCmd())
@@ -77,6 +82,7 @@ func newWorkflowValidateCmd() *cobra.Command {
 		triggerSender   string
 		activationParam string
 		ownerGitHubID   string
+		base            string
 	)
 
 	cmd := &cobra.Command{
@@ -99,6 +105,18 @@ give only the fields your expressions read. The JSON may be a file: @event.json.
 would set them (params it leaves out read as the workflow's input defaults), and
 --owner-github-id trigger.activation.owner.github_id.
 
+With --base <git revision> (in CI, the branch the change merges into), the
+declared triggers are also compared with the ones at that revision. An edit that
+existing activations cannot follow — a workflow with triggers deleted, a trigger
+renamed or removed, a trigger changed to another kind or integration — is
+reported under "Breaks activations": each activation of it would turn BROKEN
+and fire nothing. These are warnings, since the CLI cannot see whether anyone
+activated the trigger; the server lists any enabled activation a synced change
+broke in its owner's Inbox.
+
+Each project workflow is also linted (reliant workflow lint --rules lists the
+rules): a lint error fails validation, a lint warning is reported.
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -106,13 +124,14 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 			if err != nil {
 				return err
 			}
-			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins, sample)
+			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins, sample, base)
 		},
 	}
 	cmd.Flags().StringVar(&triggerPayload, "trigger-payload", "", "Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it")
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
 	cmd.Flags().StringVar(&activationParam, "activation-params", "", "Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload")
 	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "Sample trigger.activation.owner.github_id (a string), used with --trigger-payload")
+	cmd.Flags().StringVar(&base, "base", "", "Git revision the workflows are changing from: also report trigger changes that would break existing activations")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
 	cmd.Flags().BoolVarP(&verboseValidate, "verbose", "V", false, "Show detailed output for each workflow")
@@ -282,6 +301,7 @@ func newWorkflowRunCmd() *cobra.Command {
 		inputs      []string
 		inputFile   string
 		message     string
+		title       string
 		follow      bool
 		projectID   string
 		projectPath string
@@ -292,9 +312,14 @@ func newWorkflowRunCmd() *cobra.Command {
 		Use:   "run <workflow-name>",
 		Short: "Run a workflow",
 		Long: `Triggers a workflow execution by creating a chat bound to the workflow,
-via the Reliant ChatService.StartChat Connect RPC — the exact path the web
-app takes. A run IS a chat: sending the first user message kicks the root
-workflow.
+via the Reliant ChatService.StartChat Connect RPC. A run IS a chat: sending
+the first user message kicks the root workflow.
+
+The run is recorded as a command-line run (launch kind cli.run): it is listed
+under Runs, not among your conversations in the sidebar, the same as a run an
+agent starts with start_run. Open it from Runs, or by the chat id printed
+below; adopting it moves it into the sidebar. Its title is --title, else
+"<workflow> · <first line of the message>", else "<workflow> · <start time>".
 
 The target server is --server (else RELIANT_SERVER_URL, else the default);
 the bearer is RELIANT_TOKEN, else the login 'reliant auth login' stored for
@@ -344,7 +369,10 @@ format, exit codes, and --hook).`,
 				if len(parts) != 2 {
 					return fmt.Errorf("invalid input format %q — expected key=value", kv)
 				}
-				inputMap[parts[0]] = parts[1]
+				// Read as `workflow validate --input` reads it: asap=true is
+				// a boolean and every=10 a number, which a boolean or number
+				// input requires (the server never parses text into one).
+				inputMap[parts[0]] = parseCLIInputValue(parts[1])
 			}
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
@@ -365,14 +393,25 @@ format, exit codes, and --hook).`,
 				return err
 			}
 
+			workflowRef := normalizeRunWorkflowRef(workflowName)
+			runMessage, messageGiven := resolveRunMessage(workflowName, message, inputMap)
 			createReq := &reliantv1.StartChatRequest{
 				ProjectId: resolvedProjectID,
-				Workflow:  normalizeRunWorkflowRef(workflowName),
+				Workflow:  workflowRef,
 				Messages: []*reliantv1.InputMessage{{
 					Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
-					Content: resolveRunMessage(workflowName, message, inputMap),
+					Content: runMessage,
 				}},
 				WorkflowParams: params,
+				CliRun:         proto.Bool(true),
+			}
+			switch {
+			case title != "":
+				createReq.Title = proto.String(title)
+			case !messageGiven:
+				// The kick message is not a subject; without one the server's
+				// "<workflow> · <first line>" would title every run with it.
+				createReq.Title = proto.String(launch.RunTitle(workflowRef, "", time.Now()))
 			}
 
 			// Connect client authenticated by the context bearer, mirroring how
@@ -390,6 +429,9 @@ format, exit codes, and --hook).`,
 			fmt.Fprintf(out, "Workflow %q triggered\n", workflowName)
 			if chatID != "" {
 				fmt.Fprintf(out, "  Chat/Execution ID: %s\n", chatID)
+			}
+			if t := resp.Msg.GetChat().GetTitle(); t != "" {
+				fmt.Fprintf(out, "  Title:             %s (listed under Runs)\n", t)
 			}
 			if wid := resp.Msg.GetWorkflowId(); wid != "" {
 				fmt.Fprintf(out, "  Workflow ID:       %s\n", wid)
@@ -411,6 +453,7 @@ format, exit codes, and --hook).`,
 	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable)")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default)")
+	cmd.Flags().StringVar(&title, "title", "", "Title for the run (default: \"<workflow> · <first line of the message>\")")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow the execution and stream NDJSON lifecycle events")
 	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (takes precedence over --project-path)")
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "Project directory path; resolves (find-or-create) to a project ID when --project-id is absent")
@@ -443,17 +486,18 @@ func normalizeRunWorkflowRef(name string) string {
 // resolveRunMessage picks the chat's first user message: explicit --message,
 // then inputs.message, then inputs.prompt, then a generic kick message
 // (StartChat requires at least one user message; input-driven workflows read
-// their params, not the message).
-func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) string {
+// their params, not the message). given is false for the kick message, which
+// names no subject.
+func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) (message string, given bool) {
 	if explicit != "" {
-		return explicit
+		return explicit, true
 	}
 	for _, key := range []string{"message", "prompt"} {
 		if s, ok := inputs[key].(string); ok && s != "" {
-			return s
+			return s, true
 		}
 	}
-	return fmt.Sprintf("Run the %s workflow with the provided inputs.", workflowName)
+	return fmt.Sprintf("Run the %s workflow with the provided inputs.", workflowName), false
 }
 
 // workflowParamsFromInputs converts the CLI input map to the proto
@@ -486,14 +530,22 @@ type validateResult struct {
 	Valid    bool     `json:"valid"`
 	Errors   []string `json:"errors,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
-	Nodes    int      `json:"nodes,omitempty"`
-	Edges    int      `json:"edges,omitempty"`
+	// ActivationBreaks are the declared-trigger changes since --base that
+	// existing activations cannot follow (activationBreaks). Warnings, kept
+	// apart so they are always printed.
+	ActivationBreaks []string `json:"activation_breaks,omitempty"`
+	// Lint is what `reliant workflow lint` finds in a project workflow; an
+	// error-severity finding makes the result invalid.
+	Lint  []lint.Finding `json:"lint,omitempty"`
+	Nodes int            `json:"nodes,omitempty"`
+	Edges int            `json:"edges,omitempty"`
 }
 
-func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample) error {
+func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample, base string) error {
 	var files []string
 
 	// Single file or directory from positional arg
+	singleFile := false
 	if len(args) == 1 {
 		path := args[0]
 		info, err := os.Stat(path)
@@ -510,6 +562,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		} else {
 			dir = filepath.Dir(path)
 			files = append(files, path)
+			singleFile = true
 		}
 	} else {
 		// Default directory mode
@@ -542,7 +595,20 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		return err
 	}
 
-	total := len(files) + len(builtins)
+	// What the edit since --base breaks, by workflow name; a deleted workflow
+	// is its own result (a single-file run is not about the others).
+	var breaks map[string][]string
+	var deleted []validateResult
+	if base != "" {
+		if breaks, deleted, err = activationBreaks(dir, base, layout); err != nil {
+			return err
+		}
+		if singleFile {
+			deleted = nil
+		}
+	}
+
+	total := len(files) + len(builtins) + len(deleted)
 	if total == 0 {
 		if jsonOut {
 			fmt.Println("[]")
@@ -580,9 +646,18 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	for _, file := range files {
 		result := validateWorkflowFileIn(file, dir, layout)
 		dryRunTriggers(&result, file, sample)
+		if result.Name != "" {
+			result.ActivationBreaks = breaks[result.Name]
+		}
 		if stopped = record(result); stopped {
 			break
 		}
+	}
+	for _, d := range deleted {
+		if stopped {
+			break
+		}
+		stopped = record(d)
 	}
 	for _, b := range builtins {
 		if stopped {
@@ -772,7 +847,14 @@ func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout
 			addressProblem = entry.Problem
 		}
 	}
-	return validateWorkflowYAML(data, filepath.Base(path), addressProblem, layout)
+	result := validateWorkflowYAML(data, filepath.Base(path), addressProblem, layout)
+	if result.Name != "" {
+		result.Lint = lintWorkflowSource(data, layout)
+		if lint.HasErrors(result.Lint) {
+			result.Valid = false
+		}
+	}
+	return result
 }
 
 // validateWorkflowYAML validates one workflow definition, shown as file,
@@ -841,6 +923,10 @@ func printCompactValidateResult(r validateResult) {
 			fmt.Printf("      Error: %s\n", e)
 		}
 	}
+	for _, b := range r.ActivationBreaks {
+		fmt.Printf("      Breaks activations: %s\n", b)
+	}
+	printLintFindings("      ", r.Lint)
 }
 
 func printVerboseValidateResult(r validateResult) {
@@ -866,6 +952,16 @@ func printVerboseValidateResult(r validateResult) {
 		for _, w := range r.Warnings {
 			fmt.Printf("  - %s\n", w)
 		}
+	}
+	if len(r.ActivationBreaks) > 0 {
+		fmt.Println("Breaks activations:")
+		for _, b := range r.ActivationBreaks {
+			fmt.Printf("  - %s\n", b)
+		}
+	}
+	if len(r.Lint) > 0 {
+		fmt.Println("Lint:")
+		printLintFindings("  ", r.Lint)
 	}
 
 	fmt.Println()
@@ -910,6 +1006,7 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 		PresetLoader:         presetLoader,
 		CanonicalWorkflowRef: canonicalWorkflowRef(ref),
 		RootLabel:            displayName,
+		Authoring:            true,
 	}
 	staticResult := validation.StaticAnalysisWithOptions(wf, opts)
 
@@ -1036,8 +1133,11 @@ func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}
 	return inputMap, nil
 }
 
-// parseCLIInputValue attempts to parse the raw value as JSON if it looks like a
-// JSON literal; otherwise returns the raw string.
+// parseCLIInputValue reads a --input value: a JSON literal (true, 10, 0.5,
+// null, "text", [..], {..}) as that value, anything else as text. A number is
+// read only when written canonically: 1.10 and 1e3 stay text, since reading
+// them as numbers would lose what was typed if the input is a string. Quote a
+// value to keep it text: --input 'sha="0123"'.
 func parseCLIInputValue(raw string) interface{} {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -1058,6 +1158,9 @@ func parseCLIInputValue(raw string) interface{} {
 	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
 		return raw
 	}
+	if f, isNumber := v.(float64); isNumber && strconv.FormatFloat(f, 'f', -1, 64) != trimmed {
+		return raw
+	}
 	return v
 }
 
@@ -1065,6 +1168,7 @@ func printValidateSummary(results []validateResult) {
 	valid := 0
 	invalid := 0
 	totalWarnings := 0
+	breaks := 0
 
 	for _, r := range results {
 		if r.Valid {
@@ -1072,7 +1176,8 @@ func printValidateSummary(results []validateResult) {
 		} else {
 			invalid++
 		}
-		totalWarnings += len(r.Warnings)
+		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks)
+		breaks += len(r.ActivationBreaks)
 	}
 
 	fmt.Println()
@@ -1083,6 +1188,9 @@ func printValidateSummary(results []validateResult) {
 	fmt.Printf("  Valid:    %d\n", valid)
 	fmt.Printf("  Invalid:  %d\n", invalid)
 	fmt.Printf("  Warnings: %d\n", totalWarnings)
+	if breaks > 0 {
+		fmt.Printf("  Breaks activations: %d (each activation of these triggers would turn BROKEN)\n", breaks)
+	}
 	fmt.Println("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550")
 
 	if invalid > 0 {
