@@ -42511,7 +42511,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
+    "reliant/v1/trigger.proto": "4544ca4ec9eae7546bd359b714d7dadfd2eb6f63f6672f3a9696557663172697",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "e147f09969abaec0d629efccfce0964975cd97a169b0553bf1600a0b9a4ecf2a",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
