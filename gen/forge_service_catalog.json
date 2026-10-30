@@ -50647,6 +50647,17 @@
           }
         },
         {
+          "id": "method1:67d71ff1e2230a6f4f1a9e0f79cdb6b20c00f641746c54841c29a212fce4daa7",
+          "name": "GetPinnedProjectCatalog",
+          "signature": "func(ctx context.Context, pin string) (*github.com/reliant-labs/reliant/internal/db.PinnedCatalog, bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetPinnedProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.GetPinnedProjectCatalog"
+          }
+        },
+        {
           "id": "method1:ca3375d2f2cb6ef496b2be82f03c1dbe7389f305900262eebb9486ffbea5bd21",
           "name": "GetPlan",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Plan, error)",
@@ -52946,6 +52957,17 @@
           }
         },
         {
+          "id": "method1:ec0c0fc40519ff6c6859f69d0d31a63858396cc52aef98f4802eb92ac1bb7bf5",
+          "name": "PinProjectCatalog",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.PinProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.PinProjectCatalog"
+          }
+        },
+        {
           "id": "method1:4911a81bb3075a3d65683613d7e3edf1e120bff27c2b3c47911859eeb0ea64a9",
           "name": "Ping",
           "signature": "func(ctx context.Context) error",
@@ -54560,6 +54582,17 @@
           "source": {
             "path": "internal/db/workflow_source_diagnostic.go",
             "symbol": "Repo.machineNames"
+          }
+        },
+        {
+          "id": "method1:dfc05674d456155c06ff7972ae3c84d75f9de80864c7e4b6d09bd412a80abbd0",
+          "name": "pinnableUserWorkflows",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (*string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.pinnableUserWorkflows",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.pinnableUserWorkflows"
           }
         },
         {
