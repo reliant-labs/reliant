@@ -37,8 +37,9 @@ func outlivesHeartbeatRPCFailure(act any) bool {
 //
 // Why this exists. The SDK cancels the activity context on ANY retryable
 // heartbeat error (internal_task_handlers.go internalHeartBeat), and the
-// heartbeat RPC's own deadline is the 2s throttle interval. On a loaded
-// machine one slow round trip is enough. At 2026-10-06 09:16:09 five
+// heartbeat RPC's own deadline is the throttle interval (2s until the stop
+// nudge let it grow to 15s). On a loaded machine one slow round trip is
+// enough. At 2026-10-06 09:16:09 five
 // activities lost a heartbeat RPC to "context deadline exceeded" in the same
 // second; for each ExecuteTools among them the in-flight tool was cancelled
 // ("Tool execution cancelled: context canceled"), its row closed as
@@ -72,8 +73,8 @@ func outlivesHeartbeatRPCFailure(act any) bool {
 // client, which returns the server's verdict — and a cancel, pause, reset or
 // NotFound in it cancels the work with that cause, exactly as it would have
 // before the shield engaged. That direct RPC also gets its own deadline
-// (shieldedHeartbeatRPCTimeout) instead of the SDK's 2s one, which is the
-// budget a loaded server keeps blowing.
+// (shieldedHeartbeatRPCTimeout) instead of the SDK's throttle-sized one,
+// which at 2s was the budget a loaded server kept blowing.
 //
 // The returned shield's release func must be called when the activity
 // returns; it stops the watcher, which runs on helpers so the caller can wait
@@ -121,14 +122,14 @@ const (
 	// matches the SDK's batching window (maxHeartbeatThrottleInterval in
 	// workersetup), so an engaged activity costs the server no more heartbeat
 	// RPCs than a healthy one does.
-	shieldedHeartbeatInterval = 2 * time.Second
+	shieldedHeartbeatInterval = 15 * time.Second
 
-	// shieldedHeartbeatRPCTimeout bounds one direct heartbeat RPC. It is the
-	// budget the SDK path cannot widen (its deadline IS the 2s throttle
-	// interval), and the reason a slow server stops killing work: 10s rides
-	// out the persistence stalls measured on 2026-10-30 while staying well
-	// inside activityHeartbeatTimeout (30s), so a run of slow RPCs still
-	// lands a heartbeat before the server would declare the worker dead.
+	// shieldedHeartbeatRPCTimeout bounds one direct heartbeat RPC: an engaged
+	// shield's, and a stop nudge's probe (stop_nudge.go). 10s rides out the
+	// persistence stalls measured on 2026-10-30, stays under
+	// shieldedHeartbeatInterval so direct heartbeats never overlap, and leaves
+	// a run of slow RPCs well inside activityHeartbeatTimeout (60s), so one
+	// still lands before the server would declare the worker dead.
 	shieldedHeartbeatRPCTimeout = 10 * time.Second
 )
 

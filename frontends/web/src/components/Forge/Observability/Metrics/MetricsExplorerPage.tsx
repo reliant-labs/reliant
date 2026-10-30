@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, Check, Link2, RefreshCw, Terminal, Timer } from "lucide-react";
+import { Bell, Check, Link2, RefreshCw, Terminal } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
@@ -74,7 +74,7 @@ import { seriesLabel } from "./model/metricSemantics";
 import { formulaProblem, quantileLabel, QueryBuilder } from "./QueryBuilder";
 import { SaveToDashboard } from "./SaveToDashboardDialog";
 import { SeriesTable } from "./SeriesTable";
-import { chartUnitOf, isInFlightLimit } from "./seriesView";
+import { chartUnitOf } from "./seriesView";
 import { SqlTab } from "./SqlTab";
 
 // ── The console page ─────────────────────────────────────────────────────────
@@ -385,14 +385,6 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
     </div>
   );
 
-  if (catalogError && isInFlightLimit(catalogError)) {
-    return (
-      <div className="space-y-4" data-testid="metrics-explorer">
-        {toolbar}
-        <InFlight onRetry={refresh} />
-      </div>
-    );
-  }
   if (catalogError) {
     return (
       <div className="space-y-4" data-testid="metrics-explorer">
@@ -507,8 +499,6 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
                             ? "Fix the formula to run the query."
                             : "Pick a metric for every query to run it."}
                       </p>
-                    ) : main.error && isInFlightLimit(main.error) ? (
-                      <InFlight onRetry={() => void main.refetch()} />
                     ) : (
                       <div className={cn("transition-opacity", main.isPlaceholderData && "opacity-60")} aria-busy={main.isFetching || undefined}>
                         <ExplorerChart
@@ -672,27 +662,5 @@ function ActionButton({ icon, children, onClick, disabled, title, testId }: { ic
       {icon}
       {children}
     </button>
-  );
-}
-
-/**
- * The console's in-flight cap (MX-C3): too many of this reader's queries are
- * running at once. Nothing is wrong and nothing is spent; one finishing frees
- * a slot, so a retry a moment later works.
- */
-function InFlight({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5" data-testid="metrics-in-flight">
-      <Timer className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-      <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-ink">Too many queries in flight</p>
-        <p className="text-xs text-ink-muted">
-          You have several queries running at once, and the console runs at most six per person. One will finish in a moment; try again then.
-        </p>
-        <Button variant="outline" size="sm" onClick={onRetry} leftIcon={<RefreshCw />} data-testid="metrics-in-flight-retry">
-          Try again
-        </Button>
-      </div>
-    </div>
   );
 }

@@ -1069,6 +1069,7 @@ var minimal = map[string]map[string]any{
 	"labels.list":             {"owner": "acme", "repo": "app"},
 	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
 	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
+	"pr.merge":                {"owner": "acme", "repo": "app", "pull_number": 1, "action": "disable_auto"},
 	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comments.list": {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comment.reply": {"owner": "acme", "repo": "app", "pull_number": 1, "comment_id": 5, "body": "b"},
