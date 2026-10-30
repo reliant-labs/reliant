@@ -20572,6 +20572,12 @@
             "repeated": true
           }
         ],
+        "reliant.v1.InboxAutomationRunPaused": [
+          {
+            "name": "reason",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.InboxItem": [
           {
             "name": "kind",
@@ -20670,6 +20676,12 @@
             "name": "recovery",
             "kind": "message",
             "type_name": "reliant.v1.RecoveryInboxItem",
+            "oneof": "payload"
+          },
+          {
+            "name": "automation_run_paused",
+            "kind": "message",
+            "type_name": "reliant.v1.InboxAutomationRunPaused",
             "oneof": "payload"
           }
         ],
@@ -20880,6 +20892,7 @@
         "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
+        "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
         "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
         "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
@@ -20918,7 +20931,8 @@
           "INBOX_ITEM_KIND_RUN_FINISHED",
           "INBOX_ITEM_KIND_STORAGE",
           "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
-          "INBOX_ITEM_KIND_RECOVERY"
+          "INBOX_ITEM_KIND_RECOVERY",
+          "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED"
         ],
         "reliant.v1.TriggerHealthStatus": [
           "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -20955,7 +20969,8 @@
           6,
           7,
           8,
-          9
+          9,
+          10
         ],
         "reliant.v1.TriggerHealthStatus": [
           0,
@@ -42314,7 +42329,7 @@
     "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
-    "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
+    "reliant/v1/inbox.proto": "1ab6ec0c52325333376a14356a24b7f196f5f70ffedb10e3b375b2f55c910730",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",

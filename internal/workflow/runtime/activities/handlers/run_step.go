@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -69,9 +70,27 @@ type ExecuteRunStepActivity struct {
 	repo         ExecuteRunStepStore
 	toolExecutor toolexec.ToolExecutor
 	runExecutor  RunExecutor // optional override for testing
-	// undeliveredRetryDelays overrides defaultUndeliveredRetryDelays; tests
-	// shrink it.
-	undeliveredRetryDelays []time.Duration
+	// machines reports whether the run's machine is attached while a command
+	// that never reached it waits (WithMachineObserver). nil: the wait cannot
+	// see the machine and re-sends on its backoff alone.
+	machines MachineObserver
+	// machineWait overrides defaultMachineWait; tests shrink it or give it a
+	// fake clock.
+	machineWait *machineWait
+}
+
+// MachineObserver reports the state of the machine a run's commands execute
+// on; the run's daemon selector travels on ctx (toolexec.WithDaemonSelector).
+// toolexec.RunMachine implements it, as it does for wait_for_machine.
+type MachineObserver interface {
+	MachineStatus(ctx context.Context, userID string) (tools.MachineStatus, error)
+}
+
+// WithMachineObserver lets a command that never reached its machine watch the
+// machine's connection while it waits, instead of re-sending blind.
+func (a *ExecuteRunStepActivity) WithMachineObserver(observer MachineObserver) *ExecuteRunStepActivity {
+	a.machines = observer
+	return a
 }
 
 // NewExecuteRunStepActivity creates a new ExecuteRunStepActivity.
@@ -194,12 +213,30 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	}
 
 	// Execute the command
-	retryDelays := a.undeliveredRetryDelays
-	if retryDelays == nil {
-		retryDelays = defaultUndeliveredRetryDelays
+	wait := a.machineWait
+	if wait == nil {
+		wait = defaultMachineWait()
 	}
-	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, retryDelays, input.Command, workingDir, timeout)
+	observe := a.observeMachine(execCtx)
+	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, input.Command, workingDir, timeout)
 	if err != nil {
+		// The machine never took the command within the wait (or is gone):
+		// the step fails saying which machine and for how long.
+		var unavailable *machineUnavailableError
+		if errors.As(err, &unavailable) {
+			activity.GetLogger(ctx).Warn("[RunStep] machine unavailable; failing the step",
+				"chat_id", input.ChatID,
+				"step_id", input.StepID,
+				"daemon_id", unavailable.DaemonID,
+				"waited", unavailable.Waited,
+				"error", unavailable.Error(),
+			)
+			// No cause: the message already carries it, and a cause would be
+			// appended to it again wherever the error is printed.
+			return ExecuteRunStepOutput{}, temporal.NewNonRetryableApplicationError(
+				"failed to execute command: "+unavailable.Error(),
+				activitytypes.RunStepMachineUnavailableErrType, nil)
+		}
 		// A transport failure is not a command verdict: fail the activity
 		// rather than return a synthetic exit code the workflow would read
 		// as one. Not retryable either way — see runStepTransportFailure.
@@ -370,42 +407,207 @@ const (
 	runStepOutcomeUnknownErrType = "RunStepOutcomeUnknown"
 )
 
-// defaultUndeliveredRetryDelays are the waits before each re-send of a command that
-// provably never reached a machine, within one attempt. The same ladder as a
-// step's Temporal retries (1s doubling, five sends in all), held here because
-// only this attempt knows the command never ran: a Temporal retry starts with
-// no record of how the attempt before it ended, so it could not tell this
-// failure from one where the command started. The router has already ridden
-// out a short disconnect inside each send (DaemonReconnectGrace).
-var defaultUndeliveredRetryDelays = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
+// A command that provably never reached a machine (TransportError.
+// NotDispatched) is held, inside the attempt that knows it never ran, until
+// the machine is back, and then sent again. Only this attempt can do it: a
+// Temporal retry starts with no record of how the attempt before it ended, so
+// it could not tell this failure from one where the command started.
+//
+// It is infrastructure, not the command failing, so it spends none of the
+// node's retries and does not pause the run. It watches the machine the way
+// wait_for_machine does — connected: send again; removed or failed to start:
+// stop now, waiting cannot help; anything else (disconnected, restarting,
+// starting, asleep): keep waiting — for at most RunStepMachineWaitBudget from
+// the first failure, then fails the step naming the machine and the wait.
+//
+// Each send has already ridden out a short disconnect inside the router
+// (DaemonReconnectGrace); this is the longer wait around it, for a machine
+// that is away for minutes (a VM restart), not seconds.
 
-// executeUntilDelivered runs command through executor, sending it again after
-// each of delays while a failure proves it never reached a machine
-// (TransportError.NotDispatched).
-// Every other outcome — a verdict, a failure that may have followed a start —
-// is returned as it came: it is sent once.
-func executeUntilDelivered(ctx context.Context, executor RunExecutor, delays []time.Duration, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
-	for i := 0; ; i++ {
+// machineWait is the shape of that wait.
+type machineWait struct {
+	// budget bounds the whole wait, from the first undelivered send.
+	budget time.Duration
+	// poll is how often a machine that is not attached is looked at again.
+	poll time.Duration
+	// firstResend and maxResend bound the backoff between sends to a machine
+	// that reads attached (or cannot be observed): one that answers the
+	// connection check but not the command must not be hammered.
+	firstResend, maxResend time.Duration
+	// now and sleep are the clock; tests replace them.
+	now   func() time.Time
+	sleep func(ctx context.Context, d time.Duration) error
+}
+
+func defaultMachineWait() *machineWait {
+	return &machineWait{
+		budget:      activitytypes.RunStepMachineWaitBudget,
+		poll:        5 * time.Second,
+		firstResend: time.Second,
+		maxResend:   30 * time.Second,
+		now:         time.Now,
+		sleep:       sleepCtx,
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// machineLook is one look at the run's machine; ok is false when it could not
+// be observed (no observer, or the read failed), which is not a verdict.
+type machineLook func(ctx context.Context) (status tools.MachineStatus, ok bool)
+
+// observeMachine looks at the machine execCtx's commands are sent to.
+func (a *ExecuteRunStepActivity) observeMachine(execCtx RunExecutorContext) machineLook {
+	if a.machines == nil {
+		return func(context.Context) (tools.MachineStatus, bool) { return tools.MachineStatus{}, false }
+	}
+	return func(ctx context.Context) (tools.MachineStatus, bool) {
+		status, err := a.machines.MachineStatus(toolexec.WithDaemonSelector(ctx, execCtx.DaemonSelector), execCtx.UserID)
+		return status, err == nil
+	}
+}
+
+// machineUnavailableError ends a run step whose command never reached its
+// machine: the wait ran out, or the machine is gone. The command never ran.
+type machineUnavailableError struct {
+	DaemonID string
+	Waited   time.Duration
+	// Gone is the reason waiting stopped early (removed, failed to start);
+	// empty when the budget ran out.
+	Gone string
+	Last *toolexec.TransportError
+}
+
+func (e *machineUnavailableError) Error() string {
+	machine := "this run's machine"
+	if e.DaemonID != "" {
+		machine = "machine " + shortMachineID(e.DaemonID)
+	}
+	var b strings.Builder
+	if e.Gone != "" {
+		fmt.Fprintf(&b, "%s %s; the command never ran", machine, e.Gone)
+	} else {
+		fmt.Fprintf(&b, "%s unavailable for %s; the command never ran", machine, formatMachineWait(e.Waited))
+	}
+	if e.Last != nil && e.Last.Detail != "" {
+		fmt.Fprintf(&b, " (last error: %s)", e.Last.Detail)
+	}
+	return b.String()
+}
+
+func (e *machineUnavailableError) Unwrap() error {
+	if e.Last == nil {
+		return nil
+	}
+	return e.Last
+}
+
+// shortMachineID is the leading block of a daemon id, as people quote it.
+func shortMachineID(id string) string {
+	if i := strings.IndexByte(id, '-'); i > 0 {
+		return id[:i]
+	}
+	return id
+}
+
+// formatMachineWait renders a wait as people say it: "30m", "1h5m", "45s".
+func formatMachineWait(d time.Duration) string {
+	if d >= time.Minute {
+		s := strings.TrimSuffix(d.Round(time.Minute).String(), "0s") // "1h0m", "30m", "1h5m"
+		if strings.HasSuffix(s, "h0m") {
+			s = strings.TrimSuffix(s, "0m")
+		}
+		return s
+	}
+	return d.Round(time.Second).String()
+}
+
+// executeUntilDelivered runs command through executor and, while a failure
+// proves it never reached a machine, holds it for the machine and sends it
+// again (see machineWait). Every other outcome — a verdict, a failure that may
+// have followed a start — is returned as it came: it is sent once.
+func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+	logger := activity.GetLogger(ctx)
+	var first time.Time
+	resend := wait.firstResend
+	for {
 		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
 		var transportErr *toolexec.TransportError
-		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched || i >= len(delays) {
+		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched {
+			if !first.IsZero() && err == nil {
+				logger.Info("[RunStep] machine is back; the command went through",
+					"waited", wait.now().Sub(first).Round(time.Second))
+			}
 			return stdout, stderr, exitCode, interrupted, err
 		}
-		activity.GetLogger(ctx).Info("[RunStep] command never reached a machine; sending it again",
-			"code", transportErr.Code, "retry_in", delays[i], "detail", transportErr.Detail)
-		timer := time.NewTimer(delays[i])
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return stdout, stderr, exitCode, interrupted, err
-		case <-timer.C:
+		if first.IsZero() {
+			first = wait.now()
+			logger.Warn("[RunStep] command never reached the machine; waiting for it to come back",
+				"daemon_id", transportErr.DaemonID, "code", transportErr.Code,
+				"budget", wait.budget, "detail", transportErr.Detail)
 		}
+		unavailable := func(gone string) error {
+			return &machineUnavailableError{DaemonID: transportErr.DaemonID, Waited: wait.now().Sub(first), Gone: gone, Last: transportErr}
+		}
+
+		// Hold until the machine reads attached, or cannot be observed.
+		for {
+			remaining := wait.budget - wait.now().Sub(first)
+			if remaining <= 0 {
+				return "", "", -1, false, unavailable("")
+			}
+			status, ok := look(ctx)
+			if ok && status.Removed {
+				return "", "", -1, false, unavailable(goneReason("no longer exists", status.StatusMessage))
+			}
+			if ok && status.Failed {
+				return "", "", -1, false, unavailable(goneReason("failed to start", status.StatusMessage))
+			}
+			if !ok || status.Connected {
+				break
+			}
+			if wait.sleep(ctx, min(wait.poll, remaining)) != nil {
+				return stdout, stderr, exitCode, interrupted, err
+			}
+		}
+
+		remaining := wait.budget - wait.now().Sub(first)
+		if remaining <= 0 {
+			return "", "", -1, false, unavailable("")
+		}
+		logger.Info("[RunStep] sending the command again",
+			"daemon_id", transportErr.DaemonID, "retry_in", min(resend, remaining),
+			"waited", wait.now().Sub(first).Round(time.Second))
+		if wait.sleep(ctx, min(resend, remaining)) != nil {
+			return stdout, stderr, exitCode, interrupted, err
+		}
+		resend = min(resend*2, wait.maxResend)
 	}
+}
+
+func goneReason(what, message string) string {
+	if message == "" {
+		return what
+	}
+	return what + " (" + message + ")"
 }
 
 // runStepTransportFailure is the activity error for a command whose result
 // never came back. Neither kind is retryable: one that never ran was already
-// sent again by executeUntilDelivered, and one that may have run must not be.
+// held and sent again by executeUntilDelivered (it reaches here only when the
+// wait was cut short), and one that may have run must not be.
 // The workflow handles it as it handled the old refused retries, only without
 // four of them first: it pauses the step (RetryExhausted), and a resume
 // dispatches it afresh.

@@ -179,6 +179,21 @@ export function runFinishedItem(overrides: Overrides<InboxItem> = {}): InboxItem
   });
 }
 
+export function runPausedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    ...base,
+    kind: InboxItemKind.AUTOMATION_RUN_PAUSED,
+    itemId: "automation_run_paused:chat-1@20261030T082500.000000",
+    triggerId: "trg-4",
+    triggerName: "cp-merge",
+    payload: {
+      case: "automationRunPaused",
+      value: { reason: "machine e164d47d did not answer the gate command" },
+    },
+    ...overrides,
+  });
+}
+
 export function storageItem(
   overrides: Overrides<InboxItem> = {},
   storage: Overrides<InboxStorage> = {},

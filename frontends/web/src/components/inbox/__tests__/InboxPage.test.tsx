@@ -36,6 +36,7 @@ import {
   questionItem,
   renderInboxAt,
   runFinishedItem,
+  runPausedItem,
   storageItem,
   waitingItem,
 } from "./inboxTestUtils";
@@ -272,6 +273,17 @@ describe("InboxPage item kinds", () => {
     const { router } = renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
     expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("link", { name: "Open" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
+  });
+
+  it("a paused automation run says what paused it and opens the run", async () => {
+    respond([runPausedItem()]);
+    const { router } = renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_run_paused:chat-1@20261030T082500.000000");
+    expect(within(row).getByLabelText("Automation run paused")).toBeInTheDocument();
+    expect(within(row).getByText("Paused: machine e164d47d did not answer the gate command")).toBeInTheDocument();
+    expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });

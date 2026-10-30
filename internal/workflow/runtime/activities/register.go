@@ -6,6 +6,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -202,7 +203,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// RUN STEP ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor))
+	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor)
+	if deps.DaemonRouter != nil {
+		// A command that never reached its machine watches the machine while
+		// it waits, as wait_for_machine does.
+		runStep = runStep.WithMachineObserver(toolexec.NewRunMachine(deps.DaemonRouter))
+	}
+	v2.RegisterActivity(registry, runStep)
 
 	// ========================================================================
 	// WORKTREE ACTIVITIES

@@ -486,6 +486,16 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// loops trip the breaker. May block until resume.
 	e.pauseCtrl.ObserveDaemonOfflineStep(e.ctx, running.ActivityName, stepEvent)
 
+	// A run that gave up (an unattended self-pause outlived its ladder) is
+	// ending: a step that completes now fails with that, so whichever
+	// executor holds it returns it instead of carrying on — the pause that
+	// gave up may have been armed by another thread, or by the breaker above.
+	if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil && stepEvent != nil {
+		stepEvent.Data = nil
+		stepEvent.Error = gaveUp
+		stepEvent.RetryExhausted = true
+	}
+
 	// Repeated-identical-tool-error breaker: an unattended agent that has been
 	// told the same thing three times and keeps asking is not going to get
 	// another answer. Ending its step makes the surrounding loop and run fail
@@ -1031,18 +1041,27 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs[types.RunStepSaveMessageKey] = saveReq
 	}
 
-	future := workflow.ExecuteActivity(e.activityOptions(node), "ExecuteRunStep", runInputs)
+	// A command that never reached its machine waits for it inside the
+	// attempt (RunStepMachineWaitBudget), so a node timeout bounds the
+	// command, not the command plus that wait.
+	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep", saveReq != nil
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.
 func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
+	return e.activityOptionsWithSlack(node, 0)
+}
+
+// activityOptionsWithSlack is activityOptions with slack added to a node's own
+// timeout, for an activity that may legitimately wait before its work starts.
+func (e *StepExecutor) activityOptionsWithSlack(node *reliantv1.Node, slack time.Duration) workflow.Context {
 	// Default to 30 days - we have our own timeout mechanism via heartbeats
 	timeout := 30 * 24 * time.Hour
 	if node != nil {
 		if timeoutStr := model.TimeoutExpr(node); timeoutStr != "" {
 			if parsed, err := time.ParseDuration(timeoutStr); err == nil {
-				timeout = parsed
+				timeout = parsed + slack
 			}
 		}
 	}

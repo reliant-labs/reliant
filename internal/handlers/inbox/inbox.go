@@ -47,12 +47,13 @@ const (
 	inboxStoragePrefix           = "storage:"
 	inboxNeedsSetupPrefix        = "automation_needs_setup:"
 	inboxRecoveryPrefix          = "recovery:"
+	inboxRunPausedPrefix         = "automation_run_paused:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
-	inboxNeedsSetupPrefix, inboxRecoveryPrefix,
+	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -659,6 +660,12 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED
 		item.ItemId = inboxRunFinishedPrefix + p.ItemKey
 		item.Payload = &reliantv1.InboxItem_RunFinished{RunFinished: &reliantv1.InboxRunFinished{}}
+	case core.InboxPendingRunPaused:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
+		item.ItemId = inboxRunPausedPrefix + p.ItemKey
+		item.Payload = &reliantv1.InboxItem_AutomationRunPaused{AutomationRunPaused: &reliantv1.InboxAutomationRunPaused{
+			Reason: p.Text1,
+		}}
 	}
 	return item
 }
