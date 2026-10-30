@@ -41,7 +41,6 @@
         "Inbox",
         "InputOptions",
         "IntegrationSettings",
-        "LLMUsageRetention",
         "MCP",
         "Message",
         "ModelEndpoint",
@@ -52023,17 +52022,6 @@
           }
         },
         {
-          "id": "method1:e7f707981e4f7a70a99c85cb73651f61d1c285b7aafeb377186170d009d9730a",
-          "name": "ListLLMUsageDaily",
-          "signature": "func(ctx context.Context, userID string, from time.Time, to time.Time) ([]*github.com/reliant-labs/reliant/internal/db.LLMUsageDay, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/db",
-          "legacy_name": "db.ListLLMUsageDaily",
-          "source": {
-            "path": "internal/db/llm_usage.go",
-            "symbol": "Repo.ListLLMUsageDaily"
-          }
-        },
-        {
           "id": "method1:cf9652cc2eab9c12aac8afe91ed55446f42ce5c86c5233fb45757f12d738a5f6",
           "name": "ListLiveBackgroundSpawns",
           "signature": "func(ctx context.Context, rootWorkflowID string) ([]*github.com/reliant-labs/reliant/internal/db.LiveBackgroundSpawn, error)",
@@ -53112,25 +53100,14 @@
           }
         },
         {
-          "id": "method1:1ce4ba75d2204adaf06d1e3c789b57c02a03968acec114e79da2d740da7653ee",
-          "name": "PruneLLMCallUsage",
-          "signature": "func(ctx context.Context, now time.Time) (int64, error)",
+          "id": "method1:d2d3a374d30c7ea55f80d72428a222290e1f9d8333e5953ad2360378eecee770",
+          "name": "QueueChatForMachine",
+          "signature": "func(ctx context.Context, chatID string, machine *github.com/reliant-labs/reliant/internal/db.QueuedMachine) (bool, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
-          "legacy_name": "db.PruneLLMCallUsage",
+          "legacy_name": "db.QueueChatForMachine",
           "source": {
-            "path": "internal/db/llm_usage.go",
-            "symbol": "Repo.PruneLLMCallUsage"
-          }
-        },
-        {
-          "id": "method1:cc689524abc88ee657fbc9b7915228ecdb5dbfbe942dfa023c8e312a73e5e5eb",
-          "name": "PruneLLMUsagePurgeFences",
-          "signature": "func(ctx context.Context, now time.Time) (int64, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/db",
-          "legacy_name": "db.PruneLLMUsagePurgeFences",
-          "source": {
-            "path": "internal/db/llm_usage.go",
-            "symbol": "Repo.PruneLLMUsagePurgeFences"
+            "path": "internal/db/repo.go",
+            "symbol": "Repo.QueueChatForMachine"
           }
         },
         {
@@ -53186,17 +53163,6 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.RecentTriggerOutcomes"
-          }
-        },
-        {
-          "id": "method1:084afd053818e54bce5504862336e843b5d7c98ce4b0899e0b9105858471046d",
-          "name": "RecordLLMCallUsage",
-          "signature": "func(ctx context.Context, rec github.com/reliant-labs/reliant/internal/db.LLMCallUsage) (bool, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/db",
-          "legacy_name": "db.RecordLLMCallUsage",
-          "source": {
-            "path": "internal/db/llm_usage.go",
-            "symbol": "Repo.RecordLLMCallUsage"
           }
         },
         {
@@ -56330,30 +56296,6 @@
           "source": {
             "path": "",
             "line": 0
-          }
-        }
-      ],
-      "implementation_candidates": []
-    },
-    {
-      "id": "LLMUsageRetention",
-      "name": "LLMUsageRetention",
-      "kind": "provider",
-      "type": "*github.com/reliant-labs/reliant/internal/app.LLMUsageRetention",
-      "source": {
-        "path": "internal/app/providers_api.go",
-        "symbol": "NewLLMUsageRetention"
-      },
-      "methods": [
-        {
-          "id": "method1:64ead427fe425a6cb3023dfd52abb3b43ba38a8aa668c21027d289c096999edf",
-          "name": "Run",
-          "signature": "func(ctx context.Context) error",
-          "scope": "github.com/reliant-labs/reliant/internal/app",
-          "legacy_name": "app.Run",
-          "source": {
-            "path": "internal/app/providers_api.go",
-            "symbol": "LLMUsageRetention.Run"
           }
         }
       ],

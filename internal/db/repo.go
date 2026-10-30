@@ -1407,6 +1407,23 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	return changed, err
 }
 
+// QueueChatForMachine records that the chat holds a message queued for the
+// given machine (nil: the chat's pinned machine), and reports whether the
+// stored row changed. Delivery waits for that machine, not just any of the
+// user's. It emits chat_activity_changed only on a change.
+func (r *Repo) QueueChatForMachine(ctx context.Context, chatID string, machine *QueuedMachine) (bool, error) {
+	var changed bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var err error
+		changed, err = store.QueueChatForMachine(txCtx, r.ORM(), chatID, machine)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return changed, err
+}
+
 // ListChatsQueuedForMachine lists non-archived chats holding a message
 // queued for their machine, oldest first, at most limit; userID "" lists
 // every user's.
