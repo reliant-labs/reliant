@@ -102,9 +102,16 @@ type MachineWorkflowResolver interface {
 
 // resolveTriggerWorkflow loads the workflow t's runs execute: on t's target
 // machine when it has one and the resolver can read a machine's catalog.
+//
+// A pool-bound trigger has no machine of its own; it reads the pool's agreed
+// catalog through the member bindPoolCatalog chose (CatalogDaemonID).
 func resolveTriggerWorkflow(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*reliantv1.Workflow, error) {
-	if m, ok := workflows.(MachineWorkflowResolver); ok && t.DaemonID != "" {
-		return m.ResolveRunWorkflowOn(ctx, t.UserID, t.Workflow, t.ProjectID, t.DaemonID)
+	machine := t.DaemonID
+	if machine == "" {
+		machine = t.CatalogDaemonID
+	}
+	if m, ok := workflows.(MachineWorkflowResolver); ok && machine != "" {
+		return m.ResolveRunWorkflowOn(ctx, t.UserID, t.Workflow, t.ProjectID, machine)
 	}
 	return workflows.ResolveRunWorkflow(ctx, t.UserID, t.Workflow, t.ProjectID)
 }

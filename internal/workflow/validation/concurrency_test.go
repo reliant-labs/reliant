@@ -12,7 +12,7 @@ func TestWorkflowConcurrencyRequiresPositiveLimit(t *testing.T) {
 	result := StaticAnalysis(wf, nil)
 	found := false
 	for _, issue := range result.Errors() {
-		if issue.Field == "concurrency.max_running" {
+		if issue.Field == "concurrency" {
 			found = true
 		}
 	}

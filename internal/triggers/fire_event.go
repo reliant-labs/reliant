@@ -76,6 +76,14 @@ type EventFirer struct {
 	launcher  Launcher
 	workflows WorkflowResolver
 	capacity  capacityDescriptions
+	pools     Placer
+}
+
+// WithPlacer lets the firer place a pool-bound trigger's runs. Without it,
+// such a fire fails (and is retried) rather than running on a guessed machine.
+func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
+	f.pools = p
+	return f
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
@@ -130,8 +138,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger is disabled", nil)
 	}
-	// A no-machine trigger names no daemon, by design.
-	if trigger.NoMachine {
+	// A no-machine trigger names no daemon, by design; a pool-bound one is
+	// placed on a member at launch (launchOnPool).
+	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -140,6 +149,20 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
 		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
 	}
+
+	// A pool-bound trigger reads its declaration and concurrency from the
+	// pool's agreed catalog, the one its run is placed on.
+	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+		}
+		return nil, err
+	}
+	if wait != "" {
+		return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: wait, EventID: ev.ID}, nil
+	}
+	trigger = bound
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
@@ -158,11 +181,14 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return nil, err
 	}
-	maxRunning := policy.GetMaxRunning()
-	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && maxRunning == 0 {
+	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	if err != nil {
+		return nil, err
+	}
+	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
-	if maxRunning > 0 {
+	if capped {
 		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 		})
@@ -181,7 +207,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, errors.New("admitted retry storage unavailable")
 		}
 	}
-	res, launchErr := f.launcher.Launch(ctx, launch.Event{
+	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,
 		DedupeKey:  ev.DedupeKey,
@@ -189,7 +215,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
-	}, spec)
+	}, spec, resuming, catalog)
 
 	switch {
 	case launchErr == nil:
@@ -207,7 +233,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
 		}
-		if reason == capacityWaiting {
+		if reason == capacityWaiting || isPoolWaiting(reason) {
+			// The event stays pending; the redriver fires it again.
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
 		return f.settle(ctx, ev, core.TriggerEventSkipped, reason, nil)
@@ -242,7 +269,20 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 
 // PreviewEvent maps a sample through the exact event-fire seed path. It does
 // not persist, enable, or launch anything. The caller must authorize the trigger.
-func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+//
+// pools answers a pool-bound trigger's agreed catalog, so the preview reads
+// the definitions a real fire would; nil previews from the union.
+func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, pools PoolCatalogs, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+	if pools != nil {
+		bound, _, wait, err := bindPoolCatalog(ctx, pools, trigger)
+		if err != nil {
+			return launch.Spec{}, err
+		}
+		if wait != "" {
+			return launch.Spec{}, &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
+		}
+		trigger = bound
+	}
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		return launch.Spec{}, err
