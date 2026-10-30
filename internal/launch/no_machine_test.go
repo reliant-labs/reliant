@@ -238,3 +238,43 @@ func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
 	require.Nil(t, chat.TriggerID, "deleting the trigger clears the chat's trigger id")
 	assert.True(t, AutomationPrecedence(chat), "and leaves the run an automation")
 }
+
+// A trigger's first launch builds and validates its inputs against the
+// project's workflow, as tree admission and the run's own loads read it: the
+// owner's same-named account workflow, which requires an input the project's
+// defaults, must neither reject the fire nor supply its defaults.
+func TestLaunchAutomationBuildsInputsFromTheProjectWorkflow(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	seedCompleteWorkflow(t, ctx, repo, "deploy", "name: deploy\napiVersion: v2\ninputs:\n  env: {type: string, required: true}\n  owner: {type: string, default: mine}\nentry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: account}\n")
+	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{
+		Slug: "deploy", Name: "deploy", RelativePath: ".reliant/workflows/deploy.yaml",
+		YAMLContent: "name: deploy\napiVersion: v2\ninputs:\n  env: {type: string, default: prod}\nentry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: project}\n",
+	}})
+	require.NoError(t, err)
+	laptop := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: laptop, UserID: launchTestUserID}))
+	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+		ProjectID: projectID, DaemonID: laptop, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
+	}, true)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	triggerID := uuid.NewString()
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "deploy",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "deploy",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
+	}))
+
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	_, err = launcher.Launch(ctx, Event{
+		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
+	}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "deploy",
+		Messages: userSeed("go"), Unattended: true,
+	})
+	require.NoError(t, err, "the account workflow's required env must not reject the project workflow's fire")
+	inputs := starter.lastRootInput(t).Inputs
+	assert.Equal(t, "prod", inputs["env"], "the project workflow's default")
+	assert.NotContains(t, inputs, "owner", "the account workflow's defaults are not the run's")
+}

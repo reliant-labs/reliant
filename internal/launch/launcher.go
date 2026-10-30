@@ -299,9 +299,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
-	// The chat's launch trigger, as the chat reads it back once stored: it
-	// decides the precedence its inputs are built and validated under
-	// (AutomationPrecedence).
+	// The chat's launch event, as the chat reads it back once stored: its
+	// kind decides the precedence the inputs are built and validated under
+	// (AutomationPrecedence), the same rule tree admission (admissionScope)
+	// and the run's own loads use.
+	chat.LaunchKind = string(ev.Kind)
 	if ev.TriggerID != "" {
 		triggerID := ev.TriggerID
 		chat.TriggerID = &triggerID
@@ -678,6 +680,10 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it and ends no-machine. Every admission read below is scoped by it, so
 	// the tree, the presets and the input schema all come from that machine.
 	checked := *chat
+	// A pending chat has no launch event yet: this start is it.
+	if checked.LaunchKind == "" {
+		checked.LaunchKind = string(ev.Kind)
+	}
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
