@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // cp-merge, 2026-10-30: the managed machine behind an automation's `gate` run
@@ -217,8 +218,8 @@ nodes:
 	s.Require().NoError(e.env.GetWorkflowError())
 	s.Equal(1, calls.count())
 	s.EqualValues(30000, commandTimeout, "the node's 30s is the command's timeout, not the 5m default")
-	s.Equal(30*time.Second+30*time.Minute, activityBound.Round(time.Second),
-		"the activity may also wait out an unreachable machine (RunStepMachineWaitBudget)")
+	s.Equal(30*time.Second+types.RunStepMachineWaitBudget+types.RunStepSendOverhead, activityBound.Round(time.Second),
+		"the activity may also wait out an unreachable machine, plus one send's transport overhead")
 }
 
 // A blip that clears while the ladder is still climbing: the next rung's retry

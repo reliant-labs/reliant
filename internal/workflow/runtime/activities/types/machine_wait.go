@@ -16,6 +16,16 @@ import "time"
 // hours.
 const RunStepMachineWaitBudget = 30 * time.Minute
 
+// RunStepSendOverhead bounds what one send of a run step's command costs on
+// top of the command's own timeout: the router rides out a short disconnect
+// inside each send (toolexec.DaemonReconnectGrace, 90s), and the requester
+// waits the command timeout plus 30s for the machine's verdict. The run
+// activity's deadline is command timeout + RunStepMachineWaitBudget + this,
+// and the wait's clock starts when the FIRST send starts, so a send begun
+// anywhere inside the budget — the first included — finishes before the
+// deadline with its full command timeout.
+const RunStepSendOverhead = 2 * time.Minute
+
 // RunStepMachineUnavailableErrType is the Temporal error type of a run step
 // whose command never reached its machine within RunStepMachineWaitBudget, or
 // whose machine was removed or failed to start. The command never ran. The

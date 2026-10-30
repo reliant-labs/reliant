@@ -540,20 +540,26 @@ func formatMachineWait(d time.Duration) string {
 // have followed a start — is returned as it came: it is sent once.
 func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
 	logger := activity.GetLogger(ctx)
-	var first time.Time
+	// The wait's clock starts when the FIRST send starts, not when it fails:
+	// that send may itself have ridden out a disconnect for up to
+	// DaemonReconnectGrace, and the activity's deadline (command timeout +
+	// RunStepMachineWaitBudget + RunStepSendOverhead) is measured from the
+	// same moment (see types.RunStepSendOverhead).
+	first := wait.now()
+	waiting := false
 	resend := wait.firstResend
 	for {
 		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
 		var transportErr *toolexec.TransportError
 		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched {
-			if !first.IsZero() && err == nil {
+			if waiting && err == nil {
 				logger.Info("[RunStep] machine is back; the command went through",
 					"waited", wait.now().Sub(first).Round(time.Second))
 			}
 			return stdout, stderr, exitCode, interrupted, err
 		}
-		if first.IsZero() {
-			first = wait.now()
+		if !waiting {
+			waiting = true
 			logger.Warn("[RunStep] command never reached the machine; waiting for it to come back",
 				"daemon_id", transportErr.DaemonID, "code", transportErr.Code,
 				"budget", wait.budget, "detail", transportErr.Detail)
@@ -594,6 +600,16 @@ func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *mach
 			return stdout, stderr, exitCode, interrupted, err
 		}
 		resend = min(resend*2, wait.maxResend)
+		if wait.now().Sub(first) >= wait.budget {
+			return "", "", -1, false, unavailable("")
+		}
+		// Never start a send the activity cannot see through: one killed by
+		// its deadline is retried by Temporal, refused (RunStepRetryRefused)
+		// and pauses the run — exactly what this wait exists to prevent.
+		if deadline, ok := ctx.Deadline(); ok &&
+			time.Until(deadline) < time.Duration(timeoutMs)*time.Millisecond+activitytypes.RunStepSendOverhead {
+			return "", "", -1, false, unavailable("")
+		}
 	}
 }
 

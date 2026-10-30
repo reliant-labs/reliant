@@ -1052,7 +1052,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	} else if timeout, ok := nodeTimeout(node); ok {
 		runInputs["timeout"] = int(timeout / time.Millisecond)
 	}
-	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget), "ExecuteRunStep", runInputs)
+	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget+types.RunStepSendOverhead), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep", saveReq != nil
 }
 

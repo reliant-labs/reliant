@@ -62,6 +62,10 @@ type blippingDaemon struct {
 	backAt time.Time
 	// removed reports the machine deleted instead of coming back.
 	removed bool
+	// undeliveredDelay is how long an undelivered send takes before it
+	// fails: the router rides out a disconnect inside it (up to
+	// DaemonReconnectGrace, 90s).
+	undeliveredDelay time.Duration
 
 	mu    sync.Mutex
 	sends int
@@ -79,6 +83,7 @@ func (d *blippingDaemon) ExecuteCommand(_ context.Context, command, _ string, ti
 	d.sends++
 	d.timeouts = append(d.timeouts, timeoutMs)
 	if !d.up() {
+		_ = d.clock.Sleep(context.Background(), d.undeliveredDelay)
 		return "", "", -1, false, &toolexec.TransportError{
 			Code: toolexec.ErrorCodeDaemonUnreached, Command: command,
 			Detail:        "tool request via NATS failed: no daemon connected for user",
@@ -150,6 +155,46 @@ func TestRunStep_CommandTimeoutBoundsTheCommandNotTheWait(t *testing.T) {
 			assert.Equal(t, 1, daemon.ran)
 		})
 	}
+}
+
+// The first send itself can spend 90s riding out the disconnect before it
+// fails. That time is part of the wait, not added to it: the activity's
+// deadline (command timeout + RunStepMachineWaitBudget + RunStepSendOverhead)
+// is measured from the same start, so a short node timeout leaves no room for
+// a wait that started late — a step killed by its deadline would be refused on
+// retry and pause the run instead of failing clearly.
+func TestRunStep_SlowFirstSendCountsAgainstTheWait(t *testing.T) {
+	t.Parallel()
+	clock := newFakeClock()
+	start := clock.Now()
+	daemon := &blippingDaemon{clock: clock, backAt: start.Add(24 * time.Hour), undeliveredDelay: 90 * time.Second}
+
+	_, err := runStepActivityTimed(t, daemon, daemon, clock, 30_000)
+
+	requireNonRetryable(t, err, activitytypes.RunStepMachineUnavailableErrType)
+	assert.Contains(t, err.Error(), "machine e164d47d unavailable for 30m")
+	elapsed := clock.Now().Sub(start)
+	assert.GreaterOrEqual(t, elapsed, activitytypes.RunStepMachineWaitBudget)
+	assert.LessOrEqual(t, elapsed, activitytypes.RunStepMachineWaitBudget+10*time.Second,
+		"the wait is measured from the first send's start, not from its failure 90s later")
+}
+
+// A machine back late in the wait, behind a slow first send, still gets its
+// command with the node's full timeout, inside the activity's deadline.
+func TestRunStep_SlowFirstSendThenMachineBackLate(t *testing.T) {
+	t.Parallel()
+	clock := newFakeClock()
+	start := clock.Now()
+	daemon := &blippingDaemon{clock: clock, backAt: start.Add(29 * time.Minute), undeliveredDelay: 90 * time.Second}
+
+	out, err := runStepActivityTimed(t, daemon, daemon, clock, 30_000)
+
+	require.NoError(t, err)
+	assert.Equal(t, "gate passed", out.Stdout)
+	daemon.mu.Lock()
+	defer daemon.mu.Unlock()
+	assert.Equal(t, 30_000, daemon.timeouts[len(daemon.timeouts)-1], "the send that ran carried the full command timeout")
+	assert.Less(t, clock.Now().Sub(start), 30*time.Second+activitytypes.RunStepMachineWaitBudget+activitytypes.RunStepSendOverhead)
 }
 
 // The machine never comes back. The step fails once the 30-minute wait is
