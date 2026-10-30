@@ -236,6 +236,10 @@ var corsExposedHeaders = []string{
 	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
 	// so the deploy panel says which grant to ask for without parsing prose.
 	"X-Forge-Error-Scopes",
+	// How long a refusal (resource_exhausted, unavailable) asks the caller to
+	// wait, when the typed RetryInfo detail is absent: the dashboard panel
+	// scheduler's fallback (services/controlPlane/observability/errors.ts).
+	"Retry-After",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An

@@ -212,6 +212,12 @@ message Daemon {
   // The disk, as it is and as it was asked to be (managed daemons only).
   // Unset for an external daemon.
   DaemonDisk disk = 32;
+
+  // The machine's own environment variables (managed daemons only), declared
+  // by its owner with DaemonService.UpdateDaemon. Every process on the
+  // machine inherits them, from the next time its pod is built (resume,
+  // resize or re-create). Plain text: not for secrets.
+  map<string, string> env = 35;
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer

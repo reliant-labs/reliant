@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
@@ -130,27 +131,34 @@ type Deps struct {
 
 // Typed outcomes. Both are FailedPrecondition at control-plane, told apart by
 // the X-Forge-Error-Reason header.
+//
+// Each one a user (or the repository's owner) acts on is a user error
+// (svcerr.ClassUser), so the component log middleware writes it at INFO and it
+// never becomes an issue: on 2026-10-26..28 "GitHub is not connected" alone was
+// four issues and ~530 ERROR records. ErrAppNotConfigured is ours to fix and
+// stays a server fault.
 var (
 	// ErrAppNotConfigured: control-plane holds no GitHub App private key (or
 	// it is unusable), so it cannot mint installation tokens.
 	ErrAppNotConfigured = errors.New("gitcredentialclient: the GitHub App is not configured on the control plane")
 	// ErrAppNotInstalled: the App is not installed on the repository, or its
 	// installation is suspended.
-	ErrAppNotInstalled = errors.New("gitcredentialclient: the GitHub App is not installed on the repository")
+	ErrAppNotInstalled = svcerr.WithClass(errors.New("gitcredentialclient: the GitHub App is not installed on the repository"), svcerr.ClassUser)
 	// ErrAppPermissions: the App has not been granted a permission the token
 	// needs; its owner must accept the updated permissions.
-	ErrAppPermissions = errors.New("gitcredentialclient: the GitHub App lacks a permission the token needs")
+	ErrAppPermissions = svcerr.WithClass(errors.New("gitcredentialclient: the GitHub App lacks a permission the token needs"), svcerr.ClassUser)
 	// ErrOwnerCannotPush: the user the automation acts for does not have push
 	// access to the repository.
-	ErrOwnerCannotPush = errors.New("gitcredentialclient: the owner cannot push to the repository")
+	ErrOwnerCannotPush = svcerr.WithClass(errors.New("gitcredentialclient: the owner cannot push to the repository"), svcerr.ClassUser)
 )
 
+// User errors too, for the same reason as the App outcomes above.
 var (
 	// ErrNotConnected: the user has no credential for the provider at
 	// control-plane (or control-plane does not know the user).
-	ErrNotConnected = errors.New("gitcredentialclient: no credential is connected")
+	ErrNotConnected = svcerr.WithClass(errors.New("gitcredentialclient: no credential is connected"), svcerr.ClassUser)
 	// ErrNeedsReconnect: the credential exists but the user must re-authorize.
-	ErrNeedsReconnect = errors.New("gitcredentialclient: the connection needs to be reconnected")
+	ErrNeedsReconnect = svcerr.WithClass(errors.New("gitcredentialclient: the connection needs to be reconnected"), svcerr.ClassUser)
 )
 
 var _ Service = (*Client)(nil)

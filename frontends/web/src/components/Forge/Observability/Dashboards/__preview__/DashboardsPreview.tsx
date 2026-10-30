@@ -24,7 +24,8 @@
 import { useEffect, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { BinaryWriter } from "@bufbuild/protobuf/wire";
 
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -51,7 +52,13 @@ const SCHEMES = [
   "pure-black",
 ] as const;
 
-const CASES: { id: string; label: string; options: FixtureOptions & { loading?: boolean } }[] = [
+/** Emulates control-plane's per-user cap on concurrent console reads: over `limit` in flight is refused as in_flight_limit with a 1s RetryInfo. */
+interface ReadCap {
+  limit: number;
+  ms: number;
+}
+
+const CASES: { id: string; label: string; options: FixtureOptions & { loading?: boolean; readCap?: ReadCap } }[] = [
   { id: "data", label: "the fixture app", options: {} },
   { id: "few", label: "a young app: two dashboards", options: { dashboardsFew: true } },
   { id: "ungrouped", label: "older control plane: no group field", options: { dashboardsUngrouped: true } },
@@ -59,6 +66,9 @@ const CASES: { id: string; label: string; options: FixtureOptions & { loading?: 
   { id: "read-only", label: "member, not admin", options: { dashboardsReadOnly: true } },
   { id: "error", label: "dashboards unavailable", options: { dashboardsFailWith: Code.Unavailable } },
   { id: "loading", label: "loading", options: { loading: true } },
+  { id: "cap", label: "server cap of 6 concurrent reads, each takes 800ms", options: { readCap: { limit: 6, ms: 800 } } },
+  { id: "tight", label: "server cap of 1, each read takes 1.5s (retries, waiting for capacity)", options: { readCap: { limit: 1, ms: 1500 } } },
+  { id: "jammed", label: "server always at its cap (waiting, then Retry)", options: { readCap: { limit: 0, ms: 300 } } },
   { id: "not-set-up", label: "observability not set up", options: { failWith: Code.FailedPrecondition } },
   { id: "no-telemetry", label: "nothing sent in the window", options: { empty: true } },
   { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
@@ -118,6 +128,45 @@ const ALERT_SAMPLES: Record<string, Panel> = {
   funnel: { id: "conversion", title: "Conversion", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["begin_checkout", "purchase"], window: "1h", by: "session" } },
 };
 
+declare global {
+  interface Window {
+    /** The cap emulation's tally, for looking at the scheduler from the console: window.__panelReads. */
+    __panelReads?: { live: number; peak: number; refused: number; served: number };
+  }
+}
+
+function capped(api: ObservabilityApi, cap: ReadCap): ObservabilityApi {
+  // One tally per page: StrictMode builds the api twice, and both must count into the same object.
+  const stats = (window.__panelReads ??= { live: 0, peak: 0, refused: 0, served: 0 });
+  return {
+    ...api,
+    queryPanel: (req, options) => {
+      stats.live++;
+      stats.peak = Math.max(stats.peak, stats.live);
+      if (stats.live > cap.limit) {
+        stats.live--;
+        stats.refused++;
+        const error = new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted, { "x-forge-error-reason": "in_flight_limit" });
+        const duration = new BinaryWriter().tag(1, 0).int64(1).finish();
+        error.details.push({ type: "google.rpc.RetryInfo", value: new BinaryWriter().tag(1, 2).bytes(duration).finish() });
+        return Promise.reject(error);
+      }
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          stats.live--;
+          stats.served++;
+          resolve(api.queryPanel(req));
+        }, cap.ms);
+        options?.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          stats.live--;
+          reject(options.signal!.reason);
+        });
+      });
+    },
+  };
+}
+
 /** An API whose every call never answers: the loading state, held. */
 function pending(api: ObservabilityApi): ObservabilityApi {
   return Object.fromEntries(Object.keys(api).map((key) => [key, () => new Promise(() => undefined)])) as unknown as ObservabilityApi;
@@ -146,6 +195,7 @@ export default function DashboardsPreview() {
   const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }), [caseId]);
   const api = useMemo(() => {
     const fixture = createFixtureApi(active.options);
+    if (active.options.readCap) return capped(fixture, active.options.readCap);
     return active.options.loading ? pending(fixture) : fixture;
   }, [active]);
 
