@@ -1863,6 +1863,11 @@
               "Name": "new_only",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ]
         },
@@ -2078,6 +2083,11 @@
             {
               "name": "new_only",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ]
         },
@@ -17371,6 +17381,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetPackageProcessLogsResponse": [
@@ -17396,6 +17411,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetPackageProcessResponse": [
@@ -17411,6 +17431,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "KillPackageProcessResponse": [
@@ -17435,6 +17460,11 @@
               "Name": "custom_directories",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListPackageCommandsResponse": [
@@ -17452,6 +17482,11 @@
           "ListPackageProcessesRequest": [
             {
               "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
               "ProtoType": "string",
               "IsOptional": true
             }
@@ -17494,6 +17529,11 @@
               "Name": "working_dir",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "RunPackageCommandResponse": [
@@ -17509,6 +17549,11 @@
             },
             {
               "Name": "start_time",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
               "ProtoType": "string",
               "IsOptional": false
             }
@@ -17565,6 +17610,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetPackageProcessLogsResponse": [
@@ -17587,6 +17637,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetPackageProcessResponse": [
@@ -17600,6 +17655,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.KillPackageProcessResponse": [
@@ -17623,6 +17683,11 @@
               "name": "custom_directories",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListPackageCommandsResponse": [
@@ -17642,6 +17707,11 @@
           "reliant.v1.ListPackageProcessesRequest": [
             {
               "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
               "kind": "string",
               "optional": true
             }
@@ -17741,6 +17811,10 @@
               "name": "exit_code",
               "kind": "int32",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.RunPackageCommandRequest": [
@@ -17773,6 +17847,11 @@
               "name": "working_dir",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RunPackageCommandResponse": [
@@ -17786,6 +17865,10 @@
             },
             {
               "name": "start_time",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
               "kind": "string"
             }
           ],
@@ -56985,7 +57068,7 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.GetProcess",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
             "symbol": "Service.GetProcess"
           }
         },
@@ -56996,7 +57079,7 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.GetProcessLogs",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
             "symbol": "Service.GetProcessLogs"
           }
         },
@@ -57007,7 +57090,7 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.KillProcess",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
             "symbol": "Service.KillProcess"
           }
         },
@@ -57029,7 +57112,7 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.ListProcesses",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
             "symbol": "Service.ListProcesses"
           }
         },
@@ -57073,7 +57156,7 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.RunCommand",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
             "symbol": "Service.RunCommand"
           }
         },
@@ -57091,7 +57174,7 @@
         {
           "id": "method1:e2e31c95bb9600ec6c48fff0cccf92be8ee643269a1960887c8e3cfb8e8c4235",
           "name": "daemon",
-          "signature": "func() github.com/reliant-labs/reliant/internal/daemoncmd.Service",
+          "signature": "func(daemonID string) github.com/reliant-labs/reliant/internal/daemoncmd.Service",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.daemon",
           "source": {
@@ -57100,14 +57183,69 @@
           }
         },
         {
+          "id": "method1:2e069a640aaeb9db6257ed9e58ff4fe4f2efff00328a2315956a27fb2e5e7fb6",
+          "name": "listEverywhere",
+          "signature": "func(ctx context.Context, userID string) []*github.com/reliant-labs/reliant/gen/reliant/v1.PackageProcess",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.listEverywhere",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "symbol": "Service.listEverywhere"
+          }
+        },
+        {
+          "id": "method1:0b2b92d553f2a9032fa6fa36c192d7191582f2d6ef0daa2e697a79357d479183",
+          "name": "listOn",
+          "signature": "func(ctx context.Context, userID string, daemonID string) ([]*github.com/reliant-labs/reliant/gen/reliant/v1.PackageProcess, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.listOn",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "symbol": "Service.listOn"
+          }
+        },
+        {
+          "id": "method1:2fac8e5ca0eba9fb01eb44883c0679a55be7b18ca6eb8aa04a4ff84803fbc843",
+          "name": "online",
+          "signature": "func(ctx context.Context, userID string, daemonID string) bool",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.online",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "symbol": "Service.online"
+          }
+        },
+        {
+          "id": "method1:f74c699c5efe2ed6398d5204507a5c8a43717742bcf24f7ab5cc9b95777d2e6c",
+          "name": "requestedMachine",
+          "signature": "func(ctx context.Context, userID string, daemonID *string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.requestedMachine",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "symbol": "Service.requestedMachine"
+          }
+        },
+        {
           "id": "method1:9621756e906566854f8a8e39048300172cf34edb8ae2a4cc98613e4bd6db3fa8",
           "name": "resolveWorkingDir",
-          "signature": "func(ctx context.Context, msg *github.com/reliant-labs/reliant/gen/reliant/v1.ListPackageCommandsRequest) (string, error)",
+          "signature": "func(ctx context.Context, userID string, msg *github.com/reliant-labs/reliant/gen/reliant/v1.ListPackageCommandsRequest) (string, string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.resolveWorkingDir",
           "source": {
             "path": "internal/handlers/package_commands/package_commands_proxy.go",
             "symbol": "Service.resolveWorkingDir"
+          }
+        },
+        {
+          "id": "method1:b04c6a55cedaeb64a8130e6ca9162917d529dec5dcec003e47afdbb3c24d2d75",
+          "name": "workspace",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, chatID string) (path string, daemonID string, err error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.workspace",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "symbol": "Service.workspace"
           }
         }
       ],
@@ -74861,93 +74999,6 @@
     },
     {
       "consumer": "PackageCommands",
-      "field": "Processes",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Processes",
-      "methods": [
-        {
-          "id": "method1:ed86539c1e665ebc73f88ffe1ae78b58fb3054abd41c6920e3d4b7f82f755fd4",
-          "name": "GetAllProcesses",
-          "signature": "func() []*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetAllProcesses",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.GetAllProcesses"
-          }
-        },
-        {
-          "id": "method1:bb1e091c14108ee0e726c085e0f691ee82f4a1dae90f06c402724606c3dc2170",
-          "name": "GetCombinedOutput",
-          "signature": "func(processID string) ([]github.com/reliant-labs/reliant/internal/llm/tools/shell.OutputLine, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetCombinedOutput",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.GetCombinedOutput"
-          }
-        },
-        {
-          "id": "method1:40613f169626a493c315d7f32270b3eb39aaf601d00204f28ab5c518e9d31c4f",
-          "name": "GetProcess",
-          "signature": "func(processID string) (*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcess",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.GetProcess"
-          }
-        },
-        {
-          "id": "method1:9958d7cc231c3af9f255ebf42678e611eaee8054d1642f81b4e6541ca1954440",
-          "name": "GetProcessOutput",
-          "signature": "func(processID string) (stdout string, stderr string, err error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcessOutput",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.GetProcessOutput"
-          }
-        },
-        {
-          "id": "method1:9aab92a5105ff8f4cc536915ac00632cad4bcf6b9f847c13eda91e4097fac238",
-          "name": "GetProcessesByWorktree",
-          "signature": "func(worktreeID string) []*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcessesByWorktree",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.GetProcessesByWorktree"
-          }
-        },
-        {
-          "id": "method1:84e9168fd49100744008cbf64def6f2c987a07911124d94ddfe7e9b38113e43a",
-          "name": "KillProcess",
-          "signature": "func(processID string) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.KillProcess",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.KillProcess"
-          }
-        },
-        {
-          "id": "method1:f3f744aedd70517dfafd3106b4a095accaaebca29c306417791c729bdb02c6e4",
-          "name": "RunCommand",
-          "signature": "func(ctx context.Context, req github.com/reliant-labs/reliant/internal/pkgmgr.RunRequest) (*github.com/reliant-labs/reliant/internal/pkgmgr.RunResponse, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.RunCommand",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "symbol": "Processes.RunCommand"
-          }
-        }
-      ],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
-    },
-    {
-      "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
       "methods": [
@@ -74960,6 +75011,39 @@
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
             "symbol": "Repository.AddCommandFavorite"
+          }
+        },
+        {
+          "id": "method1:94a33915db436f7f504b39f60e9037ef4bcb85fd765b8b1b29cb877b6768731e",
+          "name": "GetChat",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetChat",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "symbol": "Repository.GetChat"
+          }
+        },
+        {
+          "id": "method1:40527fee01c6b54fd7fb1fd7af8c37007a228e8164f583c5770f04153e8f9cef",
+          "name": "GetDaemon",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetDaemon",
+          "source": {
+            "path": "internal/daemonplacement/default.go",
+            "symbol": "Installs.GetDaemon"
+          }
+        },
+        {
+          "id": "method1:fca58c033fd8478ec1b88ddc6de84d4e4c9e297a02df1f32afdc8d8263c92980",
+          "name": "GetProject",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Project, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetProject",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "symbol": "Repository.GetProject"
           }
         },
         {
@@ -74996,6 +75080,28 @@
           }
         },
         {
+          "id": "method1:62e09dc1ff38061a9c74f403f8bae2dcb1d8b27377f615d0d1909c93815c2218",
+          "name": "ListDaemonsByUserID",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.ListDaemonsByUserID",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "symbol": "Repository.ListDaemonsByUserID"
+          }
+        },
+        {
+          "id": "method1:50c2e1dd46cfc6b362e05a537ce681e8f6826cf122eb84cf9bea9b5e168e683b",
+          "name": "ListProjectDaemonsForProject",
+          "signature": "func(ctx context.Context, projectID string) ([]*github.com/reliant-labs/reliant/internal/db/core.ProjectDaemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.ListProjectDaemonsForProject",
+          "source": {
+            "path": "internal/daemonplacement/default.go",
+            "symbol": "Installs.ListProjectDaemonsForProject"
+          }
+        },
+        {
           "id": "method1:8cc7c3e9f4a2856b55eb3c49271b1e48a0816a85cf29795ceda0f2d9aae9db03",
           "name": "RemoveCommandFavorite",
           "signature": "func(ctx context.Context, userID string, projectID string, commandKey string) error",
@@ -75029,6 +75135,17 @@
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
             "symbol": "Router.SendDaemonCommand"
+          }
+        },
+        {
+          "id": "method1:113b0da00c8fd699b1aa7b05518537959803c741d7fc7eb4f0d28c94c0b1c204",
+          "name": "SendDaemonCommandToDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.SendDaemonCommandToDaemon",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "symbol": "Router.SendDaemonCommandToDaemon"
           }
         }
       ],
@@ -81736,14 +81853,6 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewNATSConn"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "PackageCommands.Processes",
-      "source": {
-        "path": "internal/handlers/package_commands/service.go",
-        "symbol": "New"
       }
     },
     {
