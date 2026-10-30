@@ -10,7 +10,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
-	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -65,7 +64,7 @@ func (s *Service) GetWorktreeChanges(
 		DefaultBranch string            `json:"default_branch"`
 		Error         string            `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_changes", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, s.owner(ctx, userID, worktree), "worktree.git_changes", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 		"base_branch":   worktree.BaseBranch,
@@ -151,7 +150,7 @@ func (s *Service) GetWorktreeGitStatus(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, s.owner(ctx, userID, worktree), "worktree.git_status", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
@@ -238,7 +237,7 @@ func (s *Service) GetWorktreeCommits(
 		BaseBranch   string `json:"base_branch"`
 		Limit        int32  `json:"limit"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_commits", commitsReq{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, s.owner(ctx, userID, worktree), "worktree.git_commits", commitsReq{
 		WorktreePath: repoPath,
 		Branch:       worktree.Branch,
 		BaseBranch:   baseBranch,
@@ -338,7 +337,7 @@ func (s *Service) ListWorktreeRepoStatuses(
 			Behind         int32    `json:"behind"`
 			Error          string   `json:"error,omitempty"`
 		}
-		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, s.owner(ctx, userID, worktree), "worktree.git_status", map[string]string{
 			"worktree_path": repoPath,
 			"branch":        worktree.Branch,
 		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {

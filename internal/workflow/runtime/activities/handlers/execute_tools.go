@@ -718,8 +718,10 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	tec.dispatchInput = dispatchInput
 
 	// Daemon routing priority: explicit node/workflow selector > durable chat
-	// pin > the worktree's owner > default resolution. Read the pin even when
-	// this live run's input snapshot predates launch-time pinning.
+	// pin > the worktree's owner > default resolution, except that a chat pin
+	// naming a machine other than a branch workspace's owner yields to the
+	// owner (toolDaemonSelector). Read the pin even when this live run's input
+	// snapshot predates launch-time pinning.
 	// ensureBatchWorkspace routes with the same functions, so the directory it
 	// checked is on the disk these calls run on. A thread-bound worktree
 	// exists on its owner alone, so an inherited selector (the parent's pin,

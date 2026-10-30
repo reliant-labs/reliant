@@ -19,8 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -108,63 +106,29 @@ func (s *Service) resolveScope(ctx context.Context, userID, projectID string, wo
 // request was made for a chat that has no machine: such a request must never
 // wake one (see machinewake).
 //
-// The files exist on one machine. For a request made for a chat (chat_id) it
-// is the chat's machine: its pinned daemon, else its worktree's owner
-// (daemonplacement.ChatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
-// Files tab and the preview must show the files the chat's tools read and
-// write. Default resolution picks the user's default machine instead, which is
-// the wrong disk for any chat on another machine, main checkout included.
-//
-// A request that names a worktree some machine owns, other than the chat's
-// own, is about that worktree, and goes to its owner: no other machine has the
-// checkout. Without a chat, an owned worktree goes to its owner too. Anything
-// else (the main checkout, legacy rows that record no owner) keeps default
-// resolution.
+// The files exist on one machine, and daemonplacement.WorkspaceDaemon names
+// it: an owned worktree's owner, else the chat's machine (the precedence
+// ExecuteTools routes the chat's tools by), else default resolution. The Files
+// tab, the preview and the terminal share that one rule, so they cannot show
+// two different disks.
 func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
-	var worktree *db.Worktree
-	if worktreeID != nil && *worktreeID != "" {
-		wt, err := s.deps.Repo.GetWorktree(ctx, *worktreeID)
-		switch {
-		case errors.Is(err, core.ErrWorktreeNotFound):
-			// A missing row means "no owner", as it does for tool routing.
-		case err != nil:
-			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
-		default:
-			worktree = wt
-		}
-	}
-	owner := daemonplacement.WorktreeOwner(worktree)
-
-	if chatID == nil || *chatID == "" {
-		return machinewake.Target{DaemonID: owner}, nil
-	}
-	chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, s.owners, userID, projectID, deref(worktreeID), deref(chatID))
 	switch {
-	case errors.Is(err, core.ErrChatNotFound):
-		// The UI can still name a chat it has just deleted. Degrade to the
-		// routing a request without a chat gets rather than fail the tree.
-		return machinewake.Target{DaemonID: owner}, nil
-	case err != nil:
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	case chat.UserID != userID:
+	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")
-	case chat.ProjectID != projectID:
-		// A chat from another project says nothing about this project's
-		// files. It is stale UI context (a project switch racing the tree),
-		// and ResolveBasePath ignores it the same way.
-		return machinewake.Target{DaemonID: owner}, nil
+	case errors.Is(err, daemonplacement.ErrForeignWorkspace):
+		return machinewake.Target{}, svcerr.NotFound("worktree")
+	case err != nil:
+		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
-	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
-		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return machinewake.Target{DaemonID: ws.DaemonID, NoMachine: ws.NoMachine}, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
 	}
-	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
-	if err != nil {
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	}
-	if daemonID != "" {
-		return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
-	}
-	return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return *s
 }
 
 // resolve turns a client path into the absolute, confined path the daemon
