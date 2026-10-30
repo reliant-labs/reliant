@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/token.proto.
  */
 export const file_reliant_v1_token: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLUAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJIkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIkYKEUxpc3RUb2tlbnNSZXF1ZXN0EigKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZEgAiAEBQgcKBV9raW5kIjsKEkxpc3RUb2tlbnNSZXNwb25zZRIlCgZ0b2tlbnMYASADKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyIgChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkiFQoTUmV2b2tlVG9rZW5SZXNwb25zZSJzChJVcGRhdGVUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEioKBnNjb3BlcxgDIAEoCzIVLnJlbGlhbnQudjEuU2NvcGVMaXN0SAGIAQFCBwoFX25hbWVCCQoHX3Njb3BlcyIbCglTY29wZUxpc3QSDgoGc2NvcGVzGAEgAygJIjoKE1VwZGF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvIlgKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0EhAKCGF1ZGllbmNlGAEgASgJEg4KBnNjb3BlcxgCIAMoCRITCgZvcmdfaWQYAyABKAlIAIgBAUIJCgdfb3JnX2lkInAKFUV4Y2hhbmdlVG9rZW5SZXNwb25zZRINCgV0b2tlbhgBIAEoCRIUCgx0b2tlbl9wcmVmaXgYAiABKAkSEgoKZXhwaXJlc19hdBgDIAEoCRIOCgZzY29wZXMYBCADKAkSDgoGb3JnX2lkGAUgASgJIiYKEkdldEdpdFRva2VuUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCSI/ChNHZXRHaXRUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgpleHBpcmVzX2F0GAIgASgJKlIKCVRva2VuS2luZBIaChZUT0tFTl9LSU5EX1VOU1BFQ0lGSUVEEAASFQoRVE9LRU5fS0lORF9EQUVNT04QARISCg5UT0tFTl9LSU5EX0FQSRACMq0GCgxUb2tlblNlcnZpY2USkwEKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiQ6K7GD86PQoGY3JlYXRlEi0KBXRva2VuEhByZXNwb25zZS5pbmZvLmlkGhJyZXNwb25zZS5pbmZvLm5hbWUqBGtpbmQSTQoKTGlzdFRva2VucxIdLnJlbGlhbnQudjEuTGlzdFRva2Vuc1JlcXVlc3QaHi5yZWxpYW50LnYxLkxpc3RUb2tlbnNSZXNwb25zZSIAEmsKC1Jldm9rZVRva2VuEh4ucmVsaWFudC52MS5SZXZva2VUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVzcG9uc2UiG6K7GBc6FQoGcmV2b2tlEgsKBXRva2VuEgJpZBJ/CgtVcGRhdGVUb2tlbhIeLnJlbGlhbnQudjEuVXBkYXRlVG9rZW5SZXF1ZXN0Gh8ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlc3BvbnNlIi+iuxgrOikKBnVwZGF0ZRIfCgV0b2tlbhICaWQaEnJlc3BvbnNlLmluZm8ubmFtZRLxAQoNRXhjaGFuZ2VUb2tlbhIgLnJlbGlhbnQudjEuRXhjaGFuZ2VUb2tlblJlcXVlc3QaIS5yZWxpYW50LnYxLkV4Y2hhbmdlVG9rZW5SZXNwb25zZSKaAaK7GJUBCAA6kAE6jQFwZXItY29tbWFuZCBjcmVkZW50aWFsIGV4Y2hhbmdlOiBmb3JnZSBtaW50cyBvbmUgc2hvcnQtbGl2ZWQsIGF0dGVudWF0ZWQgdG9rZW4gZm9yIGVhY2ggY29udHJvbC1wbGFuZSBjYWxsLCBzbyBhbiBldmVudCBwZXIgZXhjaGFuZ2UgaXMgbm9pc2USVgoLR2V0R2l0VG9rZW4SHi5yZWxpYW50LnYxLkdldEdpdFRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0R2l0VG9rZW5SZXNwb25zZSIGorsYAggAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLUAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJIkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIkYKEUxpc3RUb2tlbnNSZXF1ZXN0EigKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZEgAiAEBQgcKBV9raW5kIjsKEkxpc3RUb2tlbnNSZXNwb25zZRIlCgZ0b2tlbnMYASADKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyIgChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkiFQoTUmV2b2tlVG9rZW5SZXNwb25zZSJzChJVcGRhdGVUb2tlblJlcXVlc3QSCgoCaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEioKBnNjb3BlcxgDIAEoCzIVLnJlbGlhbnQudjEuU2NvcGVMaXN0SAGIAQFCBwoFX25hbWVCCQoHX3Njb3BlcyIbCglTY29wZUxpc3QSDgoGc2NvcGVzGAEgAygJIjoKE1VwZGF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvIlgKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0EhAKCGF1ZGllbmNlGAEgASgJEg4KBnNjb3BlcxgCIAMoCRITCgZvcmdfaWQYAyABKAlIAIgBAUIJCgdfb3JnX2lkInAKFUV4Y2hhbmdlVG9rZW5SZXNwb25zZRINCgV0b2tlbhgBIAEoCRIUCgx0b2tlbl9wcmVmaXgYAiABKAkSEgoKZXhwaXJlc19hdBgDIAEoCRIOCgZzY29wZXMYBCADKAkSDgoGb3JnX2lkGAUgASgJIiYKEkdldEdpdFRva2VuUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCSI/ChNHZXRHaXRUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgpleHBpcmVzX2F0GAIgASgJIrcBChhHZXRHaXRIdWJCb3RUb2tlblJlcXVlc3QSDQoFb3duZXIYASABKAkSDAoEcmVwbxgCIAEoCRJKCgtwZXJtaXNzaW9ucxgDIAMoCzI1LnJlbGlhbnQudjEuR2V0R2l0SHViQm90VG9rZW5SZXF1ZXN0LlBlcm1pc3Npb25zRW50cnkaMgoQUGVybWlzc2lvbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIn8KGUdldEdpdEh1YkJvdFRva2VuUmVzcG9uc2USDQoFdG9rZW4YASABKAkSEgoKZXhwaXJlc19hdBgCIAEoCRIRCglib3RfbG9naW4YAyABKAkSGAoQYWN0aW5nX2Zvcl9sb2dpbhgEIAEoCRISCgpyZXBvc2l0b3J5GAUgASgJKlIKCVRva2VuS2luZBIaChZUT0tFTl9LSU5EX1VOU1BFQ0lGSUVEEAASFQoRVE9LRU5fS0lORF9EQUVNT04QARISCg5UT0tFTl9LSU5EX0FQSRACMpcHCgxUb2tlblNlcnZpY2USkwEKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiQ6K7GD86PQoGY3JlYXRlEi0KBXRva2VuEhByZXNwb25zZS5pbmZvLmlkGhJyZXNwb25zZS5pbmZvLm5hbWUqBGtpbmQSTQoKTGlzdFRva2VucxIdLnJlbGlhbnQudjEuTGlzdFRva2Vuc1JlcXVlc3QaHi5yZWxpYW50LnYxLkxpc3RUb2tlbnNSZXNwb25zZSIAEmsKC1Jldm9rZVRva2VuEh4ucmVsaWFudC52MS5SZXZva2VUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVzcG9uc2UiG6K7GBc6FQoGcmV2b2tlEgsKBXRva2VuEgJpZBJ/CgtVcGRhdGVUb2tlbhIeLnJlbGlhbnQudjEuVXBkYXRlVG9rZW5SZXF1ZXN0Gh8ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlc3BvbnNlIi+iuxgrOikKBnVwZGF0ZRIfCgV0b2tlbhICaWQaEnJlc3BvbnNlLmluZm8ubmFtZRLxAQoNRXhjaGFuZ2VUb2tlbhIgLnJlbGlhbnQudjEuRXhjaGFuZ2VUb2tlblJlcXVlc3QaIS5yZWxpYW50LnYxLkV4Y2hhbmdlVG9rZW5SZXNwb25zZSKaAaK7GJUBCAA6kAE6jQFwZXItY29tbWFuZCBjcmVkZW50aWFsIGV4Y2hhbmdlOiBmb3JnZSBtaW50cyBvbmUgc2hvcnQtbGl2ZWQsIGF0dGVudWF0ZWQgdG9rZW4gZm9yIGVhY2ggY29udHJvbC1wbGFuZSBjYWxsLCBzbyBhbiBldmVudCBwZXIgZXhjaGFuZ2UgaXMgbm9pc2USVgoLR2V0R2l0VG9rZW4SHi5yZWxpYW50LnYxLkdldEdpdFRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0R2l0VG9rZW5SZXNwb25zZSIGorsYAggAEmgKEUdldEdpdEh1YkJvdFRva2VuEiQucmVsaWFudC52MS5HZXRHaXRIdWJCb3RUb2tlblJlcXVlc3QaJS5yZWxpYW50LnYxLkdldEdpdEh1YkJvdFRva2VuUmVzcG9uc2UiBqK7GAIIAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
  * @generated from message reliant.v1.CreateTokenRequest
@@ -422,6 +422,89 @@ export const GetGitTokenResponseSchema: GenMessage<GetGitTokenResponse> = /*@__P
   messageDesc(file_reliant_v1_token, 13);
 
 /**
+ * @generated from message reliant.v1.GetGitHubBotTokenRequest
+ */
+export type GetGitHubBotTokenRequest = Message<"reliant.v1.GetGitHubBotTokenRequest"> & {
+  /**
+   * owner and repo name the one repository the token is scoped to.
+   *
+   * @generated from field: string owner = 1;
+   */
+  owner: string;
+
+  /**
+   * @generated from field: string repo = 2;
+   */
+  repo: string;
+
+  /**
+   * permissions narrows the token: issues, pull_requests, contents -> read or
+   * write. Empty means all three at write.
+   *
+   * @generated from field: map<string, string> permissions = 3;
+   */
+  permissions: { [key: string]: string };
+};
+
+/**
+ * Describes the message reliant.v1.GetGitHubBotTokenRequest.
+ * Use `create(GetGitHubBotTokenRequestSchema)` to create a new message.
+ */
+export const GetGitHubBotTokenRequestSchema: GenMessage<GetGitHubBotTokenRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 14);
+
+/**
+ * @generated from message reliant.v1.GetGitHubBotTokenResponse
+ */
+export type GetGitHubBotTokenResponse = Message<"reliant.v1.GetGitHubBotTokenResponse"> & {
+  /**
+   * token is the plaintext installation token. A credential: apply it to the
+   * requests you make, never log or persist it.
+   *
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * expires_at is when token stops working (RFC 3339; GitHub issues
+   * one-hour tokens).
+   *
+   * @generated from field: string expires_at = 2;
+   */
+  expiresAt: string;
+
+  /**
+   * bot_login is who GitHub shows as the author of writes made with token,
+   * e.g. `reliant-labs[bot]`.
+   *
+   * @generated from field: string bot_login = 3;
+   */
+  botLogin: string;
+
+  /**
+   * acting_for_login is the caller's own GitHub login, whose push access
+   * gated the mint.
+   *
+   * @generated from field: string acting_for_login = 4;
+   */
+  actingForLogin: string;
+
+  /**
+   * repository is the owner/name the token is scoped to, as GitHub spells it.
+   *
+   * @generated from field: string repository = 5;
+   */
+  repository: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetGitHubBotTokenResponse.
+ * Use `create(GetGitHubBotTokenResponseSchema)` to create a new message.
+ */
+export const GetGitHubBotTokenResponseSchema: GenMessage<GetGitHubBotTokenResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 15);
+
+/**
  * @generated from enum reliant.v1.TokenKind
  */
 export enum TokenKind {
@@ -594,6 +677,41 @@ export const TokenService: GenService<{
     methodKind: "unary";
     input: typeof GetGitTokenRequestSchema;
     output: typeof GetGitTokenResponseSchema;
+  },
+  /**
+   * GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
+   * ONE repository, so an agent on a daemon can review, label and merge as
+   * the App's bot (`reliant-labs[bot]`) instead of as the user: `reliant
+   * github token --as app --repo owner/name` and `reliant github gh`.
+   *
+   * It is the interactive twin of an automation acting as the app. The same
+   * safety rule holds, enforced by control-plane at the mint: the CALLING
+   * session's acting user must have push access to the repository, so the bot
+   * is never a way past the user's own permissions. The token is scoped to
+   * that one repository and to the requested permissions (issues,
+   * pull_requests, contents; default all three at write), expires within an
+   * hour, and is never stored or logged here. control-plane's audit log
+   * records each mint.
+   *
+   * Daemon credential only, exactly as GetGitToken and for the same reason.
+   *
+   * Errors:
+   *   - UNAUTHENTICATED / PERMISSION_DENIED: not a live daemon credential.
+   *   - INVALID_ARGUMENT: owner or repo is missing or malformed, or a
+   *     permission is outside the three or a level other than read/write.
+   *   - FAILED_PRECONDITION, by `x-forge-error-reason`:
+   *     `git_credential_no_control_plane`, `github_app_not_configured`,
+   *     `github_app_not_installed`, `github_app_permissions`,
+   *     `git_credential_not_connected`, `git_credential_needs_reconnect`.
+   *   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
+   *   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+   *
+   * @generated from rpc reliant.v1.TokenService.GetGitHubBotToken
+   */
+  getGitHubBotToken: {
+    methodKind: "unary";
+    input: typeof GetGitHubBotTokenRequestSchema;
+    output: typeof GetGitHubBotTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_token, 0);

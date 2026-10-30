@@ -35076,6 +35076,23 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "GetGitHubBotToken",
+          "InputType": "GetGitHubBotTokenRequest",
+          "OutputType": "GetGitHubBotTokenResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": false,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.GetGitHubBotTokenRequest",
+          "OutputTypeFQ": "reliant.v1.GetGitHubBotTokenResponse",
+          "InputProtoFile": "reliant/v1/token.proto",
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/token.proto",
@@ -35151,6 +35168,50 @@
           },
           {
             "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenRequest": [
+          {
+            "Name": "owner",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "permissions",
+            "ProtoType": "message",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenResponse": [
+          {
+            "Name": "token",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "expires_at",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "bot_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "acting_for_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repository",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -35291,6 +35352,44 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.GetGitHubBotTokenRequest": [
+          {
+            "name": "owner",
+            "kind": "string"
+          },
+          {
+            "name": "repo",
+            "kind": "string"
+          },
+          {
+            "name": "permissions",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          }
+        ],
+        "reliant.v1.GetGitHubBotTokenResponse": [
+          {
+            "name": "token",
+            "kind": "string"
+          },
+          {
+            "name": "expires_at",
+            "kind": "string"
+          },
+          {
+            "name": "bot_login",
+            "kind": "string"
+          },
+          {
+            "name": "acting_for_login",
+            "kind": "string"
+          },
+          {
+            "name": "repository",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.GetGitTokenRequest": [
           {
             "name": "provider",
@@ -35411,6 +35510,8 @@
         "reliant.v1.CreateTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenResponse": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenRequest": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ListTokensRequest": "reliant/v1/token.proto",
@@ -42434,7 +42535,7 @@
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
-    "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
+    "reliant/v1/token.proto": "4817e691d2716f164c1b939d53f7f6fe0865646915a5e1147310ceaf8a983de5",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
     "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
