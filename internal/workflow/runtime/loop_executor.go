@@ -2062,6 +2062,13 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						return nil, endSubAgent(e.ctx, exhaustion, running.StepID)
 					}
 
+					// Unless pausing would only hold the run for nothing: see
+					// endsRunInsteadOfPausing.
+					if endErr := e.pauseCtrl.endsRunInsteadOfPausing(running.StepID, stepEvent.Error); endErr != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), e.iteration+1)
+						return nil, endErr
+					}
+
 					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
@@ -2097,6 +2104,12 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					// Self-pause and block until resume
 					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
 					e.pauseCtrl.DoCheckPause(e.ctx)
+					// An unattended run whose pause outlived its self-resume
+					// ladder ends here, with the cause (pause_coordinator.go).
+					if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), e.iteration+1)
+						return nil, gaveUp
+					}
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running

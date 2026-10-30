@@ -110,6 +110,15 @@ func classifyError(err error) error {
 	if errors.As(err, &app) && app.Type() == "ProviderSwitchHold" {
 		return err
 	}
+	// The run step classifies its own failures, and the workflow branches on
+	// the type (endsRunInsteadOfPausing). Their messages carry a machine's
+	// status and a transport's text verbatim, so the text rules below could
+	// match ("not found", "permission denied") and replace the type with
+	// TerminalError — and a machine-unavailable run would pause, holding its
+	// automation's slot, instead of ending.
+	if errors.As(err, &app) && app.NonRetryable() && strings.HasPrefix(app.Type(), "RunStep") {
+		return err
+	}
 	// Check if already classified as TerminalError
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {

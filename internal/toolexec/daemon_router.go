@@ -219,13 +219,31 @@ var ErrDaemonConnectionInterrupted = errors.New("daemon connection interrupted")
 // Match it with errors.Is; the error's message is the underlying failure's.
 var ErrNotDispatched = errors.New("the request never reached a machine")
 
-type notDispatchedError struct{ err error }
+type notDispatchedError struct {
+	err error
+	// daemonID is the machine the request was addressed to; "" when
+	// resolution named none.
+	daemonID string
+}
 
 func (e *notDispatchedError) Error() string        { return e.err.Error() }
 func (e *notDispatchedError) Unwrap() error        { return e.err }
 func (e *notDispatchedError) Is(target error) bool { return target == ErrNotDispatched }
 
-func notDispatched(err error) error { return &notDispatchedError{err: err} }
+func notDispatched(err error, daemonID string) error {
+	return &notDispatchedError{err: err, daemonID: daemonID}
+}
+
+// NotDispatchedDaemonID is the machine a request that never reached one was
+// addressed to, so a caller waiting for it can name it. "" when err is not
+// ErrNotDispatched, or no machine was resolved at all.
+func NotDispatchedDaemonID(err error) string {
+	var nd *notDispatchedError
+	if errors.As(err, &nd) {
+		return nd.daemonID
+	}
+	return ""
+}
 
 // TransportError says a tool request never reached a daemon. It exists so
 // callers that would otherwise flatten a failure into an exit code can tell
@@ -239,6 +257,8 @@ type TransportError struct {
 	// command never ran (ToolResult.NotDispatched). Otherwise the daemon may
 	// have run it — a timeout or a dropped connection loses only the answer.
 	NotDispatched bool
+	// DaemonID is the machine the request was addressed to, when known.
+	DaemonID string
 }
 
 func (e *TransportError) Error() string {
