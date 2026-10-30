@@ -38,6 +38,7 @@ describe("runFilterState", () => {
       "integration",
       "workflow_event",
       "agent.start_run",
+      "cli.run",
       "builder.test",
     ]);
     expect(RUN_KIND_OPTIONS.map((option) => option.label)).toEqual([
@@ -48,6 +49,7 @@ describe("runFilterState", () => {
       "App event",
       "Workflow event",
       "Agent",
+      "CLI",
       "Tests",
     ]);
   });
