@@ -146,7 +146,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	// Which definition the event resolves is recorded on its row; a broken
 	// one refuses it before any filter, so a broken file never reads as
 	// "did not match".
-	def, err := definitionOf(ctx, in.workflows, trigger)
+	def, err := DefinitionOf(ctx, in.workflows, trigger)
 	if err != nil {
 		return nil, err
 	}

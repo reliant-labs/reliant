@@ -86,10 +86,11 @@ func BrokenDefinition(ctx context.Context, workflows *CachedWorkflows, t *core.T
 	return def, nil
 }
 
-// definitionOf is the definition t's firing resolves, nil when workflows
+// DefinitionOf is the definition t's firing resolves, nil when workflows
 // cannot say (a resolver that is not a DefinitionReader). An error is a
-// failure to READ, which a retry can fix.
-func definitionOf(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*core.TriggerEventDefinition, error) {
+// failure to READ, which a retry can fix. Every firing path records it and
+// refuses a Broken one.
+func DefinitionOf(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*core.TriggerEventDefinition, error) {
 	reader, ok := workflows.(DefinitionReader)
 	if !ok || t == nil {
 		return nil, nil

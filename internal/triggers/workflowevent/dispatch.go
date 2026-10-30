@@ -164,13 +164,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 				if prev, prevErr := SpecOf(trigger); prevErr == nil && !prev.Source.Matches(ev.WorkflowName, ev.Outcome) {
 					continue
 				}
-				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, declErr.Error())
+				def, defErr := triggers.DefinitionOf(ctx, d.workflows, trigger)
+				if defErr != nil {
+					retryable = append(retryable, defErr)
+					continue
+				}
+				detail := declErr.Error()
+				if def.Broken() {
+					detail = triggers.RefusalDetail(def)
+				}
+				res, recErr := d.record(ctx, trigger, ev, nil, def, core.TriggerEventFailed, detail)
 				results, retryable = appendResult(results, retryable, res, recErr)
 			case trigger.WorkflowTrigger != nil:
 				// The workflow could not be READ: retry the dispatch.
 				retryable = append(retryable, fmt.Errorf("resolve trigger %s: %w", trigger.ID, err))
 			default:
-				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
+				res, recErr := d.record(ctx, trigger, ev, nil, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
 				results, retryable = appendResult(results, retryable, res, recErr)
 			}
 			continue
@@ -207,37 +216,47 @@ func appendResult(results []Result, errs []error, res *Result, err error) ([]Res
 // fire applies the loop guards and the filter to one matching trigger, then
 // launches.
 func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage) (*Result, error) {
+	// Which definition this firing resolves rides on its event row; a broken
+	// one refuses it before any guard or filter (triggers.Firer.Fire).
+	def, err := triggers.DefinitionOf(ctx, d.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if def.Broken() {
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, triggers.RefusalDetail(def))
+	}
 	if reason, blocked := chain.Blocked(trigger.ID); blocked {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, reason)
 	}
 
 	// An activation that is not set up cannot launch (its run would fail its
 	// first input check), and its filter reads the params that are missing.
 	if issues := triggers.SetupIssues(spec.Declaration, trigger); len(issues) > 0 {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, triggers.SetupDetail(issues))
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, triggers.SetupDetail(issues))
 	}
 
 	next := chain.Extend(trigger.ID, ev.ChatID)
 	launchEv := d.buildEvent(trigger, ev, next)
+	launchEv.Definition = def
 
 	// The filter sees exactly what the launched run would see as `trigger`,
 	// and the activation it fires for.
 	scope := triggers.ActivationScope(ctx, d.repo, trigger, spec.Declaration, triggerRoot(launchEv))
 	pass, err := d.filter(spec.Filter, scope)
 	if err != nil {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, "filter error: "+err.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, "filter error: "+err.Error())
 	}
 	if !pass {
 		reason := "filter did not match"
 		if gap := triggers.OwnerIdentityGap(spec.Filter, scope); gap != "" {
 			reason += ": " + gap + ". Filter: " + spec.Filter
 		}
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, reason)
 	}
 
 	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
 	if err != nil {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, err.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, err.Error())
 	}
 
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)
@@ -256,7 +275,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// Retrying cannot fix a spec that can never launch; record why.
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, launchErr.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, launchErr.Error())
 	}
 	return nil, fmt.Errorf("launch trigger %s for run event %s: %w", trigger.ID, ev.ID, launchErr)
 }
@@ -369,6 +388,7 @@ func (d *Dispatcher) record(
 	trigger *core.Trigger,
 	ev *core.RunEvent,
 	chain lineage.Lineage,
+	def *core.TriggerEventDefinition,
 	outcome core.TriggerEventOutcome,
 	detail string,
 ) (*Result, error) {
@@ -384,6 +404,7 @@ func (d *Dispatcher) record(
 		Sender:        launchEv.Sender,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
+		Definition:    def,
 		CreatedAt:     d.now().UTC(),
 	}
 	created, err := d.repo.CreateTriggerEvent(ctx, row)

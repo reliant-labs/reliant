@@ -144,11 +144,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	// Which definition this fire resolves, recorded on the event whatever the
 	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
 	// trusted from intake, like the declaration below.
-	def, err := definitionOf(ctx, f.workflows, trigger)
+	def, err := DefinitionOf(ctx, f.workflows, trigger)
 	if err != nil {
 		return nil, err
 	}
-	if def != nil {
+	if def != nil && !resuming {
 		if err := f.repo.SetTriggerEventDefinition(ctx, ev.ID, def); err != nil {
 			return nil, err
 		}
