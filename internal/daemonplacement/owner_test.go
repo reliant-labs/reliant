@@ -30,8 +30,11 @@ type ownerFixture struct {
 	failing      map[string]bool            // daemon -> its stat errors
 	hanging      map[string]bool            // daemon -> its stat never answers
 
-	adopted map[string]string // worktree -> daemon
-	stats   map[string]int    // daemon -> stats asked
+	// branches overrides what a directory has checked out (default: the
+	// workspace's branch for every directory in dirs).
+	branches map[string]map[string]string // daemon -> path -> branch
+	adopted  map[string]string            // worktree -> daemon
+	stats    map[string]int               // daemon -> stats asked
 	// staleReads makes GetWorktree miss the recorded owner, as a read that
 	// raced another resolver's commit does.
 	staleReads bool
@@ -57,6 +60,7 @@ func newOwnerFixture() *ownerFixture {
 		dirs:         map[string]map[string]bool{},
 		failing:      map[string]bool{},
 		hanging:      map[string]bool{},
+		branches:     map[string]map[string]string{},
 		adopted:      map[string]string{},
 		stats:        map[string]int{},
 	}
@@ -115,6 +119,19 @@ func (f *ownerFixture) IsDaemonOnline(_ context.Context, _ string, selector *too
 }
 
 func (f *ownerFixture) SendDaemonCommandToDaemon(ctx context.Context, _, daemonID, commandType string, payload []byte, _ int32) ([]byte, error) {
+	if commandType == "worktree.git_status" {
+		var req struct {
+			Path string `json:"worktree_path"`
+		}
+		_ = json.Unmarshal(payload, &req)
+		f.mu.Lock()
+		branch, ok := f.branches[daemonID][req.Path]
+		f.mu.Unlock()
+		if !ok && f.dirs[daemonID][req.Path] {
+			branch = wtBranch // a checkout of the workspace's branch
+		}
+		return json.Marshal(map[string]string{"branch": branch})
+	}
 	if commandType != "fs.stat" {
 		return nil, errors.New("unexpected command " + commandType)
 	}
@@ -146,10 +163,13 @@ func (f *ownerFixture) statsAsked() int {
 	return n
 }
 
-const wtPath = "/home/workspace/.reliant/worktrees/wt-1"
+const (
+	wtPath   = "/home/workspace/.reliant/worktrees/wt-1"
+	wtBranch = "feature"
+)
 
 func unattributed() *db.Worktree {
-	return &db.Worktree{ID: "wt-1", ProjectID: "p1", Path: wtPath}
+	return &db.Worktree{ID: "wt-1", ProjectID: "p1", Path: wtPath, Branch: wtBranch}
 }
 
 func TestResolver_RecordsTheOneConnectedMachineThatHasIt(t *testing.T) {
@@ -369,4 +389,24 @@ func TestResolver_ConcurrentUsesProbeOnce(t *testing.T) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	require.Equal(t, 1, f.stats["a"], "one resolution, shared")
+}
+
+// The real owner A is asleep, and connected B has an unrelated directory at
+// the same path (an imported checkout's path is not unique across
+// machines). A path is not a workspace: B's directory is not a checkout of the
+// workspace's branch, so the row stays unattributed, nothing is recorded and
+// no chat pin moves.
+func TestResolver_AnUnrelatedDirectoryAtThePathIsNotTheOwner(t *testing.T) {
+	f := newOwnerFixture()
+	f.machine("a", false, wtPath) // the real owner, asleep
+	f.machine("b", true, wtPath)  // a different checkout at the same path
+	f.branches["b"] = map[string]string{wtPath: "main"}
+
+	assert.Empty(t, NewResolver(f, f).Owner(context.Background(), "u1", unattributed()))
+	assert.Empty(t, f.adopted, "nothing is recorded on an unproven match")
+
+	// Not a checkout at all (git reads no branch): not proof either.
+	f.branches["b"] = map[string]string{wtPath: ""}
+	assert.Empty(t, NewResolver(f, f).Owner(context.Background(), "u1", unattributed()))
+	assert.Empty(t, f.adopted)
 }

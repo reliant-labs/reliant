@@ -58,7 +58,9 @@ var (
 // The Resolver settles such a row the first time it is used: it asks each of
 // the user's connected machines whether the workspace's directory exists
 // there (one stat each, in parallel, bounded by
-// ownerProbeTimeout), and records the owner when exactly one has it.
+// ownerProbeTimeout), and records the owner when exactly one has it AND has
+// it checked out on the workspace's branch (checkedOutOn): a path alone is
+// not a workspace's identity.
 //
 // It never wakes a machine and never waits for one: a machine that is asleep
 // or starting is not asked, so a workspace that lives on one stays unattributed
@@ -203,6 +205,15 @@ func (r *Resolver) resolve(ctx context.Context, userID string, worktree *db.Work
 	if owner == "" {
 		return ""
 	}
+	// A directory at the path is not yet this workspace: an imported
+	// checkout can sit at a path another machine also has, and the real
+	// owner may be asleep and unasked. The one machine that has it must have
+	// it checked out on the workspace's branch, or the row stays unknown.
+	if !r.checkedOutOn(ctx, userID, owner, worktree) {
+		logging.InfoContext(ctx, "[daemonplacement] a machine has a workspace's path but not its checkout; leaving it unattributed",
+			"worktreeID", worktree.ID, "daemonID", owner)
+		return ""
+	}
 	// Route only to the owner the row records: another resolver (a replica,
 	// another service) may have settled it first, possibly on a machine this
 	// one's probes did not see.
@@ -242,6 +253,35 @@ func (r *Resolver) candidates(ctx context.Context, userID string) ([]string, err
 		}
 	}
 	return connected, nil
+}
+
+// checkedOutOn reports whether the directory at worktree.Path on daemonID is
+// a git checkout of worktree.Branch: the identity a workspace has beyond its
+// path. A row with no branch, a detached HEAD, a directory that is not a
+// checkout (a multi-repo workspace's root) or no answer is not proof.
+func (r *Resolver) checkedOutOn(ctx context.Context, userID, daemonID string, worktree *db.Worktree) bool {
+	if worktree.Branch == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, ownerProbeTimeout)
+	defer cancel()
+	// No "branch" in the request: the daemon echoes it back when git cannot
+	// read one, which would prove nothing.
+	payload, err := json.Marshal(map[string]string{"worktree_path": worktree.Path})
+	if err != nil {
+		return false
+	}
+	raw, err := r.probe.SendDaemonCommandToDaemon(ctx, userID, daemonID, "worktree.git_status", payload, int32(ownerProbeTimeout/time.Millisecond))
+	if err != nil {
+		return false
+	}
+	var status struct {
+		Branch string `json:"branch"`
+	}
+	if err := json.Unmarshal(raw, &status); err != nil {
+		return false
+	}
+	return status.Branch == worktree.Branch
 }
 
 // probeOne asks one connected machine whether path is a directory on it.

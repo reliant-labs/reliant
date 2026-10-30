@@ -18,7 +18,8 @@ import (
 )
 
 // ownerProbingRouter is two connected machines: it answers the Resolver's
-// liveness checks and stats from which machine holds which directory, and
+// liveness checks, stats and branch reads from which machine holds which
+// checkout, and
 // records the machine every other command went to.
 type ownerProbingRouter struct {
 	mu   sync.Mutex
@@ -40,6 +41,17 @@ func (r *ownerProbingRouter) SendDaemonCommandToDaemon(_ context.Context, _, dae
 		_ = json.Unmarshal(payload, &req)
 		present := r.dirs[req.Path] == daemonID
 		return json.Marshal(map[string]bool{"exists": present, "is_dir": present})
+	}
+	if commandType == "worktree.git_status" {
+		var req struct {
+			Path string `json:"worktree_path"`
+		}
+		_ = json.Unmarshal(payload, &req)
+		branch := ""
+		if r.dirs[req.Path] == daemonID {
+			branch = "feature" // the workspace's branch, checked out where it lives
+		}
+		return json.Marshal(map[string]string{"branch": branch})
 	}
 	r.sent = append(r.sent, daemonID+" "+commandType)
 	return json.Marshal(map[string]any{"nodes": []any{}})

@@ -21,7 +21,7 @@ import (
 // removed while the workspace survives there, so the remaining install proves
 // nothing about its disk (daemonplacement.Resolver settles it from disk).
 func TestWorktreeOwnerBackfill(t *testing.T) {
-	sqlBytes, err := os.ReadFile("../../db/migrations/20261030080808_worktree_owner_backfill.up.sql")
+	sqlBytes, err := os.ReadFile("../../db/migrations/20261030113936_worktree_owner_backfill.up.sql")
 	require.NoError(t, err)
 
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
