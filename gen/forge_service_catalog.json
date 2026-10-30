@@ -31243,16 +31243,6 @@
           "server_streaming": false,
           "idempotency": "UNKNOWN",
           "auth_required": true
-        },
-        {
-          "id": "reliant.v1.TerminalService/StreamTerminal",
-          "name": "StreamTerminal",
-          "input": "reliant.v1.TerminalStreamInput",
-          "output": "reliant.v1.TerminalStreamOutput",
-          "client_streaming": true,
-          "server_streaming": true,
-          "idempotency": "UNKNOWN",
-          "auth_required": true
         }
       ],
       "descriptor": {
@@ -31296,25 +31286,6 @@
               "Declared": true,
               "None": "closes a terminal session on the daemon: interactive transport, not project history"
             }
-          },
-          {
-            "Name": "StreamTerminal",
-            "InputType": "TerminalStreamInput",
-            "OutputType": "TerminalStreamOutput",
-            "ClientStreaming": true,
-            "ServerStreaming": true,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.TerminalStreamInput",
-            "OutputTypeFQ": "reliant.v1.TerminalStreamOutput",
-            "InputProtoFile": "reliant/v1/terminal.proto",
-            "OutputProtoFile": "reliant/v1/terminal.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "None": "terminal I/O to and from the daemon: interactive transport, not project history"
-            }
           }
         ],
         "ProtoFile": "reliant/v1/terminal.proto",
@@ -31325,6 +31296,11 @@
               "Name": "session_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CloseTerminalSessionResponse": [
@@ -31352,58 +31328,6 @@
               "ProtoType": "int32",
               "IsOptional": false
             }
-          ],
-          "TerminalStreamInput": [
-            {
-              "Name": "create",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCreateRequest"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataInput"
-            },
-            {
-              "Name": "resize",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalResizeInput"
-            },
-            {
-              "Name": "close_session",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCloseRequest"
-            }
-          ],
-          "TerminalStreamOutput": [
-            {
-              "Name": "created",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionCreated"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataOutput"
-            },
-            {
-              "Name": "closed",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionClosed"
-            },
-            {
-              "Name": "error",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalError"
-            }
           ]
         },
         "Audience": "user",
@@ -31412,6 +31336,11 @@
             {
               "name": "session_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CloseTerminalSessionResponse": [
@@ -31437,62 +31366,6 @@
               "kind": "int32"
             }
           ],
-          "reliant.v1.TerminalCloseRequest": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalCreateRequest": [
-            {
-              "name": "working_dir",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalDataInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalDataOutput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalError": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "message",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalResizeInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "cols",
-              "kind": "uint32"
-            },
-            {
-              "name": "rows",
-              "kind": "uint32"
-            }
-          ],
           "reliant.v1.TerminalSession": [
             {
               "name": "id",
@@ -31515,78 +31388,6 @@
               "kind": "int32",
               "optional": true
             }
-          ],
-          "reliant.v1.TerminalSessionClosed": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "exit_code",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalSessionCreated": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "pid",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalStreamInput": [
-            {
-              "name": "create",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCreateRequest",
-              "oneof": "input"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataInput",
-              "oneof": "input"
-            },
-            {
-              "name": "resize",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalResizeInput",
-              "oneof": "input"
-            },
-            {
-              "name": "close_session",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCloseRequest",
-              "oneof": "input"
-            }
-          ],
-          "reliant.v1.TerminalStreamOutput": [
-            {
-              "name": "created",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionCreated",
-              "oneof": "output"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataOutput",
-              "oneof": "output"
-            },
-            {
-              "name": "closed",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionClosed",
-              "oneof": "output"
-            },
-            {
-              "name": "error",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalError",
-              "oneof": "output"
-            }
           ]
         },
         "SchemaFiles": {
@@ -31594,17 +31395,7 @@
           "reliant.v1.CloseTerminalSessionResponse": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsRequest": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsResponse": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCloseRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCreateRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataOutput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalError": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalResizeInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionClosed": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionCreated": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamOutput": "reliant/v1/terminal.proto"
+          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto"
         }
       }
     },
@@ -61348,17 +61139,6 @@
           }
         },
         {
-          "id": "method1:9bb04040844ae6ec4d857ef3c362329d5a5c33c946159e60073aa1719a46321a",
-          "name": "StreamTerminal",
-          "signature": "func(ctx context.Context, stream *connectrpc.com/connect.BidiStream[github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamInput, github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamOutput]) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.StreamTerminal",
-          "source": {
-            "path": "internal/handlers/terminal/terminal_proxy.go",
-            "symbol": "Service.StreamTerminal"
-          }
-        },
-        {
           "id": "method1:8a3ceb3bbd76e8e4d50df0e1b2dfb429780702d65c53f6893be195585ba31a7c",
           "name": "getUserID",
           "signature": "func(ctx context.Context) (string, error)",
@@ -77794,36 +77574,14 @@
           }
         },
         {
-          "id": "method1:a87a7fe45999eab37325759479892febd2425a3873a4a90cf607f158bca9dc32",
-          "name": "SendTerminalInput",
-          "signature": "func(ctx context.Context, userID string, sessionID string, data []byte) error",
+          "id": "method1:566092835e7e4597590720eea7a0dce468e17d7eccc5cf04326c09a5ff88a6b3",
+          "name": "SendDaemonCommandToDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalInput",
+          "legacy_name": "terminal.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SendTerminalInput"
-          }
-        },
-        {
-          "id": "method1:2331f70f01f4ed4ee04b860988a2cd1013c312f9ed26327e4c366a85b56c5f4b",
-          "name": "SendTerminalResize",
-          "signature": "func(ctx context.Context, userID string, sessionID string, cols uint32, rows uint32) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalResize",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SendTerminalResize"
-          }
-        },
-        {
-          "id": "method1:71528251b1d5cd09394b61db7d0558b78cb8691d62a695ffa97b36898f63a5e1",
-          "name": "SubscribeTerminalOutput",
-          "signature": "func(ctx context.Context, userID string, sessionID string) (\u003c-chan *github.com/reliant-labs/reliant/internal/toolexec.TerminalOutputEvent, func(), error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SubscribeTerminalOutput",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "symbol": "SessionRouter.SubscribeTerminalOutput"
+            "symbol": "SessionRouter.SendDaemonCommandToDaemon"
           }
         }
       ],

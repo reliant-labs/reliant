@@ -19,8 +19,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 
-// Records the session id each CloseSession put on the wire.
-const closeSession = vi.fn((_sessionId: string) => Promise.resolve({ success: true, message: "" }));
+// Records the session id (and machine) each CloseSession put on the wire.
+const closeSession = vi.fn((_sessionId: string, _daemonId?: string) => Promise.resolve({ success: true, message: "" }));
 
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -38,7 +38,10 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 function reset() {
   setTransport(
     mockTransport({
-      "TerminalService.CloseSession": (req) => closeSession((req as { sessionId: string }).sessionId),
+      "TerminalService.CloseSession": (req) => {
+        const { sessionId, daemonId } = req as { sessionId: string; daemonId?: string };
+        return daemonId ? closeSession(sessionId, daemonId) : closeSession(sessionId);
+      },
     }),
   );
   useTerminalStore.setState({
@@ -103,5 +106,17 @@ describe("terminal close uses the daemon session id", () => {
     expect(session?.id).toBe(localId);
     expect(session?.daemonSessionId).toBe("a-uuid");
     expect(useTerminalStore.getState().activeSessionId).toBe(localId);
+  });
+
+  // A session lives on one machine: the one holding its workspace, which the
+  // server names in "init". A close sent to the default machine instead finds
+  // no such session there and leaves the PTY running.
+  it("closes the session on the machine that holds it", async () => {
+    const localId = useTerminalStore.getState().createSession("/home/workspace");
+    useTerminalStore.getState().setDaemonSessionId(localId, "a-uuid", "daemon-gpu");
+    useTerminalStore.getState().killSession(localId);
+    await settle();
+
+    expect(closeSession).toHaveBeenCalledWith("a-uuid", "daemon-gpu");
   });
 });
