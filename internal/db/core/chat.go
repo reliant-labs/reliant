@@ -361,7 +361,21 @@ type QueuedForMachineChat struct {
 	// ActiveDaemonID is the machine the chat is pinned to; nil means the
 	// user's default machine.
 	ActiveDaemonID *string
-	QueuedAt       time.Time
+	// Machine is the machine the run that queued the message was waiting
+	// for (chats.queued_for_machine_selector). It wins over ActiveDaemonID:
+	// a workflow-level daemon selector targets a machine the chat's pin does
+	// not name. Nil when the run named none.
+	Machine  *QueuedMachine
+	QueuedAt time.Time
+}
+
+// QueuedMachine is the machine a queued message waits for, as the run that
+// queued it selected it: the fields of its daemon selector.
+type QueuedMachine struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // PausedForMachineChat is a chat whose root run the daemon-offline circuit
