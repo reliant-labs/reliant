@@ -121,7 +121,7 @@ trigger that is already activated is brought to the flags, not duplicated.`,
 	fl.StringArrayVar(&f.connections, "connection", nil, "Connection an integration listens through, as integration=connection-id (default: your default connection)")
 	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none")
 	fl.StringVar(&f.namePrefix, "name-prefix", "", "Names new activations \"<prefix> · <trigger>\" (default: the workflow)")
-	fl.StringVar(&f.actingAs, "acting-as", "", "Who integration writes speak as: owner or app (default: owner for a new activation, unchanged otherwise)")
+	fl.StringVar(&f.actingAs, "acting-as", "", "Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise)")
 	fl.BoolVar(&f.notify, "notify", false, "Notify you when a run completes")
 	return cmd
 }

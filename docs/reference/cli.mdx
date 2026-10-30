@@ -309,6 +309,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
 | [`reliant forge tools pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`reliant machine`](#reliant-machine) | List, start, stop and resize your machines |
+| [`reliant machine list`](#reliant-machine-list) | List your machines |
+| [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
+| [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
+| [`reliant machine stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -13768,6 +13773,86 @@ reliant forge version
 
 ---
 
+## reliant machine
+
+List, start, stop and resize your machines
+
+Manage your own machines, exactly as Settings -> Machines does.
+
+A machine is billed while it runs. start wakes a suspended machine; stop
+suspends a running one; resize changes a SUSPENDED machine's size (small,
+medium, large, xl, 2xl), which takes effect when it next starts. To resize a
+running machine: stop, resize, start.
+
+Needs a login made by this release ('reliant auth login'): it carries the
+daemon:manage permission, which only a person's login can hold.
+
+```
+reliant machine
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-machine-list) | List your machines |
+| [`resize`](#reliant-machine-resize) | Change a suspended machine's size |
+| [`start`](#reliant-machine-start) | Start (wake) a suspended machine |
+| [`stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant machine list
+
+List your machines
+
+```
+reliant machine list
+```
+
+---
+
+### reliant machine resize
+
+Change a suspended machine's size
+
+Change a SUSPENDED machine's size; it takes effect when the machine next
+starts. A running machine is refused: stop it first. Disks only grow, so a
+downsize keeps the larger disk.
+
+```
+reliant machine resize <name|id> <small|medium|large|xl|2xl>
+```
+
+---
+
+### reliant machine start
+
+Start (wake) a suspended machine
+
+```
+reliant machine start <name|id>
+```
+
+---
+
+### reliant machine stop
+
+Stop (suspend) a running machine
+
+```
+reliant machine stop <name|id>
+```
+
+---
+
 ## reliant preview-url
 
 Print the shareable preview URL for a local port
@@ -14060,7 +14145,7 @@ reliant trigger activate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--acting-as` | `string` | - | Who integration writes speak as: owner or app (default: owner for a new activation, unchanged otherwise) |
+| `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
 | `--message` | `string` | - | Prompt for a declared trigger that has none |

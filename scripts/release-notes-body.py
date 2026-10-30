@@ -14,6 +14,7 @@ appends that list via `gh release create --generate-notes`.
 Usage: release-notes-body.py <tag>
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -26,44 +27,65 @@ def load(path):
     Deliberately not PyYAML: the release workflow runs on a bare runner and
     adding a pip install to the release path buys nothing here. The schema is
     fixed and enforced by `task generate:docs:changelog`, which parses the same
-    files — it is four scalars and a list of title/description pairs.
+    files — four scalars and either a list of title/description pairs
+    (`items`) or titled groups of them (`sections`, what
+    `task generate:docs:changelog:draft` writes).
+
+    Returns (meta, entries); an entry is a dict with a title, an optional
+    description and `section`: True for a group heading, False for an entry
+    inside a group, None for a top-level item.
     """
     text = path.read_text(encoding="utf-8")
     meta = {}
-    items = []
+    entries = []
     current = None
+    in_sections = False
+    section_indent = None
 
     for raw in text.splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
 
         stripped = raw.strip()
+        indent = len(raw) - len(raw.lstrip())
 
         if stripped.startswith("- title:"):
             if current:
-                items.append(current)
-            current = {"title": unquote(stripped[len("- title:"):])}
+                entries.append(current)
+            kind = None
+            if in_sections:
+                if section_indent is None:
+                    section_indent = indent
+                kind = indent == section_indent
+            current = {"title": unquote(stripped[len("- title:"):]), "section": kind}
             continue
 
         if current is not None and stripped.startswith("description:"):
             current["description"] = unquote(stripped[len("description:"):])
             continue
 
-        if not raw.startswith(" ") and ":" in stripped:
+        if indent == 0 and ":" in stripped:
             key, _, value = stripped.partition(":")
+            in_sections = key.strip() == "sections"
             value = unquote(value)
             if value:
                 meta[key.strip()] = value
 
     if current:
-        items.append(current)
-    return meta, items
+        entries.append(current)
+    return meta, entries
 
 
 def unquote(value):
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        # A JSON string is a YAML double-quoted scalar (the draft writes them so).
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value[1:-1]
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1].replace("''", "'")
     return value
 
 
@@ -78,7 +100,7 @@ def main():
         # Not an error — see the module docstring.
         return 0
 
-    meta, items = load(path)
+    meta, entries = load(path)
 
     out = []
     if meta.get("title"):
@@ -87,14 +109,25 @@ def main():
     if meta.get("summary"):
         out.append(meta["summary"])
         out.append("")
-    for item in items:
-        if not item.get("title"):
+    for entry in entries:
+        if not entry.get("title"):
             continue
-        out.append(f"### {item['title']}")
-        if item.get("description"):
+        if entry["section"] is True:
+            if out and out[-1] != "":
+                out.append("")
+            out.append(f"### {entry['title']}")
             out.append("")
-            out.append(item["description"])
-        out.append("")
+        elif entry["section"] is False:
+            line = f"- **{entry['title']}**"
+            if entry.get("description"):
+                line += f" {entry['description']}"
+            out.append(line)
+        else:
+            out.append(f"### {entry['title']}")
+            if entry.get("description"):
+                out.append("")
+                out.append(entry["description"])
+            out.append("")
 
     sys.stdout.write("\n".join(out).rstrip() + "\n")
     return 0
