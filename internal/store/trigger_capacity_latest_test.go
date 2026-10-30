@@ -2,13 +2,46 @@ package store_test
 
 import (
 	"context"
+	"encoding/hex"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCapacityLongKeysEnrollWithoutPrefixCollisions(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	// Deterministic, incompressible content also exceeds the B-tree entry
+	// limit, not just the renderer's former 4096-byte truncation threshold.
+	rng := rand.New(rand.NewPCG(19, 91))
+	bytes := make([]byte, 3000)
+	for i := range bytes {
+		bytes[i] = byte(rng.Uint32())
+	}
+	prefix := hex.EncodeToString(bytes)
+	keyFor := func(value string) string {
+		key, err := triggerspec.RenderConcurrencyKey("{{ trigger.payload.key }}", triggerspec.Scope{Trigger: map[string]any{"payload": map[string]any{"key": value}}})
+		require.NoError(t, err)
+		require.Len(t, key, 64, "only a fixed-size digest is stored/indexed")
+		return key
+	}
+	a, b := keyFor(prefix+"a"), keyFor(prefix+"b")
+	require.NotEqual(t, a, b)
+	for _, entry := range []struct{ id, key string }{{"long-a", a}, {"long-b", b}, {"new-long-a", a}} {
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, keyedCapacityEvent(entry.id, &entry.key), capacityScope()))
+	}
+	outcome, _ := outcomeOf(t, env, "long-a")
+	require.Equal(t, core.TriggerEventSkipped, outcome)
+	for _, id := range []string{"long-b", "new-long-a"} {
+		outcome, _ = outcomeOf(t, env, id)
+		require.Equal(t, core.TriggerEventPending, outcome)
+	}
+}
 
 func keyedCapacityEvent(id string, key *string) *core.TriggerEvent {
 	ev := capacityEvent(id)

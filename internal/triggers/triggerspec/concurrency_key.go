@@ -2,6 +2,8 @@
 package triggerspec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -38,8 +40,9 @@ func CompileConcurrencyKey(key string) error {
 }
 
 // RenderConcurrencyKey renders key against a firing. An empty template is the
-// pool's one key, "". A template that renders empty is an error, like a
-// dedupe_key: it would silently merge unrelated firings.
+// pool's one key, "". Nonempty keys are SHA-256 digests of the entire rendered
+// value: bounded for PostgreSQL's B-tree, without merging long shared prefixes.
+// A template that renders empty is an error, like a dedupe_key.
 func RenderConcurrencyKey(key string, scope Scope) (string, error) {
 	if strings.TrimSpace(key) == "" {
 		return "", nil
@@ -52,8 +55,6 @@ func RenderConcurrencyKey(key string, scope Scope) (string, error) {
 	if rendered == "" {
 		return "", fmt.Errorf("concurrency key rendered empty")
 	}
-	if len(rendered) > maxRenderedKey {
-		rendered = rendered[:maxRenderedKey]
-	}
-	return rendered, nil
+	digest := sha256.Sum256([]byte(rendered))
+	return hex.EncodeToString(digest[:]), nil
 }
