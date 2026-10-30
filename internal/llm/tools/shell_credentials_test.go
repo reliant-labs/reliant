@@ -67,7 +67,8 @@ func TestShellTool_CredentialsNoneReachesTheDaemon(t *testing.T) {
 
 func TestShellTool_DefaultSendsNoCredentialsSetting(t *testing.T) {
 	d, _ := runShellParams(t, ShellParams{Command: "ls", Env: map[string]string{"A": "b"}})
-	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 1 {
+	// The caller's env, plus the chat the command runs for (ChatIDEnv).
+	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 2 || got.Env["A"] != "b" || got.Env[ChatIDEnv] == "" {
 		t.Fatalf("the default request changed: %+v", got)
 	}
 }

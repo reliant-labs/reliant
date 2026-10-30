@@ -733,20 +733,24 @@ func (s *Service) triggerFromDefinition(
 
 // actingIdentityFor decides who a trigger's integration writes speak as.
 //
-// Unspecified means app for a new GitHub integration activation, owner for
-// other sources, and "unchanged" on update. Use the resolved source so inline
-// triggers and workflow declarations agree. Never reinterpret a stored identity
-// using the creation default. Missing bot infrastructure is an error, not a
-// reason to silently write under the owner's name.
+// Unspecified means app (the Reliant GitHub bot) for every new activation,
+// whatever its source: an automation's GitHub writes are the bot's unless its
+// owner explicitly chooses owner. On update it means "unchanged": never
+// reinterpret a stored identity using the creation default.
+//
+// A deployment with no control plane has no bot. There a new GitHub
+// integration trigger is refused (its source says it acts on GitHub, so the
+// bot is what it would have meant), while other sources default to the owner.
+// Missing bot infrastructure never silently turns a chosen bot into the owner.
 func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger, src *triggers.Source) (core.ActingIdentity, error) {
 	identity, chosen := triggers.ActingIdentityFromProto(def.ActingIdentity)
 	if !chosen {
 		if existing != nil {
 			return existing.ActingIdentity.OrOwner(), nil
 		}
-		identity = core.ActingIdentityOwner
-		if src.Kind == core.TriggerKindIntegration && src.Integration == "github" {
-			identity = core.ActingIdentityApp
+		identity = core.ActingIdentityApp
+		if s.deps.ControlPlane == nil && (src.Kind != core.TriggerKindIntegration || src.Integration != "github") {
+			identity = core.ActingIdentityOwner
 		}
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {

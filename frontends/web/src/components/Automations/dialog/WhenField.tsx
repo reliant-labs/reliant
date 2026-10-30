@@ -161,7 +161,7 @@ export function WhenField({
           ) : (
             <p className={hintClass}>Your default {integration.integration} account is used.</p>
           )}
-          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} allowApp={integration.integration === "github"} />
+          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} />
           <OnlyFromControl
             integration={integration.integration}
             filter={when.event?.filter ?? ""}

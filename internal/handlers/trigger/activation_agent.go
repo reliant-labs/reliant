@@ -54,7 +54,8 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, user)
 	var existing *core.Trigger
 	var err error
-	def := &pb.TriggerDefinition{ActingIdentity: pb.ActingIdentity_ACTING_IDENTITY_OWNER}
+	// Unspecified: the server default (the Reliant bot) applies on create.
+	def := &pb.TriggerDefinition{}
 	if operation != tools.ToolCreateTriggerActivation {
 		if p.TriggerID == "" {
 			return nil, tools.ActivationPreview{}, refused("trigger_id is required")
@@ -251,7 +252,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 			return "unknown"
 		}()))
 	}
-	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", machineName, row.DaemonID, operation, user, def.ActingIdentity, connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
+	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", machineName, row.DaemonID, operation, user, row.ActingIdentity.OrOwner(), connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
 	if len(title) > automationpolicy.MaxDisplayBytes {
 		return nil, tools.ActivationPreview{}, refusedPrecondition("Activation approval display size limit exceeded")
 	}

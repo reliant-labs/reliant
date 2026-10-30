@@ -203,6 +203,12 @@ describe("a dashboard's link (Share)", () => {
     expect(forgeConsoleDashboardSearchSchema.parse({ hiddenSections: "resources", alerts: "false" })).toEqual({});
   });
 
+  it("keeps an org dashboard's project/env selection through the URL, so a picker change and a shared link both hold", () => {
+    const search = { orgEnvs: ["landing/prod", "control-plane/staging"] };
+    expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
+    expect(forgeConsoleDashboardSearchSchema.parse({ orgEnvs: "landing/prod" })).toEqual({});
+  });
+
   it("opens an older version or the release it shipped in", () => {
     expect(throughTheUrl({ version: 3 }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ version: 3 });
     expect(throughTheUrl({ release: "v1.8.2" }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ release: "v1.8.2" });
