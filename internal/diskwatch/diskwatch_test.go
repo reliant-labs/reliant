@@ -541,3 +541,32 @@ func TestSeverityOf_RefusingHeavyCommandsIsCritical(t *testing.T) {
 		t.Fatalf("reclaiming alone raises nothing: %v", got)
 	}
 }
+
+// The process guard's refusal is one episode across heartbeats (one inbox
+// item), and starting or ending it is urgent: the UI hears at once.
+func TestStamp_CarriesTheProcessRefusalEpisode(t *testing.T) {
+	rep := func(refusing bool) *reliantv1.DiskReport {
+		return &reliantv1.DiskReport{
+			Volumes:   []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 400 * GiB, FreeBytes: 300 * GiB}},
+			Processes: &reliantv1.ProcessReport{Count: 6000, Limit: 7650, RefusingHeavy: refusing},
+		}
+	}
+	t0 := time.UnixMilli(1760000000000)
+	first := Stamp(rep(true), nil, t0)
+	if first.Processes.RefusingSinceMs != t0.UnixMilli() {
+		t.Fatalf("first refusing report: since = %d", first.Processes.RefusingSinceMs)
+	}
+	later := Stamp(rep(true), first, t0.Add(time.Minute))
+	if later.Processes.RefusingSinceMs != t0.UnixMilli() {
+		t.Fatalf("the episode did not carry forward: since = %d", later.Processes.RefusingSinceMs)
+	}
+	if ended := Stamp(rep(false), later, t0.Add(2*time.Minute)); ended.Processes.RefusingSinceMs != 0 {
+		t.Fatalf("a report that is not refusing kept the episode: %d", ended.Processes.RefusingSinceMs)
+	}
+	if UrgentSignature(rep(true)) == UrgentSignature(rep(false)) {
+		t.Error("starting to refuse is not urgent")
+	}
+	if Signature(rep(true)) == Signature(rep(false)) {
+		t.Error("the stored report would not be rewritten when refusal starts")
+	}
+}

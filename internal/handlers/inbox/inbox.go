@@ -703,6 +703,12 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 	}
 	var out []*reliantv1.InboxItem
 	for _, m := range machines {
+		if m.Processes != nil {
+			out = append(out, s.processesItem(ctx, userID, m, names[m.DaemonID]))
+		}
+		if !m.StorageItem() {
+			continue
+		}
 		payload := &reliantv1.InboxStorage{
 			DaemonId:   m.DaemonID,
 			DaemonName: names[m.DaemonID],
@@ -733,9 +739,49 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 }
 
 const (
-	storageKeptSuffix = ":kept"
-	storageDiskInfix  = ":disk:"
+	storageKeptSuffix  = ":kept"
+	storageDiskInfix   = ":disk:"
+	storageProcsInfix  = ":procs:"
+	maxTitledProcTrees = 5
 )
+
+// processesItem is a machine's "near its process limit" item: the daemon is
+// refusing new background heavy commands, and the item names the largest
+// process trees by the agent that started each, so the one at fault can be
+// stopped. One item per refusal episode (storage:<daemon>:procs:<since ms>):
+// dismissing it holds until the machine recovers and gets there again.
+func (s *Service) processesItem(ctx context.Context, userID string, m *worktreesweep.MachineStorage, name string) *reliantv1.InboxItem {
+	procs := proto.Clone(m.Processes).(*reliantv1.ProcessReport)
+	for i, t := range procs.Top {
+		if i == maxTitledProcTrees || t.ChatId == "" {
+			continue
+		}
+		// Only the caller's own chats are named: the id came from a machine,
+		// and a title is not the machine's to reveal.
+		if c, err := s.deps.Repo.GetChat(ctx, t.ChatId); err == nil && c != nil && c.UserID == userID {
+			t.ChatTitle = c.Title
+		}
+	}
+	payload := &reliantv1.InboxStorage{
+		DaemonId:   m.DaemonID,
+		DaemonName: name,
+		Online:     m.Online,
+		Processes:  procs,
+	}
+	since := procs.RefusingSinceMs
+	if m.Disk != nil {
+		payload.ReportedAt = time.UnixMilli(m.Disk.ReportedAtMs).UTC().Format(time.RFC3339)
+		if since == 0 {
+			since = m.Disk.ReportedAtMs
+		}
+	}
+	return &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE,
+		ItemId:       inboxStoragePrefix + m.DaemonID + storageProcsInfix + strconv.FormatInt(since, 10),
+		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
+		Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
+	}
+}
 
 // storageItemID names a machine's storage item by what the user is told, so a
 // dismissal holds for exactly that and no longer:

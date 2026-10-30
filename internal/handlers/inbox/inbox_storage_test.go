@@ -437,3 +437,54 @@ func (s *Service) mustList(t *testing.T, f *inboxFixture) []*reliantv1.InboxItem
 	require.NoError(t, err)
 	return resp.Msg.Items
 }
+
+// A machine near its process limit gets an item of its own, naming the
+// largest process trees by the agent that started each — by chat title for
+// the caller's own chats, never another user's — and no storage item when the
+// disk is fine and nothing is kept.
+func TestListInbox_ProcessLimitItemNamesTheTreesByAgent(t *testing.T) {
+	f := newInboxFixture(t)
+	daemonID := "d-" + uuid.NewString()
+	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("cloud")}))
+	now := time.Now().UTC()
+	wf, wid := "wf", "c-gate"
+	require.NoError(t, f.repo.CreateChat(f.ctx, &db.Chat{
+		ID: "c-gate", Title: "Release gate under 1h", ProjectID: f.project(), UserID: f.userID, WorkflowName: &wf, WorkflowID: &wid,
+		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	otherCtx, otherUser, otherProject := f.otherUser(t)
+	owid := "c-theirs"
+	require.NoError(t, f.repo.CreateChat(otherCtx, &db.Chat{
+		ID: "c-theirs", Title: "someone else's", ProjectID: otherProject, UserID: otherUser, WorkflowName: &wf, WorkflowID: &owid,
+		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	report := func(refusing bool) *reliantv1.DiskReport {
+		return &reliantv1.DiskReport{
+			Volumes: []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 1000 << 30, FreeBytes: 800 << 30}},
+			Processes: &reliantv1.ProcessReport{Count: 5400, Limit: 7650, RefusingHeavy: refusing, Top: []*reliantv1.ProcessTree{
+				{ChatId: "c-gate", Command: "bash scripts/ci-gate.sh all", Tasks: 4950, Tracked: true},
+				{ChatId: "c-theirs", Command: "go test ./...", Tasks: 200, Tracked: true},
+				{Command: "nohup /tmp/blitz/gate.sh 1631", Tasks: 120},
+			}},
+		}
+	}
+	putDiskReport(t, f, daemonID, report(true))
+
+	items := f.storage(t)
+	require.Len(t, items, 1, "the process item only: the disk is fine and nothing is kept")
+	assert.True(t, strings.HasPrefix(items[0].ItemId, "storage:"+daemonID+":procs:"), items[0].ItemId)
+	p := items[0].GetStorage().GetProcesses()
+	require.NotNil(t, p)
+	assert.True(t, p.RefusingHeavy)
+	assert.EqualValues(t, 5400, p.Count)
+	require.Len(t, p.Top, 3)
+	assert.Equal(t, "Release gate under 1h", p.Top[0].ChatTitle)
+	assert.Empty(t, p.Top[1].ChatTitle, "another user's chat is not named")
+	assert.Equal(t, "nohup /tmp/blitz/gate.sh 1631", p.Top[2].Command)
+
+	// Dismissed, it stays dismissed for the episode; recovered, it is gone.
+	f.dismiss(t, items[0].ItemId)
+	assert.Empty(t, f.storage(t))
+	putDiskReport(t, f, daemonID, report(false))
+	assert.Empty(t, f.storage(t))
+}

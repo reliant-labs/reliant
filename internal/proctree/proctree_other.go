@@ -5,6 +5,9 @@ package proctree
 
 import "os/exec"
 
+// trackLive is off: no /proc scan prunes a list of live trees here.
+const trackLive = false
+
 // New builds a limiter. Outside Linux there is no cgroup v2 and no
 // per-command process limit to set: commands only get their process group.
 func New(cfg Config) *Limiter {
