@@ -564,18 +564,31 @@ tasks:
 
   contract:controlplane:check:
     # proto-vendor/controlplane/ is a generated `buf export` of control-plane's
-    # public protos. CONTROL_PLANE_DIR is a control-plane checkout at main
-    # (default ../control-plane); control-plane is private, so CI reads it
-    # with a deploy key. --require: a missing sibling or buf fails rather than
-    # reporting a pass that checked nothing.
-    desc: "Fail unless proto-vendor/controlplane/ is exactly what control-plane main exports (CONTROL_PLANE_DIR, buf on PATH)"
+    # public protos, and its SOURCE names the control-plane commit it came
+    # from. This judges the tree against that declaration, never against
+    # control-plane's moving main: the tree must be exactly SOURCE's export,
+    # and SOURCE must be on control-plane main. CONTROL_PLANE_DIR is a
+    # control-plane checkout holding that commit (default ../control-plane);
+    # control-plane is private, so CI reads it with a deploy key. --require: a
+    # missing sibling, commit or buf fails rather than reporting a pass that
+    # checked nothing.
+    desc: "Fail unless proto-vendor/controlplane/ is exactly what its SOURCE control-plane commit exports, and SOURCE is on control-plane main (CONTROL_PLANE_DIR, buf on PATH)"
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs --check --require
 
+  contract:controlplane:drift:
+    # How far proto-vendor/controlplane/ is behind CONTROL_PLANE_DIR's checked-
+    # out tree (control-plane main). Exit 3 when behind. Never a gate:
+    # .github/workflows/cp-contract-drift.yml turns it into one open issue.
+    desc: "Report whether proto-vendor/controlplane/ is behind control-plane main (exit 3 when it is; CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs --upstream --require {{.CLI_ARGS}}
+
   contract:controlplane:sync:
     # Pull control-plane main's public contract into proto-vendor/controlplane/
-    # (a `buf export` over its proto/public-api.txt), then regenerate the
-    # clients from it. contract:controlplane:check is the drift gate.
+    # (a `buf export` over its proto/public-api.txt, plus SOURCE naming the
+    # commit), then regenerate the clients from it. CONTROL_PLANE_DIR must be a
+    # clean checkout of a commit on control-plane main.
     desc: "Re-vendor control-plane's public protos into proto-vendor/controlplane/ and regenerate the clients (CONTROL_PLANE_DIR, buf on PATH)"
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs

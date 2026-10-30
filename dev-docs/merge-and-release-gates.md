@@ -394,7 +394,9 @@ Beside them run the lanes neither gate covers, selected by path
 one (the contract only when a push changed what it checks): the renderer's release build (`task build:web:verify`), Playwright
 (`task test:web:e2e`), the electron package (`task build:electron:smoke`) and
 the vendored control-plane contract (`task contract:controlplane:check`, which
-reads private control-plane with a deploy key). `CI result` is the one verdict.
+reads private control-plane with a deploy key and judges the tree against the
+control-plane commit its `SOURCE` declares, never against control-plane's
+moving main; lag behind main is `cp-contract-drift.yml`'s issue, not a gate). `CI result` is the one verdict.
 DB-backed tests boot forge pgtest's embedded Postgres on the runner: there is
 no Postgres service container and no `DATABASE_URL`.
 
