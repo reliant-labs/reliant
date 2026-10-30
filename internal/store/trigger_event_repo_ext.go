@@ -287,15 +287,24 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 // transaction) and takes the launch's start record as its payload. The
 // outcome predicate is what makes two concurrent fires of one event launch it
 // once: the loser updates zero rows, and reports claimed=false.
-func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, payload map[string]any) (bool, error) {
+//
+// def is the workflow definition the claiming fire resolved. It is written in
+// the same guarded statement, so only the fire that wins the claim records
+// what it launched against; nil keeps the definition recorded at intake.
+func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	encoded, err := triggerJSONObject(payload)
 	if err != nil {
 		return false, fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	definition, err := triggerEventDefinitionJSON(def)
+	if err != nil {
+		return false, err
 	}
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = 'launched'").
 		Set("outcome_detail = ''").
 		Set("payload = ?", string(encoded)).
+		Set("definition = COALESCE(?::jsonb, definition)", definition).
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
@@ -308,10 +317,19 @@ func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, pa
 // SettlePendingTriggerEvent records the verdict on an inbound event that did
 // NOT launch. Conditional on pending, so it can never overwrite a launch that
 // won a race; settled=false means it did not apply.
-func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+//
+// def is the workflow definition the settling fire resolved, written under
+// the same guard so a fire that lost the race never rewrites the winner's;
+// nil keeps the definition already recorded.
+func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	definition, err := triggerEventDefinitionJSON(def)
+	if err != nil {
+		return false, err
+	}
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = ?", outcome).
 		Set("outcome_detail = ?", detail).
+		Set("definition = COALESCE(?::jsonb, definition)", definition).
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
@@ -319,24 +337,6 @@ func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, o
 		return false, fmt.Errorf("failed to settle pending trigger event: %w", err)
 	}
 	return oneRowTouched(res)
-}
-
-// SetTriggerEventDefinition records which workflow definition a firing
-// resolved. A fire re-reads the definition when it decides, so an inbound
-// event recorded at intake is stamped again with what its fire launched (or
-// refused) against.
-func SetTriggerEventDefinition(ctx context.Context, db orm.Context, id string, def *core.TriggerEventDefinition) error {
-	encoded, err := triggerEventDefinitionJSON(def)
-	if err != nil {
-		return err
-	}
-	if _, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
-		Set("definition = ?", encoded).
-		Where("id = ?", id).
-		Exec(ctx); err != nil {
-		return fmt.Errorf("failed to record trigger event definition: %w", err)
-	}
-	return nil
 }
 
 func oneRowTouched(res sql.Result) (bool, error) {

@@ -49196,7 +49196,7 @@
         {
           "id": "method1:f205fc1e4ba331a125d20b85121842d34f6b04dd8625bbcb2052a7a8817a54c9",
           "name": "ClaimPendingTriggerEvent",
-          "signature": "func(ctx context.Context, id string, payload map[string]any) (bool, error)",
+          "signature": "func(ctx context.Context, id string, payload map[string]any, def *github.com/reliant-labs/reliant/internal/db/core.TriggerEventDefinition) (bool, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.ClaimPendingTriggerEvent",
           "source": {
@@ -53814,17 +53814,6 @@
           }
         },
         {
-          "id": "method1:0425e8fd15dafa68c109ee83e16d0c2893426801f5dda976191c76f941339882",
-          "name": "SetTriggerEventDefinition",
-          "signature": "func(ctx context.Context, id string, def *github.com/reliant-labs/reliant/internal/db/core.TriggerEventDefinition) error",
-          "scope": "github.com/reliant-labs/reliant/internal/db",
-          "legacy_name": "db.SetTriggerEventDefinition",
-          "source": {
-            "path": "internal/db/repository_impl.go",
-            "symbol": "Repo.SetTriggerEventDefinition"
-          }
-        },
-        {
           "id": "method1:f46e025b64f000aa5290ca011140746552893332672ba7198e35a3a3b4ad8a25",
           "name": "SetTriggerProjection",
           "signature": "func(ctx context.Context, id string, p github.com/reliant-labs/reliant/internal/db/core.TriggerProjection) error",
@@ -53915,7 +53904,7 @@
         {
           "id": "method1:3b6f1d28e9ba2b526102ceb866a95f26f3052b446f7ed106aae1b39965765914",
           "name": "SettlePendingTriggerEvent",
-          "signature": "func(ctx context.Context, id string, outcome github.com/reliant-labs/reliant/internal/db/core.TriggerEventOutcome, detail string) (bool, error)",
+          "signature": "func(ctx context.Context, id string, outcome github.com/reliant-labs/reliant/internal/db/core.TriggerEventOutcome, detail string, def *github.com/reliant-labs/reliant/internal/db/core.TriggerEventDefinition) (bool, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.SettlePendingTriggerEvent",
           "source": {
@@ -70314,7 +70303,7 @@
         {
           "id": "method1:447fb692a7d8a3fda42e149544194a903e64029e63d328fd9363da98fc11aca4",
           "name": "ClaimPendingTriggerEvent",
-          "signature": "func(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)",
+          "signature": "func(ctx context.Context, id string, payload map[string]any, def *github.com/reliant-labs/reliant/internal/db/core.TriggerEventDefinition) (claimed bool, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.ClaimPendingTriggerEvent",
           "source": {

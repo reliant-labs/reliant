@@ -479,7 +479,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if pending != nil {
 			// The outcome predicate on the claim is what decides between two
 			// fires of one inbound event, as the unique key does for inserts.
-			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload)
+			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
 			if err != nil {
 				return fmt.Errorf("failed to claim trigger event: %w", err)
 			}

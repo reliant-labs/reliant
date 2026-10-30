@@ -107,12 +107,6 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil && existing.Outcome == core.TriggerEventPending && def != nil {
-		// A queued fire decides now, against the definition as it is now.
-		if err := f.repo.SetTriggerEventDefinition(ctx, existing.ID, def); err != nil {
-			return nil, err
-		}
-	}
 	rec := fireRecord{trigger: trigger, req: req, def: def}
 	if def.Broken() && !resuming {
 		return f.failPermanently(ctx, rec, RefusalDetail(def), errors.New(def.Error))
@@ -524,12 +518,12 @@ func (f *Firer) recordOutcome(
 		}
 		if stored.Outcome == core.TriggerEventPending && stored.CapacityOrder != nil {
 			settler, ok := f.repo.(interface {
-				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string) (bool, error)
+				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 			})
 			if !ok {
 				return nil, errors.New("capacity queue settlement unavailable")
 			}
-			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail); err != nil {
+			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail, rec.def); err != nil {
 				return nil, err
 			}
 			stored, err = f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)

@@ -177,7 +177,7 @@ func (r *fakeRepo) AbandonFailedWorkflowStart(_ context.Context, id string) (boo
 	return true, nil
 }
 
-func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, ev := range r.events {
@@ -186,21 +186,13 @@ func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outco
 				return false, nil
 			}
 			ev.Outcome, ev.OutcomeDetail = outcome, detail
+			if def != nil {
+				ev.Definition = def
+			}
 			return true, nil
 		}
 	}
 	return false, nil
-}
-
-func (r *fakeRepo) SetTriggerEventDefinition(_ context.Context, id string, def *core.TriggerEventDefinition) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, ev := range r.events {
-		if ev.ID == id {
-			ev.Definition = def
-		}
-	}
-	return nil
 }
 
 func (r *fakeRepo) ListStalePendingTriggerEvents(_ context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {

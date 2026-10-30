@@ -3214,18 +3214,12 @@ func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
-func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
 
-// SetTriggerEventDefinition records which workflow definition a firing
-// resolved (store.SetTriggerEventDefinition).
-func (r *Repo) SetTriggerEventDefinition(ctx context.Context, id string, def *core.TriggerEventDefinition) error {
-	return store.SetTriggerEventDefinition(ctx, r.ORM(), id, def)
-}
-
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {

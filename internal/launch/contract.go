@@ -345,7 +345,7 @@ type TriggerEventStore interface {
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
 	// as pending; claimed=false means another launch got it first.
-	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (claimed bool, err error)
 }
 
 // WorkflowStore is the root workflow row a launch starts.

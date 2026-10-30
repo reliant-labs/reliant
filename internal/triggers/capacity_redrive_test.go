@@ -18,7 +18,7 @@ type capacityRedriveRepo struct {
 func (r *capacityRedriveRepo) ListStalePendingTriggerEvents(context.Context, time.Time, int) ([]*core.TriggerEvent, error) {
 	return r.events, nil
 }
-func (r *capacityRedriveRepo) SettlePendingTriggerEvent(_ context.Context, id string, _ core.TriggerEventOutcome, _ string) (bool, error) {
+func (r *capacityRedriveRepo) SettlePendingTriggerEvent(_ context.Context, id string, _ core.TriggerEventOutcome, _ string, _ *core.TriggerEventDefinition) (bool, error) {
 	r.settled = append(r.settled, id)
 	return true, nil
 }
