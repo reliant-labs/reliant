@@ -568,17 +568,39 @@ func (s *Service) DeleteChat(
 	}
 
 	// Otherwise, archive the chat
-	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, db.ChatStateArchived, "user_archived"); err != nil {
+	if err := s.archiveChat(ctx, chat, "user_archived"); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to archive chat"))
 	}
-
-	s.cancelArchivedChatWorkflow(ctx, chat)
 
 	return connect.NewResponse(&reliantv1.DeleteChatResponse{
 		Success:            true,
 		Message:            "Chat archived successfully",
 		PermanentlyDeleted: false,
 	}), nil
+}
+
+// archiveChat archives a chat and stops its run.
+//
+// The state change is made under the chat's run-control lock, the lock every
+// path that starts a run for the chat holds while it decides to (a send,
+// ContinueQueued's delivery of a message queued for the machine,
+// ResumePausedForMachine). So a delivery either finishes starting its run
+// before the archive — and the cancel below stops it — or reads the chat as
+// archived and drops the queued message. Without the lock a delivery that had
+// read the chat a moment earlier could start a run after the cancel, on a
+// chat the user had put away. The archive itself drops the chat's queued and
+// paused-for-machine markers (Repo.UpdateChatState), so nothing redelivers it
+// later either.
+func (s *Service) archiveChat(ctx context.Context, chat *db.Chat, reason string) error {
+	if s.runs != nil {
+		release := s.runs.LockRunControl(ctx, chat.ID)
+		defer release()
+	}
+	if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, reason); err != nil {
+		return err
+	}
+	s.cancelArchivedChatWorkflow(ctx, chat)
+	return nil
 }
 
 // cancelArchivedChatWorkflow stops the run of a chat that was just archived.
