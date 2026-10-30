@@ -22,6 +22,7 @@
  *   unavailable  everything else: the stack is down, a network blip.
  */
 
+import { BinaryReader, WireType } from "@bufbuild/protobuf/wire";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { hasErrorReason } from "@/lib/errorReasons";
@@ -54,6 +55,69 @@ export function obsErrorMessage(error: unknown): string {
   if (error instanceof ConnectError) return error.rawMessage || error.message.replace(/^\[[^\]]+\]\s*/, "");
   if (error instanceof Error) return error.message;
   return "";
+}
+
+/**
+ * The console's concurrent-read cap (control-plane obsratelimit.InFlight): a
+ * ResourceExhausted with reason `in_flight_limit`. Not the hourly quota, which
+ * shares the code, and not a fault: a slot frees as soon as one of the user's
+ * own reads finishes, so the answer is "wait and ask again", never "give up".
+ */
+export function isInFlightLimit(error: unknown): boolean {
+  return error instanceof ConnectError && error.code === Code.ResourceExhausted && !quotaOf(error) && hasErrorReason(error, "in_flight_limit");
+}
+
+const RETRY_INFO_TYPE = "google.rpc.RetryInfo";
+/** A server asking for a longer pause than this is a bad clock or a bad header. */
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/** google.rpc.RetryInfo { Duration retry_delay = 1 } → milliseconds, or null when it carries none. */
+function retryInfoMs(bytes: Uint8Array): number | null {
+  try {
+    const info = new BinaryReader(bytes);
+    while (info.pos < info.len) {
+      const [field, wire] = info.tag();
+      if (field !== 1 || wire !== WireType.LengthDelimited) {
+        info.skip(wire, field);
+        continue;
+      }
+      const duration = new BinaryReader(info.bytes());
+      let seconds = 0;
+      let nanos = 0;
+      while (duration.pos < duration.len) {
+        const [f, w] = duration.tag();
+        if (f === 1 && w === WireType.Varint) seconds = Number(duration.int64());
+        else if (f === 2 && w === WireType.Varint) nanos = duration.int32();
+        else duration.skip(w, f);
+      }
+      return seconds * 1000 + nanos / 1e6;
+    }
+  } catch {
+    // A detail that does not decode is no detail.
+  }
+  return null;
+}
+
+/**
+ * How long the server asked the caller to wait, in ms, or null when it did not
+ * say. The typed RetryInfo detail travels in the error body, so any origin can
+ * read it; the `Retry-After` header is the fallback (a browser reads it only
+ * same-origin or when the server exposes it).
+ */
+export function retryAfterMs(error: unknown): number | null {
+  if (!(error instanceof ConnectError)) return null;
+  let ms: number | null = null;
+  for (const detail of error.details) {
+    if ("type" in detail && detail.type === RETRY_INFO_TYPE) {
+      ms = retryInfoMs(detail.value);
+      if (ms !== null) break;
+    }
+  }
+  if (ms === null) {
+    const header = Number(error.metadata.get("retry-after"));
+    if (error.metadata.has("retry-after") && Number.isFinite(header) && header >= 0) ms = header * 1000;
+  }
+  return ms === null ? null : Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS);
 }
 
 /** A not-set-up answer is a fact about the org, not a fault: never retry it, nor any other answer the server gave on purpose. */
