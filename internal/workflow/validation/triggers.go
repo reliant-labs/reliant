@@ -700,8 +700,8 @@ func validateTriggerInputType(name, value string, exprs []string, input *reliant
 		return ""
 	}
 	yields, sample := "", any(nil)
-	mixed := !(len(exprs) == 1 && strings.HasPrefix(trimmed, "{{") && strings.HasSuffix(trimmed, "}}") &&
-		strings.TrimSpace(trimmed[2:len(trimmed)-2]) == strings.TrimSpace(exprs[0]))
+	mixed := len(exprs) != 1 || !strings.HasPrefix(trimmed, "{{") || !strings.HasSuffix(trimmed, "}}") ||
+		strings.TrimSpace(trimmed[2:len(trimmed)-2]) != strings.TrimSpace(exprs[0])
 	if mixed {
 		yields, sample = "string", ""
 	} else if shape != nil {
