@@ -42,6 +42,11 @@ type Daemon struct {
 	LastStatusChangedAt *time.Time
 	LastOOMKilledAt     *time.Time
 	OOMKillCount        int32
+
+	// Labels are the machine's durable labels, set by its owner. They decide
+	// machine-pool membership (dev-docs/design/machine-pools.md) and, unlike
+	// the labels a daemon reports when it connects, hold while it sleeps.
+	Labels map[string]string
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied

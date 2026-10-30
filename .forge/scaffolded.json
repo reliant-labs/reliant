@@ -370,6 +370,18 @@
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },
+    "internal/handlers/daemon_registry/handlers_scaffold_delete_machine_pool_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:05Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_list_machine_pools_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_put_machine_pool_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_set_machine_labels_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
+    },
     "internal/handlers/file_system/handlers_scaffold_copy_file_test.go": {
       "scaffolded_at": "2026-10-13T15:43:35Z"
     },
@@ -1169,6 +1181,9 @@
     "internal/store/legacy_credential_copy_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/machine_pool_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T17:25:10Z"
+    },
     "internal/store/message_content_block_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
@@ -1326,6 +1341,10 @@
     "internal/handlers/connector/handlers_scaffold_list_available_tools_test.go",
     "internal/handlers/connector/handlers_scaffold_list_connectors_test.go",
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_delete_machine_pool_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_list_machine_pools_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_put_machine_pool_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_set_machine_labels_test.go",
     "internal/handlers/file_system/handlers_scaffold_copy_file_test.go",
     "internal/handlers/file_system/handlers_scaffold_create_directory_test.go",
     "internal/handlers/file_system/handlers_scaffold_create_file_or_folder_test.go",

@@ -16,7 +16,7 @@ var concurrencyWaiting = map[string]reliantv1.WorkflowConcurrencyWaiting{
 
 func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurrency, error) {
 	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("concurrency must be a mapping with max_running")
+		return nil, fmt.Errorf("concurrency must be a mapping with max_running, per_member, or both")
 	}
 	policy := &reliantv1.WorkflowConcurrency{}
 	seen := map[string]bool{}
@@ -27,15 +27,21 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 		}
 		seen[name] = true
 		switch name {
-		case "max_running":
+		case "max_running", "per_member":
 			if value.Kind != yaml.ScalarNode || value.Tag != "!!int" {
-				return nil, fmt.Errorf("concurrency.max_running must be a positive integer")
+				return nil, fmt.Errorf("concurrency.%s must be a positive integer", name)
 			}
 			n, err := strconv.ParseUint(value.Value, 10, 32)
 			if err != nil || n == 0 {
-				return nil, fmt.Errorf("concurrency.max_running must be between 1 and 4294967295")
+				return nil, fmt.Errorf("concurrency.%s must be between 1 and 4294967295", name)
 			}
-			policy.MaxRunning = uint32(n)
+			if name == "max_running" {
+				policy.MaxRunning = uint32(n)
+			} else {
+				// K runs per member of the trigger's machine pool that can take
+				// work; max_running, when set too, caps the scaled value.
+				policy.PerMember = uint32(n)
+			}
 		case "waiting":
 			waiting, ok := concurrencyWaiting[value.Value]
 			if value.Kind != yaml.ScalarNode || !ok {
@@ -48,11 +54,11 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 			}
 			policy.Key = value.Value
 		default:
-			return nil, fmt.Errorf("unknown concurrency field %q (max_running, waiting, key)", name)
+			return nil, fmt.Errorf("unknown concurrency field %q (max_running, per_member, waiting, key)", name)
 		}
 	}
-	if !seen["max_running"] {
-		return nil, fmt.Errorf("concurrency requires max_running")
+	if !seen["max_running"] && !seen["per_member"] {
+		return nil, fmt.Errorf("concurrency requires max_running, per_member, or both")
 	}
 	if policy.Key != "" && policy.Waiting != reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST {
 		return nil, fmt.Errorf("concurrency.key needs waiting: latest (it groups the waiting firings that replace each other)")
@@ -63,11 +69,16 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 // marshalWorkflowConcurrency is the inverse of unmarshalWorkflowConcurrency.
 // waiting is emitted only when it was set.
 func marshalWorkflowConcurrency(policy *reliantv1.WorkflowConcurrency) (*yaml.Node, error) {
-	if policy.MaxRunning == 0 {
-		return nil, fmt.Errorf("concurrency.max_running must be positive")
+	if policy.MaxRunning == 0 && policy.PerMember == 0 {
+		return nil, fmt.Errorf("concurrency requires max_running, per_member, or both")
 	}
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	node.Content = append(node.Content, scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(policy.MaxRunning), 10), "!!int"))
+	if policy.MaxRunning > 0 {
+		node.Content = append(node.Content, scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(policy.MaxRunning), 10), "!!int"))
+	}
+	if policy.PerMember > 0 {
+		node.Content = append(node.Content, scalarNode("per_member", ""), scalarNode(strconv.FormatUint(uint64(policy.PerMember), 10), "!!int"))
+	}
 	for spelling, waiting := range concurrencyWaiting {
 		if policy.Waiting == waiting {
 			node.Content = append(node.Content, scalarNode("waiting", ""), scalarNode(spelling, ""))
