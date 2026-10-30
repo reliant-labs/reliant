@@ -2138,7 +2138,8 @@ message Workflow {
   // like any other workflow.
   bool automation_only = 18;
   // Concurrency optionally bounds trigger-launched runs across this owner's
-  // activations in one project. Excess firings wait durably in FIFO order.
+  // activations in one project. Excess firings wait durably in FIFO order
+  // (or, with waiting: latest, only the newest per key waits).
   // Paused or uncertain runs retain capacity. Interactive starts are outside
   // this trigger policy; manual trigger fires participate.
   WorkflowConcurrency concurrency = 20;
@@ -2175,5 +2176,30 @@ message WorkflowRequirements {
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
 message WorkflowConcurrency {
+  // MaxRunning is how many trigger-launched runs may run at once; later
+  // firings wait.
   uint32 max_running = 1 [(buf.validate.field).uint32.gt = 0];
+  // Waiting is what happens to firings that wait: fifo (the default) keeps
+  // every one, in arrival order; latest keeps only the newest waiting firing
+  // per key, and each older one it replaces is recorded skipped with the
+  // detail "superseded", never failed. Running runs are never touched.
+  WorkflowConcurrencyWaiting waiting = 2;
+  // Key groups waiting firings for waiting: latest, a template over `trigger`
+  // like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
+  // Unset: every firing of the workflow shares one key. It only decides which
+  // waiting firings replace each other; max_running still bounds the whole
+  // workflow. A firing whose key cannot be rendered waits and is never
+  // superseded.
+  string key = 3;
+}
+
+// WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting
+// firings. In YAML: fifo or latest.
+enum WorkflowConcurrencyWaiting {
+  // UNSPECIFIED is FIFO.
+  WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED = 0;
+  // FIFO: every waiting firing runs, oldest first.
+  WORKFLOW_CONCURRENCY_WAITING_FIFO = 1;
+  // LATEST: a new firing supersedes the older waiting firings of its key.
+  WORKFLOW_CONCURRENCY_WAITING_LATEST = 2;
 }

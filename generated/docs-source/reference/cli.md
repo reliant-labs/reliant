@@ -14159,7 +14159,9 @@ no value) none is, and the reason is printed per trigger. Run it again with
 changed flags to change an automation's settings; an existing activation is
 brought to them.
 
---trigger activates only the named declared triggers, one at a time.
+--trigger enables only the named declared triggers (all or nothing among
+them) and leaves the workflow's other activations as they are. A named
+trigger that is already activated is brought to the flags, not duplicated.
 
 ```
 reliant trigger activate [flags]

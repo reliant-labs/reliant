@@ -60,7 +60,7 @@ import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observa
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { ENV_ALL } from "../../Console/envScope";
+import { ENV_ALL, PLATFORM_SCOPE_LABEL } from "../../Console/envScope";
 import { ObsChartMarkersProvider, type ChartBand, type ChartMarker } from "../charts/UPlotChart";
 import { deliveryScopeOf } from "../deliveryScope";
 import { formatAgo } from "../format";
@@ -134,6 +134,12 @@ export interface DashboardViewProps {
 
 const NO_MARKERS: readonly ChartMarker[] = [];
 
+/** Release comparison on a platform dashboard: no environment, so no release. */
+const PLATFORM_NO_RELEASE: CompareTarget = {
+  mode: "unavailable",
+  reason: "A platform dashboard belongs to no environment, so there is no release to compare with.",
+};
+
 const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 
 export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
@@ -153,6 +159,9 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const defaultRange = dashboardDefaultRange(spec?.defaultRange);
   const range: RangePreset = search.range ?? defaultRange;
 
+  // A platform dashboard's signals belong to no environment: it reads them
+  // platform-wide whatever environment the top bar names.
+  const platform = spec?.scope === "platform";
   // An org dashboard reads every project's environments: it names no project,
   // lists the org's environments as project/env, and narrows by its own picker
   // (the top bar's control is the route project's).
@@ -162,16 +171,17 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const env = orgScoped ? orgPick.env : consoleEnv;
   const environments = orgScoped ? orgEnvironments : projectEnvironments;
   const envId = orgScoped ? (orgPick.ids.length === 1 ? orgPick.ids[0] : null) : env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
-  const unrecorded = !orgScoped && env !== ENV_ALL && !envId;
-  const envLabel = orgScoped ? orgScopeLabel(orgPick) : env === ENV_ALL ? "All environments" : env;
+  const unrecorded = !orgScoped && !platform && env !== ENV_ALL && !envId;
+  const envLabel = platform ? PLATFORM_SCOPE_LABEL : orgScoped ? orgScopeLabel(orgPick) : env === ENV_ALL ? "All environments" : env;
   // Its drill-downs and explorers read the same org-wide scope: the org's
   // pages on the picked environments, not the route project's console.
   const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
   const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
     if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
+    if (platform) return { orgId, envIds: [], filters: [], platformScope: true };
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
-  }, [orgId, project, envId, unrecorded, orgRosterBlocked, orgScoped, orgPick, dashRef.kind]);
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -191,22 +201,26 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const starred = starredHere ?? !!summary?.starred;
 
   // ── Markers, bands, comparison ──
-  const marks = !!spec && marksReleases(spec) && search.releases !== false;
+  const marks = !!spec && !platform && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && !orgRosterBlocked && dashRef.kind !== "builtin" });
-  const history = useAlertHistory(dashRef.kind === "builtin" || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  // A platform dashboard belongs to no environment: the environment the top
+  // bar names (hidden for it) must not lend it that environment's alert bands
+  // or its last release to compare with. Previous-period comparison stays.
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
+  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(
     () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
     [envId, environments, orgScoped, orgPick.ids]
   );
   const bands = useMemo(
-    () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
-    [history.data, scopeEnvIds, search.service, search.alerts]
+    () => platform || search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
+    [platform, history.data, scopeEnvIds, search.service, search.alerts]
   );
   const now = Date.now();
-  const target = compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
-  const releaseCompare = compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);
@@ -619,7 +633,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           services={services}
           environments={environments}
           env={env}
-          scopeLabel={`${orgScoped ? envLabel : env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
+          scopeLabel={`${platform ? PLATFORM_SCOPE_LABEL : orgScoped ? envLabel : env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
           version={currentVersion}
           envScope={workspaceScope}
           saving={save.isPending}
