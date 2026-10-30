@@ -55,11 +55,14 @@ type Workflow struct {
 // run at position when the next user message starts a fresh Temporal run.
 // One row per workflow ID (workflow IDs are reused across runs for a chat).
 type WorkflowCheckpoint struct {
-	WorkflowID    string    `json:"workflow_id"`
-	ChatID        string    `json:"chat_id"`
-	NodeID        string    `json:"node_id"`
-	LoopIteration int64     `json:"loop_iteration"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	WorkflowID    string `json:"workflow_id"`
+	ChatID        string `json:"chat_id"`
+	NodeID        string `json:"node_id"`
+	LoopIteration int64  `json:"loop_iteration"`
+	// CatalogPin is the workflow catalog the run at this position started
+	// with (db.Repo.PinProjectCatalog); "" for a run with no pin.
+	CatalogPin string    `json:"catalog_pin,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // StepExecution represents a single execution of a workflow step.

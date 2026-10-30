@@ -9,7 +9,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -22,6 +21,9 @@ type LoadPresetParamsInput struct {
 	// ProjectID.
 	ChatID     string `json:"chat_id" reliant:"-"`
 	PresetName string `json:"preset_name"`
+	// CatalogPin is the project catalog the run started with
+	// (LoadWorkflowInput.CatalogPin): a project preset is read from it.
+	CatalogPin string `json:"catalog_pin,omitempty" reliant:"-"`
 }
 
 // LoadPresetParamsActivity loads preset params for use in spawned workflows.
@@ -64,7 +66,7 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 	// One column, not the whole config row: the row carries every indexed
 	// skill and can run to tens of MB.
 	if projectID != "" && a.repo != nil {
-		presets, err := workflowsource.ProjectPresets(ctx, a.repo, projectID, daemonID)
+		presets, err := projectPresets(ctx, a.repo, projectID, daemonID, input.CatalogPin)
 		if err != nil {
 			return nil, fmt.Errorf("load preset %s: %w", input.PresetName, err)
 		}

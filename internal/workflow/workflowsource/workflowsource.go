@@ -89,6 +89,87 @@ type Options struct {
 	// workflow's input schema for whatever is about to start, as opposed to
 	// a builder test run, which must run the draft or nothing.
 	DraftRootOptional bool
+	// CatalogPin is the catalog the run started with
+	// (db.Repo.PinProjectCatalog). When set, the project's workflows and the
+	// owner's account workflows come from that snapshot, not the live
+	// catalog of any machine or the owner's current workflows, so every load
+	// of one run reads one definition tree. A pin that is no longer stored
+	// fails closed.
+	CatalogPin string
+}
+
+// PinnedStore reads the catalog a run pinned at its start. found is false
+// when the pin is unknown (never stored, or pruned).
+type PinnedStore interface {
+	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
+}
+
+// pinnedCatalog reads a pin, refusing a store that cannot and a pin that is
+// gone: the run asked for the definitions it started with, and running any
+// other version in their place is exactly what the pin prevents.
+func pinnedCatalog(ctx context.Context, store any, pin string) (*db.PinnedCatalog, error) {
+	pinned, ok := store.(PinnedStore)
+	if !ok {
+		return nil, &StoreError{Err: fmt.Errorf("this store cannot read the run's pinned workflow catalog %s", pin)}
+	}
+	catalog, found, err := pinned.GetPinnedProjectCatalog(ctx, pin)
+	if err != nil {
+		return nil, &StoreError{Err: fmt.Errorf("read the run's pinned workflow catalog %s: %w", pin, err)}
+	}
+	if !found {
+		return nil, fmt.Errorf("the workflows this run started with (catalog %s) are no longer stored; start the run again to use the current ones", pin)
+	}
+	return catalog, nil
+}
+
+// PinnedPresets is ProjectPresets for a run that pinned its catalog.
+func PinnedPresets(ctx context.Context, store any, pin string) ([]config.StoredPreset, error) {
+	catalog, err := pinnedCatalog(ctx, store, pin)
+	if err != nil {
+		return nil, err
+	}
+	return config.ParseStoredPresets(catalog.Presets)
+}
+
+// pinnedSources is what a pinned run's refs resolve against: the project
+// index and the owner's account workflows as they were at the pin.
+func pinnedSources(ctx context.Context, store any, opts Options) (workflowref.Sources, error) {
+	catalog, err := pinnedCatalog(ctx, store, opts.CatalogPin)
+	if err != nil {
+		return workflowref.Sources{}, err
+	}
+	workflows, err := config.ParseStoredWorkflows(catalog.Workflows)
+	if err != nil {
+		return workflowref.Sources{}, err
+	}
+	sources := workflowref.Sources{Project: config.ProjectWorkflowIndex(workflows), ProjectFirst: opts.ProjectFirst}
+	if opts.UserID != "" {
+		sources.User = pinnedUserWorkflows(catalog.UserWorkflows, opts)
+	}
+	return sources, nil
+}
+
+// pinnedUserWorkflows is userWorkflows over the pin's snapshot of the
+// owner's account workflows, with the same answers: a complete workflow's
+// definition (the draft root's draft), an unfinished one's error, and
+// nothing for a slug the owner had no workflow of.
+func pinnedUserWorkflows(pinned map[string]db.PinnedUserWorkflow, opts Options) func(slug string) ([]byte, error) {
+	draftRoot := workflowref.ProjectSlug(opts.DraftRoot)
+	return func(slug string) ([]byte, error) {
+		w, ok := pinned[slug]
+		switch {
+		case draftRoot != "" && slug == draftRoot && !ok:
+			if opts.DraftRootOptional {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("%w: you have no workflow named %q to test", workflowref.ErrNotFound, slug)
+		case !ok:
+			return nil, nil
+		case w.NotRunnable && slug != draftRoot:
+			return nil, &db.WorkflowDraftNotRunnableError{Slug: slug}
+		}
+		return []byte(w.Definition), nil
+	}
 }
 
 // ProjectIndex indexes the workflows synced for a project: nil when there is
@@ -189,7 +270,8 @@ func ProjectPresets(ctx context.Context, store interface {
 	return config.ParseStoredPresets(presetsJSON)
 }
 
-// Sources assembles what a ref resolves against.
+// Sources assembles what a ref resolves against: the run's pinned catalog
+// when it has one, else the live one.
 func Sources(ctx context.Context, store Store, opts Options) (workflowref.Sources, error) {
 	sources, _, err := sources(ctx, store, opts)
 	return sources, err
@@ -198,6 +280,12 @@ func Sources(ctx context.Context, store Store, opts Options) (workflowref.Source
 // sources is Sources, and whether the project's workflows are opts.DaemonID's
 // own catalog (false: the union of every machine's).
 func sources(ctx context.Context, store Store, opts Options) (workflowref.Sources, bool, error) {
+	if opts.CatalogPin != "" && opts.ProjectID != "" {
+		// A pinned run reads the catalog it started with, not any machine's
+		// live one.
+		pinned, err := pinnedSources(ctx, store, opts)
+		return pinned, false, err
+	}
 	project, fromMachine, err := machineProjectIndex(ctx, store, opts.ProjectID, opts.DaemonID)
 	if err != nil {
 		return workflowref.Sources{}, false, err

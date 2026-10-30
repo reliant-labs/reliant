@@ -225,6 +225,29 @@ func GetProjectMCPConfigsJSON(ctx context.Context, db orm.Context, projectID str
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldMCPConfigs)
 }
 
+// GetProjectCatalogJSON reads the project's synced workflows and presets in
+// one statement, so the pair comes from one committed sync: two reads could
+// straddle a push and pair one sync's workflows with the next one's presets.
+// Both are nil with no error when the project has no record.
+func GetProjectCatalogJSON(ctx context.Context, db orm.Context, projectID string) (workflows, presets *string, err error) {
+	var row struct {
+		Workflows *string `bun:"project_workflows_json"`
+		Presets   *string `bun:"project_presets_json"`
+	}
+	err = db.Bun().NewSelect().Model((*ProjectConfig)(nil)).
+		Column(ProjectConfigFieldProjectWorkflowsJSON, ProjectConfigFieldProjectPresetsJSON).
+		Where("project_id = ?", projectID).
+		Limit(1).
+		Scan(ctx, &row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load the workflow catalog of project %s: %w", projectID, err)
+	}
+	return row.Workflows, row.Presets, nil
+}
+
 // projectConfigColumn reads one nullable text column of the project's
 // record. column is one of the ProjectConfigField* names, never caller input.
 func projectConfigColumn(ctx context.Context, db orm.Context, projectID, column string) (*string, error) {
