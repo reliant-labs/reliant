@@ -39634,6 +39634,9 @@
           "daemon"
         ],
         [
+          "machine"
+        ],
+        [
           "project"
         ],
         [
@@ -39710,7 +39713,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/cli_config.proto",
-      "Line": 39,
+      "Line": 40,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39747,7 +39750,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/cli_config.proto",
-      "Line": 87,
+      "Line": 88,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39798,7 +39801,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/cli_config.proto",
-      "Line": 103,
+      "Line": 104,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -42214,7 +42217,7 @@
   "sources": {
     "reliant/config/v1/analytics_config.proto": "aee736b02a56e865ba9da6e827efb0ce56267256b44e37f5fd3e703ea7e461b9",
     "reliant/config/v1/api_server_config.proto": "db6320103f36deedcdac6129b5f050b26ee1891d2d8a22e392cfa6c4375889e1",
-    "reliant/config/v1/cli_config.proto": "8322a3c3d237061fd60e217ec3056224b68449c6b3104510dc00fec5d5bb0b8e",
+    "reliant/config/v1/cli_config.proto": "314be8bdd3ea0da6c616bbbd8fc72b6474cc55366f172b54f66aa42508c66d94",
     "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
     "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",
     "reliant/config/v1/daemon_config.proto": "7e68240d24b474ef479461049e521c6c6342b94486aa8ed8b72d6bef6cd50ea0",
@@ -42265,7 +42268,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "2487e444cc7ceb7c9f29d16e1cfe0733faeeb91c32a42dc58ff9c15ba1c59076",
+    "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
     "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
