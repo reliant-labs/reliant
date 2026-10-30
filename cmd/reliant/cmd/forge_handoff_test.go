@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -84,7 +85,8 @@ func TestReliantForgeRunsTheProjectsForge(t *testing.T) {
 		out, code := runReliant(t, project, map[string]string{"FORGE_PINNED_CACHE": cache}, "forge", "generate", "--no-cache")
 		require.Equal(t, 0, code, "output:\n%s", out)
 		assert.Contains(t, out, "pinned forge ran: generate --no-cache")
-		assert.Contains(t, out, "delegated=1 session=set", "the pinned forge runs as a delegate, signed in as reliant forge is")
+		// The marker is addressed to the exec'd process alone: its pid, then the forge it is.
+		assert.Regexp(t, `delegated=[0-9]+:forge_version `+regexp.QuoteMeta(pin)+` session=set`, out, "the pinned forge runs as a delegate, signed in as reliant forge is")
 	})
 
 	t.Run("with no pin the embedded forge runs, and says which", func(t *testing.T) {
