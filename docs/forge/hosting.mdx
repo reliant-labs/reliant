@@ -16,7 +16,7 @@ Ask the agent in your project to "deploy it" and it takes this same path. The `d
 
 Hosting runs three kinds of workload: **services**, **workers** (background processors) and **jobs** (one-off tasks such as the database migration that runs before each rollout). In a hosted environment, every service and worker in your project runs in one workload called `api` (the binary's `server` command), so the browser reaches every service at one origin with one sign-in cookie. Your frontend is published separately as a **static site** on Reliant's static hosting and CDN. Every workload and site gets a generated hostname the moment it deploys.
 
-Your app's database is a **managed Postgres**: a dedicated database the platform creates for the environment, retained if you delete the environment. Your services receive its connection string automatically, and it is reachable only from inside the platform, so migrations run as part of the deploy rather than from your laptop.
+Your app's database is a **managed Postgres**: a dedicated database the platform creates for the environment, and deleted with it, data included, unless you delete the environment with `--keep-data`. Your services receive its connection string automatically, and it is reachable only from inside the platform, so migrations run as part of the deploy rather than from your laptop.
 
 Because the frontend is served as static files, a hosted frontend must be a static export. New forge frontends are scaffolded that way, and `forge lint --static-export` names anything in your code that the export cannot serve (a dynamic `[id]` route, a server action, `cookies()`). A frontend that needs a server at request time ships as a workload instead.
 
@@ -51,7 +51,7 @@ Some deploys are refused rather than queued, with the reason printed: when a res
 
 ## Stopping and deleting an environment
 
-`forge env stop <env>` suspends a hosted environment's workloads (they stop running and stop costing compute) and `forge env start <env>` resumes them. `forge env delete <env>` tears the environment down; its managed database is retained. These act on the hosted environment, unlike `forge env down`, which only stops the local processes `forge env up` started.
+`forge env stop <env>` suspends a hosted environment's workloads (they stop running and stop costing compute) and `forge env start <env>` resumes them. `forge env delete <env>` tears the environment down, and **its managed database is deleted with it, data included; this cannot be undone**. It asks you to type the environment name first. To keep the database, run `forge env delete <env> --keep-data`: it keeps running, is billed as storage, and stays until you purge it, and a later deploy of the same name creates a new environment that does not reattach it. Releases older than forge v1.0.5 (Reliant v1.8.10 and earlier) do not have `--keep-data`, and their prompt wrongly says the data is kept. Upgrade before deleting an environment whose data you want to keep. These act on the hosted environment, unlike `forge env down`, which only stops the local processes `forge env up` started.
 
 ## What hosting does not run
 

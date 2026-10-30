@@ -1303,7 +1303,18 @@ type QueryScope struct {
 	// reliant.env.id). Empty = all of the caller's environments in the org.
 	EnvIds []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
 	// Generic attribute predicates, ANDed with each other and with everything else.
-	Filters       []*AttributeFilter `protobuf:"bytes,7,rep,name=filters,proto3" json:"filters,omitempty"`
+	Filters []*AttributeFilter `protobuf:"bytes,7,rep,name=filters,proto3" json:"filters,omitempty"`
+	// Read platform telemetry: the signals of a dashboard whose spec says
+	// `scope: "platform"` (a database, a message bus, a collector). They belong
+	// to no environment and carry no reliant.env.id, so the environment predicate
+	// is the one thing dropped. Nothing else is: the org's database, the caller's
+	// membership and every other predicate apply as always.
+	//
+	// Only the platform organization (tenant zero) has such telemetry, so any
+	// other org is refused PermissionDenied, as is a credential bound to one
+	// environment. It takes no env_ids and no project_id (both narrow by
+	// environment): sending either is InvalidArgument.
+	PlatformScope bool `protobuf:"varint,8,opt,name=platform_scope,json=platformScope,proto3" json:"platform_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1378,6 +1389,13 @@ func (x *QueryScope) GetFilters() []*AttributeFilter {
 		return x.Filters
 	}
 	return nil
+}
+
+func (x *QueryScope) GetPlatformScope() bool {
+	if x != nil {
+		return x.PlatformScope
+	}
+	return false
 }
 
 // === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
@@ -10698,7 +10716,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"-services/observability/v1/observability.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"k\n" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\x90\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xb7\x02\n" +
 	"\n" +
 	"QueryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -10708,7 +10726,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12:\n" +
-	"\afilters\x18\a \x03(\v2 .controlplane.v1.AttributeFilterR\afiltersB\r\n" +
+	"\afilters\x18\a \x03(\v2 .controlplane.v1.AttributeFilterR\afilters\x12%\n" +
+	"\x0eplatform_scope\x18\b \x01(\bR\rplatformScopeB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03R\x06env_id\"\xb0\x02\n" +
 	"\x16GetServiceGraphRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x17\n" +
