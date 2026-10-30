@@ -56,7 +56,7 @@ const START = "2026-10-01T10:00:00Z";
 
 function daemon() {
   const background = [{ id: "bg-1", command: "sleep 100", status: BackgroundProcessStatus.RUNNING, startTime: START, workingDir: "/w", sessionId: "s" }];
-  const packages: Array<{ id: string; command: string; status: BackgroundProcessStatus; worktreeId: string; startTime: string }> = [];
+  const packages: Array<{ id: string; command: string; status: BackgroundProcessStatus; worktreeId: string; startTime: string; daemonId?: string }> = [];
   let favorites = ["npm:dev:"];
   const calls: Record<string, number> = {};
   const count = (name: string) => (calls[name] = (calls[name] ?? 0) + 1);
@@ -91,7 +91,7 @@ function daemon() {
       return {};
     },
   });
-  return { transport, calls: (name: string) => calls[name] ?? 0 };
+  return { transport, calls: (name: string) => calls[name] ?? 0, packages };
 }
 
 function processUpdate(type: UserUpdateType, data: Record<string, unknown>, seq: number): UserUpdate {
@@ -174,12 +174,13 @@ describe("BackgroundService + PackageCommandsService keys", () => {
 
     act(() =>
       useGlobalUpdatesStore.getState().handleUpdate([
-        processUpdate(UserUpdateType.PROCESS_STARTED, { process_id: "p-new", command: "npm run dev", working_dir: "/w", start_time: START, worktree_id: "wt-1" }, 1),
+        processUpdate(UserUpdateType.PROCESS_STARTED, { process_id: "p-new", command: "npm run dev", working_dir: "/w", start_time: START, worktree_id: "wt-1", daemon_id: "machine-a" }, 1),
       ]),
     );
     await waitFor(() => {
       expect(background.result.current.data.map((p) => p.id)).toContain("p-new");
       expect(packages.result.current.data.map((p) => p.id)).toEqual(["p-new"]);
+      expect(packages.result.current.data[0]?.daemon_id).toBe("machine-a");
     });
 
     act(() =>
@@ -198,5 +199,34 @@ describe("BackgroundService + PackageCommandsService keys", () => {
     // Patched in place: the stream refetched nothing.
     expect(calls("bg.ListProcesses")).toBe(1);
     expect(calls("pkg.ListProcesses")).toBe(1);
+  });
+
+  it("a process first seen on the stream with no machine is placed by the server, not on the default machine", async () => {
+    const { transport, calls, packages: server } = daemon();
+    setTransport(transport);
+
+    const all = renderHook(() => usePackageProcesses(), { wrapper });
+    const mine = renderHook(() => usePackageProcesses("wt-1"), { wrapper });
+    await waitFor(() => {
+      expect(all.result.current.isSuccess).toBe(true);
+      expect(mine.result.current.isSuccess).toBe(true);
+    });
+
+    // The process runs on machine B; the event that announces it says nothing
+    // about where. A row without daemon_id would read its logs and kill it on
+    // the default machine.
+    server.push({ id: "p-b", command: "npm run dev", status: BackgroundProcessStatus.RUNNING, worktreeId: "wt-1", startTime: START, daemonId: "machine-b" });
+    act(() =>
+      useGlobalUpdatesStore.getState().handleUpdate([
+        processUpdate(UserUpdateType.PROCESS_STARTED, { process_id: "p-b", command: "npm run dev", working_dir: "/w", start_time: START, worktree_id: "wt-1" }, 1),
+      ]),
+    );
+
+    await waitFor(() => {
+      expect(all.result.current.data.map((p) => [p.id, p.daemon_id])).toEqual([["p-b", "machine-b"]]);
+      expect(mine.result.current.data.map((p) => [p.id, p.daemon_id])).toEqual([["p-b", "machine-b"]]);
+    });
+    // Both lists were refetched rather than patched with an unplaced row.
+    expect(calls("pkg.ListProcesses")).toBe(4);
   });
 });

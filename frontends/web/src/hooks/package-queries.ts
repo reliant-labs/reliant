@@ -303,11 +303,23 @@ function patchList(worktreeId: string | undefined, update: (processes: ProtoPack
  * A process started, finished or failed. One a list already holds takes the
  * event's status, exit code and end time; an unknown one is added. Lists that
  * were never fetched are left alone: their first fetch is current.
+ *
+ * An unknown process the event does not place on a machine is not added: its
+ * logs and kill go to the machine the row names, and a row naming none would
+ * send them to the default machine. The lists are refetched instead, and the
+ * server's answer says where each process runs.
  */
 export function upsertPackageProcess(process: PackageProcess): void {
+  let unplaced = false;
   patchList(process.worktree_id, (processes) => {
     const index = processes.findIndex((p) => p.id === process.id);
-    if (index < 0) return [packageProcessToProto(process), ...processes];
+    if (index < 0) {
+      if (!process.daemon_id) {
+        unplaced = true;
+        return processes;
+      }
+      return [packageProcessToProto(process), ...processes];
+    }
     const existing = processes[index]!;
     const next = [...processes];
     next[index] = create(PackageProcessSchema, {
@@ -315,7 +327,11 @@ export function upsertPackageProcess(process: PackageProcess): void {
       status: process.status,
       exitCode: process.exit_code,
       endTime: process.end_time,
+      daemonId: existing.daemonId || (process.daemon_id ?? ""),
     });
     return next;
   });
+  // The empty request is a prefix of every list's key, so this refetches the
+  // per-worktree lists too.
+  if (unplaced) void queryClient.invalidateQueries({ queryKey: packageCommandsServiceKeys.listProcesses({}) });
 }

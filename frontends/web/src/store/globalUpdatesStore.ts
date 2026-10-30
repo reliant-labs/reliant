@@ -1154,6 +1154,8 @@ function handleProcessStarted(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1188,6 +1190,7 @@ function handleProcessStarted(update: UserUpdate) {
       worktree_id: worktreeId,
       working_dir: data.working_dir,
       start_time: data.start_time || new Date().toISOString(),
+      daemon_id: data.daemon_id || undefined,
     });
   }
 
@@ -1206,6 +1209,8 @@ function handleProcessCompleted(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1232,6 +1237,8 @@ function handleProcessFailed(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1281,6 +1288,7 @@ function updateProcessStatus(
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   },
   status: BackgroundProcess["status"]
@@ -1310,6 +1318,7 @@ function updateProcessStatus(
     start_time: data.start_time,
     end_time: data.end_time,
     exit_code: data.exit_code,
+    daemon_id: data.daemon_id || undefined,
   });
 }
 

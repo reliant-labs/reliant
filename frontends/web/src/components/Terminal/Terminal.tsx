@@ -17,6 +17,7 @@ import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { reliantApiBaseUrl } from "../../lib/connect";
 import { daemonLabel } from "../Automations/daemonChoices";
+import { isAwakeMachine } from "../../lib/chatMachine";
 import { pageActivity } from "../../lib/pageActivity";
 
 interface TerminalProps {
@@ -172,7 +173,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
     : undefined;
   const refreshDaemonStatusRef = useRef(refreshDaemonStatus);
   refreshDaemonStatusRef.current = refreshDaemonStatus;
-  const daemonOnline = !!activeDaemon || daemonStatusLoading;
+  // Once the server has said which machine holds this terminal, that machine's
+  // state is the only one that matters: another machine being up keeps nothing
+  // here alive, and this one dropping while another stays active must still
+  // read as offline. Until then, any connected machine stands in for it.
+  const reachedDaemon = reachedMachineId ? daemons.find((d) => d.daemonId === reachedMachineId) : undefined;
+  const daemonOnline =
+    daemonStatusLoading || (reachedMachineId ? !!reachedDaemon && isAwakeMachine(reachedDaemon) : !!activeDaemon);
   const daemonOnlineRef = useRef(daemonOnline);
 
   useEffect(() => {
@@ -207,9 +214,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
     // daemon, ever corrected it.
     //
     // Deliberately debounced rather than immediate: see
-    // DAEMON_OFFLINE_GRACE_DELAY. `daemonOnline` is `!!activeDaemon ||
-    // daemonStatusLoading` — true while status is LOADING by design, so this
-    // never fires on the gap before the first poll lands.
+    // DAEMON_OFFLINE_GRACE_DELAY. `daemonOnline` is true while status is
+    // LOADING by design, so this never fires on the gap before the first poll
+    // lands.
     if (wasOnline && !daemonOnline) {
       const state = connectionStateRef.current;
       if (state === "connected" || state === "connecting") {
