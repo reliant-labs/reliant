@@ -10076,6 +10076,10 @@
           {
             "name": "archived",
             "kind": "bool"
+          },
+          {
+            "name": "failure_detail",
+            "kind": "string"
           }
         ],
         "reliant.v1.RunNodeExecution": [
@@ -10906,6 +10910,11 @@
             "Name": "acting_identity",
             "ProtoType": "enum",
             "IsOptional": false
+          },
+          {
+            "Name": "triggers",
+            "ProtoType": "[]string",
+            "IsOptional": false
           }
         ],
         "EnableWorkflowResponse": [
@@ -11337,6 +11346,11 @@
             "name": "acting_identity",
             "kind": "enum",
             "type_name": "reliant.v1.ActingIdentity"
+          },
+          {
+            "name": "triggers",
+            "kind": "string",
+            "repeated": true
           }
         ],
         "reliant.v1.EnableWorkflowResponse": [
@@ -12052,6 +12066,66 @@
           {
             "name": "fire_workflow_id",
             "kind": "string"
+          },
+          {
+            "name": "definition",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerEventDefinition",
+            "optional": true
+          }
+        ],
+        "reliant.v1.TriggerEventDefinition": [
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "source",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_name",
+            "kind": "string"
+          },
+          {
+            "name": "repo",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "dirty",
+            "kind": "bool"
+          },
+          {
+            "name": "content_hash",
+            "kind": "string"
+          },
+          {
+            "name": "error",
+            "kind": "string"
+          },
+          {
+            "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "catalog_pin",
+            "kind": "string"
           }
         ],
         "reliant.v1.TriggerEventRun": [
@@ -12327,6 +12401,7 @@
         "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
@@ -15682,6 +15757,11 @@
           {
             "name": "guard_since_ms",
             "kind": "int64"
+          },
+          {
+            "name": "processes",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -16120,6 +16200,52 @@
         "reliant.v1.ProcessOutputUnsubscribeMessage": [
           {
             "name": "process_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ProcessReport": [
+          {
+            "name": "count",
+            "kind": "uint64"
+          },
+          {
+            "name": "limit",
+            "kind": "uint64"
+          },
+          {
+            "name": "refusing_heavy",
+            "kind": "bool"
+          },
+          {
+            "name": "refusing_since_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "top",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessTree",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ProcessTree": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
+          {
+            "name": "command",
+            "kind": "string"
+          },
+          {
+            "name": "tasks",
+            "kind": "uint64"
+          },
+          {
+            "name": "tracked",
+            "kind": "bool"
+          },
+          {
+            "name": "chat_title",
             "kind": "string"
           }
         ],
@@ -16676,6 +16802,8 @@
         "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectConfigDelta": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectConfigSnapshot": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectDiscovery": "reliant/v1/tools_daemon.proto",
@@ -16887,6 +17015,27 @@
             "Mutating": true,
             "Declared": true,
             "Verb": "clear_caches",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
+          "Name": "SetDefaultDaemon",
+          "InputType": "SetDefaultDaemonRequest",
+          "OutputType": "SetDefaultDaemonResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
+          "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_default",
             "TargetKind": "daemon",
             "Writer": "INTERCEPTOR"
           }
@@ -17129,6 +17278,14 @@
             "IsOptional": false
           }
         ],
+        "SetDefaultDaemonRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "SetDefaultDaemonResponse": null,
         "SetLocalModelEndpointsRequest": [
           {
             "Name": "daemon_id",
@@ -17328,6 +17485,10 @@
             "kind": "string"
           },
           {
+            "name": "is_default",
+            "kind": "bool"
+          },
+          {
             "name": "labels",
             "kind": "map",
             "map_key_kind": "string",
@@ -17416,6 +17577,11 @@
           {
             "name": "guard_since_ms",
             "kind": "int64"
+          },
+          {
+            "name": "processes",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -17676,6 +17842,52 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ProcessReport": [
+          {
+            "name": "count",
+            "kind": "uint64"
+          },
+          {
+            "name": "limit",
+            "kind": "uint64"
+          },
+          {
+            "name": "refusing_heavy",
+            "kind": "bool"
+          },
+          {
+            "name": "refusing_since_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "top",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessTree",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ProcessTree": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
+          {
+            "name": "command",
+            "kind": "string"
+          },
+          {
+            "name": "tasks",
+            "kind": "uint64"
+          },
+          {
+            "name": "tracked",
+            "kind": "bool"
+          },
+          {
+            "name": "chat_title",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.PutMachinePoolRequest": [
           {
             "name": "pool",
@@ -17750,6 +17962,13 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.SetDefaultDaemonRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.SetDefaultDaemonResponse": [],
         "reliant.v1.SetLocalModelEndpointsRequest": [
           {
             "name": "daemon_id",
@@ -17811,6 +18030,8 @@
         "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
         "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
         "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.PutMachinePoolRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
@@ -17819,6 +18040,8 @@
         "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
@@ -20912,6 +21135,19 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.InboxAutomationDefinitionBroken": [
+          {
+            "name": "definition",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerEventDefinition"
+          },
+          {
+            "name": "automations",
+            "kind": "message",
+            "type_name": "reliant.v1.InboxRefusedAutomation",
+            "repeated": true
+          }
+        ],
         "reliant.v1.InboxAutomationFailing": [
           {
             "name": "health",
@@ -20944,6 +21180,12 @@
             "kind": "message",
             "type_name": "reliant.v1.TriggerSetupIssue",
             "repeated": true
+          }
+        ],
+        "reliant.v1.InboxAutomationRunPaused": [
+          {
+            "name": "reason",
+            "kind": "string"
           }
         ],
         "reliant.v1.InboxItem": [
@@ -21045,6 +21287,18 @@
             "kind": "message",
             "type_name": "reliant.v1.RecoveryInboxItem",
             "oneof": "payload"
+          },
+          {
+            "name": "automation_run_paused",
+            "kind": "message",
+            "type_name": "reliant.v1.InboxAutomationRunPaused",
+            "oneof": "payload"
+          },
+          {
+            "name": "automation_definition_broken",
+            "kind": "message",
+            "type_name": "reliant.v1.InboxAutomationDefinitionBroken",
+            "oneof": "payload"
           }
         ],
         "reliant.v1.InboxQuestion": [
@@ -21068,6 +21322,16 @@
           {
             "name": "async",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.InboxRefusedAutomation": [
+          {
+            "name": "trigger_id",
+            "kind": "string"
+          },
+          {
+            "name": "trigger_name",
+            "kind": "string"
           }
         ],
         "reliant.v1.InboxRunFinished": [],
@@ -21103,6 +21367,11 @@
             "kind": "message",
             "type_name": "reliant.v1.DiskVolume",
             "repeated": true
+          },
+          {
+            "name": "processes",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.InboxWaitingForMachine": [
@@ -21149,6 +21418,52 @@
           {
             "name": "other_projects_count",
             "kind": "int32"
+          }
+        ],
+        "reliant.v1.ProcessReport": [
+          {
+            "name": "count",
+            "kind": "uint64"
+          },
+          {
+            "name": "limit",
+            "kind": "uint64"
+          },
+          {
+            "name": "refusing_heavy",
+            "kind": "bool"
+          },
+          {
+            "name": "refusing_since_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "top",
+            "kind": "message",
+            "type_name": "reliant.v1.ProcessTree",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.ProcessTree": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
+          {
+            "name": "command",
+            "kind": "string"
+          },
+          {
+            "name": "tasks",
+            "kind": "uint64"
+          },
+          {
+            "name": "tracked",
+            "kind": "bool"
+          },
+          {
+            "name": "chat_title",
+            "kind": "string"
           }
         ],
         "reliant.v1.RecoveryInboxItem": [
@@ -21205,6 +21520,60 @@
           }
         ],
         "reliant.v1.RestoreInboxItemResponse": [],
+        "reliant.v1.TriggerEventDefinition": [
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "source",
+            "kind": "string"
+          },
+          {
+            "name": "path",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_name",
+            "kind": "string"
+          },
+          {
+            "name": "repo",
+            "kind": "string"
+          },
+          {
+            "name": "branch",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "dirty",
+            "kind": "bool"
+          },
+          {
+            "name": "content_hash",
+            "kind": "string"
+          },
+          {
+            "name": "error",
+            "kind": "string"
+          },
+          {
+            "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "catalog_pin",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.TriggerHealth": [
           {
             "name": "status",
@@ -21251,19 +21620,25 @@
         "reliant.v1.DismissInboxItemResponse": "reliant/v1/inbox.proto",
         "reliant.v1.HeldWorktree": "reliant/v1/inbox.proto",
         "reliant.v1.InboxApproval": "reliant/v1/inbox.proto",
+        "reliant.v1.InboxAutomationDefinitionBroken": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
+        "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
         "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
+        "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
         "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
         "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
         "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
+        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
+        "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
       },
@@ -21292,7 +21667,9 @@
           "INBOX_ITEM_KIND_RUN_FINISHED",
           "INBOX_ITEM_KIND_STORAGE",
           "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
-          "INBOX_ITEM_KIND_RECOVERY"
+          "INBOX_ITEM_KIND_RECOVERY",
+          "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
+          "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN"
         ],
         "reliant.v1.TriggerHealthStatus": [
           "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -21329,7 +21706,9 @@
           6,
           7,
           8,
-          9
+          9,
+          10,
+          11
         ],
         "reliant.v1.TriggerHealthStatus": [
           0,
@@ -39574,6 +39953,15 @@
             "kind": "uint32"
           },
           {
+            "name": "waiting",
+            "kind": "enum",
+            "type_name": "reliant.v1.WorkflowConcurrencyWaiting"
+          },
+          {
+            "name": "key",
+            "kind": "string"
+          },
+          {
             "name": "per_member",
             "kind": "uint32"
           }
@@ -39902,6 +40290,11 @@
           "TRIGGER_OVERLAP_POLICY_SKIP",
           "TRIGGER_OVERLAP_POLICY_ALLOW"
         ],
+        "reliant.v1.WorkflowConcurrencyWaiting": [
+          "WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED",
+          "WORKFLOW_CONCURRENCY_WAITING_FIFO",
+          "WORKFLOW_CONCURRENCY_WAITING_LATEST"
+        ],
         "reliant.v1.WorkflowDraftStatus": [
           "WORKFLOW_DRAFT_STATUS_UNSPECIFIED",
           "WORKFLOW_DRAFT_STATUS_DRAFT",
@@ -39920,6 +40313,11 @@
           1,
           2
         ],
+        "reliant.v1.WorkflowConcurrencyWaiting": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.WorkflowDraftStatus": [
           0,
           1,
@@ -39934,6 +40332,10 @@
         "reliant.v1.TriggerOverlapPolicy": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TriggerOverlapPolicy"
+        },
+        "reliant.v1.WorkflowConcurrencyWaiting": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "WorkflowConcurrencyWaiting"
         },
         "reliant.v1.WorkflowDraftStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -42994,10 +43396,10 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "97f5ddf2875fe45d286ae5c1a4ddd62dd0b006f0fd4fc45471c396012ca202a7",
+    "reliant/v1/daemon_registry.proto": "c1890f5ab97d0a9894f22c80dbbf34ae2089d06e53583e05de095821cec82848",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
-    "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
+    "reliant/v1/inbox.proto": "e88979af9f279f5dab594b8fb2aecccc4bb8c725d16d181337506f095a02f4f8",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -43009,7 +43411,7 @@
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "41361c4d530daffc74850527b0953baab9a7681b7f659e580c96d1de6d01498a",
-    "reliant/v1/run.proto": "a09b4a2effcec6e5917076f86cf7b9945961d1ecfc280f85670d69b63df8a6a6",
+    "reliant/v1/run.proto": "60e5adfe63608f8abf63550151e225e7de88ee1f140da0525ed459fce99ff47f",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
     "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",
@@ -43018,11 +43420,11 @@
     "reliant/v1/terminal.proto": "37fc0d8a7a78dd8b08da87948e12fe5e573b9c3062b7f769f4dbbd416eea4f26",
     "reliant/v1/token.proto": "4817e691d2716f164c1b939d53f7f6fe0865646915a5e1147310ceaf8a983de5",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "274269fe6cd1ef8a8b4ccb2d66b6b3ea8e24cd32a2e665ba44a03ea9c200d73a",
+    "reliant/v1/tools_daemon.proto": "28ac36fad9a13b423b4eb10e38ca5d580eda72a11e39597d94858e6703660b91",
+    "reliant/v1/trigger.proto": "ec112fbf3ba69b3c9198be41e4db6af50bfcedd6f647b3e8ac2f139eb3119ffe",
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "7b526749d1271075d9ff47331d684dd5b3715f1658254fda0ab58ebeda378ed8",
+    "reliant/v1/workflow_v2.proto": "08c24ab2c762e7e0d407251d9a1d070d1dc56bb2d051fcfdd4527879426108cf",
     "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
   }
 }
