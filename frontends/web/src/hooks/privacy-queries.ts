@@ -83,13 +83,16 @@ export function privacyConsent(): PrivacyConsent {
 }
 
 /**
- * Whether privacyConsent() is the user's own answer (loaded, or the last one
- * seen before a sign-out) rather than the default. Until it is, a reader that
- * would act on consent (an event queued for replay) waits for the answer.
+ * Whether the signed-in account's own settings are loaded, so privacyConsent()
+ * is that account's answer. Not the default, and not the answer kept across a
+ * sign-out: that one belongs to whoever signed out, and the next account to
+ * sign in may have opted out. Until it is, a reader that would act on consent
+ * (an event queued for replay) waits. A sign-out clears the cache, so a loaded
+ * entry is always the current account's.
  */
 export function privacyConsentKnown(): boolean {
   installCacheRules();
-  return queryClient.getQueryData(privacySettingsKey()) !== undefined || consentAfterClear !== undefined;
+  return queryClient.getQueryData(privacySettingsKey()) !== undefined;
 }
 
 /** Call `listener` with the consent each time the entry's answer changes (a load, a write, a rollback). */
