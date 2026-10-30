@@ -163,3 +163,77 @@ from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
 `situation` is `signed-out`, `resume-upgrade`, `replace-anonymous` or
 `existing-account`. The control plane sends its own `signup` event with
 `source=claimable_deploy` at completion; the web does not duplicate it.
+
+## LLM usage ledger (not a product event)
+
+`llm_call_usage` is a service record, not telemetry: the analytics toggle does
+not gate it, and it lives in Postgres, not in `otel_logs`. It is the durable,
+countable record of model usage that product events and gen_ai spans are not
+(events are kept 14 days, spans are tail-sampled and kept 7, and
+`messages.token_count` is the context size, not what a call used). It is also
+the source for per-user usage views (`GetLLMUsage`), including BYOK and
+Claude/Codex/Copilot subscription calls that control-plane `usage_events`
+never see.
+
+- **One seam for every text request.** CallLLM's turn writes its row through
+  `recordLLMCallUsage` (`handlers/llm_usage_record.go`), beside `logLLMUsage`
+  and the `llm_call_completed` emitter. Every other model request (compaction
+  summaries, chat titles, automation drafts) is made through
+  `usageMeter.streamAndAccumulate` in the same file, which streams the request
+  and records it. The two are independent of the event: the event is gated by
+  the user's analytics choice and expires in 14 days; the ledger row is
+  neither. They read the same `llm.TokenUsage`, so their counts agree.
+  `purpose` (`chat`, `compaction`, `title`, `draft_automation`) says what a row
+  was for.
+- **Not recorded.** Image and video generation (their APIs return no token
+  counts), `ValidateKey`'s test request, and `ProbeLLMCall` (an operator tool
+  in `reliant-dev`). The privacy page names the first two; do not widen its
+  "every model request" claim without covering them.
+- **A guard for the next call site.** `TestModelRequestsGoThroughTheUsageLedger`
+  parses the module and fails when anything outside `internal/llm/**`,
+  `call_llm.go`, the meter and the probe calls `StreamResponse`, `SendMessages`
+  or `StreamAndAccumulate`. A new request path goes through the meter, or is
+  added to that test's allow-list with a reason (and to the privacy page if it
+  is not recorded).
+- **One row per provider request, counted per attempt.** The row key is
+  `(id, attempt)`. The `id` is
+  `<workflow id>/<run id>/<activity id>/<purpose>/<ordinal>`: the activity, what
+  the request was for, and its ordinal among the requests that activity makes (a
+  title or a compaction can make several). `attempt` is the Temporal attempt.
+  Temporal re-runs a failed activity and every attempt is a real request that
+  may have used tokens (a stream can report usage and then break), so each
+  attempt is its own row and its own `calls` in the rollup. Only a repeated
+  write of the same `(id, attempt)` is ignored. Purpose and ordinal keep
+  requests apart, so none collides with CallLLM's `.../chat/1`.
+- **Usage reported before a failure is kept.** A provider can bill a request
+  and then drop the connection, and drivers send the final event (the one with
+  the usage) either before or after the error event. `accumulator.StreamAndAccumulate`
+  therefore returns the partial response next to its error (usage, content and
+  tool calls seen so far; nil only when the stream produced nothing), and
+  `usageMeter` records that usage while still returning no response to its
+  callers. `CallLLM` stops reading at the error, so it reads on for the final
+  event for up to one second (`collectUsageAfterStreamError`). A request cut by a
+  cancel, a deadline or the progress guard is recorded as `cancelled` or a
+  `timeout`/`stalled` error. The limit: a driver only reports usage in its final
+  event, so a request cut before that event has no usage to record and is counted
+  as a call with zero tokens. Tests: `TestUsageMeter_AFailedStreamKeepsTheUsageItReported`,
+  `TestBackgroundRequests_FailedAttemptKeepsItsUsage`,
+  `TestCallLLM_UsageLedgerKeepsTokensAFailedAttemptConsumed`,
+  `TestUsageMeter_ContextEndedRequestsAreRecordedAsWhatCutThem`.
+- **Count-only.** Columns are ids, provider, model, auth mode
+  (`managed`/`byok`/`subscription`/`local`), four token counts, outcome, an
+  `error_class` from a closed set (a CHECK constraint, so an error string
+  cannot be stored), latency, attempt and `created_at`. There is no content
+  column, and `TestLLMUsageTablesHoldNoContent` pins the exact column set. A
+  new column means changing that test and `docs/help/privacy.mdx` together.
+- **Rollup and retention.** `llm_call_usage_daily` sums per UTC day, user, org,
+  provider, model, auth mode and purpose. `LLMUsageRetention` (api root) deletes
+  per-call rows older than `db.LLMCallUsageRetention` (90 days) hourly, in
+  batches; the rollup is kept. `accountpurge` deletes both tables with the
+  account and fences the user (`llm_usage_purged_users`, under a per-user
+  advisory lock) so a model call still in flight at deletion cannot write usage
+  back afterwards; a fence refuses every later write for that user and is pruned after 30 days,
+  longer than the 14-day workflow timeout.
+- **Visibility (v1).** Only the user's own rows are readable
+  (`Repo.ListLLMUsageDaily` takes the user id). Org admins do not see members'
+  own-key usage. `org_id` is written empty today: reliant chats carry no org.

@@ -125,6 +125,7 @@ type ApprovalResolveStore interface {
 // to the local-model directory, threads.Service, the tool bindings, the mailbox
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
@@ -172,6 +173,7 @@ type CleanupStore interface {
 // CompactStore is what CompactActivity reads and writes; the summary goes
 // through threads.Service and the history through LoadMessagesForLLM.
 type CompactStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -276,6 +278,7 @@ type ExecuteToolsStore interface {
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.
 type GenerateTitleStore interface {
+	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error

@@ -1172,6 +1172,12 @@
     "internal/store/legacy_credential_copy_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/llm_call_usage_daily_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T02:07:48Z"
+    },
+    "internal/store/llm_call_usage_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T02:07:48Z"
+    },
     "internal/store/message_content_block_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },

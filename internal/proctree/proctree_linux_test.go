@@ -54,7 +54,7 @@ func runForker(t *testing.T, l *Limiter, forks int) (int, *Tree) {
 	cmd.Env = append(os.Environ(), helperEnv+"="+strconv.Itoa(forks), "GOMAXPROCS=1")
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	tree := l.Prepare(cmd)
+	tree := l.Prepare(cmd, Owner{})
 	if err := cmd.Start(); err != nil {
 		tree.Started(0)
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 	// A member that left the process group (setsid) is out of a group kill's
 	// reach, not the cgroup's.
 	cmd := exec.Command("setsid", "sleep", "300")
-	tree = l.Prepare(cmd)
+	tree = l.Prepare(cmd, Owner{})
 	if err := cmd.Start(); err != nil {
 		tree.Started(0)
 		t.Skip("no setsid: ", err)
@@ -181,7 +181,7 @@ func TestPrepareKeepsTheCallersAttributes(t *testing.T) {
 	cmd := exec.Command("true")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWUSER}
 	var l *Limiter
-	tree := l.Prepare(cmd)
+	tree := l.Prepare(cmd, Owner{})
 	if !cmd.SysProcAttr.Setpgid || cmd.SysProcAttr.Cloneflags != syscall.CLONE_NEWUSER {
 		t.Fatalf("SysProcAttr = %+v", cmd.SysProcAttr)
 	}

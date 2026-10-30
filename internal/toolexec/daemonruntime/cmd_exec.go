@@ -173,7 +173,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// Its own cgroup with a process limit where the machine allows, so a
 	// runaway command fails alone (internal/proctree). Last before Start:
 	// the heavy-slot and sandbox rewrites above change what cmd execs.
-	tree := proctree.Default().Prepare(cmd)
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
 	err = cmd.Start()
@@ -279,6 +279,7 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		GrantID:   daemonpolicy.GrantIDFromContext(ctx),
 		HeavyGate: heavyGateRef.Load(),
 		Heavy:     req.Heavy,
+		AgentID:   req.ChatID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)
