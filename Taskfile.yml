@@ -578,8 +578,10 @@ tasks:
 
   contract:controlplane:drift:
     # How far proto-vendor/controlplane/ is behind CONTROL_PLANE_DIR's checked-
-    # out tree (control-plane main). Exit 3 when behind. Never a gate:
-    # .github/workflows/cp-contract-drift.yml turns it into one open issue.
+    # out tree (control-plane main). The script exits 3 when behind (Task
+    # reports that as 201; `task --exit-code` keeps the 3). Never a gate:
+    # .github/workflows/cp-contract-drift.yml runs the script directly and
+    # turns it into one open issue.
     desc: "Report whether proto-vendor/controlplane/ is behind control-plane main (exit 3 when it is; CONTROL_PLANE_DIR, buf on PATH)"
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs --upstream --require {{.CLI_ARGS}}

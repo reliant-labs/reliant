@@ -86,14 +86,16 @@ jobs:
           github_token: ${{ github.token }}
 
       # Exit 0 in sync, 3 behind; anything else means it could not decide and
-      # must not touch the issue.
-      - name: task contract:controlplane:drift
+      # must not touch the issue. The script itself, not `task
+      # contract:controlplane:drift`: Task reports every failing command as
+      # exit 201, which would turn "behind" (3) into "could not decide".
+      - name: sync-controlplane-proto.mjs --upstream (task contract:controlplane:drift)
         id: drift
         env:
           CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
         run: |
           set +e
-          task contract:controlplane:drift -- --report "${RUNNER_TEMP}/drift.md"
+          node .github/scripts/sync-controlplane-proto.mjs --upstream --require --report "${RUNNER_TEMP}/drift.md"
           rc=$?
           case "${rc}" in
             0) echo "verdict=in-sync" >> "$GITHUB_OUTPUT" ;;
