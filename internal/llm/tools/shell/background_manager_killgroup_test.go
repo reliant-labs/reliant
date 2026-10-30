@@ -6,6 +6,7 @@ package shell
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 // startGrandchildCommand starts, through the background manager, a shell that
@@ -78,7 +81,9 @@ func TestKillProcessKillsGrandchildThatIgnoresSIGTERM(t *testing.T) {
 	require.NoError(t, m.KillProcess(process.ID))
 
 	require.True(t, gone(grandchild), "grandchild %d survived shell_kill", grandchild)
-	require.False(t, processGroupAlive(process.cmd.Process.Pid), "the process group still has members")
+	if members, ok := osutil.GroupMembers(process.cmd.Process.Pid); ok {
+		require.Empty(t, members, "the process group still has live members")
+	}
 	require.Equal(t, "killed", process.StatusSafe())
 }
 
@@ -100,4 +105,69 @@ func TestKillProcessReachesWhatAnExitedShellLeftRunning(t *testing.T) {
 
 	// Nothing left: the next kill says so.
 	require.Error(t, m.KillProcess(process.ID))
+}
+
+// A command that exited long ago keeps its record, and its process group id
+// can since have been reused by an unrelated group — another command, another
+// agent's workload. shell_kill on the old record must not signal it: the id
+// is the command's only while a process it left is provably still in it.
+func TestKillProcessNeverSignalsARecycledGroup(t *testing.T) {
+	if _, ok := osutil.GroupMembers(1); !ok {
+		t.Skip("needs /proc to tell a group's members apart")
+	}
+	// The "recycled" group: an unrelated process leading a group whose id is
+	// the old command's pid.
+	victim := exec.Command("sleep", "300")
+	victim.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, victim.Start())
+	t.Cleanup(func() { _ = victim.Process.Kill(); _ = victim.Wait() })
+
+	m := &BackgroundManager{processes: map[string]*BackgroundProcess{}}
+	old := &BackgroundProcess{
+		ID: "old", Status: "completed", cmd: &exec.Cmd{Process: victim.Process}, done: make(chan struct{}),
+		// What the old command left behind when it exited: a process with this
+		// pid but another start time, long gone.
+		survivors: []osutil.GroupMember{{PID: victim.Process.Pid, Start: 1}},
+	}
+	close(old.done)
+	m.processes["old"] = old
+
+	require.Error(t, m.KillProcess("old"), "a group no survivor proves is the command's must be refused")
+	time.Sleep(200 * time.Millisecond)
+	require.False(t, gone(victim.Process.Pid), "shell_kill on a stale record killed an unrelated process group")
+
+	// With no survivors recorded at all, likewise.
+	old.survivors = nil
+	require.Error(t, m.KillProcess("old"))
+	require.False(t, gone(victim.Process.Pid))
+}
+
+// A zombie runs nothing. A group whose only member left is an unreaped zombie
+// — its reaper never comes, as under a PID 1 that does not reap — is gone,
+// not a survivor that SIGKILL failed to stop. Here this test process is the
+// zombie's parent and does not reap it until the end.
+func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
+	if _, ok := osutil.GroupMembers(1); !ok {
+		t.Skip("needs /proc to tell a group's members apart")
+	}
+	z := exec.Command("sleep", "0.3")
+	z.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, z.Start())
+	w := watchGroup(z.Process.Pid)
+	require.True(t, w.alive(), "a running member is alive")
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		stat, err := os.ReadFile("/proc/" + strconv.Itoa(z.Process.Pid) + "/stat")
+		require.NoError(t, err, "the zombie was reaped by someone else")
+		if strings.Contains(string(stat), ") Z ") {
+			break
+		}
+		require.True(t, time.Now().Before(deadline), "the child never became a zombie")
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.True(t, processGroupAlive(z.Process.Pid), "precondition: the group id still answers a signal")
+	require.False(t, w.alive(), "a zombie-only group counted as alive")
+	require.True(t, waitProcessGroupGone(w, nil, time.Second), "the wait spent its budget on a zombie")
+	_ = z.Wait()
 }

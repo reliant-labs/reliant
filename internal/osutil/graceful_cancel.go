@@ -100,6 +100,10 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 			return os.ErrProcessDone
 		}
 
+		// Who is in the group now, while the leader is unreaped and the
+		// group id is therefore certainly the command's (GroupMember).
+		members, _ := GroupMembers(proc.Pid)
+
 		err := terminateGracefully(proc)
 
 		// Escalate on our own clock so WaitDelay keeps meaning only the pipe
@@ -108,15 +112,15 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		// trapped or ignored it runs on, and stopping the timer the moment
 		// Wait returned left exactly that child orphaned. So when the
 		// command finishes inside the grace period the timer is stopped
-		// only if nothing of its group is left; otherwise it fires and
-		// SIGKILLs the rest (killGroup explains why the group id is safe to
-		// signal after the leader is reaped).
+		// only if none of those members is left; otherwise it fires and
+		// SIGKILLs the rest — the group only while one of them still proves
+		// the id is the command's (killGroup).
 		timer := time.AfterFunc(grace, func() {
-			killGroup(proc)
+			killGroup(proc, members)
 		})
 		go func() {
 			<-done
-			if !groupAlive(proc.Pid) {
+			if !GroupOwned(proc.Pid, members) {
 				timer.Stop()
 			}
 		}()

@@ -391,3 +391,31 @@ func TestApplyGracefulCancel_ZeroGraceUsesDefault(t *testing.T) {
 		t.Fatalf("cleanup marker = %q with grace=0; want the default grace to apply, not an immediate kill", got)
 	}
 }
+
+// GroupMembers lists live members only, and GroupOwned recognises a member by
+// its start time, not its pid alone.
+func TestGroupMembersAndOwnership(t *testing.T) {
+	if _, ok := GroupMembers(1); !ok {
+		t.Skip("needs /proc")
+	}
+	cmd := exec.Command("sleep", "300")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	pgid := cmd.Process.Pid
+	members, _ := GroupMembers(pgid)
+	if len(members) != 1 || members[0].PID != pgid {
+		t.Fatalf("members = %v", members)
+	}
+	if !GroupOwned(pgid, members) {
+		t.Fatal("a live recorded member does not prove the group")
+	}
+	if GroupOwned(pgid, []GroupMember{{PID: pgid, Start: members[0].Start + 1}}) {
+		t.Fatal("a pid with another start time proved the group: that is pid reuse")
+	}
+	if GroupOwned(pgid+1, members) {
+		t.Fatal("a member proved a group it is not in")
+	}
+}

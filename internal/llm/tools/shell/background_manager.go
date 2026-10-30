@@ -102,7 +102,12 @@ type BackgroundProcess struct {
 	outputSeq      int64               // Current sequence number for output lines
 	outputMu       sync.RWMutex
 	cancelFunc     context.CancelFunc
-	done           chan struct{}
+	// survivors are the live members of the command's process group when its
+	// leader was reaped: what it left running. Recorded so a later kill can
+	// prove the group id is still the command's before signalling it
+	// (osutil.GroupMember). Guarded by outputMu.
+	survivors []osutil.GroupMember
+	done      chan struct{}
 	// oomSnap captures the workspace cgroup's oom_kill counter at spawn so a
 	// SIGKILLed process can be attributed to the kernel OOM killer on exit.
 	oomSnap cgroupmem.OOMSnapshot
@@ -616,6 +621,7 @@ func (w *outputLineWriter) emit(raw []byte) {
 // so flushing them first puts every line in place before the status changes.
 func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs ...*outputLineWriter) {
 	err := process.cmd.Wait()
+	process.recordSurvivors()
 	for _, output := range outputs {
 		output.flush()
 	}
@@ -633,6 +639,7 @@ func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs .
 // Used by AdoptRunningProcess to avoid calling cmd.Wait() twice.
 func (m *BackgroundManager) waitForProcessWithChannel(process *BackgroundProcess, waitErrCh <-chan error) {
 	err := <-waitErrCh
+	process.recordSurvivors()
 	m.handleProcessCompletion(process, err)
 }
 
@@ -1033,34 +1040,85 @@ var KillGraceTimeout = 3 * time.Second
 const killSettleTimeout = 2 * time.Second
 
 // groupPollInterval is how often a kill looks whether the group is empty.
-const groupPollInterval = 50 * time.Millisecond
+const groupPollInterval = 100 * time.Millisecond
 
 // stopProcessGroup stops a command's whole process group: SIGTERM to every
 // member, then onTerm (the context cancel, when there is one), then — if any
 // member is still alive after KillGraceTimeout — SIGKILL to the group. It
 // returns whether the group is gone. leaderDone closes once the leader has
 // been reaped (until then it is a zombie member of its own group).
-func stopProcessGroup(pgid int, leaderDone <-chan struct{}, onTerm func()) bool {
+func stopProcessGroup(w *groupWatch, leaderDone <-chan struct{}, onTerm func()) bool {
+	pgid := w.pgid
 	if err := terminateProcessGroup(pgid); err != nil {
 		logging.Warn("Failed to terminate process group gracefully", "pgid", pgid, "error", err)
 	}
 	if onTerm != nil {
 		onTerm()
 	}
-	if waitProcessGroupGone(pgid, leaderDone, KillGraceTimeout) {
+	if waitProcessGroupGone(w, leaderDone, KillGraceTimeout) {
 		logging.Debug("Process group terminated gracefully", "pgid", pgid)
 		return true
 	}
+	// alive() just proved the id is still the command's.
 	logging.Warn("Process group did not terminate gracefully, force killing", "pgid", pgid)
 	if err := forceKillProcessGroup(pgid); err != nil {
 		logging.Error("Failed to force kill process group", "pgid", pgid, "error", err)
 	}
-	return waitProcessGroupGone(pgid, leaderDone, killSettleTimeout)
+	return waitProcessGroupGone(w, leaderDone, killSettleTimeout)
+}
+
+// groupWatch follows a command's process group while it is being stopped.
+//
+// Liveness is the group's live members — zombies excluded, since a zombie
+// runs nothing and one whose reaper never comes would otherwise read as a
+// survivor of SIGKILL forever — and only members that are provably the
+// command's: some member recorded while the id was known to be the command's
+// must still be in the group (osutil.GroupOwned), and then everyone now in it
+// is recorded in turn, so ownership carries forward as members come and go.
+// Where the process table cannot be read (macOS) it falls back to "does the
+// group id answer a signal".
+type groupWatch struct {
+	pgid     int
+	members  []osutil.GroupMember
+	listable bool
+}
+
+// watchGroup records the group's members now. Call it only while the group
+// id is known to be the command's: its leader not yet reaped.
+func watchGroup(pgid int) *groupWatch {
+	members, ok := osutil.GroupMembers(pgid)
+	return &groupWatch{pgid: pgid, members: members, listable: ok}
+}
+
+// alive reports whether the group still has live members that are the
+// command's.
+func (w *groupWatch) alive() bool {
+	if !w.listable {
+		return processGroupAlive(w.pgid)
+	}
+	if !osutil.GroupOwned(w.pgid, w.members) {
+		w.members = nil
+		return false
+	}
+	w.members, _ = osutil.GroupMembers(w.pgid)
+	return len(w.members) > 0
+}
+
+// recordSurvivors records what the command left running in its group, right
+// after its leader was reaped.
+func (p *BackgroundProcess) recordSurvivors() {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	members, _ := osutil.GroupMembers(p.cmd.Process.Pid)
+	p.outputMu.Lock()
+	p.survivors = members
+	p.outputMu.Unlock()
 }
 
 // waitProcessGroupGone waits up to d for the leader to be reaped and every
 // other member of the group to exit.
-func waitProcessGroupGone(pgid int, leaderDone <-chan struct{}, d time.Duration) bool {
+func waitProcessGroupGone(w *groupWatch, leaderDone <-chan struct{}, d time.Duration) bool {
 	deadline := time.NewTimer(d)
 	defer deadline.Stop()
 	if leaderDone != nil {
@@ -1072,11 +1130,11 @@ func waitProcessGroupGone(pgid int, leaderDone <-chan struct{}, d time.Duration)
 	}
 	tick := time.NewTicker(groupPollInterval)
 	defer tick.Stop()
-	for processGroupAlive(pgid) {
+	for w.alive() {
 		select {
 		case <-tick.C:
 		case <-deadline.C:
-			return !processGroupAlive(pgid)
+			return !w.alive()
 		}
 	}
 	return true
@@ -1101,10 +1159,15 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		// the shell was killed. They are still in its process group, still
 		// this command's, and a kill reaches them — otherwise they run on,
 		// orphaned, where nothing can see or stop them.
-		if process.cmd != nil && processGroupAlive(pid) {
+		// Only while a process it left is provably still in the group: once
+		// they have all exited the group id may belong to someone else.
+		process.outputMu.RLock()
+		w := &groupWatch{pgid: pid, members: process.survivors, listable: true}
+		process.outputMu.RUnlock()
+		if process.cmd != nil && w.alive() {
 			logging.Info("Killing what an exited background command left running in its process group",
 				"id", processID, "pgid", pid, "status", status)
-			if !stopProcessGroup(pid, process.done, nil) {
+			if !stopProcessGroup(w, process.done, nil) {
 				return fmt.Errorf("process %s (%s) left processes in its group %d that did not die on SIGKILL", processID, status, pid)
 			}
 			return nil
@@ -1128,7 +1191,9 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 	// leader. A leader that dies at once used to end the wait while children
 	// that trapped or ignored SIGTERM ran on with nothing left to kill them.
 	if pid > 0 {
-		if !stopProcessGroup(pid, process.done, process.cancelFunc) {
+		// Recorded now, while the leader is unreaped and the group id is
+		// therefore certainly this command's.
+		if !stopProcessGroup(watchGroup(pid), process.done, process.cancelFunc) {
 			logging.Error("Process group survived SIGKILL", "id", processID, "pgid", pid)
 		}
 	} else {
@@ -1227,9 +1292,10 @@ func (m *BackgroundManager) killRecoveredProcessByPID(processID string) error {
 		"id", processID,
 		"pid", pid)
 
-	// The whole group, SIGTERM then SIGKILL, until it is empty. This daemon
-	// did not start it, so it is not our child and no reap is waited for.
-	if !stopProcessGroup(pid, nil, nil) {
+	// The whole group, SIGTERM then SIGKILL, until it is empty. The leader
+	// is alive and its signature matched, so the group id is its: recorded
+	// now. This daemon did not start it, so no reap is waited for.
+	if !stopProcessGroup(watchGroup(pid), nil, nil) {
 		return fmt.Errorf("recovered process %s: process group %d survived SIGKILL", processID, pid)
 	}
 
