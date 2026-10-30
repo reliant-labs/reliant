@@ -158,6 +158,25 @@ describe("the other tabs", () => {
     expect(harness.current().in).toBe("dev");
   });
 
+  it("lists forge-applied slots in their own group, by their reason, never as unobservable", async () => {
+    const reason = "applied by forge (not observed by the control plane)";
+    renderDetail(
+      createReleasesFixtureApi({ forgeApplied: [{ name: "edge-us/web/api", artifact: "web", pinnedDigest: "sha256:abc123", reason }] }),
+      V[0]!,
+      { search: { tab: "rollout" } }
+    );
+    await ready();
+    const rollout = await screen.findByTestId("release-rollout");
+    expect(rollout).toHaveTextContent("1 applied by forge");
+    const group = within(rollout).getByTestId("release-rollout-forge-applied");
+    expect(within(group).getByRole("table", { name: "Applied by forge" })).toBeInTheDocument();
+    expect(group).toHaveTextContent("edge-us/web/api");
+    expect(group).toHaveTextContent(reason);
+    expect(group).not.toHaveTextContent("Cannot be observed");
+    // The judged workloads keep their own table; the slot is not among them.
+    expect(within(rollout).getByRole("table", { name: "Workloads" })).not.toHaveTextContent("edge-us/web/api");
+  });
+
   it("lists every check with its result, a failed one tinted", async () => {
     renderDetail(createReleasesFixtureApi(), V[2]!, { search: { tab: "checks" } });
     await ready();
