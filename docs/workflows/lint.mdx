@@ -59,10 +59,6 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 
 **Warning.** A workflow that triggers start (an unattended run) has no `on_failure:` handler, so a run that fails tells nobody. Add one with a step that reaches a person: a PR comment, a message, an issue.
 
-### child-on-failure-ignored
-
-**Warning.** A `workflow` node runs a child (`ref:`) that declares `on_failure:`. A `workflow` node runs its child inline, inside the parent's run, and `on_failure` is a property of the run: when the run fails, the root workflow's handler runs, once. The child's handler does not run at all, so whatever cleanup it was written for (reconciling a pushed tag, releasing a lease, telling someone) does not happen when the child is started this way. Give the parent an `on_failure` that does the same, or start the child as its own run (a trigger on the parent's outcome).
-
 ### agent-turn-budget-default
 
 **Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50").
