@@ -46358,7 +46358,7 @@
           "legacy_name": "chat.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 367
+            "line": 370
           }
         },
         {
@@ -46633,7 +46633,7 @@
           "legacy_name": "chat.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 334
+            "line": 336
           }
         },
         {
@@ -46710,7 +46710,7 @@
           "legacy_name": "chat.newRunOptions",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 457
+            "line": 456
           }
         },
         {
@@ -46743,7 +46743,7 @@
           "legacy_name": "chat.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 347
+            "line": 350
           }
         },
         {
@@ -47271,7 +47271,7 @@
           "legacy_name": "chat.wakeLiveRun",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 479
+            "line": 478
           }
         },
         {
@@ -59054,7 +59054,7 @@
           "legacy_name": "launch.RefreshProviderPolicy",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 150
+            "line": 154
           }
         },
         {
@@ -59065,7 +59065,7 @@
           "legacy_name": "launch.RefreshSelectedProvider",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 182
+            "line": 186
           }
         },
         {
@@ -59109,7 +59109,7 @@
           "legacy_name": "launch.ResolvedModelAtDriver",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 206
+            "line": 210
           }
         },
         {
@@ -59241,7 +59241,7 @@
           "legacy_name": "launch.buildInputs",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1060
+            "line": 1071
           }
         },
         {
@@ -59285,7 +59285,7 @@
           "legacy_name": "launch.finishExisting",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 898
+            "line": 909
           }
         },
         {
@@ -59362,7 +59362,7 @@
           "legacy_name": "launch.primaryDriver",
           "source": {
             "path": "internal/launch/provider_policy.go",
-            "line": 165
+            "line": 169
           }
         },
         {
@@ -59373,7 +59373,7 @@
           "legacy_name": "launch.recordFailedStart",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1319
+            "line": 1330
           }
         },
         {
@@ -59384,7 +59384,7 @@
           "legacy_name": "launch.recordStartSelection",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1425
+            "line": 1436
           }
         },
         {
@@ -59417,7 +59417,7 @@
           "legacy_name": "launch.saveSeedMessages",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1093
+            "line": 1104
           }
         },
         {
@@ -59428,7 +59428,7 @@
           "legacy_name": "launch.start",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1144
+            "line": 1155
           }
         },
         {
@@ -59439,7 +59439,7 @@
           "legacy_name": "launch.startRecorded",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 837
+            "line": 843
           }
         },
         {
@@ -59450,7 +59450,7 @@
           "legacy_name": "launch.startTitleGeneration",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1331
+            "line": 1342
           }
         },
         {
@@ -64326,7 +64326,7 @@
           "legacy_name": "app.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 367
+            "line": 370
           }
         },
         {
@@ -64601,7 +64601,7 @@
           "legacy_name": "app.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 334
+            "line": 336
           }
         },
         {
@@ -64678,7 +64678,7 @@
           "legacy_name": "app.newRunOptions",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 457
+            "line": 456
           }
         },
         {
@@ -64711,7 +64711,7 @@
           "legacy_name": "app.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 347
+            "line": 350
           }
         },
         {
@@ -65239,7 +65239,7 @@
           "legacy_name": "app.wakeLiveRun",
           "source": {
             "path": "internal/handlers/chat/rpc_send_agent_message.go",
-            "line": 479
+            "line": 478
           }
         },
         {
