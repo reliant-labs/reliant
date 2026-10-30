@@ -22,6 +22,7 @@ export interface UsageBillingCardProps {
   rates: string[];
   isLoading?: boolean;
   error?: string;
+  unavailableReason?: string;
   isSubmitting?: boolean;
   onRetry: () => void;
   onCheckout: (consent: { policyVersion: string; infraBudgetCents: bigint }) => void;
@@ -38,7 +39,7 @@ export function UsageBillingCard(props: UsageBillingCardProps) {
   const canCheckout = !props.agreement || pending;
   return <Card><CardHeader><CardTitle>App hosting billing</CardTitle></CardHeader><CardContent className="space-y-4">
     <p className="text-sm text-muted-foreground">Pay as you go, with no base fee. One agreement covers this organization’s apps and environments. Machine subscriptions and AI wallet credits are separate; no machine purchase is required.</p>
-    {props.isLoading ? <p role="status">Loading app hosting billing…</p> : props.error ? <div role="alert"><p>{props.error}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : !props.enabled ? <p>App hosting billing is unavailable. Buying a machine plan does not enable it.</p> : active ? <>
+    {props.isLoading ? <p role="status">Loading app hosting billing…</p> : props.error ? <div role="alert"><p>{props.error}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : !props.enabled ? <div role="status"><p>{props.unavailableReason ?? "App hosting billing is unavailable. Buying a machine plan does not enable it."}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : active ? <>
       <p role="status">App hosting billing is active.</p>
       <p>Monthly admission budget: {formatCents(Number(props.agreement!.infraBudgetCents))}. Changing the consented budget is not currently supported.</p>
       <p className="text-xs text-muted-foreground">This is not a guaranteed maximum bill. Enforcement can lag and in-flight workloads may continue accruing charges; storage is not deleted.</p>

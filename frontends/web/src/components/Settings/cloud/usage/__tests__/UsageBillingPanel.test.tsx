@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { beforeEach, expect, it, vi } from "vitest";
 import { UsageBillingPanel } from "../UsageBillingPanel";
 
@@ -16,7 +17,7 @@ beforeEach(() => {
   mocks.open.mockResolvedValue("success");
 });
 function mount() {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
   const view = () => <QueryClientProvider client={cache}><UsageBillingPanel /></QueryClientProvider>;
   return { ...render(view()), view };
 }
@@ -63,4 +64,37 @@ it("shows an actionable error when checkout returns no URL", async () => {
   await consent();
   expect(await screen.findByRole("alert")).toHaveTextContent(/Checkout could not be completed/);
   expect(mocks.open).not.toHaveBeenCalled();
+});
+it("treats an undeployed RPC as unavailable and can recover after the backend arrives", async () => {
+  mocks.read.mockRejectedValue(new ConnectError("unknown procedure", Code.Unimplemented));
+  mount();
+  expect(await screen.findByText(/App hosting billing is not available on this server yet/)).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(mocks.checkout).not.toHaveBeenCalled();
+  mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [{ displayName: "CPU", priceCents: "9", unit: "vCPU-hour" }] });
+  fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
+  expect(await screen.findByRole("checkbox")).not.toBeChecked();
+  expect(mocks.checkout).not.toHaveBeenCalled();
+});
+it("keeps disabled billing recoverable without offering checkout or a machine purchase", async () => {
+  mocks.read.mockResolvedValue({ enabled: false });
+  mount();
+  expect(await screen.findByText(/App hosting billing is unavailable/)).toBeInTheDocument();
+  expect(screen.getByText(/Buying a machine plan does not enable it/)).toBeInTheDocument();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [{ displayName: "CPU", priceCents: "9", unit: "vCPU-hour" }] });
+  fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
+  expect(await screen.findByRole("checkbox")).not.toBeChecked();
+  expect(mocks.checkout).not.toHaveBeenCalled();
+});
+it("keeps genuine read failures actionable rather than treating them as disabled billing", async () => {
+  mocks.read.mockRejectedValue(new ConnectError("temporary outage", Code.Unavailable));
+  mount();
+  expect(await screen.findByRole("alert")).toHaveTextContent(/Could not verify app hosting billing/);
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  mocks.read.mockResolvedValue({ enabled: false });
+  fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
+  expect(await screen.findByText(/App hosting billing is unavailable/)).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
