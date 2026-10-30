@@ -4,6 +4,7 @@ package chat
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,14 +20,25 @@ import (
 )
 
 // slowQueryTemporalClient is a run whose worker is too busy to answer a query:
-// QueryWorkflowWithOptions returns only when its context ends.
+// QueryWorkflowWithOptions returns only when its context ends. It records how
+// long each query was allowed to wait, so the test pins the bound itself
+// rather than the send's wall-clock time.
 type slowQueryTemporalClient struct {
 	wakeTestTemporalClient
+	mu      sync.Mutex
+	queries []time.Duration // the time each query's context had left; -1 for no deadline
 }
 
 func (c *slowQueryTemporalClient) QueryWorkflowWithOptions(
 	ctx context.Context, _ *client.QueryWorkflowWithOptionsRequest,
 ) (*client.QueryWorkflowWithOptionsResponse, error) {
+	left := time.Duration(-1)
+	if deadline, ok := ctx.Deadline(); ok {
+		left = time.Until(deadline)
+	}
+	c.mu.Lock()
+	c.queries = append(c.queries, left)
+	c.mu.Unlock()
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
@@ -44,7 +56,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
-	temporal := &slowQueryTemporalClient{wakeTestTemporalClient{
+	temporal := &slowQueryTemporalClient{wakeTestTemporalClient: wakeTestTemporalClient{
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	}}
 	service := &Service{
@@ -59,11 +71,19 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	start := time.Now()
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "next step"))
-	elapsed := time.Since(start)
 	require.NoError(t, err)
-	assert.Less(t, elapsed, 3*time.Second, "the send waited on the workflow's answer to an advisory query")
+	// The query is bounded by its own short timeout, not by the request's
+	// context. (A wall-clock bound on the whole send was flaky: on a loaded
+	// gate the send's DB round trips alone could pass it.)
+	temporal.mu.Lock()
+	queries := append([]time.Duration(nil), temporal.queries...)
+	temporal.mu.Unlock()
+	require.NotEmpty(t, queries, "the send asks the run whether its params changed")
+	for _, left := range queries {
+		require.GreaterOrEqual(t, left, time.Duration(0), "the advisory query has no deadline of its own")
+		assert.LessOrEqual(t, left, paramsChangeQueryTimeout, "the send waited on the workflow's answer to an advisory query")
+	}
 	assert.True(t, resp.Msg.Queued, "the message is queued for the running thread's next turn")
 
 	var names []string

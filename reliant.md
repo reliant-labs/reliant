@@ -92,9 +92,19 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   everything in full: `-race`, every slow test, integration, e2e. So a slow
   test, or a package two imports away from your change, runs only there: when
   you touch code one covers, run its package with `task test -- ./<pkg>/...`.
-  New and changed tests run 3x (`task test:flake`): a test that fails on a
-  repeat is a flake to fix, never to re-run. A red main opens a `ci:main-red`
-  issue. Details: `dev-docs/merge-and-release-gates.md`.
+  New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
+  repeat does not merge. A red main opens a `ci:main-red` issue. Details:
+  `dev-docs/merge-and-release-gates.md`.
+- **A flaky test never blocks a merge or keeps main red** (owner, 2026-10-30:
+  "I'd rather remove a test than have it be flaky"). An existing test that
+  fails intermittently is fixed within the day, or deleted (the test, or just
+  its flaky assertion) in the same PR that finds it, with an issue labelled
+  `flake:removed` holding the test body, the failure signature and its
+  frequency, so coverage is restored on purpose later. A failure caused by the
+  host (inotify or fd budget exhausted, disk full) makes the test `t.Skip` with
+  a message naming the missing resource, never fail. Never re-run to green: the
+  `Flake report` workflow on main reruns failed tests once and files a
+  `flake:suspected` issue for each that then passes, without turning anything red.
 - **DB-backed tests need no database from you.** They use forge pgtest's
   shared embedded Postgres (the major `forge.yaml` declares, booted on first
   use and shared by every test process on the machine; each test gets its own
