@@ -15,7 +15,7 @@
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
-import { rumRetry } from "@/services/controlPlane/observability/errors";
+import { obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
 import { useObsReadApi } from "./observability-queries";
 import type { RumScope, SessionList, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -66,7 +66,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
     enabled: !!scope,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
-    retry: rumRetry,
+    retry: rumRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -78,7 +78,7 @@ export function useSession(scope: RumScope | null, sessionId: string | undefined
     queryFn: () => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }),
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
-    retry: rumRetry,
+    retry: rumRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -98,6 +98,6 @@ export function useSessionTimeline(scope: RumScope | null, sessionId: string | u
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
-    retry: rumRetry,
+    retry: rumRetry, retryDelay: obsRetryDelay,
   });
 }

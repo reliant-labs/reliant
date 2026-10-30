@@ -126,11 +126,11 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     );
   }
   if (waitingForCapacity(query)) {
-    if (compact) return <p className="text-xs text-ink-muted" title="Waiting for capacity…">…</p>;
+    if (compact) return <p className="text-xs text-ink-muted" title="Queued…">…</p>;
     return (
       <p role="status" className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-panel-waiting">
         <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-        Waiting for capacity…
+        Queued…
       </p>
     );
   }

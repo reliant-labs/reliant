@@ -7,7 +7,7 @@ import Combobox, { type ComboboxOption } from "@/components/forge-ui/combobox";
 import Input from "@/components/forge-ui/input";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
 import { obsKeys, useObsReadApi } from "@/hooks/observability-queries";
-import { obsRetry } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import type { RPCCatalog } from "@/services/controlPlane/observability/graphTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -67,14 +67,14 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   const catalogKey = [...obsKeys.all(scope), "graph-catalog", window] as const;
   const everything = useQuery({ queryKey: [...catalogKey, ""],
     queryFn: () => api.getServiceGraphCatalog({ ...scope, window, rpcService: "" }),
-    enabled: !processService, staleTime: Infinity, retry: obsRetry });
+    enabled: !processService, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
   const scoped = useQuery({ queryKey: [...catalogKey, service],
     queryFn: () => api.getServiceGraphCatalog({ ...scope, window, rpcService: service }),
-    enabled: !processService && !!service, staleTime: Infinity, retry: obsRetry });
+    enabled: !processService && !!service, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
   const catalog = service ? scoped : everything;
   const exactCatalog = useQuery({ queryKey: [...catalogKey, "exact", service, rpcId],
     queryFn: () => api.getServiceGraphCatalog({ ...scope, window, rpcService: service, rpcIds: [rpcId] }),
-    enabled: !!rpcId && !processService, staleTime: Infinity, retry: obsRetry });
+    enabled: !!rpcId && !processService, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
   // React Query intentionally retains data after a failed refetch. Catalog
   // metadata is permissioned: never present retained data as currently verified.
   const catalogError = everything.error || catalog.error || exactCatalog.error;
@@ -88,7 +88,7 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   } : selectedData;
   const graph = useQuery({ queryKey: [...obsKeys.all(scope), "graph", window, rpcId, service, processService, !!search.internal, !!search.declared],
     queryFn: () => api.getServiceGraph({ ...scope, window, rpcIds: rpcId ? [rpcId] : [], rpcService: service, services: processService ? [processService] : [], includeInternal: !!search.internal, includeDeclared: !!search.declared && !processService }),
-    enabled: !explorer, staleTime: Infinity, retry: obsRetry });
+    enabled: !explorer, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
   const { services, methods } = useMemo(() => filterOptions(optionsData, scopedOptionsData, service, rpcId), [optionsData, scopedOptionsData, service, rpcId]);
   const notes = useMemo(() => catalogNotes(displayedCatalog, envNames), [displayedCatalog, envNames]);
   const filters = useMemo(() => ({ rpcId, errorsOnly: search.errors, declared: !!search.declared && !processService, internal: search.internal, showUnresolved }),

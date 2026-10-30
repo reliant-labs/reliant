@@ -3,7 +3,7 @@ import {
   GraphNodeKind, GraphEdgeKind, GraphEvidenceKind, ObservabilityService,
   type GraphCompleteness, type GraphHistogram,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf, wireScope } from "./api";
 import type { CatalogRequest, GraphEdge, GraphNode, GraphQuality, GraphRequest, RPCCatalog, ServiceGraph } from "./graphTypes";
 
@@ -35,7 +35,7 @@ function quality(q?: GraphCompleteness): GraphQuality | null {
 }
 
 export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> {
-  const res = await getControlPlaneClient(ObservabilityService).getServiceGraph({
+  const res = await obsClient(ObservabilityService).getServiceGraph({
     scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 500,
     edgeKinds: [GraphEdgeKind.SYNC, GraphEdgeKind.DATABASE, GraphEdgeKind.EXTERNAL, GraphEdgeKind.ASYNC_SEND,
       GraphEdgeKind.ASYNC_CONSUME, ...(req.includeInternal ? [GraphEdgeKind.INTERNAL] : []), ...(req.includeDeclared ? [GraphEdgeKind.DECLARED] : [])],
@@ -58,7 +58,7 @@ export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> 
 }
 
 export async function getServiceGraphCatalog(req: CatalogRequest): Promise<RPCCatalog> {
-  const res = await getControlPlaneClient(ObservabilityService).getServiceGraphCatalog({
+  const res = await obsClient(ObservabilityService).getServiceGraphCatalog({
     scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500,
   });
   return {

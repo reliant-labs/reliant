@@ -12,7 +12,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { metricKeys, obsKeys, useObsReadApi } from "@/hooks/observability-queries";
 import { useDebounce } from "@/hooks/useDebounce";
-import { obsRetry } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -59,7 +59,7 @@ export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset
     // Every range is relative ("the last hour"), so an answer is stale once time has moved on.
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -83,6 +83,6 @@ export function useExplainPanel(scope: ObsScope | null, range: RangePreset, pane
     },
     enabled: enabled && !!scope && !!panel,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }

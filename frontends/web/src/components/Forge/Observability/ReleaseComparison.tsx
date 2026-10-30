@@ -39,7 +39,7 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import { useObsReadApi } from "@/hooks/observability-queries";
@@ -98,7 +98,7 @@ function useResources(scope: ObsScope, side: "before" | "after", window: TimeWin
       api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
     enabled: usable,
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 

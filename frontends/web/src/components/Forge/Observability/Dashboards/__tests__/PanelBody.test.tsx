@@ -100,7 +100,7 @@ describe("states", () => {
   it("says it is waiting for capacity, not that it failed, while the server's cap refuses it and it retries", () => {
     const cap = new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted, { "x-forge-error-reason": "in_flight_limit" });
     const { rerender } = render(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 2, failureReason: cap }} />);
-    expect(screen.getByTestId("obs-panel-waiting")).toHaveTextContent("Waiting for capacity…");
+    expect(screen.getByTestId("obs-panel-waiting")).toHaveTextContent("Queued…");
     expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
     // A different failure being retried is still just loading.
     rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 1, failureReason: new ConnectError("down", Code.Unavailable) }} />);
