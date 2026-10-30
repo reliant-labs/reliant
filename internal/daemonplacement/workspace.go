@@ -48,9 +48,8 @@ type Workspace struct {
 // they all reach the one disk that holds the files. worktreeID and chatID may
 // each be "".
 //
-//  1. A worktree some machine owns goes to that owner, whatever chat asked
-//     (owners resolves a row that does not record one; nil reads the record):
-//     the checkout exists on no other disk. A chat pinned elsewhere (rows from
+//  1. A worktree some machine owns (worktrees.daemon_id) goes to that owner,
+//     whatever chat asked: the checkout exists on no other disk. A chat pinned elsewhere (rows from
 //     before StartChat refused that combination) would read a directory that
 //     is not there.
 //     A request that names a chat of this project and no worktree is about
@@ -67,8 +66,8 @@ type Workspace struct {
 // ErrForeignChat, and a worktree of another user's project, or of a project
 // other than projectID, is ErrForeignWorkspace; any other lookup failure is
 // returned.
-func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, owners *Resolver, userID, projectID, worktreeID, chatID string) (Workspace, error) {
-	owner, err := workspaceOwner(ctx, r, owners, userID, projectID, worktreeID)
+func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, userID, projectID, worktreeID, chatID string) (Workspace, error) {
+	owner, err := workspaceOwner(ctx, r, userID, projectID, worktreeID)
 	if err != nil {
 		return Workspace{}, err
 	}
@@ -91,9 +90,9 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, owners *Resolver, u
 	// A request scoped to the chat alone is about the chat's workspace: the
 	// files it resolves are under chat.WorktreeID (file_system's
 	// ResolveBasePath), so they go to that workspace's owner by the same rule,
-	// settled on first use, never to a pin that names another machine.
+	// never to a pin that names another machine.
 	if owner == "" && worktreeID == "" && chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		if owner, err = workspaceOwner(ctx, r, owners, userID, chat.ProjectID, *chat.WorktreeID); err != nil {
+		if owner, err = workspaceOwner(ctx, r, userID, chat.ProjectID, *chat.WorktreeID); err != nil {
 			return Workspace{}, err
 		}
 	}
@@ -108,10 +107,10 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, owners *Resolver, u
 }
 
 // workspaceOwner is the machine holding worktreeID's checkout ("" for none,
-// the main checkout, a row no machine settled, or a row that no longer
+// the main checkout, a row that records no owner, or a row that no longer
 // exists), after confirming it is the caller's and of projectID ("" for any
 // of the caller's projects).
-func workspaceOwner(ctx context.Context, r WorkspaceReader, owners *Resolver, userID, projectID, worktreeID string) (string, error) {
+func workspaceOwner(ctx context.Context, r WorkspaceReader, userID, projectID, worktreeID string) (string, error) {
 	if worktreeID == "" {
 		return "", nil
 	}
@@ -132,7 +131,7 @@ func workspaceOwner(ctx context.Context, r WorkspaceReader, owners *Resolver, us
 	if project == nil || project.UserID != userID {
 		return "", ErrForeignWorkspace
 	}
-	return owners.Owner(ctx, userID, wt), nil
+	return WorktreeOwner(wt), nil
 }
 
 // WorkspaceMachineConflict reports whether a chat in worktree pinned to

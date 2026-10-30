@@ -50,11 +50,6 @@ type Repository interface {
 
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 
-	// ListDaemonsByUserID and AdoptWorktreeDaemon settle the machine of a
-	// workspace whose row records none (daemonplacement.Resolver).
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
-
 	// GetWorktree, CreateWorktree, UpdateWorktree, ArchiveWorktree,
 	// GetLiveWorktreeByName and ListReposByProject are called directly too;
 	// the roles below already declare them.

@@ -375,15 +375,7 @@ type worktreeWithProject struct {
 // AdoptWorktreeDaemon records the daemon that found a workspace's directory
 // on its disk, which proves it owns it. Only a row created before daemon_id
 // was recorded is filled in, once.
-//
-// The same statement moves the chats in that workspace that are pinned to
-// another of their owner's machines onto the owner, as worktree_owner_backfill
-// does for owners recorded before it ran: a chat's tools run where its
-// checkout is, and a pin naming another machine is one StartChat and
-// SetChatDaemon refuse today. Every reader of a chat's pin (tool routing,
-// queued delivery, the machine's catalog) then agrees with the owner. A
-// no-machine chat has no pin and is untouched; updated_at does not move.
-//
+
 // It returns the owner the row records afterwards, which is daemonID only
 // when this call won: two resolvers (separate services or API replicas) can
 // nominate different machines for one row, and only the persisted one may be
@@ -392,23 +384,12 @@ type worktreeWithProject struct {
 // row. "" means the row is gone.
 func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) (string, error) {
 	var adopted []string
-	err := db.Bun().NewRaw(`
-WITH adopted AS (
-    UPDATE worktrees SET daemon_id = ?
-     WHERE id = ? AND daemon_id IS NULL
-    RETURNING id, daemon_id
-), moved AS (
-    UPDATE chats c SET active_daemon_id = a.daemon_id
-      FROM adopted a
-      JOIN daemons d ON d.id = a.daemon_id
-     WHERE c.worktree_id = a.id
-       AND d.user_id = c.user_id
-       AND c.active_daemon_id IS NOT NULL
-       AND c.active_daemon_id <> a.daemon_id
-       AND NOT c.no_machine
-    RETURNING c.id
-)
-SELECT daemon_id FROM adopted`, daemonID, id).Scan(ctx, &adopted)
+	err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
+		Set("daemon_id = ?", daemonID).
+		Where("id = ?", id).
+		Where("daemon_id IS NULL").
+		Returning("daemon_id").
+		Scan(ctx, &adopted)
 	if err != nil {
 		return "", err
 	}

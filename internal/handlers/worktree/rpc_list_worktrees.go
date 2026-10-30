@@ -112,7 +112,6 @@ func (s *Service) ListWorktrees(
 	for i, w := range worktrees {
 		protoWorktrees[i] = worktreeToProto(w)
 	}
-	s.settleOwnersInBackground(ctx, userID, worktrees)
 
 	return connect.NewResponse(&reliantv1.ListWorktreesResponse{
 		Worktrees:     protoWorktrees,
@@ -220,35 +219,4 @@ func (s *Service) GetWorktree(
 	return connect.NewResponse(&reliantv1.GetWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
 	}), nil
-}
-
-// listSettleTimeout bounds the background settling one list starts.
-const listSettleTimeout = 30 * time.Second
-
-// settleOwnersInBackground settles, after the list has answered, the machine
-// of each listed branch workspace whose row records none
-// (daemonplacement.Resolver), so the next list carries it and the new-chat
-// composer offers the workspace only on its machine. The list itself never
-// waits on a machine. Rows are settled one after another: each already asks
-// every connected machine at once, and a long list must not fan out further.
-func (s *Service) settleOwnersInBackground(ctx context.Context, userID string, worktrees []*db.Worktree) {
-	var unattributed []*db.Worktree
-	for _, w := range worktrees {
-		if w != nil && w.DaemonID == nil && !w.IsMain && w.DeletedAt == nil && w.Path != "" {
-			unattributed = append(unattributed, w)
-		}
-	}
-	if len(unattributed) == 0 || s.owners == nil {
-		return
-	}
-	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listSettleTimeout)
-	go func() {
-		defer cancel()
-		for _, w := range unattributed {
-			if settleCtx.Err() != nil {
-				return
-			}
-			s.owners.Owner(settleCtx, userID, w)
-		}
-	}()
 }

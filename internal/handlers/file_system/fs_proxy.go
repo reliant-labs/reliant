@@ -112,7 +112,7 @@ func (s *Service) resolveScope(ctx context.Context, userID, projectID string, wo
 // tab, the preview and the terminal share that one rule, so they cannot show
 // two different disks.
 func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
-	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, s.owners, userID, projectID, deref(worktreeID), deref(chatID))
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, projectID, deref(worktreeID), deref(chatID))
 	switch {
 	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")

@@ -11,10 +11,8 @@
 -- Rows with no daemon_id (from before ownership was recorded) are left alone.
 -- Nothing in the database proves which disk holds one: an install row can be
 -- removed while the workspace survives on that machine, and a branch
--- directory is separate from the project's clone. They are settled from disk
--- instead, by daemonplacement.Resolver on first use and by the worktree sweep;
--- recording an owner then moves that workspace's stale pins the same way
--- (store.AdoptWorktreeDaemon).
+-- directory is separate from the project's clone. The worktree sweep records
+-- an owner when a machine finds the checkout.
 --
 -- The main checkout (is_main) is on every machine with the project and has no
 -- owner. No-machine chats have no pin and are untouched. updated_at and

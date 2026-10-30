@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -56,7 +57,7 @@ func (s *Service) StageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.stage", stageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.stage", stageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &stageResp); err != nil {
@@ -110,7 +111,7 @@ func (s *Service) UnstageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.unstage", unstageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.unstage", unstageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &unstageResp); err != nil {
@@ -160,7 +161,7 @@ func (s *Service) CommitWorktree(
 	}
 
 	// Commit via daemon
-	output, err := s.commitViaDaemon(ctx, userID, s.owner(ctx, userID, worktree), repoPath, req.Msg.Message)
+	output, err := s.commitViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath, req.Msg.Message)
 	if err != nil {
 		// err's text is the client's: git's words, or the machine's state.
 		errStr := err.Error()
@@ -208,7 +209,7 @@ func (s *Service) PushWorktree(
 	// Push via daemon. Branch is resolved daemon-side from HEAD, not from
 	// worktree.Branch — the user may have checked out a different branch in
 	// this repo since creation.
-	output, err := s.pushViaDaemon(ctx, userID, s.owner(ctx, userID, worktree), repoPath)
+	output, err := s.pushViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func (s *Service) PullWorktree(
 	}
 
 	// Pull via daemon. Branch resolved daemon-side from HEAD.
-	output, err := s.pullViaDaemon(ctx, userID, s.owner(ctx, userID, worktree), repoPath)
+	output, err := s.pullViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +301,7 @@ func (s *Service) GetWorktreePR(
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
 	}
 	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.get_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.WarnContext(ctx, "Failed to check PR via daemon", "error", err)
@@ -382,7 +383,7 @@ func (s *Service) CreateWorktreePR(
 		AutoPushed    bool   `json:"auto_pushed"`
 		Error         string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.create_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.create_pr", map[string]string{
 		"worktree_path": repoPath,
 		"title":         req.Msg.Title,
 		"body":          body,
@@ -462,7 +463,7 @@ func (s *Service) RevertFiles(
 		Results []revertResult `json:"results"`
 		Error   string         `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.revert", map[string]interface{}{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.revert", map[string]interface{}{
 		"worktree_path": repoPath,
 		"files":         req.Msg.Files,
 	}, &revertResp); err != nil {

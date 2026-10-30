@@ -11,7 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 )
@@ -54,9 +53,9 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 		if chat.ProjectID != projectID {
 			return machinewake.Target{}, svcerr.InvalidArgument("chat belongs to a different project")
 		}
-		daemonID, err := s.chatMachine(ctx, userID, chat)
+		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
-			return machinewake.Target{}, err
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 		}
 		if daemonID != "" {
 			return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
@@ -64,7 +63,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 		noMachine = chat.NoMachine
 	}
 
-	if owner := s.owner(ctx, userID, source); owner != "" {
+	if owner := daemonplacement.WorktreeOwner(source); owner != "" {
 		return machinewake.Target{DaemonID: owner, NoMachine: noMachine}, nil
 	}
 
@@ -95,11 +94,9 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 	if err := daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, requested); err != nil {
 		return machinewake.Target{}, err
 	}
-	// The source's owner as the resolver finds it, not just as its row
-	// records it: an unattributed source settled on another machine is a
-	// conflict too, or the copy is made where the source's files are not.
+	// A copy of a workspace is made where the source's files are.
 	if source != nil {
-		if owner := s.owner(ctx, userID, source); owner != "" && owner != requested {
+		if owner := daemonplacement.WorktreeOwner(source); owner != "" && owner != requested {
 			return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the source workspace's machine: a copy of a workspace is made on the machine that holds it")
 		}
 	}
@@ -114,9 +111,9 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		if chat.ProjectID != projectID {
 			return machinewake.Target{}, svcerr.InvalidArgument("chat belongs to a different project")
 		}
-		chatDaemon, err := s.chatMachine(ctx, userID, chat)
+		chatDaemon, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
-			return machinewake.Target{}, err
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 		}
 		if chatDaemon != "" && chatDaemon != requested {
 			return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the chat's machine: a chat's workspace is made where the chat runs")
@@ -141,39 +138,4 @@ func (s *Service) defaultMachine(ctx context.Context, userID, projectID string) 
 		return s.deps.Router.ResolveDaemonID(ctx, userID)
 	}
 	return daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, projectID)
-}
-
-// owner is the machine holding worktree's checkout ("" for default
-// resolution): the one its row records, or, for a row from before owners were
-// recorded, the one connected machine found to hold it, recorded on the row
-// (daemonplacement.Resolver). Every command about an existing workspace goes
-// through here, so an unattributed workspace is settled the first time it is
-// opened instead of being sent to the user's default machine.
-func (s *Service) owner(ctx context.Context, userID string, worktree *db.Worktree) string {
-	return s.owners.Owner(ctx, userID, worktree)
-}
-
-// chatMachine is the machine chat's tools run on, by the rule they are routed
-// by: its branch workspace's owner, settled by the Resolver on first use when
-// the row records none, else its pin (daemonplacement.ChatDaemonID). A
-// workspace owned by B whose chat is still pinned to A (a pin from before the
-// owner was recorded) places and judges new workspaces on B, where the chat's
-// files are.
-func (s *Service) chatMachine(ctx context.Context, userID string, chat *db.Chat) (string, error) {
-	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		wt, err := s.deps.Repo.GetWorktree(ctx, *chat.WorktreeID)
-		if err != nil && !errors.Is(err, core.ErrWorktreeNotFound) {
-			return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-		}
-		if err == nil {
-			if owner := s.owner(ctx, userID, wt); owner != "" {
-				return owner, nil
-			}
-		}
-	}
-	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
-	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	}
-	return daemonID, nil
 }

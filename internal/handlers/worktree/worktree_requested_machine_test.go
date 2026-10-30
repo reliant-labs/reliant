@@ -3,7 +3,6 @@ package worktree
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // A workspace made from the new-chat composer goes on the machine its "Runs
@@ -100,53 +98,6 @@ func TestCreateWorktree_RefusesARequestedMachineWithAnotherProjectsChat(t *testi
 	assert.Empty(t, f.router.daemonsFor("worktree.create"))
 }
 
-// probingRouter is a placementRouter whose machines are all online and
-// answer fs.stat: only holder has the directories in held.
-type probingRouter struct {
-	placementRouter
-	holder string
-	held   map[string]bool
-}
-
-func (r *probingRouter) IsDaemonOnline(context.Context, string, *toolexec.DaemonSelector) (bool, error) {
-	return true, nil
-}
-
-func (r *probingRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	if commandType == "fs.stat" {
-		var req struct {
-			Path string `json:"path"`
-		}
-		_ = json.Unmarshal(payload, &req)
-		present := daemonID == r.holder && r.held[req.Path]
-		return json.Marshal(map[string]bool{"exists": present, "is_dir": present})
-	}
-	return r.placementRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
-}
-
-// A source with no recorded owner is settled before the requested machine is
-// judged: found on B, a copy requested on A is refused, never made where the
-// source's files are not.
-func TestCreateWorktree_RefusesARequestedMachineOtherThanAnUnattributedSourcesHolder(t *testing.T) {
-	t.Parallel()
-
-	f := newPlacementFixture(t)
-	machineA := f.ownedDaemon(t, f.userID)
-	machineB := f.ownedDaemon(t, f.userID)
-	source := f.worktree(t, "") // unattributed: no daemon_id
-	router := &probingRouter{holder: machineB, held: map[string]bool{source.Path: true}}
-	f.svc = newWorktreeService(t, f.repo, router)
-
-	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{SourceWorktreeId: &source.ID, DaemonId: &machineA})
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	assert.Empty(t, router.daemonsFor("worktree.create"), "no copy may be made away from the source's files")
-	settled, err := f.repo.GetWorktree(context.Background(), source.ID)
-	require.NoError(t, err)
-	require.NotNil(t, settled.DaemonID)
-	assert.Equal(t, machineB, *settled.DaemonID, "the source's holder is recorded")
-}
-
 // The row carries its machine to the web, so the composer can tell which
 // workspaces a machine holds.
 func TestWorktreeProto_CarriesItsMachine(t *testing.T) {
@@ -157,28 +108,25 @@ func TestWorktreeProto_CarriesItsMachine(t *testing.T) {
 	assert.Nil(t, worktreeToProto(&db.Worktree{ID: "main", IsMain: true}).DaemonId)
 }
 
-// A chat pinned to A whose branch workspace is B's: an unattributed row the
-// migration left with the chat's pin, settled on B the first time it is used.
-// The chat's tools run on B, so branching it to a new workspace (copying
-// files from it) is made on B, where its files are, and the copy is read
-// there; naming B is accepted and naming A is refused.
+// A chat pinned to A whose branch workspace is B's (a pin from before StartChat
+// refused the combination). The chat's tools run on B, so branching it to a
+// new workspace (copying files from it) is made on B, where its files are,
+// and the copy is read there; naming B is accepted and naming A is refused.
 func TestCreateWorktree_AChatPinnedOffItsWorkspaceBranchesOnTheOwner(t *testing.T) {
 	t.Parallel()
 
 	f := newPlacementFixture(t)
 	machineA := f.ownedDaemon(t, f.userID)
 	machineB := f.ownedDaemon(t, f.userID)
-	source := f.worktree(t, "") // unattributed: no daemon_id
+	source := f.worktree(t, machineB)
 	chatID := f.chat(t, f.userID, machineA, source.ID)
-	router := &probingRouter{holder: machineB, held: map[string]bool{source.Path: true}}
-	f.svc = newWorktreeService(t, f.repo, router)
 
 	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{
 		ChatId: &chatID, SourceWorktreeId: &source.ID, CopyFiles: []string{".env"},
 	})
 	require.NoError(t, err)
-	assertPlacedOn(t, &router.placementRouter, wt, machineB)
-	assert.Equal(t, []string{machineB}, router.daemonsFor("worktree.copy_paths"), "the files are copied where they are")
+	assertPlacedOn(t, f.router, wt, machineB)
+	assert.Equal(t, []string{machineB}, f.router.daemonsFor("worktree.copy_paths"), "the files are copied where they are")
 
 	_, err = f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID, SourceWorktreeId: &source.ID, DaemonId: &machineB})
 	require.NoError(t, err, "the workspace's machine is the chat's machine")

@@ -392,7 +392,7 @@ func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, 
 		Exists bool   `json:"exists"`
 		Error  string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
 		return daemonerr.Error("access the worktree directory", err)
 	}
 	if !resp.Exists {
