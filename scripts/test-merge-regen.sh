@@ -124,4 +124,36 @@ echo "$out" | tail -1 | grep -q '^merge-regen: no-drift ' || fail "--out rerun a
 set +e; (cd "$tmp/w" && "$script" --branch pr --push --out refs/x) >/dev/null 2>&1; rc=$?; set -e
 [ $rc = 1 ] || fail "--push with --out should be refused, exit $rc"
 echo "ok   --out leaves the commit in a ref for the caller to push"
+
+# 8. forge's driver makes the LOCAL merge clean and generate is a no-op, but
+#    GitHub's merge (no driver) still conflicts: the merge is pushed anyway.
+setup
+printf 'gen/list_gen.txt merge=forge-generated\n' >.gitattributes
+printf 'm\nz\n' >gen/list_gen.txt
+git add -A && git commit -qm list && git push -q origin main
+edit pr gen/list_gen.txt m m-pr
+edit main gen/list_gen.txt m m-main
+git fetch -q origin
+git merge-tree --write-tree origin/main origin/pr >/dev/null 2>&1 && fail "precondition: a driver-less merge should conflict"
+out=$(MERGE_REGEN_DRIVER_INSTALL='git config merge.forge-generated.driver "git merge-file --union %A %O %B"' \
+  MERGE_REGEN_GENERATE=true run --branch pr --push 2>&1) || fail "driver-clean exited $?: $out"
+echo "$out" | tail -1 | grep -q '^merge-regen: pushed ' || fail "a PR GitHub cannot merge must be pushed even when the driver merges it: $out"
+git fetch -q origin
+git merge-tree --write-tree origin/main origin/pr >/dev/null 2>&1 || fail "the pushed PR still conflicts for a driver-less merge"
+echo "ok   driver-clean but server-conflicting merge is pushed"
+
+# 9. A hand-written file in a directory that also holds generated output is
+#    hand-written: with the default classifier its conflict is refused.
+setup
+mkdir -p deploy/observability
+printf 'one\ntwo\nthree\n' >deploy/observability/gateway-sync.sh
+git add -A && git commit -qm sync && git push -q origin main
+edit pr deploy/observability/gateway-sync.sh two PR
+edit main deploy/observability/gateway-sync.sh two MAIN
+before=$(git rev-parse origin/pr)
+set +e; out=$(cd "$tmp/w" && env -u MERGE_REGEN_GEN_RE "$script" --branch pr --push 2>&1); rc=$?; set -e
+[ $rc = 2 ] || fail "deploy/observability hand-written conflict: exit $rc, want 2: $out"
+echo "$out" | tail -1 | grep -q 'refused-conflict deploy/observability/gateway-sync.sh' || fail "refusal: $out"
+git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$before" ] || fail "a refused run pushed"
+echo "ok   hand-written file beside generated output is refused"
 echo PASS
