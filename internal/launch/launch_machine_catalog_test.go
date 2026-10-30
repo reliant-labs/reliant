@@ -12,6 +12,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A launch on a machine builds its inputs from that machine's presets and
@@ -128,6 +130,46 @@ func TestLaunchRefusesAPresetOnlyAnotherMachineSynced(t *testing.T) {
 	_, err = launcher.Launch(ctx, chatStartEvent(), spec(laptop))
 	require.NoError(t, err, "on the laptop the preset resolves")
 	assert.Equal(t, "auto", starter.lastRootInput(t).Inputs["mode"])
+}
+
+// Re-deriving a live run's provider policy when one of its presets no longer
+// resolves keeps the policy the run holds. Rebuilding it from the presets that
+// remain would drop a preset's wait and account pin and let the Settings
+// default (fallback to another provider) take over.
+func TestResolveProviderPolicyKeepsTheRunsPolicyWhenAPresetIsGone(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	cicd := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: cicd, UserID: launchTestUserID}))
+	pj, err := config.EncodeCatalogJSON([]config.StoredPreset{{
+		Name: "guarded", RelativePath: ".reliant/presets/guarded.yaml",
+		YAMLContent: "name: guarded\ntag: agent\nproviders:\n  prefer: [\"claude:work@acme.com\"]\n  on_limit: wait\n",
+	}})
+	require.NoError(t, err)
+	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+		ProjectID: projectID, DaemonID: cicd, ProjectPresetsJSON: pj, PushedAt: time.Now().UTC(),
+	}, true)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateSetting(ctx, &db.Setting{
+		ID: uuid.NewString(), UserID: launchTestUserID, Key: ProviderPolicyDefaultsKey, ValueType: "json",
+		Value:     `{"claude": {"on_limit": "fallback", "fallback_model": "gpt-5.6-sol@codex"}}`,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	chat := &db.Chat{ID: uuid.NewString(), UserID: launchTestUserID, ProjectID: projectID, ActiveDaemonID: &cicd}
+	held := types.RunProviderPolicy{OnLimit: "wait", PreferredAccount: map[string]string{"claude": "work@acme.com"}}
+	inputs := map[string]interface{}{
+		"model":                   map[string]interface{}{"id": claudeOpus},
+		v2.InputKeyProviderPolicy: held.Value(),
+	}
+
+	chat.SelectedPresets = map[string]string{"default": "guarded"}
+	assert.Equal(t, held, launcher.ResolveProviderPolicy(ctx, launchTestUserID, chat, inputs), "the preset's policy beats the Settings default")
+
+	chat.SelectedPresets = map[string]string{"default": "guarded", "reviewer": "gone"}
+	assert.Equal(t, held, launcher.ResolveProviderPolicy(ctx, launchTestUserID, chat, inputs),
+		"a preset that no longer resolves must not hand the run to the Settings default's fallback")
 }
 
 // A pending no-machine branch started with a daemon named at its first send
