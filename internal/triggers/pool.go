@@ -196,7 +196,7 @@ func (f *Firer) recordPoolWait(ctx context.Context, t *core.Trigger, ev launch.E
 	row := &core.TriggerEvent{
 		ID: uuid.NewString(), UserID: t.UserID, TriggerID: &t.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey,
 		OccurredAt: ev.OccurredAt, CreatedAt: f.now(), Payload: ev.Payload,
-		Outcome: core.TriggerEventPending, OutcomeDetail: reason,
+		Outcome: core.TriggerEventPending, OutcomeDetail: reason, Definition: ev.Definition,
 	}
 	if _, err := f.repo.CreateTriggerEvent(ctx, row); err != nil {
 		return nil, fmt.Errorf("record the pool wait of fire %s: %w", ev.DedupeKey, err)

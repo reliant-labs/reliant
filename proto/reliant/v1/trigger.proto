@@ -846,6 +846,62 @@ message TriggerEvent {
   // Empty for ad hoc launches. An identifier is not proof a workflow started:
   // an inbound event may be rejected before its fire is launched.
   string fire_workflow_id = 11;
+
+  // Read-only: which workflow definition this firing resolved — the file,
+  // its version (content hash), the machine and git commit it was synced
+  // from, and why it could not run when it could not. Unset for a firing
+  // recorded without one (an ad hoc start, or one recorded before firings
+  // carried it).
+  optional TriggerEventDefinition definition = 12;
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved, so
+// "which version of which file did this run, from which machine and commit?"
+// has an answer after the file has changed again. A firing whose definition
+// has an error and a path was refused: the newest version of that file does
+// not parse or validate, and no older version runs in its place.
+message TriggerEventDefinition {
+  // The workflow ref the trigger names.
+  string workflow = 1;
+
+  // Where it resolved: "builtin", "user" (the owner's account workflow) or
+  // "project" (a synced .reliant/workflows file). Empty when it did not
+  // resolve.
+  string source = 2;
+
+  // The project file, relative to the project root, for a project workflow.
+  string path = 3;
+
+  // The machine whose synced copy of path was read; daemon_name is its
+  // display name. Empty when no one machine's copy can be named.
+  string daemon_id = 4;
+  string daemon_name = 5;
+
+  // The git state of the checkout the file was synced from: the repo's path
+  // relative to the project root ("" for the root), the branch ("" for a
+  // detached HEAD), the HEAD commit, and whether .reliant had uncommitted
+  // changes. Empty when the machine reported none.
+  string repo = 6;
+  string branch = 7;
+  string commit = 8;
+  bool dirty = 9;
+
+  // Hex SHA-256 of the definition's bytes: its version, the value
+  // `sha256sum` prints for the file.
+  string content_hash = 10;
+
+  // Why this definition cannot run (it does not parse, validate or
+  // resolve). Empty when it can.
+  string error = 11;
+
+  // The definition for display: "machine cicd at .reliant/workflows/x.yaml
+  // @ main 1a2b3c4, clean (sha256 9f86d081884c)".
+  string summary = 12;
+
+  // The catalog snapshot the firing read this definition in and launched
+  // its run on: the run loads exactly this version, whatever was synced
+  // after. Empty when the firing read the live catalog.
+  string catalog_pin = 13;
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,

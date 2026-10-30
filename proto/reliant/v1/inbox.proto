@@ -99,6 +99,14 @@ enum InboxItemKind {
   // on its own and ends, failed, if the cause does not clear; this item says
   // what paused it in the meantime. One item per pause. Informational.
   INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED = 10;
+  // The newest version of a workflow file that enabled automations run does
+  // not parse or validate, so every firing of them is refused until a valid
+  // version is synced. ONE item per broken version (machine, file, content
+  // hash), however many automations and firings it refuses; it names the
+  // file, the error and the branch and commit, and leaves the list when a
+  // valid version lands. It replaces those automations' own failing items.
+  // Informational.
+  INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 11;
 }
 
 message ListInboxRequest {
@@ -179,6 +187,7 @@ message InboxItem {
     InboxAutomationNeedsSetup automation_needs_setup = 27;
     RecoveryInboxItem recovery = 28;
     InboxAutomationRunPaused automation_run_paused = 29;
+    InboxAutomationDefinitionBroken automation_definition_broken = 30;
   }
 }
 
@@ -246,6 +255,23 @@ message InboxAutomationFailing {
 // InboxAutomationNeedsSetup is an automation waiting for its owner to finish
 // setting it up. The item's workflow_name and project_id locate the workflow
 // page's automation.
+// InboxAutomationDefinitionBroken is one broken version of one workflow file
+// and the enabled automations it refuses.
+message InboxAutomationDefinitionBroken {
+  // The broken version: path, machine, branch, commit, content hash and the
+  // error.
+  TriggerEventDefinition definition = 1;
+
+  // The enabled automations whose firings it refuses, by name.
+  repeated InboxRefusedAutomation automations = 2;
+}
+
+// InboxRefusedAutomation is one automation a broken definition refuses.
+message InboxRefusedAutomation {
+  string trigger_id = 1;
+  string trigger_name = 2;
+}
+
 message InboxAutomationNeedsSetup {
   // What is missing, one entry per workflow input, in input-name order.
   repeated TriggerSetupIssue issues = 1;

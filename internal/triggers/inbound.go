@@ -161,19 +161,30 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	if err != nil && !isVerdict(err) {
 		return nil, fmt.Errorf("resolve trigger %s's pool catalog: %w", trigger.ID, err)
 	}
-	var decl *Declaration
+	// Which definition the event resolves is recorded on its row; a broken
+	// one refuses it before any filter, so a broken file never reads as
+	// "did not match".
+	var (
+		decl *Declaration
+		def  *core.TriggerEventDefinition
+	)
 	switch {
 	case err != nil:
 	case wait != "":
 		err = &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
 	default:
 		trigger = bound
-		decl, err = activationFor(ctx, in.workflows, trigger)
+		if def, err = DefinitionOf(ctx, in.workflows, trigger); err != nil {
+			return nil, err
+		}
+		decl, err = activationFor(ctx, PinnedTo(in.workflows, def), trigger)
 	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
 	origin := in.enrich(ctx, trigger, &ev)
 	switch {
+	case def.Broken():
+		outcome, detail = core.TriggerEventFailed, RefusalDetail(def)
 	case err != nil && isVerdict(err):
 		// Recorded, not dropped: "why did my trigger stop firing?" must have
 		// an answer, and this is it.
@@ -212,6 +223,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		Origin:        origin,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
+		Definition:    def,
 		CreatedAt:     in.now().UTC(),
 	}
 	ev.DedupeKey = dedupeKey

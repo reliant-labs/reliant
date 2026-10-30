@@ -131,12 +131,12 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	trigger, err := f.repo.GetTrigger(ctx, in.TriggerID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerNotFound) {
-			return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger deleted", nil)
+			return f.settle(ctx, ev, nil, core.TriggerEventSkipped, "trigger deleted", nil)
 		}
 		return nil, fmt.Errorf("load trigger %s: %w", in.TriggerID, err)
 	}
 	if !resuming && !manual && !trigger.Enabled {
-		return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger is disabled", nil)
+		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, "trigger is disabled", nil)
 	}
 	// A no-machine trigger names no daemon, by design; a pool-bound one is
 	// placed on a member at launch (launchOnPool).
@@ -147,7 +147,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
-		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
+		return f.settle(ctx, ev, nil, core.TriggerEventFailed, detail, err)
 	}
 
 	// A pool-bound trigger reads its declaration and concurrency from the
@@ -155,7 +155,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+			return f.settle(ctx, ev, nil, core.TriggerEventFailed, err.Error(), err)
 		}
 		return nil, err
 	}
@@ -164,20 +164,36 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}
 	trigger = bound
 
+	// Which definition this fire resolves, recorded on the event whatever the
+	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
+	// trusted from intake, like the declaration below.
+	def, err := firingDefinition(ctx, f.workflows, trigger, ev, resuming)
+	if err != nil {
+		return nil, err
+	}
+	if def.Broken() && !resuming {
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, RefusalDetail(def), errors.New(def.Error))
+	}
+
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	decl, err := activationFor(ctx, f.workflows, trigger)
+	workflows := PinnedTo(f.workflows, def)
+	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+			return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
 		}
 		return nil, err
 	}
 	spec, err := f.buildSpec(ctx, trigger, ev, decl)
 	if err != nil {
-		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
 	}
-	policy, err := capacityPolicy(ctx, f.workflows, trigger)
+	if def != nil {
+		// The run loads the definition this fire recorded (FiringDefinition).
+		spec.CatalogPin = def.CatalogPin
+	}
+	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +202,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return nil, err
 	}
 	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
-		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
+		return f.settle(ctx, ev, def, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
 	if capped {
 		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
@@ -194,7 +210,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		})
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
 			if capacitySettled(err) {
-				return f.settle(ctx, ev, core.TriggerEventSkipped, err.Error(), nil)
+				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
 			}
 			return nil, err
 		}
@@ -215,6 +231,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
+		Definition: def,
 	}, spec, resuming, catalog)
 
 	switch {
@@ -237,19 +254,23 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			// The event stays pending; the redriver fires it again.
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
-		return f.settle(ctx, ev, core.TriggerEventSkipped, reason, nil)
+		return f.settle(ctx, ev, def, core.TriggerEventSkipped, reason, nil)
 	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
-		return f.settle(ctx, ev, core.TriggerEventFailed, launchErr.Error(), launchErr)
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, launchErr.Error(), launchErr)
 	}
 	return nil, fmt.Errorf("launch trigger %s event %s: %w", trigger.ID, ev.ID, launchErr)
 }
 
 // settle records a verdict on an event that did not launch. With cause set,
 // the fire ends without retry: the event can never launch as written.
-func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome core.TriggerEventOutcome, detail string, cause error) (*FireOutput, error) {
-	settled, err := f.repo.SettlePendingTriggerEvent(ctx, ev.ID, outcome, detail)
+//
+// def is the definition the fire resolved, written in the same guarded update
+// (nil before it was read): a fire that lost the race to another never
+// rewrites the winner's record.
+func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, def *core.TriggerEventDefinition, outcome core.TriggerEventOutcome, detail string, cause error) (*FireOutput, error) {
+	settled, err := f.repo.SettlePendingTriggerEvent(ctx, ev.ID, outcome, detail, def)
 	if err != nil {
 		return nil, fmt.Errorf("record %s for event %s: %w", outcome, ev.ID, err)
 	}

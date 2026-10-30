@@ -24,6 +24,9 @@ type WorkflowCatalogSnapshot struct {
 	// UserWorkflowsJSON is the owner's account workflows as a ref resolved
 	// them at the pin (db.PinnedUserWorkflow by slug); NULL for none.
 	UserWorkflowsJSON *string `bun:"user_workflows_json"`
+	// RepoStatesJSON is the git state DaemonID's files were synced from
+	// (config.SyncedRepoState array); NULL for the union or none reported.
+	RepoStatesJSON *string `bun:"repo_states_json"`
 }
 
 // CatalogSnapshotRetention is how long a pinned catalog no run has used is
@@ -34,10 +37,10 @@ const CatalogSnapshotRetention = 90 * 24 * time.Hour
 // of that id used now, and prunes those unused for CatalogSnapshotRetention.
 func PutWorkflowCatalogSnapshot(ctx context.Context, db orm.Context, row *WorkflowCatalogSnapshot, now time.Time) error {
 	if _, err := db.Exec(ctx, `
-INSERT INTO workflow_catalog_snapshots (id, project_id, daemon_id, workflows_json, presets_json, user_workflows_json, created_at, last_used_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+INSERT INTO workflow_catalog_snapshots (id, project_id, daemon_id, workflows_json, presets_json, user_workflows_json, repo_states_json, created_at, last_used_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 ON CONFLICT (id) DO UPDATE SET last_used_at = EXCLUDED.last_used_at`,
-		row.ID, row.ProjectID, row.DaemonID, row.WorkflowsJSON, row.PresetsJSON, row.UserWorkflowsJSON, now); err != nil {
+		row.ID, row.ProjectID, row.DaemonID, row.WorkflowsJSON, row.PresetsJSON, row.UserWorkflowsJSON, row.RepoStatesJSON, now); err != nil {
 		return fmt.Errorf("failed to store the workflow catalog snapshot of project %s: %w", row.ProjectID, err)
 	}
 	if _, err := db.Exec(ctx, `DELETE FROM workflow_catalog_snapshots WHERE last_used_at < $1`, now.Add(-CatalogSnapshotRetention)); err != nil {
@@ -52,7 +55,7 @@ func UseWorkflowCatalogSnapshot(ctx context.Context, db orm.Context, id string, 
 	var row WorkflowCatalogSnapshot
 	err := db.Bun().NewRaw(`
 UPDATE workflow_catalog_snapshots SET last_used_at = ? WHERE id = ?
-RETURNING id, project_id, daemon_id, workflows_json, presets_json, user_workflows_json`, now, id).Scan(ctx, &row)
+RETURNING id, project_id, daemon_id, workflows_json, presets_json, user_workflows_json, repo_states_json`, now, id).Scan(ctx, &row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
