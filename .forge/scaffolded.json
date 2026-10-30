@@ -131,6 +131,9 @@
     "frontends/web/src/hooks/trigger-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
+    "frontends/web/src/hooks/usage-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-30T08:36:16Z"
+    },
     "frontends/web/src/hooks/workflow-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:56Z"
     },
