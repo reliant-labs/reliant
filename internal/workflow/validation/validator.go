@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
@@ -151,6 +152,12 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
 	if wf.Concurrency != nil && wf.Concurrency.MaxRunning == 0 {
 		result.AddError(CategoryStructure, nil, "concurrency.max_running", "must be positive")
+	}
+	for _, msg := range requirements.Validate(wf.GetRequires(), func(id string) bool {
+		_, _, ok := catalogIntegrations{}.TriggerTypes(id)
+		return ok
+	}) {
+		result.AddError(CategoryStructure, nil, "requires", msg)
 	}
 
 	valueTypes := opts.valueTypes()

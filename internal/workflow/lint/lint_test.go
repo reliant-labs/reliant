@@ -10,6 +10,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -26,6 +28,12 @@ var agentChild = &reliantv1.Workflow{
 	},
 }
 
+// withHandlerChild declares an on_failure, as project://release does.
+var withHandlerChild = &reliantv1.Workflow{
+	Name:      "with-handler",
+	OnFailure: &reliantv1.Workflow{Nodes: []*reliantv1.Node{{Id: "reconcile_tag", Type: "run"}}},
+}
+
 func loadFixture(t *testing.T, path string) Input {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -37,7 +45,12 @@ func loadFixture(t *testing.T, path string) Input {
 	if err != nil {
 		t.Fatalf("%s does not parse: %v", path, err)
 	}
-	in := Input{Workflow: wf, Source: data, LoadRef: func(string) (*reliantv1.Workflow, error) { return agentChild, nil }}
+	in := Input{Workflow: wf, Source: data, LoadRef: func(ref string) (*reliantv1.Workflow, error) {
+		if ref == "project://with-handler" {
+			return withHandlerChild, nil
+		}
+		return agentChild, nil
+	}}
 	sc := strings.TrimSuffix(path, ".yaml") + ".scenarios.yaml"
 	if raw, err := os.ReadFile(sc); err == nil {
 		parsed, err := scenario.ParseScenarioYAML(raw)
@@ -122,6 +135,83 @@ nodes:
 	got := findingsOf(Check(Input{Workflow: wf}), RuleSharedCheckoutFetch)
 	if len(got) != 1 || got[0].Severity != SeverityWarning {
 		t.Fatalf("want one warning, got %v", got)
+	}
+}
+
+// A slot-bounded workflow's child holds the slot while it runs, so the
+// child's unbounded steps (through refs it reaches in turn) are reported on
+// the node that runs it.
+func TestSlotBoundedChildIsReadThroughItsRefs(t *testing.T) {
+	parse := func(src string) *reliantv1.Workflow {
+		wf, err := wfyaml.ParseWorkflow([]byte(src))
+		require.NoError(t, err)
+		return wf
+	}
+	children := map[string]*reliantv1.Workflow{
+		"project://release": parse(`
+name: release
+entry: [cut]
+nodes:
+- id: cut
+  type: workflow
+  ref: project://captain
+`),
+		"project://captain": parse(`
+name: captain
+entry: [tag]
+nodes:
+- id: tag
+  type: run
+  args: {command: 'git tag v1 && echo {{ nodes.tag.exit_code }}'}
+`),
+	}
+	wf := parse(`
+name: release-cp
+concurrency: {max_running: 1}
+entry: [release]
+nodes:
+- id: release
+  type: workflow
+  ref: project://release
+`)
+	got := findingsOf(Check(Input{Workflow: wf, LoadRef: func(ref string) (*reliantv1.Workflow, error) { return children[ref], nil }}), RuleSlotUnboundedWait)
+	require.Len(t, got, 1, "%v", got)
+	assert.Equal(t, "release", got[0].Node)
+	assert.Contains(t, got[0].Message, "project://release → cut → tag")
+}
+
+// Cases that are complements cover every value: no default is needed.
+func TestComplementaryCasesNeedNoDefault(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"nodes.t.exit_code == 0", "nodes.t.exit_code != 0"},
+		{"nodes.t.exit_code != 0", "nodes.t.exit_code==0"},
+		{"nodes.t.ok", "!nodes.t.ok"},
+		{"nodes.t.ok", "true"},
+	} {
+		wf, err := wfyaml.ParseWorkflow([]byte(`
+name: fixture
+entry: [t]
+nodes:
+- id: t
+  type: run
+  timeout: 1m
+  args: {command: make test}
+- id: a
+  type: save_message
+  args: {role: assistant, content: a}
+- id: b
+  type: save_message
+  args: {role: assistant, content: b}
+edges:
+- from: t
+  cases:
+  - {to: a, condition: '` + pair[0] + `'}
+  - {to: b, condition: '` + pair[1] + `'}
+`))
+		require.NoError(t, err)
+		fs := Check(Input{Workflow: wf})
+		assert.Empty(t, findingsOf(fs, RuleExitCodeUnhandled), pair)
+		assert.Empty(t, findingsOf(fs, RuleEdgeNoDefault), pair)
 	}
 }
 

@@ -84,23 +84,26 @@ type Rule struct {
 // Rule IDs. Stable: an ID is what a `lint:allow` comment and the docs name,
 // so a rule is renamed only with every allowance that names it.
 const (
-	RuleRunNoTimeout          = "run-no-timeout"
-	RuleRunExitCodeUnread     = "run-exit-code-unread"
-	RuleExitCodeUnhandled     = "exit-code-unhandled"
-	RuleEdgeNoDefault         = "edge-no-default"
-	RuleActionErrorUnread     = "action-error-unread"
-	RuleNoFailurePath         = "no-failure-path"
-	RuleAgentTurnBudget       = "agent-turn-budget-default"
-	RuleLoopUnbounded         = "loop-unbounded"
-	RuleAgentDecodeFreeText   = "agent-decode-free-text"
-	RuleSlotUnboundedWait     = "slot-unbounded-wait"
-	RuleSharedCheckoutFetch   = "shared-checkout-fetch"
-	RuleSecretLiteral         = "secret-literal"
-	RuleAutomationUntriggered = "automation-only-untriggered"
-	RuleScenarioNone          = "scenario-none"
-	RuleScenarioTrigger       = "scenario-trigger-uncovered"
-	RuleScenarioTerminal      = "scenario-terminal-uncovered"
-	RuleAllowInvalid          = "lint-allow-invalid"
+	RuleRunNoTimeout           = "run-no-timeout"
+	RuleRunExitCodeUnread      = "run-exit-code-unread"
+	RuleExitCodeUnhandled      = "exit-code-unhandled"
+	RuleEdgeNoDefault          = "edge-no-default"
+	RuleActionErrorUnread      = "action-error-unread"
+	RuleNoFailurePath          = "no-failure-path"
+	RuleAgentTurnBudget        = "agent-turn-budget-default"
+	RuleLoopUnbounded          = "loop-unbounded"
+	RuleAgentDecodeFreeText    = "agent-decode-free-text"
+	RuleSlotUnboundedWait      = "slot-unbounded-wait"
+	RuleSharedCheckoutFetch    = "shared-checkout-fetch"
+	RuleSecretLiteral          = "secret-literal"
+	RuleAutomationUntriggered  = "automation-only-untriggered"
+	RuleRequiresUndeclaredTool = "requires-undeclared-tool"
+	RuleTimeoutIgnored         = "timeout-ignored"
+	RuleChildOnFailureIgnored  = "child-on-failure-ignored"
+	RuleScenarioNone           = "scenario-none"
+	RuleScenarioTrigger        = "scenario-trigger-uncovered"
+	RuleScenarioTerminal       = "scenario-terminal-uncovered"
+	RuleAllowInvalid           = "lint-allow-invalid"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -108,19 +111,22 @@ func rule(id string, sev Severity, summary string) Rule {
 }
 
 var rules = []Rule{
+	rule(RuleTimeoutIgnored, SeverityWarning, "A workflow or loop node declares timeout:, which bounds nothing: a node's timeout applies to the activity it dispatches, and these dispatch none."),
 	rule(RuleRunNoTimeout, SeverityWarning, "A run node has no timeout, so a hung command runs for the 30-day activity default."),
 	rule(RuleRunExitCodeUnread, SeverityWarning, "Nothing reads a run node's exit_code, so a failed command looks like a successful one."),
 	rule(RuleExitCodeUnhandled, SeverityError, "An edge branches on a run node's exit_code and has no default, so an exit code no case names ends the run silently."),
 	rule(RuleEdgeNoDefault, SeverityWarning, "An edge has cases and no default: when no case matches, that branch of the run ends silently."),
 	rule(RuleActionErrorUnread, SeverityWarning, "Nothing reads an action node's is_error, so a failed call (a 4xx, a revoked credential) looks like a successful one."),
+	rule(RuleChildOnFailureIgnored, SeverityWarning, "A workflow node runs a child that declares on_failure; the child's handler never runs as a node, because on_failure belongs to the root run."),
 	rule(RuleNoFailurePath, SeverityWarning, "A triggered workflow has no on_failure handler, so an unattended run that fails tells nobody."),
 	rule(RuleAgentTurnBudget, SeverityWarning, "An agent node leaves the child's max_turns at its default: the turn budget is a decision, not an accident."),
 	rule(RuleLoopUnbounded, SeverityWarning, "A loop's while never reads iter.iteration and the loop has no items, so nothing bounds it."),
 	rule(RuleAgentDecodeFreeText, SeverityError, "An expression json.decode()s an agent's free text; agents have a structured-output contract (response_schema) for that."),
-	rule(RuleSlotUnboundedWait, SeverityError, "A workflow with concurrency.max_running has a step that can wait without bound (no timeout, a human gate, an unbounded loop), so one run can hold a slot forever."),
+	rule(RuleSlotUnboundedWait, SeverityError, "A workflow with concurrency.max_running has a step (its own, or a child's) that can run without bound (a run node with no timeout, a loop with no bound), so one run can hold a slot forever."),
 	rule(RuleSharedCheckoutFetch, SeverityError, "A run step fetches into the shared project checkout's own refs or tags, racing every other step that does (a warning when the directory is not provably the checkout)."),
 	rule(RuleSecretLiteral, SeverityError, "A secret is written into the definition instead of being read through a credential."),
 	rule(RuleAutomationUntriggered, SeverityWarning, "automation_only: true with no triggers: no chat can start it and nothing else will."),
+	rule(RuleRequiresUndeclaredTool, SeverityWarning, "A triggered workflow's command calls an external tool (gh, task, jq, …) its requires.tools does not list, so preflight cannot check it."),
 	rule(RuleScenarioNone, SeverityWarning, "The workflow has no scenarios."),
 	rule(RuleScenarioTrigger, SeverityWarning, "No scenario fires the workflow through this trigger (scenario `trigger:`)."),
 	rule(RuleScenarioTerminal, SeverityWarning, "No scenario expects the run to reach this terminal node."),

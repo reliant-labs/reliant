@@ -35,6 +35,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 				}
 			}
 			cmd := model.CelStringRaw(model.GetRunArgs(n).GetCommand())
+			c.checkUndeclaredTools(path, cmd)
 			if !g.onFailure && !trivialCommand(cmd) && !c.reads.reads(id, "exit_code") {
 				c.add(RuleRunExitCodeUnread, path, "nothing reads this node's exit_code, so a failed command routes like a successful one",
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
@@ -46,18 +47,25 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 					fmt.Sprintf("branch on nodes.%s.is_error, or allow it with the reason the failure does not matter", id))
 			}
 		case model.NodeTypeWorkflow:
-			if slotBound && !timed {
-				c.add(RuleSlotUnboundedWait, path, "sub-workflow node has no timeout; a stuck child holds this workflow's max_running slot",
-					"set timeout: on the node")
+			if timed {
+				c.add(RuleTimeoutIgnored, path, "timeout: on a workflow node bounds nothing: the runtime applies a node's timeout to the activity the node dispatches, and a workflow node dispatches none (its child's nodes run on their own timeouts)",
+					"remove it, and bound the child's own steps (run timeouts, the agent's max_turns)")
 			}
+			if slotBound {
+				if ref := childRef(n); ref != "" {
+					c.checkChildBounded(path, ref)
+				}
+			}
+			c.checkChildOnFailure(path, n)
 			c.checkTurnBudget(path, n)
-		case model.NodeTypeApproval, model.NodeTypeAskQuestion:
-			bounded := timed || model.CelStringIsSet(model.GetApprovalArgs(n).GetTimeout())
-			if slotBound && !bounded {
-				c.add(RuleSlotUnboundedWait, path, n.GetType()+" waits for a person with no timeout, holding this workflow's max_running slot until someone answers",
-					"set a timeout, or move the human gate out of the slot-bounded workflow")
-			}
 		case model.NodeTypeLoop:
+			if timed {
+				c.add(RuleTimeoutIgnored, path, "timeout: on a loop node bounds nothing: the runtime applies a node's timeout to the activity the node dispatches, and a loop node dispatches none",
+					"remove it, and bound the loop with iter.iteration in while")
+			}
+			if ref := childRef(n); slotBound && ref != "" {
+				c.checkChildBounded(path, ref)
+			}
 			la := model.GetLoopArgs(n)
 			while := model.DirectCelExpr(la.GetWhile())
 			if !model.CelStringIsSet(la.GetItems()) && !strings.Contains(while, "iteration") {
@@ -74,7 +82,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 	}
 
 	for _, e := range g.wf.GetEdges() {
-		if len(e.GetCases()) == 0 || len(e.GetDefault()) > 0 {
+		if len(e.GetCases()) == 0 || len(e.GetDefault()) > 0 || exhaustiveCases(e.GetCases()) {
 			continue
 		}
 		path := g.prefix + e.GetFrom()
@@ -97,6 +105,108 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 				"add a default:, even one that only saves a message")
 		}
 	}
+}
+
+// checkChildOnFailure: a workflow node runs its child inline, in the parent's
+// run, and on_failure is a property of the RUN (the root's handler runs, once,
+// when the run fails). A child's own on_failure therefore never runs when it is
+// started as a node, whatever cleanup it was written to do.
+func (c *checker) checkChildOnFailure(path string, n *reliantv1.Node) {
+	ref := childRef(n)
+	if ref == "" || strings.Contains(ref, "{{") || c.in.LoadRef == nil {
+		return
+	}
+	child, err := c.in.LoadRef(ref)
+	if err != nil || child == nil || child.GetOnFailure() == nil {
+		return
+	}
+	var ids []string
+	for _, h := range child.GetOnFailure().GetNodes() {
+		ids = append(ids, h.GetId())
+	}
+	c.add(RuleChildOnFailureIgnored, path, fmt.Sprintf("%s declares on_failure (%s), which does not run when it runs as this node: on_failure belongs to the run, and only the root's runs", ref, strings.Join(ids, ", ")),
+		"give this workflow an on_failure that does what the child's does, or start the child as its own run")
+}
+
+// checkChildBounded: a slot-bounded workflow's child holds the slot for as
+// long as it runs, so the child's own waits must be bounded too. It is read
+// through LoadRef, every ref it reaches in turn; a ref that does not resolve
+// statically (a template) or a loader error is skipped, never guessed.
+func (c *checker) checkChildBounded(path, ref string) {
+	if c.in.LoadRef == nil || strings.Contains(ref, "{{") {
+		return
+	}
+	visited := map[string]bool{}
+	var walk func(ref, via string)
+	walk = func(ref, via string) {
+		if visited[ref] {
+			return
+		}
+		visited[ref] = true
+		child, err := c.in.LoadRef(ref)
+		if err != nil || child == nil {
+			return
+		}
+		for _, g := range graphsOf(child) {
+			for _, n := range g.wf.GetNodes() {
+				where := via + " → " + g.prefix + n.GetId()
+				// Approvals and questions are not here: max_running bounds only
+				// trigger-launched runs, which are unattended, and an
+				// unattended run's human gates resolve at once.
+				switch n.GetType() {
+				case model.NodeTypeRun:
+					if !model.CelStringIsSet(n.GetTimeout()) {
+						c.add(RuleSlotUnboundedWait, path, fmt.Sprintf("the child's run node %s has no timeout, and this workflow's max_running slot is held while it runs", where),
+							"give that node a timeout (in the child), or run the child outside the slot-bounded workflow")
+					}
+				case model.NodeTypeLoop:
+					la := model.GetLoopArgs(n)
+					if !model.CelStringIsSet(la.GetItems()) && !strings.Contains(model.DirectCelExpr(la.GetWhile()), "iteration") {
+						c.add(RuleSlotUnboundedWait, path, fmt.Sprintf("the child's loop %s has no iteration bound, holding this workflow's max_running slot", where),
+							"bound it with iter.iteration in while")
+					}
+				}
+				if r := childRef(n); r != "" && !strings.Contains(r, "{{") {
+					walk(r, where)
+				}
+			}
+		}
+	}
+	walk(ref, ref)
+}
+
+// comparisonPattern is `<operand> == <value>` or `<operand> != <value>`, the
+// whole condition.
+var comparisonPattern = regexp.MustCompile(`^\s*\(?\s*(.+?)\s*(==|!=)\s*(.+?)\s*\)?\s*$`)
+
+// exhaustiveCases reports whether an edge's cases provably cover every
+// value, so no default is needed: one case is literally `true`, or two cases
+// are complements (`x == v` and `x != v`; `c` and `!c`).
+func exhaustiveCases(cases []*reliantv1.EdgeCase) bool {
+	norm := func(s string) string { return strings.Join(strings.Fields(s), "") }
+	seen := map[string]bool{}
+	for _, cs := range cases {
+		cond := norm(cs.GetCondition())
+		if cond == "true" {
+			return true
+		}
+		seen[cond] = true
+	}
+	for cond := range seen {
+		if seen["!"+cond] || seen["!("+cond+")"] {
+			return true
+		}
+		if m := comparisonPattern.FindStringSubmatch(cond); m != nil {
+			flip := "!="
+			if m[2] == "!=" {
+				flip = "=="
+			}
+			if seen[m[1]+flip+m[3]] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // trivialCommand is a command whose failure means nothing: a fixed sleep (a
@@ -182,6 +292,45 @@ func (c *checker) checkFetch(path string, n *reliantv1.Node, cmd string) {
 }
 
 func joinContinuations(s string) string { return strings.ReplaceAll(s, "\\\n", " ") }
+
+// externalTools are executables a machine image may or may not carry. A
+// shell builtin or a coreutil every machine has is not worth declaring.
+var externalTools = []string{"gh", "git", "task", "jq", "yq", "forge", "reliant", "docker", "kubectl", "helm", "gcloud", "aws", "go", "node", "npm", "npx", "pnpm", "python3", "buf", "k3d", "kcl", "terraform", "curl", "flock"}
+
+var toolInvocation = regexp.MustCompile(`(?:^|[;&|({]\s*|\$\(\s*|\b(?:then|do|if|exec|timeout\s+\S+|!)\s+)(` + strings.Join(externalTools, "|") + `)(?:\s|$|\))`)
+
+// checkUndeclaredTools: a triggered (unattended) workflow's command that calls
+// an external tool its requires.tools does not list fails midway on a machine
+// without it, instead of at preflight.
+func (c *checker) checkUndeclaredTools(path, cmd string) {
+	if len(c.wf.GetTriggers()) == 0 {
+		return
+	}
+	declared := map[string]bool{}
+	for _, t := range c.wf.GetRequires().GetTools() {
+		declared[t] = true
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(joinContinuations(cmd), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, loc := range toolInvocation.FindAllStringSubmatchIndex(line, -1) {
+			tool := line[loc[2]:loc[3]]
+			if declared[tool] || seen[tool] || insideQuotes(line[:loc[2]]) {
+				continue
+			}
+			seen[tool] = true
+			missing = append(missing, tool)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		c.add(RuleRequiresUndeclaredTool, path, fmt.Sprintf("the command calls %s, which requires.tools does not list, so a machine without it fails this step midway instead of at preflight", strings.Join(missing, ", ")),
+			"add them to requires.tools: ["+strings.Join(missing, ", ")+"]")
+	}
+}
 
 // insideQuotes reports whether a shell line that starts with prefix is, at
 // its end, inside a single- or double-quoted string.
