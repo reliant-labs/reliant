@@ -56,6 +56,9 @@ const (
 	// DaemonRegistryServiceClearMachineCachesProcedure is the fully-qualified name of the
 	// DaemonRegistryService's ClearMachineCaches RPC.
 	DaemonRegistryServiceClearMachineCachesProcedure = "/reliant.v1.DaemonRegistryService/ClearMachineCaches"
+	// DaemonRegistryServiceSetDefaultDaemonProcedure is the fully-qualified name of the
+	// DaemonRegistryService's SetDefaultDaemon RPC.
+	DaemonRegistryServiceSetDefaultDaemonProcedure = "/reliant.v1.DaemonRegistryService/SetDefaultDaemon"
 )
 
 // DaemonRegistryServiceClient is a client for the reliant.v1.DaemonRegistryService service.
@@ -90,6 +93,12 @@ type DaemonRegistryServiceClient interface {
 	// progress shows as DiskConsumer.clearing and then as freed space in the
 	// next disk report. Fails with Unavailable when the machine is offline.
 	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
+	// SetDefaultDaemon makes one of the caller's machines their default
+	// (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
+	// clears it. Work that names a machine — a pinned chat, an automation's
+	// chosen machine — is unaffected. NotFound for a machine the caller does
+	// not own.
+	SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error)
 }
 
 // NewDaemonRegistryServiceClient constructs a client for the reliant.v1.DaemonRegistryService
@@ -146,6 +155,12 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
 			connect.WithClientOptions(opts...),
 		),
+		setDefaultDaemon: connect.NewClient[v1.SetDefaultDaemonRequest, v1.SetDefaultDaemonResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceSetDefaultDaemonProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetDefaultDaemon")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -158,6 +173,7 @@ type daemonRegistryServiceClient struct {
 	refreshLocalModels     *connect.Client[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse]
 	setLocalModelEndpoints *connect.Client[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse]
 	clearMachineCaches     *connect.Client[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse]
+	setDefaultDaemon       *connect.Client[v1.SetDefaultDaemonRequest, v1.SetDefaultDaemonResponse]
 }
 
 // ListDaemons calls reliant.v1.DaemonRegistryService.ListDaemons.
@@ -195,6 +211,11 @@ func (c *daemonRegistryServiceClient) ClearMachineCaches(ctx context.Context, re
 	return c.clearMachineCaches.CallUnary(ctx, req)
 }
 
+// SetDefaultDaemon calls reliant.v1.DaemonRegistryService.SetDefaultDaemon.
+func (c *daemonRegistryServiceClient) SetDefaultDaemon(ctx context.Context, req *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error) {
+	return c.setDefaultDaemon.CallUnary(ctx, req)
+}
+
 // DaemonRegistryServiceHandler is an implementation of the reliant.v1.DaemonRegistryService
 // service.
 type DaemonRegistryServiceHandler interface {
@@ -228,6 +249,12 @@ type DaemonRegistryServiceHandler interface {
 	// progress shows as DiskConsumer.clearing and then as freed space in the
 	// next disk report. Fails with Unavailable when the machine is offline.
 	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
+	// SetDefaultDaemon makes one of the caller's machines their default
+	// (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
+	// clears it. Work that names a machine — a pinned chat, an automation's
+	// chosen machine — is unaffected. NotFound for a machine the caller does
+	// not own.
+	SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error)
 }
 
 // NewDaemonRegistryServiceHandler builds an HTTP handler from the service implementation. It
@@ -280,6 +307,12 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonRegistryServiceSetDefaultDaemonHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceSetDefaultDaemonProcedure,
+		svc.SetDefaultDaemon,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetDefaultDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.DaemonRegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaemonRegistryServiceListDaemonsProcedure:
@@ -296,6 +329,8 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 			daemonRegistryServiceSetLocalModelEndpointsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceClearMachineCachesProcedure:
 			daemonRegistryServiceClearMachineCachesHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceSetDefaultDaemonProcedure:
+			daemonRegistryServiceSetDefaultDaemonHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -331,4 +366,8 @@ func (UnimplementedDaemonRegistryServiceHandler) SetLocalModelEndpoints(context.
 
 func (UnimplementedDaemonRegistryServiceHandler) ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ClearMachineCaches is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetDefaultDaemon is not implemented"))
 }

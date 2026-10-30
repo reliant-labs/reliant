@@ -529,12 +529,16 @@ func TestWorktreeQueries(t *testing.T) {
 		t.Fatalf("cleanup metadata not cleared: %+v", w.CleanupMetadata)
 	}
 
-	// Adopt fills daemon_id once.
-	if err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-2"); err != nil {
-		t.Fatalf("AdoptWorktreeDaemon: %v", err)
+	// Adopt fills daemon_id once, and every caller learns the persisted
+	// winner: a second resolver nominating another machine is told the first.
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-2"); err != nil || got != "daemon-2" {
+		t.Fatalf("AdoptWorktreeDaemon = %q, %v; want daemon-2", got, err)
 	}
-	if err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-3"); err != nil {
-		t.Fatalf("AdoptWorktreeDaemon(again): %v", err)
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-3"); err != nil || got != "daemon-2" {
+		t.Fatalf("AdoptWorktreeDaemon(again) = %q, %v; want the recorded daemon-2", got, err)
+	}
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-missing", "daemon-3"); err != nil || got != "" {
+		t.Fatalf("AdoptWorktreeDaemon(missing row) = %q, %v; want \"\"", got, err)
 	}
 	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.DaemonID == nil || *w.DaemonID != "daemon-2" {
 		t.Fatalf("after adopt = %v", w.DaemonID)

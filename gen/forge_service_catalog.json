@@ -10094,6 +10094,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.DaemonRegistryService/SetDefaultDaemon",
+          "name": "SetDefaultDaemon",
+          "input": "reliant.v1.SetDefaultDaemonRequest",
+          "output": "reliant.v1.SetDefaultDaemonResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.DaemonRegistryService/SetLocalModelEndpoints",
           "name": "SetLocalModelEndpoints",
           "input": "reliant.v1.SetLocalModelEndpointsRequest",
@@ -10241,6 +10251,27 @@
               "TargetKind": "daemon",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "SetDefaultDaemon",
+            "InputType": "SetDefaultDaemonRequest",
+            "OutputType": "SetDefaultDaemonResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
+            "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_default",
+              "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -10364,6 +10395,14 @@
               "IsOptional": false
             }
           ],
+          "SetDefaultDaemonRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "SetDefaultDaemonResponse": null,
           "SetLocalModelEndpointsRequest": [
             {
               "Name": "daemon_id",
@@ -10541,6 +10580,10 @@
             {
               "name": "forge_version",
               "kind": "string"
+            },
+            {
+              "name": "is_default",
+              "kind": "bool"
             }
           ],
           "reliant.v1.DiscoveredProject": [
@@ -10838,6 +10881,13 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.SetDefaultDaemonRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.SetDefaultDaemonResponse": [],
           "reliant.v1.SetLocalModelEndpointsRequest": [
             {
               "name": "daemon_id",
@@ -10879,6 +10929,8 @@
           "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetDefaultDaemonRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetDefaultDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
         },
@@ -41447,6 +41499,11 @@
               "Name": "idempotency_key",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateWorktreeResponse": [
@@ -41516,6 +41573,11 @@
               "Name": "background",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DiscoverWorktreesResponse": [
@@ -41785,6 +41847,11 @@
               "Name": "confirm_move",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorktreeResponse": [
@@ -41915,6 +41982,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "PruneWorktreesResponse": [
@@ -42339,6 +42411,11 @@
               "name": "idempotency_key",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateWorktreeResponse": [
@@ -42403,6 +42480,11 @@
             {
               "name": "background",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DiscoverWorktreesResponse": [
@@ -42697,6 +42779,11 @@
             {
               "name": "confirm_move",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ImportWorktreeResponse": [
@@ -42824,6 +42911,11 @@
             {
               "name": "project_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.PruneWorktreesResponse": [
@@ -43139,6 +43231,11 @@
             {
               "name": "failure_reason",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorktreeFileChange": [
@@ -43873,6 +43970,17 @@
           }
         },
         {
+          "id": "method1:075c562a852417c588d8e75185fa3f77a7e51ce917a2ba7503719ce74fcbc063",
+          "name": "defaultSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.defaultSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.defaultSelector"
+          }
+        },
+        {
           "id": "method1:a83f6c4f86d1b1220a8f056649621f44e38cd7f6ae5385db0a10479774843bb2",
           "name": "dispatchDaemonCommand",
           "signature": "func(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32, data []byte, requestID string, resolve func() (daemonID string, waitFor string, err error)) ([]byte, error)",
@@ -44024,6 +44132,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:fe01872e58ef37e10bde52a4d4fcbf2662e26391f40394c3f8b534bbab75b6bf",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
@@ -46771,6 +46890,17 @@
           }
         },
         {
+          "id": "method1:9f02eca1a5afcf7129df6443d8bdcf425f6e7d43dc05992f0314d477bc37bd86",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "symbol": "Service.checkWorkspaceMachine"
+          }
+        },
+        {
           "id": "method1:11eb3ef7e854ecaf4d24c2b31ec7af13dcbb095f1f7b74296474c345330fe60b",
           "name": "copyPlanAndTasks",
           "signature": "func(ctx context.Context, sourceChatID string, targetThreadID string) error",
@@ -48822,6 +48952,17 @@
           }
         },
         {
+          "id": "method1:e35d38484e50f5ca9497a91f89bcd2bb49d4c8727dd7c6700a0c644a2938e267",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.SetDefaultDaemonRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.SetDefaultDaemonResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetDefaultDaemon",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_set_default_daemon.go",
+            "symbol": "Service.SetDefaultDaemon"
+          }
+        },
+        {
           "id": "method1:0875492fe38821d7da0b99264094114ba84228f073375975bd07e0e2338661df",
           "name": "SetLocalModelEndpoints",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.SetLocalModelEndpointsRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.SetLocalModelEndpointsResponse], error)",
@@ -48983,7 +49124,7 @@
         {
           "id": "method1:6d37c38e1b74436055f1bd23af744864c3b6017225df0952da24acfbf4fa7e1d",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.AdoptWorktreeDaemon",
           "source": {
@@ -53741,6 +53882,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetDaemonStorageState"
+          }
+        },
+        {
+          "id": "method1:d98e72ceeee71902b90f809a3a47ff0a28a8b40d955e4353d7424c0e6dac77d1",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetDefaultDaemon",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetDefaultDaemon"
           }
         },
         {
@@ -64871,6 +65023,17 @@
           }
         },
         {
+          "id": "method1:00b78386984d8a248e2750ee7f88f2c6c45c983947cb53bc0bf1fedd7d0ebe5a",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "symbol": "Service.checkWorkspaceMachine"
+          }
+        },
+        {
           "id": "method1:becdea21b0487ea9ff36105f845b58fa5e8e5e6dfd39bd622091d8f83a335203",
           "name": "copyPlanAndTasks",
           "signature": "func(ctx context.Context, sourceChatID string, targetThreadID string) error",
@@ -66050,6 +66213,17 @@
           }
         },
         {
+          "id": "method1:fab2b6c3e0b2829b6d156d824f75532325e12755e7ff7ede3d6f06ce706286fe",
+          "name": "defaultSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.defaultSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.defaultSelector"
+          }
+        },
+        {
           "id": "method1:348a2191ee7116cd07dbc8a0199a9fc7f01f47902e290e53b84ae53db94b5fdb",
           "name": "dispatchDaemonCommand",
           "signature": "func(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32, data []byte, requestID string, resolve func() (daemonID string, waitFor string, err error)) ([]byte, error)",
@@ -66201,6 +66375,17 @@
           "source": {
             "path": "internal/toolexec/daemon_reconnect.go",
             "symbol": "NATSDaemonRouter.rideOutDisconnect"
+          }
+        },
+        {
+          "id": "method1:1675b7bd33af6a83d9deaa72d7ef8d41201382dcf388599a0fe2164eab1ea0ac",
+          "name": "routingSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.routingSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.routingSelector"
           }
         },
         {
@@ -68993,12 +69178,23 @@
         {
           "id": "method1:95457a721a8174749faf9fec150974319ca39c2102889f107514b62156131798",
           "name": "placeNewWorktree",
-          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested *string, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.placeNewWorktree",
           "source": {
             "path": "internal/handlers/worktree/worktree_placement.go",
             "symbol": "Service.placeNewWorktree"
+          }
+        },
+        {
+          "id": "method1:a620e7edea6c0a979af28545d2c56214398b40a2b3c2e6c6b44e0172e761fbc7",
+          "name": "placeOnRequestedMachine",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.placeOnRequestedMachine",
+          "source": {
+            "path": "internal/handlers/worktree/worktree_placement.go",
+            "symbol": "Service.placeOnRequestedMachine"
           }
         },
         {
@@ -69169,7 +69365,7 @@
         {
           "id": "method1:a6afc1620a32bb0637bd91d162d525466094479447c90820ee70bc7aef18ead3",
           "name": "trackedWorktreePaths",
-          "signature": "func(ctx context.Context, projectID string) ([]string, error)",
+          "signature": "func(ctx context.Context, projectID string, daemonID string) ([]string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.trackedWorktreePaths",
           "source": {
@@ -72981,6 +73177,17 @@
             "path": "internal/handlers/daemon_registry/deps.go",
             "symbol": "Repository.ListFreshDaemonAttachmentsForUser"
           }
+        },
+        {
+          "id": "method1:58dc4630765cb61be61dd724b197a2afea8f88901029a9c192930beb12a86a38",
+          "name": "SetDefaultDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetDefaultDaemon",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.SetDefaultDaemon"
+          }
         }
       ],
       "candidates": [
@@ -73543,7 +73750,7 @@
         {
           "id": "method1:d2f8f4893928808811030d4798274fb34e4a258dfd6ef7076925590f415be635",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/inbox",
           "legacy_name": "inbox.AdoptWorktreeDaemon",
           "source": {

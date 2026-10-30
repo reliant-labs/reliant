@@ -75,6 +75,15 @@ import {
   startOptionsForMachine,
 } from "@/lib/chatMachine";
 import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
+import {
+  choiceLeavesWorkspace,
+  resolveChatMachine,
+  startChoice,
+  workspaceFilterMachine,
+  workspaceMachine,
+  workspacesOnMachine,
+} from "@/lib/workspaceMachine";
+import { daemonLabel } from "../Automations/daemonChoices";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -137,7 +146,6 @@ export function MobileNewChat() {
     ? worktrees.find((w) => w.id === wantedWorktreeId && !w.deleted_at)
     : undefined;
   const targetWorktree = requestedWorktree ?? mainWorktree;
-  const workspaceRowOptions = useMemo(() => workspaceOptions(worktrees), [worktrees]);
 
   // Same filtering the desktop selector applies: drop hidden workflows and
   // ones a chat cannot start (their Chat trigger is off), and
@@ -167,9 +175,27 @@ export function MobileNewChat() {
   const { data: daemons = [], isLoading: daemonsLoading } = useDaemonList();
   const installs = useProjectDaemonInstalls();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
-  const machine =
-    selectedMachine ?? defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE;
+  // A branch workspace is a checkout on one machine: picking it picks its
+  // machine, and a machine offers only its own workspaces (lib/workspaceMachine.ts).
+  const effectiveChoice = canPickMachine ? selectedMachine : null;
+  const resolvedMachine = resolveChatMachine({
+    choice: effectiveChoice,
+    fallback: defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE,
+    workspaceDaemonId: workspaceMachine(targetWorktree, new Set(daemons.map((d) => d.daemonId))),
+  });
+  const machine = resolvedMachine.value;
   const noMachine = machine === NO_MACHINE;
+  const workspaceMachineId = workspaceFilterMachine(effectiveChoice, resolvedMachine);
+  const workspaceRowOptions = useMemo(
+    () => workspaceOptions(workspacesOnMachine(worktrees, workspaceMachineId)),
+    [worktrees, workspaceMachineId],
+  );
+  // Choosing a machine that does not hold the picked workspace falls back to
+  // the main checkout, which every machine has.
+  const handleMachineChange = (next: string) => {
+    setSelectedMachine(next);
+    if (choiceLeavesWorkspace(next, resolvedMachine.lockedBy)) setPickedWorktreeId(mainWorktree?.id ?? null);
+  };
   // DEFAULT_MACHINE sends no daemon (the server picks); show the machine it
   // will land on — an awake one, or one still starting.
   const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))?.daemonId ?? "") : machine;
@@ -190,7 +216,7 @@ export function MobileNewChat() {
     setIsCreating(true);
     setError("");
     try {
-      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(machine);
+      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(startChoice(resolvedMachine));
       // A chat with no machine runs in the main checkout: a branch workspace
       // is a checkout on one machine.
       const worktreeId = noMachine ? mainWorktree?.id : targetWorktree?.id;
@@ -271,7 +297,7 @@ export function MobileNewChat() {
                 value={machineRowValue}
                 sheetTitle="Where this chat runs"
                 options={machineRowOptions}
-                onChange={setSelectedMachine}
+                onChange={handleMachineChange}
               />
             )}
             {/* Shown only when there is something to do with it: another
@@ -299,6 +325,13 @@ export function MobileNewChat() {
                 />
               )}
           </MobileCardGroup>
+        )}
+        {canPickMachine && resolvedMachine.lockedBy && daemons.length > 1 && (
+          <p role="note" className="mt-3 px-1 text-xs text-muted-foreground">
+            Runs on{" "}
+            {daemonLabel(daemons.find((d) => d.daemonId === resolvedMachine.lockedBy), resolvedMachine.lockedBy)}, where
+            this workspace lives.
+          </p>
         )}
         {noMachine && (
           <p role="note" className="mt-3 px-1 text-xs text-muted-foreground">
@@ -349,6 +382,7 @@ export function MobileNewChat() {
       {creatingWorkspace && currentProject && (
         <MobileCreateWorkspaceSheet
           projectId={currentProject.id}
+          daemonId={workspaceMachineId}
           onClose={() => setCreatingWorkspace(false)}
           onCreated={(worktree) => {
             // The store has already appended it, so selecting it by id
