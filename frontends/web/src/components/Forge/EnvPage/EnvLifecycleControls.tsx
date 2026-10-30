@@ -11,7 +11,9 @@
  * START is not confirmed — it only costs what the plan already allows — but it
  * can be REFUSED (billing), and that refusal is shown verbatim, inline, not as
  * a generic toast. STOP gets a one-line confirm. DELETE needs the environment
- * name typed, and says plainly that database data is kept but orphaned.
+ * name typed, and says plainly that its databases are deleted with it, data
+ * included (the control plane's default since control-plane #1541), naming
+ * `forge env delete <env> --keep-data` as the way to keep them.
  */
 
 import { useState } from "react";
