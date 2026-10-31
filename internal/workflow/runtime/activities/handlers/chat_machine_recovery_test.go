@@ -33,6 +33,9 @@ type chatMachineRecovery struct {
 	remote                                  *toolexec.RemoteExecutor
 	mu                                      sync.Mutex
 	deliveries                              map[string]int
+	// wait, when set, replaces the run step's machine wait (30m by default:
+	// a command that never reached an asleep machine is held for it).
+	wait *machineWait
 }
 
 func newChatMachineRecovery(t *testing.T) *chatMachineRecovery {
@@ -119,11 +122,21 @@ func (f *chatMachineRecovery) count(id string) int {
 
 func (f *chatMachineRecovery) run(selector *activitytypes.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
 	var out ExecuteRunStepOutput
-	err := f.h.ExecuteActivity(NewExecuteRunStepActivity(f.h.Repo(), executor, nil).Execute, ExecuteRunStepInput{
+	act := NewExecuteRunStepActivity(f.h.Repo(), executor, nil)
+	act.machineWait = f.wait
+	err := f.h.ExecuteActivity(act.Execute, ExecuteRunStepInput{
 		ChatID: f.chat, WorkflowID: "live-workflow", StepID: "run", Command: "pwd", Timeout: 5000,
 		DaemonSelector: selector,
 	}, &out)
 	return out, err
+}
+
+// shortMachineWait ends the run step's hold for an undelivered command in
+// seconds, for the steps that assert the command never ran.
+func shortMachineWait() *machineWait {
+	w := defaultMachineWait()
+	w.budget, w.poll, w.firstResend, w.maxResend = 2*time.Second, 100*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond
+	return w
 }
 
 func (f *chatMachineRecovery) pinIs(t *testing.T, want string) {
@@ -168,7 +181,11 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	require.NoError(t, err)
 	_, err = f.h.Repo().ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{DaemonID: f.original, Phase: "suspended", ChangedAt: time.Now()})
 	require.NoError(t, err)
+	// The step holds a command that never reached its machine (run_step.go's
+	// machineWait); a short budget ends that hold here instead of in 30m.
+	f.wait = shortMachineWait()
 	out, err = f.run(nil, f.remote)
+	f.wait = nil
 	require.Error(t, err, "offline is a transport error, not a command verdict or a switch")
 	assert.Contains(t, err.Error(), "suspended")
 	assert.Contains(t, err.Error(), "the command never ran")
@@ -248,7 +265,9 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	f.serve(t, "foreign", "other-user")
 	foreign := "foreign"
 	require.NoError(t, f.h.Repo().UpdateChatActiveDaemon(ctx, f.chat, &foreign))
+	f.wait = shortMachineWait()
 	_, err = f.run(nil, f.remote)
+	f.wait = nil
 	require.Error(t, err)
 	assert.Zero(t, f.count("foreign"))
 	assert.Equal(t, ciBefore, f.count(f.ci))

@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -25,6 +26,15 @@ type fakeDaemons struct {
 	bearer  string
 	resized []string
 	resumed []string
+	renamed []string
+}
+
+func (f *fakeDaemons) UpdateDaemon(_ context.Context, req *connect.Request[daemonv1.UpdateDaemonRequest]) (*connect.Response[daemonv1.UpdateDaemonResponse], error) {
+	if req.Msg.GetNewName() == "default" {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New(`a machine named "default" already exists; choose another name`))
+	}
+	f.renamed = append(f.renamed, req.Msg.GetDaemonId()+"="+req.Msg.GetNewName())
+	return connect.NewResponse(&daemonv1.UpdateDaemonResponse{}), nil
 }
 
 func (f *fakeDaemons) ListDaemons(_ context.Context, req *connect.Request[daemonv1.ListDaemonsRequest]) (*connect.Response[daemonv1.ListDaemonsResponse], error) {
@@ -85,6 +95,14 @@ func TestMachineCommandsCallTheControlPlaneAsTheLogin(t *testing.T) {
 	assert.ErrorContains(t, err, "unknown size")
 	_, err = run("start", "nope")
 	assert.ErrorContains(t, err, "no machine")
+
+	// rename sends only the new name, by id, and reports a refusal verbatim.
+	out, err = run("rename", "cicd", "build-box")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Renamed cicd to build-box (d-cicd)")
+	_, err = run("rename", "cicd", "default")
+	assert.ErrorContains(t, err, "already exists")
+	assert.Equal(t, []string{"d-cicd=build-box"}, fake.renamed)
 
 	// An agent's shell is refused the money-spending and state-changing verbs.
 	t.Setenv(daemonpolicy.AgentShellEnv, "1")

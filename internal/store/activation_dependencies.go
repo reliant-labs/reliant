@@ -17,7 +17,9 @@ func LockActivationDependencies(ctx context.Context, db orm.Context, user, proje
 		`SELECT id FROM workflow_drafts WHERE user_id=?0 ORDER BY id FOR SHARE`,
 		`SELECT id FROM presets WHERE user_id=?0 AND (project_id IS NULL OR project_id=?1) ORDER BY id FOR SHARE`,
 		`SELECT id FROM connections WHERE user_id=?0 ORDER BY id FOR SHARE`,
-		`SELECT id FROM settings WHERE user_id=?0 AND key LIKE 'tool.bindings.%' ORDER BY id FOR SHARE`,
+		// Tool bindings are in the approval's fingerprint, and the
+		// automation-approvals setting decides whether it needs a card.
+		`SELECT id FROM settings WHERE user_id=?0 AND (key LIKE 'tool.bindings.%' OR key = 'automation.approvals') ORDER BY id FOR SHARE`,
 		`SELECT id FROM daemons WHERE user_id=?0 ORDER BY id FOR SHARE`,
 		`SELECT project_id FROM project_daemons WHERE project_id=?1 ORDER BY daemon_id FOR SHARE`,
 	} {

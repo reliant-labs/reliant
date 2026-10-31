@@ -377,9 +377,12 @@ func generateTriggers() string {
 	return `## Triggers: when a workflow runs
 
 A workflow says WHEN it runs in a top-level ` + bt + `triggers:` + bt + ` list. Declaring a trigger fires nothing.
-In an interactive chat, use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger
-when asked to manage an activation. Each change raises an approval card; nothing changes until the owner approves.
-Unattended runs cannot manage activations. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
+Use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger when asked to manage an
+activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
+card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
+identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
+Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
 
@@ -475,7 +478,11 @@ the pair marks it as an automation's internal step.
 Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
 Archived). A failed run, a completion into a declared ` + bt + `outcome: failure` + bt + `, a cancelled run and one awaiting input stay
 unarchived so they surface. So route a blocked or punted path to a terminal node with ` + bt + `outcome: failure` + bt + ` when a person
-should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
+should look at it. An automation with "notify me when a run succeeds" keeps its successful runs too, and raises a
+desktop notification for each. A successful run is never an Inbox item, whatever that setting says: the Inbox holds
+what needs a person (a question, an approval, a failed run, a broken automation), and a later successful run clears
+the automation's failure item. A workflow that must tell a person something after a success does it with an explicit
+step: a Slack, SMS or email message, or an async ask_user question.
 
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 

@@ -148,3 +148,65 @@ func TestRetirementTreePartialFailureKeepsGitPointer(t *testing.T) {
 		t.Fatal("partial deletion discarded recovery registration")
 	}
 }
+
+// Every node_modules holds symlinks (.bin, pnpm's whole layout) and pnpm
+// hard-links its store into it. Refusing either held every worktree that had
+// run an install, which were the worktrees that filled the disk. Removing a
+// link never touches what it names.
+func TestRetirementTreeRemovesLinksWithoutTouchingTheirTargets(t *testing.T) {
+	root := retirementFixture(t)
+	outside := filepath.Join(t.TempDir(), "only-copy")
+	write(t, outside, "external")
+	if err := os.Symlink(outside, filepath.Join(root, "node_modules", "pkg", "bin")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(outside, filepath.Join(root, "node_modules", "pkg", "linked.js")); err != nil {
+		t.Fatal(err)
+	}
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	if err := tree.remove(context.Background(), func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if exists(root) {
+		t.Fatal("tree was not removed")
+	}
+	if b, err := os.ReadFile(outside); err != nil || string(b) != "external" {
+		t.Fatalf("link target touched: %q %v", b, err)
+	}
+}
+
+// A regenerable subtree is removed whole, the directory itself included,
+// and holds like a checkout does on a protected name or a nested repository.
+func TestRegenerableTreeRemovesTheDirectoryAndHoldsLikeRetirement(t *testing.T) {
+	root := retirementFixture(t)
+	modules := filepath.Join(root, "node_modules")
+	tree, err := inspectRegenerableTree(context.Background(), modules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.remove(context.Background(), func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	tree.close()
+	if exists(modules) || !exists(filepath.Join(root, "src", "main.go")) || !exists(filepath.Join(root, ".git")) {
+		t.Fatal("subtree removal reached outside node_modules, or left it")
+	}
+	for _, rel := range []string{".env", "dep/.git", "dep/data/rows.csv"} {
+		t.Run(rel, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "node_modules")
+			write(t, filepath.Join(dir, "pkg", "index.js"), "x")
+			write(t, filepath.Join(dir, filepath.FromSlash(rel)), "keep")
+			tree, err := inspectRegenerableTree(context.Background(), dir)
+			if tree != nil {
+				tree.close()
+			}
+			if err == nil {
+				t.Fatal("held content authorized")
+			}
+		})
+	}
+}

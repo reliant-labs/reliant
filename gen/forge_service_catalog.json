@@ -10123,6 +10123,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.DaemonRegistryService/RenameMachine",
+          "name": "RenameMachine",
+          "input": "reliant.v1.RenameMachineRequest",
+          "output": "reliant.v1.RenameMachineResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.DaemonRegistryService/ResolveDaemon",
           "name": "ResolveDaemon",
           "input": "reliant.v1.ResolveDaemonRequest",
@@ -10354,6 +10364,27 @@
             }
           },
           {
+            "Name": "RenameMachine",
+            "InputType": "RenameMachineRequest",
+            "OutputType": "RenameMachineResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RenameMachineRequest",
+            "OutputTypeFQ": "reliant.v1.RenameMachineResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "rename_machine",
+              "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
             "Name": "ListMachinePools",
             "InputType": "ListMachinePoolsRequest",
             "OutputType": "ListMachinePoolsResponse",
@@ -10514,6 +10545,26 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.LocalModelInventory"
+            }
+          ],
+          "RenameMachineRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RenameMachineResponse": [
+            {
+              "Name": "daemon",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.DaemonInfo"
             }
           ],
           "ResolveDaemonRequest": [
@@ -11207,6 +11258,23 @@
               "type_name": "reliant.v1.LocalModelInventory"
             }
           ],
+          "reliant.v1.RenameMachineRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RenameMachineResponse": [
+            {
+              "name": "daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonInfo"
+            }
+          ],
           "reliant.v1.ResolveDaemonRequest": [
             {
               "name": "daemon_id",
@@ -11328,6 +11396,8 @@
           "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.RenameMachineRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.RenameMachineResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -15074,12 +15144,6 @@
               "oneof": "payload"
             },
             {
-              "name": "run_finished",
-              "kind": "message",
-              "type_name": "reliant.v1.InboxRunFinished",
-              "oneof": "payload"
-            },
-            {
               "name": "storage",
               "kind": "message",
               "type_name": "reliant.v1.InboxStorage",
@@ -15143,7 +15207,6 @@
               "kind": "string"
             }
           ],
-          "reliant.v1.InboxRunFinished": [],
           "reliant.v1.InboxStorage": [
             {
               "name": "daemon_id",
@@ -15437,7 +15500,6 @@
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
-          "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
@@ -15473,7 +15535,6 @@
             "INBOX_ITEM_KIND_WAITING_FOR_MACHINE",
             "INBOX_ITEM_KIND_AUTOMATION_FAILING",
             "INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED",
-            "INBOX_ITEM_KIND_RUN_FINISHED",
             "INBOX_ITEM_KIND_STORAGE",
             "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
             "INBOX_ITEM_KIND_RECOVERY",
@@ -15512,7 +15573,6 @@
             3,
             4,
             5,
-            6,
             7,
             8,
             9,
@@ -36530,6 +36590,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "approval",
+              "kind": "string"
+            },
+            {
+              "name": "capabilities_added",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "capabilities_removed",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.TriggerDefinition": [
@@ -46150,6 +46224,24 @@
     },
     {
       "consumer": "DaemonRegistry",
+      "field": "IdleTimeouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MemberIdleTimeouts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "DaemonRegistry",
+      "field": "Names",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "DaemonRegistry",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Repository",
       "methods": [],
@@ -47310,6 +47402,22 @@
       "source": {
         "path": "internal/app/nodes_gateway.go",
         "symbol": "NewDaemonEventPublisher"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "DaemonRegistry.IdleTimeouts",
+      "source": {
+        "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "DaemonRegistry.Names",
+      "source": {
+        "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
       }
     },
     {

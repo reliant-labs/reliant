@@ -58,9 +58,12 @@ import (
 type ProjectDaemonExtra struct {
 }
 
-// RecordProjectDaemonInstalled records a COMPLETED clone. install_state is
-// forced to installed rather than left to the column default, so a row that
-// was installing or failed is corrected when the clone finally lands. An
+// RecordProjectDaemonInstalled records a COMPLETED clone, or a checkout the
+// connect-time reconcile just found on the daemon's disk: either way it is
+// there now, so verified_at is stamped (machine-pool placement reads it).
+// install_state is forced to installed rather than left to the column
+// default, so a row that was installing or failed is corrected when the clone
+// finally lands. An
 // existing row keeps its cloned_at, which is why this is not the generated
 // UpsertProjectDaemon (that rewrites every non-key column).
 func RecordProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID, path string, defaultBranch *string) error {
@@ -70,13 +73,15 @@ func RecordProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID
 	}
 	_, err := db.Bun().NewInsert().Model(row).
 		Column(ProjectDaemonFieldProjectID, ProjectDaemonFieldDaemonID, ProjectDaemonFieldPath,
-			ProjectDaemonFieldDefaultBranch, ProjectDaemonFieldInstallState).
+			ProjectDaemonFieldDefaultBranch, ProjectDaemonFieldInstallState, ProjectDaemonFieldVerifiedAt).
+		Value(ProjectDaemonFieldVerifiedAt, "NOW()").
 		On("CONFLICT (project_id, daemon_id) DO UPDATE").
 		Set("path = EXCLUDED.path").
 		Set("default_branch = EXCLUDED.default_branch").
 		Set("install_state = EXCLUDED.install_state").
 		Set("install_error = ''").
 		Set("install_request_id = ''").
+		Set("verified_at = EXCLUDED.verified_at").
 		Exec(ctx)
 	return err
 }
@@ -116,7 +121,8 @@ func ResolveQueuedProjectDaemon(ctx context.Context, db orm.Context, requestID, 
 	} else {
 		q = q.Set("install_state = ?", core.ProjectInstallInstalled).
 			Set("install_error = ''").
-			Set("cloned_at = NOW()")
+			Set("cloned_at = NOW()").
+			Set("verified_at = NOW()")
 	}
 	_, err := q.Where("install_request_id = ?", requestID).
 		Where("install_request_id <> ''").
@@ -132,6 +138,7 @@ func MarkProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, 
 		Set("install_state = ?", core.ProjectInstallInstalled).
 		Set("install_error = ''").
 		Set("cloned_at = NOW()").
+		Set("verified_at = NOW()").
 		Where("project_id = ?", projectID).
 		Where("daemon_id = ?", daemonID).
 		Where("install_state <> ?", core.ProjectInstallInstalled).

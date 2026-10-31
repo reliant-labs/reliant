@@ -35,7 +35,6 @@ import {
   needsSetupItem,
   questionItem,
   renderInboxAt,
-  runFinishedItem,
   runPausedItem,
   storageItem,
   waitingItem,
@@ -266,15 +265,6 @@ describe("InboxPage item kinds", () => {
     expect(screen.getByText("Automations that need setup")).toBeInTheDocument();
     const link = within(row).getByRole("link", { name: "Finish setup" });
     expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1");
-  });
-
-  it("a finished run opens its run", async () => {
-    respond([runFinishedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
-    await userEvent.click(within(row).getByRole("link", { name: "Open" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
 
   it("a paused automation run says what paused it and opens the run", async () => {
@@ -594,14 +584,14 @@ describe("InboxPage storage item", () => {
   });
 
   it("while a clean-up runs, Clean up is disabled and says so", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
   });
 
   it("when nothing is removable, Clean up is disabled and explains why", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const button = within(row).getByRole("button", { name: "Clean up" });

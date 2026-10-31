@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+
 	// pr.merge's executor, registered on import.
 	_ "github.com/reliant-labs/reliant/internal/integrations/ghmerge"
 )

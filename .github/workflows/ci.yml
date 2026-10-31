@@ -137,6 +137,38 @@ jobs:
             *) task ci:lanes -- --full ;;
           esac | tee -a "$GITHUB_OUTPUT"
 
+  # ── Migration order (every event) ─────────────────────────────────────────
+  # A migration versioned at or below main's newest is never applied, and the
+  # migrator refuses to boot on it: every pod crash-loops. The merge gate runs
+  # this check, but a PR merged without the queue skips the merge gate, which
+  # is how #1666 landed 20261027140617 under prod's 20261029064544
+  # (reliant#1970). So it runs on EVERY event, an unlabelled PR included: a PR
+  # and a merge group against a freshly fetched origin/main, a push against the
+  # commit before it, which fails main's CI result (and so its release record)
+  # before a release can carry the file.
+  migration-order:
+    name: Migration order
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: New migrations are above main's newest
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            pull_request|merge_group) task ci:migration-order ;;
+            *)
+              if [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then base=${PUSH_BEFORE}
+              else base=$(git rev-parse HEAD^); fi
+              task ci:migration-order BASE="${base}" ;;
+          esac
+
   # ── The merge tier (the merge queue; a ci:run pull request) ───────────────
   merge-gate:
     name: Merge gate
@@ -507,7 +539,7 @@ jobs:
   # succeeded.
   ci-result:
     name: CI result
-    needs: [lanes, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
+    needs: [lanes, migration-order, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

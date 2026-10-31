@@ -155,6 +155,10 @@ type CleanupMetadata struct {
 // tool batch one of them runs brings the worktree back.
 const ArchivedBecauseLanded = "landed"
 
+// ArchivedBecauseRecoverableIdle is automatic retirement of a complete clean
+// pushed/merged workspace, not deletion of generated files beside unique work.
+const ArchivedBecauseRecoverableIdle = "recoverable-idle"
+
 // WorktreeRunActivity is what the chats working in a worktree say about it:
 // whether any run is going (pending, active, or paused awaiting a resume) and
 // when anything last happened in it. A chat works in a worktree when it is

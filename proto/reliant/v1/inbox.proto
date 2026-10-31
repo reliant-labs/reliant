@@ -74,14 +74,19 @@ enum InboxItemKind {
   INBOX_ITEM_KIND_QUESTION = 2;
   // A live run is blocked on a suspended or starting machine. Blocks a run.
   INBOX_ITEM_KIND_WAITING_FOR_MACHINE = 3;
-  // An automation's health is FAILING. Informational.
+  // A run an automation launched failed (or its health is FAILING, or it is
+  // BROKEN), and no later run of it has succeeded. One item per failure
+  // streak; a later successful run resolves it. Informational.
   INBOX_ITEM_KIND_AUTOMATION_FAILING = 4;
   // An automation's newest firing failed to launch and no later firing has.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED = 5;
-  // An automation that opted in (Trigger.notify_on_complete) completed a run
-  // that has not been opened yet. Informational.
-  INBOX_ITEM_KIND_RUN_FINISHED = 6;
+  // 6 was RUN_FINISHED: a successful run of an automation with
+  // notify_on_complete. A run that completed successfully never puts anything
+  // in the Inbox, whatever its automation's notify setting: the Inbox lists
+  // what needs the person (waiting for input or approval, failed, broken).
+  reserved 6;
+  reserved "INBOX_ITEM_KIND_RUN_FINISHED";
   // A machine is low on disk, or holds archived worktrees it will not remove
   // on its own. One item per machine. Informational.
   INBOX_ITEM_KIND_STORAGE = 7;
@@ -144,13 +149,12 @@ message InboxItem {
 
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-  // "automation_launch_failed:", "run_finished:", "storage:",
+  // "automation_launch_failed:", "storage:",
   // "automation_needs_setup:", "automation_run_paused:"). An automation run
   // paused embeds the chat id and when the failure that paused it happened,
   // so a later pause is a new item. Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
-  // block began, so a later block is a new item; run-finished embeds the chat
-  // id. Automation failure items embed the id of the FIRST failing event of the
+  // block began, so a later block is a new item. Automation failure items embed the id of the FIRST failing event of the
   // current failure episode, so repeated failures stay one item and a new
   // episode is a new item. A needs-setup item embeds the automation and the
   // set of inputs it is missing, so dismissing it holds until a workflow edit
@@ -182,13 +186,15 @@ message InboxItem {
     InboxWaitingForMachine waiting_for_machine = 22;
     InboxAutomationFailing automation_failing = 23;
     InboxAutomationLaunchFailed automation_launch_failed = 24;
-    InboxRunFinished run_finished = 25;
     InboxStorage storage = 26;
     InboxAutomationNeedsSetup automation_needs_setup = 27;
     RecoveryInboxItem recovery = 28;
     InboxAutomationRunPaused automation_run_paused = 29;
     InboxAutomationDefinitionBroken automation_definition_broken = 30;
   }
+  // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
+  reserved 25;
+  reserved "run_finished";
 }
 
 // InboxAutomationRunPaused is a paused run of an automation. The item's
@@ -286,11 +292,6 @@ message InboxAutomationLaunchFailed {
   // How many consecutive firings have failed to launch in this episode.
   int32 consecutive_failures = 3;
 }
-
-// InboxRunFinished is a completed run of an automation that opted in to
-// notifications. Open the item's chat_id to read the result; opening it clears
-// the item.
-message InboxRunFinished {}
 
 message DismissInboxItemRequest {
   // One row, or a whole section ("Dismiss all").

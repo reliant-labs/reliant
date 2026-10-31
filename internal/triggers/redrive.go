@@ -56,11 +56,28 @@ func NewRedriver(repo EventRepo, starter WorkflowStarter, taskQueue string) *Red
 // names the event's fire id, so racing starts collapse into one execution.
 func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	now := r.now()
+	var errs []error
+	// Reconcile occupied capacity BEFORE listing the queue heads, so a slot
+	// whose run has finished is filled by this pass rather than the next one.
+	// Capacity reconciliation cannot prevent unrelated delivery recovery.
+	if repo, ok := r.repo.(capacityRepository); ok {
+		if batch, ok := r.repo.(interface {
+			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
+		}); ok {
+			if descriptions, ok := r.starter.(capacityDescriptions); ok {
+				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
+				if err != nil {
+					errs = append(errs, err)
+				} else {
+					reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
+				}
+			}
+		}
+	}
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {
-		return err
+		return errors.Join(append(errs, err)...)
 	}
-	var errs []error
 	for _, ev := range stale {
 		if ev.TriggerID == nil {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted", nil); err != nil {
@@ -80,40 +97,36 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 			}
 			continue
 		}
-		if ev.Kind == core.TriggerEventKindSchedule {
-			request := FireRequest{TriggerID: *ev.TriggerID, FireWorkflowID: ev.DedupeKey, ScheduledAt: ev.OccurredAt, Manual: ev.Payload[payloadManual] == true}
-			_, startErr := r.starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: r.taskQueue}, TriggerCapacityRedriveWorkflow, request)
-			if startErr != nil {
-				errs = append(errs, startErr)
-			}
-			continue
-		}
-		input := EventFireInput{
-			TriggerID: *ev.TriggerID,
-			Kind:      ev.Kind,
-			DedupeKey: ev.DedupeKey,
-			Manual:    ev.Payload[payloadManual] == true,
-		}
-		if err := StartEventFire(ctx, r.starter, ev.ID, input, r.taskQueue); err != nil {
+		if err := refireEvent(ctx, r.starter, r.taskQueue, ev, now); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	// Capacity reconciliation cannot prevent unrelated delivery recovery.
-	if repo, ok := r.repo.(capacityRepository); ok {
-		if batch, ok := r.repo.(interface {
-			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
-		}); ok {
-			if descriptions, ok := r.starter.(capacityDescriptions); ok {
-				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
-				if err != nil {
-					errs = append(errs, err)
-				} else {
-					reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
-				}
-			}
-		}
-	}
 	return errors.Join(errs...)
+}
+
+// refireEvent starts the fire of a recorded event that has not launched: a
+// scheduled one through TriggerCapacityRedriveWorkflow (its original identity),
+// an inbound one through its own fire workflow. A start that is already
+// running is not an error; it is the fire this asks for.
+func refireEvent(ctx context.Context, starter WorkflowStarter, taskQueue string, ev *core.TriggerEvent, now time.Time) error {
+	if taskQueue == "" {
+		taskQueue = defaultTaskQueue
+	}
+	if ev.Kind == core.TriggerEventKindSchedule {
+		request := FireRequest{TriggerID: *ev.TriggerID, FireWorkflowID: ev.DedupeKey, ScheduledAt: ev.OccurredAt, Manual: ev.Payload[payloadManual] == true}
+		_, err := starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: taskQueue}, TriggerCapacityRedriveWorkflow, request)
+		if err != nil && !isAlreadyExists(err) {
+			return err
+		}
+		return nil
+	}
+	input := EventFireInput{
+		TriggerID: *ev.TriggerID,
+		Kind:      ev.Kind,
+		DedupeKey: ev.DedupeKey,
+		Manual:    ev.Payload[payloadManual] == true,
+	}
+	return StartEventFire(ctx, starter, ev.ID, input, taskQueue)
 }
 
 // Run redrives on an interval until ctx ends. It never blocks startup and

@@ -1029,10 +1029,12 @@ func (g *Graph) newConnector() (*connector.Service, error) {
 // The ToolsDaemonService stream is the daemon-gateway's.
 func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 	return daemon_registry.New(daemon_registry.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		Router:       g.APIDaemonRouter().NATSDaemonRouter,
+		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 

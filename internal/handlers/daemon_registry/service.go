@@ -29,6 +29,15 @@ type Deps struct {
 	// daemon is external) the relays report Unavailable.
 	// forge:optional-dep
 	Router Router
+	// IdleTimeouts sets a pool member's idle timeout to its pool's
+	// member_idle_timeout. Nil when self-hosted: no machine sleeps there.
+	// forge:optional-dep
+	IdleTimeouts MemberIdleTimeouts
+	// Names renames a machine at the control plane (RenameMachine). Nil
+	// without one: the control plane owns machine names, so there is
+	// nothing to rename them in.
+	// forge:optional-dep
+	Names MachineNames
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

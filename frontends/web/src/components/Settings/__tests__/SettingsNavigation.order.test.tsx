@@ -23,6 +23,7 @@ describe("SettingsNavigation order", () => {
       "browser",
       "projects",
       "branches",
+      "automations",
       "machines",
       "git-connections",
       "tokens",

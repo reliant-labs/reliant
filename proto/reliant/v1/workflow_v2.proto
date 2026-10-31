@@ -3,7 +3,6 @@ syntax = "proto3";
 
 package reliant.v1;
 
-import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/annotations.proto";
 import "reliant/v1/trigger.proto";

@@ -280,14 +280,21 @@ type Worktree struct {
 	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
 	// with, in addition to locking it; see OutcomeIdleDone.
 	ProbeIdle bool `json:"probe_idle,omitempty"`
+	// ProbeRecoverableAfterSeconds asks for read-only whole-worktree idle
+	// eligibility. It never authorizes deleting files from a live checkout.
+	ProbeRecoverableAfterSeconds int64 `json:"probe_recoverable_after_s,omitempty"`
 	// ProbeLanded (ACTIVE requests only) asks whether the worktree's work has
 	// landed: every checkout clean and its HEAD merged into its base branch
-	// on the remote (see Result.Landed). Read-only unless ShedLanded is set.
+	// on the remote (see Result.Landed). Always read-only.
 	ProbeLanded bool `json:"probe_landed,omitempty"`
-	// ShedLanded lets a landed worktree's regenerable output (node_modules,
-	// tool installs, caches) be deleted while it is still active, once it has
-	// been quiet for the shed floor and nothing uses it. The server sets it
-	// only when no chat run is going in the worktree.
+	// ShedAfterSeconds asks the daemon to shed the worktree's regenerable
+	// output (node_modules, build output, tool caches) once nothing in it has
+	// changed for this long and no process uses it (shedRegenerable). The
+	// server sends it for a live row no chat is running in, and for an
+	// archived row held for its work; zero never sheds.
+	ShedAfterSeconds int64 `json:"shed_after_s,omitempty"`
+	// ShedLanded is ignored; complete worktree retirement requires archival.
+	// It cannot authorize deleting any file from a live checkout.
 	ShedLanded bool       `json:"shed_landed,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
@@ -323,8 +330,11 @@ type Result struct {
 	// no data, foreign checkout or other repository. A checkout with no
 	// commits beyond its base counts as landed. The daemon never removes an
 	// active worktree; whether to archive it is the server's call.
-	Landed bool   `json:"landed,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Landed bool `json:"landed,omitempty"`
+	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
+	// whose files (including caches) have all been quiet for the requested floor.
+	RecoverableIdle bool   `json:"recoverable_idle,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

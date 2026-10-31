@@ -1350,7 +1350,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`draft_automation`](#draft_automation) | workflow, readonly | Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull... |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
-| [`enable_trigger`](#enable_trigger) | workflow | Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Intera... |
+| [`enable_trigger`](#enable_trigger) | workflow | Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The ow... |
 | [`fire_trigger`](#fire_trigger) | workflow, runs | Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Neve... |
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
 | [`get_integration_schema`](#get_integration_schema) | workflow, readonly | Get the full schema of one integration action (or trigger type) by ref. |
@@ -1363,7 +1363,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`list_trigger_events`](#list_trigger_events) | workflow, readonly | Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, laun... |
 | [`list_triggers`](#list_triggers) | workflow, readonly | List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integra... |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
-| [`pause_trigger`](#pause_trigger) | workflow | Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. Interac... |
+| [`pause_trigger`](#pause_trigger) | workflow | Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The own... |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
 | [`search_integrations`](#search_integrations) | workflow, readonly | Search the integration catalog for actions a workflow can run (and trigger types that can start o... |
 | [`update_trigger_activation`](#update_trigger_activation) | workflow | Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validat... |
@@ -1399,7 +1399,7 @@ Evaluation is bounded (CEL cost limit) and has no side effects.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
+Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
 
 ---
 
@@ -1534,7 +1534,7 @@ every current error and warning.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
+Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
 
 ---
 
@@ -1720,7 +1720,7 @@ create_workflow or list_workflows.
 
 **Tags:** `workflow`, `readonly`
 
-Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id and current run state. Read-only; never fires or changes a trigger. Raw event payloads are not returned.
+Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id, current run state, and the workflow definition each firing resolved (file, machine, branch and commit, content hash, and the error when a broken definition refused it). Read-only; never fires or changes a trigger. Raw event payloads are not returned.
 
 Use after fire_trigger to see whether a firing launched, skipped or failed; acceptance of a manual fire is not a successful run. Recording is asynchronous, so an empty page may mean the firing has not been recorded yet. Use get_run with a launched chat_id for details. Concurrent fires can appear: do not assume the newest event necessarily belongs to your call. Match fire_workflow_id from fire_trigger to the event with that exact ID, then use its chat_id; do not guess from ordering. Continue with next_page_token when present.
 
@@ -1759,7 +1759,7 @@ Any handle in the Workflow column can be passed straight to get_workflow as id.
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
+Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
 
 ---
 
@@ -1811,7 +1811,7 @@ Core workflow nodes (call_llm, run, loop, ...) are not integrations; use get_sch
 
 **Tags:** `workflow`
 
-Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
+Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged.
 
 ---
 

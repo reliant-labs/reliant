@@ -48,6 +48,12 @@ func (d *daemonSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, cmd 
 	panic("unexpected command " + cmd)
 }
 
+// idleLease is the runtime admission of a machine running nothing.
+type idleLease struct{}
+
+func (idleLease) Check(context.Context) error { return nil }
+func (idleLease) Release()                    {}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -93,7 +99,14 @@ func newEnv(t *testing.T) *env {
 	if err := os.MkdirAll(e.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	e.sender = &daemonSender{reclaimer: &worktreereclaim.Reclaimer{Root: e.root, Cwds: func(context.Context) ([]string, error) { return nil, nil }}}
+	// The daemon's runtime admission and process-use check (cmd_worktree.go),
+	// as an idle machine answers them: nothing runs in any worktree.
+	e.sender = &daemonSender{reclaimer: &worktreereclaim.Reclaimer{
+		Root:       e.root,
+		Cwds:       func(context.Context) ([]string, error) { return nil, nil },
+		Acquire:    func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return idleLease{}, nil },
+		ProcessUse: func(context.Context, []string) error { return nil },
+	}}
 	e.sweeper = New(repo, e.sender)
 	return e
 }

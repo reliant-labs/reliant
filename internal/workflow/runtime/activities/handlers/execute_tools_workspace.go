@@ -224,7 +224,7 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 	if worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
 		return "", false
 	}
-	if m := worktree.CleanupMetadata; m == nil || m.ArchivedBecause != db.ArchivedBecauseLanded || len(m.SnapshotRefs) > 0 {
+	if m := worktree.CleanupMetadata; m == nil || (m.ArchivedBecause != db.ArchivedBecauseLanded && m.ArchivedBecause != db.ArchivedBecauseRecoverableIdle) || len(m.SnapshotRefs) > 0 {
 		return "", false
 	}
 	fence, err := a.repo.ReviveArchivedWorktree(ctx, worktree.ID)

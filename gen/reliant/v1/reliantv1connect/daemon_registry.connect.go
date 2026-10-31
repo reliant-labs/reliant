@@ -62,6 +62,9 @@ const (
 	// DaemonRegistryServiceSetMachineLabelsProcedure is the fully-qualified name of the
 	// DaemonRegistryService's SetMachineLabels RPC.
 	DaemonRegistryServiceSetMachineLabelsProcedure = "/reliant.v1.DaemonRegistryService/SetMachineLabels"
+	// DaemonRegistryServiceRenameMachineProcedure is the fully-qualified name of the
+	// DaemonRegistryService's RenameMachine RPC.
+	DaemonRegistryServiceRenameMachineProcedure = "/reliant.v1.DaemonRegistryService/RenameMachine"
 	// DaemonRegistryServiceListMachinePoolsProcedure is the fully-qualified name of the
 	// DaemonRegistryService's ListMachinePools RPC.
 	DaemonRegistryServiceListMachinePoolsProcedure = "/reliant.v1.DaemonRegistryService/ListMachinePools"
@@ -116,6 +119,17 @@ type DaemonRegistryServiceClient interface {
 	// whose labels contain its selector), so this is how a machine joins or
 	// leaves a pool. Keys and values are short slugs.
 	SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error)
+	// RenameMachine renames one of the caller's machines. The control plane
+	// owns the name, so it is written there first (UpdateDaemon new_name, which
+	// validates it and keeps it unique among the owner's live machines) and
+	// then onto this registry row, so every picker, trigger and agent tool
+	// shows it at once. The name is a label only: the machine's id, its
+	// workspace and every Kubernetes object named after them do not change.
+	// A name is 1-63 lowercase letters, digits or hyphens, starting and ending
+	// with a letter or digit. AlreadyExists when another of the caller's
+	// machines has it; NotFound for a machine the caller does not own;
+	// Unimplemented without a control plane.
+	RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error)
 	// forge:custom — the caller's pools joined with their members' live state,
 	// not a page of rows.
 	//
@@ -202,6 +216,12 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetMachineLabels")),
 			connect.WithClientOptions(opts...),
 		),
+		renameMachine: connect.NewClient[v1.RenameMachineRequest, v1.RenameMachineResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceRenameMachineProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("RenameMachine")),
+			connect.WithClientOptions(opts...),
+		),
 		listMachinePools: connect.NewClient[v1.ListMachinePoolsRequest, v1.ListMachinePoolsResponse](
 			httpClient,
 			baseURL+DaemonRegistryServiceListMachinePoolsProcedure,
@@ -235,6 +255,7 @@ type daemonRegistryServiceClient struct {
 	clearMachineCaches     *connect.Client[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse]
 	setDefaultDaemon       *connect.Client[v1.SetDefaultDaemonRequest, v1.SetDefaultDaemonResponse]
 	setMachineLabels       *connect.Client[v1.SetMachineLabelsRequest, v1.SetMachineLabelsResponse]
+	renameMachine          *connect.Client[v1.RenameMachineRequest, v1.RenameMachineResponse]
 	listMachinePools       *connect.Client[v1.ListMachinePoolsRequest, v1.ListMachinePoolsResponse]
 	putMachinePool         *connect.Client[v1.PutMachinePoolRequest, v1.PutMachinePoolResponse]
 	deleteMachinePool      *connect.Client[v1.DeleteMachinePoolRequest, v1.DeleteMachinePoolResponse]
@@ -283,6 +304,11 @@ func (c *daemonRegistryServiceClient) SetDefaultDaemon(ctx context.Context, req 
 // SetMachineLabels calls reliant.v1.DaemonRegistryService.SetMachineLabels.
 func (c *daemonRegistryServiceClient) SetMachineLabels(ctx context.Context, req *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error) {
 	return c.setMachineLabels.CallUnary(ctx, req)
+}
+
+// RenameMachine calls reliant.v1.DaemonRegistryService.RenameMachine.
+func (c *daemonRegistryServiceClient) RenameMachine(ctx context.Context, req *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error) {
+	return c.renameMachine.CallUnary(ctx, req)
 }
 
 // ListMachinePools calls reliant.v1.DaemonRegistryService.ListMachinePools.
@@ -344,6 +370,17 @@ type DaemonRegistryServiceHandler interface {
 	// whose labels contain its selector), so this is how a machine joins or
 	// leaves a pool. Keys and values are short slugs.
 	SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error)
+	// RenameMachine renames one of the caller's machines. The control plane
+	// owns the name, so it is written there first (UpdateDaemon new_name, which
+	// validates it and keeps it unique among the owner's live machines) and
+	// then onto this registry row, so every picker, trigger and agent tool
+	// shows it at once. The name is a label only: the machine's id, its
+	// workspace and every Kubernetes object named after them do not change.
+	// A name is 1-63 lowercase letters, digits or hyphens, starting and ending
+	// with a letter or digit. AlreadyExists when another of the caller's
+	// machines has it; NotFound for a machine the caller does not own;
+	// Unimplemented without a control plane.
+	RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error)
 	// forge:custom — the caller's pools joined with their members' live state,
 	// not a page of rows.
 	//
@@ -426,6 +463,12 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetMachineLabels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonRegistryServiceRenameMachineHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceRenameMachineProcedure,
+		svc.RenameMachine,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("RenameMachine")),
+		connect.WithHandlerOptions(opts...),
+	)
 	daemonRegistryServiceListMachinePoolsHandler := connect.NewUnaryHandler(
 		DaemonRegistryServiceListMachinePoolsProcedure,
 		svc.ListMachinePools,
@@ -465,6 +508,8 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 			daemonRegistryServiceSetDefaultDaemonHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceSetMachineLabelsProcedure:
 			daemonRegistryServiceSetMachineLabelsHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceRenameMachineProcedure:
+			daemonRegistryServiceRenameMachineHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceListMachinePoolsProcedure:
 			daemonRegistryServiceListMachinePoolsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServicePutMachinePoolProcedure:
@@ -514,6 +559,10 @@ func (UnimplementedDaemonRegistryServiceHandler) SetDefaultDaemon(context.Contex
 
 func (UnimplementedDaemonRegistryServiceHandler) SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetMachineLabels is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.RenameMachine is not implemented"))
 }
 
 func (UnimplementedDaemonRegistryServiceHandler) ListMachinePools(context.Context, *connect.Request[v1.ListMachinePoolsRequest]) (*connect.Response[v1.ListMachinePoolsResponse], error) {

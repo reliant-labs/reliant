@@ -99,10 +99,10 @@ func (r *Reclaimer) allLanded(ctx context.Context, w Worktree, checkouts []strin
 	wg.Wait()
 	out := landedYes
 	for _, a := range answers {
-		switch {
-		case a == landedNo:
+		switch a {
+		case landedNo:
 			return landedNo // a definite no outranks an unknown
-		case a == landedInconclusive:
+		case landedInconclusive:
 			out = landedInconclusive
 		}
 	}

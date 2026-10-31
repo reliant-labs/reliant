@@ -109,6 +109,27 @@ WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ? AND 
 	})
 }
 
+// NextWaitingTriggerCapacityEvent returns the head of a scope's FIFO queue —
+// its oldest waiting event, the only one CanLaunchTriggerCapacity may admit —
+// or nil when nothing waits. Served by trigger_events_capacity_waiting.
+func NextWaitingTriggerCapacityEvent(ctx context.Context, db orm.Context, scope TriggerCapacityScope) (*core.TriggerEvent, error) {
+	if !scope.valid() {
+		return nil, errors.New("invalid trigger capacity scope")
+	}
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event
+WHERE event.user_id = ? AND event.capacity_project_id = ? AND event.capacity_workflow_ref = ?
+  AND event.capacity_order IS NOT NULL AND event.outcome = 'pending'
+ORDER BY event.capacity_order LIMIT 1`, scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("find waiting trigger capacity head: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return triggerEventToCore(rows[0])
+}
+
 // CanLaunchTriggerCapacity checks FIFO and capacity inside the caller's launch
 // transaction. The caller MUST claim the pending event in that same transaction
 // before releasing the lock (ClaimPendingTriggerEvent already does this).

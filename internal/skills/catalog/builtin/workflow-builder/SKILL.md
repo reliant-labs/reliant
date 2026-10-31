@@ -263,9 +263,12 @@ edges:
 ## Triggers: when a workflow runs
 
 A workflow says WHEN it runs in a top-level `triggers:` list. Declaring a trigger fires nothing.
-In an interactive chat, use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger
-when asked to manage an activation. Each change raises an approval card; nothing changes until the owner approves.
-Unattended runs cannot manage activations. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
+Use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger when asked to manage an
+activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
+card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
+identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
+Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
 
@@ -361,7 +364,11 @@ the pair marks it as an automation's internal step.
 Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
 Archived). A failed run, a completion into a declared `outcome: failure`, a cancelled run and one awaiting input stay
 unarchived so they surface. So route a blocked or punted path to a terminal node with `outcome: failure` when a person
-should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
+should look at it. An automation with "notify me when a run succeeds" keeps its successful runs too, and raises a
+desktop notification for each. A successful run is never an Inbox item, whatever that setting says: the Inbox holds
+what needs a person (a question, an approval, a failed run, a broken automation), and a later successful run clears
+the automation's failure item. A workflow that must tell a person something after a success does it with an explicit
+step: a Slack, SMS or email message, or an async ask_user question.
 
 What `trigger.payload` holds, by source:
 
@@ -786,7 +793,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
-| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
+| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
 | `requires` | WorkflowRequirements | No | - |
 

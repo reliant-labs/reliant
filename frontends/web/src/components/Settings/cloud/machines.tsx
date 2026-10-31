@@ -107,6 +107,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
@@ -670,6 +671,7 @@ function ManagedMachinesTable({
   pricing?: DaemonPricingLike;
 }) {
   const waking = useWakingMachines();
+  const [renaming, setRenaming] = useState<string | null>(null);
   // Forget wakes that are over (the machine came up, failed, or never left
   // sleep), so a later Pending is not mislabelled as a wake.
   useEffect(() => {
@@ -683,7 +685,12 @@ function ManagedMachinesTable({
     {
       key: "name",
       header: "Name",
-      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+      render: (_, { d }) =>
+        renaming === d.daemonId ? (
+          <RenameMachineField daemonId={d.daemonId} currentName={d.name} onDone={() => setRenaming(null)} />
+        ) : (
+          <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />
+        ),
     },
     {
       key: "status",
@@ -741,6 +748,7 @@ function ManagedMachinesTable({
         return (
           <div className="inline-flex items-center gap-1">
             <MakeDefaultButton daemon={d} />
+            <RenameMachineButton label={daemonDisplayName(d)} onClick={() => setRenaming(d.daemonId)} />
             <Button
               variant="ghost"
               size="md"
@@ -774,7 +782,8 @@ function ManagedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
-        getRowAction={(r) => () => onOpenDetail(r.id)}
+        // The row being renamed holds a form, so it is not a link meanwhile.
+        getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}
       />
     </div>
@@ -834,11 +843,17 @@ function SelfHostedMachinesTable({
   /** Absent without a control plane, which owns the machine record. */
   onRemove?: (d: Daemon) => void;
 }) {
+  const [renaming, setRenaming] = useState<string | null>(null);
   const columns: DataTableColumn<MachineRow>[] = [
     {
       key: "name",
       header: "Name",
-      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+      render: (_, { d }) =>
+        renaming === d.daemonId ? (
+          <RenameMachineField daemonId={d.daemonId} currentName={d.name} onDone={() => setRenaming(null)} />
+        ) : (
+          <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />
+        ),
     },
     {
       key: "status",
@@ -878,6 +893,7 @@ function SelfHostedMachinesTable({
         return (
           <div className="inline-flex items-center gap-1">
             <MakeDefaultButton daemon={d} />
+            <RenameMachineButton label={daemonDisplayName(d)} onClick={() => setRenaming(d.daemonId)} />
             {removal.allowed ? (
               button
             ) : (
@@ -897,7 +913,8 @@ function SelfHostedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
-        getRowAction={(r) => () => onOpenDetail(r.id)}
+        // The row being renamed holds a form, so it is not a link meanwhile.
+        getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}
       />
     </div>
@@ -1293,6 +1310,7 @@ function EnvironmentDetail({
   const [cycling, setCycling] = useState<LifecycleAction | null>(null);
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeError, setResizeError] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [growOpen, setGrowOpen] = useState(false);
   const [growError, setGrowError] = useState("");
   const [growDenied, setGrowDenied] = useState(false);
@@ -1563,7 +1581,14 @@ function EnvironmentDetail({
             className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+              {renaming ? (
+                <RenameMachineField daemonId={daemon.daemonId} currentName={daemon.name} onDone={() => setRenaming(false)} />
+              ) : (
+                <>
+                  <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+                  {cloud && <RenameMachineButton label={daemonDisplayName(daemon)} onClick={() => setRenaming(true)} />}
+                </>
+              )}
               {/*
                 ONE badge. This header used to render two: the status badge
                 ("Disconnected", red) and a separate connection badge

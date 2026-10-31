@@ -313,8 +313,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
-| [`reliant machine`](#reliant-machine) | List, start, stop and resize your machines |
+| [`reliant machine`](#reliant-machine) | List, start, stop, resize and rename your machines |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
+| [`reliant machine rename`](#reliant-machine-rename) | Rename a machine |
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
 | [`reliant machine stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
@@ -14041,14 +14042,15 @@ reliant github token [flags]
 
 ## reliant machine
 
-List, start, stop and resize your machines
+List, start, stop, resize and rename your machines
 
 Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
 suspends a running one; resize changes a SUSPENDED machine's size (small,
 medium, large, xl, 2xl), which takes effect when it next starts. To resize a
-running machine: stop, resize, start.
+running machine: stop, resize, start. rename changes what a machine is
+called, and nothing else.
 
 Needs a login made by this release ('reliant auth login'): it carries the
 daemon:manage permission, which only a person's login can hold.
@@ -14062,6 +14064,7 @@ reliant machine
 | Command | Description |
 |---------|-------------|
 | [`list`](#reliant-machine-list) | List your machines |
+| [`rename`](#reliant-machine-rename) | Rename a machine |
 | [`resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`start`](#reliant-machine-start) | Start (wake) a suspended machine |
 | [`stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
@@ -14081,6 +14084,23 @@ List your machines
 
 ```
 reliant machine list
+```
+
+---
+
+### reliant machine rename
+
+Rename a machine
+
+Rename one of your machines, cloud or self-hosted, running or not. The name
+is a label only: the machine's id and its workspace do not change, so chats,
+automations and links that point at it keep working.
+
+A name is 1-63 lowercase letters, digits or hyphens, starting and ending with
+a letter or digit, and no two of your machines share one.
+
+```
+reliant machine rename <name|id> <new-name>
 ```
 
 ---
@@ -14403,6 +14423,16 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+--notify is about successful runs only. With it, a run that completes
+successfully is marked unread, which raises a desktop notification, and stays
+out of the archive so the notification has a run to open. It never puts the
+run in the Inbox: the Inbox lists only what needs you. Without it a successful
+run is silent. Either way, a failed run notifies you once per failure streak
+and is an Inbox item until a later run of the same trigger succeeds, and a run
+waiting for an answer or an approval, or an automation that is broken, is an
+Inbox item. A workflow that has something to tell you after a success says so
+itself, with a step that messages you.
+
 ```
 reliant trigger activate [flags]
 ```
@@ -14417,7 +14447,7 @@ reliant trigger activate [flags]
 | `--message` | `string` | - | Prompt for a declared trigger that has none |
 | `--name-prefix` | `string` | - | Names new activations "`<prefix>` · `<trigger>`" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
-| `--notify` | `bool` | - | Notify you when a run completes |
+| `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |
 | `--param` | `stringArray` | `[]` | Workflow input as key=value; repeatable. Values parse as JSON, else as a string |
 | `--params-json` | `string` | - | Workflow inputs as one JSON object; --param entries win over its keys |
 | `--preset` | `stringArray` | `[]` | Preset assignment as group=name, or just name for the top level; repeatable |

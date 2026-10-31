@@ -28,6 +28,20 @@ type Repository interface {
 	DeleteMachinePoolByName(ctx context.Context, userID, name string) error
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 	SetDefaultDaemon(ctx context.Context, userID, daemonID string) error
+	// UpsertDaemonIdentity writes a renamed machine's name onto its row.
+	UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error)
+}
+
+// MachineNames renames a machine at the control plane, which owns the name.
+// controlplane.Service implements it.
+type MachineNames interface {
+	RenameDaemon(ctx context.Context, jwt, daemonID, name string) error
+}
+
+// MemberIdleTimeouts sets a managed machine's idle timeout at the control
+// plane. controlplane.Service implements it.
+type MemberIdleTimeouts interface {
+	SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error
 }
 
 // Router is the slice of toolexec.DaemonRouter the daemon_registry handlers

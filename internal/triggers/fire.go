@@ -36,7 +36,15 @@ type Firer struct {
 	workflows WorkflowResolver
 	now       func() time.Time
 	capacity  capacityDescriptions
+	wake      *capacityWake
 	pools     Placer
+}
+
+// WithCapacityWake lets a capped launch fire the next waiting event of its
+// scope at once (capacityWake), instead of leaving it to the redriver.
+func (f *Firer) WithCapacityWake(starter WorkflowStarter, taskQueue string) *Firer {
+	f.wake = &capacityWake{starter: starter, taskQueue: taskQueue}
+	return f
 }
 
 // NewFirer builds the fire activity's receiver.
@@ -268,6 +276,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// Launch recorded the launched event itself, inside the same
 		// transaction as the chat. Writing one here too would either conflict
 		// on (kind, dedupe_key) or, worse, succeed and double-count.
+		if capped {
+			f.wake.wakeNext(ctx, f.repo, trigger, res.EventID)
+		}
 		return &FireOutput{
 			Outcome: string(core.TriggerEventLaunched),
 			ChatID:  res.Chat.ID,

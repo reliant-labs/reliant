@@ -625,6 +625,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	}
 	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil {
+		r.shedHeld(ctx, w, hold)
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
@@ -655,6 +656,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		res.SnapshotRefs = saved
+		r.shedHeld(ctx, w, &res)
 		r.measure(ctx, &res, w.Path)
 		return res
 	}
@@ -1086,12 +1088,22 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
+	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
+		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
+			res.RecoverableIdle = true
+		}
+	}
 	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
 		r.probeLanded(ctx, w, &res)
 	}
+	// A landed or recoverable row is about to be retired whole; shedding it
+	// first would only spend the request.
+	if res.Outcome == OutcomeLocked && !res.Landed && !res.RecoverableIdle && w.ShedAfterSeconds > 0 && len(checkouts) > 0 {
+		r.shedRegenerable(ctx, w, time.Duration(w.ShedAfterSeconds)*time.Second, &res)
+	}
 	// A landed worktree is the server's to decide on by its own rule; asking
 	// whether it is also "finished" would repeat the same checks.
-	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeRecoverableAfterSeconds <= 0 && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
 		switch r.finished(ctx, w) {
 		case probeFinished:
 			res.Outcome = OutcomeIdleDone

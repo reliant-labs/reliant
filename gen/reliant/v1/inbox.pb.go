@@ -37,14 +37,13 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_QUESTION InboxItemKind = 2
 	// A live run is blocked on a suspended or starting machine. Blocks a run.
 	InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE InboxItemKind = 3
-	// An automation's health is FAILING. Informational.
+	// A run an automation launched failed (or its health is FAILING, or it is
+	// BROKEN), and no later run of it has succeeded. One item per failure
+	// streak; a later successful run resolves it. Informational.
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING InboxItemKind = 4
 	// An automation's newest firing failed to launch and no later firing has.
 	// Informational.
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED InboxItemKind = 5
-	// An automation that opted in (Trigger.notify_on_complete) completed a run
-	// that has not been opened yet. Informational.
-	InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED InboxItemKind = 6
 	// A machine is low on disk, or holds archived worktrees it will not remove
 	// on its own. One item per machine. Informational.
 	InboxItemKind_INBOX_ITEM_KIND_STORAGE InboxItemKind = 7
@@ -81,7 +80,6 @@ var (
 		3:  "INBOX_ITEM_KIND_WAITING_FOR_MACHINE",
 		4:  "INBOX_ITEM_KIND_AUTOMATION_FAILING",
 		5:  "INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED",
-		6:  "INBOX_ITEM_KIND_RUN_FINISHED",
 		7:  "INBOX_ITEM_KIND_STORAGE",
 		8:  "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
 		9:  "INBOX_ITEM_KIND_RECOVERY",
@@ -95,7 +93,6 @@ var (
 		"INBOX_ITEM_KIND_WAITING_FOR_MACHINE":          3,
 		"INBOX_ITEM_KIND_AUTOMATION_FAILING":           4,
 		"INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED":     5,
-		"INBOX_ITEM_KIND_RUN_FINISHED":                 6,
 		"INBOX_ITEM_KIND_STORAGE":                      7,
 		"INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP":       8,
 		"INBOX_ITEM_KIND_RECOVERY":                     9,
@@ -329,13 +326,12 @@ type InboxItem struct {
 	Kind  InboxItemKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.InboxItemKind" json:"kind,omitempty"`
 	// Stable key for dismissal and de-duplication, prefixed by kind
 	// ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-	// "automation_launch_failed:", "run_finished:", "storage:",
+	// "automation_launch_failed:", "storage:",
 	// "automation_needs_setup:", "automation_run_paused:"). An automation run
 	// paused embeds the chat id and when the failure that paused it happened,
 	// so a later pause is a new item. Approvals and questions
 	// embed their row id; waiting-for-machine embeds the chat id and when the
-	// block began, so a later block is a new item; run-finished embeds the chat
-	// id. Automation failure items embed the id of the FIRST failing event of the
+	// block began, so a later block is a new item. Automation failure items embed the id of the FIRST failing event of the
 	// current failure episode, so repeated failures stay one item and a new
 	// episode is a new item. A needs-setup item embeds the automation and the
 	// set of inputs it is missing, so dismissing it holds until a workflow edit
@@ -364,7 +360,6 @@ type InboxItem struct {
 	//	*InboxItem_WaitingForMachine
 	//	*InboxItem_AutomationFailing
 	//	*InboxItem_AutomationLaunchFailed
-	//	*InboxItem_RunFinished
 	//	*InboxItem_Storage
 	//	*InboxItem_AutomationNeedsSetup
 	//	*InboxItem_Recovery
@@ -534,15 +529,6 @@ func (x *InboxItem) GetAutomationLaunchFailed() *InboxAutomationLaunchFailed {
 	return nil
 }
 
-func (x *InboxItem) GetRunFinished() *InboxRunFinished {
-	if x != nil {
-		if x, ok := x.Payload.(*InboxItem_RunFinished); ok {
-			return x.RunFinished
-		}
-	}
-	return nil
-}
-
 func (x *InboxItem) GetStorage() *InboxStorage {
 	if x != nil {
 		if x, ok := x.Payload.(*InboxItem_Storage); ok {
@@ -612,10 +598,6 @@ type InboxItem_AutomationLaunchFailed struct {
 	AutomationLaunchFailed *InboxAutomationLaunchFailed `protobuf:"bytes,24,opt,name=automation_launch_failed,json=automationLaunchFailed,proto3,oneof"`
 }
 
-type InboxItem_RunFinished struct {
-	RunFinished *InboxRunFinished `protobuf:"bytes,25,opt,name=run_finished,json=runFinished,proto3,oneof"`
-}
-
 type InboxItem_Storage struct {
 	Storage *InboxStorage `protobuf:"bytes,26,opt,name=storage,proto3,oneof"`
 }
@@ -645,8 +627,6 @@ func (*InboxItem_WaitingForMachine) isInboxItem_Payload() {}
 func (*InboxItem_AutomationFailing) isInboxItem_Payload() {}
 
 func (*InboxItem_AutomationLaunchFailed) isInboxItem_Payload() {}
-
-func (*InboxItem_RunFinished) isInboxItem_Payload() {}
 
 func (*InboxItem_Storage) isInboxItem_Payload() {}
 
@@ -1303,45 +1283,6 @@ func (x *InboxAutomationLaunchFailed) GetConsecutiveFailures() int32 {
 	return 0
 }
 
-// InboxRunFinished is a completed run of an automation that opted in to
-// notifications. Open the item's chat_id to read the result; opening it clears
-// the item.
-type InboxRunFinished struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InboxRunFinished) Reset() {
-	*x = InboxRunFinished{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InboxRunFinished) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InboxRunFinished) ProtoMessage() {}
-
-func (x *InboxRunFinished) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InboxRunFinished.ProtoReflect.Descriptor instead.
-func (*InboxRunFinished) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{13}
-}
-
 type DismissInboxItemRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// One row, or a whole section ("Dismiss all").
@@ -1352,7 +1293,7 @@ type DismissInboxItemRequest struct {
 
 func (x *DismissInboxItemRequest) Reset() {
 	*x = DismissInboxItemRequest{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[14]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1305,7 @@ func (x *DismissInboxItemRequest) String() string {
 func (*DismissInboxItemRequest) ProtoMessage() {}
 
 func (x *DismissInboxItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[14]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1318,7 @@ func (x *DismissInboxItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DismissInboxItemRequest.ProtoReflect.Descriptor instead.
 func (*DismissInboxItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DismissInboxItemRequest) GetItemIds() []string {
@@ -1395,7 +1336,7 @@ type DismissInboxItemResponse struct {
 
 func (x *DismissInboxItemResponse) Reset() {
 	*x = DismissInboxItemResponse{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[15]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1407,7 +1348,7 @@ func (x *DismissInboxItemResponse) String() string {
 func (*DismissInboxItemResponse) ProtoMessage() {}
 
 func (x *DismissInboxItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[15]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1420,7 +1361,7 @@ func (x *DismissInboxItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DismissInboxItemResponse.ProtoReflect.Descriptor instead.
 func (*DismissInboxItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{14}
 }
 
 type RestoreInboxItemRequest struct {
@@ -1432,7 +1373,7 @@ type RestoreInboxItemRequest struct {
 
 func (x *RestoreInboxItemRequest) Reset() {
 	*x = RestoreInboxItemRequest{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[16]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1444,7 +1385,7 @@ func (x *RestoreInboxItemRequest) String() string {
 func (*RestoreInboxItemRequest) ProtoMessage() {}
 
 func (x *RestoreInboxItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[16]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +1398,7 @@ func (x *RestoreInboxItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreInboxItemRequest.ProtoReflect.Descriptor instead.
 func (*RestoreInboxItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RestoreInboxItemRequest) GetItemIds() []string {
@@ -1475,7 +1416,7 @@ type RestoreInboxItemResponse struct {
 
 func (x *RestoreInboxItemResponse) Reset() {
 	*x = RestoreInboxItemResponse{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[17]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1487,7 +1428,7 @@ func (x *RestoreInboxItemResponse) String() string {
 func (*RestoreInboxItemResponse) ProtoMessage() {}
 
 func (x *RestoreInboxItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[17]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1500,7 +1441,7 @@ func (x *RestoreInboxItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreInboxItemResponse.ProtoReflect.Descriptor instead.
 func (*RestoreInboxItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{16}
 }
 
 // InboxStorage describes one machine's disk and the archived worktrees it is
@@ -1536,7 +1477,7 @@ type InboxStorage struct {
 
 func (x *InboxStorage) Reset() {
 	*x = InboxStorage{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[18]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1548,7 +1489,7 @@ func (x *InboxStorage) String() string {
 func (*InboxStorage) ProtoMessage() {}
 
 func (x *InboxStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[18]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1561,7 +1502,7 @@ func (x *InboxStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InboxStorage.ProtoReflect.Descriptor instead.
 func (*InboxStorage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *InboxStorage) GetDaemonId() string {
@@ -1651,7 +1592,7 @@ type HeldWorktree struct {
 
 func (x *HeldWorktree) Reset() {
 	*x = HeldWorktree{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[19]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1663,7 +1604,7 @@ func (x *HeldWorktree) String() string {
 func (*HeldWorktree) ProtoMessage() {}
 
 func (x *HeldWorktree) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[19]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1676,7 +1617,7 @@ func (x *HeldWorktree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeldWorktree.ProtoReflect.Descriptor instead.
 func (*HeldWorktree) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HeldWorktree) GetWorktreeId() string {
@@ -1757,7 +1698,7 @@ type CleanupStorageRequest struct {
 
 func (x *CleanupStorageRequest) Reset() {
 	*x = CleanupStorageRequest{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[20]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +1710,7 @@ func (x *CleanupStorageRequest) String() string {
 func (*CleanupStorageRequest) ProtoMessage() {}
 
 func (x *CleanupStorageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[20]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +1723,7 @@ func (x *CleanupStorageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupStorageRequest.ProtoReflect.Descriptor instead.
 func (*CleanupStorageRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CleanupStorageRequest) GetDaemonId() string {
@@ -1810,7 +1751,7 @@ type CleanupStorageResponse struct {
 
 func (x *CleanupStorageResponse) Reset() {
 	*x = CleanupStorageResponse{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[21]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1822,7 +1763,7 @@ func (x *CleanupStorageResponse) String() string {
 func (*CleanupStorageResponse) ProtoMessage() {}
 
 func (x *CleanupStorageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[21]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1835,7 +1776,7 @@ func (x *CleanupStorageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupStorageResponse.ProtoReflect.Descriptor instead.
 func (*CleanupStorageResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CleanupStorageResponse) GetResults() []*CleanupStorageResult {
@@ -1857,7 +1798,7 @@ type CleanupStorageResult struct {
 
 func (x *CleanupStorageResult) Reset() {
 	*x = CleanupStorageResult{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[22]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1869,7 +1810,7 @@ func (x *CleanupStorageResult) String() string {
 func (*CleanupStorageResult) ProtoMessage() {}
 
 func (x *CleanupStorageResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[22]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1882,7 +1823,7 @@ func (x *CleanupStorageResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupStorageResult.ProtoReflect.Descriptor instead.
 func (*CleanupStorageResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CleanupStorageResult) GetWorktreeId() string {
@@ -1923,7 +1864,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
 	"\x11has_informational\x18\x03 \x01(\bR\x10hasInformational\x12\x1c\n" +
 	"\ttruncated\x18\x04 \x01(\bR\ttruncated\x120\n" +
-	"\x14other_projects_count\x18\x05 \x01(\x05R\x12otherProjectsCount\"\xdf\t\n" +
+	"\x14other_projects_count\x18\x05 \x01(\x05R\x12otherProjectsCount\"\xb0\t\n" +
 	"\tInboxItem\x12-\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x19.reliant.v1.InboxItemKindR\x04kind\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12\x17\n" +
@@ -1944,14 +1885,13 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\bquestion\x18\x15 \x01(\v2\x19.reliant.v1.InboxQuestionH\x00R\bquestion\x12T\n" +
 	"\x13waiting_for_machine\x18\x16 \x01(\v2\".reliant.v1.InboxWaitingForMachineH\x00R\x11waitingForMachine\x12S\n" +
 	"\x12automation_failing\x18\x17 \x01(\v2\".reliant.v1.InboxAutomationFailingH\x00R\x11automationFailing\x12c\n" +
-	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailed\x12A\n" +
-	"\frun_finished\x18\x19 \x01(\v2\x1c.reliant.v1.InboxRunFinishedH\x00R\vrunFinished\x124\n" +
+	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailed\x124\n" +
 	"\astorage\x18\x1a \x01(\v2\x18.reliant.v1.InboxStorageH\x00R\astorage\x12]\n" +
 	"\x16automation_needs_setup\x18\x1b \x01(\v2%.reliant.v1.InboxAutomationNeedsSetupH\x00R\x14automationNeedsSetup\x12;\n" +
 	"\brecovery\x18\x1c \x01(\v2\x1d.reliant.v1.RecoveryInboxItemH\x00R\brecovery\x12Z\n" +
 	"\x15automation_run_paused\x18\x1d \x01(\v2$.reliant.v1.InboxAutomationRunPausedH\x00R\x13automationRunPaused\x12o\n" +
 	"\x1cautomation_definition_broken\x18\x1e \x01(\v2+.reliant.v1.InboxAutomationDefinitionBrokenH\x00R\x1aautomationDefinitionBrokenB\t\n" +
-	"\apayload\"2\n" +
+	"\apayloadJ\x04\b\x19\x10\x1aR\frun_finished\"2\n" +
 	"\x18InboxAutomationRunPaused\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x9f\x03\n" +
 	"\x11RecoveryInboxItem\x12\x1f\n" +
@@ -2005,8 +1945,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x1bInboxAutomationLaunchFailed\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x121\n" +
-	"\x14consecutive_failures\x18\x03 \x01(\x05R\x13consecutiveFailures\"\x12\n" +
-	"\x10InboxRunFinished\"4\n" +
+	"\x14consecutive_failures\x18\x03 \x01(\x05R\x13consecutiveFailures\"4\n" +
 	"\x17DismissInboxItemRequest\x12\x19\n" +
 	"\bitem_ids\x18\x02 \x03(\tR\aitemIds\"\x1a\n" +
 	"\x18DismissInboxItemResponse\"4\n" +
@@ -2046,21 +1985,20 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.reliant.v1.CleanupStorageOutcomeR\aoutcome\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*\xd1\x03\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage*\xd3\x03\n" +
 	"\rInboxItemKind\x12\x1f\n" +
 	"\x1bINBOX_ITEM_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18INBOX_ITEM_KIND_APPROVAL\x10\x01\x12\x1c\n" +
 	"\x18INBOX_ITEM_KIND_QUESTION\x10\x02\x12'\n" +
 	"#INBOX_ITEM_KIND_WAITING_FOR_MACHINE\x10\x03\x12&\n" +
 	"\"INBOX_ITEM_KIND_AUTOMATION_FAILING\x10\x04\x12,\n" +
-	"(INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED\x10\x05\x12 \n" +
-	"\x1cINBOX_ITEM_KIND_RUN_FINISHED\x10\x06\x12\x1b\n" +
+	"(INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED\x10\x05\x12\x1b\n" +
 	"\x17INBOX_ITEM_KIND_STORAGE\x10\a\x12*\n" +
 	"&INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP\x10\b\x12\x1c\n" +
 	"\x18INBOX_ITEM_KIND_RECOVERY\x10\t\x12)\n" +
 	"%INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED\x10\n" +
 	"\x120\n" +
-	",INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN\x10\v*\x8b\x01\n" +
+	",INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN\x10\v\"\x04\b\x06\x10\x06*\x1cINBOX_ITEM_KIND_RUN_FINISHED*\x8b\x01\n" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
@@ -2086,7 +2024,7 @@ func file_reliant_v1_inbox_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_inbox_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_reliant_v1_inbox_proto_goTypes = []any{
 	(InboxItemKind)(0),                      // 0: reliant.v1.InboxItemKind
 	(CleanupStorageOutcome)(0),              // 1: reliant.v1.CleanupStorageOutcome
@@ -2103,22 +2041,21 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*InboxRefusedAutomation)(nil),          // 12: reliant.v1.InboxRefusedAutomation
 	(*InboxAutomationNeedsSetup)(nil),       // 13: reliant.v1.InboxAutomationNeedsSetup
 	(*InboxAutomationLaunchFailed)(nil),     // 14: reliant.v1.InboxAutomationLaunchFailed
-	(*InboxRunFinished)(nil),                // 15: reliant.v1.InboxRunFinished
-	(*DismissInboxItemRequest)(nil),         // 16: reliant.v1.DismissInboxItemRequest
-	(*DismissInboxItemResponse)(nil),        // 17: reliant.v1.DismissInboxItemResponse
-	(*RestoreInboxItemRequest)(nil),         // 18: reliant.v1.RestoreInboxItemRequest
-	(*RestoreInboxItemResponse)(nil),        // 19: reliant.v1.RestoreInboxItemResponse
-	(*InboxStorage)(nil),                    // 20: reliant.v1.InboxStorage
-	(*HeldWorktree)(nil),                    // 21: reliant.v1.HeldWorktree
-	(*CleanupStorageRequest)(nil),           // 22: reliant.v1.CleanupStorageRequest
-	(*CleanupStorageResponse)(nil),          // 23: reliant.v1.CleanupStorageResponse
-	(*CleanupStorageResult)(nil),            // 24: reliant.v1.CleanupStorageResult
-	(ApprovalType)(0),                       // 25: reliant.v1.ApprovalType
-	(*TriggerHealth)(nil),                   // 26: reliant.v1.TriggerHealth
-	(*TriggerEventDefinition)(nil),          // 27: reliant.v1.TriggerEventDefinition
-	(*TriggerSetupIssue)(nil),               // 28: reliant.v1.TriggerSetupIssue
-	(*DiskVolume)(nil),                      // 29: reliant.v1.DiskVolume
-	(*ProcessReport)(nil),                   // 30: reliant.v1.ProcessReport
+	(*DismissInboxItemRequest)(nil),         // 15: reliant.v1.DismissInboxItemRequest
+	(*DismissInboxItemResponse)(nil),        // 16: reliant.v1.DismissInboxItemResponse
+	(*RestoreInboxItemRequest)(nil),         // 17: reliant.v1.RestoreInboxItemRequest
+	(*RestoreInboxItemResponse)(nil),        // 18: reliant.v1.RestoreInboxItemResponse
+	(*InboxStorage)(nil),                    // 19: reliant.v1.InboxStorage
+	(*HeldWorktree)(nil),                    // 20: reliant.v1.HeldWorktree
+	(*CleanupStorageRequest)(nil),           // 21: reliant.v1.CleanupStorageRequest
+	(*CleanupStorageResponse)(nil),          // 22: reliant.v1.CleanupStorageResponse
+	(*CleanupStorageResult)(nil),            // 23: reliant.v1.CleanupStorageResult
+	(ApprovalType)(0),                       // 24: reliant.v1.ApprovalType
+	(*TriggerHealth)(nil),                   // 25: reliant.v1.TriggerHealth
+	(*TriggerEventDefinition)(nil),          // 26: reliant.v1.TriggerEventDefinition
+	(*TriggerSetupIssue)(nil),               // 27: reliant.v1.TriggerSetupIssue
+	(*DiskVolume)(nil),                      // 28: reliant.v1.DiskVolume
+	(*ProcessReport)(nil),                   // 29: reliant.v1.ProcessReport
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
@@ -2128,35 +2065,34 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	9,  // 4: reliant.v1.InboxItem.waiting_for_machine:type_name -> reliant.v1.InboxWaitingForMachine
 	10, // 5: reliant.v1.InboxItem.automation_failing:type_name -> reliant.v1.InboxAutomationFailing
 	14, // 6: reliant.v1.InboxItem.automation_launch_failed:type_name -> reliant.v1.InboxAutomationLaunchFailed
-	15, // 7: reliant.v1.InboxItem.run_finished:type_name -> reliant.v1.InboxRunFinished
-	20, // 8: reliant.v1.InboxItem.storage:type_name -> reliant.v1.InboxStorage
-	13, // 9: reliant.v1.InboxItem.automation_needs_setup:type_name -> reliant.v1.InboxAutomationNeedsSetup
-	6,  // 10: reliant.v1.InboxItem.recovery:type_name -> reliant.v1.RecoveryInboxItem
-	5,  // 11: reliant.v1.InboxItem.automation_run_paused:type_name -> reliant.v1.InboxAutomationRunPaused
-	11, // 12: reliant.v1.InboxItem.automation_definition_broken:type_name -> reliant.v1.InboxAutomationDefinitionBroken
-	25, // 13: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
-	26, // 14: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
-	27, // 15: reliant.v1.InboxAutomationDefinitionBroken.definition:type_name -> reliant.v1.TriggerEventDefinition
-	12, // 16: reliant.v1.InboxAutomationDefinitionBroken.automations:type_name -> reliant.v1.InboxRefusedAutomation
-	28, // 17: reliant.v1.InboxAutomationNeedsSetup.issues:type_name -> reliant.v1.TriggerSetupIssue
-	21, // 18: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
-	29, // 19: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
-	30, // 20: reliant.v1.InboxStorage.processes:type_name -> reliant.v1.ProcessReport
-	24, // 21: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
-	1,  // 22: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
-	2,  // 23: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
-	22, // 24: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
-	16, // 25: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	18, // 26: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 27: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	23, // 28: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	17, // 29: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	19, // 30: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	27, // [27:31] is the sub-list for method output_type
-	23, // [23:27] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	19, // 7: reliant.v1.InboxItem.storage:type_name -> reliant.v1.InboxStorage
+	13, // 8: reliant.v1.InboxItem.automation_needs_setup:type_name -> reliant.v1.InboxAutomationNeedsSetup
+	6,  // 9: reliant.v1.InboxItem.recovery:type_name -> reliant.v1.RecoveryInboxItem
+	5,  // 10: reliant.v1.InboxItem.automation_run_paused:type_name -> reliant.v1.InboxAutomationRunPaused
+	11, // 11: reliant.v1.InboxItem.automation_definition_broken:type_name -> reliant.v1.InboxAutomationDefinitionBroken
+	24, // 12: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
+	25, // 13: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
+	26, // 14: reliant.v1.InboxAutomationDefinitionBroken.definition:type_name -> reliant.v1.TriggerEventDefinition
+	12, // 15: reliant.v1.InboxAutomationDefinitionBroken.automations:type_name -> reliant.v1.InboxRefusedAutomation
+	27, // 16: reliant.v1.InboxAutomationNeedsSetup.issues:type_name -> reliant.v1.TriggerSetupIssue
+	20, // 17: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
+	28, // 18: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
+	29, // 19: reliant.v1.InboxStorage.processes:type_name -> reliant.v1.ProcessReport
+	23, // 20: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
+	1,  // 21: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
+	2,  // 22: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
+	21, // 23: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
+	15, // 24: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	17, // 25: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	3,  // 26: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	22, // 27: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	16, // 28: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	18, // 29: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	26, // [26:30] is the sub-list for method output_type
+	22, // [22:26] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_inbox_proto_init() }
@@ -2174,7 +2110,6 @@ func file_reliant_v1_inbox_proto_init() {
 		(*InboxItem_WaitingForMachine)(nil),
 		(*InboxItem_AutomationFailing)(nil),
 		(*InboxItem_AutomationLaunchFailed)(nil),
-		(*InboxItem_RunFinished)(nil),
 		(*InboxItem_Storage)(nil),
 		(*InboxItem_AutomationNeedsSetup)(nil),
 		(*InboxItem_Recovery)(nil),
@@ -2189,7 +2124,7 @@ func file_reliant_v1_inbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_inbox_proto_rawDesc), len(file_reliant_v1_inbox_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   23,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

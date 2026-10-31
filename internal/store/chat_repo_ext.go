@@ -45,6 +45,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -58,6 +59,33 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 		return "", nil
 	}
 	return id, err
+}
+
+// ListWorktreeIDsWithRunningChat conservatively excludes both chat and
+// spawned-thread workspace bindings while their chat has a pending, active or
+// paused/resumable run. A thread can override its chat's workspace.
+func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if len(worktreeIDs) == 0 {
+		return out, nil
+	}
+	var ids []string
+	err := db.Bun().NewRaw(`WITH bindings AS (
+ SELECT id AS chat_id, worktree_id FROM chats WHERE worktree_id = ANY(?0::text[])
+ UNION
+ SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
+)
+SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
+WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)`,
+		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
+		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 // The chats writes (P5b L1b). Reads go through the view — see
@@ -79,6 +107,13 @@ func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
 // The SQL trigger is a backstop for other writers, not a handler-only guard.
 func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID string, worktreeID *string, fn func(context.Context) error) error {
 	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		// Serialize the binding set before its workspace parents, matching
+		// workflow/thread admission triggers. Taking a workspace before this
+		// chat row would invert their order and deadlock a concurrent rebind.
+		var chatIDs []string
+		if err := db.Bun().NewRaw(`SELECT id FROM chats WHERE id=? FOR NO KEY UPDATE`, chatID).Scan(ctx, &chatIDs); err != nil {
+			return err
+		}
 		// A rebind locks old and new parents in the same stable order as the
 		// trigger. The trigger still protects against a concurrently moved row.
 		//

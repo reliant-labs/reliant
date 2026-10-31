@@ -1448,10 +1448,13 @@ type Trigger struct {
 	// Read-only registry state: connected, disconnected, starting, suspended,
 	// failed, removed, or none for a no-machine activation.
 	MachineState string `protobuf:"bytes,30,opt,name=machine_state,json=machineState,proto3" json:"machine_state,omitempty"`
-	// When true, a completed run of this trigger marks its chat unread
-	// (raising the OS notification) and appears in the Inbox as "Run finished".
-	// Off by default: unattended completions are silent, failures always notify
-	// (research/WORKFLOW_UI.md §6.4).
+	// When true, a run of this trigger that completes successfully marks its
+	// chat unread, which raises an OS notification, and the run stays out of
+	// the archive so the notification has something to open. It never creates
+	// an Inbox item: the Inbox lists only what needs the person, and a
+	// successful run does not. Off by default: unattended completions are
+	// silent. Failures notify (once per failure streak) and are an Inbox item
+	// whatever this says (research/WORKFLOW_UI.md §6.4).
 	NotifyOnComplete bool `protobuf:"varint,18,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// CEL bool over the `trigger` root (trigger.payload.*) that an event must
 	// satisfy to launch a run. Empty matches every event. A miss is recorded as
@@ -1923,18 +1926,28 @@ func (x *TriggerDefinitionSource) GetWarnings() []string {
 
 // TriggerChange is a configuration audit entry, not a firing.
 type TriggerChange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	ChatId        string                 `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ToolCallId    string                 `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
-	Operation     string                 `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
-	BeforeState   string                 `protobuf:"bytes,7,opt,name=before_state,json=beforeState,proto3" json:"before_state,omitempty"`
-	AfterState    string                 `protobuf:"bytes,8,opt,name=after_state,json=afterState,proto3" json:"after_state,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId      string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ChatId      string                 `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	RunId       string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	ToolCallId  string                 `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	Operation   string                 `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
+	BeforeState string                 `protobuf:"bytes,7,opt,name=before_state,json=beforeState,proto3" json:"before_state,omitempty"`
+	AfterState  string                 `protobuf:"bytes,8,opt,name=after_state,json=afterState,proto3" json:"after_state,omitempty"`
+	CreatedAt   string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// How an agent's change was approved: "card" (the owner approved a card),
+	// "auto:on_capability_change" or "auto:never" (the owner's automation
+	// approvals setting applied it without one), or "auto:pause". Empty for a
+	// change the owner made in the app.
+	Approval string `protobuf:"bytes,10,opt,name=approval,proto3" json:"approval,omitempty"`
+	// The capability items the change granted and dropped, such as
+	// "connection:github/conn_1", "identity:app", "machine:d_1",
+	// "secret:machine_credentials" or "deploy:prod".
+	CapabilitiesAdded   []string `protobuf:"bytes,11,rep,name=capabilities_added,json=capabilitiesAdded,proto3" json:"capabilities_added,omitempty"`
+	CapabilitiesRemoved []string `protobuf:"bytes,12,rep,name=capabilities_removed,json=capabilitiesRemoved,proto3" json:"capabilities_removed,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TriggerChange) Reset() {
@@ -2028,6 +2041,27 @@ func (x *TriggerChange) GetCreatedAt() string {
 		return x.CreatedAt
 	}
 	return ""
+}
+
+func (x *TriggerChange) GetApproval() string {
+	if x != nil {
+		return x.Approval
+	}
+	return ""
+}
+
+func (x *TriggerChange) GetCapabilitiesAdded() []string {
+	if x != nil {
+		return x.CapabilitiesAdded
+	}
+	return nil
+}
+
+func (x *TriggerChange) GetCapabilitiesRemoved() []string {
+	if x != nil {
+		return x.CapabilitiesRemoved
+	}
+	return nil
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -2479,7 +2513,8 @@ type TriggerDefinition struct {
 	// for the run's life. Exactly one of daemon_id, no_machine and
 	// machine_pool_id is set. See dev-docs/design/machine-pools.md.
 	MachinePoolId string `protobuf:"bytes,26,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
-	// Notify the owner when a run completes. Replaced on update, like every
+	// Send an OS notification when a run completes successfully
+	// (Trigger.notify_on_complete); never an Inbox item. Replaced on update, like every
 	// other field here, so a client editing a trigger must send the current
 	// value back.
 	NotifyOnComplete bool `protobuf:"varint,10,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
@@ -3511,7 +3546,8 @@ type EnableWorkflowRequest struct {
 	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Preset assignments, as TriggerDefinition.presets.
 	Presets map[string]string `protobuf:"bytes,8,rep,name=presets,proto3" json:"presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+	// Send an OS notification when a run completes successfully, as
+	// TriggerDefinition.notify_on_complete; never an Inbox item.
 	NotifyOnComplete bool `protobuf:"varint,9,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// The prompt for a trigger whose declaration has none (TriggerDefinition.message).
 	// A declaration's own prompt is used when this is empty.
@@ -5214,7 +5250,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vdaemon_name\x18\x04 \x01(\tR\n" +
 	"daemonName\x12\x18\n" +
 	"\asummary\x18\x05 \x01(\tR\asummary\x12\x1a\n" +
-	"\bwarnings\x18\x06 \x03(\tR\bwarnings\"\x8b\x02\n" +
+	"\bwarnings\x18\x06 \x03(\tR\bwarnings\"\x89\x03\n" +
 	"\rTriggerChange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x17\n" +
@@ -5227,7 +5263,11 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vafter_state\x18\b \x01(\tR\n" +
 	"afterState\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\t \x01(\tR\tcreatedAt\"\xe4\x04\n" +
+	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1a\n" +
+	"\bapproval\x18\n" +
+	" \x01(\tR\bapproval\x12-\n" +
+	"\x12capabilities_added\x18\v \x03(\tR\x11capabilitiesAdded\x121\n" +
+	"\x14capabilities_removed\x18\f \x03(\tR\x13capabilitiesRemoved\"\xe4\x04\n" +
 	"\fTriggerEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +
