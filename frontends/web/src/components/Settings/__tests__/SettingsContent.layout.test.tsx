@@ -25,6 +25,7 @@ vi.mock("../cloud/MemberPermissions", () => ({ MemberPermissions: () => <div dat
 vi.mock("../GitConnectionsSettings", () => ({ GitConnectionsSettings: () => <div data-testid="section">git-connections</div> }));
 vi.mock("../PromptsSettings", () => ({ PromptsSettings: () => <div data-testid="section">prompts</div> }));
 vi.mock("../PresetsSettings", () => ({ PresetsSettings: () => <div data-testid="section">presets</div> }));
+vi.mock("../AutomationSettings", () => ({ AutomationSettings: () => <div data-testid="section">automations</div> }));
 vi.mock("../ProjectsSection", () => ({ ProjectsSection: () => <div data-testid="section">projects</div> }));
 vi.mock("../cloud/billing", () => ({ BillingSection: () => <div data-testid="section">billing</div> }));
 vi.mock("../cloud/machines", () => ({ MachinesSection: () => <div data-testid="section">machines</div> }));

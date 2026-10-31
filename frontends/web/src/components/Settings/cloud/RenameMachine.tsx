@@ -10,7 +10,7 @@
  * The name is a label only — the machine's id and its workspace never
  * change — so renaming a running machine is safe and needs no restart.
  */
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 
 import { useRenameMachine } from "@/hooks/daemon-registry-service-hooks_gen";

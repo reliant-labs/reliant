@@ -3200,8 +3200,15 @@ The connection follows the workload (`--workload`, default "api"):
   OnHosted            the control plane runs it inside the platform
                       (AppDatabaseService.QueryDatabase), as forge_ro, and
                       records it in the audit log and the activity feed
-The databases of real (not scratch) cluster envs are not reachable from forge
-yet (exit 2), unless you bring your own route: --addr.
+  forge.ExternalDatabase  a database forge does not run (Cloud SQL, RDS, one
+                      behind a pooler), declared on the env with the Service
+                      in front of it and the role and Secret to sign in with:
+                      a port-forward to that Service with your kube context.
+                      Reachable on a real env too (declaring it is the
+                      opt-in); --database <name> picks it, no --workload
+                      needed
+A ManagedDatabase of a real (not scratch) cluster env is not reachable from
+forge yet (exit 2), unless you bring your own route: --addr.
 
 --addr <host:port> dials that address directly instead of any transport above,
 for a database forge cannot route to itself. The route (a VPN, a kubectl
@@ -3236,6 +3243,7 @@ connection lost).
   cli forge db query staging "select * from jobs limit 5" --confirm-env staging --reason "ISS-7f3a"
   kubectl -n app-prod port-forward svc/ledger-rw 5432:5432 &
   cli forge db query prod "select 1" --addr localhost:5432 --confirm-env prod --reason "ISS-7f3a"
+  cli forge db query prod "select count(*) from chats" --database reliant --confirm-env prod --reason "ISS-7f3a"
 
 ```
 reliant forge db query <env> ["<sql>" | -f FILE] [flags]
@@ -3248,7 +3256,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 | `--addr` | `string` | - | Dial host:port directly (your VPN, kubectl port-forward or bastion) instead of forge's own transport; not for a hosted env |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--confirm-env` | `string` | - | Required on a real env: the env name again |
-| `--database` | `string` | - | ManagedDatabase to query, when a cluster env declares several |
+| `--database` | `string` | - | ManagedDatabase or ExternalDatabase to query, when a cluster env declares several |
 | `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
 | `--format` | `string` | `table` | Output format: table, json or csv |
 | `--json` | `bool` | - | Same as --format json |
@@ -7087,8 +7095,9 @@ proto/ (the API), the migrations under db/migrations/ (the schema), and
 forge.yaml plus deploy/kcl/ (features, frontends, environments).
 
 What it writes, in order:
-  - gen/: Go + Connect stubs (buf generate) and gen/forge_descriptor.json,
-    the services, rpcs and config messages extracted from the protos
+  - gen/: Go + Connect stubs (buf generate) and gen/forge_descriptor/,
+    the services, rpcs and config messages extracted from the protos (one
+    file per .proto, so independent proto changes merge cleanly)
   - each frontend's TypeScript stubs, hooks, CRUD pages, nav and mocks
   - pkg/config/ from proto/<project>/config/v1/, the typed config loader
   - internal/handlers/<svc>/: a stub for every rpc no handler implements yet,
@@ -8511,7 +8520,7 @@ reliant forge obs endpoints [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
@@ -8709,7 +8718,7 @@ reliant forge obs issue <id> [env] [flags]
 | `--events` | `int` | `5` | newest events to include (0 = none) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
@@ -9659,7 +9668,7 @@ reliant forge obs issues [env] [flags]
 | `--expand-incidents` | `bool` | - | list every issue of an incident instead of collapsing each incident under its first issue |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--incident-window` | `duration` | `10m0s` | issues of one cause first seen within this long of each other are one incident (max 1h0m0s) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
@@ -9735,7 +9744,7 @@ reliant forge obs logs [env] [query] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--follow` | `bool` | - | keep polling for new logs (NDJSON with --json); stop with ^C |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--interval` | `duration` | `2s` | with --follow, how often to poll |
@@ -9893,7 +9902,7 @@ reliant forge obs metrics describe [env] <metric> [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
@@ -9969,7 +9978,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group` | `stringArray` | `[]` | narrow to one series group: a --group-by KEY=VALUE (repeatable, one per key) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
@@ -10044,7 +10053,7 @@ reliant forge obs metrics list [env] [flags]
 | `--contains` | `string` | - | only metrics whose name contains this (case-insensitive) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
@@ -10302,7 +10311,7 @@ reliant forge obs query [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
@@ -10402,7 +10411,7 @@ reliant forge obs session <id> [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
@@ -10474,7 +10483,7 @@ reliant forge obs sessions [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--has-error` | `bool` | - | only sessions with at least one browser error |
 | `--has-replay` | `bool` | - | only sessions with a recorded replay |
@@ -10720,7 +10729,7 @@ reliant forge obs trace <trace-id> [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--full` | `bool` | - | lift the depth, span and collapse caps |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
@@ -10793,7 +10802,7 @@ reliant forge obs traces [env] [flags]
 | `--errors` | `bool` | - | only traces with an error span |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `50` | most items to return |
@@ -11290,7 +11299,7 @@ project. Use it for a scaffold the project does not want at all — one whose
 very presence would change the build (a cmd tree's serve.go switches internal/app
 composition on) — including one forge has not written yet, or one a failed
 generate wrote and then rolled back. The decline is recorded with its reason in
-.forge/scaffolded.json, which a failed `forge generate` restores rather than
+.forge/scaffolded/, which a failed `forge generate` restores rather than
 loses. Re-adopt it with `forge project rescaffold <path>`.
 
 Examples:
@@ -11305,10 +11314,10 @@ reliant forge project disown <path>... --reason <text> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--absent` | `bool` | - | Decline scaffold-once files: forge never writes them in this project (recorded in .forge/scaffolded.json) |
+| `--absent` | `bool` | - | Decline scaffold-once files: forge never writes them in this project (recorded in .forge/scaffolded/) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print what would change without writing .forge/disowned.json |
-| `--reason` | `string` | - | WHY forge's generated code couldn't express what you needed (required; recorded in .forge/disowned.json, or .forge/scaffolded.json with --absent) |
+| `--reason` | `string` | - | WHY forge's generated code couldn't express what you needed (required; recorded in .forge/disowned.json, or .forge/scaffolded/ with --absent) |
 
 ---
 
@@ -11384,7 +11393,7 @@ project declares (services, packages, frontends, binaries, gateways,
 routes) and the explicit dependency edges between them.
 
 Sources are existing forge parsers: forge.yaml, the KCL render for
-the selected env, contract.go's Deps struct, and gen/forge_descriptor.json.
+the selected env, contract.go's Deps struct, and gen/forge_descriptor/.
 Partial-data conditions (missing forge.yaml, KCL fails to render) are
 reported via the top-level "warnings" array rather than aborting the
 command — consumers should always read warnings before trusting the
@@ -11816,7 +11825,7 @@ Re-create scaffold-once files you deleted, as forge would scaffold them today
 Re-create one or more scaffold-once ("yours") files.
 
 forge writes a scaffold-once file exactly once. Deleting it is an act of
-ownership that .forge/scaffolded.json records, so `forge generate` leaves it deleted —
+ownership that .forge/scaffolded/ records, so `forge generate` leaves it deleted —
 in this checkout and every clone. To get forge's version back, name it here:
 
   forge project rescaffold .github/workflows/ci.yml
@@ -11855,7 +11864,7 @@ reliant forge project rescaffold <path>... [flags]
 List the scaffold-once files forge has written, and which are absent
 
 List every scaffold-once ("yours") file forge has written in this project,
-from the birth ledger at .forge/scaffolded.json.
+from the birth ledger at .forge/scaffolded/.
 
 forge writes a scaffold-once file exactly once and then it is yours. Deleting
 one is an act of ownership the ledger records, so `forge generate` leaves it
@@ -11894,7 +11903,7 @@ List every API shape — RPCs, messages, enums, tables, handlers, hooks — with
 List every API shape in the project with its source location.
 
 Derived LIVE from .proto, db/migrations and source on every call — never from
-gen/forge_descriptor.json, which is a cache and can be stale. Answers "where is
+gen/forge_descriptor/, which is a cache and can be stale. Answers "where is
 X and what shape is it" in ONE call instead of a sequence of greps.
 
 Start recon here. A measured fan-out spent 28 minutes across 123 calls
@@ -12002,7 +12011,7 @@ template accounts for. Adopt one by naming it:
 'forge project upgrade --force <path>'. Bare --force does not reach them.
 
 A scaffold-once file the project deleted stays deleted. The birth ledger
-(.forge/scaffolded.json) records every scaffold-once file forge has written, so a
+(.forge/scaffolded/) records every scaffold-once file forge has written, so a
 managed file the template ships that is absent AND recorded there — or declined
 ('forge project disown <path> --absent'), or disowned — is the project's decision,
 not drift: upgrade never re-creates it (nor does 'forge generate'), and says so
@@ -12715,7 +12724,7 @@ ORM, CRUD wiring, and frontend pages.
 
   --from-proto <svc>[.<Message>]   Derive the create-table migration from
       the already-authored proto message (read from
-      gen/forge_descriptor.json). With no <Message> and no <name>, sweeps
+      gen/forge_descriptor/). With no <Message> and no <name>, sweeps
       every message sitting in entity position of a full CRUD quintet that
       has no applied table yet, PLUS every message carrying a leading
       `// forge:entity` marker (those also get their missing CRUD quintet
@@ -12797,7 +12806,7 @@ nothing else to run.
 
 The scaffold ends with a 'forge generate' run, because the frontend's
 config proto (proto/<project>/config/v1/<name>_config.proto) is a generate input: the
-run re-extracts gen/forge_descriptor.json and writes the frontend's typed
+run re-extracts gen/forge_descriptor/ and writes the frontend's typed
 config, so the next 'forge lint' is green. --no-generate skips it, for a
 round that stages several scaffolds and generates once.
 
@@ -13839,7 +13848,6 @@ reliant forge storage worktrees [flags]
 | `--apply` | `bool` | - | remove removable worktrees without forcing or deleting branches |
 | `--base` | `string` | - | integration branch for the pushed test (default: origin/HEAD, else origin/main) |
 | `--idle` | `duration` | `24h0m0s` | minimum time since any activity in the worktree (at least 24h) |
-| `--reliant-managed` | `bool` | - | also consider worktrees under Reliant's worktree root (~/.reliant/worktrees), which Reliant otherwise reclaims itself |
 | `--repo` | `string` | `.` | repository whose worktrees to inspect |
 
 ---
