@@ -66,6 +66,23 @@ func FailedAttemptUsage(u TokenUsage) *TokenUsage {
 	return &u
 }
 
+// EndStreamWithError ends a driver's stream on a terminal error: an
+// EventError, then, when the failed request reported usage before it failed,
+// an EventComplete holding only that usage, then close. The provider billed
+// those tokens although the request failed, and the usage ledger reads them
+// from the final event after an error (CallLLM's collectUsageAfterStreamError,
+// the accumulator's partial response). The error comes first, so no consumer
+// takes the usage-only event for an answer. The Anthropic driver already sends
+// its final event after an error; this is the same order for the drivers that
+// drop their accumulator on the way out.
+func EndStreamWithError(eventChan chan<- DriverEvent, err error, usage TokenUsage) {
+	eventChan <- DriverEvent{Type: EventError, Error: err}
+	if billed := FailedAttemptUsage(usage); billed != nil {
+		eventChan <- DriverEvent{Type: EventComplete, Response: &DriverResponse{Usage: *billed}}
+	}
+	close(eventChan)
+}
+
 // TokenUsage contains token information from an LLM response.
 // TokenCount represents the total tokens used (input + output + cache).
 // This is used for compaction decisions.

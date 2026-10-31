@@ -121,7 +121,9 @@ func llmUsageID(workflowID, runID, activityID, purpose string, ordinal, request 
 // inside one call, from its EventRetryWait events, each with how long it ran.
 type driverRetries struct {
 	start time.Time
-	list  []driverRetry
+	// end is when the call's stream ended (finish); zero until then.
+	end  time.Time
+	list []driverRetry
 }
 
 type driverRetry struct {
@@ -139,13 +141,25 @@ func (r *driverRetries) observe(wait llm.RetryWait) {
 	r.start = now.Add(wait.Delay)
 }
 
+// finish marks the call's stream as ended and returns when. Call it as soon as
+// the stream ends: what runs after it, the ledger writes of the retried
+// requests above all, is not part of any request's latency.
+func (r *driverRetries) finish() time.Time {
+	r.end = time.Now()
+	return r.end
+}
+
 // finalLatencyMs is how long the request that ended the call ran: the whole
-// call when the driver retried nothing, else the time since its last wait.
+// call when the driver retried nothing, else from its last wait to finish.
 func (r *driverRetries) finalLatencyMs(callLatencyMs int64) int64 {
 	if len(r.list) == 0 {
 		return callLatencyMs
 	}
-	return max(time.Since(r.start).Milliseconds(), 0)
+	end := r.end
+	if end.IsZero() {
+		end = time.Now()
+	}
+	return max(end.Sub(r.start).Milliseconds(), 0)
 }
 
 // retriedRequestError is a failed request a driver retried, as the ledger
@@ -222,14 +236,16 @@ func newUsageMeter(recorder LLMUsageRecorder, userID, chatID, purpose string) *u
 func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolvedLLMCall, prompts []string, messages []message.Message, available []tools.Tool) (*llm.DriverResponse, error) {
 	m.n++
 	retries := newDriverRetries()
+	callStart := retries.start
 	resp, err := accumulator.StreamAndAccumulateObserving(ctx, resolved.Driver, prompts, messages, available, retries.observe)
+	callLatencyMs := retries.finish().Sub(callStart).Milliseconds()
 	call := llmUsageCall{
 		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID,
 		Purpose: m.purpose, Ordinal: m.n,
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
 	}
 	recordDriverRetries(ctx, call, retries)
-	call.LatencyMs = retries.finalLatencyMs(time.Since(retries.start).Milliseconds())
+	call.LatencyMs = retries.finalLatencyMs(callLatencyMs)
 	call.Err = err
 	if err != nil && ctx.Err() != nil {
 		// A driver that stops because its context ended closes the stream
