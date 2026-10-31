@@ -368,6 +368,35 @@ nothing else merges in between, the bump commit inherits that green.
 A hotfix that cannot wait takes `scripts/release-tag.sh --skip-release-gate`.
 Say so in the release notes. There is no waiver for a red run: fix it.
 
+### Release candidates: gate a frozen commit, never main's tip (owner, 2026-10-31)
+
+Main keeps merging all day and is never frozen, paused or blocked for a
+release. A release ships a **release candidate**: one commit of main, cut
+off as a branch, gated, and promoted unchanged. A captain spent 28 hours
+re-gating main's moving tip and shipped nothing; this is the rule that stops
+that.
+
+1. **Cut.** Push the commit as a branch, `release/vX.Y.Z-rc.N`, and mark its
+   head with the tag `rc/vX.Y.Z-rc.N`. Choose a commit whose
+   `electron/package.json` already carries `X.Y.Z` (the bump PR merged), so it
+   can be tagged without a new commit.
+2. **Gate that SHA only.** `scripts/release-gate.sh run <rc sha>`. CI's
+   push-to-main run of the same sha is an equal record. Nothing that merges
+   afterwards is in this RC: it goes in the next one.
+3. **Red:** file the failures for main's fixers (`pipeline:main-red`). Fixes go
+   to **main**, never to the RC branch. Cut `rc.N+1` from a newer main that
+   carries them. More than one RC may be in flight; the first green one ships.
+4. **Green:** `scripts/release-tag.sh vX.Y.Z --commit <rc sha>`. The release
+   tag lands on exactly the commit the gate judged, so what ships is what was
+   gated.
+
+The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
+`Release Electron App` (publishing to the alpha channel, a GitHub Release
+and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
+gated yet. Two `v*` tags on one commit would also make
+`scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
+`release/` branch and the `rc/` tag trigger no workflow.
+
 ## The merge queue
 
 `main` merges only through GitHub's native merge queue. The ruleset
