@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -81,6 +82,49 @@ func TestRequirementsUnmetFailBeforeTheFirstNode(t *testing.T) {
 	assert.Equal(t, "requirements_unmet", card["error_type"])
 	env.AssertNotCalled(t, "FirstNode", mock.Anything)
 	env.AssertExpectations(t)
+}
+
+// requirementsCompletionWorkflow ends the requirements slice the way
+// DynamicWorkflow does, through handleWorkflowCompletion, so the terminal
+// status it reports can be read.
+func requirementsCompletionWorkflow(ctx workflow.Context, wf *reliantv1.Workflow) (retErr error) {
+	defer func() {
+		handleWorkflowCompletion(ctx, "wf1", "c1", wf.GetName(), "", "wf1", "", retErr, "", "", false, nil, nil)
+	}()
+	return requirementsWorkflow(ctx, wf, false)
+}
+
+// Unmet requirements are the run's recorded failure: the "failed" status
+// carries every problem as its error, which the status activity writes to the
+// run's failure_detail (see workflow_status_test), so GetRun and the run page
+// say why a run that never reached a node failed.
+func TestRequirementsUnmetAreTheFailedStatusError(t *testing.T) {
+	env := newRequirementsEnv()
+	env.RegisterWorkflow(requirementsCompletionWorkflow)
+	env.RegisterActivityWithOptions(workflowStatusStub, activity.RegisterOptions{Name: "WorkflowStatus"})
+	env.RegisterActivityWithOptions(cleanupStub, activity.RegisterOptions{Name: "Cleanup"})
+	unmet := temporal.NewNonRetryableApplicationError(requirements.Report{Problems: []requirements.Problem{
+		{Kind: "tool", Name: "task", Problem: "not found on the machine's PATH", Fix: "install task"},
+		{Kind: "integration", Name: "github", Problem: "no connection", Fix: "connect GitHub"},
+	}}.Error(), requirements.UnmetErrType, nil)
+	env.OnActivity(PreflightRequirementsActivityName, mock.Anything).Return(nil, unmet).Once()
+	statuses := map[string]map[string]interface{}{}
+	env.OnActivity("WorkflowStatus", mock.Anything, mock.Anything).Return(
+		func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+			statuses[in["status"].(string)] = in
+			return map[string]interface{}{"success": true}, nil
+		})
+
+	env.ExecuteWorkflow(requirementsCompletionWorkflow, requiresWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+
+	failed, ok := statuses["failed"]
+	require.True(t, ok, "an unmet requirement must end the run failed; got statuses %v", statuses)
+	detail, _ := failed["error"].(string)
+	assert.Contains(t, detail, "preflight requirements:")
+	assert.Contains(t, detail, "tool task: not found on the machine's PATH. Fix: install task")
+	assert.Contains(t, detail, "github")
+	env.AssertNotCalled(t, "FirstNode", mock.Anything)
 }
 
 // A check that could not run is retried, then reported as such, not as unmet.
