@@ -236,7 +236,7 @@ func ListChatStepExecutions(ctx context.Context, db orm.Context, chatID string, 
 	return scanChatStepExecutions(ctx, db.Bun().NewRaw(chatStepExecutionsSQL, chatID, pgdialect.Array(internalActivities)))
 }
 
-// basicChatStepExecutionsSQL is the steps the chat timeline renders, for
+// BasicChatStepExecutionsSQL is the steps the chat timeline renders, for
 // ChatService/GetWorkflowExecutions in its BASIC view: each USER-FACING step,
 // plus its "-save" sibling when that recorded a message (the step then
 // renders AS that message). On chat 8bb0a875 that is 6 of 93,568 step rows:
@@ -251,11 +251,21 @@ func ListChatStepExecutions(ctx context.Context, db orm.Context, chatID string, 
 // pins all three.
 //
 // The second arm finds each visible step's "-save" sibling by
-// (workflow_id, step_id || '-save', loop scope) through
-// idx_step_executions_saves. Loop scope is matched with IS NOT DISTINCT FROM
-// so iteration 3's step never picks up iteration 2's save. Save rows carry
-// no output_json, as in the FULL view.
-const basicChatStepExecutionsSQL = `
+// (workflow_id, step_id || '-save', loop scope), so iteration 3's step never
+// picks up iteration 2's save. Save rows carry no output_json, as in the FULL
+// view.
+//
+// The loop scope is compared as ONE array, ARRAY[loop_node_id,
+// loop_iteration::text], spelled exactly as idx_step_executions_save_scope's
+// third key. Array equality treats NULL elements as equal, so it is the
+// null-safe match a step outside any loop needs, and unlike IS NOT DISTINCT
+// FROM it is an index condition. With IS NOT DISTINCT FROM the probe keyed
+// only (workflow_id, step_id) and filtered the scope: an agent loop writes
+// one execute_tools-save per turn under one step id, so every probe walked
+// the run's whole history to keep one row (prod, chat 9fbaace8: 1,958 entries
+// per probe, 1.3-3.9s per open). TestBasicStepSaveProbeUsesScopeIndex pins
+// the index condition under a generic plan.
+const BasicChatStepExecutionsSQL = `
 SELECT u.id, u.workflow_id, u.step_id, u.activity_name,
        u.exit_code, u.success, u.duration_ms,
        u.loop_node_id, u.loop_iteration, u.created_at,
@@ -283,8 +293,8 @@ FROM (
     JOIN step_executions sv
       ON sv.workflow_id = vis.workflow_id
      AND sv.step_id = vis.step_id || '-save'
-     AND sv.loop_node_id IS NOT DISTINCT FROM vis.loop_node_id
-     AND sv.loop_iteration IS NOT DISTINCT FROM vis.loop_iteration
+     AND ARRAY[sv.loop_node_id, sv.loop_iteration::text]
+         = ARRAY[vis.loop_node_id, vis.loop_iteration::text]
      AND sv.saved_message_id IS NOT NULL
     WHERE vw.chat_id = ?0
       AND vis.activity_name NOT IN (
@@ -295,7 +305,7 @@ ORDER BY u.workflow_id, u.created_at ASC`
 
 // ListBasicChatStepExecutions loads only the steps the chat timeline renders.
 func ListBasicChatStepExecutions(ctx context.Context, db orm.Context, chatID string) ([]*core.ChatStepExecution, error) {
-	return scanChatStepExecutions(ctx, db.Bun().NewRaw(basicChatStepExecutionsSQL, chatID))
+	return scanChatStepExecutions(ctx, db.Bun().NewRaw(BasicChatStepExecutionsSQL, chatID))
 }
 
 // chatStepExecutionRow is one row of the chat-wide step reads.
