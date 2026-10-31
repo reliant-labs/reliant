@@ -1,11 +1,11 @@
 ---
 title: "Observability billing & limits"
-description: "The included allowance, $0.25/GB ingest price, spend caps, retention and query fair use for Reliant hosting"
+description: "The included allowance, ingest pricing, spend caps, retention and query fair use for Reliant hosting"
 ---
 
-Reliant hosting includes **10 GiB of observability ingestion per organization per UTC calendar month**, shared across all projects and environments. Beyond that, the price is **$0.25/GB**, with retention included. There is no separate storage or query charge.
+Reliant hosting includes **10 GiB of observability ingestion per organization per UTC calendar month**, shared across all projects and environments. Beyond that, ingestion is billed per GB at the rate on the [pricing page](https://reliantlabs.io/pricing), with retention included. There is no separate storage or query charge.
 
-**Here, the pricing label “GB” means GiB: 1,073,741,824 bytes (2³⁰), not one billion bytes.** The included amount is therefore 10,737,418,240 bytes. The rate is $0.25 per GiB for logs, traces, metrics and profiles alike.
+**Here, the pricing label “GB” means GiB: 1,073,741,824 bytes (2³⁰), not one billion bytes.** The included amount is therefore 10,737,418,240 bytes. The same rate applies to logs, traces, metrics and profiles alike.
 
 Open **Settings → Billing & usage → Usage & limits → Observability** to see ingestion, the stored-now snapshot, your cap and limit change history. The observability **Usage** view in Apps also shows these figures. These are organization-wide billing figures, not an environment-specific bill.
 
@@ -31,7 +31,7 @@ Stored-now snapshots refresh with the metering pass and have their own **as of**
 
 ### Worked bill
 
-Suppose your organization has a qualifying subscription, a $10 monthly observability cap, and the following uncompressed ingestion after sampling in one UTC month:
+Suppose your organization has a qualifying subscription and the following uncompressed ingestion after sampling in one UTC month:
 
 | Ingestion | Recorded | Counts toward billable ingestion |
 |---|---:|---:|
@@ -42,9 +42,9 @@ Suppose your organization has a qualifying subscription, a $10 monthly observabi
 | Browser telemetry, including replay | 3 GiB | 2 GiB |
 | **Total** | **41 GiB** | **40 GiB** |
 
-The browser ceiling removes 1 GiB from billable ingestion. Subtract the shared 10 GiB allowance from 40 GiB, leaving 30 GiB of overage: **30 × $0.25 = $7.50**. That is below the $10 cap, so the observability overage is $7.50, separate from the subscription price and other usage charges. Nothing is added for keeping that data through its retention period.
+The browser ceiling removes 1 GiB from billable ingestion. Subtract the shared 10 GiB allowance from 40 GiB, leaving **30 GiB of overage**. You are charged 30 GiB at the per-GiB rate on the [pricing page](https://reliantlabs.io/pricing), as long as that amount is below your monthly observability cap. It is separate from the subscription price and other usage charges. Nothing is added for keeping that data through its retention period.
 
-If the cap were $5 instead, the chargeable ledger would stop at 30 GiB total: 10 GiB included plus 20 GiB of paid overage. The charge would be **at most $5**, even if more telemetry had already arrived while the meter caught up. The recorded ingestion need not stop at 30 GiB: retained bytes beyond the cap are uncharged, and the gateway switches to reduced collection once it learns the cap has been reached.
+If your cap were worth only 20 GiB of overage at that rate, the chargeable ledger would stop at 30 GiB total: 10 GiB included plus 20 GiB of paid overage. The charge would be **at most the cap**, even if more telemetry had already arrived while the meter caught up. The recorded ingestion need not stop at 30 GiB: retained bytes beyond the cap are uncharged, and the gateway switches to reduced collection once it learns the cap has been reached.
 
 The ledger uses KiB (1,024 bytes), rounding each metered hour's eligible bytes up to KiB. The displayed overage rounds up to whole cents; the cap calculation rounds permitted KiB down so this cannot push the charge above the cap. CSV exports contain exact bytes rather than rounded display GB.
 
@@ -71,7 +71,7 @@ Gateway state is polled every 30 seconds. A missing or stale quota-state source 
 
 Raising the cap re-evaluates the organization immediately, with gateway changes following a poll; if that evaluation fails, the next metering pass retries. Normal collection can resume, but previously dropped data cannot be restored. Recent hours can be re-metered until their ledger buckets are finalized for Stripe; raising a cap is not a promise that every previously clamped byte stays permanently free.
 
-Lowering the cap cannot undo charges already recorded this month. If you request $2 after $7.50 has already been charged, the server saves **$7.50**, reports that it raised your request to the charged floor, and shows the saved value. That floor is checked again while saving, including any metering that completed while you were editing. A new lower setting is not automatically scheduled for next month.
+Lowering the cap cannot undo charges already recorded this month. If you request a cap lower than what has already been charged this month, the server saves **the amount already charged**, reports that it raised your request to the charged floor, and shows the saved value. That floor is checked again while saving, including any metering that completed while you were editing. A new lower setting is not automatically scheduled for next month.
 
 Settings are versioned. If another admin changes them while your editor is open, your save is rejected without overwriting their change. Reload the latest limits, review them and edit again. Saved changes appear in the organization-wide limit history with the actor and time.
 
