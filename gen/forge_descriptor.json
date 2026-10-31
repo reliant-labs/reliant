@@ -43452,7 +43452,7 @@
     "reliant/v1/trigger.proto": "ec112fbf3ba69b3c9198be41e4db6af50bfcedd6f647b3e8ac2f139eb3119ffe",
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "08c24ab2c762e7e0d407251d9a1d070d1dc56bb2d051fcfdd4527879426108cf",
+    "reliant/v1/workflow_v2.proto": "b9dd65fe2b76315524ea7232c00ce33568a9f840b0b0b2183b39a6551c944868",
     "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
   }
 }

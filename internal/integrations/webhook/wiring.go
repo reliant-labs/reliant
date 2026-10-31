@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+
 	// github/pr.merge@1's executor, registered on import.
 	_ "github.com/reliant-labs/reliant/internal/integrations/ghmerge"
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"

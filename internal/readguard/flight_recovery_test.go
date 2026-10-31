@@ -13,7 +13,7 @@ import (
 )
 
 func TestFlightPanicCompletesAndReleasesSlot(t *testing.T) {
-	g := New(Deps{PerUser: 1}).(*guard)
+	g := New(Deps{Limits: Limits{PerUser: 1}}).(*guard)
 	proc := Read[pb.ListChatsResponse]("list")
 	_, err := g.do(context.Background(), "user", "key", proc, func(context.Context) (connect.AnyResponse, error) {
 		panic("secret handler detail")

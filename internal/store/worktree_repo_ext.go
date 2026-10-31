@@ -618,7 +618,7 @@ func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (m
 		Running    bool      `bun:"running"`
 		LastActive time.Time `bun:"last_active"`
 	}
-	if err := db.Bun().NewRaw(worktreeRunActivitySQL, bun.In(ids)).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := db.Bun().NewRaw(worktreeRunActivitySQL, bun.List(ids)).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("worktree run activity: %w", err)
 	}
 	for _, r := range rows {

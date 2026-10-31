@@ -26,20 +26,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
-// Machine runs one shell command on the run's machine, in the project root.
-// err is a transport failure (the command may not have run), never a
-// non-zero exit.
-type Machine interface {
-	Run(ctx context.Context, command string) (stdout string, exitCode int, err error)
-}
-
-// Credentials says whether an integration's connection resolves, authorized,
-// for this run: nil when it does (or the integration needs none), else an
-// error whose text the owner is shown.
-type Credentials interface {
-	Check(ctx context.Context, integration string) error
-}
-
 // UnmetErrType is the Temporal error type of a run whose requirements are not
 // met: a verdict, never retried. The runtime and the activity both name it.
 const UnmetErrType = "PreflightRequirementsUnmet"

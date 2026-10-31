@@ -194,7 +194,7 @@ func TestReadsAreSharedPerUserAndRequest(t *testing.T) {
 func TestDistinctReadsAreBoundedPerUser(t *testing.T) {
 	t.Parallel()
 	svc := newChatLists()
-	client, g := serve(t, svc, Deps{PerUser: 2, Queue: 1, Wait: 300 * time.Millisecond, RetryAfter: 2 * time.Second})
+	client, g := serve(t, svc, Deps{Limits: Limits{PerUser: 2, Queue: 1, Wait: 300 * time.Millisecond, RetryAfter: 2 * time.Second}})
 
 	type result struct {
 		resp *connect.Response[reliantv1.ListChatsResponse]
@@ -279,7 +279,7 @@ func TestSharedReadIsCancelledWithItsLastCaller(t *testing.T) {
 func TestUnguardedCallsPassThrough(t *testing.T) {
 	t.Parallel()
 	svc := newChatLists()
-	client, _ := serve(t, svc, Deps{PerUser: 1, Queue: 1, Wait: time.Millisecond})
+	client, _ := serve(t, svc, Deps{Limits: Limits{PerUser: 1, Queue: 1, Wait: time.Millisecond}})
 
 	go func() { _, _ = listChats(context.Background(), client, "u1", "p1") }()
 	waitRunning(t, svc, 1)

@@ -298,7 +298,7 @@ request stay yours: run git and gh as usual for those.`,
 			if req.As == githubAsApp {
 				repository = req.Owner + "/" + req.Repo
 			}
-			code, err := run(cmd, args, ghEnv(os.Environ(), tok, repository))
+			code, err := run(cmd, args, ghEnv(os.Environ(), tok, repository)) //nolint:forbidigo // gh inherits this process's whole environment (PATH, HOME, GH_*), not configuration of reliant
 			if err != nil {
 				return fmt.Errorf("reliant github gh: %w", err)
 			}

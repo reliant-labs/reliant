@@ -32,11 +32,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.temporal.io/sdk/workflow"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
