@@ -558,7 +558,10 @@ function installsOf(response: ListProjectDaemonsResponse): ProjectDaemonInfo[] {
  * Every project_daemons row the caller owns — which daemon has which project
  * installed (and which clones are still in flight). The same rows the server
  * checks a trigger's daemon against.
+ *
+ * `pollMs` re-reads the rows on an interval, for a view waiting on a clone to
+ * land (installing → installed); false (the default) does not poll.
  */
-export function useProjectDaemonInstalls(enabled = true) {
-  return useListProjectDaemons({}, { enabled, staleTime: 30_000, select: installsOf });
+export function useProjectDaemonInstalls(enabled = true, pollMs: number | false = false) {
+  return useListProjectDaemons({}, { enabled, staleTime: 30_000, select: installsOf, refetchInterval: pollMs });
 }
