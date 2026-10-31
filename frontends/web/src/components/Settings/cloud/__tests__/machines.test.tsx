@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
   navigate: vi.fn(),
   search: {} as Record<string, string>,
@@ -138,7 +138,7 @@ describe('MachinesSection', () => {
       hasActiveSubscription: true,
       grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute Small',
-      allowedDaemonSizes: ['small'],
+      allowedDaemonSizes: ['m'],
     })
   })
 
@@ -233,7 +233,7 @@ describe('MachinesSection', () => {
       daemonType: 'managed',
       status: DaemonStatus.ACTIVE,
       platform: '',
-      size: 'medium',
+      size: 'l',
     }
     const externalDaemon = {
       daemonId: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
@@ -243,7 +243,7 @@ describe('MachinesSection', () => {
       status: DaemonStatus.ACTIVE,
       platform: 'darwin',
       // A self-hosted machine genuinely has no size. control-plane's row
-      // carried an invented 'medium' placeholder to satisfy a NOT NULL column;
+      // carried an invented 'l' placeholder to satisfy a NOT NULL column;
       // the registry reports the truth, and nothing renders.
       size: '',
     }
@@ -298,7 +298,7 @@ describe('MachinesSection', () => {
             status: DaemonStatus.PENDING,
             lifecyclePhase: DaemonLifecyclePhase.PROVISIONING,
             platform: '',
-            size: 'small',
+            size: 'm',
           },
         ],
       })

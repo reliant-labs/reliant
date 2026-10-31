@@ -106,7 +106,7 @@ describe("useGoToBilling", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        search: expect.objectContaining({ tab: "plans", from: "forge", returnTo: "/forge/env/prod?project=proj-1" }),
+        search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: "/forge/env/prod?project=proj-1" }),
       }),
     );
   });

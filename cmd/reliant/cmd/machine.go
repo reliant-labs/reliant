@@ -45,11 +45,13 @@ var machineSizes = []struct {
 	name string
 	size controlplanev1.DaemonSize
 }{
-	{"small", controlplanev1.DaemonSize_DAEMON_SIZE_SMALL},
-	{"medium", controlplanev1.DaemonSize_DAEMON_SIZE_MEDIUM},
-	{"large", controlplanev1.DaemonSize_DAEMON_SIZE_LARGE},
+	{"s1", controlplanev1.DaemonSize_DAEMON_SIZE_S1},
+	{"s2", controlplanev1.DaemonSize_DAEMON_SIZE_S2},
+	{"m", controlplanev1.DaemonSize_DAEMON_SIZE_M},
+	{"l", controlplanev1.DaemonSize_DAEMON_SIZE_L},
 	{"xl", controlplanev1.DaemonSize_DAEMON_SIZE_XL},
 	{"2xl", controlplanev1.DaemonSize_DAEMON_SIZE_2XL},
+	{"3xl", controlplanev1.DaemonSize_DAEMON_SIZE_3XL},
 }
 
 func parseMachineSize(s string) (controlplanev1.DaemonSize, error) {
@@ -146,8 +148,8 @@ func newMachineCmd() *cobra.Command {
 		Long: `Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
-suspends a running one; resize changes a SUSPENDED machine's size (small,
-medium, large, xl, 2xl), which takes effect when it next starts. To resize a
+suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
+m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
 called, and nothing else.
 
@@ -245,7 +247,7 @@ func newMachineStopCmd() *cobra.Command {
 
 func newMachineResizeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "resize <name|id> <small|medium|large|xl|2xl>",
+		Use:   "resize <name|id> <s1|s2|m|l|xl|2xl|3xl>",
 		Short: "Change a suspended machine's size",
 		Long: `Change a SUSPENDED machine's size; it takes effect when the machine next
 starts. A running machine is refused: stop it first. Disks only grow, so a

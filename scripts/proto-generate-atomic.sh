@@ -68,7 +68,11 @@ else
   buf_version=$(GOWORK=off go list -m -f '{{.Version}}' github.com/bufbuild/buf)
   buf=(env GOWORK=off GOFLAGS=-trimpath go run "github.com/bufbuild/buf/cmd/buf@${buf_version}")
 fi
-"${buf[@]}" generate --template "$template" -o "$staging"
+# Buf's short default includes local `go tool` plugin compilation. Cold builds on
+# a shared host can exceed it (observed ~4m) before any generated output exists.
+# Bound the whole invocation, but allow a caller to choose a tighter budget.
+# This is not the heavy-slot queue timeout; it starts when buf actually runs.
+"${buf[@]}" --timeout "${BUF_TIMEOUT:-10m}" generate --template "$template" -o "$staging"
 
 for dir in "$@"; do
   if [[ ! -d "$staging/$dir" ]] || [[ -z "$(ls -A "$staging/$dir")" ]]; then

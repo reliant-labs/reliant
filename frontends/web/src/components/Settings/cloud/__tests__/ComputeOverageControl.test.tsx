@@ -15,7 +15,7 @@ import {
 
 const defaults = {
   enabled: false,
-  pricing: { sizes: [{ size: 'small', hourlyPriceCents: '13', multiplier: 1, storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false },
+  pricing: { pricingVersion: 'test-version', sizes: [{ size: 'm', hourlyPriceCents: '13', exactHourlyPriceCents: '13/1', costWeight: '1/1', storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false },
   overageSpentCents: 0,
   monthlyPriceCents: 4000, // $40/mo
   onSave: vi.fn(),
@@ -131,7 +131,7 @@ describe('ComputeOverageControl', () => {
 
   it('shows per-size server hourly rates, never a flat minute estimate', () => {
     renderControl({ enabled: true, budgetCents: 2000n })
-    expect(screen.getAllByText(/small: \$0.13\/hr/)).toHaveLength(2)
+    expect(screen.getAllByText(/m: \$0.13\/hr/)).toHaveLength(2)
     expect(screen.queryByText(/extra minutes/)).not.toBeInTheDocument()
     expect(screen.getByText(/disk beyond it is billed running or suspended/)).toBeInTheDocument()
   })

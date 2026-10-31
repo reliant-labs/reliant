@@ -133,6 +133,7 @@ export function ComputeStep({
     eligible: cloudEligible,
     isLoading: cloudLoading,
     refetch: refetchCloudEligibility,
+    allowedDaemonSizes,
   } = useCloudEligibility();
 
   const eligible =
@@ -210,30 +211,40 @@ export function ComputeStep({
    *
    * Not all of them, and getting this wrong is worse than showing prices. The
    * server's `checkDaemonSizeAllowed` gives a coupon-only user (no
-   * subscription) a size allowance of SMALL alone — a compute grant buys
-   * machine TIME, deliberately not a bigger machine. So marking
+   * subscription) a size allowance of M alone (the coupon unit) — a compute
+   * grant buys machine TIME, deliberately not a bigger machine. So marking
    * every tile "Covered" tells the user their code bought an XL, and the
    * commit is then refused with "your plan does not include daemon size xl"
    * at the last step of onboarding. Observed doing exactly that in dev.
    *
-   * Marking only the smallest offered tile keeps the claim true: that is the
-   * one the grant genuinely covers, and the others still show their price, so
-   * choosing one is visibly a purchase.
+   * Marking only the cheapest tile the server says it will admit
+   * (`allowed_daemon_sizes`) keeps the claim true. It is not simply the
+   * cheapest tile: S1 and S2 sell below M, and a coupon does not run them.
+   * The others still show their price, so choosing one is visibly a
+   * purchase. With no answer yet (the forced-eligibility escape hatch), the
+   * cheapest tile stands in.
    */
-  const coveredPlanId = machineCovered ? planOptions[0]?.planId : undefined;
+  const allowedSizes = new Set((allowedDaemonSizes ?? []).map((size) => size.toLowerCase()));
+  const coveredOption = machineCovered
+    ? (planOptions.find((option) => allowedSizes.has(option.size)) ??
+      (allowedSizes.size === 0 ? planOptions[0] : undefined))
+    : undefined;
+  const coveredPlanId = coveredOption?.planId;
   // Read from `size` rather than reformatting the row. The specs live in the
   // row's own `detail` slot now, so `label` is already the bare machine name —
   // but this sentence is prose about a SIZE, not a restatement of a row, and
   // deriving it from the size keeps it that way if the row's label ever
-  // changes again. It must read "covers the Small machine".
-  const smallestOfferedSize = planOptions[0]?.size;
-  const coveredSizeLabel = smallestOfferedSize
-    ? formatSizeLabel(smallestOfferedSize)
-    : "smallest";
+  // changes again. It must read "covers the M machine".
+  const coveredSize = coveredOption?.size;
+  const coveredSizeLabel = coveredSize ? formatSizeLabel(coveredSize) : "smallest";
 
+  // Until the user picks a tile, the default is the machine their coverage
+  // pays for: a coupon-only user who continues without touching the tiles
+  // must commit the M the coupon runs, not the cheaper S1 the server refuses
+  // at the last step. Uncovered, the cheapest tile is the default.
   const selectedPlanId =
     planOptions.find((option) => option.planId === plan.computePlanId)
-      ?.planId ?? planOptions[0]?.planId;
+      ?.planId ?? coveredPlanId ?? planOptions[0]?.planId;
   const selectedPlanLabel = planOptions.find(
     (option) => option.planId === selectedPlanId,
   )?.label;
@@ -442,7 +453,8 @@ export function ComputeStep({
             key={option.planId}
             plan={option}
             // NOTHING is selected while the user's own computer is the
-            // choice. `selectedPlanId` falls back to the first plan so
+            // choice. `selectedPlanId` falls back to the covered plan, else
+            // the first, so
             // that committing cloud always carries a size — harmless
             // when the tiles were a separate block, but in one list that
             // default paints Small as selected beside an equally
@@ -791,7 +803,7 @@ export function ComputeStep({
           
               It used to be the last thing in this box, under every machine row
               and the notes beneath them. With six hosted sizes that put it
-              below the fold of a 1400x900 window: picking "Large" appeared to
+              below the fold of a 1400x900 window: picking "XL" appeared to
               do nothing, and the only button that could advance sat out of
               sight while the footer bar was empty. The footer cannot scroll
               away, so the action renders there — see ../StepFooter.tsx and

@@ -430,6 +430,26 @@ service BillingService {
     };
   }
 
+  // Machine pricing is accepted explicitly for the next billing period only.
+  rpc GetMachinePricingReadiness(GetMachinePricingReadinessRequest) returns (GetMachinePricingReadinessResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc AcceptNextMachinePricing(AcceptNextMachinePricingRequest) returns (AcceptNextMachinePricingResponse) {
+    option (forge.v1.method) = {auth_required: true activity: {none: "explicit future-period pricing consent is persisted in the acceptance ledger"}};
+  }
+
+  // Independent organization-wide hosted usage funding; never requires a machine plan.
+  rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
+  rpc CreateCurrentUserUsageBillingCheckout(CreateCurrentUserUsageBillingCheckoutRequest) returns (CreateCurrentUserUsageBillingCheckoutResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "billing consent is recorded in the usage agreement and audit log"}
+    };
+  }
+
   // AI credit auto-recharge: refill the wallet from a saved card when the
   // balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
   //
@@ -575,6 +595,9 @@ message CreateCurrentUserCheckoutSessionRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 6;
+  // Explicit authoritative machine terms; candidate admission never infers them.
+  string pricing_version = 7;
+  string terms_sha256 = 8;
 }
 
 message CreateCurrentUserCheckoutSessionResponse {
@@ -604,6 +627,85 @@ message GetCurrentUserWalletOverviewResponse {
   WalletOverview overview = 1;
 }
 
+message GetMachinePricingReadinessRequest {
+  optional string org_id = 1;
+  string pricing_version = 2;
+  string plan_id = 3;
+}
+message GetMachinePricingReadinessResponse {
+  string pricing_version = 1;
+  bool activation_ready = 2;
+  repeated string hold_reasons = 3;
+  string terms_sha256 = 4;
+  google.protobuf.Timestamp effective_period_start = 5;
+  // Authoritative disclosure; the digest binds these exact proposed terms.
+  int64 monthly_price_cents = 6;
+  int64 included_own_size_hours = 7;
+  int64 included_disk_gib = 8;
+  string size = 9;
+  string exact_hourly_rate_cents = 10;
+  string exact_cost_weight = 11;
+  string route_id = 12;
+  // Consent alone schedules no Stripe change; activation remains pending verification.
+  string activation_state = 13;
+}
+message AcceptNextMachinePricingRequest {
+  optional string org_id = 1;
+  string pricing_version = 2;
+  string plan_id = 3;
+  string terms_sha256 = 4;
+}
+message AcceptNextMachinePricingResponse {
+  string acceptance_id = 1;
+  google.protobuf.Timestamp effective_period_start = 2;
+  string pricing_version = 3;
+  string activation_state = 4;
+}
+
+message GetCurrentUserUsageBillingRequest {
+  // Active organization; resolved and authorized server-side. Empty selects primary org.
+  optional string org_id = 1;
+}
+
+// Funding for hosted apps, not a machine entitlement or observability package.
+message UsageBillingAgreement {
+  string id = 1;
+  string status = 2;
+  // UTC calendar-month hosting admission budget, not a synchronous cost ceiling.
+  int64 infra_budget_cents = 3;
+  string policy_version = 4;
+  google.protobuf.Timestamp billing_start_at = 5;
+}
+
+// Exact decimal cents per displayed unit, derived from the canonical catalog.
+message HostedUsageRate {
+  string resource_kind = 1;
+  string display_name = 2;
+  string unit = 3;
+  string price_cents = 4;
+}
+
+message GetCurrentUserUsageBillingResponse {
+  bool enabled = 1;
+  string policy_version = 2;
+  UsageBillingAgreement agreement = 3;
+  // Present before enrollment; never hardcode rates in a checkout page.
+  repeated HostedUsageRate rates = 4;
+}
+
+message CreateCurrentUserUsageBillingCheckoutRequest {
+  string policy_version = 1;
+  int64 infra_budget_cents = 2;
+  string success_url = 3;
+  string cancel_url = 4;
+  // Active organization; requires owner/admin consent. Never trust client scope alone.
+  optional string org_id = 5;
+}
+
+message CreateCurrentUserUsageBillingCheckoutResponse {
+  string checkout_url = 1;
+}
+
 message GetCurrentUserComputeSubscriptionRequest {}
 
 message GetCurrentUserComputeSubscriptionResponse {
@@ -611,12 +713,11 @@ message GetCurrentUserComputeSubscriptionResponse {
 }
 
 message CreateCurrentUserComputeSubscriptionIntentRequest {
-  // The compute plan to subscribe to.
   string plan_id = 1;
-  // The org this request acts in (docs/orgs.md). Unset: the caller's default
-  // org. A person must be a member of it; a machine credential may name only
-  // its own org.
   optional string org_id = 2;
+  // Explicit exact future/current sale terms disclosed by readiness.
+  string pricing_version = 3;
+  string terms_sha256 = 4;
 }
 
 message CreateCurrentUserComputeSubscriptionIntentResponse {
@@ -1164,19 +1265,30 @@ message GetCurrentUserComputeUsageResponse {
   bool usage_measured = 10;
 
   // The plan allowance for this period, in small-daemon-seconds.
-  int64 included_small_daemon_seconds = 11;
+  int64 included_small_daemon_seconds = 11 [deprecated = true];
   // Consumed this period: drained counter + undrained segments.
-  int64 used_small_daemon_seconds = 12;
+  int64 used_small_daemon_seconds = 12 [deprecated = true];
   // max(0, included − used). Never negative.
-  int64 remaining_small_daemon_seconds = 13;
+  int64 remaining_small_daemon_seconds = 13 [deprecated = true];
   // One-time coupon grant still unspent, in small-daemon-seconds. Reported
   // alongside the allowance rather than folded into it: the allowance
   // refills every period, a grant depletes once. Spent after the allowance
   // and before overage.
-  int64 granted_small_daemon_seconds_remaining = 14;
+  int64 granted_small_daemon_seconds_remaining = 14 [deprecated = true];
   // Sum of the multipliers of the daemons running right now (the burn rate
   // in SDS per second). Zero when nothing runs.
-  int64 running_multiplier = 15;
+  int64 running_multiplier = 15 [deprecated = true];
+  // Exact rational weighted-second accounting; no legacy integer truncation.
+  string pricing_version = 23;
+  string allowance_weighted_seconds = 24;
+  string consumed_weighted_seconds = 25;
+  string remaining_weighted_seconds = 26;
+  string grant_remaining_weighted_seconds = 27;
+  string running_cost_weight_sum = 28;
+  // Nonempty means usage/charge estimate is held for explicit reconciliation.
+  string billing_hold_reason = 29;
+  // Runtime/cost history covers only this window of the accepted period.
+  google.protobuf.Timestamp measured_from = 30;
   // When the allowance runs out at the current burn rate. UNSET when nothing
   // is running or nothing remains — never a fabricated far-future instant.
   google.protobuf.Timestamp exhausts_at = 16;
@@ -1204,17 +1316,19 @@ message GetCurrentUserComputeUsageResponse {
 // SizeUsage is one size's running usage within a period (design §6.1).
 message SizeUsage {
   string size = 1;
-  int64 multiplier = 2;
-  // Native wall-clock seconds at this size.
-  int64 running_seconds = 3;
-  // Small-daemon-seconds of this size's running time covered by the plan
-  // allowance or a grant.
-  int64 included_small_daemon_seconds = 4;
-  // Native seconds at this size past allowance and grant — the priced part.
-  int64 overage_seconds = 5;
+  int64 multiplier = 2 [deprecated = true];
+  // Deprecated whole seconds; exact rational field is canonical.
+  int64 running_seconds = 3 [deprecated = true];
+  int64 included_small_daemon_seconds = 4 [deprecated = true];
+  int64 overage_seconds = 5 [deprecated = true];
   // overage_seconds × this size's hourly price / 3600, in cents, as an exact
   // decimal string rounded half-up to 4 places.
   string overage_cost_cents = 6;
+  string pricing_version = 7;
+  string cost_weight = 8;
+  string exact_running_seconds = 9;
+  string included_weighted_seconds = 10;
+  string exact_overage_seconds = 11;
 }
 
 // StorageUsage is machine disk against the plan's pooled allowance
@@ -1229,7 +1343,8 @@ message StorageUsage {
   // max(0, provisioned − included): what bills right now.
   int64 extra_gib = 3;
   // Billed excess GiB × seconds so far this period.
-  int64 extra_gib_seconds = 4;
+  int64 extra_gib_seconds = 4 [deprecated = true];
+  string exact_extra_gib_seconds = 8;
   // extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
   string cost_cents = 5;
   // cost_cents plus extra_gib carried to the end of the period.

@@ -502,7 +502,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/10 hours on a Small machine/),
+        screen.getByText(/10 hours on an M machine/),
       ).toBeInTheDocument();
     });
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();
@@ -585,7 +585,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   // The user's report: "why is the CreateDaemon button even clickable just to
   // return an error to the user" — and its twin, a DISABLED button for a user
   // whose CreateDaemon actually succeeds (their real state: an active
-  // plan_compute_small subscription, 0 minutes used, but no
+  // plan_compute_m subscription, 0 minutes used, but no
   // reliant_user_entitlements row, which the OLD gate read as "no credits").
   //
   // Both are the same defect: the button's enabled state must track what the

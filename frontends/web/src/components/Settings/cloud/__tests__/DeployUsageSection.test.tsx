@@ -10,7 +10,7 @@
 // that hop is the adapter's concern rather than this surface's.
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { DeployUsageSection } from "@/components/Settings/cloud/usage/DeployUsageSection";
 import {
@@ -81,16 +81,13 @@ function renderSection({
   overage?: InfraOverageResponse;
   rows?: DeployUsageRow[];
 } & Partial<Parameters<typeof DeployUsageSection>[0]> = {}) {
-  const onSaveCap = vi.fn();
   render(
     <DeployUsageSection
       summary={buildUsageSummary({ overage, rows })}
-      onSaveCap={onSaveCap}
       deploymentNames={new Map([["dep-1", "api"]])}
       {...rest}
     />,
   );
-  return { onSaveCap };
 }
 
 describe("DeployUsageSection — consumption against allowance", () => {
@@ -122,7 +119,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
           }),
           rows: [],
         })}
-        onSaveCap={vi.fn()}
+
       />,
     );
     expect(
@@ -140,7 +137,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
           }),
           rows: [],
         })}
-        onSaveCap={vi.fn()}
+
       />,
     );
     expect(
@@ -158,7 +155,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
           }),
           rows: [],
         })}
-        onSaveCap={vi.fn()}
+
       />,
     );
     // The track is still full, but the overage is stated in words — clamping
@@ -230,27 +227,17 @@ describe("DeployUsageSection — honesty about estimates", () => {
   });
 });
 
-describe("DeployUsageSection — no compute subscription", () => {
-  it("explains the state instead of rendering an empty dashboard", () => {
-    renderSection({
-      overage: infraOverageResponse({ dimensions: [], budgetCents: undefined }),
-      rows: [],
-    });
-
-    expect(screen.getByText(/no compute plan on this account/i)).toBeDefined();
-    // The two consequences the user actually needs: no free tier, and what
-    // they can still run.
-    expect(screen.getByText(/there is no free tier/i)).toBeDefined();
-    expect(screen.getByText(/bills from the first unit/i)).toBeDefined();
+describe("DeployUsageSection — PAYG independent of machines", () => {
+  it("does not infer missing funding from empty dimensions", () => {
+    renderSection({ overage: infraOverageResponse({ dimensions: [], budgetCents: undefined }), rows: [] });
+    expect(screen.queryByText(/no compute plan/i)).toBeNull();
+    expect(screen.getByText(/no included CPU, memory or storage allowance/i)).toBeDefined();
+    expect(screen.queryByText(/one deployment/i)).toBeNull();
   });
-
-  it("explains why the spending cap is unavailable rather than showing a dead control", () => {
-    renderSection({
-      overage: infraOverageResponse({ dimensions: [], budgetCents: undefined }),
-      rows: [],
-    });
-
-    expect(screen.getByText(/no allowance to exceed/i)).toBeDefined();
+  it("renders zero included usage without a grant progress bar", () => {
+    renderSection({ overage: infraOverageResponse({ dimensions: [dimension({ includedAllowance: 0 })] }) });
+    expect(screen.getByText(/Pay as you go · no included app hosting allowance/)).toBeDefined();
+    expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByRole("button", { name: /save spending cap/i })).toBeNull();
   });
 });
@@ -325,15 +312,11 @@ describe("DeployUsageSection — attribution", () => {
   });
 });
 
-describe("DeployUsageSection — the cap it writes", () => {
-  it("renders the stored INFRA cap, and submits the full request", () => {
-    const { onSaveCap } = renderSection();
-
-    expect(screen.getByText(/ceiling of \$25\.00 per month/i)).toBeDefined();
-
-    screen.getByRole("button", { name: /save spending cap/i }).click();
-
-    // Always carries budgetCents — the partial-send hazard cannot be expressed.
-    expect(onSaveCap).toHaveBeenCalledWith({ budgetCents: 2500n });
+describe("DeployUsageSection — immutable consent budget", () => {
+  it("never offers the old cap mutation and discloses enforcement lag", () => {
+    renderSection();
+    expect(screen.queryByRole("button", { name: /save spending cap/i })).toBeNull();
+    expect(screen.getByText(/Changing it is not supported here/)).toBeDefined();
+    expect(screen.getByText(/not a guaranteed maximum bill/)).toBeDefined();
   });
 });

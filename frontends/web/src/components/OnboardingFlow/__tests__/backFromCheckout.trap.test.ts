@@ -47,7 +47,7 @@ describe("Back from the checkout step", () => {
   // with their own model key, so only the compute leg is owed.
   const AT_CHECKOUT: Partial<LaunchPlan> = {
     compute: "cloud_paid",
-    computePlanId: "plan_compute_small",
+    computePlanId: "plan_compute_m",
     modelProvider: "anthropic",
   };
 
@@ -84,12 +84,12 @@ describe("Back from the checkout step", () => {
     // Re-choosing compute re-records a plan id (the compute step writes one
     // for an un-entitled user), so the bill is priced again by the time
     // checkout is derived.
-    plan = { ...plan, compute: "cloud_paid", computePlanId: "plan_compute_small" };
+    plan = { ...plan, compute: "cloud_paid", computePlanId: "plan_compute_m" };
     expect(deriveStep(plan, NEW_ACCOUNT)).toBe("model");
 
     plan = { ...plan, modelProvider: "anthropic" };
     expect(deriveStep(plan, NEW_ACCOUNT)).toBe("checkout");
-    expect(plan.computePlanId).toBe("plan_compute_small");
+    expect(plan.computePlanId).toBe("plan_compute_m");
   });
 
   // Back must remain able to reach the first step. A Back that clears compute

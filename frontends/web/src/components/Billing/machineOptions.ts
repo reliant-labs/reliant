@@ -32,7 +32,7 @@ import {
   type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 
-import { sizeHours, type DaemonPricingLike } from "./daemonUsage";
+import type { DaemonPricingLike } from "./daemonUsage";
 import { formatMachineSpec } from "./machineSpecs";
 import type { ComputePlanOption } from "./PlanTiles";
 
@@ -62,7 +62,7 @@ export type MachineCatalogPlan = Pick<
 export function deriveMachineOptions<T extends MachineCatalogPlan>(
   plans: T[],
   /** ListPlans' daemon_pricing: each size's multiplier. */
-  pricing?: DaemonPricingLike,
+  _pricing?: DaemonPricingLike,
 ): ComputePlanOption[] {
   const options: ComputePlanOption[] = [];
   for (const size of offeredDaemonSizes(plans)) {
@@ -77,19 +77,14 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       // instrument that unlocks it and is never the thing being chosen.
       label: formatSizeLabel(size),
       // What the size actually BUYS, in its own slot rather than concatenated
-      // into the label. "Medium" describes nothing on its own, and the caller
+      // into the label. "L" describes nothing on its own, and the caller
       // that needs the bare name back (the coupon coverage sentence) would
       // otherwise have to unpick the string it just built.
       detail: formatMachineSpec(size),
       size,
       monthlyPriceCents: display.monthlyPriceCents,
-      includedHours: sizeHours(
-        pricing,
-        size,
-        plan.structuredLimits?.includedSmallDaemonHours === undefined
-          ? undefined
-          : Number(plan.structuredLimits.includedSmallDaemonHours),
-      ),
+      includedHours: plan.structuredLimits?.machineIncludedHours && plan.structuredLimits.machineIncludedHours > 0n
+        ? String(plan.structuredLimits.machineIncludedHours) : null,
     });
   }
   return options;

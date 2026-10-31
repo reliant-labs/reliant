@@ -6,8 +6,8 @@
  *
  *   ⌛ Waiting on billing                                    [Set up billing]
  *      Release v2.0.0 is recorded. This runs compute (1 workload) and the
- *      organization has no active compute plan.
- *      Subscribe to a Reliant Compute plan … nothing needs to be re-run.
+ *      organization has no active app hosting usage agreement.
+ *      Enable independent app hosting billing … nothing needs to be re-run.
  *      Queued 5 minutes ago
  *
  * The control plane accepted the deploy instead of refusing it, so there is

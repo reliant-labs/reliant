@@ -219,7 +219,7 @@ func TestDerivation_IdentityLifecycleCreatesRowWithName(t *testing.T) {
 	publishEvent(t, nc, daemonwire.Event{
 		DaemonID: "2aab1465", Type: daemonwire.EventLifecycle, At: created,
 		UserID: "u-owner", DaemonType: "managed", Name: "default", CreatedAt: &created,
-		Phase: daemonwire.LifecyclePhaseProvisioning, Size: "small",
+		Phase: daemonwire.LifecyclePhaseProvisioning, Size: "m",
 	})
 
 	if !waitFor(t, time.Second, func() bool {
@@ -278,7 +278,7 @@ func TestDerivation_RegistrySnapshotReconciles(t *testing.T) {
 			{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo},
 			{
 				DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo,
-				Phase: daemonwire.LifecyclePhaseSuspended, PhaseChangedAt: &suspendedAt, Size: "small",
+				Phase: daemonwire.LifecyclePhaseSuspended, PhaseChangedAt: &suspendedAt, Size: "m",
 			},
 		},
 	})

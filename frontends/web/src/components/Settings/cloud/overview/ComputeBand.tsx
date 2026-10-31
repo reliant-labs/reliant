@@ -4,7 +4,6 @@ import { Cpu } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import type { ComputeCapacity } from "../billingUtils";
-import { formatMachineSecondsShort } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,7 +71,7 @@ export interface ComputeBandProps {
   allowedSizesLabel: string | null;
   dimensions: ComputeBandDimension[];
   /** Unspent coupon grant balance, in small-daemon-seconds. */
-  grantedSmallDaemonSecondsRemaining: number;
+  grantRemainingLabel: string | null;
   /** The plan row arrived without its detail — see isPlanDetailUnavailable. */
   planDetailUnavailable: boolean;
   usageUnavailable: boolean;
@@ -87,7 +86,7 @@ export function ComputeBand({
   renewsOnLabel,
   allowedSizesLabel,
   dimensions,
-  grantedSmallDaemonSecondsRemaining,
+  grantRemainingLabel,
   planDetailUnavailable,
   usageUnavailable,
   onChangePlan,
@@ -246,7 +245,7 @@ export function ComputeBand({
             time you HAVE, and someone who redeemed a code before subscribing
             has some with no plan at all. Nesting it under the plan hid it from
             exactly the user most likely to be looking for it. */}
-        {grantedSmallDaemonSecondsRemaining >= 60 && (
+        {grantRemainingLabel && (
           <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium text-foreground">Coupon hours</p>
@@ -256,7 +255,7 @@ export function ComputeBand({
               </p>
             </div>
             <span className="font-medium text-foreground">
-              {formatMachineSecondsShort(grantedSmallDaemonSecondsRemaining)}
+              {grantRemainingLabel}
             </span>
           </div>
         )}

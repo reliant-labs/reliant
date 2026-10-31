@@ -109,8 +109,8 @@ export const COMPUTE_PLAN_UNPRICED = null;
 export interface PlanDisplay {
   allowedSizes: string[];
   monthlyPriceCents: number | null;
-  /** Small-daemon-hours the plan includes each period (0 with none). */
-  includedSmallDaemonHours: number;
+  /** Native running hours at the plan's declared machine size. */
+  machineIncludedHours: number;
 }
 
 /** The wire fields this module reads. Narrow on purpose. */
@@ -122,7 +122,7 @@ export function derivePlanDisplay(
   const limits = plan?.structuredLimits;
   return {
     allowedSizes: limits?.allowedDaemonSizes ?? [],
-    includedSmallDaemonHours: Number(limits?.includedSmallDaemonHours ?? 0),
+    machineIncludedHours: Number(limits?.machineIncludedHours ?? 0),
     monthlyPriceCents:
       plan && plan.priceCents > 0n
         ? Number(plan.priceCents)
@@ -212,17 +212,18 @@ export function sortPlansForDisplay<T extends PlanPricing>(plans: T[]): T[] {
  * never presented.
  */
 export const DAEMON_SIZE_ORDER = [
-  "small",
-  "medium",
-  "large",
+  // A size missing from this list is dropped by `offeredDaemonSizes`, so
+  // leaving one out does not omit the tier gracefully — it makes a priced,
+  // purchasable machine silently unbuyable, with nothing on screen to say why.
+  // Which sizes are OFFERED is still the catalog's decision; this list only
+  // bounds what the client can label.
+  "s1",
+  "s2",
+  "m",
+  "l",
   "xl",
-  // The catalog sells plan_compute_2xl at $299 with a real Stripe price. A
-  // size missing from this list is dropped by `offeredDaemonSizes`, so leaving
-  // it out did not omit the tier gracefully — it made a priced, purchasable
-  // machine silently unbuyable, with nothing on screen to say why. Which sizes
-  // are OFFERED is still the catalog's decision; this list only bounds what
-  // the client can label.
   "2xl",
+  "3xl",
 ] as const;
 
 export type DaemonSizeName = (typeof DAEMON_SIZE_ORDER)[number];
@@ -262,7 +263,7 @@ export function plansAllowingSize<T extends PlanSizes>(
 
 /**
  * The cheapest plan that can run this size — the answer to "what do I have to
- * buy for a Medium machine?", which is the question that makes plan and size a
+ * buy for an L machine?", which is the question that makes plan and size a
  * single choice rather than two.
  */
 export function smallestPlanAllowingSize<T extends PlanSizes>(
@@ -287,11 +288,13 @@ export function offeredDaemonSizes(plans: PlanSizes[]): DaemonSizeName[] {
 }
 
 const SIZE_DISPLAY_LABELS: Record<string, string> = {
-  small: "Small",
-  medium: "Medium",
-  large: "Large",
+  s1: "S1",
+  s2: "S2",
+  m: "M",
+  l: "L",
   xl: "XL",
   "2xl": "2XL",
+  "3xl": "3XL",
 };
 
 export function formatSizeLabel(size: string): string {
@@ -304,8 +307,8 @@ export function formatAllowedSizes(sizes: string[]): string {
     .map((s) => SIZE_DISPLAY_LABELS[s.toLowerCase()])
     .filter((label): label is string => !!label);
   // "All sizes" only when the plan genuinely allows every size this client can
-  // label. Hardcoded as 4 while the ladder had four rungs, which meant adding
-  // 2xl would have made a large-and-below plan claim it ran everything.
+  // label. A count hardcoded to one ladder's length would make a smaller plan
+  // claim it ran everything the day a rung is added.
   if (labeled.length === DAEMON_SIZE_ORDER.length) return "All sizes";
   return labeled.join(", ");
 }
@@ -332,7 +335,7 @@ export function isPlanDetailUnavailable(plan?: PlanPricing | null): boolean {
   const d = derivePlanDisplay(plan);
   return (
     d.allowedSizes.length === 0 &&
-    d.includedSmallDaemonHours === 0
+    d.machineIncludedHours === 0
   );
 }
 

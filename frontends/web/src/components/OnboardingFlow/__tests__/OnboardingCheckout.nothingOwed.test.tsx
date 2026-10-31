@@ -137,7 +137,7 @@ describe("OnboardingCheckout — nothing actually chargeable", () => {
             covered: false,
           },
         ],
-        "plan_compute_small",
+        "plan_compute_m",
       ),
     ).not.toThrow();
 
@@ -158,7 +158,7 @@ describe("OnboardingCheckout — nothing actually chargeable", () => {
           covered: false,
         },
       ],
-      "plan_compute_small",
+      "plan_compute_m",
     );
 
     expect(
@@ -180,7 +180,7 @@ describe("OnboardingCheckout — nothing actually chargeable", () => {
           covered: false,
         },
       ],
-      "plan_compute_small",
+      "plan_compute_m",
     );
 
     expect(screen.getByTestId("stripe-elements")).toBeInTheDocument();

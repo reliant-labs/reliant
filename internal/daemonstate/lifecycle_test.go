@@ -65,7 +65,7 @@ func TestDerivation_LifecycleMirrorsManagedPhase(t *testing.T) {
 		Type:          daemonwire.EventLifecycle,
 		At:            at,
 		Phase:         daemonwire.LifecyclePhaseProvisioning,
-		Size:          "medium",
+		Size:          "l",
 		StatusMessage: "pulling image",
 	})
 
@@ -80,8 +80,8 @@ func TestDerivation_LifecycleMirrorsManagedPhase(t *testing.T) {
 	if got := *row.LifecyclePhase; got != string(daemonwire.LifecyclePhaseProvisioning) {
 		t.Errorf("lifecycle_phase = %q, want %q", got, daemonwire.LifecyclePhaseProvisioning)
 	}
-	if row.Size == nil || *row.Size != "medium" {
-		t.Errorf("size = %v, want \"medium\"", row.Size)
+	if row.Size == nil || *row.Size != "l" {
+		t.Errorf("size = %v, want \"l\"", row.Size)
 	}
 	if row.LastStatusMessage != "pulling image" {
 		t.Errorf("last_status_message = %q, want %q", row.LastStatusMessage, "pulling image")
@@ -202,7 +202,7 @@ func TestDerivation_LifecycleOOMAccountingAccumulates(t *testing.T) {
 	killedAt := time.Date(2026, 10, 2, 9, 30, 0, 0, time.UTC)
 	publish(daemonwire.Event{
 		DaemonID: "d-oom", UserID: "u-1", Type: daemonwire.EventLifecycle,
-		At: killedAt, Phase: daemonwire.LifecyclePhaseReady, Size: "large",
+		At: killedAt, Phase: daemonwire.LifecyclePhaseReady, Size: "xl",
 		LastOOMKilledAt: &killedAt, OOMKillCount: 2,
 	})
 	if !waitFor(t, time.Second, func() bool {
@@ -231,8 +231,8 @@ func TestDerivation_LifecycleOOMAccountingAccumulates(t *testing.T) {
 	if row.LastOOMKilledAt == nil || !row.LastOOMKilledAt.Equal(killedAt) {
 		t.Errorf("last_oom_killed_at = %v after a phase transition, want %v preserved", row.LastOOMKilledAt, killedAt)
 	}
-	if row.Size == nil || *row.Size != "large" {
-		t.Errorf("size = %v after a phase transition, want \"large\" preserved", row.Size)
+	if row.Size == nil || *row.Size != "xl" {
+		t.Errorf("size = %v after a phase transition, want \"xl\" preserved", row.Size)
 	}
 }
 

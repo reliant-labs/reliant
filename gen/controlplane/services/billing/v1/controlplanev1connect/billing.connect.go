@@ -110,6 +110,18 @@ const (
 	// BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure is the fully-qualified name of
 	// the BillingService's CreateCurrentUserComputeSubscriptionIntent RPC.
 	BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure = "/controlplane.v1.BillingService/CreateCurrentUserComputeSubscriptionIntent"
+	// BillingServiceGetMachinePricingReadinessProcedure is the fully-qualified name of the
+	// BillingService's GetMachinePricingReadiness RPC.
+	BillingServiceGetMachinePricingReadinessProcedure = "/controlplane.v1.BillingService/GetMachinePricingReadiness"
+	// BillingServiceAcceptNextMachinePricingProcedure is the fully-qualified name of the
+	// BillingService's AcceptNextMachinePricing RPC.
+	BillingServiceAcceptNextMachinePricingProcedure = "/controlplane.v1.BillingService/AcceptNextMachinePricing"
+	// BillingServiceGetCurrentUserUsageBillingProcedure is the fully-qualified name of the
+	// BillingService's GetCurrentUserUsageBilling RPC.
+	BillingServiceGetCurrentUserUsageBillingProcedure = "/controlplane.v1.BillingService/GetCurrentUserUsageBilling"
+	// BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure is the fully-qualified name of the
+	// BillingService's CreateCurrentUserUsageBillingCheckout RPC.
+	BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure = "/controlplane.v1.BillingService/CreateCurrentUserUsageBillingCheckout"
 	// BillingServiceGetCurrentUserWalletAutoRechargeProcedure is the fully-qualified name of the
 	// BillingService's GetCurrentUserWalletAutoRecharge RPC.
 	BillingServiceGetCurrentUserWalletAutoRechargeProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletAutoRecharge"
@@ -244,6 +256,13 @@ type BillingServiceClient interface {
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
 	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	// Machine pricing is accepted explicitly for the next billing period only.
+	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
+	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	// Independent organization-wide hosted usage funding; never requires a machine plan.
+	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
+	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
+	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
@@ -442,6 +461,30 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
 			connect.WithClientOptions(opts...),
 		),
+		getMachinePricingReadiness: connect.NewClient[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse](
+			httpClient,
+			baseURL+BillingServiceGetMachinePricingReadinessProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+			connect.WithClientOptions(opts...),
+		),
+		acceptNextMachinePricing: connect.NewClient[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse](
+			httpClient,
+			baseURL+BillingServiceAcceptNextMachinePricingProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
+			connect.WithClientOptions(opts...),
+		),
+		getCurrentUserUsageBilling: connect.NewClient[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse](
+			httpClient,
+			baseURL+BillingServiceGetCurrentUserUsageBillingProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
+			connect.WithClientOptions(opts...),
+		),
+		createCurrentUserUsageBillingCheckout: connect.NewClient[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse](
+			httpClient,
+			baseURL+BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
+			connect.WithClientOptions(opts...),
+		),
 		getCurrentUserWalletAutoRecharge: connect.NewClient[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
@@ -531,6 +574,10 @@ type billingServiceClient struct {
 	setCurrentUserInfraOverage                 *connect.Client[v1.SetCurrentUserInfraOverageRequest, v1.SetCurrentUserInfraOverageResponse]
 	getCurrentUserInfraOverage                 *connect.Client[v1.GetCurrentUserInfraOverageRequest, v1.GetCurrentUserInfraOverageResponse]
 	createCurrentUserComputeSubscriptionIntent *connect.Client[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse]
+	getMachinePricingReadiness                 *connect.Client[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse]
+	acceptNextMachinePricing                   *connect.Client[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse]
+	getCurrentUserUsageBilling                 *connect.Client[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse]
+	createCurrentUserUsageBillingCheckout      *connect.Client[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse]
 	getCurrentUserWalletAutoRecharge           *connect.Client[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse]
 	setCurrentUserWalletAutoRecharge           *connect.Client[v1.SetCurrentUserWalletAutoRechargeRequest, v1.SetCurrentUserWalletAutoRechargeResponse]
 	createCurrentUserWalletPaymentMethodSetup  *connect.Client[v1.CreateCurrentUserWalletPaymentMethodSetupRequest, v1.CreateCurrentUserWalletPaymentMethodSetupResponse]
@@ -670,6 +717,27 @@ func (c *billingServiceClient) GetCurrentUserInfraOverage(ctx context.Context, r
 // controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent.
 func (c *billingServiceClient) CreateCurrentUserComputeSubscriptionIntent(ctx context.Context, req *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error) {
 	return c.createCurrentUserComputeSubscriptionIntent.CallUnary(ctx, req)
+}
+
+// GetMachinePricingReadiness calls controlplane.v1.BillingService.GetMachinePricingReadiness.
+func (c *billingServiceClient) GetMachinePricingReadiness(ctx context.Context, req *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
+	return c.getMachinePricingReadiness.CallUnary(ctx, req)
+}
+
+// AcceptNextMachinePricing calls controlplane.v1.BillingService.AcceptNextMachinePricing.
+func (c *billingServiceClient) AcceptNextMachinePricing(ctx context.Context, req *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
+	return c.acceptNextMachinePricing.CallUnary(ctx, req)
+}
+
+// GetCurrentUserUsageBilling calls controlplane.v1.BillingService.GetCurrentUserUsageBilling.
+func (c *billingServiceClient) GetCurrentUserUsageBilling(ctx context.Context, req *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {
+	return c.getCurrentUserUsageBilling.CallUnary(ctx, req)
+}
+
+// CreateCurrentUserUsageBillingCheckout calls
+// controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout.
+func (c *billingServiceClient) CreateCurrentUserUsageBillingCheckout(ctx context.Context, req *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error) {
+	return c.createCurrentUserUsageBillingCheckout.CallUnary(ctx, req)
 }
 
 // GetCurrentUserWalletAutoRecharge calls
@@ -829,6 +897,13 @@ type BillingServiceHandler interface {
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
 	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	// Machine pricing is accepted explicitly for the next billing period only.
+	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
+	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	// Independent organization-wide hosted usage funding; never requires a machine plan.
+	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
+	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
+	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
@@ -1023,6 +1098,30 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	billingServiceGetMachinePricingReadinessHandler := connect.NewUnaryHandler(
+		BillingServiceGetMachinePricingReadinessProcedure,
+		svc.GetMachinePricingReadiness,
+		connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceAcceptNextMachinePricingHandler := connect.NewUnaryHandler(
+		BillingServiceAcceptNextMachinePricingProcedure,
+		svc.AcceptNextMachinePricing,
+		connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceGetCurrentUserUsageBillingHandler := connect.NewUnaryHandler(
+		BillingServiceGetCurrentUserUsageBillingProcedure,
+		svc.GetCurrentUserUsageBilling,
+		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceCreateCurrentUserUsageBillingCheckoutHandler := connect.NewUnaryHandler(
+		BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure,
+		svc.CreateCurrentUserUsageBillingCheckout,
+		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
+		connect.WithHandlerOptions(opts...),
+	)
 	billingServiceGetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
 		svc.GetCurrentUserWalletAutoRecharge,
@@ -1133,6 +1232,14 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceGetCurrentUserInfraOverageHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure:
 			billingServiceCreateCurrentUserComputeSubscriptionIntentHandler.ServeHTTP(w, r)
+		case BillingServiceGetMachinePricingReadinessProcedure:
+			billingServiceGetMachinePricingReadinessHandler.ServeHTTP(w, r)
+		case BillingServiceAcceptNextMachinePricingProcedure:
+			billingServiceAcceptNextMachinePricingHandler.ServeHTTP(w, r)
+		case BillingServiceGetCurrentUserUsageBillingProcedure:
+			billingServiceGetCurrentUserUsageBillingHandler.ServeHTTP(w, r)
+		case BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure:
+			billingServiceCreateCurrentUserUsageBillingCheckoutHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserWalletAutoRechargeProcedure:
 			billingServiceGetCurrentUserWalletAutoRechargeHandler.ServeHTTP(w, r)
 		case BillingServiceSetCurrentUserWalletAutoRechargeProcedure:
@@ -1256,6 +1363,22 @@ func (UnimplementedBillingServiceHandler) GetCurrentUserInfraOverage(context.Con
 
 func (UnimplementedBillingServiceHandler) CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetMachinePricingReadiness is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.AcceptNextMachinePricing is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserUsageBilling is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error) {

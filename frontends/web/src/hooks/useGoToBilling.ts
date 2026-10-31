@@ -20,7 +20,8 @@ export type BillingOrigin =
   | "claim";
 
 /**
- * Send the user to billing, on the Plans tab, carrying where they came from.
+ * Send the user to billing, carrying where they came from. Hosted apps go to
+ * independent usage consent; machine origins go to Plans.
  *
  * WHY THERE IS NO LONGER A DETOUR: this hook used to fork on anonymity and
  * route anonymous sessions through /upgrade first, because a subscription
@@ -64,7 +65,8 @@ export function useGoToBilling(from: BillingOrigin): () => void {
     void navigate({
       to: "/settings/$section",
       params: { section: "billing" },
-      search: { tab: "plans", from, returnTo },
+      // Hosted-app holds require independent usage consent, not a machine plan.
+      search: { tab: from === "forge" ? "usage" : "plans", from, returnTo },
     });
   };
 }

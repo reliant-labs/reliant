@@ -67,6 +67,15 @@ export function AllowanceMeter({
   const fillPercent = Math.min(100, Math.max(0, reading.percentUsed));
   const isOver = reading.percentUsed >= 100;
 
+  // PAYG has no denominator: a full/empty allowance bar would imply a grant.
+  if (!reading.hasAllowance) return (
+    <div className="rounded-md border border-border/60 bg-background p-4">
+      <h4 className="text-sm font-semibold text-foreground">{reading.label}</h4>
+      <p className="mt-1 text-sm tabular-nums">{usageMeasured ? `${formatQuantity(reading.consumed)} ${reading.unitLabel} used` : "Current usage unavailable"}</p>
+      <p className="mt-2 text-xs text-muted-foreground">Pay as you go · no included app hosting allowance</p>
+    </div>
+  );
+
   if (!usageMeasured) {
     return (
       <div className="rounded-md border border-border/60 bg-background p-4">

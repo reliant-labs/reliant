@@ -40,7 +40,7 @@ func (c *client) SuspendDaemon(ctx context.Context, jwt, daemonID string) error 
 func (c *client) ResizeDaemon(ctx context.Context, jwt, daemonID, size string) error {
 	pbSize, ok := daemonSizes[strings.ToLower(strings.TrimSpace(size))]
 	if !ok {
-		return fmt.Errorf("unknown machine size %q: want one of small, medium, large, xl, 2xl", size)
+		return fmt.Errorf("unknown machine size %q: want one of s1, s2, m, l, xl, 2xl, 3xl", size)
 	}
 	req := connect.NewRequest(&daemonv1.ResizeDaemonRequest{DaemonId: daemonID, Size: pbSize})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
@@ -67,9 +67,11 @@ func (c *client) RenameDaemon(ctx context.Context, jwt, daemonID, name string) e
 // daemonSizes are the size names reliant's daemon registry stores (the
 // control plane's lifecycle mirror), mapped to the control plane's enum.
 var daemonSizes = map[string]controlplanev1.DaemonSize{
-	"small":  controlplanev1.DaemonSize_DAEMON_SIZE_SMALL,
-	"medium": controlplanev1.DaemonSize_DAEMON_SIZE_MEDIUM,
-	"large":  controlplanev1.DaemonSize_DAEMON_SIZE_LARGE,
-	"xl":     controlplanev1.DaemonSize_DAEMON_SIZE_XL,
-	"2xl":    controlplanev1.DaemonSize_DAEMON_SIZE_2XL,
+	"s1":  controlplanev1.DaemonSize_DAEMON_SIZE_S1,
+	"s2":  controlplanev1.DaemonSize_DAEMON_SIZE_S2,
+	"m":   controlplanev1.DaemonSize_DAEMON_SIZE_M,
+	"l":   controlplanev1.DaemonSize_DAEMON_SIZE_L,
+	"xl":  controlplanev1.DaemonSize_DAEMON_SIZE_XL,
+	"2xl": controlplanev1.DaemonSize_DAEMON_SIZE_2XL,
+	"3xl": controlplanev1.DaemonSize_DAEMON_SIZE_3XL,
 }

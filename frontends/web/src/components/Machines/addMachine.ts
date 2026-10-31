@@ -12,11 +12,13 @@ import { uniqueMachineName } from "@/lib/uniqueMachineName";
 
 /** The wire enum for each catalog size name. */
 export const DAEMON_SIZE_BY_NAME: Record<DaemonSizeName, DaemonSize> = {
-  small: DaemonSize.DAEMON_SIZE_SMALL,
-  medium: DaemonSize.DAEMON_SIZE_MEDIUM,
-  large: DaemonSize.DAEMON_SIZE_LARGE,
+  s1: DaemonSize.DAEMON_SIZE_S1,
+  s2: DaemonSize.DAEMON_SIZE_S2,
+  m: DaemonSize.DAEMON_SIZE_M,
+  l: DaemonSize.DAEMON_SIZE_L,
   xl: DaemonSize.DAEMON_SIZE_XL,
   "2xl": DaemonSize.DAEMON_SIZE_2XL,
+  "3xl": DaemonSize.DAEMON_SIZE_3XL,
 };
 
 /**
@@ -73,7 +75,7 @@ export function cloudMachineRows(
 
 /** The row to start on: the caller's suggestion, else Small, else the first. */
 export function defaultRow(rows: CloudMachineRow[], suggested?: DaemonSizeName): CloudMachineRow | undefined {
-  return rows.find((r) => r.size === suggested) ?? rows.find((r) => r.size === "small") ?? rows[0];
+  return rows.find((r) => r.size === suggested) ?? rows.find((r) => r.size === "m") ?? rows[0];
 }
 
 /**

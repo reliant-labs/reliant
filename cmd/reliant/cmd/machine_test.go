@@ -43,7 +43,7 @@ func (f *fakeDaemons) ListDaemons(_ context.Context, req *connect.Request[daemon
 		{Id: "d-cicd", Name: "cicd", DaemonType: controlplanev1.DaemonType_DAEMON_TYPE_MANAGED,
 			Status: controlplanev1.DaemonStatus_DAEMON_STATUS_SUSPENDED, Size: controlplanev1.DaemonSize_DAEMON_SIZE_XL},
 		{Id: "d-default", Name: "default", DaemonType: controlplanev1.DaemonType_DAEMON_TYPE_MANAGED,
-			Status: controlplanev1.DaemonStatus_DAEMON_STATUS_ACTIVE, Size: controlplanev1.DaemonSize_DAEMON_SIZE_LARGE},
+			Status: controlplanev1.DaemonStatus_DAEMON_STATUS_ACTIVE, Size: controlplanev1.DaemonSize_DAEMON_SIZE_L},
 	}}), nil
 }
 
