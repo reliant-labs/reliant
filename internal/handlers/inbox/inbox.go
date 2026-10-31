@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
@@ -502,10 +505,18 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 //
 // Resolving a declaration may read the workflow store, one workflow after
 // another, so the whole loop holds one of lim's tokens.
+//
+// Resolution validates each workflow tree (launch memoizes the verdict), which
+// is CPU, not queries: the span names that time, which a trace otherwise shows
+// only as a gap between catalog reads.
 func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	var out []*reliantv1.InboxItem
 	err := lim.do(ctx, func() error {
+		ctx, span := otel.Tracer("reliant.inbox").Start(ctx, "inbox.declarationItems",
+			trace.WithAttributes(attribute.Int("inbox.triggers", len(stored))))
+		defer span.End()
 		out = s.declarationItems(ctx, stored)
+		span.SetAttributes(attribute.Int("inbox.items", len(out)))
 		return nil
 	})
 	return out, err
