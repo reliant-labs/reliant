@@ -46150,6 +46150,15 @@
     },
     {
       "consumer": "DaemonRegistry",
+      "field": "IdleTimeouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MemberIdleTimeouts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "DaemonRegistry",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Repository",
       "methods": [],
@@ -47310,6 +47319,14 @@
       "source": {
         "path": "internal/app/nodes_gateway.go",
         "symbol": "NewDaemonEventPublisher"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "DaemonRegistry.IdleTimeouts",
+      "source": {
+        "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
       }
     },
     {

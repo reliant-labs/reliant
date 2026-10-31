@@ -30,6 +30,12 @@ type Repository interface {
 	SetDefaultDaemon(ctx context.Context, userID, daemonID string) error
 }
 
+// MemberIdleTimeouts sets a managed machine's idle timeout at the control
+// plane. controlplane.Service implements it.
+type MemberIdleTimeouts interface {
+	SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error
+}
+
 // Router is the slice of toolexec.DaemonRouter the daemon_registry handlers
 // use. toolexec.DaemonRouter implements it.
 type Router interface {
