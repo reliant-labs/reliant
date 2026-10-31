@@ -376,7 +376,8 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
       expect(await screen.findByText(/Machine-time coupon redeemed/)).toBeInTheDocument()
-      expect(screen.getByText(/legacy grant may require reconciliation/)).toBeInTheDocument()
+      // No reconciliation step exists, so the confirmation never claims one.
+      expect(screen.queryByText(/reconciliation/i)).not.toBeInTheDocument()
       expect(screen.queryByText(/3 hours on a small machine available/i)).not.toBeInTheDocument()
     })
 

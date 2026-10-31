@@ -113,7 +113,7 @@ export function RedeemCouponForm({
       onSuccess: (res) => {
         setRedeemed(
           res.kind === RedeemedCouponKind.COMPUTE_MINUTES
-            ? "Machine-time coupon redeemed. Check the versioned machine usage balance for equivalent hours; a legacy grant may require reconciliation before use."
+            ? "Machine-time coupon redeemed. Your machine usage balance shows the hours it adds."
             : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
         );
         setCode("");

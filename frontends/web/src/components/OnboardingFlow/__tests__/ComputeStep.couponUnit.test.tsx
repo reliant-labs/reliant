@@ -47,9 +47,16 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           structuredLimits: { allowedDaemonSizes: ["s1"], includedSmallDaemonHours: 160n },
         },
         {
+          id: "plan_compute_s2",
+          name: "S2",
+          displayOrder: 2,
+          priceCents: 2900n,
+          structuredLimits: { allowedDaemonSizes: ["s1", "s2"], includedSmallDaemonHours: 160n },
+        },
+        {
           id: "plan_compute_m",
           name: "M",
-          displayOrder: 2,
+          displayOrder: 3,
           priceCents: 3900n,
           structuredLimits: { allowedDaemonSizes: ["s1", "s2", "m"], includedSmallDaemonHours: 160n },
         },
@@ -75,13 +82,13 @@ vi.mock("@/services/controlPlane/reliantAI", () => ({
 
 import { ComputeStep } from "../steps/ComputeStep";
 
-function renderStep() {
+function renderStep(updatePlan = vi.fn(async (_patch: Partial<LaunchPlan>) => {})) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return render(
-    <ComputeStep plan={{} as Partial<LaunchPlan>} updatePlan={vi.fn(async () => {})} onNext={vi.fn()} onBack={vi.fn()} />,
+    <ComputeStep plan={{} as Partial<LaunchPlan>} updatePlan={updatePlan} onNext={vi.fn()} onBack={vi.fn()} />,
     { wrapper },
   );
 }
@@ -94,5 +101,16 @@ describe("ComputeStep — a coupon covers the coupon unit", () => {
     // M carries no price; S1, which the coupon does not run, still does.
     expect(screen.queryByText(/\$39\.00\/mo/)).toBeNull();
     expect(screen.getByText(/\$25\.00\/mo/)).toBeInTheDocument();
+  });
+
+  it("defaults the selection to the covered M, not the cheaper S1", () => {
+    renderStep();
+
+    // Nothing picked yet: the selected tile is the one the coupon runs. S1
+    // would be refused by the daemon service at the last onboarding step.
+    const selected = screen.getAllByRole("button").filter((el) => el.getAttribute("aria-pressed") === "true");
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toHaveTextContent(/Covered/);
+    expect(selected[0]).toHaveTextContent(/^M/);
   });
 });

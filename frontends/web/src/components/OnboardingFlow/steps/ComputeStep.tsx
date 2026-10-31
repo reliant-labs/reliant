@@ -238,9 +238,13 @@ export function ComputeStep({
   const coveredSize = coveredOption?.size;
   const coveredSizeLabel = coveredSize ? formatSizeLabel(coveredSize) : "smallest";
 
+  // Until the user picks a tile, the default is the machine their coverage
+  // pays for: a coupon-only user who continues without touching the tiles
+  // must commit the M the coupon runs, not the cheaper S1 the server refuses
+  // at the last step. Uncovered, the cheapest tile is the default.
   const selectedPlanId =
     planOptions.find((option) => option.planId === plan.computePlanId)
-      ?.planId ?? planOptions[0]?.planId;
+      ?.planId ?? coveredPlanId ?? planOptions[0]?.planId;
   const selectedPlanLabel = planOptions.find(
     (option) => option.planId === selectedPlanId,
   )?.label;
@@ -449,7 +453,8 @@ export function ComputeStep({
             key={option.planId}
             plan={option}
             // NOTHING is selected while the user's own computer is the
-            // choice. `selectedPlanId` falls back to the first plan so
+            // choice. `selectedPlanId` falls back to the covered plan, else
+            // the first, so
             // that committing cloud always carries a size — harmless
             // when the tiles were a separate block, but in one list that
             // default paints Small as selected beside an equally
