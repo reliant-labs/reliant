@@ -1,6 +1,6 @@
 ---
 title: "Key Concepts"
-description: "Understand Reliant's core terminology and architecture"
+description: "Understand the core terminology of Reliant and Forge"
 ---
 
 Reliant is a cloud service. Its servers run your agents and call the AI model, and a **daemon** on a machine you choose does the hands-on work with your code. Everything else in Reliant is built from the handful of concepts below.
@@ -22,6 +22,36 @@ A **chat** is one conversation with an agent or a workflow, tied to a project. Y
 ### Project
 
 A **project** is a code repository, or several, that your agents work in. A cloud machine gets its copy by cloning from GitHub, which you connect in **Settings → GitHub**.
+
+## Forge
+
+Reliant and Forge are two halves of one workflow. Reliant is the harness: the agents, workflows and machines that do the work. **Forge** is the foundation: the framework for the app those agents build and run. Forge is built into the `reliant` binary, so everything below is available as `reliant forge …`.
+
+### Forge project
+
+A **forge project** is a repository with a fixed structure: Go services defined in protobuf, SQL migrations, background workers and jobs, and Next.js, Vite or Expo frontends or static sites. Forge generates the plumbing (API stubs, data access, typed config, frontend hooks, dashboards) from your protobuf API and your SQL migrations, and never touches the files where your logic lives. A project with only a static frontend, such as a landing page, is a complete forge project too.
+
+**Related**: [Forge overview](/forge/overview), [Project anatomy](/forge/project-anatomy)
+
+### Environment and release
+
+An **environment** is a place the project runs, declared as code under `deploy/kcl/`. A new project has `dev` on your machine, and `staging` and `prod` on Reliant hosting. A **release** is an immutable build of the project, cut once by `forge env deploy` and promoted unchanged from one environment to the next, so what you tested in staging is what goes to prod. Every deploy shows a plan of what will change and waits for your approval.
+
+**Related**: [Environments & deploys](/forge/environments-and-deploys)
+
+### Hosting
+
+**Reliant hosting** is where `staging` and `prod` run by default: your services, workers and jobs, a managed Postgres, and frontends published as static sites behind a CDN, each with a hostname, with custom domains and managed secrets. It needs a Reliant Compute plan, except for a single static site per organization, which has a free tier. See the [pricing page](https://reliantlabs.io/pricing) for current plans.
+
+**Related**: [Hosting on Reliant](/forge/hosting)
+
+### Build an App workflow
+
+**Build an App** is the built-in Reliant workflow that connects the two: it scopes an app with you, scaffolds it as a forge project, builds it, and verifies the running result. **Move to Forge** ports an existing codebase into a forge project one component at a time. Once an app is deployed, the **Apps** and **Observability** areas of Reliant show its releases, logs, traces, dashboards and alerts.
+
+**Related**: [Forge quick start](/forge/quick-start), [Observability](/forge/observability)
+
+---
 
 ## The essentials
 
