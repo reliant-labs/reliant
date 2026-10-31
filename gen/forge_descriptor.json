@@ -17076,6 +17076,27 @@
           }
         },
         {
+          "Name": "RenameMachine",
+          "InputType": "RenameMachineRequest",
+          "OutputType": "RenameMachineResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.RenameMachineRequest",
+          "OutputTypeFQ": "reliant.v1.RenameMachineResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "rename_machine",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
           "Name": "ListMachinePools",
           "InputType": "ListMachinePoolsRequest",
           "OutputType": "ListMachinePoolsResponse",
@@ -17236,6 +17257,26 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelInventory"
+          }
+        ],
+        "RenameMachineRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RenameMachineResponse": [
+          {
+            "Name": "daemon",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.DaemonInfo"
           }
         ],
         "ResolveDaemonRequest": [
@@ -17929,6 +17970,23 @@
             "type_name": "reliant.v1.LocalModelInventory"
           }
         ],
+        "reliant.v1.RenameMachineRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.RenameMachineResponse": [
+          {
+            "name": "daemon",
+            "kind": "message",
+            "type_name": "reliant.v1.DaemonInfo"
+          }
+        ],
         "reliant.v1.ResolveDaemonRequest": [
           {
             "name": "daemon_id",
@@ -18050,6 +18108,8 @@
         "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.RenameMachineRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.RenameMachineResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -43428,7 +43488,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c1890f5ab97d0a9894f22c80dbbf34ae2089d06e53583e05de095821cec82848",
+    "reliant/v1/daemon_registry.proto": "eed6074cb2377349d8ffdd07f50139ae1865e892a615405c0192dc4a6ea6f004",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "ed9b00ea9debd6d67d4b7dff36905a3973ae43ca55c7c8def5e340de5a885b08",
