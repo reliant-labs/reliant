@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -290,6 +291,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerLauncher != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
 		pools := machinepool.NewPlacer(cfg.Database)
+		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
+			pools = pools.WithWaker(poolMemberWaker{w: w})
+		}
 		w.RegisterActivityWithOptions(
 			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithPlacer(pools).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
@@ -423,6 +427,21 @@ func TaskQueueName(suffix string) string {
 // triggerPollRepo gives the poll activity the owner-scoped connection read it
 // checks a polled trigger's connection with, which lives on the connection
 // store rather than the main repository.
+// poolMemberWaker wakes the pool member a placement chose, on the trigger
+// owner's behalf: the trigger was authorized to run on the pool when it was
+// enabled, exactly as a resuming run was authorized to use its machine, so it
+// goes through the same door (WakeForRun), with the trigger's delegated
+// access as the fallback credential. A member already on its way is success.
+type poolMemberWaker struct{ w toolexec.RunWaker }
+
+func (p poolMemberWaker) WakeMember(ctx context.Context, userID, daemonID string) error {
+	_, err := p.w.WakeForRun(automationcred.Allow(ctx), userID, &toolexec.DaemonSelector{ID: daemonID})
+	if toolexec.IsDaemonPending(err) {
+		return nil
+	}
+	return err
+}
+
 type triggerPollRepo struct {
 	*db.Repo
 	connections db.ConnectionStore

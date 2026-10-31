@@ -75,11 +75,38 @@ func (p *Placer) AgreedCatalog(ctx context.Context, userID, poolID, projectID st
 // Placer places runs on a pool's members.
 type Placer struct {
 	store Store
+	waker Waker
+}
+
+// Waker wakes one of the owner's suspended machines. The worker's daemon
+// router implements it; success means the wake is under way.
+type Waker interface {
+	WakeMember(ctx context.Context, userID, daemonID string) error
 }
 
 // NewPlacer builds a Placer.
 func NewPlacer(store Store) *Placer {
 	return &Placer{store: store}
+}
+
+// WithWaker lets the Placer act on a Wake decision.
+func (p *Placer) WithWaker(w Waker) *Placer {
+	p.waker = w
+	return p
+}
+
+// errNoWaker is a Wake decision in a process with no waker wired: a
+// configuration bug, reported rather than waited on silently.
+var errNoWaker = errors.New("waking machine pool members is not configured on this worker")
+
+// Wake wakes member daemonID of a pool for userID (a Wake decision). The run
+// is not placed: it waits, and a later Place puts it on the member once the
+// member is up and its checkout verified.
+func (p *Placer) Wake(ctx context.Context, userID, daemonID string) error {
+	if p.waker == nil {
+		return errNoWaker
+	}
+	return p.waker.WakeMember(ctx, userID, daemonID)
 }
 
 // Placement is one Place answer: the pool, its members as read, and the
@@ -226,7 +253,7 @@ func memberFromRow(r core.MachinePoolMemberRow) (Member, error) {
 	}
 	return Member{
 		DaemonID: r.DaemonID, Name: r.Name, Size: r.Size, Phase: Phase(r.Phase),
-		LiveRuns: r.LiveRuns, Installed: r.Installed,
+		LiveRuns: r.LiveRuns, Installed: r.Installed, Verified: r.Verified,
 		CatalogDigest: digest, CatalogPushedAt: pushed,
 	}, nil
 }

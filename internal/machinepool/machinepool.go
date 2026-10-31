@@ -56,6 +56,12 @@ type Member struct {
 	LiveRuns int
 	// Installed: the project is installed on this machine.
 	Installed bool
+	// Verified: the checkout was seen on the machine's disk since its current
+	// connection. Only a connected member can be verified. A machine whose
+	// disk is the pod's own (an ephemeral member) wakes with an empty disk
+	// while Installed still holds, so a connected member takes runs only once
+	// this is true.
+	Verified bool
 	// CatalogDigest is CatalogDigest of the project catalog this machine last
 	// synced; "" when it has synced none.
 	CatalogDigest   string
@@ -75,9 +81,11 @@ type Kind int
 const (
 	// Queue: no member can take the run now; it waits and is placed again.
 	Queue Kind = iota
-	// Run on Member, which is connected or already starting.
+	// Run on Member, which is connected and has its checkout.
 	Run
-	// Wake Member (suspended) and run on it once it is up.
+	// Wake Member (suspended). The run is NOT pinned to it: it waits, and a
+	// later placement puts it on the member once the member is connected and
+	// its checkout verified (wake, then place).
 	Wake
 )
 
@@ -113,11 +121,14 @@ type Decision struct {
 // Reason explains a Queue decision in one line, naming why each member was
 // passed over: what a waiting run and its trigger's event show.
 func (d Decision) Reason(poolName string) string {
-	if d.Kind != Queue {
+	switch d.Kind {
+	case Run:
 		return fmt.Sprintf("placed on %s of pool %s", d.Member.label(), poolName)
+	case Wake:
+		return fmt.Sprintf("%s%s (waking %s; the run is placed once it is up and its checkout is verified)", WaitingPrefix, poolName, d.Member.label())
 	}
 	if len(d.Skipped) == 0 {
-		return fmt.Sprintf("waiting for a machine in pool %s: it has no members (label machines to match its selector)", poolName)
+		return fmt.Sprintf("%s%s: it has no members (label machines to match its selector)", WaitingPrefix, poolName)
 	}
 	parts := make([]string, 0, len(d.Skipped))
 	for _, s := range d.Skipped {
@@ -127,7 +138,7 @@ func (d Decision) Reason(poolName string) string {
 		}
 		parts = append(parts, name+": "+s.Reason)
 	}
-	return fmt.Sprintf("waiting for a machine in pool %s (%s)", poolName, strings.Join(parts, "; "))
+	return fmt.Sprintf("%s%s (%s)", WaitingPrefix, poolName, strings.Join(parts, "; "))
 }
 
 // Reasons a member is passed over.
@@ -139,7 +150,12 @@ const (
 	ReasonFailed         = "failed to start"
 	ReasonRemoved        = "removed"
 	ReasonDisconnected   = "disconnected"
+	ReasonStarting       = "starting"
+	ReasonVerifying      = "connected; checking its checkout"
 )
+
+// WaitingPrefix starts every reason a run waits for a pool with.
+const WaitingPrefix = "waiting for a machine in pool "
 
 // Decide places one run on pool's members.
 //
@@ -148,9 +164,14 @@ const (
 //  1. A member is eligible when the project is installed on it, it has not
 //     failed or been removed, and its catalog equals the pool's expected
 //     catalog (ExpectedCatalog: majority, not newest).
-//  2. A connected eligible member with a free slot, fewest live runs first.
-//  3. Else a starting one, same order: the run's preflight waits for it.
-//  4. Else a suspended one: Wake.
+//  2. A connected eligible member with a free slot whose checkout was
+//     verified since it connected: Run, fewest live runs first.
+//  3. Else, if a member is on its way (starting, or connected and still
+//     verifying its checkout): Queue. The run waits for that member rather
+//     than waking another machine.
+//  4. Else a suspended one: Wake. The run waits and is never pinned to a
+//     member that is not up, because a member whose disk is the pod's own
+//     comes up empty (wake, then place).
 //  5. Else Queue.
 //
 // Ties break on name then id, so the same inputs always give the same answer.
@@ -159,7 +180,8 @@ func Decide(pool Pool, members []Member) Decision {
 	expected := ExpectedCatalog(ordered)
 	d := Decision{Kind: Queue, ExpectedCatalog: expected}
 
-	var connected, starting, suspended []Member
+	var connected, suspended []Member
+	coming := false
 	for _, m := range ordered {
 		if reason := ineligible(m, expected); reason != "" {
 			d.Skipped = append(d.Skipped, Skip{DaemonID: m.DaemonID, Name: m.Name, Reason: reason})
@@ -178,9 +200,15 @@ func Decide(pool Pool, members []Member) Decision {
 		}
 		switch m.Phase {
 		case PhaseConnected:
+			if !m.Verified {
+				coming = true
+				d.Skipped = append(d.Skipped, Skip{DaemonID: m.DaemonID, Name: m.Name, Reason: ReasonVerifying})
+				continue
+			}
 			connected = append(connected, m)
 		case PhaseStarting:
-			starting = append(starting, m)
+			coming = true
+			d.Skipped = append(d.Skipped, Skip{DaemonID: m.DaemonID, Name: m.Name, Reason: ReasonStarting})
 		case PhaseSuspended:
 			suspended = append(suspended, m)
 		default:
@@ -191,8 +219,8 @@ func Decide(pool Pool, members []Member) Decision {
 	switch {
 	case len(connected) > 0:
 		d.Kind, d.Member = Run, leastLoaded(connected)
-	case len(starting) > 0:
-		d.Kind, d.Member = Run, leastLoaded(starting)
+	case coming:
+		// A member is on its way up: wait for it rather than wake another.
 	case len(suspended) > 0:
 		d.Kind, d.Member = Wake, leastLoaded(suspended)
 	}
