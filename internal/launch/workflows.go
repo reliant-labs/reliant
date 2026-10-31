@@ -299,6 +299,7 @@ func (l *Launcher) buildWorkflowInputs(
 	// Everything downstream rejects strings.
 	if len(protoInputs) > 0 {
 		NormalizeModelInputs(initialData, protoInputs)
+		coerceSingleValuesToLists(ctx, workflowName, initialData, protoInputs)
 	}
 
 	logging.DebugContext(ctx, "[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
@@ -417,8 +418,22 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	}
 	if protoInputs := l.loadWorkflowInputs(ctx, chatScope(userID, chat, workflowName), workflowName); len(protoInputs) > 0 {
 		NormalizeModelInputs(update, protoInputs)
+		coerceSingleValuesToLists(ctx, workflowName, update, protoInputs)
 	}
 	return update, nil
+}
+
+// coerceSingleValuesToLists is the launch boundary's one reading of a single
+// value as a list (validation.CoerceSingleToList): `repos=acme/web` from
+// `reliant workflow run -i`, start_run or a hand-written client becomes
+// [acme/web] for a list-of-repositories input, instead of a refused start.
+// Each wrap is logged, so a caller sending the wrong shape is visible without
+// failing anyone's run over it.
+func coerceSingleValuesToLists(ctx context.Context, workflowName string, inputs map[string]interface{}, protoInputs map[string]*reliantv1.Input) {
+	for _, c := range validation.CoerceSingleToList(inputs, protoInputs, nil) {
+		logging.InfoContext(ctx, "Coerced a single workflow input value to a one-item list",
+			"workflow", workflowName, "input", c.Input, "item_type", c.Type)
+	}
 }
 
 // ValidateStateUpdate validates what a run would hold after update lands: the
@@ -550,6 +565,9 @@ func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID stri
 	if protoInputs != nil {
 		NormalizeModelInputs(filteredInputs, protoInputs)
 		NormalizeModelInputs(finalInputs, protoInputs)
+		// Admission accepts what the run will: the runtime wraps a single
+		// valid item for a list input too (validation.CoerceSingleToList).
+		validation.CoerceSingleToList(finalInputs, protoInputs, nil)
 	}
 
 	// Validate inputs against schema
