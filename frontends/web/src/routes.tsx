@@ -37,6 +37,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { PageVisitTracker } from './components/PageVisitTracker'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -263,7 +264,7 @@ function RootShell() {
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
-      navigate({ href: mobilePathFor(pathname), replace: true });
+      navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
   }, [pathname, search, navigate]);
 
@@ -275,6 +276,7 @@ function RootShell() {
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
       <ActiveOrgBinding />
+      <PageVisitTracker />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>

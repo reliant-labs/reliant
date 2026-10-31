@@ -4,31 +4,50 @@ name: CI
 # Every job is setup, then `task <name>`: what a check does lives once, in
 # Taskfile.yml and the scripts it runs, so CI and a laptop cannot disagree.
 #
-#   pull_request                      task ci:merge   the merge tier: what the
-#                                                     diff can affect, ~5 min
-#   push to main, schedule, dispatch  task release:gate  the whole suite,
-#                                                     recorded per sha
+# REVIEW FIRST (owner, 2026-10-30): no CI minutes on a head nobody has
+# reviewed. pr-review (control-plane docs/pr-pipeline.md) reads the diff, not
+# CI results, and a pull request is pushed about twice before it merges.
 #
-# The merge gate is the merge path: the merge queue (.fm-tools/merge_queue3.sh)
-# runs `scripts/merge-gate.sh` on the squash it lands and posts the required
-# `merge-gate` commit status. This workflow is a second signal on the same
-# commands, never a different opinion. The release gate here records its
-# verdict as a git note (refs/notes/release-gate), the same record a local
-# `task release:gate` writes, so `task release:tag` accepts a green from
-# either.
+#   pull_request                      nothing heavy: the review-marker notice
+#                                     and "CI result", green in about a minute,
+#                                     which is what lets GitHub enqueue the PR
+#                                     once pr-review passes it
+#   merge_group                       task ci:merge   the merge tier: what the
+#                                     diff can affect, -short, ~10 min, plus
+#                                     the path lanes; the run that decides
+#                                     the merge
+#   push to main, schedule, dispatch  task release:gate  the whole suite plus
+#                                     every lane, recorded per sha; never
+#                                     blocks a merge, gates every release
+#
+# A pull request labelled `ci:run` gets the merge tier and the lanes its paths
+# reach, read on the next push (see `pull_request:` for why not on `labeled`).
+#
+# A red main does not block merges: pipeline-health files a fix
+# (`pipeline:slo`), and `task release:tag` refuses a sha without a green
+# release-gate record, so it is fixed before the next release. The release
+# gate here records its verdict as a git note (refs/notes/release-gate), the
+# same record a local `task release:gate` writes, so `task release:tag`
+# accepts a green from either.
 #
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
-# control-plane contract. A pull request runs those its paths reach; main runs
-# all of them.
+# control-plane contract. The merge queue (and a `ci:run` pull request) runs
+# those its paths reach; main runs all of them. They stay in the queue because
+# the release-gate record does not include them.
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
 on:
+  # Default activity types only (opened, synchronize, reopened), NOT
+  # `labeled`: every pipeline label (merge:queue, review:passed, ...) would
+  # start a run, and a run on an unchanged head REPLACES that head's
+  # "CI result". `ci:run` is read on the next push (an empty commit will do).
   pull_request:
     branches: [main]
-  # GitHub's native merge queue: each queued PR is gated again, as the merge
-  # tier, over main plus the entries ahead of it. "CI result" is the required check.
+  # GitHub's native merge queue: each queued PR is gated, as the merge tier,
+  # over main plus the entries ahead of it. "CI result" is the required check,
+  # and this is the run of it that decides the merge.
   merge_group:
   push:
     branches: [main]
@@ -65,6 +84,8 @@ jobs:
   # merged onto, so HEAD^1..HEAD is exactly what merging brings in.
   lanes:
     name: Lanes
+    # Not on an unlabelled pull request (REVIEW FIRST): every lane needs it.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:run')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -114,11 +135,43 @@ jobs:
             *) task ci:lanes -- --full ;;
           esac | tee -a "$GITHUB_OUTPUT"
 
-  # ── The merge tier (pull requests) ────────────────────────────────────────
+  # ── Migration order (every event) ─────────────────────────────────────────
+  # A migration versioned at or below main's newest is never applied, and the
+  # migrator refuses to boot on it: every pod crash-loops. The merge gate runs
+  # this check, but a PR merged without the queue skips the merge gate, which
+  # is how #1666 landed 20261027140617 under prod's 20261029064544
+  # (reliant#1970). So it runs on EVERY event, an unlabelled PR included: a PR
+  # and a merge group against a freshly fetched origin/main, a push against the
+  # commit before it, which fails main's CI result (and so its release record)
+  # before a release can carry the file.
+  migration-order:
+    name: Migration order
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: New migrations are above main's newest
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            pull_request|merge_group) task ci:migration-order ;;
+            *)
+              if [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then base=${PUSH_BEFORE}
+              else base=$(git rev-parse HEAD^); fi
+              task ci:migration-order BASE="${base}" ;;
+          esac
+
+  # ── The merge tier (the merge queue; a ci:run pull request) ───────────────
   merge-gate:
     name: Merge gate
     needs: lanes
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run'))
     runs-on: ubuntu-latest
     # The slowest green run was 25 min (a 208-file proto change). A runner that
     # dies holds the job, and the merge queue's entry, until this fires.
@@ -161,17 +214,31 @@ jobs:
   # note pushed to origin, so `task release:tag` can cut a release from it. A
   # sha that already has a green record (a local run) passes at once. A
   # dispatch on a branch other than main runs it without publishing a record.
+  #
+  # PARALLEL PARTS. The gate's steps run as parts, one job each
+  # (scripts/release-gate.sh's header lists them), and `Release gate` below
+  # assembles their part records into the one record and publishes it. Run in
+  # one job, one step after another, the gate took 45-70 minutes (2026-10-30:
+  # test 1345-2112s, integration 591-897s, lint 365-549s, generate 201-396s),
+  # and every release waited on it. A missing part, or a shard of one, fails
+  # the assembly closed: no record is written.
   release-gate:
-    name: Release gate
+    name: Release gate (${{ matrix.label }})
     needs: lanes
     if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
-    permissions:
-      # refs/notes/release-gate: the record of this run.
-      contents: write
-    env:
-      RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
+    timeout-minutes: 90
+    strategy:
+      # Every part reports: one failure must not hide another part's.
+      fail-fast: false
+      matrix:
+        include:
+          - { label: "static", part: static, shard: "" }
+          - { label: "lint", part: lint, shard: "" }
+          - { label: "go 1/3", part: go, shard: "1/3" }
+          - { label: "go 2/3", part: go, shard: "2/3" }
+          - { label: "go 3/3", part: go, shard: "3/3" }
+          - { label: "web", part: web, shard: "" }
     steps:
       - uses: actions/checkout@v6
         with:
@@ -187,32 +254,106 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: task release:gate
-        run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- "${GITHUB_SHA}"
+      # The Temporal dev-server tests (internal/triggers, workflow/runtime,
+      # e2e/stories, ...) use a `temporal` on PATH, and otherwise each test
+      # process downloads the SDK's pinned CLI into one shared /tmp path on
+      # first use. Several packages doing that at once on one runner failed
+      # 16 tests with "start Temporal dev server: unexpected EOF" (release
+      # gate go 3/3, 2026-10-30). One cached, retried install per runner.
+      - name: Temporal CLI (cached)
+        if: ${{ matrix.part == 'go' || matrix.part == 'web' }}
+        id: temporal-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/temporal-cli
+          key: temporal-cli-${{ runner.os }}-${{ runner.arch }}-1.9.1
+      - name: Install the Temporal CLI on PATH
+        if: ${{ matrix.part == 'go' || matrix.part == 'web' }}
+        env:
+          # The CLI go.temporal.io/sdk v1.50.0's testsuite downloads itself.
+          TEMPORAL_CLI_URL: https://temporal.download/assets/temporalio/cli/releases/download/v1.9.1/temporal_cli_1.9.1_linux_amd64.tar.gz
+        run: |
+          set -euo pipefail
+          dir="$HOME/.local/temporal-cli"
+          if [ ! -x "$dir/temporal" ]; then
+            mkdir -p "$dir"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$TEMPORAL_CLI_URL" | tar -xz -C "$dir" temporal
+          fi
+          "$dir/temporal" --version
+          echo "$dir" >> "$GITHUB_PATH"
+      - name: task release:gate (part ${{ matrix.label }})
+        env:
+          PART: ${{ matrix.part }}
+          SHARD: ${{ matrix.shard }}
+        run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- --part "${PART}" ${SHARD:+--shard "${SHARD}"} "${GITHUB_SHA}"
       - name: task ci:repo-checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.part == 'static' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
-      - name: Summary
+      - name: Locate the part record and logs
         if: ${{ !cancelled() }}
-        run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-      - name: Upload the gate's step logs
-        if: failure()
-        run: echo "logs=$(git rev-parse --git-common-dir)/release-gate" >> "$GITHUB_ENV"
+        run: |
+          echo "records=$(git rev-parse --path-format=absolute --git-common-dir)/release-gate" >> "$GITHUB_ENV"
+          echo "artifact=$(echo "${{ matrix.label }}" | tr ' /' '--')" >> "$GITHUB_ENV"
+      # The part record, pass or fail: `Release gate` assembles a red record
+      # from a red part, as the single job recorded a red run.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-part-${{ env.artifact }}
+          path: ${{ env.records }}/${{ github.sha }}.part-*.json
+          retention-days: 7
+          if-no-files-found: ignore
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gate-logs
-          path: ${{ env.logs }}
+          name: release-gate-logs-${{ env.artifact }}
+          path: ${{ env.records }}
           retention-days: 7
           if-no-files-found: ignore
-      # Saves: main only, after the run, whatever it found.
+      # Saves: main only, after the run, whatever it found. One part saves:
+      # the key is the archive's, and a second save would only race it.
       - name: Save embedded Postgres binaries (main only)
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && matrix.label == 'go 1/3' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/forge/embedded-postgres
           key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.embedded-pg }}
         continue-on-error: true
+
+  # The record: every part's part record, assembled into this commit's
+  # release-gate record and published as its git note (on main). Keeps the
+  # name `Release gate`, the verdict gate-health and main-health key on.
+  release-record:
+    name: Release gate
+    needs: [lanes, release-gate]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # refs/notes/release-gate: the record of this run.
+      contents: write
+    env:
+      RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Identify the record's author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-gate-part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/parts
+      - name: Assemble the record
+        run: |
+          shopt -s nullglob
+          scripts/release-gate.sh assemble "${GITHUB_SHA}" "${RUNNER_TEMP}"/parts/*.json
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
   # ── The compile cache every Go job restores (main only) ───────────────────
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of
@@ -248,27 +389,41 @@ jobs:
 
   # ── The lanes no gate covers ──────────────────────────────────────────────
 
-  # proto-vendor/controlplane/ must be exactly what control-plane main exports.
+  # proto-vendor/controlplane/ must be exactly what the control-plane commit
+  # its SOURCE declares exports, and that commit must be on control-plane main.
+  # It judges the change under review against its OWN declaration: it used to
+  # compare against control-plane main, so every control-plane proto merge
+  # turned every PR reaching this lane red until someone re-vendored. Lag behind
+  # control-plane main is cp-contract-drift.yml's report, never this gate.
   # control-plane is private, so this reads it with CONTROL_PLANE_DEPLOY_KEY (a
-  # read-only deploy key) and FAILS without one: a drift gate that skips cannot
-  # be told from one that passes. Fork PRs get no secrets; control-plane's own
-  # gate judges the tree once it reaches main.
+  # read-only deploy key) and FAILS without one: a gate that skips cannot be
+  # told from one that passes. Fork PRs get no secrets.
   cp-contract:
-    name: Vendored control-plane contract matches control-plane main
+    name: Vendored control-plane contract is its SOURCE commit's export
     needs: lanes
     if: needs.lanes.outputs.cp_contract == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - name: Check out control-plane main (private, read-only)
+      - name: The control-plane commit proto-vendor/controlplane/SOURCE declares
+        id: source
+        run: |
+          set -euo pipefail
+          sha=$(sed -n 's/^control-plane \([0-9a-f]\{40\}\)$/\1/p' proto-vendor/controlplane/SOURCE 2>/dev/null | head -1)
+          [ -n "${sha}" ] || { echo "::error::proto-vendor/controlplane/SOURCE names no control-plane commit; re-vendor with task contract:controlplane:sync"; exit 1; }
+          echo "sha=${sha}" | tee -a "$GITHUB_OUTPUT"
+      # At SOURCE, with main's history (commits and trees only: blob:none) so
+      # the check can prove SOURCE is on control-plane main.
+      - name: Check out control-plane at SOURCE (private, read-only)
         uses: actions/checkout@v6
         with:
           repository: reliant-labs/control-plane
-          ref: main
+          ref: ${{ steps.source.outputs.sha }}
           path: control-plane-sibling
           ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
-          fetch-depth: 1
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
@@ -375,8 +530,8 @@ jobs:
   # (scripts/ci-review-marker.sh; control-plane docs/pr-pipeline.md).
   # pr-disarm reacts to a push only after the webhook, so a head pushed after
   # a pass, with its checks already green, could otherwise ride the armed
-  # auto-merge in. On a PR it only reports: the review comes after CI, and a
-  # red here would keep the PR out of the queue it guards.
+  # auto-merge in. On a PR it only reports: the review comes after this run,
+  # and a red here would keep the PR out of the queue it guards.
   review-marker:
     name: Review marker
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -404,16 +559,19 @@ jobs:
           fi
 
   # ── One verdict ───────────────────────────────────────────────────────────
-  # Green only when every job that ran passed. On a PR a lane the change does
-  # not reach is skipped, which is fine, but the merge gate must have run. Off
-  # a PR every lane runs (scripts/ci-lanes.sh --full), so a skip there is a
-  # broken `if:`, never a pass: everything but the merge gate and the review
-  # marker (merge tier only), go-cache (only a push runs it) and cp-contract
-  # (only a change to the vendored contract does) must have succeeded. In the
-  # merge queue the review marker must have passed.
+  # Green only when every job that ran passed. On an unlabelled PR only the
+  # review marker runs (REVIEW FIRST), so this is green within a minute and
+  # GitHub can enqueue the PR once pr-review passes it. In the merge queue and
+  # on a ci:run PR a lane the change does not reach is skipped, which is fine,
+  # but the merge gate must have run; in the queue the review marker must have
+  # passed too. Off a PR every lane runs (scripts/ci-lanes.sh --full), so a
+  # skip there is a broken `if:`, never a pass: everything but the merge gate
+  # and the review marker (merge tier only), go-cache (only a push runs it)
+  # and cp-contract (only a change to the vendored contract does) must have
+  # succeeded.
   ci-result:
     name: CI result
-    needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
+    needs: [lanes, migration-order, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -422,11 +580,18 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
+          CI_RUN: ${{ contains(github.event.pull_request.labels.*.name, 'ci:run') }}
         run: |
           set -euo pipefail
           bad=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
+          if [ "${EVENT_NAME}" = pull_request ] && [ "${CI_RUN}" != true ]; then
+            # REVIEW FIRST: the merge tier runs in the merge queue.
+            if [ -n "${bad}" ]; then echo "::error::jobs that did not pass:"; echo "${bad}"; exit 1; fi
+            echo "review first: the merge tier runs in the merge queue (label ci:run and push to run it here)"
+            exit 0
+          fi
           merge_tier=$([ "${EVENT_NAME}" = pull_request ] || [ "${EVENT_NAME}" = merge_group ] && echo true || echo false)
-          gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-gate)
+          gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-record)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
           if [ "${EVENT_NAME}" = merge_group ] && [ "$(jq -r '."review-marker".result' <<< "${RESULTS}")" != success ]; then

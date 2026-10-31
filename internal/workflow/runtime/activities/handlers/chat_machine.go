@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -16,5 +20,51 @@ func chatDaemonSelector(chat *db.Chat, explicit *types.DaemonSelector) *types.Da
 	if explicit != nil || chat == nil || chat.NoMachine || chat.ActiveDaemonID == nil || *chat.ActiveDaemonID == "" {
 		return explicit
 	}
-	return &types.DaemonSelector{ID: *chat.ActiveDaemonID}
+	return &types.DaemonSelector{ID: *chat.ActiveDaemonID, Session: true}
+}
+
+// configMachine is the machine whose synced project config (skills, memory,
+// MCP servers) a call routed by selector reads: the daemon tool dispatch sends
+// that call to (toolDaemonSelector: an explicit node or workflow selector, the
+// chat pin, the worktree's owner). An id selector names it outright; a selector
+// by name, type or labels, or none at all, is resolved through router the way
+// dispatch resolves it, so a workflow that picks machine B by name reads B's
+// skills rather than the project's union. A run that resolves no machine (no
+// router, no machine connected, a no-machine run) reads the project's record,
+// the union: its commands reach no machine either.
+func configMachine(ctx context.Context, router toolexec.DaemonRouter, userID string, selector *toolexec.DaemonSelector) string {
+	if selector != nil && selector.ID != "" {
+		return selector.ID
+	}
+	if router == nil || userID == "" {
+		return ""
+	}
+	id, err := toolexec.ResolveDaemonIDForSelector(ctx, router, userID, selector)
+	if err != nil {
+		logging.DebugContext(ctx, "[config] no machine resolved for the call's selector; reading the project's config", "error", err)
+		return ""
+	}
+	return id
+}
+
+// chatWorktreeReader reads the chat's workspace for runMachineSelector.
+type chatWorktreeReader interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+}
+
+// runMachineSelector is the machine a run's machine steps reach, by the rule
+// tool execution applies: the run's selector, else the chat's pin, except
+// that a pin (a session selector) naming another machine than the chat's
+// branch workspace's owner yields to the owner (toolDaemonSelector). The
+// preflight and resume wake check and wake this machine, so they wake the one
+// the run's tools and commands will use. A worktree that cannot be read
+// leaves the selector as it is: the wake is best effort and never fails a run.
+func runMachineSelector(ctx context.Context, worktrees chatWorktreeReader, chat *db.Chat, explicit *types.DaemonSelector) *toolexec.DaemonSelector {
+	owner := ""
+	if chat != nil && chat.WorktreeID != nil && *chat.WorktreeID != "" {
+		if wt, err := worktrees.GetWorktree(ctx, *chat.WorktreeID); err == nil && wt != nil {
+			owner = ptrValue(wt.DaemonID)
+		}
+	}
+	return toolDaemonSelector(owner, chatDaemonSelector(chat, explicit))
 }

@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: check_run.create
+display_name: Create check run
+summary: Report a check (queued, running or finished) on a commit, as the Reliant GitHub App.
+description: >-
+  Create a check run on one commit, shown in a pull request's Checks tab when
+  the commit is its head. A branch ruleset can require it by name, from this
+  App. GitHub lets only an App write a check run, so the automation must act
+  as the Reliant App (its acting identity). Acting as its owner, GitHub
+  answers 403. status is queued (the default), in_progress or completed.
+  Giving a conclusion completes the run. A required check passes on success,
+  neutral or skipped, so report a review that did not pass as failure.
+  output.summary is the markdown in the check's details. Returns the check
+  run's id: pass it to check_run.update to move the same run on.
+keywords: [check, check run, status, ci, required check, pull request]
+placement: server
+mutates: true
+# Workflow-only: what the pipeline reports about a head is the pipeline's
+# record, not something an agent's tool call should be able to post.
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, name, head_sha]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    name: { $ref: ../schemas/check_run_name.yaml }
+    head_sha: { $ref: ../schemas/check_run_sha.yaml }
+    status: { $ref: ../schemas/check_run_status.yaml }
+    conclusion: { $ref: ../schemas/check_run_conclusion.yaml }
+    details_url: { $ref: ../schemas/check_run_details_url.yaml }
+    external_id: { $ref: ../schemas/check_run_external_id.yaml }
+    started_at: { $ref: ../schemas/check_run_started_at.yaml }
+    completed_at: { $ref: ../schemas/check_run_completed_at.yaml }
+    output: { $ref: ../schemas/check_run_output.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/check-runs
+  body_expr: >-
+    {"name": params.name,
+     "head_sha": params.head_sha,
+     ?"status": params.?status,
+     ?"conclusion": params.?conclusion,
+     ?"details_url": params.?details_url,
+     ?"external_id": params.?external_id,
+     ?"started_at": params.?started_at,
+     ?"completed_at": params.?completed_at,
+     ?"output": params.?output}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: { $ref: ../schemas/check_run_select.yaml }
+  schema: { $ref: ../schemas/check_run_output_schema.yaml }

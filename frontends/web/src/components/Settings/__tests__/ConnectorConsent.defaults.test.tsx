@@ -320,10 +320,11 @@ describe("creating a machine from the consent flow", () => {
 
     await waitFor(() => expect(createDaemon).toHaveBeenCalled());
 
-    // Managed, because the permissive defaults are only safe in a sandbox.
+    // Managed, because the permissive defaults are only safe in a sandbox;
+    // M (8), because 1 is a retired, reserved size number.
     expect(createDaemon.mock.calls[0][0]).toMatchObject({
       daemonType: 1,
-      size: 1,
+      size: 8,
     });
 
     // Selected automatically, so the user does not have to notice it appear.

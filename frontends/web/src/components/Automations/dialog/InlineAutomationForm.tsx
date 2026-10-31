@@ -41,7 +41,7 @@ import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../../workflow/run/runFormStyles";
 import { countRunInputs, type RunWorkflowValue } from "../../workflow/run/runWorkflowValues";
-import { ActingIdentityField } from "../ActingIdentityField";
+import { ActingIdentityField, defaultActingIdentity } from "../ActingIdentityField";
 import { buildDaemonChoices, NO_MACHINE, noMachineBlockerFor } from "../daemonChoices";
 import { scheduleFromForm, serverErrorField, validateScheduleForm } from "../scheduleForm";
 import { validateTimezone } from "../timezone";
@@ -138,12 +138,13 @@ export function InlineAutomationForm({
   const whenTouched = useRef(false);
   const [connectionId, setConnectionId] = useState(trigger?.connectionId ?? "");
   const [notify, setNotify] = useState(trigger?.notifyOnComplete ?? initialPrefill?.notifyOnComplete ?? false);
-  // Keep a stored or explicit actor; only an untouched new GitHub source defaults to the bot.
+  // Keep a stored or explicit actor; an untouched new automation defaults to the bot.
   const [chosenIdentity, setActingIdentity] = useState<ActingIdentityKey | undefined>(trigger?.actingIdentity);
-  const actingIdentity = chosenIdentity ?? (when.kind === "integration" && when.event && integrationOf(when.event)?.integration === "github" ? "app" : "owner");
+  const actingIdentity = chosenIdentity ?? defaultActingIdentity(when.kind === "integration" && !!when.event && integrationOf(when.event)?.integration === "github");
   const [assumptions, setAssumptions] = useState(initialPrefill?.assumptions ?? []);
   const [inputsOpen, setInputsOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || trigger?.actingIdentity === "app");
+  // Open when a stored identity differs from what a new automation would get.
+  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || (!!trigger?.actingIdentity && trigger.actingIdentity !== defaultActingIdentity(false)));
   const [serverErrors, setErrors] = useState<FieldErrors>({});
   const [blurred, setBlurred] = useState<Partial<Record<keyof FieldErrors, boolean>>>({});
   const blurField = (key: keyof FieldErrors) => setBlurred((prev) => ({ ...prev, [key]: true }));
@@ -376,7 +377,7 @@ export function InlineAutomationForm({
   }
 
   const title = isEdit ? "Edit automation" : "New automation";
-  const showWritesAsInAdvanced = when.kind !== "integration" && (!!workflow || actingIdentity === "app");
+  const showWritesAsInAdvanced = when.kind !== "integration";
   const primaryLabel = isEdit ? "Save changes" : when.kind === "webhook" ? "Create and show URL" : "Create";
 
   return (
@@ -665,7 +666,7 @@ export function InlineAutomationForm({
               className="forge-ui"
             />
           </div>
-          <p className={hintClass}>Failures always notify you, once per streak.</p>
+          <p className={hintClass}>A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.</p>
         </div>
 
         {(when.kind === "schedule" || showWritesAsInAdvanced) && (

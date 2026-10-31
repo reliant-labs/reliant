@@ -259,15 +259,15 @@ interface DimensionPresentation {
 const PRESENTATION: Record<string, DimensionPresentation> = {
   infra_cpu: {
     id: "cpu",
-    label: "CPU",
+    label: "CPU requested",
     meterDescription:
-      "Metered from requested CPU × running replicas. Scaling to zero stops this meter.",
+      "Billed exactly as your pods request: CPU requests × running replicas, nothing added. Scaling to zero stops this meter.",
   },
   infra_memory: {
     id: "memory",
-    label: "Memory",
+    label: "Memory requested",
     meterDescription:
-      "Metered from requested memory × running replicas. Scaling to zero stops this meter.",
+      "Billed exactly as your pods request: memory requests × running replicas, nothing added. Scaling to zero stops this meter.",
   },
   infra_storage: {
     id: "storage",

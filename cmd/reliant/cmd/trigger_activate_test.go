@@ -5,8 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,52 +36,14 @@ func TestActivateResolvesTheAppsChoices(t *testing.T) {
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, req.GetActingIdentity())
 	assert.Equal(t, "PR pipeline · pr-review", req.GetNamePrefix())
 
-	def := f.triggerDefinition("queued", "github", c)
-	assert.Equal(t, "PR pipeline · pr-review · queued", def.GetName())
-	assert.Equal(t, "queued", def.GetWorkflowTrigger())
-	assert.Equal(t, "conn-1", def.GetConnectionId())
-}
+	assert.Empty(t, req.GetTriggers(), "no --trigger enables every declared trigger")
 
-type fakeWorkflowGetter struct{ wf *reliantv1.Workflow }
-
-func (g fakeWorkflowGetter) GetWorkflow(
-	_ context.Context,
-	_ *connect.Request[reliantv1.GetWorkflowRequest],
-) (*connect.Response[reliantv1.GetWorkflowResponse], error) {
-	return connect.NewResponse(&reliantv1.GetWorkflowResponse{Workflow: g.wf}), nil
-}
-
-func integrationTrigger(name, integration string) *reliantv1.WorkflowTrigger {
-	return &reliantv1.WorkflowTrigger{Name: name, Source: &reliantv1.WorkflowTrigger_Integration{
-		Integration: &reliantv1.IntegrationSource{Integration: integration}}}
-}
-
-// A per-trigger activation routes each --connection to the triggers of ITS
-// integration, as EnableWorkflow does, and never drops one silently.
-func TestActivatePerTriggerRoutesConnectionsByIntegration(t *testing.T) {
-	wf := &reliantv1.Workflow{Triggers: []*reliantv1.WorkflowTrigger{
-		integrationTrigger("pr", "github"), integrationTrigger("msg", "slack"), integrationTrigger("cron", ""),
-	}}
-	f := &activateFlags{workflow: "w", triggers: []string{"pr", "msg"}, workflowGetter: fakeWorkflowGetter{wf}}
-	c := &activateChoices{projectID: "p", connections: map[string]string{"github": "gh-1", "slack": "sl-1"}}
-	integrations, err := f.declaredIntegrations(context.Background(), nil, c)
-	require.NoError(t, err)
-	assert.Equal(t, "gh-1", f.triggerDefinition("pr", integrations["pr"], c).GetConnectionId())
-	assert.Equal(t, "sl-1", f.triggerDefinition("msg", integrations["msg"], c).GetConnectionId())
-
-	f.triggers = []string{"pr"}
-	_, err = f.declaredIntegrations(context.Background(), nil, c)
-	assert.ErrorContains(t, err, "--connection slack=… matches none of the named triggers")
-
-	f.triggers = []string{"nope"}
-	_, err = f.declaredIntegrations(context.Background(), nil, c)
-	assert.ErrorContains(t, err, `declares no trigger "nope"`)
-
-	f.triggers = []string{"cron"}
-	none, err := f.declaredIntegrations(context.Background(), nil, &activateChoices{projectID: "p"})
-	require.NoError(t, err)
-	assert.Nil(t, none, "no --connection, nothing to route or fetch")
-	assert.Nil(t, f.triggerDefinition("cron", "", c).ConnectionId)
+	// --trigger narrows the same EnableWorkflow call, so an existing
+	// activation is updated in place instead of created a second time.
+	f.triggers = []string{"queued", "pushed"}
+	req = f.enableRequest(c)
+	assert.Equal(t, []string{"queued", "pushed"}, req.GetTriggers())
+	assert.Equal(t, map[string]string{"github": "conn-1"}, req.GetConnectionIds(), "connections route by integration server-side")
 }
 
 func TestActivateNeedsExactlyOnePlaceToRun(t *testing.T) {

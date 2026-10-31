@@ -148,6 +148,38 @@ func TestHandleGitClone_RedeliveryAfterSuccessIsIdempotent(t *testing.T) {
 	}
 }
 
+// A clone that names no branch checks out the remote's default branch (its
+// HEAD), not a guessed "main": restoring a pool member's nested repositories
+// clones them without a recorded branch.
+func TestHandleGitClone_NoBranchClonesTheRemoteDefault(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts on disk")
+	t.Parallel()
+	origin := newTestOriginRepo(t)
+	for _, args := range [][]string{
+		{"--git-dir", origin, "branch", "trunk", "main"},
+		{"--git-dir", origin, "symbolic-ref", "HEAD", "refs/heads/trunk"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	dest := filepath.Join(t.TempDir(), "dest")
+	payload, err := json.Marshal(gitCloneRequest{Repo: origin, Path: dest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handleGitClone(context.Background(), payload); err != nil {
+		t.Fatalf("handleGitClone: %v", err)
+	}
+	out, err := exec.Command("git", "-C", dest, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "trunk" {
+		t.Fatalf("checked out %q, want the remote's default trunk", got)
+	}
+}
+
 // A genuine conflict — a non-git, non-empty directory already occupying the
 // clone destination — must still fail loudly rather than being silently
 // treated as an already-completed clone.

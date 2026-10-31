@@ -66,6 +66,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Counts is a preview of what Purge would delete. Headline aggregates only:
@@ -251,6 +253,11 @@ var purgeSteps = []step{
 	{"settings", `DELETE FROM settings WHERE user_id = $1`},
 	{"attachments", `DELETE FROM attachments WHERE user_id = $1`},
 
+	// The LLM usage ledger and its daily rollup: counts keyed by the user. Both
+	// go with the account; the privacy page says so.
+	{"llm_call_usage", `DELETE FROM llm_call_usage WHERE user_id = $1`},
+	{"llm_call_usage_daily", `DELETE FROM llm_call_usage_daily WHERE user_id = $1`},
+
 	// --- Depth 6: credentials, deleted last. ---
 	//
 	// Deliberately the final step. These are live third-party OAuth refresh
@@ -297,6 +304,19 @@ func Purge(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 		return 0, fmt.Errorf("accountpurge: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }() // no-op once committed
+
+	// Fence the LLM usage ledger before deleting anything. A model call already
+	// in flight finishes after the account is gone and writes its usage row; the
+	// ledger takes this same lock (shared) per write and refuses a fenced user, so
+	// a write either commits before the lock is granted and is deleted by the
+	// steps below, or waits for this transaction and is refused. Neither lock nor fence counts toward the deleted total.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
+		return 0, fmt.Errorf("accountpurge: lock llm usage: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_usage_purged_users (user_id) VALUES ($1)
+		ON CONFLICT (user_id) DO UPDATE SET purged_at = now()`, userID); err != nil {
+		return 0, fmt.Errorf("accountpurge: fence llm usage: %w", err)
+	}
 
 	var total int64
 	for _, s := range purgeSteps {

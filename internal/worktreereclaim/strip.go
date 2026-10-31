@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	// maxStripWalk bounds how many ignored entries one checkout's strip
-	// visits looking for regenerable paths. It only ever stops early.
+	// maxStripWalk bounds how many ignored entries one checkout's target
+	// search visits, and how many children one directory may have in an
+	// inventory. It only ever stops early.
 	maxStripWalk = 50_000
 	// maxStrippedNames bounds the paths a result names; the bytes count all.
 	maxStrippedNames = 20
@@ -21,12 +22,11 @@ const (
 	shedMinBudget = 30 * time.Second
 )
 
-// shedsFor reports whether an archived worktree held for this reason still
-// gets its regenerable bulk deleted. These holds keep the directory for the
-// work in it, which shedding never touches. Every other hold is about whose
-// the directory is, or whether it can be inspected at all (unmanaged,
-// unverified, in use, quarantined), or the user chose to keep it (kept): no
-// file in it is touched.
+// shedsFor reports whether an archived worktree held for this reason gets its
+// regenerable output shed. These holds keep the directory for the work in it,
+// which shedding never touches. Every other hold is about whose the directory
+// is, or whether it can be inspected at all (unmanaged, unverified, in use,
+// quarantined), or the user chose to keep it (kept): no file in it is touched.
 func shedsFor(reason HeldReason) bool {
 	switch reason {
 	case ReasonDirty, ReasonUnpushed, ReasonUnreachable, ReasonData, ReasonOutsideFiles, ReasonNestedRepo:
@@ -35,49 +35,51 @@ func shedsFor(reason HeldReason) bool {
 	return false
 }
 
-// shed deletes the regenerable paths of an archived worktree that is being
-// kept, and records them on res. A regenerable path is one git ignores AND the
-// allow-list says a build or tool recreates (rebuildablePath): node_modules,
-// build output, forge and tool caches, the checkout's tmp/. Tracked files,
-// untracked files that are not ignored, and ignored files not on the
-// allow-list are never touched, and neither is any path holding a git
-// repository other than a tool's clone. Unarchiving keeps working; the
-// workspace just needs its install or generate step run again.
+// shedRegenerable deletes the regenerable output of a worktree that is kept
+// for its work, and records it on res: the paths git ignores AND the
+// allow-list says an install, build or tool recreates (rebuildablePath:
+// node_modules, .next, dist, build and tool caches, the checkout's tmp/).
+// Tracked files, untracked files git does not ignore, and ignored files off
+// the allow-list are never touched. The worktree keeps working; its install
+// or build step puts the output back.
 //
-// It runs only on the automatic path, for a worktree that is idle, not in use
-// and not kept by the user's "Keep everything" setting, and only inside
-// checkouts this row's lock proves are its own.
-func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) {
-	if res == nil || res.Outcome != OutcomeHeld || !shedsFor(res.Reason) || w.KeepFiles || w.State != StateArchived || w.Remove || sc.Truncated {
+// The server asks for it (Worktree.ShedAfterSeconds) for a live row no chat
+// is running in, and for an archived row held for its work. It runs only when
+// every checkout is this row's (its lock says so), nothing in the worktree
+// has changed for quiet, and no process uses it; and each target is removed
+// through the retirement inventory (inspectRegenerableTree): descriptor-
+// anchored, never following a symlink or crossing a mount, holding on a
+// protected name (.env, *.sqlite, data, secrets), a nested repository or any
+// change since it was inspected.
+func (r *Reclaimer) shedRegenerable(ctx context.Context, w Worktree, quiet time.Duration, res *Result) {
+	if res == nil || quiet <= 0 || w.KeepFiles || w.Remove || w.Retire != "" || r.ProcessUse == nil {
 		return
 	}
 	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < shedMinBudget {
 		return // the next pass sheds it
 	}
-	checkouts := ownCheckouts(ctx, w, sc)
+	checkouts := ownedCheckouts(ctx, w)
 	if len(checkouts) == 0 {
 		return
 	}
-	if r.IdleFloor > 0 {
-		last, err := idleSince(ctx, w.Path, checkouts)
-		if err != nil || r.now().Sub(last) < r.IdleFloor {
-			return
-		}
+	last, err := idleSince(ctx, w.Path, checkouts)
+	if err != nil || r.now().Sub(last) < quiet {
+		return
 	}
-	if hold := r.inUse(ctx, w, false); hold != nil {
+	if r.inUse(ctx, w, true) != nil || r.ProcessUse(ctx, []string{w.Path}) != nil {
 		return
 	}
 	for _, c := range checkouts {
-		for _, rel := range regenerableTargets(ctx, c, sc.Repos) {
+		for _, rel := range regenerableTargets(ctx, c) {
 			if ctx.Err() != nil {
-				break
+				return
 			}
-			full := filepath.Join(c, filepath.FromSlash(rel))
-			size, _ := DirSize(ctx, full)
-			if err := os.RemoveAll(full); err != nil {
+			full := filepath.Join(c, filepath.FromSlash(strings.TrimSuffix(rel, "/")))
+			freed, ok := r.shedTree(ctx, full, quiet)
+			if !ok {
 				continue
 			}
-			res.StrippedBytes += size
+			res.StrippedBytes += freed
 			if len(res.Stripped) < maxStrippedNames {
 				res.Stripped = append(res.Stripped, strings.TrimPrefix(relTo(w.Path, c)+"/"+strings.TrimSuffix(rel, "/"), "/"))
 			}
@@ -90,29 +92,68 @@ func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) 
 	}
 }
 
-// ownCheckouts lists the linked, registered checkouts in the scan that this
-// row's reliant lock (active, archived or restored) proves are its own.
-func ownCheckouts(ctx context.Context, w Worktree, sc scan) []string {
+// shedHeld sheds an archived worktree that is held for the work in it
+// (shedsFor), when the server asked for it.
+func (r *Reclaimer) shedHeld(ctx context.Context, w Worktree, hold *Result) {
+	if hold == nil || hold.Outcome != OutcomeHeld || !shedsFor(hold.Reason) || w.State != StateArchived {
+		return
+	}
+	r.shedRegenerable(ctx, w, time.Duration(w.ShedAfterSeconds)*time.Second, hold)
+}
+
+// shedTree removes one regenerable directory (or file) if nothing in it has
+// changed for quiet and no process uses it, and returns the bytes it held.
+func (r *Reclaimer) shedTree(ctx context.Context, full string, quiet time.Duration) (int64, bool) {
+	info, err := os.Lstat(full)
+	if err != nil {
+		return 0, false
+	}
+	if !info.IsDir() {
+		// A single regenerable file (a *.tsbuildinfo): too small to be worth
+		// a descriptor-anchored removal of its own.
+		return 0, false
+	}
+	tree, err := inspectRegenerableTree(ctx, full)
+	if err != nil {
+		return 0, false
+	}
+	defer tree.close()
+	if r.now().Sub(tree.newest) < quiet {
+		return 0, false
+	}
+	if r.ProcessUse(ctx, []string{full}) != nil {
+		return 0, false
+	}
+	if err := tree.remove(ctx, func() error { return ctx.Err() }); err != nil {
+		return 0, false
+	}
+	return tree.bytes, true
+}
+
+// ownedCheckouts is the described checkouts of w that exist, are registered
+// linked worktrees, and carry this row's reliant lock (active, archived or
+// restored). Shedding touches nothing it cannot prove is the row's own.
+func ownedCheckouts(ctx context.Context, w Worktree) []string {
 	var out []string
-	for _, repo := range sc.Repos {
-		if !isLinkedWorktree(repo) {
+	for _, c := range shallowCheckouts(w.Path, w.Checkouts) {
+		if !isLinkedWorktree(c) {
 			continue
 		}
-		info, err := inspectLock(ctx, repo)
+		info, err := inspectLock(ctx, c)
 		if err != nil || !info.Registered || !info.Locked {
 			continue
 		}
 		if p, ok := parseLock(info.Reason); ok && p.ID == w.ID {
-			out = append(out, repo)
+			out = append(out, c)
 		}
 	}
 	return out
 }
 
 // regenerableTargets lists the paths under checkout, relative to it, that git
-// ignores and rebuildablePath accepts, outermost first, skipping any that is,
-// holds or sits in a repository of repos other than checkout itself.
-func regenerableTargets(ctx context.Context, checkout string, repos []string) []string {
+// ignores and rebuildablePath accepts, outermost first. A nested repository
+// inside one holds that target (the inventory refuses a .git anywhere in it).
+func regenerableTargets(ctx context.Context, checkout string) []string {
 	out, err := git(ctx, checkout, nil, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
 	if err != nil {
 		return nil
@@ -124,19 +165,12 @@ func regenerableTargets(ctx context.Context, checkout string, repos []string) []
 			collectRegenerable(checkout, e, &targets, &budget)
 		}
 	}
-	var safe []string
-	for _, t := range targets {
-		full := filepath.Join(checkout, filepath.FromSlash(t))
-		if !holdsRepo(full, checkout, repos) {
-			safe = append(safe, t)
-		}
-	}
-	return safe
+	return targets
 }
 
-// collectRegenerable walks one ignored path the way dataWalk.visit does,
-// but collects the regenerable ones: a regenerable path is taken whole, and
-// any other directory is judged by its contents.
+// collectRegenerable walks one ignored path the way dataWalk.visit does, but
+// collects the regenerable ones: a regenerable path is taken whole, and any
+// other directory is judged by its contents.
 func collectRegenerable(checkout, rel string, out *[]string, budget *int) {
 	if *budget <= 0 {
 		return
@@ -162,19 +196,4 @@ func collectRegenerable(checkout, rel string, out *[]string, budget *int) {
 		}
 		collectRegenerable(checkout, name, out, budget)
 	}
-}
-
-// holdsRepo reports whether path is, contains or sits inside a repository
-// nested in checkout (a tool's clone is not one, see toolClone): deleting it
-// could delete history.
-func holdsRepo(path, checkout string, repos []string) bool {
-	for _, repo := range repos {
-		if !within(checkout, repo) {
-			continue
-		}
-		if samePath(repo, path) || within(path, repo) || within(repo, path) {
-			return true
-		}
-	}
-	return false
 }

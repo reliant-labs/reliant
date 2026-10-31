@@ -11,6 +11,7 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
 vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -194,6 +195,9 @@ describe("Sidebar selected chat scroll", () => {
       worktreeName: "Archived workspace",
       projectId: "project-1",
     });
+    // One project's archive groups by workspace (across projects it groups
+    // by project: Sidebar.projectClarity.test.tsx).
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -216,6 +220,7 @@ describe("Sidebar selected chat scroll", () => {
     // The group expands and the list must NOT snap back to the active tab.
     expect(screen.getByText("Archived chat")).toBeInTheDocument();
     expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
   });
 
   it("closes the list menu after choosing an option, and on Escape", () => {

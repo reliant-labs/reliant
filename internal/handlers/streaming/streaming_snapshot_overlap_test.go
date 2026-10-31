@@ -33,7 +33,12 @@ func (r *headsGateRepo) ListContentBlocksForMessages(ctx context.Context, ids []
 func (r *headsGateRepo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error) {
 	select {
 	case <-r.blocksAsked:
-	case <-time.After(2 * time.Second):
+	// The deadline only bounds how long a regression takes to report: a
+	// snapshot that reads the blocks after the heads never asks for them
+	// while this read is held, however long it waits. 2s was too short on a
+	// loaded gate, where the window's own message read can take that long
+	// before the blocks are asked for.
+	case <-time.After(30 * time.Second):
 		r.heldUp = true
 		return nil, errors.New("the content blocks were not read while the update heads were")
 	}

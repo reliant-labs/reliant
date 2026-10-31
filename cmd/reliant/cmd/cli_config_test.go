@@ -34,10 +34,17 @@ func runInGroup(t *testing.T, group string, probe func(cmd *cobra.Command) error
 	return root.Execute()
 }
 
+// cliConfigGroups is every command group bindCLIConfig binds (root.go). Each
+// must also be one of CLIConfig's `subtrees` (cli_config.proto), or its
+// commands fail before they run: `reliant github` shipped bound but missing
+// from the annotation, so every `reliant github token|gh` exited with
+// "CLIConfig is declared for the commands at or below ...".
+var cliConfigGroups = []string{"auth", "daemon", "github", "machine", "project", "trigger", "workflow"}
+
 // Every end-user command group hands the machine block to the packages that
 // resolve ~/.reliant and the instance id lazily, before the command runs.
 func TestCLIGroupsConfigureTheMachine(t *testing.T) {
-	for _, group := range []string{"auth", "daemon", "project", "trigger", "workflow"} {
+	for _, group := range cliConfigGroups {
 		t.Run(group, func(t *testing.T) {
 			isolateCLI(t)
 			t.Cleanup(func() {
@@ -129,7 +136,7 @@ func TestServerRolesDoNotTakeTheCLIFlags(t *testing.T) {
 			}
 		}
 	}
-	for _, group := range []string{"auth", "daemon", "project", "trigger", "workflow"} {
+	for _, group := range cliConfigGroups {
 		cmd, _, err := root.Find([]string{group})
 		if err != nil {
 			t.Fatal(err)

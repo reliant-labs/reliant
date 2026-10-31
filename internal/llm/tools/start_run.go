@@ -20,7 +20,7 @@ type StartRunParams struct {
 	ProjectID string            `json:"project_id,omitempty" jsonschema:"description=Project to run in. Defaults to the project of the run you are executing in."`
 	Inputs    map[string]any    `json:"inputs,omitempty" jsonschema:"description=Workflow input parameters, keyed by input name."`
 	Presets   map[string]string `json:"presets,omitempty" jsonschema:"description=Preset selections, keyed by preset slot."`
-	Title     string            `json:"title,omitempty" jsonschema:"description=Title for the new run. Generated from the message when omitted."`
+	Title     string            `json:"title,omitempty" jsonschema:"description=Title for the new run: a few words naming its subject. When omitted it is '<workflow> · <first line of message>'."`
 }
 
 const (

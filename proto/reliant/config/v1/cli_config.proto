@@ -23,6 +23,8 @@ message CLIConfig {
     subtrees: [
       {path: ["auth"]},
       {path: ["daemon"]},
+      {path: ["github"]},
+      {path: ["machine"]},
       {path: ["project"]},
       {path: ["trigger"]},
       {path: ["workflow"]}

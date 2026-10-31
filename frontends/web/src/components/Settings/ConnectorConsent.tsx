@@ -76,11 +76,11 @@ export interface ProvisionTiming {
   timeoutMs?: number;
 }
 
-// Numeric protobuf enum values for a "managed small" machine, matching the
+// Numeric protobuf enum values for a "managed M" machine, matching the
 // shape `createDaemon` takes (see services/controlPlane/daemon.ts, which keeps
 // these as numbers so callers need not import the control-plane enums).
 const DAEMON_TYPE_MANAGED_ENUM = 1;
-const DAEMON_SIZE_SMALL_ENUM = 1;
+const DAEMON_SIZE_M_ENUM = 8;
 
 export function ConnectorConsent({
   clientId,
@@ -258,7 +258,7 @@ export function ConnectorConsent({
       const createdID = await createDaemon({
         name: uniqueMachineName(`${clientName || "connector"}-workspace`, daemons.map((d) => d.name)),
         daemonType: DAEMON_TYPE_MANAGED_ENUM,
-        size: DAEMON_SIZE_SMALL_ENUM,
+        size: DAEMON_SIZE_M_ENUM,
       });
 
       // CreateDaemon returns before the machine has registered with reliant,

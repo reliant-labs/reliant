@@ -1,0 +1,7 @@
+# Starts the run from inputs alone: the trigger's mapping is never exercised.
+name: queued_pr
+inputs: {pr_number: 42}
+events: []
+expect:
+  outcome: completed
+  completed: [done]

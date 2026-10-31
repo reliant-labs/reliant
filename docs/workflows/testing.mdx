@@ -36,7 +36,7 @@ To check a file yourself, run `reliant workflow validate path/to/workflow.yaml`.
 
 ### When Static Validation Isn't Enough
 
-Static validation confirms your workflow is structurally sound, but it can't tell you whether the workflow actually does what you intend. A workflow can pass all validation checks and still route to the wrong node, loop forever, or produce unexpected outputs. That's where scenario testing comes in.
+Static validation confirms your workflow is structurally sound, but it can't tell you whether the workflow actually does what you intend. A workflow can pass all validation checks and still route to the wrong node, loop forever, or produce unexpected outputs. [Workflow lint](/workflows/lint) (run by `reliant workflow validate` too) catches the static half of that: a command with no timeout, an exit code nothing reads, a run that can hold a `max_running` slot forever, a trigger or an ending no scenario covers. Scenario testing covers the rest.
 
 ## Scenario Testing
 
@@ -54,7 +54,15 @@ A scenario YAML file defines:
 name: my_test_scenario
 description: "What this tests"
 
-# Optional: override workflow inputs
+# Optional: start the run through one of the workflow's triggers. Its filter
+# must pass the payload, and its inputs mapping supplies the run's inputs
+# (for an integration trigger, the payload is merged over a sample of the
+# event's declared payload). This is what covers the trigger in lint.
+trigger:
+  name: queued
+  payload: {data: {label: 'merge:queue', pull_request: {number: 42}}}
+
+# Optional: override workflow inputs (applied over a trigger's mapped inputs)
 inputs:
   max_turns: 5
 

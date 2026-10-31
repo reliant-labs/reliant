@@ -111,6 +111,9 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			require.NotNil(t, chat.ActiveDaemonID, "the run is pinned to a daemon")
 			assert.Equal(t, f.trigger.DaemonID, *chat.ActiveDaemonID, "the run is pinned to the trigger's daemon")
 			assert.False(t, chat.NoMachine)
+			// An automation's run is born a run: out of the chat list, in Runs.
+			assert.Equal(t, core.ChatOriginAutomation, chat.Origin)
+			assert.False(t, chat.ListInSidebar)
 
 			var root *v2.WorkflowInput
 			for _, start := range runs.snapshot() {

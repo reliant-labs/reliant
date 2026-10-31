@@ -94,8 +94,8 @@ describe("DeployUsageSection — consumption against allowance", () => {
   it("renders each billable dimension with its consumption", () => {
     renderSection();
 
-    expect(screen.getByText("CPU")).toBeDefined();
-    expect(screen.getByText("Memory")).toBeDefined();
+    expect(screen.getByText("CPU requested")).toBeDefined();
+    expect(screen.getByText("Memory requested")).toBeDefined();
     expect(screen.getByText("Storage")).toBeDefined();
   });
 
@@ -103,7 +103,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
     renderSection();
 
     const cpuBar = screen.getByRole("progressbar", {
-      name: /CPU consumption against allowance/i,
+      name: /CPU requested consumption against allowance/i,
     });
     expect(cpuBar.getAttribute("aria-valuenow")).toBe("50");
   });
@@ -124,7 +124,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
     );
     expect(
       screen
-        .getByRole("progressbar", { name: /CPU consumption/i })
+        .getByRole("progressbar", { name: /CPU requested consumption/i })
         .getAttribute("aria-valuenow"),
     ).toBe("0");
     unmount();
@@ -142,7 +142,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
     );
     expect(
       screen
-        .getByRole("progressbar", { name: /CPU consumption/i })
+        .getByRole("progressbar", { name: /CPU requested consumption/i })
         .getAttribute("aria-valuenow"),
     ).toBe("100");
     cleanup();
@@ -162,7 +162,7 @@ describe("DeployUsageSection — consumption against allowance", () => {
     // would lose the only number that costs money.
     expect(
       screen
-        .getByRole("progressbar", { name: /CPU consumption/i })
+        .getByRole("progressbar", { name: /CPU requested consumption/i })
         .getAttribute("aria-valuenow"),
     ).toBe("100");
     expect(screen.getByText(/50 vCPU-hours over/i)).toBeDefined();

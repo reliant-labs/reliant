@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -36,11 +37,15 @@ type activationSnapshot struct {
 	// Summary contains only structural counts and tool declaration categories,
 	// never a prompt, expression, input value, command or graph literal.
 	Summary []string
-	bytes   int
+	// Capabilities are the powers the closure uses (activation_capabilities.go):
+	// what the approval policy compares before and after a change. The row's
+	// own identity and machine are added by the caller.
+	Capabilities automationpolicy.Capabilities
+	bytes        int
 }
 
 func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.TriggerDefinition, wf *pb.Workflow) (*activationSnapshot, error) {
-	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}}
+	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}, Capabilities: automationpolicy.Capabilities{}}
 	bindings, err := s.deps.Repo.ListSettingsByKey(ctx, user, "tool.bindings.%")
 	if err != nil {
 		return nil, svcerr.Wrap(err)
@@ -53,6 +58,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				return nil, svcerr.Wrap(err)
 			}
 			snap.Connection = c
+			snap.Capabilities.Add(connectionCapabilities(c)...)
 		}
 	}
 	// Raw values only enter the memory-only digest, never its safe summary.
@@ -89,7 +95,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		if w := loaded[key]; w != nil {
 			return w, nil
 		} // cycle detection: fingerprint once, no recursive expansion
-		w, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, user, ref, def.ProjectId)
+		w, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), ref)
 		if err != nil {
 			return nil, refusedPrecondition("Could not resolve a referenced workflow for approval")
 		}
@@ -272,6 +278,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				}
 				for _, node := range w.GetNodes() {
 					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k, tainted)...)
+					snap.Capabilities.Add(nodeCapabilities(node, values, k, tainted)...)
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {

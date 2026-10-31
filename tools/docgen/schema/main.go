@@ -53,10 +53,28 @@ var toolHints = map[string]string{
 		"workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over " +
 		"`trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.",
 	"automation_only": "The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat " +
-		"start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.",
+		"start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an " +
+		"agent's start_run, or a builder test run. Unset means a chat can start it.",
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
+	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} " +
+		"(K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing " +
+		"per key survives; older ones are recorded skipped, \"superseded\", never failed) and key (a template over " +
+		"`trigger` grouping the firings that replace each other). See WorkflowConcurrency below.",
+	// WorkflowConcurrency's fields (the generated descriptors carry no comments).
+	"max_running": "How many trigger-launched runs of the workflow run at once; later firings wait. Set it, " +
+		"per_member, or both; with per_member it is a ceiling over the scaled cap.",
+	"per_member": "Scales the cap with the trigger's machine pool: this many runs for each member that can take " +
+		"work (installed, synced with the pool's catalog, not failed or removed), so adding a machine raises " +
+		"throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.",
+	"waiting": "What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps " +
+		"only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail " +
+		"\"superseded\" (never failed). Running runs are never touched.",
+	"key": "With `waiting: latest` only: a template over `trigger`, like a webhook dedupe_key, naming the group of " +
+		"waiting firings that replace each other, e.g. `'{{ trigger.payload.attributes.repository }}'`. Unset: one " +
+		"group for the whole workflow. max_running still bounds the whole workflow. A firing whose key does not " +
+		"render waits FIFO and is never superseded.",
 	"on_failure": "A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an " +
 		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
 		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
@@ -97,6 +115,12 @@ func extractTypesFromProto() []TypeInfo {
 		extractTypeFromMessage("EdgeCase",
 			(&reliantv1.EdgeCase{}).ProtoReflect().Descriptor(),
 			"Defines one conditional routing path from an edge.", 3),
+		extractTypeFromMessage("WorkflowConcurrency",
+			(&reliantv1.WorkflowConcurrency{}).ProtoReflect().Descriptor(),
+			"A trigger admission policy (`concurrency:`), not a worker task limit. Pooled per owner, project and "+
+				"workflow; manual trigger fires participate, chat starts do not. Example, one release at a time with "+
+				"only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: "+
+				"'{{ trigger.payload.attributes.repository }}'}`.", 4),
 	}
 }
 
@@ -185,6 +209,8 @@ func simplifyKind(k protoreflect.Kind) string {
 		return "number"
 	case protoreflect.MessageKind:
 		return "object"
+	case protoreflect.EnumKind:
+		return "enum"
 	default:
 		return "any"
 	}

@@ -35,24 +35,27 @@ const defaultInboxLimit = 100
 // id embeds the FIRST failing event of the current episode, so more failures
 // stay one item (and one dismissal), while a new episode after a success is a
 // new item. A waiting-for-machine id embeds the chat and when the block began,
-// so a later block is a new item. Approval, question and run-finished ids
-// embed their row or chat. Storage ids are described at storageItemID.
+// so a later block is a new item. Approval and question ids embed their row. Storage ids are described at storageItemID.
 const (
 	inboxApprovalPrefix          = "approval:"
 	inboxQuestionPrefix          = "question:"
 	inboxWaitingForMachinePrefix = "waiting_for_machine:"
 	inboxFailingPrefix           = "automation_failing:"
 	inboxLaunchFailedPrefix      = "automation_launch_failed:"
-	inboxRunFinishedPrefix       = "run_finished:"
 	inboxStoragePrefix           = "storage:"
 	inboxNeedsSetupPrefix        = "automation_needs_setup:"
 	inboxRecoveryPrefix          = "recovery:"
+	inboxRunPausedPrefix         = "automation_run_paused:"
+	// A broken definition's id is its version's identity (project, machine,
+	// file, content hash): another firing of it is the same item, a new
+	// broken version is a new one.
+	inboxDefinitionBrokenPrefix = "automation_definition_broken:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
-	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
-	inboxNeedsSetupPrefix, inboxRecoveryPrefix,
+	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
+	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -374,9 +377,13 @@ func isInboxItemID(itemID string) bool {
 	return false
 }
 
-// failingAutomations returns one item per enabled trigger whose health is
-// FAILING, using the same ComputeHealth as Trigger.health. Its three reads are
-// independent and run together, each holding one of lim's tokens.
+// failingAutomations returns one item per enabled trigger whose current
+// failure streak needs its owner: a run it launched failed, or its health is
+// FAILING (ComputeHealth, as Trigger.health reads it). One item per streak,
+// keyed by the streak's first failure, so a later successful run, which ends
+// the streak, resolves it. A streak of launch failures alone is the
+// launch-failed item's until it turns FAILING. Its three reads are independent
+// and run together, each holding one of lim's tokens.
 func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
@@ -444,11 +451,11 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 			continue
 		}
 		health := triggers.ComputeHealth(firings)
-		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING {
-			continue
-		}
 		streak := triggers.FailureStreak(episodes[t.ID])
 		if streak.First == nil {
+			continue
+		}
+		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING && streak.RunFailures == 0 {
 			continue
 		}
 		health.ConsecutiveFailures = streak.Count
@@ -507,8 +514,19 @@ func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, s
 func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	var out []*reliantv1.InboxItem
+	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
-		if !t.Enabled || t.WorkflowTrigger == nil {
+		if !t.Enabled {
+			continue
+		}
+		// A broken version of a workflow file is ONE item however many
+		// automations (declared or hand-made) it refuses, and it replaces
+		// their own broken items: they all restate its one cause.
+		if def, err := triggers.BrokenDefinition(ctx, workflows, t); err == nil && def != nil {
+			broken.add(t, def)
+			continue
+		}
+		if t.WorkflowTrigger == nil {
 			continue
 		}
 		decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
@@ -544,7 +562,43 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 			Payload:      &reliantv1.InboxItem_AutomationNeedsSetup{AutomationNeedsSetup: &reliantv1.InboxAutomationNeedsSetup{Issues: wire}},
 		})
 	}
-	return out
+	return append(out, broken.items...)
+}
+
+// brokenDefinitions gathers one AUTOMATION_DEFINITION_BROKEN item per broken
+// version of a workflow file, in the order first seen.
+type brokenDefinitions struct {
+	byKey map[string]*reliantv1.InboxItem
+	items []*reliantv1.InboxItem
+}
+
+func (b *brokenDefinitions) add(t *core.Trigger, def *core.TriggerEventDefinition) {
+	key := sha256.Sum256([]byte(strings.Join([]string{t.ProjectID, def.DaemonID, def.Path, def.ContentHash}, "\x00")))
+	id := inboxDefinitionBrokenPrefix + hex.EncodeToString(key[:12])
+	since := t.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	refused := &reliantv1.InboxRefusedAutomation{TriggerId: t.ID, TriggerName: t.Name}
+	if it := b.byKey[id]; it != nil {
+		payload := it.GetAutomationDefinitionBroken()
+		payload.Automations = append(payload.Automations, refused)
+		if since < it.WaitingSince {
+			it.WaitingSince = since
+		}
+		return
+	}
+	it := &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN,
+		ItemId:       id,
+		ProjectId:    t.ProjectID,
+		ProjectName:  t.ProjectName,
+		WorkflowName: t.Workflow,
+		WaitingSince: since,
+		Payload: &reliantv1.InboxItem_AutomationDefinitionBroken{AutomationDefinitionBroken: &reliantv1.InboxAutomationDefinitionBroken{
+			Definition:  triggers.DefinitionToProto(def),
+			Automations: []*reliantv1.InboxRefusedAutomation{refused},
+		}},
+	}
+	b.byKey[id] = it
+	b.items = append(b.items, it)
 }
 
 // brokenAutomationItem is the item for an enabled activation whose
@@ -580,12 +634,16 @@ func dropSupersededByBroken(items []*reliantv1.InboxItem) []*reliantv1.InboxItem
 		if strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
 			broken[it.TriggerId] = true
 		}
+		// A broken definition supersedes every automation it refuses.
+		for _, a := range it.GetAutomationDefinitionBroken().GetAutomations() {
+			broken[a.TriggerId] = true
+		}
 	}
 	if len(broken) == 0 {
 		return items
 	}
 	return slices.DeleteFunc(items, func(it *reliantv1.InboxItem) bool {
-		if !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
+		if it.TriggerId == "" || !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
 			return false
 		}
 		return it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING ||
@@ -655,10 +713,12 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
 			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
-	case core.InboxPendingRunFinished:
-		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED
-		item.ItemId = inboxRunFinishedPrefix + p.ItemKey
-		item.Payload = &reliantv1.InboxItem_RunFinished{RunFinished: &reliantv1.InboxRunFinished{}}
+	case core.InboxPendingRunPaused:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
+		item.ItemId = inboxRunPausedPrefix + p.ItemKey
+		item.Payload = &reliantv1.InboxItem_AutomationRunPaused{AutomationRunPaused: &reliantv1.InboxAutomationRunPaused{
+			Reason: p.Text1,
+		}}
 	}
 	return item
 }
@@ -703,6 +763,12 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 	}
 	var out []*reliantv1.InboxItem
 	for _, m := range machines {
+		if m.Processes != nil {
+			out = append(out, s.processesItem(ctx, userID, m, names[m.DaemonID]))
+		}
+		if !m.StorageItem() {
+			continue
+		}
 		payload := &reliantv1.InboxStorage{
 			DaemonId:   m.DaemonID,
 			DaemonName: names[m.DaemonID],
@@ -733,9 +799,49 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 }
 
 const (
-	storageKeptSuffix = ":kept"
-	storageDiskInfix  = ":disk:"
+	storageKeptSuffix  = ":kept"
+	storageDiskInfix   = ":disk:"
+	storageProcsInfix  = ":procs:"
+	maxTitledProcTrees = 5
 )
+
+// processesItem is a machine's "near its process limit" item: the daemon is
+// refusing new background heavy commands, and the item names the largest
+// process trees by the agent that started each, so the one at fault can be
+// stopped. One item per refusal episode (storage:<daemon>:procs:<since ms>):
+// dismissing it holds until the machine recovers and gets there again.
+func (s *Service) processesItem(ctx context.Context, userID string, m *worktreesweep.MachineStorage, name string) *reliantv1.InboxItem {
+	procs := proto.Clone(m.Processes).(*reliantv1.ProcessReport)
+	for i, t := range procs.Top {
+		if i == maxTitledProcTrees || t.ChatId == "" {
+			continue
+		}
+		// Only the caller's own chats are named: the id came from a machine,
+		// and a title is not the machine's to reveal.
+		if c, err := s.deps.Repo.GetChat(ctx, t.ChatId); err == nil && c != nil && c.UserID == userID {
+			t.ChatTitle = c.Title
+		}
+	}
+	payload := &reliantv1.InboxStorage{
+		DaemonId:   m.DaemonID,
+		DaemonName: name,
+		Online:     m.Online,
+		Processes:  procs,
+	}
+	since := procs.RefusingSinceMs
+	if m.Disk != nil {
+		payload.ReportedAt = time.UnixMilli(m.Disk.ReportedAtMs).UTC().Format(time.RFC3339)
+		if since == 0 {
+			since = m.Disk.ReportedAtMs
+		}
+	}
+	return &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE,
+		ItemId:       inboxStoragePrefix + m.DaemonID + storageProcsInfix + strconv.FormatInt(since, 10),
+		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
+		Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
+	}
+}
 
 // storageItemID names a machine's storage item by what the user is told, so a
 // dismissal holds for exactly that and no longer:

@@ -80,6 +80,48 @@ func TestUnattendedEventKinds_MatchesUnattended(t *testing.T) {
 	}
 }
 
+// The chat list keys on a chat's origin, so each launch kind's origin is
+// pinned by name: only a person's first send is a USER chat.
+func TestChatOriginOf(t *testing.T) {
+	t.Parallel()
+
+	want := map[TriggerEventKind]ChatOrigin{
+		TriggerEventKindChatStart:     ChatOriginUser,
+		TriggerEventKindSchedule:      ChatOriginAutomation,
+		TriggerEventKindWebhook:       ChatOriginAutomation,
+		TriggerEventKindIntegration:   ChatOriginAutomation,
+		TriggerEventKindWorkflowEvent: ChatOriginAutomation,
+		TriggerEventKindAgentStartRun: ChatOriginAgent,
+		TriggerEventKindManualRun:     ChatOriginManualRun,
+		TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
+		TriggerEventKindCLIRun:        ChatOriginCLI,
+	}
+	for kind, origin := range want {
+		if got := ChatOriginOf(kind); got != origin {
+			t.Errorf("ChatOriginOf(%s) = %s, want %s", kind, got, origin)
+		}
+	}
+	// Unclassified fails closed: off the chat list, not into it.
+	if got := ChatOriginOf("no.such.kind"); got != ChatOriginAutomation {
+		t.Errorf("ChatOriginOf(unknown) = %s, want AUTOMATION", got)
+	}
+}
+
+// Every declared TriggerEventKind takes a position on the chat it launches.
+func TestChatOriginOf_EveryDeclaredKindIsClassified(t *testing.T) {
+	t.Parallel()
+
+	declared := declaredStringConsts(t, "TriggerEventKind")
+	for name, value := range declared {
+		if _, classified := eventKindOrigin[TriggerEventKind(value)]; !classified {
+			t.Errorf("%s (%q) is not in eventKindOrigin; decide whether the chat it launches is a USER chat or a run", name, value)
+		}
+	}
+	if len(eventKindOrigin) != len(declared) {
+		t.Errorf("eventKindOrigin classifies %d kinds but %d are declared", len(eventKindOrigin), len(declared))
+	}
+}
+
 // A stored trigger always fires with nobody watching, so every kind of stored
 // trigger must record an unattended event — otherwise its runs could never
 // wake a suspended machine once the owner signs out.

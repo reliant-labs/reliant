@@ -59,10 +59,11 @@ import (
 // Dismissal is applied in Go (ListDismissedInboxItemIDs), uniformly for every
 // dismissable kind. Disabled automations are not listed: pausing is the cure.
 // kind (reliantv1.InboxItemKind): 1 approval, 2 question, 3 waiting for
-// machine, 5 automation launch failed (one per failure episode), 6 run
-// finished (opted-in automation). 4 (automation failing) is derived in Go from
-// the trigger's firings — internal/triggers owns that rule. Archived chats are
-// not waiting on anyone.
+// machine, 5 automation launch failed (one per failure episode), 10 paused
+// automation run. 4 (automation failing) is derived in Go from the trigger's
+// firings — internal/triggers owns that rule. Archived chats are not waiting
+// on anyone. A run that completed successfully is never an item, whatever its
+// automation's notify_on_complete says: nothing here waits on the person.
 //
 // Every item must be OPENABLE, so every branch INNER-joins its project and
 // requires the same owner. chats.project_id has no foreign key: deleting a
@@ -86,6 +87,20 @@ import (
 //	waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 //	                 id and the block's start, so a later block is a new item
 //
+// "Its run is not over" is tested as (SELECT true ... LIMIT 1) IS NULL, not
+// NOT EXISTS. The planner turns a NOT EXISTS into an anti-join and may hash
+// its side: here, every user's pending gates joined to their runs (a Seq Scan
+// of all workflows), which on a prod-scale database made this branch 120ms
+// for a user with 2,000 chats. The scalar form is always a probe of the one
+// approval's or question's gate.
+//
+// The approval and question branches find the caller's pending rows before
+// they read those rows' chats through the view, behind an OFFSET 0 the
+// planner cannot flatten. Joined directly, the planner walked every one of the
+// caller's chats, computing each one's root run state, and then probed it for
+// a pending approval: 200ms for an automation with 20,000 runs and two
+// pending approvals, against 25ms.
+//
 // It is one large statement read on every inbox refresh, so it runs through
 // the raw passthrough with bound $N parameters (and a plain Go slice for the
 // text[] argument, which pgx encodes): bun's NewRaw would format both into
@@ -108,14 +123,21 @@ SELECT * FROM (
         a.title::text AS a_text,
         ''::text AS b_text,
         a.approval_type::integer AS a_int
-    FROM approvals a
+    FROM (
+        -- Fenced by OFFSET 0: see listInboxPendingSQL's comment.
+        SELECT a.id, a.chat_id, a.status, a.created_at, a.title, a.approval_type FROM approvals a
+        JOIN chats ch ON ch.id = a.chat_id
+        WHERE a.status = 1 AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
+        OFFSET 0
+    ) a
     JOIN chats_with_activity c ON c.id = a.chat_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE a.status = 1
-      AND NOT EXISTS (
-          SELECT 1 FROM pending_input_gates g
-          WHERE g.kind = 'approval' AND g.id = a.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
+      AND (
+          SELECT true FROM pending_input_gates g
+          WHERE g.kind = 'approval' AND g.id = a.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4)
+          LIMIT 1) IS NULL
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
       AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))
@@ -137,7 +159,12 @@ SELECT * FROM (
         q.thread_id,
         COALESCE(q.metadata, ''),
         q.async::integer
-    FROM questions q
+    FROM (
+        SELECT q.id, q.chat_id, q.status, q.created_at, q.thread_id, q.metadata, q.async FROM questions q
+        JOIN chats ch ON ch.id = q.chat_id
+        WHERE q.status = 1 AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
+        OFFSET 0
+    ) q
     JOIN chats_with_activity c ON c.id = q.chat_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
@@ -148,9 +175,10 @@ SELECT * FROM (
       -- is delivered as a message, which resumes or restarts the run. A
       -- blocking one is answerable only while its runs are.
       AND (q.async OR (
-          NOT EXISTS (
-              SELECT 1 FROM pending_input_gates g
-              WHERE g.kind = 'question' AND g.id = q.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
+          (
+              SELECT true FROM pending_input_gates g
+              WHERE g.kind = 'question' AND g.id = q.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4)
+              LIMIT 1) IS NULL
           AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))))
 
     UNION ALL
@@ -175,6 +203,10 @@ SELECT * FROM (
     LEFT JOIN triggers t ON t.id = c.trigger_id
     LEFT JOIN daemons d ON d.id = COALESCE(c.active_daemon_id, t.daemon_id) AND d.user_id = c.user_id
     WHERE c.display_state = 8
+      -- Implied by display_state 8 (activity 5 is a blocked daemon), and a
+      -- column: the user's other chats are passed over without computing
+      -- their activity.
+      AND c.daemon_blocked_at IS NOT NULL
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
 
@@ -230,16 +262,14 @@ SELECT * FROM (
 
     UNION ALL
 
-    -- A completed, still-unread run of an automation that opted in to
-    -- "Notify me when it finishes". Unread is the clear condition: opening the
-    -- chat marks it read. A run that declared a failure outcome is a failure,
-    -- not a finish. Every unattended launch kind counts — the caller passes
-    -- core.UnattendedEventKinds(), the rule the unread write follows — so a
-    -- webhook, provider-event or workflow-event automation is listed exactly
-    -- as a schedule is.
+    -- A paused run of an automation (display_state 4: the root run is
+    -- stopped with reason paused). While it is paused it holds its
+    -- automation's capacity slot, so the owner is told what paused it: the
+    -- newest failed step of the chat's runs. The key is the chat and when
+    -- that failure happened, so a later pause is a new item.
     SELECT
-        6,
-        c.id,
+        10,
+        c.id || '@' || to_char(COALESCE(f.created_at, c.last_active) AT TIME ZONE 'UTC', 'YYYYMMDD"T"HH24MISS.US'),
         c.id,
         COALESCE(c.workflow_id, c.id),
         t.id,
@@ -248,29 +278,35 @@ SELECT * FROM (
         COALESCE(c.workflow_name, ''),
         c.title,
         t.name,
-        COALESCE(rw.completed_at, c.last_active),
-        '',
+        COALESCE(f.created_at, c.last_active),
+        COALESCE(f.error_message, ''),
         '',
         0
     FROM chats_with_activity c
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
-    LEFT JOIN workflows rw ON rw.id = c.workflow_id
+    LEFT JOIN LATERAL (
+        SELECT se.created_at, se.error_message
+        FROM workflows w
+        JOIN step_executions se ON se.workflow_id = w.id
+        WHERE w.chat_id = c.id
+          AND se.error_message IS NOT NULL
+        ORDER BY se.created_at DESC
+        LIMIT 1
+    ) f ON true
     WHERE c.launch_kind = ANY($2::text[])
-      AND t.notify_on_complete
-      AND c.display_state = 5
-      AND c.unread = 1
-      AND COALESCE(rw.outcome, '') <> 'failure'
+      AND c.display_state = 4
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key`
 
 // ListInboxPending returns the user's pending approvals, questions,
-// waiting-for-machine runs, launch-failed automations and finished
-// opted-in runs, ordered by kind, then waiting time.
+// waiting-for-machine runs, launch-failed automations and paused automation
+// runs, ordered by kind, then waiting time.
 func ListInboxPending(ctx context.Context, db orm.Context, userID string) ([]*core.InboxPending, error) {
-	// "Run finished" items follow the same rule as the unread write.
+	// Paused automation runs are the unattended launch kinds, the rule the
+	// unread write follows.
 	rows, err := db.Query(ctx, listInboxPendingSQL, userID, core.UnattendedEventKinds())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list inbox: %w", err)

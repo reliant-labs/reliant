@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -142,7 +143,7 @@ func (s *Service) CreateTrigger(
 		return nil, triggerSyncError(err)
 	}
 	if trigger.Enabled {
-		s.grants.ensure(ctx, userID, trigger.DaemonID)
+		s.ensureGrants(ctx, trigger)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
@@ -180,7 +181,7 @@ func (s *Service) GetTrigger(
 		return nil, svcerr.Wrap(err)
 	}
 	for _, c := range changes {
-		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339)})
+		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), Approval: c.Approval, CapabilitiesAdded: c.CapabilitiesAdded, CapabilitiesRemoved: c.CapabilitiesRemoved})
 	}
 	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
 }
@@ -293,7 +294,7 @@ func (s *Service) UpdateTrigger(
 	}
 
 	if updated.Enabled {
-		s.grants.ensure(ctx, updated.UserID, updated.DaemonID)
+		s.ensureGrants(ctx, updated)
 	}
 	if existing.DaemonID != updated.DaemonID || !updated.Enabled {
 		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
@@ -383,7 +384,7 @@ func (s *Service) SetTriggerEnabled(
 		}
 	}
 	if trigger.Enabled {
-		s.grants.ensure(ctx, trigger.UserID, trigger.DaemonID)
+		s.ensureGrants(ctx, trigger)
 	} else {
 		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
@@ -558,6 +559,8 @@ func triggerOutcomeFromProto(o reliantv1.TriggerEventOutcome) (core.TriggerEvent
 		return core.TriggerEventSkipped, true
 	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED:
 		return core.TriggerEventFailed, true
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING:
+		return core.TriggerEventPending, true
 	}
 	return "", false
 }
@@ -609,11 +612,15 @@ func (s *Service) triggerFromDefinition(
 	// The machine is an explicit choice: a daemon, or no_machine. An empty
 	// daemon_id alone is still the mistake it always was, so a client that
 	// omits the field cannot silently create a run with no machine.
+	// Or a machine pool: exactly one of the three.
 	switch {
+	case def.MachinePoolId != "" && (def.NoMachine || def.DaemonId != ""):
+		return nil, svcerr.InvalidArgument("machine_pool_id, daemon_id and no_machine are mutually exclusive: runs execute on a pool's members, one machine, or none")
+	case def.MachinePoolId != "":
 	case def.NoMachine && def.DaemonId != "":
 		return nil, svcerr.InvalidArgument("no_machine and daemon_id are mutually exclusive: runs either have a machine or they do not")
 	case !def.NoMachine && def.DaemonId == "":
-		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine")
+		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, a machine_pool_id, or no_machine")
 	}
 
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
@@ -622,7 +629,11 @@ func (s *Service) triggerFromDefinition(
 		return nil, triggerDBError("get project", err)
 	}
 
-	if def.NoMachine {
+	if def.MachinePoolId != "" {
+		if err := s.validateTriggerPool(ctx, userID, def); err != nil {
+			return nil, err
+		}
+	} else if def.NoMachine {
 		if err := s.validateNoMachineWorkflow(ctx, userID, def); err != nil {
 			return nil, err
 		}
@@ -705,6 +716,7 @@ func (s *Service) triggerFromDefinition(
 		Message:          def.Message,
 		DaemonID:         def.DaemonId,
 		NoMachine:        def.NoMachine,
+		MachinePoolID:    def.MachinePoolId,
 		ActingIdentity:   identity,
 		NotifyOnComplete: def.NotifyOnComplete,
 		Config:           src.Config,
@@ -733,20 +745,24 @@ func (s *Service) triggerFromDefinition(
 
 // actingIdentityFor decides who a trigger's integration writes speak as.
 //
-// Unspecified means app for a new GitHub integration activation, owner for
-// other sources, and "unchanged" on update. Use the resolved source so inline
-// triggers and workflow declarations agree. Never reinterpret a stored identity
-// using the creation default. Missing bot infrastructure is an error, not a
-// reason to silently write under the owner's name.
+// Unspecified means app (the Reliant GitHub bot) for every new activation,
+// whatever its source: an automation's GitHub writes are the bot's unless its
+// owner explicitly chooses owner. On update it means "unchanged": never
+// reinterpret a stored identity using the creation default.
+//
+// A deployment with no control plane has no bot. There a new GitHub
+// integration trigger is refused (its source says it acts on GitHub, so the
+// bot is what it would have meant), while other sources default to the owner.
+// Missing bot infrastructure never silently turns a chosen bot into the owner.
 func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger, src *triggers.Source) (core.ActingIdentity, error) {
 	identity, chosen := triggers.ActingIdentityFromProto(def.ActingIdentity)
 	if !chosen {
 		if existing != nil {
 			return existing.ActingIdentity.OrOwner(), nil
 		}
-		identity = core.ActingIdentityOwner
-		if src.Kind == core.TriggerKindIntegration && src.Integration == "github" {
-			identity = core.ActingIdentityApp
+		identity = core.ActingIdentityApp
+		if s.deps.ControlPlane == nil && (src.Kind != core.TriggerKindIntegration || src.Integration != "github") {
+			identity = core.ActingIdentityOwner
 		}
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
@@ -769,8 +785,17 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	}
 	// On the machine the activation targets: its runs execute there, so a
 	// workflow only another machine provides is refused here, naming both.
+	// A pool's runs execute on its agreed catalog; before any member has
+	// synced there is none, and the union is all there is to validate
+	// against (fires then wait until a member syncs).
+	catalogMachine := def.DaemonId
+	if def.MachinePoolId != "" {
+		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Repo, userID, def.MachinePoolId, def.ProjectId); err == nil {
+			catalogMachine = member
+		}
+	}
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo,
-		launch.Scope{UserID: userID, ProjectID: def.ProjectId, DaemonID: def.DaemonId}, def.Workflow)
+		launch.AutomationScope(userID, def.ProjectId, catalogMachine), def.Workflow)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -835,6 +860,45 @@ func (s *Service) validateTriggerDaemon(ctx context.Context, userID, projectID, 
 	return daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, daemonID)
 }
 
+// validateTriggerPool refuses a pool that is not the caller's. A pool with no
+// member that has the project is accepted (its runs wait, saying why), so a
+// pool can be wired before its machines finish cloning.
+func (s *Service) validateTriggerPool(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
+	if _, err := s.deps.Repo.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
+		return tools.RefuseActivation("machine pool not found", svcerr.NotFound("machine pool"))
+	} else if err != nil {
+		return triggerDBError("get machine pool", err)
+	}
+	return nil
+}
+
+// ensureGrants mints the trigger's automation (daemon:resume) grant for every
+// machine its runs may wake: its daemon, or each current member of its pool.
+// A member that joins the pool later gets one the next time the trigger is
+// saved while its owner is signed in; until then placement passes over it
+// only when it is asleep (a wake needs the grant).
+func (s *Service) ensureGrants(ctx context.Context, t *core.Trigger) {
+	if t.MachinePoolID == "" {
+		s.grants.ensure(ctx, t.UserID, t.DaemonID)
+		return
+	}
+	pool, err := s.deps.Repo.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
+	if err != nil {
+		logging.WarnContext(ctx, "automation access not granted to pool members: could not read the pool",
+			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
+		return
+	}
+	members, err := s.deps.Repo.ListMachinePoolMembers(ctx, pool, "")
+	if err != nil {
+		logging.WarnContext(ctx, "automation access not granted to pool members: could not list them",
+			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
+		return
+	}
+	for _, m := range members {
+		s.grants.ensure(ctx, t.UserID, m.DaemonID)
+	}
+}
+
 // validateNoMachineWorkflow refuses a no-machine trigger whose workflow will not
 // work without a machine, so the author learns it while writing the trigger
 // rather than from a run nobody is watching. Stricter than a no-machine chat
@@ -847,7 +911,8 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 	if workflowName == "" {
 		workflowName = workflow.DefaultWorkflow
 	}
-	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, workflowName, def.ProjectId)
+	scope := launch.AutomationScope(userID, def.ProjectId, def.DaemonId)
+	wf, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, scope, workflowName)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -858,7 +923,7 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 		return nil
 	}
 	loader := func(ref string) (*reliantv1.Workflow, error) {
-		return launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, ref, def.ProjectId)
+		return launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, scope, ref)
 	}
 	req := v2.MachineRequirements(wf, triggers.ParamsFromProto(def.Params), loader, tools.PreflightConfig())
 	if req.None() {
@@ -913,6 +978,7 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		}
 		return proto
 	}
+	proto.DefinitionSource = s.definitionSource(ctx, t)
 	// Broken wins over this (a broken declaration cannot be set up); this wins
 	// over everything the firings say, because nothing launches until the
 	// activation is finished.
@@ -920,6 +986,18 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		proto.Health = needsSetup
 	}
 	return proto
+}
+
+// definitionSource says where an activation's runs read its workflow from,
+// resolved exactly as they resolve it (on its machine, project first), and
+// what about that choice the owner should know. Nil when it does not resolve
+// right now: the declaration's health already says so.
+func (s *Service) definitionSource(ctx context.Context, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
+	desc, err := launch.DescribeRunWorkflow(ctx, s.deps.Repo, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
+	if err != nil {
+		return nil
+	}
+	return triggers.DefinitionSource(desc, t)
 }
 
 // requireSetupComplete refuses to turn on or run an activation whose params do

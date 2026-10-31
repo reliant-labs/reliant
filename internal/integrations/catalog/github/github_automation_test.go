@@ -55,15 +55,25 @@ func TestMutatingClassification(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// Merging is a deliberate policy gap: a person merges. No action may be able
-// to, whatever it is named.
-func TestNoActionCanMerge(t *testing.T) {
+// Merging is a pipeline's decision, never an agent's (owner decision,
+// 2026-10-30: workflows may merge, as the Reliant bot, after a review of an
+// exact head). So no agent TOOL can merge, whatever it is named, and the one
+// action that can (pr.merge, a workflow action node) is not a tool and
+// requires the reviewed head for every arming or merge.
+func TestNoAgentToolCanMerge(t *testing.T) {
 	resolved, err := catalog.MustBuiltin().Resolve("github/user.get@1")
 	require.NoError(t, err)
+	var merging []string
 	for _, a := range resolved.Manifest.GetActions() {
-		assert.NotContains(t, a.GetId(), "merge", a.GetId())
-		assert.NotContains(t, a.GetRequest().GetPath(), "/merge", a.GetId())
+		if strings.Contains(a.GetId(), "merge") || strings.Contains(a.GetRequest().GetPath(), "/merge") {
+			merging = append(merging, a.GetId())
+			assert.False(t, a.GetTool().GetExpose(), "%s can merge, so it must not be an agent tool", a.GetId())
+		}
 	}
+	assert.Equal(t, []string{"pr.merge"}, merging, "pr.merge is the only action that merges")
+	props, _ := mergeAction(t).GetParams().AsMap()["properties"].(map[string]any)
+	head, _ := props["match_head_commit"].(map[string]any)
+	assert.Equal(t, "^[0-9a-f]{40}$", head["pattern"], "the expected head is a full sha")
 }
 
 func TestIssueCommentUpdate(t *testing.T) {

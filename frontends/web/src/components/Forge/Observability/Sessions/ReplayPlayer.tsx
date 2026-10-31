@@ -179,6 +179,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
     const { api: rpc, props: initial } = argsRef.current;
     const loadReplayer = initial.loadReplayer ?? loadRrwebReplayer;
     let disposed = false;
+    const abort = new AbortController();
     let buffer: RrwebEvent[] = [];
     let creating = false;
     setReady(false);
@@ -251,7 +252,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
           sessionId: initial.session.sessionId,
           maxBytes: initial.pageBytes ?? REPLAY_PAGE_BYTES,
           pageToken,
-        }),
+        }, { signal: abort.signal }),
       onEvents: (events) => {
         const replayer = replayerRef.current;
         if (!replayer) {
@@ -274,6 +275,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 
     return () => {
       disposed = true;
+      abort.abort();
       feedInstance.stop();
       feedRef.current = null;
       replayerRef.current?.destroy();

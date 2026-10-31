@@ -42,7 +42,7 @@ type ActivationParams struct {
 	Params          map[string]any    `json:"params,omitempty" jsonschema:"description=Typed workflow inputs; replaces the params map when supplied."`
 	Presets         map[string]string `json:"presets,omitempty" jsonschema:"description=Workflow preset assignments."`
 	Message         *string           `json:"message,omitempty" jsonschema:"description=Seed prompt; omitted uses declaration prompt on create."`
-	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=owner or app. Defaults to owner on create."`
+	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=Who GitHub writes speak as: app (the Reliant GitHub bot) or owner. Defaults to app on create and to unchanged on update; choose owner only to write under the owner's own account."`
 }
 
 // ActivationPreview is a validated, immutable approval description, never a grant.
@@ -50,7 +50,17 @@ type ActivationPreview struct {
 	Title    string    `json:"title"`
 	Hash     string    `json:"hash"`
 	Revision time.Time `json:"revision,omitempty"`
+	// CardRequired: the owner's automation-approvals setting needs a card for
+	// this change. False means it applies without one (and is recorded);
+	// execution decides again, so this is advice, never a grant.
+	CardRequired bool `json:"card_required,omitempty"`
+	// Reason says why, in one display-safe line.
+	Reason string `json:"reason,omitempty"`
 }
+
+// ApprovalRequiredMessage is the refusal when a change needs a card and none
+// was approved.
+const ApprovalRequiredMessage = "This activation change widens its power and needs the owner's approval card in an interactive chat. It was not run."
 
 // ActivationRefusal is a failure to prepare an activation whose Reason may be
 // shown to the agent and the owner: a fixed classification that names at most
@@ -121,7 +131,7 @@ type activationTypedTool struct{ outer *activationTool }
 
 func (t *activationTypedTool) Name() string { return t.outer.name }
 func (t *activationTypedTool) Description() string {
-	return "Manage a declared workflow trigger activation (" + t.outer.name + "). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged."
+	return "Manage a declared workflow trigger activation (" + t.outer.name + "). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged."
 }
 func (t *activationTypedTool) RequiresPermission(ActivationParams) (bool, error) { return true, nil }
 func NewActivationTool(repo runCallerStore, manager ActivationManager, name string) Tool {
@@ -133,9 +143,6 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 	caller, failure := resolveRunCaller(ctx, t.repo)
 	if failure != nil {
 		return ActivationPreview{}, false, RefuseActivation("the calling chat could not be resolved", fmt.Errorf("%s", failure.Content))
-	}
-	if unattended {
-		return ActivationPreview{}, false, RefuseActivation(automationpolicy.Refusal(), errors.New("unattended"))
 	}
 	if t.manager == nil {
 		return ActivationPreview{}, false, RefuseActivation("activation management is unavailable on this server", errors.New("no activation manager"))
@@ -163,7 +170,18 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 		return ActivationPreview{}, false, RefuseActivation(reason, err)
 	}
 	preview, err := t.manager.PrepareActivation(ctx.Context, caller.userID, t.name, p)
-	return preview, true, err
+	if err != nil {
+		return ActivationPreview{}, false, err
+	}
+	// The approval setting allows this change without a card: no card, and
+	// an unattended run may make it. Execution decides again.
+	if !preview.CardRequired {
+		return preview, false, nil
+	}
+	if unattended {
+		return ActivationPreview{}, false, RefuseActivation(automationpolicy.Refusal(), errors.New("unattended: "+preview.Reason))
+	}
+	return preview, true, nil
 }
 
 // jsonKind names the JSON type a Go value decodes from.
@@ -194,24 +212,27 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 		return *failure, nil
 	}
 	exec := automationpolicy.From(ctx.Context)
-	if exec.Unattended {
-		return NewTextErrorResponse(automationpolicy.Refusal()), nil
-	}
 	callID := ""
 	if call, ok := ctx.Value(ctxkeys.ToolCallContextKey).(*ctxkeys.ToolCallContext); ok && call != nil {
 		callID = call.CurrentToolCallID
 	}
-	approved := exec.Approvals[callID]
-	if approved == "" {
-		return NewTextErrorResponse("This activation change requires an approval card in an interactive chat. It was not run."), nil
-	}
 	if o.manager == nil {
 		return NewTextErrorResponse("Activation management is unavailable."), nil
 	}
+	// The manager decides whether this change needs an approved card (the
+	// owner's automation-approvals setting) and refuses one that does
+	// without a matching approval. An empty approval is a change the
+	// preview judged card-free.
 	actorCtx := automationpolicy.WithActor(ctx.Context, automationpolicy.Actor{ChatID: ctx.ChatID, RunID: ctx.Thread, ToolCallID: callID})
-	summary, err := o.manager.ManageActivation(actorCtx, caller.userID, o.name, p, approved)
+	summary, err := o.manager.ManageActivation(actorCtx, caller.userID, o.name, p, exec.Approvals[callID])
 	if err != nil {
-		return NewTextErrorResponse("Activation change refused or could not be completed. Inspect its current state and setup in the app before retrying; a changed configuration requires a new approval."), nil
+		if exec.Unattended && strings.Contains(err.Error(), automationpolicy.Refusal()) {
+			return NewTextErrorResponse(automationpolicy.Refusal()), nil
+		}
+		if strings.Contains(err.Error(), ApprovalRequiredMessage) {
+			return NewTextErrorResponse(ApprovalRequiredMessage), nil
+		}
+		return NewTextErrorResponse("Activation change refused or could not be completed. Inspect its current state and setup in the app before retrying; a change that widens the activation's power needs a new approval."), nil
 	}
 	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
 }

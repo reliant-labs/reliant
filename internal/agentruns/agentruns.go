@@ -101,13 +101,15 @@ func (r *Runs) StartRun(ctx context.Context, req tools.StartRunRequest) (tools.S
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: req.Message,
 		}},
-		Unattended:    false,
-		GenerateTitle: req.Title == "",
+		Unattended: false,
 	}
-	if req.Title != "" {
-		title := req.Title
-		spec.Title = &title
+	// Never a generated title: an agent's message is an instruction to the
+	// run ("Run the X workflow …"), and a title made from it says only that.
+	title := req.Title
+	if title == "" {
+		title = launch.RunTitle(req.Workflow, req.Message, r.now())
 	}
+	spec.Title = &title
 	// A cloud-daemon chat's first run resolves its daemon with the owner's
 	// JWT. The tool runs on the worker, where there is no request to take it
 	// from, so use the process's cached copy when it has one; without it the

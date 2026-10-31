@@ -42,6 +42,7 @@ func loadShippedAgentLoop(t *testing.T) []byte {
 type agentLoopStubs struct {
 	callLLM      atomic.Int32
 	executeTools atomic.Int32
+	saveMessage  atomic.Int32
 
 	mu sync.Mutex
 	// expectedResponseTools is what each ExecuteTools was told is a response tool.
@@ -63,7 +64,7 @@ func (s *agentLoopStubs) lastStatus(t *testing.T) map[string]interface{} {
 func registerAgentLoopStubs(t *testing.T, env *testsuite.TestWorkflowEnvironment, wfJSON []byte, toolResult map[string]interface{}) *agentLoopStubs {
 	t.Helper()
 	s := &agentLoopStubs{}
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (interface{}, error) {
@@ -72,7 +73,7 @@ func registerAgentLoopStubs(t *testing.T, env *testsuite.TestWorkflowEnvironment
 		s.mu.Unlock()
 		return nil, nil
 	}, activity.RegisterOptions{Name: "WorkflowStatus"})
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
@@ -102,6 +103,11 @@ func registerAgentLoopStubs(t *testing.T, env *testsuite.TestWorkflowEnvironment
 		s.mu.Unlock()
 		return toolResult, nil
 	}, activity.RegisterOptions{Name: "ExecuteTools"})
+	// The budget warning (finish_warning_turns before max_turns) saves a system message.
+	env.RegisterActivityWithOptions(func(ctx context.Context, in map[string]interface{}) (interface{}, error) {
+		s.saveMessage.Add(1)
+		return stubSaveMessage(ctx, in)
+	}, activity.RegisterOptions{Name: "SaveMessage"})
 	return s
 }
 
@@ -193,4 +199,5 @@ func TestAutopilotAgentLoop_AttendedRunsAreNotCutOff(t *testing.T) {
 
 	require.NoError(t, env.GetWorkflowError())
 	assert.Equal(t, int32(6), stubs.executeTools.Load(), "attended: runs until max_turns as before")
+	assert.Equal(t, int32(1), stubs.saveMessage.Load(), "the turn-budget warning is saved once, finish_warning_turns before the end")
 }

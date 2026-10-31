@@ -377,9 +377,12 @@ func generateTriggers() string {
 	return `## Triggers: when a workflow runs
 
 A workflow says WHEN it runs in a top-level ` + bt + `triggers:` + bt + ` list. Declaring a trigger fires nothing.
-In an interactive chat, use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger
-when asked to manage an activation. Each change raises an approval card; nothing changes until the owner approves.
-Unattended runs cannot manage activations. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
+Use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger when asked to manage an
+activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
+card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
+identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
+Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
 
@@ -465,8 +468,9 @@ event: evaluation does not require enabling the trigger or waiting for a real ev
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with ` + bt + `--activation-params` + bt + ` and ` + bt + `--owner-github-id` + bt + ` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
-` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused.
+A deliberate start by hand still works: Run now, ` + bt + `reliant workflow run` + bt + `, an agent's ` + bt + `start_run` + bt + ` and a
+builder test run. Leave it unset for anything a person starts by chatting. A helper that only
 other workflows ` + bt + `ref:` + bt + ` sets ` + bt + `hidden: true` + bt + ` as well: hidden keeps it out of every picker and listing, and
 the pair marks it as an automation's internal step.
 
@@ -474,7 +478,11 @@ the pair marks it as an automation's internal step.
 Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
 Archived). A failed run, a completion into a declared ` + bt + `outcome: failure` + bt + `, a cancelled run and one awaiting input stay
 unarchived so they surface. So route a blocked or punted path to a terminal node with ` + bt + `outcome: failure` + bt + ` when a person
-should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
+should look at it. An automation with "notify me when a run succeeds" keeps its successful runs too, and raises a
+desktop notification for each. A successful run is never an Inbox item, whatever that setting says: the Inbox holds
+what needs a person (a question, an approval, a failed run, a broken automation), and a later successful run clears
+the automation's failure item. A workflow that must tell a person something after a success does it with an explicit
+step: a Slack, SMS or email message, or an async ask_user question.
 
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 
@@ -546,19 +554,18 @@ removing a declaration, or changing its source kind or integration, leaves its a
 they fire nothing, report why in ` + bt + `list_triggers` + bt + `, and recover when the declaration is restored (or are
 enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.
 
-**Who the run writes as.** New GitHub integration activations default to ` + bt + `acting_identity: app` + bt + ` (GitHub comments,
-reviews and pull requests appear as the Reliant bot, ` + bt + `reliant-labs[bot]` + bt + `). Other sources, including schedules,
-webhooks and workflow events, still default to ` + bt + `owner` + bt + ` (writes appear as the user); a scheduled GitHub writer needs an
-explicit app choice. Existing activations retain their stored identity, and explicit owner choices stay owner.
-Only GitHub supports app identity; do not promise a bot identity for another integration. It is the
+**Who the run writes as.** Every new activation defaults to ` + bt + `acting_identity: app` + bt + `, whatever its source: GitHub
+comments, reviews, labels and pull requests appear as the Reliant bot, ` + bt + `reliant-labs[bot]` + bt + `. ` + bt + `owner` + bt + ` (writes appear
+as the user) is an explicit opt-in. Existing activations retain their stored identity, and explicit owner choices stay owner.
+Only GitHub has a bot: Slack, Gmail, Twilio and HTTP writes always use the owner's connection. It is the
 ACTIVATION's choice, made in the app, not the workflow's and not yours: nothing in the YAML, an ` + bt + `action` + bt + ` node's ` + bt + `with:` + bt + ` or a prompt can
-switch it, and a person typing in the run's chat acts as themselves. It covers every integration action the run takes, an
+switch it, and a person typing in the run's chat acts as themselves. It covers every GitHub write the run makes, an
 ` + bt + `action` + bt + ` node and an agent's integration tools alike, and only the writes: reads use the owner's access. Everything the bot
 authors ends with a footer naming the automation and its owner, so do not write your own signature. The bot only writes to a
 repository the owner can push to, scoped to that one repository; if the owner cannot push, the Reliant GitHub App is not
 installed there, the App lacks a permission, the deployment has no App key, or minting fails, the write FAILS with the reason (it never falls back to the owner's name or to a saved connection; a write that names a saved connection on a bot run fails too, and a git_publish push is refused the same way),
 so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
-new GitHub triggers default to the bot; scheduled GitHub writers need the user to choose it explicitly. A deployment
+its GitHub writes default to the bot, and that the user can choose to write as themselves instead. A deployment
 without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 ` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.
 

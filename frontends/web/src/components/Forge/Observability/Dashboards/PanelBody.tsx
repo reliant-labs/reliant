@@ -26,14 +26,14 @@
 
 import type React from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, RefreshCw } from "lucide-react";
 
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { isInFlightLimit, obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import { ObsWillLoad } from "../ObsStates";
 import type { Panel, PanelResult, Series, Unit } from "@/services/controlPlane/observability/types";
@@ -71,6 +71,34 @@ export interface PanelQuery {
   data: PanelResult | undefined;
   isLoading: boolean;
   error: unknown;
+  /** The failures of the current fetch so far: above zero while it waits to retry. */
+  failureCount?: number;
+  /** The failure being retried. */
+  failureReason?: unknown;
+  isFetching?: boolean;
+  /** Reads this panel again, and only this panel. Given, every failure offers it. */
+  refetch?: () => unknown;
+}
+
+/** The server refused the read for its concurrent-read cap and the panel is waiting its turn to ask again. */
+function waitingForCapacity(query: PanelQuery): boolean {
+  return query.isLoading && !query.error && (query.failureCount ?? 0) > 0 && isInFlightLimit(query.failureReason);
+}
+
+function RetryButton({ query }: { query: PanelQuery }) {
+  if (!query.refetch) return null;
+  return (
+    <button
+      type="button"
+      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => void query.refetch?.()}
+      disabled={query.isFetching}
+      data-testid="obs-panel-retry"
+    >
+      <RefreshCw className="h-3 w-3" aria-hidden="true" />
+      Retry
+    </button>
+  );
 }
 
 export interface PanelBodyProps {
@@ -97,6 +125,15 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       </PanelNote>
     );
   }
+  if (waitingForCapacity(query)) {
+    if (compact) return <p className="text-xs text-ink-muted" title="Queued…">…</p>;
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-panel-waiting">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        Queued…
+      </p>
+    );
+  }
   if (query.isLoading) {
     return <div className={cn("animate-pulse rounded bg-ink/5 motion-reduce:animate-none", compact ? "h-7" : "h-16")} aria-busy="true" aria-label="Loading" />;
   }
@@ -111,9 +148,10 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       );
     }
     return (
-      <p className="text-xs text-danger-ink" role="alert" data-testid="obs-panel-error">
-        This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}
-      </p>
+      <div role="alert" data-testid="obs-panel-error">
+        <p className="text-xs text-danger-ink">This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}</p>
+        <RetryButton query={query} />
+      </div>
     );
   }
   const data = query.data;
@@ -376,6 +414,8 @@ function LineChart({
         label={panel.title}
         compact={compact}
         bands={bands}
+        window={data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }}
+        calendar={data.bucketTimezone === "UTC" ? { timezone: "UTC", bucketSeconds: data.bucketSeconds } : undefined}
         // The drill-down legend below names the series; uPlot's would repeat them.
         legend={!compact && !onDrill}
       />

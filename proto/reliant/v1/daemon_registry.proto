@@ -78,7 +78,197 @@ service DaemonRegistryService {
       }
     };
   }
+
+  // SetDefaultDaemon makes one of the caller's machines their default
+  // (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
+  // clears it. Work that names a machine — a pinned chat, an automation's
+  // chosen machine — is unaffected. NotFound for a machine the caller does
+  // not own.
+  rpc SetDefaultDaemon(SetDefaultDaemonRequest) returns (SetDefaultDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_default"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
+
+  // SetMachineLabels replaces one of the caller's machines' durable labels.
+  // Labels decide machine-pool membership (a pool selects the owner's machines
+  // whose labels contain its selector), so this is how a machine joins or
+  // leaves a pool. Keys and values are short slugs.
+  rpc SetMachineLabels(SetMachineLabelsRequest) returns (SetMachineLabelsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_machine_labels"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
+
+  // RenameMachine renames one of the caller's machines. The control plane
+  // owns the name, so it is written there first (UpdateDaemon new_name, which
+  // validates it and keeps it unique among the owner's live machines) and
+  // then onto this registry row, so every picker, trigger and agent tool
+  // shows it at once. The name is a label only: the machine's id, its
+  // workspace and every Kubernetes object named after them do not change.
+  // A name is 1-63 lowercase letters, digits or hyphens, starting and ending
+  // with a letter or digit. AlreadyExists when another of the caller's
+  // machines has it; NotFound for a machine the caller does not own;
+  // Unimplemented without a control plane.
+  rpc RenameMachine(RenameMachineRequest) returns (RenameMachineResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "rename_machine"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
+
+  // forge:custom — the caller's pools joined with their members' live state,
+  // not a page of rows.
+  //
+  // ListMachinePools returns the caller's machine pools, each with its
+  // members as they are now: state, live runs placed by the pool, and why a
+  // member would be passed over (dev-docs/design/machine-pools.md).
+  rpc ListMachinePools(ListMachinePoolsRequest) returns (ListMachinePoolsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // PutMachinePool creates the caller's pool of that name, or replaces its
+  // definition. Members are not listed: they are the caller's machines whose
+  // labels match the selector.
+  rpc PutMachinePool(PutMachinePoolRequest) returns (PutMachinePoolResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "put_machine_pool"
+        target: {
+          kind: "machine_pool"
+          id: "pool.name"
+        }
+      }
+    };
+  }
+
+  // forge:custom — by the caller's pool name, refused while a trigger runs
+  // on the pool.
+  //
+  // DeleteMachinePool deletes one of the caller's pools. Refused with
+  // FailedPrecondition while a trigger still runs on it. Its machines and
+  // their labels are untouched.
+  rpc DeleteMachinePool(DeleteMachinePoolRequest) returns (DeleteMachinePoolResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete_machine_pool"
+        target: {
+          kind: "machine_pool"
+          id: "name"
+        }
+      }
+    };
+  }
 }
+
+message RenameMachineRequest {
+  string daemon_id = 1;
+  // The new name; surrounding whitespace is trimmed.
+  string name = 2;
+}
+
+message RenameMachineResponse {
+  DaemonInfo daemon = 1;
+}
+
+message SetMachineLabelsRequest {
+  string daemon_id = 1;
+  // Replaces every label the machine has; empty clears them.
+  map<string, string> labels = 2;
+}
+
+message SetMachineLabelsResponse {
+  DaemonInfo daemon = 1;
+}
+
+message ListMachinePoolsRequest {}
+
+message ListMachinePoolsResponse {
+  repeated MachinePool pools = 1;
+}
+
+message PutMachinePoolRequest {
+  MachinePoolSpec pool = 1;
+}
+
+message PutMachinePoolResponse {
+  MachinePool pool = 1;
+}
+
+message DeleteMachinePoolRequest {
+  string name = 1;
+}
+
+message DeleteMachinePoolResponse {}
+
+// MachinePoolSpec is what an owner declares about a pool.
+message MachinePoolSpec {
+  // Unique among the owner's pools; how triggers and workflows name it.
+  string name = 1;
+  // Labels a member's labels must contain. Empty means {"pool": <name>}.
+  map<string, string> selector = 2;
+  // Fewest members the pool should have. Advisory: shown, and warned about
+  // when unmet; nothing is created to meet it.
+  uint32 min_members = 3;
+  // Most members a scale-up may grow the pool to; 0 when it never grows.
+  uint32 max_members = 4;
+  // The machine size a scale-up creates ("2xl"); empty when it never grows.
+  string member_size = 5;
+  // At most this many live runs placed by the pool on one member; 0 is no
+  // limit. A full member is passed over; a pool with every member full
+  // queues the run.
+  uint32 max_runs_per_member = 6;
+  // How long a member may sit idle before it sleeps, as a duration ("10m").
+  // Empty means 10m: a CI pool's members wake per burst of work, and the
+  // machine default (30m) bills an idle member for 20 more minutes after
+  // every burst. Between 1m and 4h.
+  string member_idle_timeout = 7;
+}
+
+// MachinePool is a pool with its members as placement sees them now.
+message MachinePool {
+  string id = 1;
+  MachinePoolSpec spec = 2;
+  repeated MachinePoolMember members = 3;
+  // Problems an owner should know about ("1 member, min_members is 2").
+  repeated string warnings = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message MachinePoolMember {
+  string daemon_id = 1;
+  string name = 2;
+  // connected, starting, suspended, disconnected, failed or removed.
+  string state = 3;
+  // Live runs the pool placed on this member.
+  uint32 live_runs = 4;
+  string size = 5;
+}
+
+message SetDefaultDaemonRequest {
+  // The machine to make the default; "" clears the default.
+  string daemon_id = 1;
+}
+
+message SetDefaultDaemonResponse {}
 
 message ClearMachineCachesRequest {
   string daemon_id = 1;
@@ -289,6 +479,18 @@ message DaemonInfo {
   string commit = 25;
   int64 commit_time_unix = 26;
   string forge_version = 27;
+
+  // The machine the owner made their default (SetDefaultDaemon): where work
+  // that names no machine runs — a new chat on "Default", a worktree, a tool
+  // call with no selector — whatever state it is in. At most one of a user's
+  // machines carries it; with none, default resolution falls back to its
+  // machine-state rule (a connected machine, a self-hosted one first).
+  bool is_default = 28;
+  // The machine's durable labels, set by its owner (SetMachineLabels). They
+  // decide machine-pool membership and hold while the machine sleeps.
+  map<string, string> labels = 29;
+  // Names of the owner's machine pools this machine is a member of.
+  repeated string pools = 30;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

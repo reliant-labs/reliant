@@ -16,7 +16,8 @@ export type BillingOrigin =
   | "inbox"
   | "reliant-ai"
   | "credit"
-  | "upgrade";
+  | "upgrade"
+  | "claim";
 
 /**
  * Send the user to billing, carrying where they came from. Hosted apps go to

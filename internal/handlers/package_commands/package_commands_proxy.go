@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	repopkg "github.com/reliant-labs/reliant/internal/repo"
 )
 
 // pkgListCommandsTimeoutMs bounds the pkg.list_commands round trip. Discovery is
@@ -18,12 +19,14 @@ import (
 // uses the same budget.
 const pkgListCommandsTimeoutMs = 30000
 
-// daemon is the round trip ListCommands makes to the user's daemon. On a cloud
-// daemon the browser's worktree lives on the DAEMON's filesystem, so command
-// discovery must run there — not on the api-server, where the path does not
-// exist and discovery silently found nothing.
-func (s *Service) daemon() daemoncmd.Service {
-	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: s.deps.Router})
+// daemon is the round trip ListCommands makes to the machine holding the
+// workspace (daemonID, "" for default resolution). The worktree lives on the
+// DAEMON's filesystem, so command discovery must run there — not on the
+// api-server, where the path does not exist and discovery silently found
+// nothing, and not on the user's default machine when the workspace is a
+// checkout on another one.
+func (s *Service) daemon(daemonID string) daemoncmd.Service {
+	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: repopkg.OnDaemon(s.deps.Router, daemonID)})
 }
 
 // pkgListCommandsCmd mirrors daemonruntime.pkgListCommandsRequest.
@@ -44,13 +47,13 @@ func (s *Service) ListCommands(
 		return nil, err
 	}
 
-	workingDir, err := s.resolveWorkingDir(ctx, req.Msg)
+	workingDir, daemonID, err := s.resolveWorkingDir(ctx, userID, req.Msg)
 	if err != nil {
 		return nil, err
 	}
 
 	var result pkgmgr.CommandListResponse
-	if err := s.daemon().Dispatch(ctx, userID, "pkg.list_commands",
+	if err := s.daemon(daemonID).Dispatch(ctx, userID, "pkg.list_commands",
 		pkgListCommandsCmd{WorkingDir: workingDir}, &result, pkgListCommandsTimeoutMs); err != nil {
 		// dispatch already returns a loud Connect error (Unavailable for a dead
 		// daemon / timeout / unknown command; NotFound for a missing dir). We
@@ -63,11 +66,13 @@ func (s *Service) ListCommands(
 }
 
 // resolveWorkingDir prefers the worktree's stored path (a daemon-side path),
-// else the caller-supplied path.
+// else the caller-supplied path, and returns the machine that holds it
+// (Service.workspace), "" for default resolution.
 func (s *Service) resolveWorkingDir(
 	ctx context.Context,
+	userID string,
 	msg *reliantv1.ListPackageCommandsRequest,
-) (string, error) {
+) (string, string, error) {
 	worktreeID := ""
 	if msg.WorktreeId != nil {
 		worktreeID = *msg.WorktreeId
@@ -79,15 +84,11 @@ func (s *Service) resolveWorkingDir(
 
 	switch {
 	case worktreeID != "":
-		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
-		if err != nil {
-			return "", svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
-		}
-		return worktree.Path, nil
+		return s.workspace(ctx, userID, worktreeID, msg.GetChatId())
 	case path != "":
-		return path, nil
+		return path, "", nil
 	default:
-		return "", svcerr.InvalidArgument("worktree_id or path is required")
+		return "", "", svcerr.InvalidArgument("worktree_id or path is required")
 	}
 }
 

@@ -9,20 +9,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"go.temporal.io/sdk/activity"
 )
 
-// LoadPresetParamsInput is the input for loading preset params
-type LoadPresetParamsInput struct {
-	ProjectPath string `json:"project_path"`
-	ProjectID   string `json:"project_id"`
-	// ChatID is the run's chat: its project, and the machine it runs on,
-	// whose synced presets a project preset is read from. It wins over
-	// ProjectID.
-	ChatID     string `json:"chat_id" reliant:"-"`
-	PresetName string `json:"preset_name"`
-}
+// LoadPresetParamsInput is defined in activities/types: this activity runs
+// as a LOCAL activity (runtime.executeBookkeeping), whose input must already be
+// the registered parameter type, so the workflow names it too.
+type LoadPresetParamsInput = types.LoadPresetParamsInput
 
 // LoadPresetParamsActivity loads preset params for use in spawned workflows.
 // This activity exists to avoid import cycles between v2 and preset packages.
@@ -64,7 +58,7 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 	// One column, not the whole config row: the row carries every indexed
 	// skill and can run to tens of MB.
 	if projectID != "" && a.repo != nil {
-		presets, err := workflowsource.ProjectPresets(ctx, a.repo, projectID, daemonID)
+		presets, err := projectPresets(ctx, a.repo, projectID, daemonID, input.CatalogPin)
 		if err != nil {
 			return nil, fmt.Errorf("load preset %s: %w", input.PresetName, err)
 		}

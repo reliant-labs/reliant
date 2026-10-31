@@ -41,6 +41,7 @@ import {
   Server,
   Shield,
   Laptop,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -106,6 +107,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
@@ -115,6 +117,7 @@ import { CLOUD_PROJECT_ROOT } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
+import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -670,6 +673,7 @@ function ManagedMachinesTable({
   pricing?: DaemonPricingLike;
 }) {
   const waking = useWakingMachines();
+  const [renaming, setRenaming] = useState<string | null>(null);
   // Forget wakes that are over (the machine came up, failed, or never left
   // sleep), so a later Pending is not mislabelled as a wake.
   useEffect(() => {
@@ -683,7 +687,12 @@ function ManagedMachinesTable({
     {
       key: "name",
       header: "Name",
-      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+      render: (_, { d }) =>
+        renaming === d.daemonId ? (
+          <RenameMachineField daemonId={d.daemonId} currentName={d.name} onDone={() => setRenaming(null)} />
+        ) : (
+          <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />
+        ),
     },
     {
       key: "status",
@@ -734,10 +743,14 @@ function ManagedMachinesTable({
       interactive: true,
       className: "text-right",
       render: (_, { d }) => {
-        if (!cloud) return null;
+        // Default is this server's own write, so it is offered without a
+        // control plane too; lifecycle and delete are the control plane's.
+        if (!cloud) return <MakeDefaultButton daemon={d} />;
         const isSuspended = d.status === DaemonStatus.SUSPENDED;
         return (
           <div className="inline-flex items-center gap-1">
+            <MakeDefaultButton daemon={d} />
+            <RenameMachineButton label={daemonDisplayName(d)} onClick={() => setRenaming(d.daemonId)} />
             <Button
               variant="ghost"
               size="md"
@@ -771,7 +784,8 @@ function ManagedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
-        getRowAction={(r) => () => onOpenDetail(r.id)}
+        // The row being renamed holds a form, so it is not a link meanwhile.
+        getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}
       />
     </div>
@@ -779,6 +793,29 @@ function ManagedMachinesTable({
 }
 
 type MachineRow = { id: string; d: Daemon };
+
+/**
+ * "Make default": the machine new chats, worktrees and anything else that
+ * names no machine run on, in whatever state it is in (a sleeping default is
+ * woken, never passed over). Without one, they go to a connected machine.
+ * Hidden on the machine that already is the default — its Default badge says so.
+ */
+function MakeDefaultButton({ daemon }: { daemon: Daemon }) {
+  const { makeDefault, isPending } = useMakeDefaultMachine();
+  if (daemon.isDefault) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="md"
+      disabled={isPending}
+      onClick={() => makeDefault(daemon.daemonId)}
+      leftIcon={<Star className="h-4 w-4" aria-hidden="true" />}
+      aria-label={`Make ${daemonDisplayName(daemon)} your default machine`}
+    >
+      Make default
+    </Button>
+  );
+}
 
 /**
  * The machine's name, its app-access badge and its reported build: the row's
@@ -789,6 +826,7 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
   return (
     <span className="block">
       <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+      {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
       <AppAccessIndicator count={appCount} />
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
@@ -807,11 +845,17 @@ function SelfHostedMachinesTable({
   /** Absent without a control plane, which owns the machine record. */
   onRemove?: (d: Daemon) => void;
 }) {
+  const [renaming, setRenaming] = useState<string | null>(null);
   const columns: DataTableColumn<MachineRow>[] = [
     {
       key: "name",
       header: "Name",
-      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+      render: (_, { d }) =>
+        renaming === d.daemonId ? (
+          <RenameMachineField daemonId={d.daemonId} currentName={d.name} onDone={() => setRenaming(null)} />
+        ) : (
+          <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />
+        ),
     },
     {
       key: "status",
@@ -835,7 +879,7 @@ function SelfHostedMachinesTable({
       interactive: true,
       className: "text-right",
       render: (_, { d }) => {
-        if (!onRemove) return null;
+        if (!onRemove) return <MakeDefaultButton daemon={d} />;
         const removal = canRemoveDaemon(d);
         const button = (
           <Button
@@ -848,12 +892,18 @@ function SelfHostedMachinesTable({
             Remove
           </Button>
         );
-        return removal.allowed ? (
-          button
-        ) : (
-          <Tooltip content={removal.reason ?? ""} side="left">
-            {button}
-          </Tooltip>
+        return (
+          <div className="inline-flex items-center gap-1">
+            <MakeDefaultButton daemon={d} />
+            <RenameMachineButton label={daemonDisplayName(d)} onClick={() => setRenaming(d.daemonId)} />
+            {removal.allowed ? (
+              button
+            ) : (
+              <Tooltip content={removal.reason ?? ""} side="left">
+                {button}
+              </Tooltip>
+            )}
+          </div>
         );
       },
     },
@@ -865,7 +915,8 @@ function SelfHostedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
-        getRowAction={(r) => () => onOpenDetail(r.id)}
+        // The row being renamed holds a form, so it is not a link meanwhile.
+        getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}
       />
     </div>
@@ -1261,6 +1312,7 @@ function EnvironmentDetail({
   const [cycling, setCycling] = useState<LifecycleAction | null>(null);
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeError, setResizeError] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [growOpen, setGrowOpen] = useState(false);
   const [growError, setGrowError] = useState("");
   const [growDenied, setGrowDenied] = useState(false);
@@ -1532,7 +1584,14 @@ function EnvironmentDetail({
             className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+              {renaming ? (
+                <RenameMachineField daemonId={daemon.daemonId} currentName={daemon.name} onDone={() => setRenaming(false)} />
+              ) : (
+                <>
+                  <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+                  {cloud && <RenameMachineButton label={daemonDisplayName(daemon)} onClick={() => setRenaming(true)} />}
+                </>
+              )}
               {/*
                 ONE badge. This header used to render two: the status badge
                 ("Disconnected", red) and a separate connection badge

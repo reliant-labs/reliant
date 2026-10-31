@@ -36,6 +36,16 @@ const (
 // ExecuteTools' two outcomes.
 func runShieldScenario(t *testing.T, outlives bool, sdkCancelCause error) (result string, heartbeatsAfterCancel int32) {
 	t.Helper()
+	return runShieldScenarioWithVerdict(t, outlives, sdkCancelCause, nil)
+}
+
+// runShieldScenarioWithVerdict is runShieldScenario with the server's answer
+// to the direct heartbeats an engaged shield sends: verdict is returned by
+// each one (nil: the server accepted it). A heartbeat after the cancel —
+// through the SDK or directly — lets the tool finish, unless its context dies
+// first.
+func runShieldScenarioWithVerdict(t *testing.T, outlives bool, sdkCancelCause, verdict error) (result string, heartbeatsAfterCancel int32) {
+	t.Helper()
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
@@ -44,7 +54,10 @@ func runShieldScenario(t *testing.T, outlives bool, sdkCancelCause error) (resul
 	var afterCancel atomic.Int32
 	heartbeatAfterCancel := make(chan struct{}, 64)
 	env.SetOnActivityHeartbeatListener(func(*activity.Info, converter.EncodedValues) {
-		if cancelled.Load() {
+		// With a stopping verdict, only the shield's direct heartbeat may
+		// decide the outcome: an SDK heartbeat that races in before the
+		// shield engages must not let the tool finish first.
+		if cancelled.Load() && verdict == nil {
 			afterCancel.Add(1)
 			heartbeatAfterCancel <- struct{}{}
 		}
@@ -55,8 +68,13 @@ func runShieldScenario(t *testing.T, outlives bool, sdkCancelCause error) (resul
 		close(toolStarted)
 		select {
 		case <-ctx.Done():
-			return shieldTestCancelledPrefix + ctx.Err().Error(), nil
+			return shieldTestCancelledPrefix + context.Cause(ctx).Error(), nil
 		case <-heartbeatAfterCancel:
+			// A verdict that stops the work cancels ctx in the same call
+			// that delivered this heartbeat; prefer the cancellation.
+			if ctx.Err() != nil {
+				return shieldTestCancelledPrefix + context.Cause(ctx).Error(), nil
+			}
 			return shieldTestToolOutput, nil
 		case <-time.After(10 * time.Second):
 			return "tool timed out waiting for the scenario", nil
@@ -64,6 +82,13 @@ func runShieldScenario(t *testing.T, outlives bool, sdkCancelCause error) (resul
 	}
 
 	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry.directHeartbeat = func(context.Context, any) error {
+		if verdict == nil {
+			afterCancel.Add(1)
+			heartbeatAfterCancel <- struct{}{}
+		}
+		return verdict
+	}
 	wrapped := wrapActivity(registry, "ExecuteTools", tool, lifecycle.AgentWork, outlives)
 	env.RegisterActivityWithOptions(func(ctx context.Context, in string) (string, error) {
 		sdkCtx, sdkCancel := context.WithCancelCause(ctx)
@@ -120,6 +145,81 @@ func TestHeartbeatShield_RealCancellationsStillStopTheTool(t *testing.T) {
 			assert.Contains(t, result, shieldTestCancelledPrefix)
 		})
 	}
+}
+
+// Once the shield has absorbed a spurious cancel, the SDK can no longer report
+// a later one: its cancel func is spent. A cancel, pause or reset the server
+// returns to the shield's own direct heartbeat must still stop the work, with
+// its cause — otherwise a user who interrupts after a slow heartbeat watches
+// the stream run on to the end of the turn.
+func TestHeartbeatShield_RealCancelAfterEngagingStillStopsWork(t *testing.T) {
+	t.Parallel()
+	for name, verdict := range map[string]error{
+		"server cancel":                 temporal.NewCanceledError(),
+		"activity paused":               activity.ErrActivityPaused,
+		"activity reset":                activity.ErrActivityReset,
+		"attempt unknown to the server": serviceerror.NewNotFound("activity not found"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			result, _ := runShieldScenarioWithVerdict(t, true, context.DeadlineExceeded, verdict)
+			assert.Equal(t, shieldTestCancelledPrefix+verdict.Error(), result,
+				"the direct heartbeat's verdict must cancel the work with that cause")
+		})
+	}
+}
+
+// The engaged shield's direct heartbeat: rate-limited to the SDK's cadence,
+// tolerant of a slow server, and stopped only by a real instruction.
+func TestHeartbeatShield_DirectHeartbeatVerdicts(t *testing.T) {
+	t.Parallel()
+	newShield := func() *heartbeatShield {
+		work, cancel := context.WithCancelCause(context.Background())
+		t.Cleanup(func() { cancel(nil) })
+		return &heartbeatShield{work: work, cancelWork: cancel}
+	}
+	t0 := time.Unix(1_800_000_000, 0)
+
+	t.Run("rate limited to the SDK cadence", func(t *testing.T) {
+		t.Parallel()
+		s := newShield()
+		var sent int
+		send := func(context.Context, any) error { sent++; return nil }
+		require.NoError(t, s.heartbeat(t0, send, nil))
+		require.NoError(t, s.heartbeat(t0.Add(500*time.Millisecond), send, nil))
+		require.NoError(t, s.heartbeat(t0.Add(shieldedHeartbeatInterval), send, nil))
+		assert.Equal(t, 2, sent)
+	})
+
+	t.Run("a slow server keeps the work running", func(t *testing.T) {
+		t.Parallel()
+		s := newShield()
+		var rpcDeadline time.Duration
+		slow := func(ctx context.Context, _ any) error {
+			deadline, _ := ctx.Deadline()
+			rpcDeadline = time.Until(deadline)
+			return context.DeadlineExceeded
+		}
+		err := s.heartbeat(t0, slow, nil)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.NoError(t, s.work.Err(), "a failed RPC is not an instruction to stop")
+		assert.Equal(t, t0, s.failingSince)
+		assert.Greater(t, rpcDeadline, 2*time.Second,
+			"the direct RPC must get more than the SDK's 2s budget, which is what a loaded server blows")
+
+		require.NoError(t, s.heartbeat(t0.Add(shieldedHeartbeatInterval), func(context.Context, any) error { return nil }, nil))
+		assert.True(t, s.failingSince.IsZero(), "a successful heartbeat ends the failing run")
+	})
+
+	t.Run("a real cancel stops the work with its cause", func(t *testing.T) {
+		t.Parallel()
+		s := newShield()
+		canceled := temporal.NewCanceledError()
+		err := s.heartbeat(t0, func(context.Context, any) error { return canceled }, nil)
+		require.Error(t, err)
+		require.Error(t, s.work.Err())
+		assert.True(t, temporal.IsCanceledError(context.Cause(s.work)))
+	})
 }
 
 // ExecuteTools is the activity this exists for; the opt-in is read off the

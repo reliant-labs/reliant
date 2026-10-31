@@ -20,6 +20,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -283,12 +284,19 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Create chat object (not yet persisted) - model/temperature/max_tokens are workflow input params, not stored on chat
 	chat := &db.Chat{
-		ID:              chatID,
-		UserID:          userID,
-		Title:           title,
-		ProjectID:       spec.ProjectID,
-		WorkflowName:    &workflowName,
-		State:           db.ChatStateIdle,
+		ID:           chatID,
+		UserID:       userID,
+		Title:        title,
+		ProjectID:    spec.ProjectID,
+		WorkflowName: &workflowName,
+		State:        db.ChatStateIdle,
+		// Who started it decides whether it is a conversation (the chat
+		// list) or a run (Runs), for the life of the chat.
+		Origin: core.ChatOriginOf(ev.Kind),
+		// Not a column (the chat view derives it from the launch event): set
+		// here so this launch's admission reads the workflow the run will
+		// (chatScope), before that event exists.
+		LaunchKind:      string(ev.Kind),
 		WorkflowID:      &workflowID,
 		SelectedPresets: spec.Presets,
 		CreatedAt:       now,
@@ -296,7 +304,21 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
+	// The chat's origin (set above) decides the precedence its tree, inputs
+	// and the run's own loads resolve under (AutomationPrecedence).
+	if ev.TriggerID != "" {
+		triggerID := ev.TriggerID
+		chat.TriggerID = &triggerID
+	}
+
 	chat.NoMachine = spec.NoMachine
+	if spec.MachinePool != nil {
+		if spec.NoMachine || spec.DaemonID == "" {
+			return nil, &ValidationError{Reason: "a pool-placed run names the member it was placed on, and has a machine"}
+		}
+		poolID := spec.MachinePool.ID
+		chat.MachinePoolID = &poolID
+	}
 
 	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
 	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
@@ -323,11 +345,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
 	// read from the catalog of the machine the chat is pinned to, which is what the run's
 	// own loads read.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), spec.CatalogPin, ev, AutomationPrecedence(chat)); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", spec.CatalogPin, workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -348,9 +370,23 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
 		}
 	}
+	// A branch workspace's checkout is on one machine; a chat pinned to
+	// another would run its tools against a directory that is not there.
+	// StartChat refuses this first, naming the machine; this covers every
+	// other caller of Launch.
+	if spec.DaemonID != "" {
+		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil {
+			if _, conflict := daemonplacement.WorkspaceMachineConflict(wt, spec.DaemonID); conflict {
+				return nil, &ValidationError{
+					Kind:   ValidationFailedPrecondition,
+					Reason: "this workspace's checkout lives on another machine, so a chat in it cannot run on the one named: omit daemon_id or name the workspace's machine",
+				}
+			}
+		}
+	}
 
 	// Build and validate workflow inputs BEFORE creating chat
-	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.Presets, spec.Params)
+	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.CatalogPin, spec.Presets, spec.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +505,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if pending != nil {
 			// The outcome predicate on the claim is what decides between two
 			// fires of one inbound event, as the unique key does for inserts.
-			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload)
+			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
 			if err != nil {
 				return fmt.Errorf("failed to claim trigger event: %w", err)
 			}
@@ -667,6 +703,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it and ends no-machine. Every admission read below is scoped by it, so
 	// the tree, the presets and the input schema all come from that machine.
 	checked := *chat
+	if checked.LaunchKind == "" {
+		// The launch this start records: it decides, as for the run, whether
+		// the workflow may be read from an unfinished draft (chatScope).
+		checked.LaunchKind = string(ev.Kind)
+	}
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
@@ -677,11 +718,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			checked.ActiveDaemonID = &target
 		}
 	}
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), spec.CatalogPin, ev, AutomationPrecedence(&checked)); err != nil {
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", spec.CatalogPin, workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -690,7 +731,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	{
 		_, presets, _ := effectiveStart(chat, spec)
-		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, presets, spec.Params); err != nil {
+		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params); err != nil {
 			return nil, err
 		}
 	}
@@ -816,10 +857,16 @@ func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[
 
 // isAttendedStartKind reports whether a launch kind is a human starting a chat
 // by hand: the interactive start, a test run pressed in the workflow builder,
-// and "Run now" on a workflow. All dedupe on the chat id, so a second call with different content
-// is a second thing the user said rather than a retry.
+// "Run now" on a workflow, and `reliant workflow run`. All go through
+// ChatService.StartChat's path and dedupe on the chat id, so a second call with
+// different content is a second thing the user said rather than a retry.
 func isAttendedStartKind(kind core.TriggerEventKind) bool {
-	return kind == core.TriggerEventKindChatStart || kind == core.TriggerEventKindBuilderTest || kind == core.TriggerEventKindManualRun
+	switch kind {
+	case core.TriggerEventKindChatStart, core.TriggerEventKindBuilderTest,
+		core.TriggerEventKindManualRun, core.TriggerEventKindCLIRun:
+		return true
+	}
+	return false
 }
 
 // isRetryOf reports whether a call carrying fingerprint is a retry of the
@@ -860,13 +907,17 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to read the recorded start", Err: err}
 	}
+	// The recorded start ran against the catalog snapshot its event names,
+	// not whatever this retry's caller resolved: a push since must not change
+	// what an already-recorded launch starts.
+	spec.CatalogPin = recordedCatalogPin(recorded)
 
 	// Pin an unpinned chat before its inputs are built: they are read from
 	// its machine's catalog, the one the run's own loads resolve against.
 	if l.pinner != nil {
 		l.pinner.Pin(ctx, chat)
 	}
-	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, chat.SelectedPresets, params)
+	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, spec.CatalogPin, chat.SelectedPresets, params)
 	if err != nil {
 		return nil, err
 	}
@@ -901,6 +952,15 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		generateTitle: spec.GenerateTitle && chat.Title == "",
 		attemptAt:     attemptAt,
 	})
+}
+
+// recordedCatalogPin is the catalog snapshot a recorded launch was decided
+// against (its definition's pin), "" for one decided against the live catalog.
+func recordedCatalogPin(recorded *core.TriggerEvent) string {
+	if recorded == nil || recorded.Definition == nil {
+		return ""
+	}
+	return recorded.Definition.CatalogPin
 }
 
 // finishExisting handles a Launch whose (kind, dedupe key) already has an
@@ -1056,6 +1116,7 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 		Payload:    payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
+		Definition: ev.Definition,
 		Outcome:    core.TriggerEventLaunched,
 		ChatID:     &chatID,
 	}
@@ -1068,27 +1129,35 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 
 // buildInputs resolves and validates the root run's inputs. Callers run it
 // BEFORE anything is persisted, so a spec that cannot launch leaves no rows.
+//
+// pin is the catalog snapshot the launch was decided against (Spec.CatalogPin),
+// "" for the live catalog: the presets and the input schema are read from it.
 func (l *Launcher) buildInputs(
 	ctx context.Context,
 	userID string,
 	chat *db.Chat,
-	workflowName string,
+	workflowName, pin string,
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
-	initialData, err := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	initialData, err := l.buildChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, presets, paramValues(params))
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
+	if validationErrors := l.validateChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			if errors.Is(e, drivers.ErrDriverLookupFailed) {
 				// Could not read the user's provider settings: a store
 				// problem, not a verdict on the inputs.
 				return nil, &InternalError{Reason: "failed to read provider settings", Err: e}
+			}
+			var lookupErr *WorkflowLookupError
+			if errors.As(e, &lookupErr) {
+				// Could not read the workflow: retryable, not a verdict.
+				return nil, &InternalError{Reason: "failed to look up workflow", Err: e}
 			}
 			errMsgs[i] = e.Error()
 		}
@@ -1170,6 +1239,10 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		Thread:       workflowID,
 		ThreadMode:   model.ThreadModeNew,
 		UserJWT:      p.spec.UserJWT,
+		// A launch decided against a catalog snapshot runs on it: the root
+		// load and every later load read the definitions it was admitted
+		// (and its trigger recorded) against, not a later push.
+		CatalogPin: p.spec.CatalogPin,
 	}
 
 	// Start workflow on shared task queue.
@@ -1212,6 +1285,11 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// key from a client, so only a launch can make a run unattended.
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
+	}
+	// The pool that placed the run, injected like session_daemon_id: a fact
+	// about the run, not a declared input (workflow.RuntimeInjectedInputs).
+	if pool := p.spec.MachinePool; pool != nil {
+		initialData[InputKeyMachinePool] = machinePoolInput(pool, chat)
 	}
 	// Who the integration writes speak as. Injected after validation like
 	// unattended, and only for an unattended launch: the bot is an

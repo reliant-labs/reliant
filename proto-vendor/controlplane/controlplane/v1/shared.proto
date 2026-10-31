@@ -99,6 +99,19 @@ enum DaemonSize {
   DAEMON_SIZE_3XL = 12; // 30 vCPU, 64 GiB
 }
 
+// DaemonDiskMode is where a managed machine's disk lives, fixed at create.
+enum DaemonDiskMode {
+  // Unspecified is PERSISTENT.
+  DAEMON_DISK_MODE_UNSPECIFIED = 0;
+  // The disk outlives the machine's pod and is kept while it is suspended:
+  // files, checkouts and caches survive, and the disk bills while it sleeps.
+  DAEMON_DISK_MODE_PERSISTENT = 1;
+  // Every start gets a fresh disk, deleted when the machine suspends: nothing
+  // survives a suspend, and a suspended machine costs nothing. For stateless
+  // machines such as CI pool members.
+  DAEMON_DISK_MODE_EPHEMERAL = 2;
+}
+
 enum PortAccessMode {
   PORT_ACCESS_MODE_UNSPECIFIED = 0;
   PORT_ACCESS_MODE_PUBLIC = 1; // anyone with the URL
@@ -226,6 +239,9 @@ message Daemon {
   // machine inherits them, from the next time its pod is built (resume,
   // resize or re-create). Plain text: not for secrets.
   map<string, string> env = 35;
+
+  // Where the machine's disk lives (managed daemons only); fixed at create.
+  DaemonDiskMode disk_mode = 36;
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer

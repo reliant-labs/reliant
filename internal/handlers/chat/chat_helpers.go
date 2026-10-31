@@ -204,6 +204,7 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	if c.LaunchKind != "" {
 		proto.LaunchKind = &c.LaunchKind
 	}
+	proto.Origin = c.Origin
 	if c.TriggerID != nil {
 		proto.TriggerId = c.TriggerID
 	}

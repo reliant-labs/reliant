@@ -14,12 +14,12 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -310,7 +310,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 		logging.WarnContext(ctx, "[GenerateTitle] LLM generation exhausted, writing truncated first message",
 			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
-		generatedTitle, err = a.generateTitle(ctx, chat.UserID, input.FirstMessage)
+		generatedTitle, err = a.generateTitleForChat(ctx, chat.UserID, chat.ID, input.FirstMessage)
 		if err != nil {
 			attempt := int32(1)
 			func() {
@@ -468,6 +468,9 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	for _, prompt := range compactionPrompts {
 		overhead += len(prompt)
 	}
+	// Each request below, including the smaller-prefix retries after an
+	// overflow, is a request the provider counted; the meter records each one.
+	meter := newUsageMeter(a.repo, chat.UserID, chat.ID, store.LLMPurposeCompaction)
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -476,7 +479,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: transcript[:prefixEnd]}}},
 			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: compactionMsg}}},
 		}
-		response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
+		response, err := meter.streamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved, compactionPrompts, history, []tools.Tool{})
 		if err == nil {
 			if strings.TrimSpace(response.Content) == "" {
 				return "", fmt.Errorf("empty summary generated")
@@ -622,6 +625,12 @@ func titleModelFallbackSelector() models.ModelSelector {
 
 // generateTitle generates a concise, meaningful title using the LLM
 func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, firstMessage string) (string, error) {
+	return a.generateTitleForChat(ctx, userID, "", firstMessage)
+}
+
+// generateTitleForChat is generateTitle for a known chat, which the usage
+// ledger records the title request against.
+func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, userID, chatID, firstMessage string) (string, error) {
 	if firstMessage == "" {
 		return "", fmt.Errorf("first message is empty")
 	}
@@ -670,8 +679,11 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 	var raw string
 	var err error
 	var lastRefusal error
+	// The title makes up to titleAttempts requests (an account or provider
+	// that refuses is retried elsewhere); the meter records each.
+	meter := newUsageMeter(a.repo, userID, chatID, store.LLMPurposeTitle)
 	for range titleAttempts {
-		raw, err = a.requestTitle(ctx, spec, firstMessage)
+		raw, err = a.requestTitle(ctx, meter, spec, firstMessage)
 		var refused *types.UsageLimitFailure
 		if err == nil || !errors.As(err, &refused) {
 			break
@@ -728,13 +740,12 @@ const titleAttempts = 4
 // requestTitle makes one title request: resolve the model and account, stream,
 // and return the set_title argument. A provider refusal is recorded against the
 // serving account before it is returned.
-func (a *GenerateTitleActivity) requestTitle(ctx context.Context, spec llmCallSpec, firstMessage string) (string, error) {
+func (a *GenerateTitleActivity) requestTitle(ctx context.Context, meter *usageMeter, spec llmCallSpec, firstMessage string) (string, error) {
 	titleTool := tools.NewSetTitleTool()
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
 	if err != nil {
 		return "", err
 	}
-	driver := resolved.Driver
 	logging.DebugContext(ctx, "[GenerateTitle] Selected model", "model", resolved.ModelID)
 
 	// Wrap the message in a delimiter and restate the instruction after it.
@@ -778,7 +789,7 @@ func (a *GenerateTitleActivity) requestTitle(ctx context.Context, spec llmCallSp
 	//
 	// The account's rate-limit observer rides on the request, so its headers
 	// update the account's limit state exactly as a chat turn's do.
-	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), driver, prompt, messages, []tools.Tool{titleTool})
+	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{titleTool})
 	if err != nil {
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate title: %w", err), usageLimitContext{
 			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),

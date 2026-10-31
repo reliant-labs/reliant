@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
+import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
@@ -181,6 +182,11 @@ export const authSearchSchema = z.object({
 // dropped once the page has shown it.
 export const appsSearchSchema = z.object({
   claimed: z.string().optional(),
+  // A claim paused one of the person's two free static sites (they chose which):
+  // the name of the paused site, and which one they kept live. The page says what
+  // happened and that subscribing undoes it.
+  pausedSite: z.string().optional(),
+  kept: z.enum(["claimed", "existing"]).optional(),
 });
 
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
@@ -288,6 +294,9 @@ export const SETTINGS_SECTION_IDS = [
   // redirects here.
   "branches",
   "projects",
+  // When an agent's change to a trigger activation needs the owner's
+  // approval card (the automation.approvals setting).
+  "automations",
   "browser",
   "appearance",
   "notifications",
@@ -402,7 +411,7 @@ export const settingsSearchSchema = z.object({
   // Every other value is a surface that sent the user to billing
   // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
   from: z
-    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade"])
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade", "claim"])
     .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
@@ -619,13 +628,17 @@ export const forgeConsoleWorkloadSearchSchema = z.object({
 });
 
 /**
- * Observability › Dashboards: the index's search box and its two filters
- * (source: release or workspace; owner: forge, repo or a person). The scope
- * (`env`) narrows the index server-side; these narrow it in place.
+ * Observability › Dashboards: which view (the Overview hub, or `all`: the
+ * grouped list), the list's search box and its filters (group; source:
+ * release or workspace; owner: forge, repo or a person). The scope (`env`)
+ * narrows the index server-side; these narrow it in place.
  */
 export const forgeConsoleDashboardsSearchSchema = z.object({
   env: envScopeParam,
+  // Absent is the Overview hub; "all" is the grouped list.
+  view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
+  group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
   source: z.enum(["release", "workspace"]).optional().catch(undefined),
   owner: z.string().optional().catch(undefined),
 });
@@ -654,6 +667,9 @@ export const forgeConsoleDashboardSearchSchema = z.object({
   tv: z.boolean().optional().catch(undefined),
   version: z.number().int().positive().optional().catch(undefined),
   release: z.string().optional().catch(undefined),
+  // An org-scoped dashboard's project/env picker ("<project>/<env>" names):
+  // undeclared, zod would strip it and every routed view would read all envs.
+  orgEnvs: z.array(z.string()).optional().catch(undefined),
 });
 
 /**
@@ -824,6 +840,7 @@ export const RUN_KIND_FILTER_KEYS = [
   "integration",
   "workflow_event",
   "agent.start_run",
+  "cli.run",
   "builder.test",
 ] as const;
 

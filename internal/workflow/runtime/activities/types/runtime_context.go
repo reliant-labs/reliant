@@ -135,6 +135,12 @@ type RuntimeContext struct {
 	// means something upstream is wrong. Set on call_llm nodes only.
 	SpeculativeTurn bool `json:"speculative_turn,omitempty"`
 
+	// CatalogPin is the workflow catalog the run started with
+	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
+	// describes from it, so the model is offered the presets a spawn then
+	// loads. Set on call_llm nodes; empty for a run with no pin.
+	CatalogPin string `json:"catalog_pin,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 
@@ -155,6 +161,11 @@ type DaemonSelector struct {
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Session marks the chat's pin (session_daemon_id, or the chat's
+	// active_daemon_id read at activity time) rather than a selector the
+	// workflow or node configures. Only a session pin yields to a branch
+	// workspace's owner (toolDaemonSelector).
+	Session bool `json:"session,omitempty"`
 }
 
 // SpawnConfig holds the configuration for spawning child workflows.

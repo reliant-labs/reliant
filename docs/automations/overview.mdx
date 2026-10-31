@@ -32,7 +32,7 @@ You **enable** it in the app. Open **Workflows → Library**, open the workflow 
 - for an integration event, which **connected account** it listens through, once per integration;
 - the workflow's own **inputs**, set on every run;
 - a **prompt**, for any trigger whose author wrote none;
-- whether to **notify** you when a run completes. Off by default: finished runs land quietly in **Workflows → Runs**, while a failure always notifies you.
+- whether to **notify** you when a run succeeds. Off by default: successful runs land quietly in **Workflows → Runs**. On, a successful run is marked unread and raises a desktop notification. It never puts the run in the [Inbox](#the-inbox), which lists only what needs you. A failed run always notifies you, once per failure streak, and stays in the Inbox until a later run of the automation succeeds.
 
 When the workflow declares more than one trigger, a trigger that needs something different (another machine, another account, a prompt of its own) can be changed under **Advanced: per trigger**.
 
@@ -248,22 +248,35 @@ If an agent in a shell can write to GitHub as you, give the writing to an action
 
 Nobody is watching an automation's run. The agent is told to decide and proceed rather than ask, questions and approvals resolve immediately with no answer instead of waiting, and a run that pauses on a failure (a rate limit, a machine that went away) resumes itself with a growing wait instead of waiting for someone to resume it. Only a failure that outlasts about half an hour of retries leaves it paused, in **Workflows → Runs**, for a person to look at. Design workflows for this: give them everything they need in the prompt and inputs, and assume nothing can be clarified mid-run.
 
-A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`: chat pickers stop offering it and a chat start of it is refused. A helper that other workflows only `ref:` also sets `hidden: true`, which keeps it out of every picker and listing.
+### Declare what a run needs: `requires:`
+
+A run that needs something from outside its definition says so, and checks it before its first node:
+
+```yaml
+requires:
+  tools: [git, gh, task]        # executables on the run machine's PATH
+  integrations: [github]        # connections that must resolve for the activation's owner
+  repos: [control-plane]        # checkouts under the project root
+```
+
+Once the run's machine is up, and before any node runs, the run checks every entry: each tool is on the machine's PATH; each integration's connection resolves, authorized, for the run's owner and acting identity; each checkout exists, reaches its origin (`git ls-remote`, which writes nothing), and has no local tag that differs from origin's (the cause of `git fetch` failing with "would clobber existing tag"). If anything is missing the run fails at once, before any side effect, with every missing item and its fix in the run's error, rather than an hour in. A check that cannot run (the machine dropped the probe) is retried, and reported as such if it still cannot. [Workflow lint](/workflows/lint#requires-undeclared-tool) warns when a triggered workflow's command calls a tool its `requires.tools` does not list.
+
+A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`: chat pickers stop offering it and a chat start of it is refused. A deliberate start by hand (Run now, `reliant workflow run`, an agent's `start_run`, a builder test run) still works. A helper that other workflows only `ref:` also sets `hidden: true`, which keeps it out of every picker and listing.
 
 ## Where runs go
 
 An automation's runs stay out of your chat list. Each one is listed under **Workflows → Runs**, named by the automation that fired it, with its status. A run that finishes successfully archives itself: it stays in Runs, marked **Archived**, and out of the sidebar's Archived tab, which holds only chats you put away. A run that fails, completes into a declared `outcome: failure`, is cancelled, or is waiting on you stays unarchived, so it surfaces in Runs and the Inbox. Route a blocked path to a terminal node with `outcome: failure` when you want to look at it.
 
-An automation with **Notify me when it finishes** keeps its successful runs unarchived, since the notification points at them. **Open as chat** on a run moves it into your chat list, out of the archive if it was there.
+An automation with **Notify me when a run succeeds** keeps its successful runs unarchived, since the notification points at them. **Open as chat** on a run moves it into your chat list, out of the archive if it was there.
 
 ## Who an automation acts as
 
-An automation's integration actions, a node's `action` and an agent's integration tools alike, write as the identity chosen in the automation's settings. **New GitHub integration triggers default to Reliant bot** (including triggers declared in a workflow). Other sources, including schedules, webhooks and workflow events, still default to you: a scheduled workflow that writes to GitHub needs an explicit **Reliant bot** choice. Existing activations keep their stored identity, and an explicit **You** choice is never replaced. To change one, open it in **Workflows → Automations** and choose **Edit**. Only GitHub supports the bot identity; other integrations do not: this setting does not provide a Slack, Gmail or Twilio bot.
+An automation's GitHub writes (comments, reviews, labels, pull requests, issues, workflow dispatches and `git_publish` pushes, from a node's `action` and an agent's integration tools alike) are made as the identity chosen in the automation's settings. **Every new automation defaults to Reliant bot**, whatever starts it: a GitHub event, a schedule, a webhook, another integration or a workflow event, including triggers declared in a workflow, `reliant trigger activate` and activations an agent creates. Writing as **You** is an explicit choice. Existing activations keep their stored identity, and an explicit **You** choice is never replaced. To change one, open it in **Workflows → Automations** and choose **Edit**, or run `reliant trigger activate --acting-as owner`. Only GitHub has a bot: Slack, Gmail, Twilio and HTTP writes always go through your own connection.
 
 | Identity | Comments, reviews and pull requests appear as | When to choose it |
 |----------|-----------------------------------------------|-------------------|
 | You (`owner`) | You, through your own GitHub connection | The automation is you acting on a schedule |
-| Reliant bot (`app`, default for new GitHub integration triggers) | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
+| Reliant bot (`app`, the default) | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
 
 Everything a bot writes ends with a footer naming the automation and its owner, so nobody has to guess whose it is:
 
@@ -275,7 +288,7 @@ Three things stay as they are:
 
 - **Reads** use your own access. Only writes carry the bot's name. A write that names a saved connection (`connection:`) cannot also be made as the bot, so it fails instead of using that connection; a read may still name one.
 - **A person typing in the run's chat acts as themselves.** The bot identity belongs to the automation's own run, not to the chat.
-- **A deployment with no control plane to provide the Reliant GitHub App** refuses a new GitHub trigger's default bot identity when you save. Configure the App or explicitly choose **You**; it never silently selects the owner. A hosted deployment whose App key is missing refuses each bot write with an error telling an administrator to configure the App, or you to set the automation to write as you.
+- **A deployment with no control plane to provide the Reliant GitHub App** has no bot. A new GitHub trigger's default bot identity is refused when you save: configure the App or explicitly choose **You**; it never silently selects the owner. Other new automations there default to **You**. A hosted deployment whose App key is missing refuses each bot write with an error telling an administrator to configure the App, or you to set the automation to write as you.
 
 Comments the bot writes never fire a trigger on `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot start itself. Another bot's comments (Dependabot, a CI app) do reach your filters.
 
@@ -308,10 +321,11 @@ The **Inbox**, in the sidebar, is everything waiting on you across your projects
 | Approvals | A run is waiting for you to approve a tool call or a step |
 | Questions | An agent asked you something and is waiting for the answer |
 | Waiting for a machine | A run is blocked on a machine that is asleep or starting |
-| Failing automations | An automation's health turned **Failing** |
+| Failing automations | A run an automation started failed, or the automation is **Failing** or **broken**. One item per failure streak; a later run of the automation that succeeds clears it |
 | Automations that could not start | An automation's newest firing could not start a run |
-| Finished runs | A run of an automation that notifies on completion finished, and you have not opened it yet |
 | Storage | A machine is low on disk, or holds archived worktrees it will not remove on its own |
+
+A run that completed successfully is never in the Inbox, whatever its automation's notify setting: **Notify me when a run succeeds** is a desktop notification, not an Inbox item. A workflow that has something to tell you after a success says so itself, with a step that messages you (Slack, SMS or email) or an `ask_user` question.
 
 Approvals (**Approve** / **Deny**) and questions (**Answer**) can be dealt with from the Inbox itself; the rest **Open** the run, automation or machine. Every item, or a whole section, can be dismissed, with Undo. It shows the current project by default, with every project one click away. A run started by an automation is unattended and never waits on you, so the approvals and questions here come from chats and runs someone started by hand.
 

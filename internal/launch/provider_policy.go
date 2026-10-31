@@ -126,7 +126,7 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 	}
 	delete(base, v2.InputKeyProviderPolicy)
 	if chat != nil && len(chat.SelectedPresets) > 0 {
-		fromPresets, err := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), map[string]interface{}{}, chat.SelectedPresets)
+		fromPresets, err := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), "", map[string]interface{}{}, chat.SelectedPresets)
 		if err != nil {
 			// The preset layer cannot be rebuilt (a preset disappeared, or
 			// the catalog could not be read), so the policy the run already

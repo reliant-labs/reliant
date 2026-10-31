@@ -13,21 +13,31 @@ export function RunNodes({ workflowId }: { workflowId: string }) {
       return run?.state === WorkflowState.STOPPED && run.stopReason !== WorkflowStopReason.PAUSED ? false : 5000;
     },
   });
+  // Why the run failed, as recorded on the run. A run that failed before any
+  // node ran (input validation, a definition that would not load) has no node
+  // attempt to show an error on, so this is the only place it is said.
+  const failure = query.data?.run?.failureDetail ?? "";
   return (
     <details className="border-b border-border/60 bg-card px-6 py-3" open>
       <summary className="cursor-pointer text-sm font-medium text-foreground">Node executions</summary>
       <div className="mt-2 max-h-72 overflow-auto">
         {query.isLoading ? <p role="status" className="text-sm text-muted-foreground">Loading node executions…</p> :
           query.isError ? <div role="alert" className="text-sm text-destructive">Could not load node executions. <Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></div> :
-          <RunNodeList nodes={query.data?.nodes ?? []} truncated={query.data?.nodesTruncated ?? false} />}
+          <>
+            {failure && <div role="alert" className="mb-2 text-sm">
+              <h4 className="font-medium text-destructive">Why the run failed</h4>
+              <pre className="mt-1 whitespace-pre-wrap break-words text-destructive">{failure}</pre>
+            </div>}
+            <RunNodeList nodes={query.data?.nodes ?? []} truncated={query.data?.nodesTruncated ?? false} failed={failure !== ""} />
+          </>}
       </div>
     </details>
   );
 }
 
-export function RunNodeList({ nodes, truncated }: { nodes: RunNodeExecution[]; truncated: boolean }) {
+export function RunNodeList({ nodes, truncated, failed = false }: { nodes: RunNodeExecution[]; truncated: boolean; failed?: boolean }) {
   return <>
-    {nodes.length === 0 && <p className="text-sm text-muted-foreground">No recorded node executions yet.</p>}
+    {nodes.length === 0 && <p className="text-sm text-muted-foreground">{failed ? "No node ran: the run failed before its first node." : "No recorded node executions yet."}</p>}
     <ul className="divide-y divide-border/60" aria-label="Node attempts (newest first)">
       {nodes.map((node) => <li key={node.id} className="py-2 text-sm">
         <details open={node.status === "failed"}>

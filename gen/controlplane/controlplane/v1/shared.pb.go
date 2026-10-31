@@ -344,6 +344,62 @@ func (DaemonSize) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{4}
 }
 
+// DaemonDiskMode is where a managed machine's disk lives, fixed at create.
+type DaemonDiskMode int32
+
+const (
+	// Unspecified is PERSISTENT.
+	DaemonDiskMode_DAEMON_DISK_MODE_UNSPECIFIED DaemonDiskMode = 0
+	// The disk outlives the machine's pod and is kept while it is suspended:
+	// files, checkouts and caches survive, and the disk bills while it sleeps.
+	DaemonDiskMode_DAEMON_DISK_MODE_PERSISTENT DaemonDiskMode = 1
+	// Every start gets a fresh disk, deleted when the machine suspends: nothing
+	// survives a suspend, and a suspended machine costs nothing. For stateless
+	// machines such as CI pool members.
+	DaemonDiskMode_DAEMON_DISK_MODE_EPHEMERAL DaemonDiskMode = 2
+)
+
+// Enum value maps for DaemonDiskMode.
+var (
+	DaemonDiskMode_name = map[int32]string{
+		0: "DAEMON_DISK_MODE_UNSPECIFIED",
+		1: "DAEMON_DISK_MODE_PERSISTENT",
+		2: "DAEMON_DISK_MODE_EPHEMERAL",
+	}
+	DaemonDiskMode_value = map[string]int32{
+		"DAEMON_DISK_MODE_UNSPECIFIED": 0,
+		"DAEMON_DISK_MODE_PERSISTENT":  1,
+		"DAEMON_DISK_MODE_EPHEMERAL":   2,
+	}
+)
+
+func (x DaemonDiskMode) Enum() *DaemonDiskMode {
+	p := new(DaemonDiskMode)
+	*p = x
+	return p
+}
+
+func (x DaemonDiskMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DaemonDiskMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_controlplane_v1_shared_proto_enumTypes[5].Descriptor()
+}
+
+func (DaemonDiskMode) Type() protoreflect.EnumType {
+	return &file_controlplane_v1_shared_proto_enumTypes[5]
+}
+
+func (x DaemonDiskMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DaemonDiskMode.Descriptor instead.
+func (DaemonDiskMode) EnumDescriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{5}
+}
+
 type PortAccessMode int32
 
 const (
@@ -380,11 +436,11 @@ func (x PortAccessMode) String() string {
 }
 
 func (PortAccessMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_shared_proto_enumTypes[5].Descriptor()
+	return file_controlplane_v1_shared_proto_enumTypes[6].Descriptor()
 }
 
 func (PortAccessMode) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_shared_proto_enumTypes[5]
+	return &file_controlplane_v1_shared_proto_enumTypes[6]
 }
 
 func (x PortAccessMode) Number() protoreflect.EnumNumber {
@@ -393,7 +449,7 @@ func (x PortAccessMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PortAccessMode.Descriptor instead.
 func (PortAccessMode) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{5}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{6}
 }
 
 type SubscriptionStatus int32
@@ -435,11 +491,11 @@ func (x SubscriptionStatus) String() string {
 }
 
 func (SubscriptionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_shared_proto_enumTypes[6].Descriptor()
+	return file_controlplane_v1_shared_proto_enumTypes[7].Descriptor()
 }
 
 func (SubscriptionStatus) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_shared_proto_enumTypes[6]
+	return &file_controlplane_v1_shared_proto_enumTypes[7]
 }
 
 func (x SubscriptionStatus) Number() protoreflect.EnumNumber {
@@ -448,7 +504,7 @@ func (x SubscriptionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SubscriptionStatus.Descriptor instead.
 func (SubscriptionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{6}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{7}
 }
 
 type PlanTier int32
@@ -487,11 +543,11 @@ func (x PlanTier) String() string {
 }
 
 func (PlanTier) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_shared_proto_enumTypes[7].Descriptor()
+	return file_controlplane_v1_shared_proto_enumTypes[8].Descriptor()
 }
 
 func (PlanTier) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_shared_proto_enumTypes[7]
+	return &file_controlplane_v1_shared_proto_enumTypes[8]
 }
 
 func (x PlanTier) Number() protoreflect.EnumNumber {
@@ -500,7 +556,7 @@ func (x PlanTier) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PlanTier.Descriptor instead.
 func (PlanTier) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{7}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{8}
 }
 
 type LLMKeyStatus int32
@@ -539,11 +595,11 @@ func (x LLMKeyStatus) String() string {
 }
 
 func (LLMKeyStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_shared_proto_enumTypes[8].Descriptor()
+	return file_controlplane_v1_shared_proto_enumTypes[9].Descriptor()
 }
 
 func (LLMKeyStatus) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_shared_proto_enumTypes[8]
+	return &file_controlplane_v1_shared_proto_enumTypes[9]
 }
 
 func (x LLMKeyStatus) Number() protoreflect.EnumNumber {
@@ -552,7 +608,7 @@ func (x LLMKeyStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LLMKeyStatus.Descriptor instead.
 func (LLMKeyStatus) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{8}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{9}
 }
 
 type DaemonDiskState int32
@@ -594,11 +650,11 @@ func (x DaemonDiskState) String() string {
 }
 
 func (DaemonDiskState) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_shared_proto_enumTypes[9].Descriptor()
+	return file_controlplane_v1_shared_proto_enumTypes[10].Descriptor()
 }
 
 func (DaemonDiskState) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_shared_proto_enumTypes[9]
+	return &file_controlplane_v1_shared_proto_enumTypes[10]
 }
 
 func (x DaemonDiskState) Number() protoreflect.EnumNumber {
@@ -607,7 +663,7 @@ func (x DaemonDiskState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DaemonDiskState.Descriptor instead.
 func (DaemonDiskState) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{9}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{10}
 }
 
 type ResourceRequirements struct {
@@ -756,7 +812,9 @@ type Daemon struct {
 	// by its owner with DaemonService.UpdateDaemon. Every process on the
 	// machine inherits them, from the next time its pod is built (resume,
 	// resize or re-create). Plain text: not for secrets.
-	Env           map[string]string `protobuf:"bytes,35,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Env map[string]string `protobuf:"bytes,35,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Where the machine's disk lives (managed daemons only); fixed at create.
+	DiskMode      DaemonDiskMode `protobuf:"varint,36,opt,name=disk_mode,json=diskMode,proto3,enum=controlplane.v1.DaemonDiskMode" json:"disk_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -992,6 +1050,13 @@ func (x *Daemon) GetEnv() map[string]string {
 		return x.Env
 	}
 	return nil
+}
+
+func (x *Daemon) GetDiskMode() DaemonDiskMode {
+	if x != nil {
+		return x.DiskMode
+	}
+	return DaemonDiskMode_DAEMON_DISK_MODE_UNSPECIFIED
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
@@ -3819,7 +3884,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"cpuRequest\x12\x1b\n" +
 	"\tcpu_limit\x18\x02 \x01(\tR\bcpuLimit\x12%\n" +
 	"\x0ememory_request\x18\x03 \x01(\tR\rmemoryRequest\x12!\n" +
-	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xce\v\n" +
+	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\x8c\f\n" +
 	"\x06Daemon\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -3855,7 +3920,8 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x0flifecycle_phase\x18\x1f \x01(\x0e2%.controlplane.v1.DaemonLifecyclePhaseR\x0elifecyclePhase\x12O\n" +
 	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccess\x12/\n" +
 	"\x04disk\x18  \x01(\v2\x1b.controlplane.v1.DaemonDiskR\x04disk\x122\n" +
-	"\x03env\x18# \x03(\v2 .controlplane.v1.Daemon.EnvEntryR\x03env\x1a6\n" +
+	"\x03env\x18# \x03(\v2 .controlplane.v1.Daemon.EnvEntryR\x03env\x12<\n" +
+	"\tdisk_mode\x18$ \x01(\x0e2\x1f.controlplane.v1.DaemonDiskModeR\bdiskMode\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe8\x01\n" +
@@ -4203,7 +4269,11 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x0eDAEMON_SIZE_XL\x10\n" +
 	"\x12\x13\n" +
 	"\x0fDAEMON_SIZE_2XL\x10\v\x12\x13\n" +
-	"\x0fDAEMON_SIZE_3XL\x10\f\"\x04\b\x01\x10\x05*\x11DAEMON_SIZE_SMALL*\x12DAEMON_SIZE_MEDIUM*\x11DAEMON_SIZE_LARGE*\x8f\x01\n" +
+	"\x0fDAEMON_SIZE_3XL\x10\f\"\x04\b\x01\x10\x05*\x11DAEMON_SIZE_SMALL*\x12DAEMON_SIZE_MEDIUM*\x11DAEMON_SIZE_LARGE*s\n" +
+	"\x0eDaemonDiskMode\x12 \n" +
+	"\x1cDAEMON_DISK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bDAEMON_DISK_MODE_PERSISTENT\x10\x01\x12\x1e\n" +
+	"\x1aDAEMON_DISK_MODE_EPHEMERAL\x10\x02*\x8f\x01\n" +
 	"\x0ePortAccessMode\x12 \n" +
 	"\x1cPORT_ACCESS_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PORT_ACCESS_MODE_PUBLIC\x10\x01\x12\"\n" +
@@ -4244,7 +4314,7 @@ func file_controlplane_v1_shared_proto_rawDescGZIP() []byte {
 	return file_controlplane_v1_shared_proto_rawDescData
 }
 
-var file_controlplane_v1_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_controlplane_v1_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
 var file_controlplane_v1_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_controlplane_v1_shared_proto_goTypes = []any{
 	(DaemonType)(0),               // 0: controlplane.v1.DaemonType
@@ -4252,110 +4322,112 @@ var file_controlplane_v1_shared_proto_goTypes = []any{
 	(DaemonLifecyclePhase)(0),     // 2: controlplane.v1.DaemonLifecyclePhase
 	(OwnerType)(0),                // 3: controlplane.v1.OwnerType
 	(DaemonSize)(0),               // 4: controlplane.v1.DaemonSize
-	(PortAccessMode)(0),           // 5: controlplane.v1.PortAccessMode
-	(SubscriptionStatus)(0),       // 6: controlplane.v1.SubscriptionStatus
-	(PlanTier)(0),                 // 7: controlplane.v1.PlanTier
-	(LLMKeyStatus)(0),             // 8: controlplane.v1.LLMKeyStatus
-	(DaemonDiskState)(0),          // 9: controlplane.v1.DaemonDiskState
-	(*ResourceRequirements)(nil),  // 10: controlplane.v1.ResourceRequirements
-	(*Daemon)(nil),                // 11: controlplane.v1.Daemon
-	(*DaemonDisk)(nil),            // 12: controlplane.v1.DaemonDisk
-	(*PortAccessRule)(nil),        // 13: controlplane.v1.PortAccessRule
-	(*User)(nil),                  // 14: controlplane.v1.User
-	(*Organization)(nil),          // 15: controlplane.v1.Organization
-	(*Product)(nil),               // 16: controlplane.v1.Product
-	(*MeteredDimension)(nil),      // 17: controlplane.v1.MeteredDimension
-	(*InfraOveragePolicy)(nil),    // 18: controlplane.v1.InfraOveragePolicy
-	(*PlanLimits)(nil),            // 19: controlplane.v1.PlanLimits
-	(*DaemonPricing)(nil),         // 20: controlplane.v1.DaemonPricing
-	(*DaemonSizePrice)(nil),       // 21: controlplane.v1.DaemonSizePrice
-	(*Plan)(nil),                  // 22: controlplane.v1.Plan
-	(*Subscription)(nil),          // 23: controlplane.v1.Subscription
-	(*ReliantEntitlement)(nil),    // 24: controlplane.v1.ReliantEntitlement
-	(*UsageSummary)(nil),          // 25: controlplane.v1.UsageSummary
-	(*Invoice)(nil),               // 26: controlplane.v1.Invoice
-	(*Wallet)(nil),                // 27: controlplane.v1.Wallet
-	(*WalletLedgerEntry)(nil),     // 28: controlplane.v1.WalletLedgerEntry
-	(*WalletTopup)(nil),           // 29: controlplane.v1.WalletTopup
-	(*WalletOverview)(nil),        // 30: controlplane.v1.WalletOverview
-	(*LLMKey)(nil),                // 31: controlplane.v1.LLMKey
-	(*LLMSpendEntry)(nil),         // 32: controlplane.v1.LLMSpendEntry
-	(*ManagedReliantAccess)(nil),  // 33: controlplane.v1.ManagedReliantAccess
-	(*ReliantOverview)(nil),       // 34: controlplane.v1.ReliantOverview
-	(*GitRepo)(nil),               // 35: controlplane.v1.GitRepo
-	nil,                           // 36: controlplane.v1.Daemon.EnvEntry
-	(*timestamppb.Timestamp)(nil), // 37: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 38: google.protobuf.Struct
+	(DaemonDiskMode)(0),           // 5: controlplane.v1.DaemonDiskMode
+	(PortAccessMode)(0),           // 6: controlplane.v1.PortAccessMode
+	(SubscriptionStatus)(0),       // 7: controlplane.v1.SubscriptionStatus
+	(PlanTier)(0),                 // 8: controlplane.v1.PlanTier
+	(LLMKeyStatus)(0),             // 9: controlplane.v1.LLMKeyStatus
+	(DaemonDiskState)(0),          // 10: controlplane.v1.DaemonDiskState
+	(*ResourceRequirements)(nil),  // 11: controlplane.v1.ResourceRequirements
+	(*Daemon)(nil),                // 12: controlplane.v1.Daemon
+	(*DaemonDisk)(nil),            // 13: controlplane.v1.DaemonDisk
+	(*PortAccessRule)(nil),        // 14: controlplane.v1.PortAccessRule
+	(*User)(nil),                  // 15: controlplane.v1.User
+	(*Organization)(nil),          // 16: controlplane.v1.Organization
+	(*Product)(nil),               // 17: controlplane.v1.Product
+	(*MeteredDimension)(nil),      // 18: controlplane.v1.MeteredDimension
+	(*InfraOveragePolicy)(nil),    // 19: controlplane.v1.InfraOveragePolicy
+	(*PlanLimits)(nil),            // 20: controlplane.v1.PlanLimits
+	(*DaemonPricing)(nil),         // 21: controlplane.v1.DaemonPricing
+	(*DaemonSizePrice)(nil),       // 22: controlplane.v1.DaemonSizePrice
+	(*Plan)(nil),                  // 23: controlplane.v1.Plan
+	(*Subscription)(nil),          // 24: controlplane.v1.Subscription
+	(*ReliantEntitlement)(nil),    // 25: controlplane.v1.ReliantEntitlement
+	(*UsageSummary)(nil),          // 26: controlplane.v1.UsageSummary
+	(*Invoice)(nil),               // 27: controlplane.v1.Invoice
+	(*Wallet)(nil),                // 28: controlplane.v1.Wallet
+	(*WalletLedgerEntry)(nil),     // 29: controlplane.v1.WalletLedgerEntry
+	(*WalletTopup)(nil),           // 30: controlplane.v1.WalletTopup
+	(*WalletOverview)(nil),        // 31: controlplane.v1.WalletOverview
+	(*LLMKey)(nil),                // 32: controlplane.v1.LLMKey
+	(*LLMSpendEntry)(nil),         // 33: controlplane.v1.LLMSpendEntry
+	(*ManagedReliantAccess)(nil),  // 34: controlplane.v1.ManagedReliantAccess
+	(*ReliantOverview)(nil),       // 35: controlplane.v1.ReliantOverview
+	(*GitRepo)(nil),               // 36: controlplane.v1.GitRepo
+	nil,                           // 37: controlplane.v1.Daemon.EnvEntry
+	(*timestamppb.Timestamp)(nil), // 38: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 39: google.protobuf.Struct
 }
 var file_controlplane_v1_shared_proto_depIdxs = []int32{
 	3,  // 0: controlplane.v1.Daemon.owner_type:type_name -> controlplane.v1.OwnerType
 	0,  // 1: controlplane.v1.Daemon.daemon_type:type_name -> controlplane.v1.DaemonType
 	1,  // 2: controlplane.v1.Daemon.status:type_name -> controlplane.v1.DaemonStatus
-	10, // 3: controlplane.v1.Daemon.resources:type_name -> controlplane.v1.ResourceRequirements
-	37, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
-	37, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
-	37, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
-	37, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 3: controlplane.v1.Daemon.resources:type_name -> controlplane.v1.ResourceRequirements
+	38, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
+	38, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
+	38, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
+	38, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
 	4,  // 8: controlplane.v1.Daemon.size:type_name -> controlplane.v1.DaemonSize
-	37, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	37, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	37, // 11: controlplane.v1.Daemon.last_vm_crash_at:type_name -> google.protobuf.Timestamp
+	38, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	38, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	38, // 11: controlplane.v1.Daemon.last_vm_crash_at:type_name -> google.protobuf.Timestamp
 	2,  // 12: controlplane.v1.Daemon.lifecycle_phase:type_name -> controlplane.v1.DaemonLifecyclePhase
-	5,  // 13: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
-	12, // 14: controlplane.v1.Daemon.disk:type_name -> controlplane.v1.DaemonDisk
-	36, // 15: controlplane.v1.Daemon.env:type_name -> controlplane.v1.Daemon.EnvEntry
-	9,  // 16: controlplane.v1.DaemonDisk.state:type_name -> controlplane.v1.DaemonDiskState
-	5,  // 17: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
-	37, // 18: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
-	37, // 19: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	37, // 20: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 21: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
-	37, // 22: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
-	37, // 23: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 24: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
-	18, // 25: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
-	21, // 26: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
-	7,  // 27: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
-	37, // 28: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
-	19, // 29: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
-	22, // 30: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
-	6,  // 31: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
-	37, // 32: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
-	37, // 33: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
-	37, // 34: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
-	37, // 35: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 36: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
-	37, // 37: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
-	37, // 38: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 39: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
-	37, // 40: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
-	37, // 41: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
-	37, // 42: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
-	37, // 43: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 44: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
-	37, // 45: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
-	37, // 46: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 47: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
-	27, // 48: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
-	28, // 49: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
-	29, // 50: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
-	8,  // 51: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
-	37, // 52: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
-	37, // 53: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
-	37, // 54: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
-	37, // 55: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
-	37, // 56: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
-	37, // 57: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
-	37, // 58: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
-	37, // 59: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 60: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	33, // 61: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	37, // 62: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
-	63, // [63:63] is the sub-list for method output_type
-	63, // [63:63] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	6,  // 13: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
+	13, // 14: controlplane.v1.Daemon.disk:type_name -> controlplane.v1.DaemonDisk
+	37, // 15: controlplane.v1.Daemon.env:type_name -> controlplane.v1.Daemon.EnvEntry
+	5,  // 16: controlplane.v1.Daemon.disk_mode:type_name -> controlplane.v1.DaemonDiskMode
+	10, // 17: controlplane.v1.DaemonDisk.state:type_name -> controlplane.v1.DaemonDiskState
+	6,  // 18: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
+	38, // 19: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
+	38, // 20: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	38, // 21: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	39, // 22: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
+	38, // 23: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
+	38, // 24: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 25: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
+	19, // 26: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
+	22, // 27: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
+	8,  // 28: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
+	38, // 29: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
+	20, // 30: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
+	23, // 31: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
+	7,  // 32: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
+	38, // 33: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
+	38, // 34: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
+	38, // 35: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
+	38, // 36: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 37: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
+	38, // 38: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
+	38, // 39: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 40: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
+	38, // 41: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
+	38, // 42: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
+	38, // 43: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
+	38, // 44: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 45: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
+	38, // 46: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
+	38, // 47: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
+	16, // 48: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
+	28, // 49: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
+	29, // 50: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
+	30, // 51: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
+	9,  // 52: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
+	38, // 53: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
+	38, // 54: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
+	38, // 55: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
+	38, // 56: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
+	38, // 57: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
+	38, // 58: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
+	38, // 59: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
+	38, // 60: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 61: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	34, // 62: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	38, // 63: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
+	64, // [64:64] is the sub-list for method output_type
+	64, // [64:64] is the sub-list for method input_type
+	64, // [64:64] is the sub-list for extension type_name
+	64, // [64:64] is the sub-list for extension extendee
+	0,  // [0:64] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_shared_proto_init() }
@@ -4373,7 +4445,7 @@ func file_controlplane_v1_shared_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_shared_proto_rawDesc), len(file_controlplane_v1_shared_proto_rawDesc)),
-			NumEnums:      10,
+			NumEnums:      11,
 			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,

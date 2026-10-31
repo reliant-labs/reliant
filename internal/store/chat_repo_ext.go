@@ -45,6 +45,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -58,6 +59,33 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 		return "", nil
 	}
 	return id, err
+}
+
+// ListWorktreeIDsWithRunningChat conservatively excludes both chat and
+// spawned-thread workspace bindings while their chat has a pending, active or
+// paused/resumable run. A thread can override its chat's workspace.
+func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if len(worktreeIDs) == 0 {
+		return out, nil
+	}
+	var ids []string
+	err := db.Bun().NewRaw(`WITH bindings AS (
+ SELECT id AS chat_id, worktree_id FROM chats WHERE worktree_id = ANY(?0::text[])
+ UNION
+ SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
+)
+SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
+WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)`,
+		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
+		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 // The chats writes (P5b L1b). Reads go through the view — see
@@ -79,6 +107,13 @@ func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
 // The SQL trigger is a backstop for other writers, not a handler-only guard.
 func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID string, worktreeID *string, fn func(context.Context) error) error {
 	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		// Serialize the binding set before its workspace parents, matching
+		// workflow/thread admission triggers. Taking a workspace before this
+		// chat row would invert their order and deadlock a concurrent rebind.
+		var chatIDs []string
+		if err := db.Bun().NewRaw(`SELECT id FROM chats WHERE id=? FOR NO KEY UPDATE`, chatID).Scan(ctx, &chatIDs); err != nil {
+			return err
+		}
 		// A rebind locks old and new parents in the same stable order as the
 		// trigger. The trigger still protects against a concurrently moved row.
 		//
@@ -128,13 +163,21 @@ func UpdateChatState(ctx context.Context, db orm.Context, chatID string, state c
 		return err
 	}
 	return withChatWorktreeAdmission(ctx, db, chatID, worktreeID, func(ctx context.Context) error {
+		// Archiving drops what the chat was holding for its machine: a
+		// message queued for it, a breaker pause awaiting its reconnect, the
+		// waiting-for-machine marker. The delivery sweep skips archived chats
+		// already, but a marker left set comes back to life the moment the
+		// chat is unarchived, starting a run nobody asked for.
 		_, err := db.Bun().NewRaw(`
 UPDATE chats
 SET state = ?0,
     archived_worktree_name = COALESCE(archived_worktree_name, ?1),
     updated_at = ?2,
-    last_active = ?2
-WHERE id = ?3`, state, archivedWorktreeName, now, chatID).Exec(ctx)
+    last_active = ?2,
+    queued_for_machine_at = CASE WHEN ?0 = ?4 THEN NULL ELSE queued_for_machine_at END,
+    paused_for_machine_at = CASE WHEN ?0 = ?4 THEN NULL ELSE paused_for_machine_at END,
+    daemon_blocked_at = CASE WHEN ?0 = ?4 THEN NULL ELSE daemon_blocked_at END
+WHERE id = ?3`, state, archivedWorktreeName, now, chatID, core.ChatStateArchived).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to update chat state: %w", recoveryAdmissionError(err))
 		}
@@ -309,6 +352,40 @@ func SetChatQueuedForMachine(ctx context.Context, db orm.Context, chatID string,
 	return n > 0, err
 }
 
+// queueChatForMachineSQL sets the queued-for-machine marker (keeping the
+// time of a marker already set) and records the machine the message waits
+// for, matching a row only when either changes. ?1 is NULL when the run named
+// no machine.
+const queueChatForMachineSQL = `
+UPDATE chats SET
+    queued_for_machine_at = COALESCE(queued_for_machine_at, NOW()),
+    queued_for_machine_selector = ?1::jsonb
+WHERE id = ?0
+  AND (queued_for_machine_at IS NULL OR queued_for_machine_selector IS DISTINCT FROM ?1::jsonb)`
+
+// QueueChatForMachine sets the queued-for-machine marker with the machine
+// the message waits for, and reports whether the stored row changed.
+// SetChatQueuedForMachine's clear leaves the machine in place: it is read
+// only while the marker is set, so a deliverer that claims the message and
+// then puts it back (ContinueQueued's requeue) keeps it.
+func QueueChatForMachine(ctx context.Context, db orm.Context, chatID string, machine *core.QueuedMachine) (bool, error) {
+	var selector *string
+	if machine != nil {
+		raw, err := json.Marshal(machine)
+		if err != nil {
+			return false, fmt.Errorf("encode the machine a queued message waits for: %w", err)
+		}
+		s := string(raw)
+		selector = &s
+	}
+	res, err := db.Bun().NewRaw(queueChatForMachineSQL, chatID, selector).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to queue chat for its machine: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // setChatRunIDSQL records the Temporal run currently executing a chat's root
 // workflow. It only touches the chat whose root workflow it is, and only when
 // the id changes, so the write a run makes at every start is free when nothing
@@ -356,7 +433,7 @@ func SetChatPausedForMachine(ctx context.Context, db orm.Context, chatID string,
 // sweep); otherwise one user's (a machine of theirs just connected).
 // Archived chats are left alone.
 const listChatsQueuedForMachineSQL = `
-SELECT id, user_id, active_daemon_id, queued_for_machine_at
+SELECT id, user_id, active_daemon_id, queued_for_machine_at, queued_for_machine_selector
 FROM chats
 WHERE queued_for_machine_at IS NOT NULL
   AND state IS DISTINCT FROM 3
@@ -372,6 +449,7 @@ func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID strin
 		UserID             string    `bun:"user_id"`
 		ActiveDaemonID     *string   `bun:"active_daemon_id"`
 		QueuedForMachineAt time.Time `bun:"queued_for_machine_at"`
+		Selector           *string   `bun:"queued_for_machine_selector"`
 	}
 	if err := db.Bun().NewRaw(listChatsQueuedForMachineSQL, userID, limit).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list chats queued for their machine: %w", err)
@@ -383,6 +461,14 @@ func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID strin
 			UserID:         row.UserID,
 			ActiveDaemonID: row.ActiveDaemonID,
 			QueuedAt:       row.QueuedForMachineAt,
+		}
+		if row.Selector != nil {
+			var machine core.QueuedMachine
+			// A selector that does not decode leaves Machine nil: delivery
+			// falls back to the chat's pinned machine, as before the column.
+			if err := json.Unmarshal([]byte(*row.Selector), &machine); err == nil {
+				chats[i].Machine = &machine
+			}
 		}
 	}
 	return chats, nil
@@ -513,6 +599,12 @@ func chatToRow(chat *core.Chat) *Chat {
 	if state == core.ChatStateUnspecified {
 		state = core.ChatStateIdle
 	}
+	// A chat nobody classified is a person's (the column default): the
+	// launcher, the one creator of runs, always names the origin.
+	origin := chat.Origin
+	if origin == core.ChatOriginUnspecified {
+		origin = core.ChatOriginUser
+	}
 	row := &Chat{
 		ID:              chat.ID,
 		Title:           chat.Title,
@@ -529,6 +621,8 @@ func chatToRow(chat *core.Chat) *Chat {
 		SelectedPresets: chatPresetsToColumn(chat.SelectedPresets),
 		ActiveDaemonID:  chat.ActiveDaemonID,
 		NoMachine:       chat.NoMachine,
+		MachinePoolID:   chat.MachinePoolID,
+		Origin:          origin,
 	}
 	return row
 }
