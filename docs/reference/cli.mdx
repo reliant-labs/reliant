@@ -14403,6 +14403,16 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+--notify is about successful runs only. With it, a run that completes
+successfully is marked unread, which raises a desktop notification, and stays
+out of the archive so the notification has a run to open. It never puts the
+run in the Inbox: the Inbox lists only what needs you. Without it a successful
+run is silent. Either way, a failed run notifies you once per failure streak
+and is an Inbox item until a later run of the same trigger succeeds, and a run
+waiting for an answer or an approval, or an automation that is broken, is an
+Inbox item. A workflow that has something to tell you after a success says so
+itself, with a step that messages you.
+
 ```
 reliant trigger activate [flags]
 ```
@@ -14417,7 +14427,7 @@ reliant trigger activate [flags]
 | `--message` | `string` | - | Prompt for a declared trigger that has none |
 | `--name-prefix` | `string` | - | Names new activations "`<prefix>` · `<trigger>`" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
-| `--notify` | `bool` | - | Notify you when a run completes |
+| `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |
 | `--param` | `stringArray` | `[]` | Workflow input as key=value; repeatable. Values parse as JSON, else as a string |
 | `--params-json` | `string` | - | Workflow inputs as one JSON object; --param entries win over its keys |
 | `--preset` | `stringArray` | `[]` | Preset assignment as group=name, or just name for the top level; repeatable |

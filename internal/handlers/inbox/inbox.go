@@ -35,15 +35,13 @@ const defaultInboxLimit = 100
 // id embeds the FIRST failing event of the current episode, so more failures
 // stay one item (and one dismissal), while a new episode after a success is a
 // new item. A waiting-for-machine id embeds the chat and when the block began,
-// so a later block is a new item. Approval, question and run-finished ids
-// embed their row or chat. Storage ids are described at storageItemID.
+// so a later block is a new item. Approval and question ids embed their row. Storage ids are described at storageItemID.
 const (
 	inboxApprovalPrefix          = "approval:"
 	inboxQuestionPrefix          = "question:"
 	inboxWaitingForMachinePrefix = "waiting_for_machine:"
 	inboxFailingPrefix           = "automation_failing:"
 	inboxLaunchFailedPrefix      = "automation_launch_failed:"
-	inboxRunFinishedPrefix       = "run_finished:"
 	inboxStoragePrefix           = "storage:"
 	inboxNeedsSetupPrefix        = "automation_needs_setup:"
 	inboxRecoveryPrefix          = "recovery:"
@@ -56,7 +54,7 @@ const (
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
-	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
+	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
 }
 
@@ -379,9 +377,13 @@ func isInboxItemID(itemID string) bool {
 	return false
 }
 
-// failingAutomations returns one item per enabled trigger whose health is
-// FAILING, using the same ComputeHealth as Trigger.health. Its three reads are
-// independent and run together, each holding one of lim's tokens.
+// failingAutomations returns one item per enabled trigger whose current
+// failure streak needs its owner: a run it launched failed, or its health is
+// FAILING (ComputeHealth, as Trigger.health reads it). One item per streak,
+// keyed by the streak's first failure, so a later successful run, which ends
+// the streak, resolves it. A streak of launch failures alone is the
+// launch-failed item's until it turns FAILING. Its three reads are independent
+// and run together, each holding one of lim's tokens.
 func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
@@ -449,11 +451,11 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 			continue
 		}
 		health := triggers.ComputeHealth(firings)
-		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING {
-			continue
-		}
 		streak := triggers.FailureStreak(episodes[t.ID])
 		if streak.First == nil {
+			continue
+		}
+		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING && streak.RunFailures == 0 {
 			continue
 		}
 		health.ConsecutiveFailures = streak.Count
@@ -711,10 +713,6 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
 			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
-	case core.InboxPendingRunFinished:
-		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED
-		item.ItemId = inboxRunFinishedPrefix + p.ItemKey
-		item.Payload = &reliantv1.InboxItem_RunFinished{RunFinished: &reliantv1.InboxRunFinished{}}
 	case core.InboxPendingRunPaused:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
 		item.ItemId = inboxRunPausedPrefix + p.ItemKey

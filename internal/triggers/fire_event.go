@@ -76,7 +76,15 @@ type EventFirer struct {
 	launcher  Launcher
 	workflows WorkflowResolver
 	capacity  capacityDescriptions
+	wake      *capacityWake
 	pools     Placer
+}
+
+// WithCapacityWake lets a capped launch fire the next waiting event of its
+// scope at once (capacityWake), instead of leaving it to the redriver.
+func (f *EventFirer) WithCapacityWake(starter WorkflowStarter, taskQueue string) *EventFirer {
+	f.wake = &capacityWake{starter: starter, taskQueue: taskQueue}
+	return f
 }
 
 // WithPlacer lets the firer place a pool-bound trigger's runs. Without it,
@@ -236,6 +244,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 
 	switch {
 	case launchErr == nil:
+		if capped {
+			f.wake.wakeNext(ctx, f.repo, trigger, ev.ID)
+		}
 		return &FireOutput{Outcome: string(core.TriggerEventLaunched), ChatID: res.Chat.ID, EventID: res.EventID}, nil
 	case errors.Is(launchErr, launch.ErrAlreadyLaunched):
 		out := &FireOutput{Outcome: string(core.TriggerEventLaunched), Reason: "already launched", EventID: ev.ID}

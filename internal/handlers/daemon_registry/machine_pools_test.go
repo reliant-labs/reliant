@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	daemon_registry "github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
@@ -125,4 +126,65 @@ func TestDeleteMachinePool(t *testing.T) {
 		{Name: "missing", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "gone"}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeNotFound},
 		{Name: "deleted", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "cicd"}), Ctx: daemon_registry.AuthedContext(t), Check: func(*testing.T, *connect.Response[pb.DeleteMachinePoolResponse]) {}},
 	}, svc.DeleteMachinePool)
+}
+
+// recordingIdleTimeouts records the idle timeouts set at the control plane.
+type recordingIdleTimeouts struct{ set map[string]string }
+
+func (r *recordingIdleTimeouts) SetDaemonIdleTimeout(_ context.Context, _, daemonID, idleTimeout string) error {
+	r.set[daemonID] = idleTimeout
+	return nil
+}
+
+// A pool's members sleep on its member_idle_timeout: writing the pool sets
+// every managed member's, and labelling a machine into a pool sets that
+// machine's. A machine in two pools takes the shorter; a machine in none, or
+// a self-hosted one (it never sleeps), is left alone.
+func TestPoolMembersTakeTheMemberIdleTimeout(t *testing.T) {
+	auth.SetUserJWT("test-user", "jwt-test-user")
+	managed, selfHosted := "managed", "self_hosted"
+	daemons := []*db.Daemon{
+		{ID: "d-ci", DaemonType: &managed, Labels: map[string]string{"pool": "cicd"}},
+		{ID: "d-both", DaemonType: &managed, Labels: map[string]string{"pool": "cicd", "gpu": "yes"}},
+		{ID: "d-none", DaemonType: &managed, Labels: map[string]string{"pool": "other"}},
+		{ID: "d-local", DaemonType: &selfHosted, Labels: map[string]string{"pool": "cicd"}},
+	}
+	pools := []*core.MachinePool{
+		{ID: "p-ci", Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MemberIdleTimeout: "10m"},
+		{ID: "p-gpu", Name: "gpu", Selector: map[string]string{"gpu": "yes"}, MemberIdleTimeout: "5m"},
+	}
+	repo := &daemon_registry.MockRepository{
+		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) { return p, nil },
+		ListMachinePoolsForUserFunc: func(context.Context, string) ([]*core.MachinePool, error) {
+			return pools, nil
+		},
+		ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
+			return nil, nil
+		},
+		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return daemons, nil },
+		SetDaemonLabelsFunc:     func(context.Context, string, string, map[string]string) (bool, error) { return true, nil },
+		GetDaemonFunc:           func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id}, nil },
+	}
+	set := &recordingIdleTimeouts{set: map[string]string{}}
+	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, IdleTimeouts: set}))
+
+	if _, err := svc.PutMachinePool(daemon_registry.AuthedContext(t), connect.NewRequest(&pb.PutMachinePoolRequest{
+		Pool: &pb.MachinePoolSpec{Name: "cicd", MemberIdleTimeout: "10m"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"d-ci": "10m", "d-both": "5m"}
+	if len(set.set) != len(want) || set.set["d-ci"] != "10m" || set.set["d-both"] != "5m" {
+		t.Fatalf("after PutMachinePool: set %v, want %v", set.set, want)
+	}
+
+	set.set = map[string]string{}
+	if _, err := svc.SetMachineLabels(daemon_registry.AuthedContext(t), connect.NewRequest(&pb.SetMachineLabelsRequest{
+		DaemonId: "d-ci", Labels: map[string]string{"pool": "cicd"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if len(set.set) != 1 || set.set["d-ci"] != "10m" {
+		t.Fatalf("after SetMachineLabels: set %v, want only d-ci at 10m", set.set)
+	}
 }

@@ -63,36 +63,6 @@ type Adapter interface {
 	FilePath(dir string) string
 }
 
-// RunRequest represents a request to run a package command
-type RunRequest struct {
-	// WorktreeID is the worktree where the command should run
-	WorktreeID string `json:"worktree_id"`
-
-	// WorkingDir is the directory where the command should run
-	WorkingDir string `json:"working_dir"`
-
-	// CommandName is the name of the command to run
-	CommandName string `json:"command_name"`
-
-	// PackageType specifies which package manager to use
-	PackageType PackageType `json:"package_type"`
-
-	// Env contains additional environment variables
-	Env map[string]string `json:"env,omitempty"`
-}
-
-// RunResponse contains the result of starting a command
-type RunResponse struct {
-	// ProcessID is the ID of the background process
-	ProcessID string `json:"process_id"`
-
-	// Command is the full command that was executed
-	Command string `json:"command"`
-
-	// StartTime is when the process started
-	StartTime time.Time `json:"start_time"`
-}
-
 // ProcessInfo represents information about a running or completed process
 type ProcessInfo struct {
 	ID         string     `json:"id"`

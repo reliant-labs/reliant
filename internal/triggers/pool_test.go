@@ -38,7 +38,7 @@ func newFakePool(maxPer int, names ...string) *fakePoolStore {
 	pushed := time.Date(2026, 10, 30, 16, 0, 0, 0, time.UTC)
 	for _, n := range names {
 		wf := catalogJSON
-		s.members = append(s.members, core.MachinePoolMemberRow{DaemonID: "d-" + n, Name: n, Phase: "connected", Installed: true, WorkflowsJSON: &wf, CatalogPushedAt: &pushed})
+		s.members = append(s.members, core.MachinePoolMemberRow{DaemonID: "d-" + n, Name: n, Phase: "connected", Installed: true, Verified: true, WorkflowsJSON: &wf, CatalogPushedAt: &pushed})
 	}
 	return s
 }
@@ -104,6 +104,85 @@ func (l *poolLauncher) Launch(ctx context.Context, ev launch.Event, spec launch.
 		l.store.set(strings.TrimPrefix(spec.DaemonID, "d-"), func(m *core.MachinePoolMemberRow) { m.LiveRuns++ })
 	}
 	return res, err
+}
+
+// recordingWaker records the members it was asked to wake.
+type recordingWaker struct {
+	woke []string
+	err  error
+}
+
+func (w *recordingWaker) WakeMember(_ context.Context, _, daemonID string) error {
+	w.woke = append(w.woke, daemonID)
+	return w.err
+}
+
+// Wake, then place: a pool whose only member is asleep wakes it and the run
+// waits; it is not pinned to the sleeping member. While the member is up but
+// its checkout not yet seen on its disk (an ephemeral member comes up empty),
+// the run still waits, and nothing more is woken. Once the checkout is
+// verified, the run is placed on it.
+func TestLaunchOnPool_WakesThenPlacesOnceTheCheckoutIsVerified(t *testing.T) {
+	store := newFakePool(0, "a")
+	store.set("a", func(m *core.MachinePoolMemberRow) { m.Phase, m.Verified = "suspended", false })
+	l := &poolLauncher{store: store}
+	waker := &recordingWaker{}
+	placer := machinepool.NewPlacer(store).WithWaker(waker)
+	ctx := context.Background()
+
+	_, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed)
+	var declined *launch.DeclinedError
+	if !errors.As(err, &declined) || !isPoolWaiting(declined.Reason) || !strings.Contains(declined.Reason, "waking a") {
+		t.Fatalf("got %v, want a pool wait naming the wake of a", err)
+	}
+	if len(waker.woke) != 1 || waker.woke[0] != "d-a" {
+		t.Fatalf("woke %v, want [d-a]", waker.woke)
+	}
+	if n := len(l.snapshot()); n != 0 {
+		t.Fatalf("%d launches, want none: a woken member is not pinned to", n)
+	}
+
+	store.set("a", func(m *core.MachinePoolMemberRow) { m.Phase = "connected" })
+	_, err = launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed)
+	if !errors.As(err, &declined) || !strings.Contains(declined.Reason, "a: "+machinepool.ReasonVerifying) {
+		t.Fatalf("got %v, want a wait for a's checkout", err)
+	}
+	if len(waker.woke) != 1 || len(l.snapshot()) != 0 {
+		t.Fatalf("woke %v, launched %d; want nothing new while a verifies", waker.woke, len(l.snapshot()))
+	}
+
+	store.set("a", func(m *core.MachinePoolMemberRow) { m.Verified = true })
+	if _, err := launchOnPool(ctx, placer, l, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed); err != nil {
+		t.Fatal(err)
+	}
+	if calls := l.snapshot(); len(calls) != 1 || calls[0].Spec.DaemonID != "d-a" {
+		t.Fatalf("launches %+v, want one on d-a", calls)
+	}
+}
+
+// A wake that fails, or a worker with no waker, leaves the run waiting with
+// the reason; the redriver tries again.
+func TestLaunchOnPool_FailedWakeWaitsWithTheReason(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		waker machinepool.Waker
+		want  string
+	}{
+		{"wake refused", &recordingWaker{err: errors.New("quota")}, "could not wake a: quota"},
+		{"no waker", nil, "could not wake a: waking machine pool members is not configured"},
+	} {
+		store := newFakePool(0, "a")
+		store.set("a", func(m *core.MachinePoolMemberRow) { m.Phase, m.Verified = "suspended", false })
+		placer := machinepool.NewPlacer(store)
+		if tc.waker != nil {
+			placer = placer.WithWaker(tc.waker)
+		}
+		_, err := launchOnPool(context.Background(), placer, &poolLauncher{store: store}, poolTrigger(), launch.Event{}, launch.Spec{}, false, agreed)
+		var declined *launch.DeclinedError
+		if !errors.As(err, &declined) || !isPoolWaiting(declined.Reason) || !strings.Contains(declined.Reason, tc.want) {
+			t.Errorf("%s: got %v, want a pool wait containing %q", tc.name, err, tc.want)
+		}
+	}
 }
 
 func poolTrigger() *core.Trigger {

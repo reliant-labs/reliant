@@ -32,11 +32,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.temporal.io/sdk/workflow"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -1698,14 +1699,17 @@ func (r *Runner) registerActivities(
 	// under test actually runs; see transparentRefs for why that gate is keyed
 	// by name and why opening every ref by default does not terminate.
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, in map[string]string) (runtime.LoadedWorkflow, error) {
+		// Typed like the real activity: the root load sends the struct (a
+		// local activity since #1930), the inline loaders a map of the same
+		// JSON shape, and only the struct decodes both.
+		func(_ context.Context, in types.LoadWorkflowInput) (runtime.LoadedWorkflow, error) {
 			if err := guard.check(); err != nil {
 				return runtime.LoadedWorkflow{}, err
 			}
 			// A ref is written "builtin://agent" while the loaded workflow is
 			// named "agent", so compare on the bare name — otherwise a workflow
 			// requesting ITSELF is misread as a sub-workflow, and vice versa.
-			ref := in["workflow_name"]
+			ref := in.WorkflowName
 			name := bareWorkflowName(ref)
 			if ref == "" || name == r.workflow.GetName() {
 				return runtime.LoadedWorkflow{WorkflowJSON: wfJSON}, nil

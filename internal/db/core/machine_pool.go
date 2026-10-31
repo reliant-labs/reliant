@@ -47,8 +47,11 @@ type MachinePoolMemberRow struct {
 	Size     string
 	// Phase is the trigger machine_state vocabulary: connected, starting,
 	// suspended, disconnected or failed.
-	Phase           string
-	Installed       bool
+	Phase     string
+	Installed bool
+	// Verified: the checkout was seen on the machine's disk since its current
+	// connection (project_daemons.verified_at >= daemon_attachment.attached_at).
+	Verified        bool
 	WorkflowsJSON   *string
 	PresetsJSON     *string
 	CatalogPushedAt *time.Time

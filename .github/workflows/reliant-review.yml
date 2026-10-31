@@ -1,0 +1,58 @@
+name: Reliant review
+
+# The review gate (control-plane docs/pr-pipeline.md). `Reliant review` is a
+# required check in the main ruleset: a pull request merges only if its CURRENT
+# head carries pr-review's pass marker for that exact sha
+# (`<!-- review-passed sha=<head> -->` in a review whose commit_id is the head,
+# by the pipeline's reviewer). pr-review's skip mode (the owner override,
+# labelled review:skipped) posts the same exact-head marker, so it passes here
+# too; a bare label is tied to no head and never counts. A later blocker on the
+# same sha wins. In the merge queue it judges every pull request in the group.
+#
+# Red until pr-review passes the head, then green: the marker is a review
+# (pull_request_review), and a pass also labels the PR (labeled). A push makes
+# a new head with no marker, so it goes red again (synchronize).
+#
+# Its own workflow, not a ci.yml job: ci.yml must not run on `labeled` (a label
+# run would replace the head's "CI result"). Seconds, no checkout: the gate is
+# scripts/ci-review-marker.sh, read from main through the API (never the pull
+# request's copy) and fed GitHub's own data.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled]
+    branches: [main]
+  pull_request_review:
+    types: [submitted]
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# One verdict per pull request (or merge group) at a time: the newest event wins.
+concurrency:
+  group: reliant-review-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  reliant-review:
+    name: Reliant review
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: pr-review passed this exact head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          gate="${RUNNER_TEMP}/ci-review-marker.sh"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/ci-review-marker.sh?ref=main" > "${gate}"
+          if [ "${EVENT_NAME}" = merge_group ]; then
+            bash "${gate}" group "${GROUP_REF}" "${GROUP_SHA}"
+          else
+            bash "${gate}" pr "${PR}"
+          fi

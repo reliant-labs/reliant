@@ -37,6 +37,7 @@ func checkProcessUseAt(ctx context.Context, proc string, uid int, paths []string
 		return fmt.Errorf("process enumeration unavailable: %w", err)
 	}
 	checked := 0
+procs:
 	for _, entry := range entries {
 		if _, err := strconv.Atoi(entry.Name()); err != nil {
 			continue
@@ -81,6 +82,12 @@ func checkProcessUseAt(ctx context.Context, proc string, uid int, paths []string
 				if processGone(base) {
 					break
 				}
+				// A task inside exit has dropped its mm and fs, so these
+				// links read ENOENT before it is a zombie. It never touches
+				// the filesystem again; anything else unreadable holds.
+				if os.IsNotExist(err) && processExiting(base) {
+					continue procs
+				}
 				return fmt.Errorf("process %s %s unreadable: %w", entry.Name(), name, err)
 			}
 			if processPathUses(target, roots) {
@@ -101,6 +108,13 @@ func checkProcessUseAt(ctx context.Context, proc string, uid int, paths []string
 			return errors.New("process fd budget exceeded")
 		}
 		for _, fd := range fds {
+			// Only private trusted retirement code may pass its exact pinned
+			// inspection descriptors. Never exempt a process or caller payload.
+			if entry.Name() == strconv.Itoa(os.Getpid()) {
+				if n, err := strconv.ParseUint(fd.Name(), 10, 64); err == nil && inspectionFile(ctx, uintptr(n)) {
+					continue
+				}
+			}
 			target, err := os.Readlink(filepath.Join(base, "fd", fd.Name()))
 			// FDs legitimately close between enumeration and readlink. ENOENT is
 			// safe for that one fd; permission/other failures are uncertainty.
@@ -178,6 +192,37 @@ func processZombie(base string) (bool, error) {
 	}
 	return data[pos+2] == 'Z' || data[pos+2] == 'X', nil
 }
+
+// processExiting reports whether base is a single-threaded process that has
+// entered exit: stat's flags carry PF_EXITING and its group has one thread.
+// A multi-threaded group is not proven: its leader can exit while other
+// threads run on, and the leader's links then read ENOENT too. Unreadable or
+// short stat is not proof either.
+func processExiting(base string) bool {
+	data, err := os.ReadFile(filepath.Join(base, "stat"))
+	if err != nil || len(data) > 1<<20 {
+		return false
+	}
+	pos := strings.LastIndexByte(string(data), ')')
+	if pos < 0 {
+		return false
+	}
+	// Fields after the comm, from field 3 (state): flags is field 9,
+	// num_threads field 20.
+	fields := strings.Fields(string(data[pos+1:]))
+	if len(fields) < 18 {
+		return false
+	}
+	flags, err := strconv.ParseUint(fields[6], 10, 64)
+	if err != nil {
+		return false
+	}
+	return flags&pfExiting != 0 && fields[17] == "1"
+}
+
+// pfExiting is the kernel's PF_EXITING task flag (include/linux/sched.h).
+const pfExiting = 0x00000004
+
 func processGone(base string) bool { _, err := os.Stat(base); return os.IsNotExist(err) }
 func processPathUses(path string, roots []string) bool {
 	path = strings.TrimSuffix(path, " (deleted)")

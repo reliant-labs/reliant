@@ -98,14 +98,9 @@ func (d *Dispatcher) WithWorkflows(workflows triggers.WorkflowResolver) *Dispatc
 	return d
 }
 
-// specOf is a trigger's effective spec: an activation's from its workflow's
-// declaration, read now; an ad hoc trigger's from its row.
-func (d *Dispatcher) specOf(ctx context.Context, t *core.Trigger) (Spec, error) {
-	return d.specIn(ctx, d.workflows, t)
-}
-
-// specIn is specOf reading the declaration through workflows (the
-// dispatcher's, or that bound to a firing's catalog snapshot).
+// specIn is a trigger's effective spec: an activation's from its workflow's
+// declaration, read through workflows (the dispatcher's, or that bound to a
+// firing's catalog snapshot); an ad hoc trigger's from its row.
 func (d *Dispatcher) specIn(ctx context.Context, workflows triggers.WorkflowResolver, t *core.Trigger) (Spec, error) {
 	if t.WorkflowTrigger == nil || *t.WorkflowTrigger == "" {
 		return SpecOf(t)

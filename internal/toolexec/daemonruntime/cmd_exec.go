@@ -276,10 +276,12 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.
-		GrantID:   daemonpolicy.GrantIDFromContext(ctx),
-		HeavyGate: heavyGateRef.Load(),
-		Heavy:     req.Heavy,
-		AgentID:   req.ChatID,
+		GrantID:        daemonpolicy.GrantIDFromContext(ctx),
+		HeavyGate:      heavyGateRef.Load(),
+		Heavy:          req.Heavy,
+		WorktreeID:     req.WorktreeID,
+		PackageCommand: req.PackageCommand,
+		AgentID:        req.ChatID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)
@@ -319,6 +321,16 @@ func handleExecBGOutput(ctx context.Context, payload []byte) ([]byte, error) {
 	combined, err := mgr.GetCombinedOutput(req.ProcessID)
 	if err != nil {
 		return nil, fmt.Errorf("get output: %w", err)
+	}
+
+	if req.Opts != nil && req.Opts.Lines {
+		lines := make([]daemon.ProcessOutputLine, len(combined))
+		total := 0
+		for i, line := range combined {
+			lines[i] = daemon.ProcessOutputLine{Stream: line.Type, Text: line.Text}
+			total += len(line.Text) + 1
+		}
+		return json.Marshal(daemon.ProcessOutput{Lines: lines, NextOffset: total, TotalBytes: total})
 	}
 
 	// Build the full combined output string
@@ -498,14 +510,17 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
 		info := &daemon.ProcessInfo{
-			ID:        p.ID,
-			Command:   p.Command,
-			Status:    p.Status,
-			ExitCode:  p.ExitCode,
-			StartTime: p.StartTime,
-			EndTime:   p.EndTime,
-			Ports:     shellPortsToDaemon(p.Ports),
-			DaemonID:  daemonID,
+			ID:             p.ID,
+			Command:        p.Command,
+			Status:         p.Status,
+			ExitCode:       p.ExitCode,
+			StartTime:      p.StartTime,
+			EndTime:        p.EndTime,
+			Ports:          shellPortsToDaemon(p.Ports),
+			DaemonID:       daemonID,
+			WorkingDir:     p.WorkingDir,
+			WorktreeID:     p.WorktreeID,
+			PackageCommand: p.PackageCommand,
 		}
 		result = append(result, info)
 	}

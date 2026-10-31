@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // A workflow declares WHEN it runs; the user turns that on. EnableWorkflow and
@@ -78,7 +79,7 @@ func (s *Service) EnableWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	if err := checkConnectionIntegrations(declared, msg.ConnectionIds); err != nil {
+	if err := checkConnectionIntegrations(wf, declared, msg.ConnectionIds); err != nil {
 		return nil, err
 	}
 
@@ -601,12 +602,13 @@ func selectDeclaredTriggers(wf *reliantv1.Workflow, names []string) ([]*reliantv
 }
 
 // checkConnectionIntegrations refuses, before anything is written, a
-// connection for an integration none of the enabled triggers listens
-// through. Connections are looked up by each trigger's integration, so an
+// connection for an integration that neither an enabled trigger listens
+// through nor one of the workflow's integration-typed inputs is checked
+// through (checkReachability). Connections are looked up by integration, so an
 // unmatched key (`--connection gitub=conn-1`) would otherwise be ignored and
 // the trigger would listen through the default connection instead of the one
 // the caller named.
-func checkConnectionIntegrations(enabled []*reliantv1.WorkflowTrigger, connectionIDs map[string]string) error {
+func checkConnectionIntegrations(wf *reliantv1.Workflow, enabled []*reliantv1.WorkflowTrigger, connectionIDs map[string]string) error {
 	if len(connectionIDs) == 0 {
 		return nil
 	}
@@ -614,6 +616,12 @@ func checkConnectionIntegrations(enabled []*reliantv1.WorkflowTrigger, connectio
 	for _, wt := range enabled {
 		if integ := wt.GetIntegration(); integ != nil {
 			listens[integ.GetIntegration()] = true
+		}
+	}
+	for _, input := range wf.GetInputs() {
+		if model.IsIntegrationInput(input) {
+			integration, _, _ := strings.Cut(input.GetType(), ".")
+			listens[integration] = true
 		}
 	}
 	var unmatched []string

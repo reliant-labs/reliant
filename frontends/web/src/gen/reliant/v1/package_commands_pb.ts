@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/package_commands.proto.
  */
 export const file_reliant_v1_package_commands: GenFile = /*@__PURE__*/
-  fileDesc("CiFyZWxpYW50L3YxL3BhY2thZ2VfY29tbWFuZHMucHJvdG8SCnJlbGlhbnQudjEi1wEKDlBhY2thZ2VDb21tYW5kEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHY29tbWFuZBgDIAEoCRItCgxwYWNrYWdlX3R5cGUYBCABKA4yFy5yZWxpYW50LnYxLlBhY2thZ2VUeXBlEg4KBnNvdXJjZRgFIAEoCRIQCghjYXRlZ29yeRgGIAEoCRIUCgxkZXBlbmRlbmNpZXMYByADKAkSEwoLd29ya2luZ19kaXIYCCABKAkSFQoNcmVsYXRpdmVfcGF0aBgJIAEoCSL/AQoOUGFja2FnZVByb2Nlc3MSCgoCaWQYASABKAkSDwoHY29tbWFuZBgCIAEoCRIzCgZzdGF0dXMYAyABKA4yIy5yZWxpYW50LnYxLkJhY2tncm91bmRQcm9jZXNzU3RhdHVzEhgKC3dvcmt0cmVlX2lkGAQgASgJSACIAQESEwoLd29ya2luZ19kaXIYBSABKAkSEgoKc3RhcnRfdGltZRgGIAEoCRIVCghlbmRfdGltZRgHIAEoCUgBiAEBEhYKCWV4aXRfY29kZRgIIAEoBUgCiAEBQg4KDF93b3JrdHJlZV9pZEILCglfZW5kX3RpbWVCDAoKX2V4aXRfY29kZSJ+ChpMaXN0UGFja2FnZUNvbW1hbmRzUmVxdWVzdBIYCgt3b3JrdHJlZV9pZBgBIAEoCUgAiAEBEhEKBHBhdGgYAiABKAlIAYgBARIaChJjdXN0b21fZGlyZWN0b3JpZXMYAyADKAlCDgoMX3dvcmt0cmVlX2lkQgcKBV9wYXRoIj4KDkNvbW1hbmRzQnlUeXBlEiwKCGNvbW1hbmRzGAEgAygLMhoucmVsaWFudC52MS5QYWNrYWdlQ29tbWFuZCLLAQobTGlzdFBhY2thZ2VDb21tYW5kc1Jlc3BvbnNlEkcKCGNvbW1hbmRzGAEgAygLMjUucmVsaWFudC52MS5MaXN0UGFja2FnZUNvbW1hbmRzUmVzcG9uc2UuQ29tbWFuZHNFbnRyeRIWCg5kZXRlY3RlZF90eXBlcxgCIAMoCRpLCg1Db21tYW5kc0VudHJ5EgsKA2tleRgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLnJlbGlhbnQudjEuQ29tbWFuZHNCeVR5cGU6AjgBIrcCChhSdW5QYWNrYWdlQ29tbWFuZFJlcXVlc3QSGAoLd29ya3RyZWVfaWQYASABKAlIAIgBARIRCgRwYXRoGAIgASgJSAGIAQESFAoMY29tbWFuZF9uYW1lGAMgASgJEi0KDHBhY2thZ2VfdHlwZRgEIAEoDjIXLnJlbGlhbnQudjEuUGFja2FnZVR5cGUSOgoDZW52GAUgAygLMi0ucmVsaWFudC52MS5SdW5QYWNrYWdlQ29tbWFuZFJlcXVlc3QuRW52RW50cnkSGAoLd29ya2luZ19kaXIYBiABKAlIAogBARoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg4KDF93b3JrdHJlZV9pZEIHCgVfcGF0aEIOCgxfd29ya2luZ19kaXIiVAoZUnVuUGFja2FnZUNvbW1hbmRSZXNwb25zZRISCgpwcm9jZXNzX2lkGAEgASgJEg8KB2NvbW1hbmQYAiABKAkSEgoKc3RhcnRfdGltZRgDIAEoCSJHChtMaXN0UGFja2FnZVByb2Nlc3Nlc1JlcXVlc3QSGAoLd29ya3RyZWVfaWQYASABKAlIAIgBAUIOCgxfd29ya3RyZWVfaWQiTQocTGlzdFBhY2thZ2VQcm9jZXNzZXNSZXNwb25zZRItCglwcm9jZXNzZXMYASADKAsyGi5yZWxpYW50LnYxLlBhY2thZ2VQcm9jZXNzIi4KGEdldFBhY2thZ2VQcm9jZXNzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIkgKGUdldFBhY2thZ2VQcm9jZXNzUmVzcG9uc2USKwoHcHJvY2VzcxgBIAEoCzIaLnJlbGlhbnQudjEuUGFja2FnZVByb2Nlc3MiMgocR2V0UGFja2FnZVByb2Nlc3NMb2dzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIkYKCk91dHB1dExpbmUSKgoEdHlwZRgBIAEoDjIcLnJlbGlhbnQudjEuT3V0cHV0U3RyZWFtVHlwZRIMCgR0ZXh0GAIgASgJImkKHUdldFBhY2thZ2VQcm9jZXNzTG9nc1Jlc3BvbnNlEg4KBnN0ZG91dBgBIAEoCRIOCgZzdGRlcnIYAiABKAkSKAoIY29tYmluZWQYAyADKAsyFi5yZWxpYW50LnYxLk91dHB1dExpbmUiLwoZS2lsbFBhY2thZ2VQcm9jZXNzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIi0KGktpbGxQYWNrYWdlUHJvY2Vzc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkiMAoaR2V0Q29tbWFuZEZhdm9yaXRlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSIzChtHZXRDb21tYW5kRmF2b3JpdGVzUmVzcG9uc2USFAoMY29tbWFuZF9rZXlzGAEgAygJIlkKGVNldENvbW1hbmRGYXZvcml0ZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtjb21tYW5kX2tleRgCIAEoCRITCgtpc19mYXZvcml0ZRgDIAEoCCItChpTZXRDb21tYW5kRmF2b3JpdGVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIKncKC1BhY2thZ2VUeXBlEhwKGFBBQ0tBR0VfVFlQRV9VTlNQRUNJRklFRBAAEhkKFVBBQ0tBR0VfVFlQRV9NQUtFRklMRRABEhQKEFBBQ0tBR0VfVFlQRV9OUE0QAhIZChVQQUNLQUdFX1RZUEVfVEFTS0ZJTEUQAzKOCAoWUGFja2FnZUNvbW1hbmRzU2VydmljZRJhCgxMaXN0Q29tbWFuZHMSJi5yZWxpYW50LnYxLkxpc3RQYWNrYWdlQ29tbWFuZHNSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0UGFja2FnZUNvbW1hbmRzUmVzcG9uc2UiABKtAQoKUnVuQ29tbWFuZBIkLnJlbGlhbnQudjEuUnVuUGFja2FnZUNvbW1hbmRSZXF1ZXN0GiUucmVsaWFudC52MS5SdW5QYWNrYWdlQ29tbWFuZFJlc3BvbnNlIlKiuxhOOkw6SnJ1bnMgYSBwYWNrYWdlIHNjcmlwdCBvbiB0aGUgZGFlbW9uOiBkZXYtbG9vcCBwcm9jZXNzIGNvbnRyb2wsIGhpZ2ggdm9sdW1lEmQKDUxpc3RQcm9jZXNzZXMSJy5yZWxpYW50LnYxLkxpc3RQYWNrYWdlUHJvY2Vzc2VzUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdFBhY2thZ2VQcm9jZXNzZXNSZXNwb25zZSIAElsKCkdldFByb2Nlc3MSJC5yZWxpYW50LnYxLkdldFBhY2thZ2VQcm9jZXNzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UGFja2FnZVByb2Nlc3NSZXNwb25zZSIAEmcKDkdldFByb2Nlc3NMb2dzEigucmVsaWFudC52MS5HZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXF1ZXN0GikucmVsaWFudC52MS5HZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXNwb25zZSIAEq8BCgtLaWxsUHJvY2VzcxIlLnJlbGlhbnQudjEuS2lsbFBhY2thZ2VQcm9jZXNzUmVxdWVzdBomLnJlbGlhbnQudjEuS2lsbFBhY2thZ2VQcm9jZXNzUmVzcG9uc2UiUaK7GE06SzpJc3RvcHMgYSBwYWNrYWdlIGNvbW1hbmQncyBwcm9jZXNzIG9uIHRoZSBkYWVtb246IGRldi1sb29wIHByb2Nlc3MgY29udHJvbBJoChNHZXRDb21tYW5kRmF2b3JpdGVzEiYucmVsaWFudC52MS5HZXRDb21tYW5kRmF2b3JpdGVzUmVxdWVzdBonLnJlbGlhbnQudjEuR2V0Q29tbWFuZEZhdm9yaXRlc1Jlc3BvbnNlIgASmAEKElNldENvbW1hbmRGYXZvcml0ZRIlLnJlbGlhbnQudjEuU2V0Q29tbWFuZEZhdm9yaXRlUmVxdWVzdBomLnJlbGlhbnQudjEuU2V0Q29tbWFuZEZhdm9yaXRlUmVzcG9uc2UiM6K7GC86LTorcGVyLXVzZXIgVUkgcHJlZmVyZW5jZTogYSBmYXZvcml0ZWQgY29tbWFuZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_reliant_v1_common]);
+  fileDesc("CiFyZWxpYW50L3YxL3BhY2thZ2VfY29tbWFuZHMucHJvdG8SCnJlbGlhbnQudjEi1wEKDlBhY2thZ2VDb21tYW5kEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHY29tbWFuZBgDIAEoCRItCgxwYWNrYWdlX3R5cGUYBCABKA4yFy5yZWxpYW50LnYxLlBhY2thZ2VUeXBlEg4KBnNvdXJjZRgFIAEoCRIQCghjYXRlZ29yeRgGIAEoCRIUCgxkZXBlbmRlbmNpZXMYByADKAkSEwoLd29ya2luZ19kaXIYCCABKAkSFQoNcmVsYXRpdmVfcGF0aBgJIAEoCSKSAgoOUGFja2FnZVByb2Nlc3MSCgoCaWQYASABKAkSDwoHY29tbWFuZBgCIAEoCRIzCgZzdGF0dXMYAyABKA4yIy5yZWxpYW50LnYxLkJhY2tncm91bmRQcm9jZXNzU3RhdHVzEhgKC3dvcmt0cmVlX2lkGAQgASgJSACIAQESEwoLd29ya2luZ19kaXIYBSABKAkSEgoKc3RhcnRfdGltZRgGIAEoCRIVCghlbmRfdGltZRgHIAEoCUgBiAEBEhYKCWV4aXRfY29kZRgIIAEoBUgCiAEBEhEKCWRhZW1vbl9pZBgJIAEoCUIOCgxfd29ya3RyZWVfaWRCCwoJX2VuZF90aW1lQgwKCl9leGl0X2NvZGUioAEKGkxpc3RQYWNrYWdlQ29tbWFuZHNSZXF1ZXN0EhgKC3dvcmt0cmVlX2lkGAEgASgJSACIAQESEQoEcGF0aBgCIAEoCUgBiAEBEhoKEmN1c3RvbV9kaXJlY3RvcmllcxgDIAMoCRIUCgdjaGF0X2lkGAQgASgJSAKIAQFCDgoMX3dvcmt0cmVlX2lkQgcKBV9wYXRoQgoKCF9jaGF0X2lkIj4KDkNvbW1hbmRzQnlUeXBlEiwKCGNvbW1hbmRzGAEgAygLMhoucmVsaWFudC52MS5QYWNrYWdlQ29tbWFuZCLLAQobTGlzdFBhY2thZ2VDb21tYW5kc1Jlc3BvbnNlEkcKCGNvbW1hbmRzGAEgAygLMjUucmVsaWFudC52MS5MaXN0UGFja2FnZUNvbW1hbmRzUmVzcG9uc2UuQ29tbWFuZHNFbnRyeRIWCg5kZXRlY3RlZF90eXBlcxgCIAMoCRpLCg1Db21tYW5kc0VudHJ5EgsKA2tleRgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLnJlbGlhbnQudjEuQ29tbWFuZHNCeVR5cGU6AjgBItkCChhSdW5QYWNrYWdlQ29tbWFuZFJlcXVlc3QSGAoLd29ya3RyZWVfaWQYASABKAlIAIgBARIRCgRwYXRoGAIgASgJSAGIAQESFAoMY29tbWFuZF9uYW1lGAMgASgJEi0KDHBhY2thZ2VfdHlwZRgEIAEoDjIXLnJlbGlhbnQudjEuUGFja2FnZVR5cGUSOgoDZW52GAUgAygLMi0ucmVsaWFudC52MS5SdW5QYWNrYWdlQ29tbWFuZFJlcXVlc3QuRW52RW50cnkSGAoLd29ya2luZ19kaXIYBiABKAlIAogBARIUCgdjaGF0X2lkGAcgASgJSAOIAQEaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIOCgxfd29ya3RyZWVfaWRCBwoFX3BhdGhCDgoMX3dvcmtpbmdfZGlyQgoKCF9jaGF0X2lkImcKGVJ1blBhY2thZ2VDb21tYW5kUmVzcG9uc2USEgoKcHJvY2Vzc19pZBgBIAEoCRIPCgdjb21tYW5kGAIgASgJEhIKCnN0YXJ0X3RpbWUYAyABKAkSEQoJZGFlbW9uX2lkGAQgASgJImkKG0xpc3RQYWNrYWdlUHJvY2Vzc2VzUmVxdWVzdBIYCgt3b3JrdHJlZV9pZBgBIAEoCUgAiAEBEhQKB2NoYXRfaWQYAiABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiTQocTGlzdFBhY2thZ2VQcm9jZXNzZXNSZXNwb25zZRItCglwcm9jZXNzZXMYASADKAsyGi5yZWxpYW50LnYxLlBhY2thZ2VQcm9jZXNzIlQKGEdldFBhY2thZ2VQcm9jZXNzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJEhYKCWRhZW1vbl9pZBgCIAEoCUgAiAEBQgwKCl9kYWVtb25faWQiSAoZR2V0UGFja2FnZVByb2Nlc3NSZXNwb25zZRIrCgdwcm9jZXNzGAEgASgLMhoucmVsaWFudC52MS5QYWNrYWdlUHJvY2VzcyJYChxHZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXF1ZXN0EhIKCnByb2Nlc3NfaWQYASABKAkSFgoJZGFlbW9uX2lkGAIgASgJSACIAQFCDAoKX2RhZW1vbl9pZCJGCgpPdXRwdXRMaW5lEioKBHR5cGUYASABKA4yHC5yZWxpYW50LnYxLk91dHB1dFN0cmVhbVR5cGUSDAoEdGV4dBgCIAEoCSJpCh1HZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXNwb25zZRIOCgZzdGRvdXQYASABKAkSDgoGc3RkZXJyGAIgASgJEigKCGNvbWJpbmVkGAMgAygLMhYucmVsaWFudC52MS5PdXRwdXRMaW5lIlUKGUtpbGxQYWNrYWdlUHJvY2Vzc1JlcXVlc3QSEgoKcHJvY2Vzc19pZBgBIAEoCRIWCglkYWVtb25faWQYAiABKAlIAIgBAUIMCgpfZGFlbW9uX2lkIi0KGktpbGxQYWNrYWdlUHJvY2Vzc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkiMAoaR2V0Q29tbWFuZEZhdm9yaXRlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSIzChtHZXRDb21tYW5kRmF2b3JpdGVzUmVzcG9uc2USFAoMY29tbWFuZF9rZXlzGAEgAygJIlkKGVNldENvbW1hbmRGYXZvcml0ZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtjb21tYW5kX2tleRgCIAEoCRITCgtpc19mYXZvcml0ZRgDIAEoCCItChpTZXRDb21tYW5kRmF2b3JpdGVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIKncKC1BhY2thZ2VUeXBlEhwKGFBBQ0tBR0VfVFlQRV9VTlNQRUNJRklFRBAAEhkKFVBBQ0tBR0VfVFlQRV9NQUtFRklMRRABEhQKEFBBQ0tBR0VfVFlQRV9OUE0QAhIZChVQQUNLQUdFX1RZUEVfVEFTS0ZJTEUQAzKOCAoWUGFja2FnZUNvbW1hbmRzU2VydmljZRJhCgxMaXN0Q29tbWFuZHMSJi5yZWxpYW50LnYxLkxpc3RQYWNrYWdlQ29tbWFuZHNSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0UGFja2FnZUNvbW1hbmRzUmVzcG9uc2UiABKtAQoKUnVuQ29tbWFuZBIkLnJlbGlhbnQudjEuUnVuUGFja2FnZUNvbW1hbmRSZXF1ZXN0GiUucmVsaWFudC52MS5SdW5QYWNrYWdlQ29tbWFuZFJlc3BvbnNlIlKiuxhOOkw6SnJ1bnMgYSBwYWNrYWdlIHNjcmlwdCBvbiB0aGUgZGFlbW9uOiBkZXYtbG9vcCBwcm9jZXNzIGNvbnRyb2wsIGhpZ2ggdm9sdW1lEmQKDUxpc3RQcm9jZXNzZXMSJy5yZWxpYW50LnYxLkxpc3RQYWNrYWdlUHJvY2Vzc2VzUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdFBhY2thZ2VQcm9jZXNzZXNSZXNwb25zZSIAElsKCkdldFByb2Nlc3MSJC5yZWxpYW50LnYxLkdldFBhY2thZ2VQcm9jZXNzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UGFja2FnZVByb2Nlc3NSZXNwb25zZSIAEmcKDkdldFByb2Nlc3NMb2dzEigucmVsaWFudC52MS5HZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXF1ZXN0GikucmVsaWFudC52MS5HZXRQYWNrYWdlUHJvY2Vzc0xvZ3NSZXNwb25zZSIAEq8BCgtLaWxsUHJvY2VzcxIlLnJlbGlhbnQudjEuS2lsbFBhY2thZ2VQcm9jZXNzUmVxdWVzdBomLnJlbGlhbnQudjEuS2lsbFBhY2thZ2VQcm9jZXNzUmVzcG9uc2UiUaK7GE06SzpJc3RvcHMgYSBwYWNrYWdlIGNvbW1hbmQncyBwcm9jZXNzIG9uIHRoZSBkYWVtb246IGRldi1sb29wIHByb2Nlc3MgY29udHJvbBJoChNHZXRDb21tYW5kRmF2b3JpdGVzEiYucmVsaWFudC52MS5HZXRDb21tYW5kRmF2b3JpdGVzUmVxdWVzdBonLnJlbGlhbnQudjEuR2V0Q29tbWFuZEZhdm9yaXRlc1Jlc3BvbnNlIgASmAEKElNldENvbW1hbmRGYXZvcml0ZRIlLnJlbGlhbnQudjEuU2V0Q29tbWFuZEZhdm9yaXRlUmVxdWVzdBomLnJlbGlhbnQudjEuU2V0Q29tbWFuZEZhdm9yaXRlUmVzcG9uc2UiM6K7GC86LTorcGVyLXVzZXIgVUkgcHJlZmVyZW5jZTogYSBmYXZvcml0ZWQgY29tbWFuZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_reliant_v1_common]);
 
 /**
  * PackageCommand represents a runnable command from a package manager file
@@ -126,6 +126,14 @@ export type PackageProcess = Message<"reliant.v1.PackageProcess"> & {
    * @generated from field: optional int32 exit_code = 8;
    */
   exitCode?: number | undefined;
+
+  /**
+   * The machine the process runs on: the one holding its workspace's
+   * checkout. GetProcess, GetProcessLogs and KillProcess take it back.
+   *
+   * @generated from field: string daemon_id = 9;
+   */
+  daemonId: string;
 };
 
 /**
@@ -157,6 +165,15 @@ export type ListPackageCommandsRequest = Message<"reliant.v1.ListPackageCommands
    * @generated from field: repeated string custom_directories = 3;
    */
   customDirectories: string[];
+
+  /**
+   * The chat the panel is beside. For a workspace with no owner of its own
+   * (the main checkout) the chat's machine is the one to ask, as for its
+   * Files tab and terminal. Another user's chat is not found.
+   *
+   * @generated from field: optional string chat_id = 4;
+   */
+  chatId?: string | undefined;
 };
 
 /**
@@ -246,6 +263,13 @@ export type RunPackageCommandRequest = Message<"reliant.v1.RunPackageCommandRequ
    * @generated from field: optional string working_dir = 6;
    */
   workingDir?: string | undefined;
+
+  /**
+   * The chat the panel is beside (see ListPackageCommandsRequest.chat_id).
+   *
+   * @generated from field: optional string chat_id = 7;
+   */
+  chatId?: string | undefined;
 };
 
 /**
@@ -273,6 +297,13 @@ export type RunPackageCommandResponse = Message<"reliant.v1.RunPackageCommandRes
    * @generated from field: string start_time = 3;
    */
   startTime: string;
+
+  /**
+   * The machine the process was started on (PackageProcess.daemon_id).
+   *
+   * @generated from field: string daemon_id = 4;
+   */
+  daemonId: string;
 };
 
 /**
@@ -287,12 +318,21 @@ export const RunPackageCommandResponseSchema: GenMessage<RunPackageCommandRespon
  */
 export type ListPackageProcessesRequest = Message<"reliant.v1.ListPackageProcessesRequest"> & {
   /**
-   * WorktreeId keeps only that worktree's processes. Unset (or empty) lists
-   * every process.
+   * WorktreeId keeps only that worktree's processes, read from the machine
+   * holding it. Unset (or empty) lists the package-command processes of every
+   * connected machine; one that is asleep is skipped, not woken.
    *
    * @generated from field: optional string worktree_id = 1;
    */
   worktreeId?: string | undefined;
+
+  /**
+   * The chat the panel is beside (see ListPackageCommandsRequest.chat_id):
+   * with worktree_id, the machine its processes are read from.
+   *
+   * @generated from field: optional string chat_id = 2;
+   */
+  chatId?: string | undefined;
 };
 
 /**
@@ -327,6 +367,14 @@ export type GetPackageProcessRequest = Message<"reliant.v1.GetPackageProcessRequ
    * @generated from field: string process_id = 1;
    */
   processId: string;
+
+  /**
+   * The machine the process runs on (PackageProcess.daemon_id). Unset asks
+   * the default machine.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**
@@ -361,6 +409,14 @@ export type GetPackageProcessLogsRequest = Message<"reliant.v1.GetPackageProcess
    * @generated from field: string process_id = 1;
    */
   processId: string;
+
+  /**
+   * The machine the process runs on (PackageProcess.daemon_id). Unset asks
+   * the default machine.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**
@@ -431,6 +487,14 @@ export type KillPackageProcessRequest = Message<"reliant.v1.KillPackageProcessRe
    * @generated from field: string process_id = 1;
    */
   processId: string;
+
+  /**
+   * The machine the process runs on (PackageProcess.daemon_id). Unset asks
+   * the default machine.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**
@@ -575,7 +639,9 @@ export const PackageTypeSchema: GenEnum<PackageType> = /*@__PURE__*/
   enumDesc(file_reliant_v1_package_commands, 0);
 
 /**
- * PackageCommandsService handles package command discovery and execution
+ * PackageCommandsService handles package command discovery and execution.
+ * Discovery and every process run on the machine (daemon) that holds the
+ * workspace's checkout — never on the api-server, which has no user files.
  *
  * @generated from service reliant.v1.PackageCommandsService
  */

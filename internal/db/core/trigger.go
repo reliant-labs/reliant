@@ -253,8 +253,9 @@ type Trigger struct {
 	// placed on (CatalogMachine), not the union of every machine's.
 	CatalogDaemonID string
 	// NotifyOnComplete opts the owner in to being told when a run of this
-	// trigger completes (unread + OS notification + a Run finished Inbox
-	// item). Unattended completions are otherwise silent.
+	// trigger completes successfully: unread + OS notification, and the run
+	// is kept unarchived. Never an Inbox item: a successful run is not
+	// waiting on anyone. Unattended completions are otherwise silent.
 	NotifyOnComplete bool
 	// Config is the kind-specific source configuration, e.g. ScheduleConfig
 	// for TriggerKindSchedule. Stored as jsonb.

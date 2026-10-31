@@ -29,6 +29,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
+import type { ListChatsRequest } from "../../../gen/reliant/v1/chat_pb";
 import { ProjectFilterRouteSync } from "../ProjectFilterRouteSync";
 import { ProjectFilterMenu } from "../ProjectFilterMenu";
 import { useChatListWithWorkspaces } from "../../../hooks/chat-queries";
@@ -120,9 +121,10 @@ beforeEach(() => {
   touchProject.mockClear();
   setTransport(
     mockTransport({
-      "ChatService.ListChats": (req: { projectId: string }) => {
-        listChatsProjectIds.push(req.projectId);
-        return { chats: chatsOf(req.projectId) };
+      "ChatService.ListChats": (req: unknown) => {
+        const { projectId } = req as ListChatsRequest;
+        listChatsProjectIds.push(projectId);
+        return { chats: chatsOf(projectId) };
       },
     }),
   );

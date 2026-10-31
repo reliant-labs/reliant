@@ -84,7 +84,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -1030,10 +1029,11 @@ func (g *Graph) newConnector() (*connector.Service, error) {
 // The ToolsDaemonService stream is the daemon-gateway's.
 func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 	return daemon_registry.New(daemon_registry.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		Router:       g.APIDaemonRouter().NATSDaemonRouter,
+		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 
@@ -1113,11 +1113,10 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:      g.Database(),
-		Processes: pkgmgr.NewService(),
+		Logger: g.Log,
+		Config: g.Cfg,
+		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:   g.Database(),
 	})
 }
 

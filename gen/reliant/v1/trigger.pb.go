@@ -1448,10 +1448,13 @@ type Trigger struct {
 	// Read-only registry state: connected, disconnected, starting, suspended,
 	// failed, removed, or none for a no-machine activation.
 	MachineState string `protobuf:"bytes,30,opt,name=machine_state,json=machineState,proto3" json:"machine_state,omitempty"`
-	// When true, a completed run of this trigger marks its chat unread
-	// (raising the OS notification) and appears in the Inbox as "Run finished".
-	// Off by default: unattended completions are silent, failures always notify
-	// (research/WORKFLOW_UI.md §6.4).
+	// When true, a run of this trigger that completes successfully marks its
+	// chat unread, which raises an OS notification, and the run stays out of
+	// the archive so the notification has something to open. It never creates
+	// an Inbox item: the Inbox lists only what needs the person, and a
+	// successful run does not. Off by default: unattended completions are
+	// silent. Failures notify (once per failure streak) and are an Inbox item
+	// whatever this says (research/WORKFLOW_UI.md §6.4).
 	NotifyOnComplete bool `protobuf:"varint,18,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// CEL bool over the `trigger` root (trigger.payload.*) that an event must
 	// satisfy to launch a run. Empty matches every event. A miss is recorded as
@@ -2479,7 +2482,8 @@ type TriggerDefinition struct {
 	// for the run's life. Exactly one of daemon_id, no_machine and
 	// machine_pool_id is set. See dev-docs/design/machine-pools.md.
 	MachinePoolId string `protobuf:"bytes,26,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
-	// Notify the owner when a run completes. Replaced on update, like every
+	// Send an OS notification when a run completes successfully
+	// (Trigger.notify_on_complete); never an Inbox item. Replaced on update, like every
 	// other field here, so a client editing a trigger must send the current
 	// value back.
 	NotifyOnComplete bool `protobuf:"varint,10,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
@@ -3497,7 +3501,7 @@ type EnableWorkflowRequest struct {
 	// TriggerDefinition, or machine_pool_id. Exactly one is required.
 	DaemonId      string `protobuf:"bytes,4,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	NoMachine     bool   `protobuf:"varint,5,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
-	MachinePoolId string `protobuf:"bytes,14,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
+	MachinePoolId string `protobuf:"bytes,15,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
 	// The connection each integration trigger listens through, keyed by
 	// integration id (e.g. "github"). One entry serves every trigger of that
 	// integration. An integration with no entry keeps the connection an
@@ -3511,7 +3515,8 @@ type EnableWorkflowRequest struct {
 	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Preset assignments, as TriggerDefinition.presets.
 	Presets map[string]string `protobuf:"bytes,8,rep,name=presets,proto3" json:"presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+	// Send an OS notification when a run completes successfully, as
+	// TriggerDefinition.notify_on_complete; never an Inbox item.
 	NotifyOnComplete bool `protobuf:"varint,9,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// The prompt for a trigger whose declaration has none (TriggerDefinition.message).
 	// A declaration's own prompt is used when this is empty.
@@ -3525,8 +3530,14 @@ type EnableWorkflowRequest struct {
 	// TriggerDefinition.acting_identity. Unspecified means APP for each new
 	// activation and preserves an existing activation's stored identity.
 	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Only these declared triggers (WorkflowTrigger.name). Empty means every
+	// trigger the workflow declares. Each named trigger is created or brought
+	// to the request exactly as in the whole-workflow case, all or nothing
+	// within the selection; the others are left as they are. A name the
+	// workflow does not declare refuses the request.
+	Triggers      []string `protobuf:"bytes,14,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnableWorkflowRequest) Reset() {
@@ -3655,6 +3666,13 @@ func (x *EnableWorkflowRequest) GetActingIdentity() ActingIdentity {
 		return x.ActingIdentity
 	}
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+}
+
+func (x *EnableWorkflowRequest) GetTriggers() []string {
+	if x != nil {
+		return x.Triggers
+	}
+	return nil
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -5334,7 +5352,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"J\n" +
 	"\x19SetTriggerEnabledResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\x9c\a\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\xb8\a\n" +
 	"\x15EnableWorkflowRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1d\n" +
 	"\n" +
@@ -5344,7 +5362,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x04 \x01(\tR\bdaemonId\x12\x1d\n" +
 	"\n" +
 	"no_machine\x18\x05 \x01(\bR\tnoMachine\x12&\n" +
-	"\x0fmachine_pool_id\x18\x0e \x01(\tR\rmachinePoolId\x12[\n" +
+	"\x0fmachine_pool_id\x18\x0f \x01(\tR\rmachinePoolId\x12[\n" +
 	"\x0econnection_ids\x18\x06 \x03(\v24.reliant.v1.EnableWorkflowRequest.ConnectionIdsEntryR\rconnectionIds\x12E\n" +
 	"\x06params\x18\a \x03(\v2-.reliant.v1.EnableWorkflowRequest.ParamsEntryR\x06params\x12H\n" +
 	"\apresets\x18\b \x03(\v2..reliant.v1.EnableWorkflowRequest.PresetsEntryR\apresets\x12,\n" +
@@ -5354,7 +5372,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vname_prefix\x18\v \x01(\tR\n" +
 	"namePrefix\x12A\n" +
 	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x12C\n" +
-	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a@\n" +
+	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12\x1a\n" +
+	"\btriggers\x18\x0e \x03(\tR\btriggers\x1a@\n" +
 	"\x12ConnectionIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +

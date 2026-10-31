@@ -14,7 +14,7 @@ import (
 var t0 = time.Date(2026, 10, 30, 16, 0, 0, 0, time.UTC)
 
 func member(name string, phase Phase, live int) Member {
-	return Member{DaemonID: "id-" + name, Name: name, Phase: phase, LiveRuns: live, Installed: true, CatalogDigest: "cat-main", CatalogPushedAt: t0}
+	return Member{DaemonID: "id-" + name, Name: name, Phase: phase, LiveRuns: live, Installed: true, Verified: phase == PhaseConnected, CatalogDigest: "cat-main", CatalogPushedAt: t0}
 }
 
 func pool(maxPer int) Pool {
@@ -48,18 +48,46 @@ func TestDecide_FullMembersArePassedOver(t *testing.T) {
 	}
 }
 
-func TestDecide_PrefersConnectedThenStartingThenWake(t *testing.T) {
+func TestDecide_PrefersConnectedThenWaitsForStartingThenWakes(t *testing.T) {
 	d := Decide(pool(0), []Member{member("a", PhaseSuspended, 0), member("b", PhaseStarting, 0), member("c", PhaseConnected, 5)})
 	if d.Kind != Run || d.Member.Name != "c" {
 		t.Fatalf("got %v on %q, want run on connected c even though busier", d.Kind, d.Member.Name)
 	}
+	// A member on its way up is waited for: never pinned to (it may come up
+	// with an empty disk), and no second machine is woken beside it.
 	d = Decide(pool(0), []Member{member("a", PhaseSuspended, 0), member("b", PhaseStarting, 0)})
-	if d.Kind != Run || d.Member.Name != "b" {
-		t.Fatalf("got %v on %q, want run on starting b", d.Kind, d.Member.Name)
+	if d.Kind != Queue || !strings.Contains(d.Reason("cicd"), "b: "+ReasonStarting) {
+		t.Fatalf("got %v %q, want queue waiting for starting b", d.Kind, d.Reason("cicd"))
 	}
 	d = Decide(pool(0), []Member{member("a", PhaseSuspended, 0), member("b", PhaseDisconnected, 0)})
 	if d.Kind != Wake || d.Member.Name != "a" {
 		t.Fatalf("got %v on %q, want wake a", d.Kind, d.Member.Name)
+	}
+	if r := d.Reason("cicd"); !strings.HasPrefix(r, WaitingPrefix) || !strings.Contains(r, "waking a") {
+		t.Fatalf("wake reason %q: a woken member's run waits, saying so", r)
+	}
+}
+
+// Wake, then place: a member that has just connected takes runs only once its
+// checkout was seen on its disk since that connection. An ephemeral member
+// wakes with an empty disk while its project still reads as installed; until
+// the checkout is back it is waited for, and nothing else is woken.
+func TestDecide_ConnectedButUnverifiedIsWaitedFor(t *testing.T) {
+	fresh := member("a", PhaseConnected, 0)
+	fresh.Verified = false
+	d := Decide(pool(0), []Member{fresh, member("b", PhaseSuspended, 0)})
+	if d.Kind != Queue || !strings.Contains(d.Reason("cicd"), "a: "+ReasonVerifying) {
+		t.Fatalf("got %v %q, want queue waiting for a's checkout, b left asleep", d.Kind, d.Reason("cicd"))
+	}
+	fresh.Verified = true
+	if d := Decide(pool(0), []Member{fresh, member("b", PhaseSuspended, 0)}); d.Kind != Run || d.Member.Name != "a" {
+		t.Fatalf("verified: got %v on %q, want run on a", d.Kind, d.Member.Name)
+	}
+	// A verified member with room is used even while another is verifying.
+	busy := member("c", PhaseConnected, 3)
+	fresh.Verified = false
+	if d := Decide(pool(0), []Member{fresh, busy}); d.Kind != Run || d.Member.Name != "c" {
+		t.Fatalf("got %v on %q, want run on verified c", d.Kind, d.Member.Name)
 	}
 }
 

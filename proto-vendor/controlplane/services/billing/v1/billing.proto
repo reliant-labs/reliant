@@ -8,8 +8,8 @@ syntax = "proto3";
 
 package controlplane.v1;
 
-import "controlplane/v1/shared.proto";
 import "buf/validate/validate.proto";
+import "controlplane/v1/shared.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 

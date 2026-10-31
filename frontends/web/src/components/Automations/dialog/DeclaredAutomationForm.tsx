@@ -832,7 +832,7 @@ export function DeclaredAutomationForm({
               size="lg"
               className="forge-ui"
             />
-            <p className={hintClass}>Failures always notify you, once per streak.</p>
+            <p className={hintClass}>A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.</p>
           </div>
 
           {declared.length > 1 && (

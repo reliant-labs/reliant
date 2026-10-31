@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -78,6 +79,64 @@ func capacityKey(ctx context.Context, policy *reliantv1.WorkflowConcurrency, eve
 	return &key
 }
 
+// capacityScope is the pool a trigger's capped runs share: its owner, project
+// and resolved workflow ref.
+func capacityScope(t *core.Trigger) (store.TriggerCapacityScope, error) {
+	ref, err := workflowref.Parse(t.Workflow)
+	if err != nil {
+		return store.TriggerCapacityScope{}, err
+	}
+	return store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: ref.Key()}, nil
+}
+
+// capacityQueue finds a scope's FIFO head. *db.Repo satisfies it.
+type capacityQueue interface {
+	NextWaitingTriggerCapacityEvent(context.Context, store.TriggerCapacityScope) (*core.TriggerEvent, error)
+}
+
+// capacityWake hands a freed or still-free slot straight to the next waiting
+// event. Without it a waiting event is fired again only by the redriver, one
+// queue head per scope per pass, so N free slots took N passes to fill and a
+// queue of fast runs drained at one launch a minute however high max_running
+// was set: the queue grew faster than it drained and every new event waited
+// behind it.
+type capacityWake struct {
+	starter   WorkflowStarter
+	taskQueue string
+}
+
+// wakeNext fires the scope's waiting head after a capped launch. That fire
+// launches if a slot is still free, and wakes the next in turn, so a burst of
+// free slots fills in one cascade; it declines (and the cascade stops) once
+// the scope is full. Best effort: a failure is logged, and the redriver still
+// fires the head on its next pass.
+func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, launchedEventID string) {
+	if w == nil || w.starter == nil {
+		return
+	}
+	queue, ok := repo.(capacityQueue)
+	if !ok {
+		return
+	}
+	scope, err := capacityScope(t)
+	if err != nil {
+		return
+	}
+	next, err := queue.NextWaitingTriggerCapacityEvent(ctx, scope)
+	if err != nil {
+		slog.WarnContext(ctx, "workflow capacity: cannot find the next waiting event; the redriver will fire it",
+			"trigger_id", t.ID, "error", err)
+		return
+	}
+	if next == nil || next.ID == launchedEventID || next.TriggerID == nil {
+		return
+	}
+	if err := refireEvent(ctx, w.starter, w.taskQueue, next, time.Now()); err != nil {
+		slog.WarnContext(ctx, "workflow capacity: cannot fire the next waiting event; the redriver will",
+			"event_id", next.ID, "error", err)
+	}
+}
+
 func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, n uint32, spec *launch.Spec) error {
 	repo, ok := repository.(capacityRepository)
 	if !ok {
@@ -86,12 +145,10 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if descriptions == nil {
 		return errors.New("workflow capacity Temporal descriptions are unavailable")
 	}
-	ref, err := workflowref.Parse(t.Workflow)
+	scope, err := capacityScope(t)
 	if err != nil {
 		return err
 	}
-	poolRef := ref.Key()
-	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: poolRef}
 	if event.Outcome == core.TriggerEventPending {
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
 			return errCapacityScopeChanged
