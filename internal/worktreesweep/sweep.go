@@ -61,6 +61,18 @@ const (
 	holdBackoffMax = 24 * time.Hour
 	// A locked live worktree is re-checked once a day.
 	lockRecheck = 24 * time.Hour
+
+	// shedQuiet is how long nothing in a kept worktree (a live one no chat is
+	// running in, or an archived one held for its work) must have changed
+	// before the daemon sheds its regenerable output: node_modules, build
+	// output, tool caches. An install or build puts it back. On 2026-10-30
+	// that output was 77 GiB of one machine's 225 GiB of worktrees.
+	shedQuiet = 6 * time.Hour
+	// While a machine's disk guard is acting, the floors shrink: space is
+	// needed now, and every live row is re-asked at once (due).
+	guardShedQuiet       = time.Hour
+	guardRecoverableIdle = 2 * time.Hour
+	guardLandedIdle      = time.Hour
 	// While landed reclaim is on, a live worktree is asked whether its work
 	// has landed this often: a merge should free its disk within the hour,
 	// not the next day.
@@ -181,6 +193,9 @@ type Sweeper struct {
 	slots          chan struct{}
 	// inflight is the rows with a request out to a daemon.
 	inflight leases
+	// guarded is the daemons whose disk guard is acting this pass (set once
+	// by Sweep before any daemon is asked, read by describe and apply).
+	guarded atomic.Pointer[map[string]bool]
 	// owner names this process in a clean-up's metadata, so a flag left by a
 	// process that died is recognizable as not ours and expires on its own.
 	owner string
@@ -294,6 +309,40 @@ func (s *Sweeper) WithLandedIdle(d time.Duration) *Sweeper {
 // work has landed.
 func (s *Sweeper) reclaimsLanded() bool {
 	return s.auto != nil && s.auto.landedIdle > 0
+}
+
+// sheds reports whether the sweep asks daemons to shed regenerable output.
+// Shedding deletes files, so it follows the auto-archive mode: only "on".
+func (s *Sweeper) sheds() bool { return s.auto != nil && s.auto.mode == AutoArchiveOn }
+
+// guardedFor reports whether the disk guard of the machine wt lives on is
+// acting this pass.
+func (s *Sweeper) guardedFor(wt *core.Worktree) bool {
+	m := s.guarded.Load()
+	return m != nil && wt.DaemonID != nil && (*m)[*wt.DaemonID]
+}
+
+// shedQuietFor, recoverableAfter and landedIdleFor are the floors for wt
+// this pass: shorter while its machine's disk guard is acting.
+func (s *Sweeper) shedQuietFor(wt *core.Worktree) time.Duration {
+	if s.guardedFor(wt) {
+		return guardShedQuiet
+	}
+	return shedQuiet
+}
+
+func (s *Sweeper) recoverableAfter(wt *core.Worktree) time.Duration {
+	if s.guardedFor(wt) {
+		return min(s.shed.after, guardRecoverableIdle)
+	}
+	return s.shed.after
+}
+
+func (s *Sweeper) landedIdleFor(wt *core.Worktree) time.Duration {
+	if s.guardedFor(wt) {
+		return min(s.auto.landedIdle, guardLandedIdle)
+	}
+	return s.auto.landedIdle
 }
 
 // Fence is the archive token for a row: its archive time in nanoseconds.
@@ -415,6 +464,11 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 			}
 		}
 	}
+	guarded := make(map[string]bool, len(guardSince))
+	for id := range guardSince {
+		guarded[id] = true
+	}
+	s.guarded.Store(&guarded)
 	sem := make(chan struct{}, sweepWorkers)
 	var wg sync.WaitGroup
 	for t, group := range groups {
@@ -467,6 +521,11 @@ func (s *Sweeper) due(wt *core.Worktree, guardSince time.Time) bool {
 	if meta.Transient != "" && age < transientBackoff(meta) {
 		return false
 	}
+	if !guardSince.IsZero() && meta.CheckedAt.Before(guardSince) {
+		// The machine's disk guard is acting: every row it holds, live or
+		// archived, is asked again once per episode.
+		return true
+	}
 	if wt.DeletedAt == nil {
 		if s.reclaimsLanded() && age >= landedRecheck {
 			return true
@@ -474,9 +533,6 @@ func (s *Sweeper) due(wt *core.Worktree, guardSince time.Time) bool {
 		return meta.LockedAt == nil || s.now().Sub(*meta.LockedAt) >= lockRecheck
 	}
 	if meta.HeldReason == "" {
-		return true
-	}
-	if !guardSince.IsZero() && meta.CheckedAt.Before(guardSince) {
 		return true
 	}
 	return age >= holdBackoff(meta)
@@ -648,6 +704,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		return batchFailed
 	}
 
+	logBatch(ctx, t, resp.Results)
 	var second []worktreereclaim.Worktree
 	for _, r := range resp.Results {
 		c := byID[r.ID]
@@ -821,7 +878,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		// lookups are terminal for this pass: never enable legacy probing.
 		w.ProbeIdle = eligible && s.shed == nil
 		if state == worktreereclaim.StateActive && w.Retire == "" && shed[wt.ID] {
-			w.ProbeRecoverableAfterSeconds = int64(s.shed.after / time.Second)
+			w.ProbeRecoverableAfterSeconds = int64(s.recoverableAfter(wt) / time.Second)
 			// Do not fall back to the older directory-mtime-only idle predicate
 			// if complete cache/activity/recoverability proof refuses this row.
 			w.ProbeIdle = false
@@ -829,6 +886,12 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		// Only a row whose chat runs were read (and found idle) is asked.
 		_, read := running[wt.ID]
 		w.ProbeLanded = eligible && s.reclaimsLanded() && !wt.IsMain && read && !running[wt.ID]
+		// Shed the regenerable output of a kept row: a live one no chat is
+		// running in, or an archived one (the daemon sheds only those held
+		// for their work).
+		if s.sheds() && !keep && w.Retire == "" && !wt.IsMain && (state == worktreereclaim.StateArchived || (read && !running[wt.ID])) {
+			w.ShedAfterSeconds = int64(s.shedQuietFor(wt) / time.Second)
+		}
 		// Whole-worktree retirement follows row-locked archival. Never permit
 		// the landed probe to delete subsets from a still-live workspace.
 		w.ShedLanded = false
@@ -849,7 +912,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 // failed lookup names them all: a row whose chats cannot be read is treated
 // as in use, so it is locked and nothing more.
 func (s *Sweeper) runActivity(ctx context.Context, batch []*core.ReclaimCandidate) map[string]bool {
-	if !s.reclaimsLanded() {
+	if !s.reclaimsLanded() && !s.sheds() {
 		return nil
 	}
 	var ids []string
@@ -1156,7 +1219,7 @@ func (s *Sweeper) archiveRecoverableIdle(ctx context.Context, userID string, wt 
 	if s.auto == nil || s.auto.mode != AutoArchiveOn {
 		return
 	}
-	archived, err := store.ArchiveRecoverableIdleWorktree(ctx, wt.ID, s.now().Add(-s.shed.after))
+	archived, err := store.ArchiveRecoverableIdleWorktree(ctx, wt.ID, s.now().Add(-s.recoverableAfter(wt)))
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] could not retire idle recoverable worktree", "worktreeID", wt.ID, "error", err)
 		return
@@ -1184,7 +1247,7 @@ func (s *Sweeper) reclaimLanded(ctx context.Context, userID string, wt *core.Wor
 		logging.InfoContext(ctx, "[WorktreeSweep] would reclaim landed worktree", "worktreeID", wt.ID, "name", wt.Name, "path", wt.Path)
 		return
 	}
-	archived, err := a.store.ArchiveLandedWorktree(ctx, wt.ID, s.now().Add(-a.landedIdle))
+	archived, err := a.store.ArchiveLandedWorktree(ctx, wt.ID, s.now().Add(-s.landedIdleFor(wt)))
 	if err != nil {
 		s.archiveErrors.Add(1)
 		logging.WarnContext(ctx, "[WorktreeSweep] could not archive landed worktree", "worktreeID", wt.ID, "error", err)
@@ -1291,4 +1354,34 @@ func foundCheckout(r worktreereclaim.Result) bool {
 		return r.Reason != worktreereclaim.ReasonError
 	}
 	return true
+}
+
+// logBatch logs one line per reconcile batch: how many rows came back with
+// each outcome and held reason, how many were landed or recoverable, and
+// what was shed. Without it a sweep that settled nothing looked the same as
+// one that settled everything (2026-10-30: 291 reconciles, no outcomes).
+func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
+	outcomes := map[string]int{}
+	held := map[string]int{}
+	var landed, recoverable, shed int
+	var shedBytes int64
+	for _, r := range results {
+		outcomes[string(r.Outcome)]++
+		if r.Outcome == worktreereclaim.OutcomeHeld {
+			held[string(r.Reason)]++
+		}
+		if r.Landed {
+			landed++
+		}
+		if r.RecoverableIdle {
+			recoverable++
+		}
+		if r.StrippedBytes > 0 {
+			shed++
+			shedBytes += r.StrippedBytes
+		}
+	}
+	logging.InfoContext(ctx, "[WorktreeSweep] reconcile batch", "daemonID", t.daemonID, "rows", len(results),
+		"outcomes", outcomes, "held", held, "landed", landed, "recoverable_idle", recoverable,
+		"shed_rows", shed, "shed_bytes", shedBytes)
 }

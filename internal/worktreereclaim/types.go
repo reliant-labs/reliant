@@ -287,6 +287,12 @@ type Worktree struct {
 	// landed: every checkout clean and its HEAD merged into its base branch
 	// on the remote (see Result.Landed). Always read-only.
 	ProbeLanded bool `json:"probe_landed,omitempty"`
+	// ShedAfterSeconds asks the daemon to shed the worktree's regenerable
+	// output (node_modules, build output, tool caches) once nothing in it has
+	// changed for this long and no process uses it (shedRegenerable). The
+	// server sends it for a live row no chat is running in, and for an
+	// archived row held for its work; zero never sheds.
+	ShedAfterSeconds int64 `json:"shed_after_s,omitempty"`
 	// ShedLanded is ignored; complete worktree retirement requires archival.
 	// It cannot authorize deleting any file from a live checkout.
 	ShedLanded bool       `json:"shed_landed,omitempty"`
