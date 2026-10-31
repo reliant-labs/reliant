@@ -295,11 +295,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithPlacer(pools).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithPlacer(pools).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
