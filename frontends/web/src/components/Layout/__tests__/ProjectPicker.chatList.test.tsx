@@ -120,9 +120,10 @@ beforeEach(() => {
   touchProject.mockClear();
   setTransport(
     mockTransport({
-      "ChatService.ListChats": (req: { projectId: string }) => {
-        listChatsProjectIds.push(req.projectId);
-        return { chats: chatsOf(req.projectId) };
+      "ChatService.ListChats": (req) => {
+        const { projectId } = req as { projectId: string };
+        listChatsProjectIds.push(projectId);
+        return { chats: chatsOf(projectId) };
       },
     }),
   );

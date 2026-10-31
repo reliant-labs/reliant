@@ -25,6 +25,7 @@ import {
   ListInboxResponseSchema,
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
+import { ProcessReportSchema } from "@/gen/reliant/v1/tools_daemon_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
@@ -463,7 +464,7 @@ describe("InboxPage storage item", () => {
           diskLow: false,
           volumes: [],
           held: [],
-          processes: {
+          processes: create(ProcessReportSchema, {
             count: 5_400n,
             limit: 7_650n,
             refusingHeavy: true,
@@ -471,7 +472,7 @@ describe("InboxPage storage item", () => {
               { chatId: "a32b6a3d-0000", chatTitle: "Release gate under 1h", command: "bash scripts/ci-gate.sh all", tasks: 4_950n, tracked: true },
               { chatId: "", command: "nohup /tmp/blitz/gate.sh 1631", tasks: 300n },
             ],
-          },
+          }),
         },
       ),
     ]);
