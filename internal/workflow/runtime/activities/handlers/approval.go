@@ -46,6 +46,14 @@ type ApprovalCreateInput struct {
 	NodePath string `json:"node_path,omitempty" reliant:"-"`
 	Title    string `json:"title" reliant:"-"`
 	Timeout  string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
+	// ToolCallID is the run's own tool call this approval is about (an
+	// activation change, a machine start); empty for a workflow approval
+	// node. Its approval is APPROVAL_TYPE_TOOL_CALL: the run answers the call
+	// itself, approved or denied.
+	ToolCallID string `json:"tool_call_id,omitempty" reliant:"-"`
+	// BatchID is shared by the approvals one step raised together, so they
+	// can be decided together. Empty for an approval raised on its own.
+	BatchID string `json:"batch_id,omitempty" reliant:"-"`
 }
 
 // ApprovalCreateOutput is the output from the ApprovalCreate activity.
@@ -163,6 +171,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		metadata["workflow_id"] = workflowID
 		metadata["run_id"] = activityInfo.WorkflowExecution.RunID
 	}
+	approvalType := reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP
+	if input.ToolCallID != "" {
+		approvalType = reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL
+		metadata["tool_call_id"] = input.ToolCallID
+	}
+	var batchID *string
+	if input.BatchID != "" {
+		batchID = &input.BatchID
+	}
 	var metadataJSON *string
 	if len(metadata) > 0 {
 		metadataBytes, err := json.Marshal(metadata)
@@ -187,7 +204,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
-		ApprovalType:       int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP),
+		ApprovalType:       int32(approvalType),
 		EntityID:           entityID,
 		Status:             int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING),
 		Title:              title,
@@ -196,6 +213,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		CreatedAt:          time.Now().UTC(),
 		ResolvedAt:         nil,
 		ThreadID:           threadID,
+		BatchID:            batchID,
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically
@@ -215,8 +233,9 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		updateData := map[string]interface{}{
 			"update_type":   "approval",
 			"id":            approvalID,
-			"approval_type": "workflow_step",
+			"approval_type": approvalTypeName(approvalType),
 			"activity_id":   activityID,
+			"batch_id":      input.BatchID,
 			"status":        "pending",
 			"title":         title,
 			"created_at":    approval.CreatedAt.Format(time.RFC3339),
@@ -321,6 +340,14 @@ func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalRes
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+// approvalTypeName is an approval type as its chat_update names it.
+func approvalTypeName(t reliantv1.ApprovalType) string {
+	if t == reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL {
+		return "tool_call"
+	}
+	return "workflow_step"
+}
 
 // approvalStatusString converts a proto approval status to a string.
 func approvalStatusString(status int32) string {

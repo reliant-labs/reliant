@@ -739,6 +739,7 @@ func inboxApproval(p *core.InboxPending) *reliantv1.InboxApproval {
 		ApprovalId:   p.ItemKey,
 		ApprovalType: reliantv1.ApprovalType(p.Int1),
 		Title:        p.Text1,
+		BatchId:      p.Text2,
 	}
 }
 

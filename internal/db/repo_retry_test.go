@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -120,6 +121,18 @@ func TestIsRetryableErrorSQLState(t *testing.T) {
 			// but still carrying the pgx-rendered SQLSTATE suffix.
 			name:     "flattened string with SQLSTATE 40001",
 			err:      errors.New("failed to get max sequence: ERROR: some message (SQLSTATE 40001)"),
+			expected: true,
+		},
+		{
+			// COMMIT after a statement whose 40001 the body swallowed (a
+			// best-effort read that logs and carries on): nothing committed.
+			name:     "commit rolled back by an earlier aborted statement",
+			err:      pgx.ErrTxCommitRollback,
+			expected: true,
+		},
+		{
+			name:     "commit rollback wrapped",
+			err:      fmt.Errorf("commit: %w", pgx.ErrTxCommitRollback),
 			expected: true,
 		},
 	}

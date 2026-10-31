@@ -193,6 +193,8 @@ function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
   // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
   const kind: unknown = update.approval_type;
   if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
+  if (kind === "tool_call" || kind === ApprovalType.TOOL_CALL) fields.approvalType = ApprovalType.TOOL_CALL;
+  if (update.batch_id) fields.batchId = update.batch_id;
   return fields;
 }
 

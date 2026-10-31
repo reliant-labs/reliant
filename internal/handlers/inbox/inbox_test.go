@@ -127,6 +127,28 @@ func inboxByKind(items []*reliantv1.InboxItem, kind reliantv1.InboxItemKind) []*
 	return out
 }
 
+// Approvals one step raised together carry their batch, so the Inbox can
+// offer them as one decision.
+func TestListInbox_ApprovalsCarryTheirBatch(t *testing.T) {
+	f := newInboxFixture(t)
+	now := time.Now().UTC().Add(-time.Minute)
+	f.seed(t, "chat-a", "wf", db.Active(), now)
+	batch := "wf-exec/call-1"
+	for _, id := range []string{"appr-1", "appr-2"} {
+		require.NoError(t, f.repo.CreateApproval(f.ctx, &db.Approval{
+			ID: id, ChatID: "chat-a", ApprovalType: int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL), EntityID: id, Status: 1,
+			Title: "Approval: enable_trigger", CreatedAt: now, BatchID: &batch,
+		}))
+	}
+	resp := f.list(t, nil)
+	require.Len(t, resp.Items, 2)
+	for _, it := range resp.Items {
+		assert.Equal(t, batch, it.GetApproval().GetBatchId())
+		assert.Equal(t, reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL, it.GetApproval().GetApprovalType())
+	}
+	assert.EqualValues(t, 2, resp.BlockingCount)
+}
+
 func TestListInbox_ApprovalAppearsAndClearsWhenResolved(t *testing.T) {
 	f := newInboxFixture(t)
 	now := time.Now().UTC().Add(-time.Minute)
@@ -149,6 +171,7 @@ func TestListInbox_ApprovalAppearsAndClearsWhenResolved(t *testing.T) {
 	require.NotNil(t, a)
 	assert.Equal(t, "Deploy to production?", a.GetTitle())
 	assert.Equal(t, reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP, a.GetApprovalType())
+	assert.Empty(t, a.GetBatchId(), "an approval node's approval is raised on its own")
 	assert.EqualValues(t, 1, resp.BlockingCount)
 	assert.False(t, resp.HasInformational)
 

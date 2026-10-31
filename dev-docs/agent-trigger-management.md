@@ -30,6 +30,18 @@ material, 32 inline-depth and 32 KiB display limits; cycles are memoized (invali
 reference cycles fail validation). Unresolvable runtime/event-dependent privilege
 choices or MCP dependencies fail closed and require app review.
 
+One turn's calls are previewed first, then every card they need is raised at
+once (`activationApprovalBatchChangeID`) and the turn waits for all of the
+decisions. Cards raised together are `APPROVAL_TYPE_TOOL_CALL` rows that share
+an `approvals.batch_id`; the chat's approval card and the Inbox offer the batch
+as one decision (`BatchApprove`/`BatchDeny`, which skip any card decided
+elsewhere meanwhile) and keep each card decidable on its own. Each decision
+still binds only its own call's fingerprint. A denied tool-call card is
+answered by its run (the call's refusal), never by a denial message over the
+whole turn. Concurrent changes in one turn do not refuse each other: a commit
+that Postgres rolled back because a swallowed read inside it hit a
+serialization failure is retried like any 40001.
+
 The executor requires the runtime's call-scoped fingerprint. Verification and
 app mutation run in one SERIALIZABLE transaction; scoped dependency row locks
 serialize existing edits, predicate reads protect shadowing/insertion, and the

@@ -227,6 +227,9 @@ message InboxApproval {
   ApprovalType approval_type = 2;
   // The approval's title.
   string title = 3;
+  // Approval.batch_id: the approvals the run raised together. The Inbox
+  // offers a batch of more than one as a single decision.
+  string batch_id = 7;
   // Described the call a tool approval (the removed APPROVAL_TYPE_TOOL) asked
   // about.
   reserved 4, 5, 6;

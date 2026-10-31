@@ -25,13 +25,17 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ApprovalType is the kind of approval request. Workflow step approvals are
-// the only kind left.
+// ApprovalType is the kind of approval request.
 type ApprovalType int32
 
 const (
-	ApprovalType_APPROVAL_TYPE_UNSPECIFIED   ApprovalType = 0
+	ApprovalType_APPROVAL_TYPE_UNSPECIFIED ApprovalType = 0
+	// A workflow approval node is waiting on it.
 	ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP ApprovalType = 2
+	// One of the run's own tool calls is waiting on it: an activation change
+	// (create/update/enable_trigger) or a machine start. The run answers that
+	// call itself, approved or not, so a denial writes no denial message.
+	ApprovalType_APPROVAL_TYPE_TOOL_CALL ApprovalType = 3
 )
 
 // Enum value maps for ApprovalType.
@@ -39,10 +43,12 @@ var (
 	ApprovalType_name = map[int32]string{
 		0: "APPROVAL_TYPE_UNSPECIFIED",
 		2: "APPROVAL_TYPE_WORKFLOW_STEP",
+		3: "APPROVAL_TYPE_TOOL_CALL",
 	}
 	ApprovalType_value = map[string]int32{
 		"APPROVAL_TYPE_UNSPECIFIED":   0,
 		"APPROVAL_TYPE_WORKFLOW_STEP": 2,
+		"APPROVAL_TYPE_TOOL_CALL":     3,
 	}
 )
 
@@ -140,10 +146,15 @@ type Approval struct {
 	CreatedAt    string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ResolvedAt   *string                `protobuf:"bytes,12,opt,name=resolved_at,json=resolvedAt,proto3,oneof" json:"resolved_at,omitempty"`
 	// Structured fields (replacing JSON in metadata).
-	MessageId     *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
-	WorkflowId    *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
-	RunId         *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`
-	ActionTaken   *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	MessageId   *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
+	WorkflowId  *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
+	RunId       *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`
+	ActionTaken *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	// Set when the run raised this approval together with others in one step
+	// (one turn's tool calls): every approval of the batch carries the same id,
+	// so they can be offered, and decided, together. Each stays its own row and
+	// can still be decided on its own.
+	BatchId       *string `protobuf:"bytes,23,opt,name=batch_id,json=batchId,proto3,oneof" json:"batch_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,6 +283,13 @@ func (x *Approval) GetRunId() string {
 func (x *Approval) GetActionTaken() string {
 	if x != nil && x.ActionTaken != nil {
 		return *x.ActionTaken
+	}
+	return ""
+}
+
+func (x *Approval) GetBatchId() string {
+	if x != nil && x.BatchId != nil {
+		return *x.BatchId
 	}
 	return ""
 }
@@ -855,7 +873,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd1\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xfe\x05\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -874,14 +892,16 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\vworkflow_id\x18\x10 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x1a\n" +
 	"\x06run_id\x18\x11 \x01(\tH\x05R\x05runId\x88\x01\x01\x12&\n" +
-	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01B\x0e\n" +
+	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01\x12\x1e\n" +
+	"\bbatch_id\x18\x17 \x01(\tH\aR\abatchId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x10\n" +
 	"\x0e_denial_reasonB\x0e\n" +
 	"\f_resolved_atB\r\n" +
 	"\v_message_idB\x0e\n" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
-	"\r_action_takenJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
+	"\r_action_takenB\v\n" +
+	"\t_batch_idJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
 	"tool_inputR\x10integration_nameR\x10integration_icon\"=\n" +
 	"\x1aListApprovalsByChatRequest\x12\x1f\n" +
 	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"g\n" +
@@ -927,10 +947,11 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06denied\x18\x02 \x01(\x05R\x06denied\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x17\n" +
-	"\achat_id\x18\x04 \x01(\tR\x06chatId*h\n" +
+	"\achat_id\x18\x04 \x01(\tR\x06chatId*\x85\x01\n" +
 	"\fApprovalType\x12\x1d\n" +
 	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\x88\x01\n" +
+	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\x12\x1b\n" +
+	"\x17APPROVAL_TYPE_TOOL_CALL\x10\x03\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\x88\x01\n" +
 	"\x0eApprovalStatus\x12\x1f\n" +
 	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17APPROVAL_STATUS_PENDING\x10\x01\x12\x1c\n" +

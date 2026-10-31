@@ -232,6 +232,10 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 		if strings.Contains(err.Error(), ApprovalRequiredMessage) {
 			return NewTextErrorResponse(ApprovalRequiredMessage), nil
 		}
+		if o.name == ToolPauseTrigger {
+			// A pause never needs a card, so a failed one is never about approval.
+			return NewTextErrorResponse("Pausing the activation could not be completed. Inspect its current state in the app before retrying."), nil
+		}
 		return NewTextErrorResponse("Activation change refused or could not be completed. Inspect its current state and setup in the app before retrying; a change that widens the activation's power needs a new approval."), nil
 	}
 	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
