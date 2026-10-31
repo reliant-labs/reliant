@@ -197,6 +197,19 @@ message ApiServerConfig {
     (buf.validate.field).duration.gte = {}
   ];
 
+  // Idle floor for whole recoverable-worktree retirement. Requires clean
+  // pushed/merged work, no live chat/thread execution, no process use and no
+  // fresh files (including caches). Dirty/unique/uncertain trees retain every
+  // file. auto-archive on is required; 0 disables. Legacy config name only.
+  google.protobuf.Duration worktree_live_shed_idle = 82 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_LIVE_SHED_IDLE"
+      default_value: "24h"
+      description: "Idle floor for whole recoverable-worktree retirement; auto-archive on required (0 = off)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
   // The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
   // logs in through: its origin and its PUBLIC publishable key
   // (sb_publishable_*, the browser-facing anon identity, not a service-role

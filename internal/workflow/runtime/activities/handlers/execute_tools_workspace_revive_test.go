@@ -123,6 +123,25 @@ func TestExecuteTools_RetirementDeferredAcrossBatchesRefusesUntilAck(t *testing.
 	assert.Equal(t, fence, executor.ensures[2].Retire)
 }
 
+func TestExecuteTools_WholeIdleRetirementRevivesWithDurableFence(t *testing.T) {
+	t.Parallel()
+	f := setupWorkspaceRecoveryFixture(t)
+	defer f.h.Cleanup()
+	ctx := context.Background()
+	ok, err := f.h.Repo().ArchiveRecoverableIdleWorktree(ctx, f.worktreeID, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.True(t, ok)
+	executor := recreatingDaemon(t)
+	out := f.run(t, executor, bashCall("pwd"))
+	require.False(t, out.ToolResults[0].GetIsError(), out.ToolResults[0].GetContent())
+	require.NotEmpty(t, executor.ensures[0].Retire)
+	f.run(t, executor, bashCall("ls"))
+	require.Equal(t, executor.ensures[0].Retire, executor.ensures[1].Retire)
+	wt, err := f.h.Repo().GetWorktree(ctx, f.worktreeID)
+	require.NoError(t, err)
+	require.Nil(t, wt.DeletedAt)
+}
+
 func TestExecuteTools_ArchivedWorktreeWithSavedWorkIsLeftForRecreate(t *testing.T) {
 	t.Parallel()
 	f := setupWorkspaceRecoveryFixture(t)

@@ -13,6 +13,11 @@ type WorktreeRunActivity = core.WorktreeRunActivity
 
 // ArchivedBecauseLanded is core.ArchivedBecauseLanded.
 const ArchivedBecauseLanded = core.ArchivedBecauseLanded
+const ArchivedBecauseRecoverableIdle = core.ArchivedBecauseRecoverableIdle
+
+func (r *Repo) ArchiveRecoverableIdleWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {
+	return store.ArchiveRecoverableIdleWorktree(ctx, r.ORM(), id, quietSince)
+}
 
 // WorktreeRunActivities reports, per worktree, whether a chat run is going in
 // it and when anything last happened in it (store.WorktreeRunActivities).

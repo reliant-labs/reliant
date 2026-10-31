@@ -165,6 +165,7 @@ type Sweeper struct {
 	sender   Sender
 	keep     KeepFilesSetting
 	auto     *autoArchive
+	shed     *liveShed
 	recovery *recoveryEngine
 	// candidates and archived count this pass's finished active worktrees.
 	idleDone      atomic.Int64
@@ -216,6 +217,61 @@ func (s *Sweeper) WithAutoArchive(mode AutoArchiveMode, store AutoArchiveStore, 
 	}
 	s.auto = &autoArchive{mode: mode, store: store, notify: notify, landedIdle: DefaultLandedIdle}
 	return s
+}
+
+// RunningChatStore says which worktrees a chat is running in.
+type RunningChatStore interface {
+	ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error)
+}
+
+type IdleRetirementStore interface {
+	ArchiveRecoverableIdleWorktree(context.Context, string, time.Time) (bool, error)
+}
+
+type liveShed struct {
+	after time.Duration
+	store RunningChatStore
+}
+
+// WithIdleRetirement configures whole-worktree idle retirement (the configuration
+// entrypoint is retained while its contract is revised). It never sheds files
+// from a live checkout. Complete clean pushed/merged quiet workspaces may be
+// archived under the DB admission lock; dirty/unique/uncertain ones retain all
+// contents. Non-positive after disables it; auto-archive on is required.
+func (s *Sweeper) WithIdleRetirement(after time.Duration, store RunningChatStore) *Sweeper {
+	if after <= 0 || store == nil {
+		s.shed = nil
+		return s
+	}
+	s.shed = &liveShed{after: after, store: store}
+	return s
+}
+
+// shedCandidates is the live rows of cands that describe may ask to shed: not
+// the main checkout, and no chat running in it. A failed lookup sheds none.
+func (s *Sweeper) shedCandidates(ctx context.Context, cands []*core.ReclaimCandidate, keep bool) map[string]bool {
+	if s.shed == nil || keep {
+		return nil
+	}
+	var ids []string
+	for _, c := range cands {
+		if wt := c.Worktree; wt.DeletedAt == nil && !wt.IsMain {
+			ids = append(ids, wt.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	running, err := s.shed.store.ListWorktreeIDsWithRunningChat(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not check for running chats; shedding nothing this pass", "error", err)
+		return nil
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		out[id] = !running[id]
+	}
+	return out
 }
 
 // DefaultLandedIdle is how long a landed worktree's chats must have been
@@ -739,6 +795,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		return repos, err == nil
 	}
 	var liveDirs []occupied // built on the first archived row
+	shed := s.shedCandidates(ctx, cands, keep)
 	for _, c := range cands {
 		wt := c.Worktree
 		state := worktreereclaim.StateActive
@@ -758,10 +815,20 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			w.Retire = wt.CleanupMetadata.RetireFence
 		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
-		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
+		// eligible is a live row the sweep may ask more of than a lock.
+		eligible := state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
+		// When whole-idle retirement is configured, exclusions and failed
+		// lookups are terminal for this pass: never enable legacy probing.
+		w.ProbeIdle = eligible && s.shed == nil
+		if state == worktreereclaim.StateActive && w.Retire == "" && shed[wt.ID] {
+			w.ProbeRecoverableAfterSeconds = int64(s.shed.after / time.Second)
+			// Do not fall back to the older directory-mtime-only idle predicate
+			// if complete cache/activity/recoverability proof refuses this row.
+			w.ProbeIdle = false
+		}
 		// Only a row whose chat runs were read (and found idle) is asked.
 		_, read := running[wt.ID]
-		w.ProbeLanded = w.ProbeIdle && s.reclaimsLanded() && !wt.IsMain && read && !running[wt.ID]
+		w.ProbeLanded = eligible && s.reclaimsLanded() && !wt.IsMain && read && !running[wt.ID]
 		// Whole-worktree retirement follows row-locked archival. Never permit
 		// the landed probe to delete subsets from a still-live workspace.
 		w.ShedLanded = false
@@ -956,13 +1023,16 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 				}
 			})
 		}
-		if r.StrippedBytes > 0 {
-			logging.InfoContext(ctx, "[WorktreeSweep] shed a landed worktree's rebuildable files", "worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
+		if r.StrippedBytes > 0 || len(r.Stripped) > 0 {
+			logging.InfoContext(ctx, "[WorktreeSweep] shed regenerable files from a live worktree",
+				"worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
 		}
 		switch {
 		case r.Landed:
 			s.reclaimLanded(ctx, userID, wt)
-		case r.Outcome == worktreereclaim.OutcomeIdleDone:
+		case r.RecoverableIdle:
+			s.archiveRecoverableIdle(ctx, userID, wt)
+		case r.Outcome == worktreereclaim.OutcomeIdleDone && s.shed == nil:
 			s.archiveFinished(ctx, userID, wt)
 		}
 		return // an unarchived row never records a removal
@@ -1024,6 +1094,9 @@ func (s *Sweeper) recordHold(ctx context.Context, wt *core.Worktree, reason work
 // it. The daemon has already checked the files; the server checks that no
 // chat still uses it. In dry-run mode it only counts and logs.
 func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.Worktree) {
+	if s.shed != nil {
+		return
+	} // whole-idle mode has only its row-locked provenance path
 	s.idleDone.Add(1)
 	a := s.auto
 	reason := ""
@@ -1066,6 +1139,30 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 	logging.InfoContext(ctx, "[WorktreeSweep] auto-archived finished worktree", "worktreeID", wt.ID, "name", wt.Name)
 	if a.notify != nil {
 		a.notify(ctx, userID, wt.ProjectID, wt.ID)
+	}
+}
+
+// archiveRecoverableIdle rechecks activity under the worktree row lock. The
+// daemon proof is read-only: archival authorizes the existing fenced, bounded
+// whole-worktree remover, and tools positively retire that fence on revival.
+func (s *Sweeper) archiveRecoverableIdle(ctx context.Context, userID string, wt *core.Worktree) {
+	if s.shed == nil || wt.IsMain || wt.DeletedAt != nil || s.keep != nil && s.keep.KeepFiles(ctx, userID) {
+		return
+	}
+	store, ok := s.shed.store.(IdleRetirementStore)
+	if !ok {
+		return
+	}
+	if s.auto == nil || s.auto.mode != AutoArchiveOn {
+		return
+	}
+	archived, err := store.ArchiveRecoverableIdleWorktree(ctx, wt.ID, s.now().Add(-s.shed.after))
+	if err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not retire idle recoverable worktree", "worktreeID", wt.ID, "error", err)
+		return
+	}
+	if archived && s.auto.notify != nil {
+		s.auto.notify(ctx, userID, wt.ProjectID, wt.ID)
 	}
 }
 

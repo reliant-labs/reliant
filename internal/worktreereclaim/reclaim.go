@@ -1086,12 +1086,17 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
+	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
+		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
+			res.RecoverableIdle = true
+		}
+	}
 	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
 		r.probeLanded(ctx, w, &res)
 	}
 	// A landed worktree is the server's to decide on by its own rule; asking
 	// whether it is also "finished" would repeat the same checks.
-	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeRecoverableAfterSeconds <= 0 && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
 		switch r.finished(ctx, w) {
 		case probeFinished:
 			res.Outcome = OutcomeIdleDone

@@ -637,6 +637,14 @@ func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (m
 // are. false, with no error, means it was not archived: main, already
 // archived, being finalized by a recovery, or not quiet.
 func ArchiveLandedWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseLanded)
+}
+
+func ArchiveRecoverableIdleWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseRecoverableIdle)
+}
+
+func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time, reason string) (bool, error) {
 	archived := false
 	err := recoveryTx(ctx, db, func(ctx context.Context) error {
 		archived = false
@@ -665,9 +673,23 @@ func ArchiveLandedWorktree(ctx context.Context, db orm.Context, id string, quiet
 		}
 		meta := core.CleanupMetadata{}
 		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
-			_ = json.Unmarshal([]byte(*row.CleanupMetadata), &meta)
+			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
+				return err
+			}
 		}
-		meta.ArchivedBecause = core.ArchivedBecauseLanded
+		// Never stamp branch-only revival provenance over preserved recovery
+		// state, even when a stale daemon answer reports a clean checkout.
+		if len(meta.SnapshotRefs) != 0 || meta.RetireFence != "" {
+			return nil
+		}
+		var recoveries int
+		if err := db.Bun().NewRaw(`SELECT COUNT(*) FROM worktree_recoveries WHERE source_worktree_id = ?`, id).Scan(ctx, &recoveries); err != nil {
+			return err
+		}
+		if recoveries != 0 {
+			return nil
+		}
+		meta.ArchivedBecause = reason
 		encoded, err := encodeCleanupMetadata(&meta)
 		if err != nil {
 			return err
@@ -717,7 +739,7 @@ func ReviveArchivedWorktree(ctx context.Context, db orm.Context, id string) (str
 		// Branch-only recreation is valid ONLY for the proven clean landed
 		// lifecycle. Catalog recovery captures dirty/untracked state separately
 		// from legacy SnapshotRefs. Creation of a recovery also locks this row.
-		if row.IsMain || row.Finalizing != nil || meta.ArchivedBecause != core.ArchivedBecauseLanded || len(meta.SnapshotRefs) != 0 {
+		if row.IsMain || row.Finalizing != nil || (meta.ArchivedBecause != core.ArchivedBecauseLanded && meta.ArchivedBecause != core.ArchivedBecauseRecoverableIdle) || len(meta.SnapshotRefs) != 0 {
 			return fmt.Errorf("workspace requires explicit recovery; cannot revive from its branch alone")
 		}
 		var recoveries int
