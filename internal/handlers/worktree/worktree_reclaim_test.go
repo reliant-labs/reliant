@@ -128,14 +128,22 @@ func (e *reclaimEnv) worktree(t *testing.T, name string) (*db.Worktree, string) 
 	return wt, path
 }
 
-// age makes a worktree look untouched for two days: its directory, the index
-// and HEAD of its git admin directory, and its reflog. The reclaimer reads the
+// age makes a worktree look untouched for two days: every file and directory
+// of the checkout, the index and HEAD of its git admin directory, and its
+// reflog. Whole-worktree retirement inventories the checkout and holds it as
+// recently active when any entry's mtime is inside the idle floor, so a
+// freshly checked-out file must be re-dated too. The reclaimer reads the
 // reflog's EVENT times, not its mtime (gc and `reflog expire` rewrite the file
 // without any user activity), so every entry is re-dated as well.
 func age(t *testing.T, path string) {
 	t.Helper()
 	old := time.Now().Add(-48 * time.Hour)
-	_ = os.Chtimes(path, old, old)
+	_ = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+		if err == nil && d.Type()&os.ModeSymlink == 0 {
+			_ = os.Chtimes(p, old, old)
+		}
+		return nil
+	})
 	if b, err := os.ReadFile(filepath.Join(path, ".git")); err == nil {
 		dir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
 		redateReflog(t, filepath.Join(dir, "logs", "HEAD"), old)
