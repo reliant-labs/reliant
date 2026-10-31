@@ -61,6 +61,10 @@ const (
 	holdBackoffMax = 24 * time.Hour
 	// A locked live worktree is re-checked once a day.
 	lockRecheck = 24 * time.Hour
+	// While landed reclaim is on, a live worktree is asked whether its work
+	// has landed this often: a merge should free its disk within the hour,
+	// not the next day.
+	landedRecheck = 30 * time.Minute
 
 	// A pass that neither removed nor held a worktree (it was touched
 	// recently, its claim went stale, the daemon timed out on it) is not asked
@@ -133,16 +137,26 @@ func ParseAutoArchiveMode(v string) AutoArchiveMode {
 	return AutoArchiveOff
 }
 
-// AutoArchiveStore is what archiving a finished worktree needs.
+// AutoArchiveStore is what archiving a finished or landed worktree needs.
 type AutoArchiveStore interface {
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ArchiveWorktree(ctx context.Context, id string) error
+	// WorktreeRunActivities says, per worktree, whether a chat run is going
+	// in it and when anything last happened in it.
+	WorktreeRunActivities(ctx context.Context, ids []string) (map[string]core.WorktreeRunActivity, error)
+	// ArchiveLandedWorktree archives a live worktree, leaving its chats live,
+	// only if no chat run is going in it and nothing has happened in it since
+	// quietSince, both checked under its row lock.
+	ArchiveLandedWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error)
 }
 
 type autoArchive struct {
 	mode   AutoArchiveMode
 	store  AutoArchiveStore
 	notify func(ctx context.Context, userID, projectID, worktreeID string)
+	// landedIdle is how long a landed worktree's chats must have been quiet
+	// before it is archived; zero turns reclaim-on-merge off.
+	landedIdle time.Duration
 }
 
 // Sweeper settles worktree directories through their daemons.
@@ -158,8 +172,12 @@ type Sweeper struct {
 	archiveErrors atomic.Int64
 	candidates    atomic.Int64
 	archived      atomic.Int64
-	now           func() time.Time
-	slots         chan struct{}
+	// landed and landedArchived count this pass's landed live worktrees and
+	// those archived for it.
+	landed         atomic.Int64
+	landedArchived atomic.Int64
+	now            func() time.Time
+	slots          chan struct{}
 	// inflight is the rows with a request out to a daemon.
 	inflight leases
 	// owner names this process in a clean-up's metadata, so a flag left by a
@@ -196,8 +214,30 @@ func (s *Sweeper) WithAutoArchive(mode AutoArchiveMode, store AutoArchiveStore, 
 		s.auto = nil
 		return s
 	}
-	s.auto = &autoArchive{mode: mode, store: store, notify: notify}
+	s.auto = &autoArchive{mode: mode, store: store, notify: notify, landedIdle: DefaultLandedIdle}
 	return s
+}
+
+// DefaultLandedIdle is how long a landed worktree's chats must have been
+// quiet before it is archived and its checkout removed.
+const DefaultLandedIdle = 3 * time.Hour
+
+// WithLandedIdle sets how long the chats of a worktree whose work has landed
+// must have been quiet before the sweep archives it (reclaim on merge); zero
+// or less turns reclaim-on-merge off. It follows the auto-archive mode: off
+// never asks, dry-run asks and logs, on sheds and archives. Call it after
+// WithAutoArchive.
+func (s *Sweeper) WithLandedIdle(d time.Duration) *Sweeper {
+	if s.auto != nil {
+		s.auto.landedIdle = max(d, 0)
+	}
+	return s
+}
+
+// reclaimsLanded reports whether live worktrees are asked whether their
+// work has landed.
+func (s *Sweeper) reclaimsLanded() bool {
+	return s.auto != nil && s.auto.landedIdle > 0
 }
 
 // Fence is the archive token for a row: its archive time in nanoseconds.
@@ -253,6 +293,8 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	s.archiveErrors.Store(0)
 	s.candidates.Store(0)
 	s.archived.Store(0)
+	s.landed.Store(0)
+	s.landedArchived.Store(0)
 	cands, err := s.store.ListWorktreesForReclaim(ctx)
 	if err != nil {
 		return err
@@ -330,7 +372,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	}
 	wg.Wait()
 	if s.auto != nil {
-		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "idle_done", s.idleDone.Load(), "blocked_by_chat", s.blockedByChat.Load(), "errors", s.archiveErrors.Load(), "finished", s.candidates.Load(), "archived", s.archived.Load())
+		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "idle_done", s.idleDone.Load(), "blocked_by_chat", s.blockedByChat.Load(), "errors", s.archiveErrors.Load(), "finished", s.candidates.Load(), "archived", s.archived.Load(), "landed", s.landed.Load(), "landed_archived", s.landedArchived.Load())
 	}
 	return nil
 }
@@ -370,6 +412,9 @@ func (s *Sweeper) due(wt *core.Worktree, guardSince time.Time) bool {
 		return false
 	}
 	if wt.DeletedAt == nil {
+		if s.reclaimsLanded() && age >= landedRecheck {
+			return true
+		}
 		return meta.LockedAt == nil || s.now().Sub(*meta.LockedAt) >= lockRecheck
 	}
 	if meta.HeldReason == "" {
@@ -523,7 +568,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	}()
 
 	byID := map[string]*core.ReclaimCandidate{}
-	req, shared := s.describe(ctx, batch, live, keep)
+	req, shared := s.describe(ctx, batch, live, keep, s.runActivity(ctx, batch))
 	for _, h := range shared {
 		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
 	}
@@ -673,7 +718,10 @@ type sharedHold struct {
 // archived row is left out, and returned as a hold, when a live row's
 // directory or checkout is at or under its own (see sharedWithLive); every
 // other archived row is described as archived.
-func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) (worktreereclaim.Request, []sharedHold) {
+//
+// running names the live rows a chat run is going in (runActivity): those are
+// only locked, never asked whether they have landed, and never shed.
+func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, live []core.WorktreePath, keep bool, running map[string]bool) (worktreereclaim.Request, []sharedHold) {
 	req := worktreereclaim.Request{}
 	var holds []sharedHold
 	repoCache := map[string][]*core.Repo{}
@@ -711,6 +759,12 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
 		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
+		// Only a row whose chat runs were read (and found idle) is asked.
+		_, read := running[wt.ID]
+		w.ProbeLanded = w.ProbeIdle && s.reclaimsLanded() && !wt.IsMain && read && !running[wt.ID]
+		// Whole-worktree retirement follows row-locked archival. Never permit
+		// the landed probe to delete subsets from a still-live workspace.
+		w.ShedLanded = false
 		repos, _ := reposOf(wt.ProjectID)
 		for _, repo := range repos {
 			w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{
@@ -722,6 +776,33 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		req.Worktrees = append(req.Worktrees, w)
 	}
 	return req, holds
+}
+
+// runActivity names the live rows of a batch a chat run is going in. A
+// failed lookup names them all: a row whose chats cannot be read is treated
+// as in use, so it is locked and nothing more.
+func (s *Sweeper) runActivity(ctx context.Context, batch []*core.ReclaimCandidate) map[string]bool {
+	if !s.reclaimsLanded() {
+		return nil
+	}
+	var ids []string
+	for _, c := range batch {
+		if c.Worktree.DeletedAt == nil {
+			ids = append(ids, c.Worktree.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	running := make(map[string]bool, len(ids))
+	acts, err := s.auto.store.WorktreeRunActivities(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not read chat runs; not probing landed worktrees", "error", err)
+	}
+	for _, id := range ids {
+		running[id] = err != nil || acts[id].Running
+	}
+	return running
 }
 
 // occupied is what one unarchived row has on disk: its directory and the
@@ -860,9 +941,28 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 				now := s.now().UTC()
 				m.LockedAt, m.CheckedAt, m.RetireFence = &now, &now, ""
 				m.Transient, m.Rechecks = "", 0
+				switch {
+				case r.Landed && m.LandedAt == nil:
+					m.LandedAt = &now
+				case !r.Landed && r.Outcome == worktreereclaim.OutcomeLocked && s.reclaimsLanded():
+					m.LandedAt = nil // asked, and there is work that has not landed
+				}
+				if r.StrippedBytes > 0 || len(r.Stripped) > 0 {
+					m.StrippedBytes += r.StrippedBytes
+					m.StrippedPaths = union(m.StrippedPaths, r.Stripped)
+					if len(m.StrippedPaths) > maxStrippedPaths {
+						m.StrippedPaths = m.StrippedPaths[:maxStrippedPaths]
+					}
+				}
 			})
 		}
-		if r.Outcome == worktreereclaim.OutcomeIdleDone {
+		if r.StrippedBytes > 0 {
+			logging.InfoContext(ctx, "[WorktreeSweep] shed a landed worktree's rebuildable files", "worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
+		}
+		switch {
+		case r.Landed:
+			s.reclaimLanded(ctx, userID, wt)
+		case r.Outcome == worktreereclaim.OutcomeIdleDone:
 			s.archiveFinished(ctx, userID, wt)
 		}
 		return // an unarchived row never records a removal
@@ -964,6 +1064,41 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 	}
 	s.archived.Add(1)
 	logging.InfoContext(ctx, "[WorktreeSweep] auto-archived finished worktree", "worktreeID", wt.ID, "name", wt.Name)
+	if a.notify != nil {
+		a.notify(ctx, userID, wt.ProjectID, wt.ID)
+	}
+}
+
+// reclaimLanded archives a live worktree whose daemon reports its work
+// landed, once its chats have been quiet for landedIdle, so the fenced
+// two-phase removal frees its checkout. Unlike archiveFinished it does not
+// wait for every chat bound to it to be archived (an agent's chat never is):
+// the chats stay live, and the first tool batch one of them runs revives the
+// worktree from its branch (ReviveArchivedWorktree, worktree.ensure). The
+// quiet and no-run checks are made under the row's lock, against the lock
+// chat and run admission take. In dry-run mode it only counts and logs.
+func (s *Sweeper) reclaimLanded(ctx context.Context, userID string, wt *core.Worktree) {
+	a := s.auto
+	if !s.reclaimsLanded() || wt.IsMain || wt.DeletedAt != nil || (s.keep != nil && s.keep.KeepFiles(ctx, userID)) {
+		return
+	}
+	s.landed.Add(1)
+	if a.mode != AutoArchiveOn {
+		logging.InfoContext(ctx, "[WorktreeSweep] would reclaim landed worktree", "worktreeID", wt.ID, "name", wt.Name, "path", wt.Path)
+		return
+	}
+	archived, err := a.store.ArchiveLandedWorktree(ctx, wt.ID, s.now().Add(-a.landedIdle))
+	if err != nil {
+		s.archiveErrors.Add(1)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not archive landed worktree", "worktreeID", wt.ID, "error", err)
+		return
+	}
+	if !archived {
+		logging.DebugContext(ctx, "[WorktreeSweep] landed worktree not quiet yet", "worktreeID", wt.ID)
+		return
+	}
+	s.landedArchived.Add(1)
+	logging.InfoContext(ctx, "[WorktreeSweep] archived landed worktree", "worktreeID", wt.ID, "name", wt.Name, "idle", a.landedIdle.String())
 	if a.notify != nil {
 		a.notify(ctx, userID, wt.ProjectID, wt.ID)
 	}

@@ -279,7 +279,16 @@ type Worktree struct {
 	KeepFiles bool `json:"keep_files,omitempty"`
 	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
 	// with, in addition to locking it; see OutcomeIdleDone.
-	ProbeIdle  bool       `json:"probe_idle,omitempty"`
+	ProbeIdle bool `json:"probe_idle,omitempty"`
+	// ProbeLanded (ACTIVE requests only) asks whether the worktree's work has
+	// landed: every checkout clean and its HEAD merged into its base branch
+	// on the remote (see Result.Landed). Read-only unless ShedLanded is set.
+	ProbeLanded bool `json:"probe_landed,omitempty"`
+	// ShedLanded lets a landed worktree's regenerable output (node_modules,
+	// tool installs, caches) be deleted while it is still active, once it has
+	// been quiet for the shed floor and nothing uses it. The server sets it
+	// only when no chat run is going in the worktree.
+	ShedLanded bool       `json:"shed_landed,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
 }
@@ -306,7 +315,16 @@ type Result struct {
 	// root (outside every checkout) were saved to before the workspace was
 	// removed; empty when there were none.
 	ReclaimedTo string `json:"reclaimed_to,omitempty"`
-	Error       string `json:"error,omitempty"`
+	// Landed (an ACTIVE worktree asked with ProbeLanded) says its work has
+	// landed and, once archived, the automatic removal would take it: every
+	// checkout is clean, holds nothing on no branch, and its HEAD is in its
+	// base branch on the remote (an ancestor, the same patches, one squash
+	// commit, or the head of a merged pull request), and the workspace holds
+	// no data, foreign checkout or other repository. A checkout with no
+	// commits beyond its base counts as landed. The daemon never removes an
+	// active worktree; whether to archive it is the server's call.
+	Landed bool   `json:"landed,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

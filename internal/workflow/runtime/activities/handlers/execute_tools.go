@@ -477,6 +477,11 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
+					if workspace.blocked != "" && tools.NeedsMachine(toolName) {
+						resultsChan <- toolCallResult{index: job.index, result: a.refuseToolCall(ctx, rtx, toolCall, workspace.blocked)}
+						return
+					}
+
 					// Execute the tool via normal toolexec path
 					result := a.executeSingleTool(
 						ctx,

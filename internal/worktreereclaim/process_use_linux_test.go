@@ -83,6 +83,55 @@ func TestRecoveryProcessUseUnreadableAndUnsupportedStateHold(t *testing.T) {
 		t.Fatalf("verified zombie has no filesystem lifetime: %v", err)
 	}
 }
+func TestRecoveryInspectionExemptsOnlyExactLiveOwnDescriptors(t *testing.T) {
+	proc, base := procUseFixture(t)
+	own := filepath.Join(proc, fmt.Sprint(os.Getpid()))
+	if err := os.Rename(base, own); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	p := filepath.Join(root, "inspected")
+	if err := os.Mkdir(p, 0700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fd := fmt.Sprint(f.Fd())
+	if err := os.Symlink(p, filepath.Join(own, "fd", fd)); err != nil {
+		t.Fatal(err)
+	}
+	ctx := withInspectionFiles(context.Background(), []*os.File{f})
+	if err := checkProcessUseAt(ctx, proc, os.Geteuid(), []string{root}); err != nil {
+		t.Fatal("exact live inspector descriptor must be allowed", err)
+	}
+	if err := checkProcessUseAt(context.Background(), proc, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("no exemption without trusted context")
+	}
+	if err := os.Symlink(p, filepath.Join(own, "fd", "999999")); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkProcessUseAt(ctx, proc, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("other own descriptor must veto")
+	}
+	os.Remove(filepath.Join(own, "fd", "999999"))
+	os.Remove(filepath.Join(own, "cwd"))
+	if err := os.Symlink(p, filepath.Join(own, "cwd")); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkProcessUseAt(ctx, proc, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("own cwd still vetoes")
+	}
+	os.Remove(filepath.Join(own, "cwd"))
+	os.Symlink("/unrelated", filepath.Join(own, "cwd"))
+	f.Close()
+	if err := checkProcessUseAt(ctx, proc, os.Geteuid(), []string{root}); err == nil {
+		t.Fatal("closed descriptor cannot retain exemption")
+	}
+}
+
 func TestRecoveryProcessUseBoundaryAndCancellation(t *testing.T) {
 	root := "/workspace/recover"
 	if processPathUses("/workspace/recover-other/file", []string{root}) {
