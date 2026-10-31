@@ -439,13 +439,22 @@ var stopSignals = []string{
 // not a crash: the first dial retries with backoff (serverkit.RetryConnect),
 // and /readyz names "temporal" as pending meanwhile.
 func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
+	return newTemporalClient(d, temporal.NewExternalClient)
+}
+
+// dialTemporalFunc connects the SDK client. Production dials
+// (temporal.NewExternalClient); a test passes a lazy client, so it builds the
+// process's client, decorators included, without a Temporal server.
+type dialTemporalFunc func(context.Context, temporal.ExternalClientConfig) (client.Client, error)
+
+func newTemporalClient(d TemporalClientDeps, dial dialTemporalFunc) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
-		dialed, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
+		dialed, err := dial(ctx, temporal.ExternalClientConfig{
 			Host:         host,
 			Port:         port,
 			Namespace:    namespace,
