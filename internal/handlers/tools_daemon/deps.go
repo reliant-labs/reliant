@@ -49,6 +49,7 @@ type Repository interface {
 
 	// ListProjects is called directly too; ProjectReconcileStore declares it.
 	ProjectReconcileStore
+	CheckoutRestoreStore
 	daemonHostnameLookup
 	projectfacts.ForgeNameWriter
 }

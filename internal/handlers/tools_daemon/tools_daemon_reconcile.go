@@ -88,25 +88,29 @@ func (s *Service) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
 		}, nil
 	}
 
-	reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	missing := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	// A pool member whose disk came up empty gets its checkouts back
+	// (tools_daemon_restore.go). Its own, longer, budget: clones are slow.
+	s.restoreCheckoutsOnConnect(conn, missing)
 }
 
 // reconcileProjectDaemons is the testable core of the reconcile pass. For each
 // of the user's projects it asks check whether the path exists on the daemon;
 // if so it upserts a project_daemons row and, when the project has no remote
 // URL yet, backfills one from the discovered root remote. Individual failures
-// are logged and skipped, never fatal.
+// are logged and skipped, never fatal. It returns the projects whose path the
+// daemon reported absent (not those whose check failed).
 func reconcileProjectDaemons(
 	ctx context.Context,
 	database ProjectReconcileStore,
 	daemonID, userID string,
 	check daemonPathChecker,
-) {
+) (missing []*db.Project) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to list projects",
 			"error", err, "userID", userID, "daemonID", daemonID)
-		return
+		return nil
 	}
 
 	var reconciled, backfilled, skipped int
@@ -128,6 +132,7 @@ func reconcileProjectDaemons(
 		}
 		if !state.Exists {
 			// Not on this daemon — must not write a row.
+			missing = append(missing, project)
 			skipped++
 			continue
 		}
@@ -152,6 +157,7 @@ func reconcileProjectDaemons(
 	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: complete",
 		"userID", userID, "daemonID", daemonID,
 		"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped)
+	return missing
 }
 
 // backfillProjectRemoteURL sets project.remote_url to remoteURL, respecting the
