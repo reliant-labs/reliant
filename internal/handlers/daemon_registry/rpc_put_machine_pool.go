@@ -62,6 +62,7 @@ func (s *Service) PutMachinePool(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to write the machine pool"))
 	}
+	s.applyMemberIdleTimeouts(ctx, userID, nil)
 	out, err := s.poolToProto(ctx, stored)
 	if err != nil {
 		return nil, err

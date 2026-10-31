@@ -55,6 +55,7 @@ func (s *Service) SetMachineLabels(
 	if !found {
 		return nil, svcerr.NotFound("machine")
 	}
+	s.applyMemberIdleTimeouts(ctx, userID, []string{msg.GetDaemonId()})
 	d, err := s.deps.Repo.GetDaemon(ctx, msg.GetDaemonId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine"))

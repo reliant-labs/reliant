@@ -270,7 +270,7 @@ approval.
 | 4 | sync-checkouts loops `inputs.machine_pool.members`; 10-minute schedule | with the migration |
 | 5 | scale-up via Inbox approval | when wanted |
 | 6 | PR pipeline onto pool `cicd` | needs owner approval for machines |
-| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | control-plane disk mode merged (control-plane#1689); reliant wake-then-place in review; restoring a woken member's checkout, warm caches and `member_idle_timeout` not started |
+| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | merged: disk mode (control-plane#1689), idle timeout on UpdateDaemon (control-plane#1697), wake-then-place (#1959), checkout restore (#1963), member idle timeout (this PR). Not started: warm caches |
 
 ## What a member costs asleep vs running
 
@@ -300,10 +300,12 @@ Sleeping is cheap either way. Disk is about 4% of a running member's cost. The
 bigger idle lever is `idle_timeout`: 30 minutes of an awake, unused 2xl costs
 $0.85, the same as about 14 hours of its sleeping disk. So a pool carries
 `member_idle_timeout`, **10m by default**, and every member it creates or
-adopts is set to it (the machine default stays 30m for interactive boxes). The
-field is stored and returned now; applying it to members goes with Stage 7's
-control-plane change, and until then set it on each member with
-`UpdateDaemon`/`CreateDaemon idle_timeout: "10m"`.
+adopts is set to it (the machine default stays 30m for interactive boxes).
+Writing a pool (`PutMachinePool`) sets every managed member's idle timeout
+at the control plane (`UpdateDaemon idle_timeout`, control-plane#1697, which
+applies to a running machine at once), and labelling a machine into a pool
+(`SetMachineLabels`) sets that machine's. A machine in several pools takes
+the shortest; a machine leaving every pool keeps the timeout it has.
 
 ## Ephemeral members (Stage 7)
 

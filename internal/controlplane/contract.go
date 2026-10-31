@@ -100,6 +100,12 @@ type Service interface {
 	// SuspendDaemon.
 	ResizeDaemon(ctx context.Context, jwt, daemonID, size string) error
 
+	// SetDaemonIdleTimeout replaces how long one of the caller's managed
+	// daemons may sit idle before it suspends (a duration such as "10m", at
+	// most 4h). It applies to a running daemon at once. A machine pool sets
+	// its members' with it. jwt is the owner's session token.
+	SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error
+
 	// ResumeDaemonForRun wakes a run owner's suspended machine for a run that
 	// resumes after a hold, with this process's internal-service identity
 	// (Deps.Sign) rather than the owner's session token, which may have
