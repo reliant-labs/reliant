@@ -259,7 +259,12 @@ fi
 # generate and docs drift). A green on an ancestor carries when everything
 # since is release metadata (this release PR's own version bump and notes).
 # dev-docs/merge-and-release-gates.md.
-if [[ -n "$RC_BRANCH" ]]; then
+if [[ "$SKIP_RELEASE_GATE" == "true" ]]; then
+    # The waiver means the same thing for an RC commit as for a main one: the gate's
+    # verdict was judged by a person and the reason goes in the release notes. Without
+    # this branch --rc silently ignored it (v1.8.14-rc.4, 2026-10-31: test-only reds).
+    echo -e "${YELLOW}⚠️  --skip-release-gate: tagging ${RELEASE_COMMIT:0:9} WITHOUT a green release-gate record. Say so in the release notes.${NC}" >&2
+elif [[ -n "$RC_BRANCH" ]]; then
     # An RC commit's gate ran on Actions (ci.yml dispatched at the RC branch); its record is
     # published as a note only on main, so the verdict is the run's "Release gate" job.
     echo -e "${YELLOW}🔎 Checking the Release gate job for ${RELEASE_COMMIT:0:9} (--rc)...${NC}"
@@ -271,8 +276,6 @@ if [[ -n "$RC_BRANCH" ]]; then
         echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9}'s Release gate job is '${JOB:-absent}' (run ${GATE:-none})${NC}" >&2
         exit 1
     fi
-elif [[ "$SKIP_RELEASE_GATE" == "true" ]]; then
-    echo -e "${YELLOW}⚠️  --skip-release-gate: tagging ${RELEASE_COMMIT:0:9} WITHOUT a green release-gate record. Say so in the release notes.${NC}" >&2
 else
     echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9}...${NC}"
     set +e
