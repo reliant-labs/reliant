@@ -15,9 +15,9 @@ describe("versioned weighted machine display", () => {
     expect(hoursRanOut({ ...usage, remainingWeightedSeconds: "0/1" }, false)).toBe(true);
     expect(hoursRanOut({ ...usage, remainingWeightedSeconds: "1/999999999" }, false)).toBe(false);
   });
-  it("labels partial measured windows and never prices an audited opening balance", () => {
-    const partial = { ...usage, periodStart: { seconds: 100n }, measuredFrom: { seconds: 200n }, openingConsumedWeightedSeconds: "999/7" };
-    expect(usageWindowLabel(partial)).toContain("Opening consumption is an audited allowance balance, not a known historical cost");
+  it("labels partial measured windows and never projects a bill from one", () => {
+    const partial = { ...usage, periodStart: { seconds: 100n }, measuredFrom: { seconds: 200n } };
+    expect(usageWindowLabel(partial)).toContain("earlier use this period is not shown");
     expect(usageWindowLabel(partial)).not.toContain("this billing period");
     expect(projectedBillLabel({ ...partial, projectedPeriodTotalCents: "6900/1" })).toBeNull();
   });

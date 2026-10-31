@@ -5773,10 +5773,8 @@ type GetCurrentUserComputeUsageResponse struct {
 	RunningCostWeightSum          string `protobuf:"bytes,28,opt,name=running_cost_weight_sum,json=runningCostWeightSum,proto3" json:"running_cost_weight_sum,omitempty"`
 	// Nonempty means usage/charge estimate is held for explicit reconciliation.
 	BillingHoldReason string `protobuf:"bytes,29,opt,name=billing_hold_reason,json=billingHoldReason,proto3" json:"billing_hold_reason,omitempty"`
-	// Runtime/cost history covers only this proven window after an audited bridge.
-	MeasuredFrom                   *timestamppb.Timestamp `protobuf:"bytes,30,opt,name=measured_from,json=measuredFrom,proto3" json:"measured_from,omitempty"`
-	OpeningConsumedWeightedSeconds string                 `protobuf:"bytes,31,opt,name=opening_consumed_weighted_seconds,json=openingConsumedWeightedSeconds,proto3" json:"opening_consumed_weighted_seconds,omitempty"`
-	BridgeEvidenceRef              string                 `protobuf:"bytes,32,opt,name=bridge_evidence_ref,json=bridgeEvidenceRef,proto3" json:"bridge_evidence_ref,omitempty"`
+	// Runtime/cost history covers only this window of the accepted period.
+	MeasuredFrom *timestamppb.Timestamp `protobuf:"bytes,30,opt,name=measured_from,json=measuredFrom,proto3" json:"measured_from,omitempty"`
 	// When the allowance runs out at the current burn rate. UNSET when nothing
 	// is running or nothing remains — never a fabricated far-future instant.
 	ExhaustsAt *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=exhausts_at,json=exhaustsAt,proto3" json:"exhausts_at,omitempty"`
@@ -5951,20 +5949,6 @@ func (x *GetCurrentUserComputeUsageResponse) GetMeasuredFrom() *timestamppb.Time
 		return x.MeasuredFrom
 	}
 	return nil
-}
-
-func (x *GetCurrentUserComputeUsageResponse) GetOpeningConsumedWeightedSeconds() string {
-	if x != nil {
-		return x.OpeningConsumedWeightedSeconds
-	}
-	return ""
-}
-
-func (x *GetCurrentUserComputeUsageResponse) GetBridgeEvidenceRef() string {
-	if x != nil {
-		return x.BridgeEvidenceRef
-	}
-	return ""
 }
 
 func (x *GetCurrentUserComputeUsageResponse) GetExhaustsAt() *timestamppb.Timestamp {
@@ -7141,7 +7125,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x06period\x18\x01 \x01(\tH\x00R\x06period\x88\x01\x01\x12\x1a\n" +
 	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_periodB\t\n" +
-	"\a_org_id\"\xa6\r\n" +
+	"\a_org_id\"\xab\f\n" +
 	"\"GetCurrentUserComputeUsageResponse\x12?\n" +
 	"\x1cestimated_overage_cost_cents\x18\x04 \x01(\x01R\x19estimatedOverageCostCents\x12=\n" +
 	"\fperiod_start\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
@@ -7161,9 +7145,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	" grant_remaining_weighted_seconds\x18\x1b \x01(\tR\x1dgrantRemainingWeightedSeconds\x125\n" +
 	"\x17running_cost_weight_sum\x18\x1c \x01(\tR\x14runningCostWeightSum\x12.\n" +
 	"\x13billing_hold_reason\x18\x1d \x01(\tR\x11billingHoldReason\x12?\n" +
-	"\rmeasured_from\x18\x1e \x01(\v2\x1a.google.protobuf.TimestampR\fmeasuredFrom\x12I\n" +
-	"!opening_consumed_weighted_seconds\x18\x1f \x01(\tR\x1eopeningConsumedWeightedSeconds\x12.\n" +
-	"\x13bridge_evidence_ref\x18  \x01(\tR\x11bridgeEvidenceRef\x12;\n" +
+	"\rmeasured_from\x18\x1e \x01(\v2\x1a.google.protobuf.TimestampR\fmeasuredFrom\x12;\n" +
 	"\vexhausts_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"exhaustsAt\x123\n" +
 	"\aby_size\x18\x11 \x03(\v2\x1a.controlplane.v1.SizeUsageR\x06bySize\x12E\n" +

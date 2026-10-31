@@ -8,8 +8,8 @@ syntax = "proto3";
 
 package controlplane.v1;
 
-import "controlplane/v1/shared.proto";
 import "buf/validate/validate.proto";
+import "controlplane/v1/shared.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -1287,10 +1287,8 @@ message GetCurrentUserComputeUsageResponse {
   string running_cost_weight_sum = 28;
   // Nonempty means usage/charge estimate is held for explicit reconciliation.
   string billing_hold_reason = 29;
-  // Runtime/cost history covers only this proven window after an audited bridge.
+  // Runtime/cost history covers only this window of the accepted period.
   google.protobuf.Timestamp measured_from = 30;
-  string opening_consumed_weighted_seconds = 31;
-  string bridge_evidence_ref = 32;
   // When the allowance runs out at the current burn rate. UNSET when nothing
   // is running or nothing remains — never a fabricated far-future instant.
   google.protobuf.Timestamp exhausts_at = 16;

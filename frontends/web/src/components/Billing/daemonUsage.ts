@@ -58,7 +58,6 @@ export interface DaemonUsageLike {
   billingHoldReason?: string;
   measuredFrom?: TimestampLike;
   periodStart?: TimestampLike;
-  openingConsumedWeightedSeconds?: string;
   exhaustsAt?: TimestampLike;
   measuredThrough?: TimestampLike;
   bySize: { size: string; pricingVersion?: string; costWeight?: string; exactRunningSeconds?: string; exactOverageSeconds?: string; includedWeightedSeconds?: string; overageCostCents?: string }[];
@@ -113,7 +112,7 @@ export function usageWindowLabel(usage: DaemonUsageLike): string {
   const partial = from && (!usage.periodStart || BigInt(from.seconds) > BigInt(usage.periodStart.seconds));
   if (!from) return "Machine runtime measurement window is unavailable; do not assume whole-period cost coverage";
   if (!partial) return "Measured machine runtime this billing period";
-  return `Measured runtime and costs since ${new Date(Number(from.seconds) * 1000).toISOString()}. Opening consumption is an audited allowance balance, not a known historical cost.`;
+  return `Measured runtime and costs since ${new Date(Number(from.seconds) * 1000).toISOString()}; earlier use this period is not shown.`;
 }
 
 /** "Large" from "large", "2XL" from "2xl". */
