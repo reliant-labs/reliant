@@ -131,13 +131,13 @@ const HEALTHY_SUB = {
       seconds: BigInt(Math.floor(Date.parse("2026-03-14") / 1000)),
     },
     plan: {
-      id: "plan_compute_small",
+      id: "plan_compute_m",
       name: "Compute Small",
       productId: "prod_compute",
       priceCents: 2000n,
       displayOrder: 1,
       structuredLimits: {
-        allowedDaemonSizes: ["small"],
+        allowedDaemonSizes: ["m"],
         machineIncludedHours: 33n, // fixture native own-size hours
       },
     },

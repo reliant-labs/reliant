@@ -130,7 +130,7 @@ function renderCheckout(lines: CheckoutLine[], overrides: Partial<{
       lines={lines}
       computePlanId={
         owedCompute
-          ? (overrides.computePlanId ?? "plan_compute_small")
+          ? (overrides.computePlanId ?? "plan_compute_m")
           : undefined
       }
       creditCents={owedCredit ? (overrides.creditCents ?? 2500) : undefined}

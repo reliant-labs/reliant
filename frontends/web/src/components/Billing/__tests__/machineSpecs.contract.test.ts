@@ -5,8 +5,8 @@ import { MACHINE_BURST, MACHINE_SPECS } from "../machineSpecs";
 
 // Public consumer contract of CP config.DaemonTierResources. Do not add sizes or
 // fractional requests here; migrate to public hardware fields when available.
-const guaranteed = { small: [2, 4], medium: [4, 8], large: [8, 16], xl: [15, 32], "2xl": [30, 64] } as const;
-it("shows the five Guaranteed guest sizes without fractional/burst promises", () => {
+const guaranteed = { s1: [1, 2], s2: [1, 4], m: [2, 4], l: [4, 8], xl: [8, 16], "2xl": [15, 32], "3xl": [30, 64] } as const;
+it("shows the seven Guaranteed guest sizes without fractional/burst promises", () => {
   expect(Object.keys(MACHINE_SPECS)).toEqual(Object.keys(guaranteed));
   for (const [size, [cpu, memory]] of Object.entries(guaranteed)) {
     expect(MACHINE_SPECS[size as keyof typeof guaranteed]).toEqual({ cpuReserved: cpu, cpuBurst: cpu, memoryReservedGb: memory, memoryBurstGb: memory });

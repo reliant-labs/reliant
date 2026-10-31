@@ -7,7 +7,7 @@ vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: mock.active }
 vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ getMachinePricingReadiness: mock.read, acceptNextMachinePricing: mock.accept }) }));
 beforeEach(() => {
   vi.clearAllMocks(); mock.active = { id: "org-a", role: "owner" };
-  mock.read.mockResolvedValue({ pricingVersion: "discovered-version", activationReady: true, holdReasons: [], termsSha256: "digest-a", monthlyPriceCents: 6900n, includedOwnSizeHours: 160n, includedDiskGib: 60n, size: "small", exactHourlyRateCents: "45/1", exactCostWeight: "1/1", routeId: "route-a", activationState: "ready", effectivePeriodStart: { seconds: 1900000000n } });
+  mock.read.mockResolvedValue({ pricingVersion: "discovered-version", activationReady: true, holdReasons: [], termsSha256: "digest-a", monthlyPriceCents: 6900n, includedOwnSizeHours: 160n, includedDiskGib: 60n, size: "m", exactHourlyRateCents: "45/1", exactCostWeight: "1/1", routeId: "route-a", activationState: "ready", effectivePeriodStart: { seconds: 1900000000n } });
   mock.accept.mockResolvedValue({ activationState: "pending", acceptanceId: "accepted" });
 });
 function mount() {

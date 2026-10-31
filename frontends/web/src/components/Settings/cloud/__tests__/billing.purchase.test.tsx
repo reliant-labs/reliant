@@ -100,7 +100,7 @@ const PLANS = [
     priceCents: 2300n,
     displayOrder: 1,
     structuredLimits: {
-      allowedDaemonSizes: ["small"],
+      allowedDaemonSizes: ["m"],
       includedSmallDaemonHours: 20n,
     },
   },
@@ -111,7 +111,7 @@ const PLANS = [
     priceCents: 4700n,
     displayOrder: 2,
     structuredLimits: {
-      allowedDaemonSizes: ["small", "medium"],
+      allowedDaemonSizes: ["m", "l"],
       includedSmallDaemonHours: 80n,
     },
   },
@@ -122,7 +122,7 @@ const PLANS = [
     priceCents: 9100n,
     displayOrder: 3,
     structuredLimits: {
-      allowedDaemonSizes: ["small", "medium", "large"],
+      allowedDaemonSizes: ["m", "l", "xl"],
       includedSmallDaemonHours: 320n,
     },
   },
@@ -149,9 +149,9 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
         plans: PLANS,
         daemonPricing: {
           sizes: [
-            { size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
-            { size: "medium", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
-            { size: "large", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
+            { size: "m", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
+            { size: "l", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
+            { size: "xl", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
           ],
           storageCentsPerGibMonth: "25",
           placeholder: false,
@@ -249,7 +249,7 @@ beforeEach(() => {
  */
 function machineRows() {
   return screen.queryAllByRole("button", {
-    name: /^(Small|Medium|Large|XL) /,
+    name: /^(S1|S2|M|L|XL|2XL|3XL) /,
     hidden: true,
   });
 }
@@ -275,12 +275,12 @@ describe("the machine list", () => {
     expect(rows).toHaveLength(3);
     // Identity AND order, by comparing the collected rows against the rows
     // looked up individually. Reading names out of `textContent` would give
-    // "Small2" — the row's sibling spans run together with no separator, which
+    // "M2" — the row's sibling spans run together with no separator, which
     // is what machineRows() exists to work around.
     expect(rows).toEqual([
-      machineRow("Small"),
-      machineRow("Medium"),
-      machineRow("Large"),
+      machineRow("M"),
+      machineRow("L"),
+      machineRow("XL"),
     ]);
   });
 
@@ -309,7 +309,7 @@ describe("the machine list", () => {
     await openPlans(user);
 
     expect(
-      screen.queryByRole("button", { name: /^XL /, hidden: true }),
+      screen.queryByRole("button", { name: /^2XL /, hidden: true }),
     ).not.toBeInTheDocument();
   });
 
@@ -318,11 +318,11 @@ describe("the machine list", () => {
     await openPlans(user);
 
     // $23 / $47 / $91 exist in no table the client ever had. Each is the
-    // CHEAPEST plan that runs that size — Alpha runs small, Beta adds medium,
-    // Gamma adds large — which is the whole of "size and plan are one axis".
-    expect(machineRow("Small")).toHaveTextContent("$23.00/mo");
-    expect(machineRow("Medium")).toHaveTextContent("$47.00/mo");
-    expect(machineRow("Large")).toHaveTextContent("$91.00/mo");
+    // CHEAPEST plan that runs that size — Alpha runs m, Beta adds l,
+    // Gamma adds xl — which is the whole of "size and plan are one axis".
+    expect(machineRow("M")).toHaveTextContent("$23.00/mo");
+    expect(machineRow("L")).toHaveTextContent("$47.00/mo");
+    expect(machineRow("XL")).toHaveTextContent("$91.00/mo");
   });
 
   /**
@@ -334,9 +334,9 @@ describe("the machine list", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    expect(machineRow("Small")).toHaveTextContent("4 GB RAM · 2 CPU");
-    expect(machineRow("Medium")).toHaveTextContent("8 GB RAM · 4 CPU");
-    expect(machineRow("Large")).toHaveTextContent("16 GB RAM · 8 CPU");
+    expect(machineRow("M")).toHaveTextContent("4 GB RAM · 2 CPU");
+    expect(machineRow("L")).toHaveTextContent("8 GB RAM · 4 CPU");
+    expect(machineRow("XL")).toHaveTextContent("16 GB RAM · 8 CPU");
   });
 
   /**
@@ -347,7 +347,7 @@ describe("the machine list", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    for (const size of ["Small", "Medium", "Large"]) {
+    for (const size of ["M", "L", "XL"]) {
       expect(machineRow(size)).not.toHaveTextContent(/hrs|hours|\/hr|GiB|suspended|included|shared|overage|small-daemon/i);
     }
   });
@@ -369,7 +369,7 @@ describe("the machine list", () => {
     await openPlans(user);
 
     expect(screen.queryByTestId("plans-burst-note")).not.toBeInTheDocument();
-    for (const size of ["Small", "Medium", "Large"]) {
+    for (const size of ["M", "L", "XL"]) {
       expect(machineRow(size)).not.toHaveTextContent(/burst/i);
     }
   });
@@ -387,7 +387,7 @@ describe("the plan the user is already on", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    const medium = machineRow("Medium");
+    const medium = machineRow("L");
     expect(medium).toHaveTextContent(/current plan/i);
     expect(medium).toBeDisabled();
 
@@ -400,8 +400,8 @@ describe("the plan the user is already on", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    expect(machineRow("Large")).toBeEnabled();
-    expect(machineRow("Large")).toHaveTextContent("$91.00/mo");
+    expect(machineRow("XL")).toBeEnabled();
+    expect(machineRow("XL")).toHaveTextContent("$91.00/mo");
   });
 });
 
@@ -416,7 +416,7 @@ describe("purchasing happens in place", () => {
     await openPlans(user);
     expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
 
-    await user.click(machineRow("Medium"));
+    await user.click(machineRow("L"));
 
     const panel = screen.getByTestId("compute-checkout");
     expect(panel).toHaveAttribute("data-kind", "compute_plan");
@@ -439,7 +439,7 @@ describe("purchasing happens in place", () => {
     await openPlans(user);
     expect(machineRows().length).toBeGreaterThan(0);
 
-    await user.click(machineRow("Medium"));
+    await user.click(machineRow("L"));
 
     expect(screen.getByTestId("compute-checkout")).toBeInTheDocument();
     expect(machineRows()).toHaveLength(0);
@@ -457,7 +457,7 @@ describe("purchasing happens in place", () => {
     const before = window.location.href;
     await openPlans(user);
 
-    await user.click(machineRow("Medium"));
+    await user.click(machineRow("L"));
 
     expect(window.location.href).toBe(before);
     expect(stripeNav.open).not.toHaveBeenCalled();
@@ -470,7 +470,7 @@ describe("purchasing happens in place", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    await user.click(machineRow("Medium"));
+    await user.click(machineRow("L"));
     expect(screen.getByTestId("compute-checkout")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /cancel/i }));

@@ -64,7 +64,7 @@ type MachineController interface {
 }
 
 // machineSizes are the sizes resize accepts, smallest first.
-var machineSizes = []string{"small", "medium", "large", "xl", "2xl"}
+var machineSizes = []string{"s1", "s2", "m", "l", "xl", "2xl", "3xl"}
 
 // =============================================================================
 // list_machines
@@ -130,14 +130,14 @@ func (l *listMachinesTool) Execute(ctx *rctx.ToolContext, _ ListMachinesParams) 
 type ManageMachineParams struct {
 	MachineID string `json:"machine_id" jsonschema:"required,description=Machine id from list_machines. Never guess one."`
 	Action    string `json:"action" jsonschema:"required,enum=start,enum=stop,enum=resize,description=start wakes a suspended machine. stop suspends a running one. resize changes a suspended machine's size; it takes effect at its next start."`
-	Size      string `json:"size,omitempty" jsonschema:"enum=small,enum=medium,enum=large,enum=xl,enum=2xl,description=The new size. resize only."`
+	Size      string `json:"size,omitempty" jsonschema:"enum=s1,enum=s2,enum=m,enum=l,enum=xl,enum=2xl,enum=3xl,description=The new size. resize only."`
 }
 
 const manageMachineDescription = `Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
 
 - start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
 - stop: suspend a running machine. No card. Never the machine this run executes on.
-- resize: change a SUSPENDED machine's size (small, medium, large, xl, 2xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+- resize: change a SUSPENDED machine's size (s1, s2, m, l, xl, 2xl, 3xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
 
 Unattended runs may only start the machine their trigger activation targets.`
 

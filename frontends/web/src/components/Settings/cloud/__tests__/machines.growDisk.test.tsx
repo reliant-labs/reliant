@@ -35,7 +35,7 @@ const eligibility = (maxDaemonStorageGib: number) => ({
   hasActiveSubscription: true,
   grantedSmallDaemonSecondsRemaining: 0,
   planName: 'Compute XL',
-  allowedDaemonSizes: ['small', 'medium', 'large', 'xl'],
+  allowedDaemonSizes: ['m', 'l', 'xl', '2xl'],
   maxDaemonStorageGib,
 })
 
@@ -51,7 +51,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   usePlans: () => ({
     data: {
       plans: [],
-      daemonPricing: { sizes: [{ size: 'xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
+      daemonPricing: { sizes: [{ size: '2xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
     },
   }),
 }))
@@ -78,11 +78,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonStatus: { UNSPECIFIED: 0, PENDING: 1, ACTIVE: 2, SUSPENDED: 3, FAILED: 5, DISCONNECTED: 4 },
   DaemonSize: {
     DAEMON_SIZE_UNSPECIFIED: 0,
-    DAEMON_SIZE_SMALL: 1,
-    DAEMON_SIZE_MEDIUM: 2,
-    DAEMON_SIZE_LARGE: 3,
-    DAEMON_SIZE_XL: 4,
-    DAEMON_SIZE_2XL: 5,
+    DAEMON_SIZE_M: 8,
+    DAEMON_SIZE_L: 9,
+    DAEMON_SIZE_XL: 10,
+    DAEMON_SIZE_2XL: 11,
+    DAEMON_SIZE_3XL: 12,
   },
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
@@ -120,7 +120,7 @@ function machine(over: Record<string, unknown> = {}) {
     status: DaemonStatus.ACTIVE,
     lifecyclePhase: DaemonLifecyclePhase.READY,
     platform: '',
-    size: 'xl',
+    size: '2xl',
     lastStatusMessage: '',
     ...over,
   }

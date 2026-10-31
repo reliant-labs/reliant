@@ -131,7 +131,7 @@ const HEALTHY_SUB = {
       priceCents: 4700n,
       displayOrder: 2,
       structuredLimits: {
-        allowedDaemonSizes: ["small", "medium"],
+        allowedDaemonSizes: ["m", "l"],
         machineIncludedHours: 41n,
       },
     },

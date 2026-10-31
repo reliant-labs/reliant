@@ -55,7 +55,7 @@ export interface AddRepoProjectResult {
 
 export const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
 const DAEMON_TYPE_MANAGED = 1;
-const DAEMON_SIZE_SMALL = 1;
+const DAEMON_SIZE_M = 8;
 
 /**
  * Chooses the machine to clone onto during onboarding.
@@ -108,7 +108,7 @@ export async function addRepoProject({
     await createDaemon({
       name: ONBOARDING_DAEMON_NAME,
       daemonType: DAEMON_TYPE_MANAGED,
-      size: DAEMON_SIZE_SMALL,
+      size: DAEMON_SIZE_M,
       gitRepo: cloneUrl,
       gitBranch: branch,
       refreshExisting: true,

@@ -115,7 +115,7 @@ export function usageWindowLabel(usage: DaemonUsageLike): string {
   return `Measured runtime and costs since ${new Date(Number(from.seconds) * 1000).toISOString()}; earlier use this period is not shown.`;
 }
 
-/** "Large" from "large", "2XL" from "2xl". */
+/** "XL" from "xl", "3XL" from "3xl". */
 export function sizeName(size: string): string {
   if (/^\d*xl$/i.test(size)) return size.toUpperCase();
   return size.charAt(0).toUpperCase() + size.slice(1);

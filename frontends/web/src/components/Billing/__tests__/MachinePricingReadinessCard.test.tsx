@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { MachinePricingReadinessCard, type MachinePricingTerms } from "../MachinePricingReadinessCard";
-const terms: MachinePricingTerms = { pricingVersion: "candidate", activationReady: false, holdReasons: ["commissioning required"], termsSha256: "digest", monthlyPriceCents: 6900n, includedOwnSizeHours: 160n, includedDiskGib: 60n, size: "small", exactHourlyRateCents: "45/1", exactCostWeight: "1/1", routeId: "candidate-small", activationState: "held", effectivePeriodStart: { seconds: 1900000000n } };
+const terms: MachinePricingTerms = { pricingVersion: "candidate", activationReady: false, holdReasons: ["commissioning required"], termsSha256: "digest", monthlyPriceCents: 6900n, includedOwnSizeHours: 160n, includedDiskGib: 60n, size: "m", exactHourlyRateCents: "45/1", exactCostWeight: "1/1", routeId: "candidate-small", activationState: "held", effectivePeriodStart: { seconds: 1900000000n } };
 const base = { canManage: true, onRetry: vi.fn(), onAccept: vi.fn() };
 it("shows proposed held rates separately from current without a purchase action", () => {
   render(<MachinePricingReadinessCard {...base} terms={terms} currentPriceLabel="$20/month" />);
   expect(screen.getByText(/Current subscription: \$20/)).toBeInTheDocument();
-  expect(screen.getByText(/Proposed small: \$69.00/)).toBeInTheDocument();
+  expect(screen.getByText(/Proposed m: \$69.00/)).toBeInTheDocument();
   expect(screen.getByText(/commissioning required/)).toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
 });

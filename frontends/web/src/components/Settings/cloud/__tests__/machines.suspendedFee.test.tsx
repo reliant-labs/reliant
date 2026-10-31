@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
   navigate: vi.fn(),
 }))
@@ -40,8 +40,8 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
       plans: [],
       daemonPricing: {
         sizes: [
-          { size: 'small', multiplier: 1n, hourlyPriceCents: '13.0000', storageGib: 25n },
-          { size: 'large', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 180n },
+          { size: 'm', multiplier: 1n, hourlyPriceCents: '13.0000', storageGib: 25n },
+          { size: 'xl', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 180n },
         ],
         storageCentsPerGibMonth: '25.0000',
         placeholder: true,
@@ -95,10 +95,10 @@ vi.mock('@/services/controlPlane/environments', () => ({
   },
   DaemonSize: {
     DAEMON_SIZE_UNSPECIFIED: 0,
-    DAEMON_SIZE_SMALL: 1,
-    DAEMON_SIZE_MEDIUM: 2,
-    DAEMON_SIZE_LARGE: 3,
-    DAEMON_SIZE_XL: 4,
+    DAEMON_SIZE_M: 8,
+    DAEMON_SIZE_L: 9,
+    DAEMON_SIZE_XL: 10,
+    DAEMON_SIZE_2XL: 11,
   },
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
@@ -160,15 +160,15 @@ describe('MachinesSection — suspended machine disk', () => {
       hasActiveSubscription: true,
       grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute Large',
-      allowedDaemonSizes: ['small', 'large'],
+      allowedDaemonSizes: ['m', 'xl'],
     })
   })
 
   it('shows the disk beside Delete for a suspended machine, and not for a running one', async () => {
     mocks.listDaemons.mockResolvedValue({
       daemons: [
-        managed('parked-large', DaemonStatus.SUSPENDED, 'large'),
-        managed('busy-small', DaemonStatus.ACTIVE, 'small'),
+        managed('parked-large', DaemonStatus.SUSPENDED, 'xl'),
+        managed('busy-small', DaemonStatus.ACTIVE, 'm'),
       ],
     })
     renderSection()

@@ -24,22 +24,14 @@
  * here, because an unrendered copy of a ladder is a drift bug with nobody
  * reading it to notice.
  *
- * ── Why 2xl is here now, having been excluded ─────────────────────────
+ * ── Every sold tier is here ───────────────────────────────────────────
  *
- * The exclusion was right while `DAEMON_SIZE_ORDER` stopped at xl: an entry
- * nothing could render was exactly the unread copy this file refuses to keep.
- * It is wrong now, and for a reason that is not about this file. The catalog
- * sells `plan_compute_2xl` at $299 with a real Stripe price, and both machine
- * lists are built from `offeredDaemonSizes` — the union of what the CATALOG
- * allows. A priced tier the client cannot name is not omitted gracefully;
- * `offeredDaemonSizes` drops any size `DAEMON_SIZE_ORDER` does not list, so
- * the top of the ladder is silently unbuyable and nothing on screen says so.
- *
- * That is the same class of defect as the hardcoded plan allowlist billingUtils
- * deleted: a client-side table deciding which server-side products exist. So
- * the size is added to `DAEMON_SIZE_ORDER`, its label to the display map, and
- * its shape here. The catalog still decides whether a 2xl row APPEARS — an
- * environment that does not sell one shows four rows, exactly as before.
+ * Both machine lists are built from `offeredDaemonSizes`, the union of what
+ * the CATALOG allows, and it drops any size `DAEMON_SIZE_ORDER` does not list.
+ * A priced tier the client cannot name is therefore not omitted gracefully:
+ * it is silently unbuyable. So every tier the catalog sells (S1 to 3XL) has
+ * its order, its label and its shape here, and the catalog still decides
+ * whether a row APPEARS.
  */
 
 import type { DaemonSizeName } from "@/components/Settings/cloud/billingUtils";
@@ -62,11 +54,13 @@ export interface MachineSpec {
  */
 export const MACHINE_SPECS: Record<DaemonSizeName, MachineSpec> = {
   // Guaranteed guest requests == limits; CP config.DaemonTierResources is canonical.
-  small: { cpuReserved: 2, cpuBurst: 2, memoryReservedGb: 4, memoryBurstGb: 4 },
-  medium: { cpuReserved: 4, cpuBurst: 4, memoryReservedGb: 8, memoryBurstGb: 8 },
-  large: { cpuReserved: 8, cpuBurst: 8, memoryReservedGb: 16, memoryBurstGb: 16 },
-  xl: { cpuReserved: 15, cpuBurst: 15, memoryReservedGb: 32, memoryBurstGb: 32 },
-  "2xl": { cpuReserved: 30, cpuBurst: 30, memoryReservedGb: 64, memoryBurstGb: 64 },
+  s1: { cpuReserved: 1, cpuBurst: 1, memoryReservedGb: 2, memoryBurstGb: 2 },
+  s2: { cpuReserved: 1, cpuBurst: 1, memoryReservedGb: 4, memoryBurstGb: 4 },
+  m: { cpuReserved: 2, cpuBurst: 2, memoryReservedGb: 4, memoryBurstGb: 4 },
+  l: { cpuReserved: 4, cpuBurst: 4, memoryReservedGb: 8, memoryBurstGb: 8 },
+  xl: { cpuReserved: 8, cpuBurst: 8, memoryReservedGb: 16, memoryBurstGb: 16 },
+  "2xl": { cpuReserved: 15, cpuBurst: 15, memoryReservedGb: 32, memoryBurstGb: 32 },
+  "3xl": { cpuReserved: 30, cpuBurst: 30, memoryReservedGb: 64, memoryBurstGb: 64 },
 };
 
 /**

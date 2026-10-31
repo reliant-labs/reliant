@@ -273,37 +273,47 @@ func (OwnerType) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{3}
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 type DaemonSize int32
 
 const (
 	DaemonSize_DAEMON_SIZE_UNSPECIFIED DaemonSize = 0
-	DaemonSize_DAEMON_SIZE_SMALL       DaemonSize = 1 // 500m/2 CPU, 2Gi/4Gi RAM
-	DaemonSize_DAEMON_SIZE_MEDIUM      DaemonSize = 2 // 1/4 CPU, 4Gi/8Gi RAM
-	DaemonSize_DAEMON_SIZE_LARGE       DaemonSize = 3 // 2/8 CPU, 8Gi/16Gi RAM
-	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 4 // 4/16 CPU, 16Gi/32Gi RAM
-	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 5 // 8/32 CPU, 32Gi/64Gi RAM
+	DaemonSize_DAEMON_SIZE_S1          DaemonSize = 6  // 1 vCPU, 2 GiB
+	DaemonSize_DAEMON_SIZE_S2          DaemonSize = 7  // 1 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_M           DaemonSize = 8  // 2 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_L           DaemonSize = 9  // 4 vCPU, 8 GiB
+	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 10 // 8 vCPU, 16 GiB
+	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 11 // 15 vCPU, 32 GiB
+	DaemonSize_DAEMON_SIZE_3XL         DaemonSize = 12 // 30 vCPU, 64 GiB
 )
 
 // Enum value maps for DaemonSize.
 var (
 	DaemonSize_name = map[int32]string{
-		0: "DAEMON_SIZE_UNSPECIFIED",
-		1: "DAEMON_SIZE_SMALL",
-		2: "DAEMON_SIZE_MEDIUM",
-		3: "DAEMON_SIZE_LARGE",
-		4: "DAEMON_SIZE_XL",
-		5: "DAEMON_SIZE_2XL",
+		0:  "DAEMON_SIZE_UNSPECIFIED",
+		6:  "DAEMON_SIZE_S1",
+		7:  "DAEMON_SIZE_S2",
+		8:  "DAEMON_SIZE_M",
+		9:  "DAEMON_SIZE_L",
+		10: "DAEMON_SIZE_XL",
+		11: "DAEMON_SIZE_2XL",
+		12: "DAEMON_SIZE_3XL",
 	}
 	DaemonSize_value = map[string]int32{
 		"DAEMON_SIZE_UNSPECIFIED": 0,
-		"DAEMON_SIZE_SMALL":       1,
-		"DAEMON_SIZE_MEDIUM":      2,
-		"DAEMON_SIZE_LARGE":       3,
-		"DAEMON_SIZE_XL":          4,
-		"DAEMON_SIZE_2XL":         5,
+		"DAEMON_SIZE_S1":          6,
+		"DAEMON_SIZE_S2":          7,
+		"DAEMON_SIZE_M":           8,
+		"DAEMON_SIZE_L":           9,
+		"DAEMON_SIZE_XL":          10,
+		"DAEMON_SIZE_2XL":         11,
+		"DAEMON_SIZE_3XL":         12,
 	}
 )
 
@@ -4182,15 +4192,18 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\tOwnerType\x12\x1a\n" +
 	"\x16OWNER_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fOWNER_TYPE_USER\x10\x01\x12\x1b\n" +
-	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\x98\x01\n" +
+	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\xf5\x01\n" +
 	"\n" +
 	"DaemonSize\x12\x1b\n" +
-	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11DAEMON_SIZE_SMALL\x10\x01\x12\x16\n" +
-	"\x12DAEMON_SIZE_MEDIUM\x10\x02\x12\x15\n" +
-	"\x11DAEMON_SIZE_LARGE\x10\x03\x12\x12\n" +
-	"\x0eDAEMON_SIZE_XL\x10\x04\x12\x13\n" +
-	"\x0fDAEMON_SIZE_2XL\x10\x05*\x8f\x01\n" +
+	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S1\x10\x06\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S2\x10\a\x12\x11\n" +
+	"\rDAEMON_SIZE_M\x10\b\x12\x11\n" +
+	"\rDAEMON_SIZE_L\x10\t\x12\x12\n" +
+	"\x0eDAEMON_SIZE_XL\x10\n" +
+	"\x12\x13\n" +
+	"\x0fDAEMON_SIZE_2XL\x10\v\x12\x13\n" +
+	"\x0fDAEMON_SIZE_3XL\x10\f\"\x04\b\x01\x10\x05*\x11DAEMON_SIZE_SMALL*\x12DAEMON_SIZE_MEDIUM*\x11DAEMON_SIZE_LARGE*\x8f\x01\n" +
 	"\x0ePortAccessMode\x12 \n" +
 	"\x1cPORT_ACCESS_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PORT_ACCESS_MODE_PUBLIC\x10\x01\x12\"\n" +

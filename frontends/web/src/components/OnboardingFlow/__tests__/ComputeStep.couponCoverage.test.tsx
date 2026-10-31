@@ -67,22 +67,22 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
     data: {
       plans: [
         {
-          id: "plan_compute_small",
-          name: "Small",
+          id: "plan_compute_m",
+          name: "M",
           displayOrder: 1,
           priceCents: 2000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small"],
+            allowedDaemonSizes: ["m"],
             includedSmallDaemonHours: 17n,
           },
         },
         {
-          id: "plan_compute_medium",
-          name: "Medium",
+          id: "plan_compute_l",
+          name: "L",
           displayOrder: 2,
           priceCents: 4000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small", "medium"],
+            allowedDaemonSizes: ["m", "l"],
             includedSmallDaemonHours: 42n,
           },
         },
@@ -173,9 +173,9 @@ describe("ComputeStep — a coupon covered the machine", () => {
     renderStep();
 
     expect(screen.getByText(/choose your machine/i)).toBeInTheDocument();
-    // ^-anchored: the footer's "Continue with Small" also names the size.
-    expect(screen.getByRole("button", { name: /^small/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^medium/i })).toBeInTheDocument();
+    // ^-anchored: the footer's "Continue with M" also names the size.
+    expect(screen.getByRole("button", { name: /^M / })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^L / })).toBeInTheDocument();
   });
 
   // Coverage is per SIZE, not blanket, and this is the assertion that keeps
@@ -224,7 +224,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
     });
     const written = updatePlan.mock.calls[0][0] as Partial<LaunchPlan>;
     expect(written.compute).toBe("cloud_paid");
-    expect(written.computePlanId).toBe("plan_compute_small");
+    expect(written.computePlanId).toBe("plan_compute_m");
   });
 
   // The un-entitled page is unchanged: real prices, and no coverage note.
@@ -292,7 +292,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
     renderStep();
 
     const local = screen.getByRole("button", { name: /use your own computer/i });
-    const paid = screen.getByRole("button", { name: /^small/i });
+    const paid = screen.getByRole("button", { name: /^M / });
 
     expect(
       local.compareDocumentPosition(paid) & Node.DOCUMENT_POSITION_FOLLOWING,

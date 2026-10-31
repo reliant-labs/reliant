@@ -65,7 +65,7 @@ beforeEach(() => {
         productId: "prod_compute",
         priceCents: 4700n,
         structuredLimits: {
-          allowedDaemonSizes: ["small", "medium"],
+          allowedDaemonSizes: ["m", "l"],
           machineIncludedHours: 41n,
         },
       },

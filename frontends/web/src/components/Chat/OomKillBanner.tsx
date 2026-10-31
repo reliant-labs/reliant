@@ -65,7 +65,7 @@ function lastOomKillMs(d: Daemon): number {
  * The parenthetical after the machine name, e.g. "(medium)".
  *
  * Size comes through the registry as the lifecycle mirror's own string
- * ("medium"), so it is rendered directly rather than mapped from the
+ * ("l"), so it is rendered directly rather than mapped from the
  * control-plane size enum. The memory LIMIT that used to appear alongside it is
  * part of the provisioning spec, which lives only in control-plane and is
  * deliberately not on the one list — fetching a second per-machine RPC to

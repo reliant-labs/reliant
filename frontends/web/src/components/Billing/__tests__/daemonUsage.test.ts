@@ -26,11 +26,11 @@ import {
 const pricing: DaemonPricingLike = {
   pricingVersion: "test-v1",
   sizes: [
-    { size: "small", costWeight: "1/1", hourlyPriceCents: "13.0000", storageGib: 25n },
-    { size: "medium", costWeight: "2/1", hourlyPriceCents: "26.0000", storageGib: 50n },
-    { size: "large", costWeight: "4/1", hourlyPriceCents: "52.0000", storageGib: 100n },
-    { size: "xl", costWeight: "8/1", hourlyPriceCents: "104.0000", storageGib: 200n },
-    { size: "2xl", costWeight: "16/1", hourlyPriceCents: "208.0000", storageGib: 400n },
+    { size: "m", costWeight: "1/1", hourlyPriceCents: "13.0000", storageGib: 25n },
+    { size: "l", costWeight: "2/1", hourlyPriceCents: "26.0000", storageGib: 50n },
+    { size: "xl", costWeight: "4/1", hourlyPriceCents: "52.0000", storageGib: 100n },
+    { size: "2xl", costWeight: "8/1", hourlyPriceCents: "104.0000", storageGib: 200n },
+    { size: "3xl", costWeight: "16/1", hourlyPriceCents: "208.0000", storageGib: 400n },
   ],
   storageCentsPerGibMonth: "25.0000",
   placeholder: true,
@@ -74,7 +74,7 @@ describe("burn line", () => {
     const u = usage({
       remainingWeightedSeconds: "149760/1",
       runningCostWeightSum: "4/1",
-      bySize: [{ size: "large", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "100/1", exactOverageSeconds: "0/1" }],
+      bySize: [{ size: "xl", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "100/1", exactOverageSeconds: "0/1" }],
     });
     expect(burnLabel(u)).toBe("≈ 10.4 h left at the current running-machine rate");
   });
@@ -84,8 +84,8 @@ describe("burn line", () => {
       remainingWeightedSeconds: "36000/1",
       runningCostWeightSum: "5/1",
       bySize: [
-        { size: "small", pricingVersion: "test-v1", costWeight: "1/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
-        { size: "large", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
+        { size: "m", pricingVersion: "test-v1", costWeight: "1/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
+        { size: "xl", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
       ],
     });
     expect(burnLabel(u)).toBe("≈ 2.0 h left at the current running-machine rate");
@@ -116,31 +116,31 @@ describe("runs out / as of", () => {
 
 describe("hours in the footnote", () => {
   it("converts the plan's small hours into hours of a size", () => {
-    for (const [size, hrs] of [["small", "160.0"], ["medium", "80.0"], ["large", "40.0"], ["xl", "20.0"], ["2xl", "10.0"]] as const) {
+    for (const [size, hrs] of [["m", "160.0"], ["l", "80.0"], ["xl", "40.0"], ["2xl", "20.0"], ["3xl", "10.0"]] as const) {
       expect(sizeHours(pricing, size, "576000/1")).toBe(hrs);
     }
   });
 
   it("never invents an allowance", () => {
-    expect(sizeHours(pricing, "small", undefined)).toBeNull();
-    expect(sizeHours(pricing, "small", "NaN")).toBeNull();
-    expect(sizeHours(undefined, "small", "576000/1")).toBeNull();
+    expect(sizeHours(pricing, "m", undefined)).toBeNull();
+    expect(sizeHours(pricing, "m", "NaN")).toBeNull();
+    expect(sizeHours(undefined, "m", "576000/1")).toBeNull();
     expect(sizeHours(pricing, "unknown", "576000/1")).toBeNull();
-    expect(sizeHours(pricing, "small", "0/1")).toBe("0.0");
+    expect(sizeHours(pricing, "m", "0/1")).toBe("0.0");
   });
 
   it("rounds down rather than promise more than the plan includes", () => {
     const p: DaemonPricingLike = { ...pricing, sizes: [{ ...pricing.sizes[0], costWeight: "3/1" }] };
-    expect(sizeHours(p, "small", "360000/1")).toBe("33.3");
+    expect(sizeHours(p, "m", "360000/1")).toBe("33.3");
   });
 
   // A 2XL plan holds 2,560 small hours; the user is told 160 hours of 2XL.
   it("states a plan's hours at its OWN (largest allowed) size, never in small units", () => {
-    expect(planOwnSizeHours(pricing, ["small"], "576000/1")).toBe("160.0");
-    expect(planOwnSizeHours(pricing, ["small", "medium"], "576000/1")).toBe("80.0");
-    expect(planOwnSizeHours(pricing, ["small", "medium", "large", "xl", "2xl"], "9216000/1")).toBe("160.0");
+    expect(planOwnSizeHours(pricing, ["m"], "576000/1")).toBe("160.0");
+    expect(planOwnSizeHours(pricing, ["m", "l"], "576000/1")).toBe("80.0");
+    expect(planOwnSizeHours(pricing, ["m", "l", "xl", "2xl", "3xl"], "9216000/1")).toBe("160.0");
     expect(planOwnSizeHours(pricing, [], "576000/1")).toBeNull();
-    expect(planOwnSizeHours(pricing, ["small"], undefined)).toBeNull();
+    expect(planOwnSizeHours(pricing, ["m"], undefined)).toBeNull();
   });
 
   it("prices storage from the server's per-GiB price", () => {

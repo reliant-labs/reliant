@@ -77,7 +77,7 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       // instrument that unlocks it and is never the thing being chosen.
       label: formatSizeLabel(size),
       // What the size actually BUYS, in its own slot rather than concatenated
-      // into the label. "Medium" describes nothing on its own, and the caller
+      // into the label. "L" describes nothing on its own, and the caller
       // that needs the bare name back (the coupon coverage sentence) would
       // otherwise have to unpick the string it just built.
       detail: formatMachineSpec(size),

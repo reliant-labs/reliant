@@ -64,16 +64,16 @@ function plan(
 describe("derivePlanDisplay reads the server, not a table", () => {
   it("returns the server's price, included hours and sizes verbatim", () => {
     const d = derivePlanDisplay(
-      plan("plan_compute_medium", {
+      plan("plan_compute_l", {
         priceCents: 4000n,
-        allowedDaemonSizes: ["small", "medium"],
+        allowedDaemonSizes: ["m", "l"],
         machineIncludedHours: 320n,
       }),
     );
 
     expect(d.monthlyPriceCents).toBe(4000);
     expect(d.machineIncludedHours).toBe(320);
-    expect(d.allowedSizes).toEqual(["small", "medium"]);
+    expect(d.allowedSizes).toEqual(["m", "l"]);
   });
 
   /**
@@ -84,7 +84,7 @@ describe("derivePlanDisplay reads the server, not a table", () => {
    */
   it("tracks a repriced plan rather than a per-id constant", () => {
     const d = derivePlanDisplay(
-      plan("plan_compute_medium", {
+      plan("plan_compute_l", {
         priceCents: 5500n,
         machineIncludedHours: 410n,
       }),
@@ -114,14 +114,14 @@ describe("derivePlanDisplay reads the server, not a table", () => {
 describe("plan grid membership and ordering come from the server", () => {
   it("orders by the server's display_order, not a client allowlist", () => {
     const plans = [
-      plan("plan_compute_large", { priceCents: 8000n, displayOrder: 3 }),
-      plan("plan_compute_small", { priceCents: 2000n, displayOrder: 1 }),
-      plan("plan_compute_medium", { priceCents: 4000n, displayOrder: 2 }),
+      plan("plan_compute_xl", { priceCents: 8000n, displayOrder: 3 }),
+      plan("plan_compute_m", { priceCents: 2000n, displayOrder: 1 }),
+      plan("plan_compute_l", { priceCents: 4000n, displayOrder: 2 }),
     ];
     expect(sortPlansForDisplay(plans).map((p) => p.id)).toEqual([
-      "plan_compute_small",
-      "plan_compute_medium",
-      "plan_compute_large",
+      "plan_compute_m",
+      "plan_compute_l",
+      "plan_compute_xl",
     ]);
   });
 
@@ -134,7 +134,7 @@ describe("plan grid membership and ordering come from the server", () => {
     const brandNew = plan("plan_compute_titan", {
       priceCents: 32000n,
       displayOrder: 5,
-      allowedDaemonSizes: ["small", "medium", "large", "xl"],
+      allowedDaemonSizes: ["m", "l", "xl", "2xl"],
     });
     expect(isPurchasableComputePlan(brandNew)).toBe(true);
     expect(derivePlanDisplay(brandNew).monthlyPriceCents).toBe(32000);
@@ -143,7 +143,7 @@ describe("plan grid membership and ordering come from the server", () => {
   it("excludes plans with no monthly price from the purchase grid", () => {
     expect(isPurchasableComputePlan(plan("plan_code_starter", {}))).toBe(false);
     expect(
-      isPurchasableComputePlan(plan("plan_compute_small", { priceCents: 0n })),
+      isPurchasableComputePlan(plan("plan_compute_m", { priceCents: 0n })),
     ).toBe(false);
   });
 });
@@ -161,7 +161,7 @@ describe("no client-side price table may return", () => {
   //
   // The glob covers `overview/` as well as billingUtils, because the redesign
   // moved rendering into per-product band components — and a band that quietly
-  // grew its own `{ plan_compute_small: 2000 }` would be the same defect in a
+  // grew its own `{ plan_compute_m: 2000 }` would be the same defect in a
   // new file, which a guard scoped to one path would never see.
   const sourceDir = resolve(process.cwd(), "src/components/Settings/cloud");
   const sources = [
@@ -176,13 +176,13 @@ describe("no client-side price table may return", () => {
   const source = sources.map((s) => s.text).join("\n");
 
   it("declares no per-plan-id price or overage map", () => {
-    // e.g. `plan_compute_small: 2000` — a plan id mapped to a number.
+    // e.g. `plan_compute_m: 2000` — a plan id mapped to a number.
     const planIdToNumber = /plan_[a-z_]+\s*:\s*-?[\d_.]+/g;
     expect(source.match(planIdToNumber) ?? []).toEqual([]);
   });
 
   it("names no compute plan ids at all", () => {
-    // The allowlist was `COMPUTE_PLAN_IDS = ["plan_compute_small", ...]`.
+    // The allowlist was `COMPUTE_PLAN_IDS = ["plan_compute_m", ...]`.
     // Membership is now a server fact, so the client should not know any
     // specific plan id.
     expect(source.match(/"plan_compute_[a-z]+"/g) ?? []).toEqual([]);

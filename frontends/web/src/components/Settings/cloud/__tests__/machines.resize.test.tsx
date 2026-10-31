@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Large',
-    allowedDaemonSizes: ['small', 'medium', 'large'],
+    allowedDaemonSizes: ['m', 'l', 'xl'],
   })),
   suspendDaemon: vi.fn(async () => {}),
   resumeEnvironment: vi.fn(async () => {}),
@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { usageMeasured: true, pricingVersion: 'test-version', billingHoldReason: '', allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'small', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { usageMeasured: true, pricingVersion: 'test-version', billingHoldReason: '', allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'm', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'xl', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
@@ -67,11 +67,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonStatus: { UNSPECIFIED: 0, PENDING: 1, ACTIVE: 2, SUSPENDED: 3, FAILED: 5, DISCONNECTED: 4 },
   DaemonSize: {
     DAEMON_SIZE_UNSPECIFIED: 0,
-    DAEMON_SIZE_SMALL: 1,
-    DAEMON_SIZE_MEDIUM: 2,
-    DAEMON_SIZE_LARGE: 3,
-    DAEMON_SIZE_XL: 4,
-    DAEMON_SIZE_2XL: 5,
+    DAEMON_SIZE_M: 8,
+    DAEMON_SIZE_L: 9,
+    DAEMON_SIZE_XL: 10,
+    DAEMON_SIZE_2XL: 11,
+    DAEMON_SIZE_3XL: 12,
   },
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
@@ -97,8 +97,8 @@ import { daemonRegistryTransport } from '@/test/daemonRegistry'
 beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
 afterEach(() => setTransport(null))
 
-const LARGE = 3
-const XL = 4
+const LARGE = 10 // DAEMON_SIZE_XL
+const XL = 11 // DAEMON_SIZE_2XL
 
 function machine(over: Record<string, unknown> = {}) {
   return {
@@ -108,7 +108,7 @@ function machine(over: Record<string, unknown> = {}) {
     status: DaemonStatus.ACTIVE,
     lifecyclePhase: DaemonLifecyclePhase.READY,
     platform: '',
-    size: 'medium',
+    size: 'l',
     lastStatusMessage: '',
     ...over,
   }
@@ -166,11 +166,11 @@ describe('machine detail — resize', () => {
     renderDetail()
     const dialog = await openResize(user)
 
-    await waitFor(() => expect(within(dialog).getByTestId('resize-size-large')).toBeEnabled())
-    expect(within(dialog).getByTestId('resize-size-medium')).toBeDisabled()
-    expect(within(dialog).getByTestId('resize-size-medium')).toHaveTextContent(/current/i)
-    expect(within(dialog).queryByTestId('resize-size-xl')).not.toBeInTheDocument()
-    expect(within(dialog).getByTestId('resize-size-large')).not.toHaveTextContent(/\$|hrs|GiB|suspended|included/i)
+    await waitFor(() => expect(within(dialog).getByTestId('resize-size-xl')).toBeEnabled())
+    expect(within(dialog).getByTestId('resize-size-l')).toBeDisabled()
+    expect(within(dialog).getByTestId('resize-size-l')).toHaveTextContent(/current/i)
+    expect(within(dialog).queryByTestId('resize-size-2xl')).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId('resize-size-xl')).not.toHaveTextContent(/\$|hrs|GiB|suspended|included/i)
     // Plan includes 160 small hours; largest allowed size here is large (x4).
     expect(within(dialog).getByTestId('resize-pricing-note')).toHaveTextContent(
       'Includes 40.0 hours a month. Extra hours and storage are billed separately.',
@@ -187,8 +187,8 @@ describe('machine detail — resize', () => {
     const dialog = await openResize(user)
 
     expect(within(dialog).getByTestId('resize-effect')).toHaveTextContent(/next time it starts/i)
-    await waitFor(() => expect(within(dialog).getByTestId('resize-size-large')).toBeEnabled())
-    await user.click(within(dialog).getByTestId('resize-size-large'))
+    await waitFor(() => expect(within(dialog).getByTestId('resize-size-xl')).toBeEnabled())
+    await user.click(within(dialog).getByTestId('resize-size-xl'))
     await user.click(within(dialog).getByRole('button', { name: /^resize$/i }))
 
     await waitFor(() => expect(mocks.resizeDaemon).toHaveBeenCalledWith('d-1', LARGE))
@@ -207,8 +207,8 @@ describe('machine detail — resize', () => {
     const dialog = await openResize(user)
 
     expect(within(dialog).getByTestId('resize-effect')).toHaveTextContent(/disconnect/i)
-    await waitFor(() => expect(within(dialog).getByTestId('resize-size-large')).toBeEnabled())
-    await user.click(within(dialog).getByTestId('resize-size-large'))
+    await waitFor(() => expect(within(dialog).getByTestId('resize-size-xl')).toBeEnabled())
+    await user.click(within(dialog).getByTestId('resize-size-xl'))
     await user.click(within(dialog).getByRole('button', { name: /resize and restart/i }))
 
     await waitFor(() => expect(mocks.resumeEnvironment).toHaveBeenCalledTimes(1))
@@ -229,7 +229,7 @@ describe('machine detail — resize', () => {
       hasActiveSubscription: true,
       grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute XL',
-      allowedDaemonSizes: ['small', 'medium', 'large', 'xl'],
+      allowedDaemonSizes: ['m', 'l', 'xl', '2xl'],
     })
     mocks.resizeDaemon.mockRejectedValueOnce(new Error('your plan does not include daemon size xl'))
     showMachine(suspended())
@@ -237,8 +237,8 @@ describe('machine detail — resize', () => {
     renderDetail()
     const dialog = await openResize(user)
 
-    await waitFor(() => expect(within(dialog).getByTestId('resize-size-xl')).toBeEnabled())
-    await user.click(within(dialog).getByTestId('resize-size-xl'))
+    await waitFor(() => expect(within(dialog).getByTestId('resize-size-2xl')).toBeEnabled())
+    await user.click(within(dialog).getByTestId('resize-size-2xl'))
     await user.click(within(dialog).getByRole('button', { name: /resize and restart/i }))
 
     expect(await within(dialog).findByText(/does not include daemon size xl/i)).toBeInTheDocument()
@@ -248,15 +248,15 @@ describe('machine detail — resize', () => {
 
   it('says the disk does not shrink when the new size is smaller', async () => {
     const user = userEvent.setup()
-    showMachine(suspended({ size: 'large' }))
+    showMachine(suspended({ size: 'xl' }))
     renderDetail()
     const dialog = await openResize(user)
 
-    await waitFor(() => expect(within(dialog).getByTestId('resize-size-small')).toBeEnabled())
+    await waitFor(() => expect(within(dialog).getByTestId('resize-size-m')).toBeEnabled())
     expect(within(dialog).queryByTestId('resize-disk-note')).not.toBeInTheDocument()
-    await user.click(within(dialog).getByTestId('resize-size-small'))
+    await user.click(within(dialog).getByTestId('resize-size-m'))
     expect(within(dialog).getByTestId('resize-disk-note')).toHaveTextContent(/above the new size's standard is billed while running/i)
-    const small = within(dialog).getByTestId('resize-size-small');
+    const small = within(dialog).getByTestId('resize-size-m');
     expect(small).not.toHaveTextContent(/\$|hrs|GiB|suspended/i);
   })
 })

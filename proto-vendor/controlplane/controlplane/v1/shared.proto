@@ -79,16 +79,24 @@ enum OwnerType {
   OWNER_TYPE_ORGANIZATION = 2;
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 enum DaemonSize {
+  reserved 1 to 5;
+  reserved "DAEMON_SIZE_SMALL", "DAEMON_SIZE_MEDIUM", "DAEMON_SIZE_LARGE";
   DAEMON_SIZE_UNSPECIFIED = 0;
-  DAEMON_SIZE_SMALL = 1; // 500m/2 CPU, 2Gi/4Gi RAM
-  DAEMON_SIZE_MEDIUM = 2; // 1/4 CPU, 4Gi/8Gi RAM
-  DAEMON_SIZE_LARGE = 3; // 2/8 CPU, 8Gi/16Gi RAM
-  DAEMON_SIZE_XL = 4; // 4/16 CPU, 16Gi/32Gi RAM
-  DAEMON_SIZE_2XL = 5; // 8/32 CPU, 32Gi/64Gi RAM
+  DAEMON_SIZE_S1 = 6; // 1 vCPU, 2 GiB
+  DAEMON_SIZE_S2 = 7; // 1 vCPU, 4 GiB
+  DAEMON_SIZE_M = 8; // 2 vCPU, 4 GiB
+  DAEMON_SIZE_L = 9; // 4 vCPU, 8 GiB
+  DAEMON_SIZE_XL = 10; // 8 vCPU, 16 GiB
+  DAEMON_SIZE_2XL = 11; // 15 vCPU, 32 GiB
+  DAEMON_SIZE_3XL = 12; // 30 vCPU, 64 GiB
 }
 
 enum PortAccessMode {

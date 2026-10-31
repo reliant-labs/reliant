@@ -115,11 +115,11 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
     data: {
       plans: [
         {
-          id: "plan_compute_small",
+          id: "plan_compute_m",
           priceCents: 2000n,
           displayOrder: 1,
           structuredLimits: {
-            allowedDaemonSizes: ["small"],
+            allowedDaemonSizes: ["m"],
             includedSmallDaemonHours: 16n,
           },
         },
@@ -161,7 +161,7 @@ import { CheckoutStep } from "../steps/CheckoutStep";
 const CLOUD_OWN_KEY: Partial<LaunchPlan> = {
   compute: "cloud_paid",
   modelProvider: "anthropic",
-  computePlanId: "plan_compute_small",
+  computePlanId: "plan_compute_m",
 };
 
 function renderStep(

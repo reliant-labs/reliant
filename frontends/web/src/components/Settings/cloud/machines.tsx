@@ -244,15 +244,17 @@ export function daemonDisplayName(d: NameableMachine): string {
 // to keep its own ("1 CPU · 2GB RAM" for a Small that reserves 0.5 CPU), so
 // the same machine was described two ways depending on the screen.
 const SIZE_TIERS = [
-  { value: DaemonSize.DAEMON_SIZE_SMALL, name: "small", label: "Small", specs: formatMachineSpec("small") },
-  { value: DaemonSize.DAEMON_SIZE_MEDIUM, name: "medium", label: "Medium", specs: formatMachineSpec("medium") },
-  { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: formatMachineSpec("large") },
+  { value: DaemonSize.DAEMON_SIZE_S1, name: "s1", label: "S1", specs: formatMachineSpec("s1") },
+  { value: DaemonSize.DAEMON_SIZE_S2, name: "s2", label: "S2", specs: formatMachineSpec("s2") },
+  { value: DaemonSize.DAEMON_SIZE_M, name: "m", label: "M", specs: formatMachineSpec("m") },
+  { value: DaemonSize.DAEMON_SIZE_L, name: "l", label: "L", specs: formatMachineSpec("l") },
   { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: formatMachineSpec("xl") },
-  // The catalog sells 2xl (see Billing/machineSpecs.ts). Without a row here a
-  // plan that allows it could neither create one nor resize to one, and an
-  // existing 2xl machine read as "Custom". Whether it is OFFERED is still the
-  // server's call, via allowed_daemon_sizes.
   { value: DaemonSize.DAEMON_SIZE_2XL, name: "2xl", label: "2XL", specs: formatMachineSpec("2xl") },
+  // Every size the catalog sells needs a row here, or a plan that allows it
+  // could neither create one nor resize to one, and an existing machine of
+  // that size would read as "Custom". Whether it is OFFERED is still the
+  // server's call, via allowed_daemon_sizes.
+  { value: DaemonSize.DAEMON_SIZE_3XL, name: "3xl", label: "3XL", specs: formatMachineSpec("3xl") },
 ] as const;
 
 // ── Copy for the un-funded state ────────────────────────────────────────────
@@ -274,14 +276,14 @@ const NO_FUNDING_DESCRIPTION =
  * Which sizes may this caller run, per the server?
  *
  * The answer arrives on `GetCurrentUserComputeEligibility.allowed_daemon_sizes`
- * as wire strings ("small", "medium", …); this maps them onto the tiers this
+ * as wire strings ("m", "l", …); this maps them onto the tiers this
  * page can render. Sizes the client has no tier for are dropped rather than
  * guessed at.
  *
  * It used to be derived here from the compute SUBSCRIPTION, which is the bug
  * this replaces: a coupon grants machine minutes and no subscription, so that
  * derivation decided a fully-entitled user could run nothing. The server
- * resolves the set — from the plan, or ["small"] when there is none — and the
+ * resolves the set — from the plan, or ["m"] when there is none — and the
  * client no longer holds an opinion about it.
  *
  * It is a membership test, not a ladder: an allowed set of `[small, large]`

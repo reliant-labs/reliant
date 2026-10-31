@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { burnLabel, equivalentHours, hoursRanOut, measuredMachineUsage, projectedBillLabel, usageWindowLabel, type DaemonUsageLike } from "../daemonUsage";
 import { exactUsageDisplay } from "../exactMachineUsage";
-const usage: DaemonUsageLike = { usageMeasured: true, pricingVersion: "v1", allowanceWeightedSeconds: "576000/1", consumedWeightedSeconds: "1/3", remainingWeightedSeconds: "1727999/3", grantRemainingWeightedSeconds: "0/1", runningCostWeightSum: "207341557/145891252", bySize: [{ size: "medium", pricingVersion: "v1", costWeight: "207341557/145891252", exactRunningSeconds: "0/1", exactOverageSeconds: "0/1" }] };
+const usage: DaemonUsageLike = { usageMeasured: true, pricingVersion: "v1", allowanceWeightedSeconds: "576000/1", consumedWeightedSeconds: "1/3", remainingWeightedSeconds: "1727999/3", grantRemainingWeightedSeconds: "0/1", runningCostWeightSum: "207341557/145891252", bySize: [{ size: "l", pricingVersion: "v1", costWeight: "207341557/145891252", exactRunningSeconds: "0/1", exactOverageSeconds: "0/1" }] };
 describe("versioned weighted machine display", () => {
   it("requires exact fields/version rather than falling back to deprecated zero defaults", () => {
     expect(measuredMachineUsage({ usageMeasured: true, bySize: [] })).toBe(false);

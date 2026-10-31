@@ -83,16 +83,19 @@ export function canSuspend(daemon: Daemon): boolean {
 }
 
 const SIZE_LABELS: Record<string, string> = {
-  small: "Small",
-  medium: "Medium",
-  large: "Large",
+  s1: "S1",
+  s2: "S2",
+  m: "M",
+  l: "L",
   xl: "XL",
+  "2xl": "2XL",
+  "3xl": "3XL",
 };
 
 /**
  * Size badge text, or "" when no tier was reported.
  *
- * The registry carries size as the lifecycle mirror's string ("medium"), not
+ * The registry carries size as the lifecycle mirror's string ("l"), not
  * the control-plane enum, so this maps names rather than numbers. Self-hosted
  * machines have no size at all and correctly render nothing.
  */

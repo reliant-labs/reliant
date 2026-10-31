@@ -354,7 +354,7 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 			{Identity: DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
 			{
 				Identity:  DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
-				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "small", ChangedAt: suspendedAt},
+				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
 			},
 		},
 		KeepCreatedAfter:  now.Add(-10 * time.Minute),
@@ -381,8 +381,8 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 	created := mustGetDaemon(t, repo, "dea98d67")
 	if created.Name != "test" || created.UserID != "u-owner" ||
 		created.LifecyclePhase == nil || *created.LifecyclePhase != "suspended" ||
-		created.Size == nil || *created.Size != "small" {
-		t.Errorf("created row = %+v, want test/u-owner/suspended/small", created)
+		created.Size == nil || *created.Size != "m" {
+		t.Errorf("created row = %+v, want test/u-owner/suspended/m", created)
 	}
 	if mustGetDaemon(t, repo, "2aab1465").Name != "default" {
 		t.Error("snapshot did not name the existing machine")
@@ -395,7 +395,7 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 			{Identity: DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
 			{
 				Identity:  DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
-				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "small", ChangedAt: suspendedAt},
+				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
 			},
 			{Identity: DaemonIdentity{DaemonID: "laptop", DaemonType: "managed", CreatedAt: longAgo}},
 			{Identity: DaemonIdentity{DaemonID: "just-registered", DaemonType: "managed", CreatedAt: now}},
