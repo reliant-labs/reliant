@@ -56,6 +56,14 @@ func (c *client) SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTi
 	return err
 }
 
+// RenameDaemon implements Service; see its contract.
+func (c *client) RenameDaemon(ctx context.Context, jwt, daemonID, name string) error {
+	req := connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: daemonID, NewName: name})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	_, err := c.daemons.UpdateDaemon(ctx, req)
+	return err
+}
+
 // daemonSizes are the size names reliant's daemon registry stores (the
 // control plane's lifecycle mirror), mapped to the control plane's enum.
 var daemonSizes = map[string]controlplanev1.DaemonSize{

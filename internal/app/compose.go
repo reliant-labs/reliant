@@ -1034,6 +1034,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 

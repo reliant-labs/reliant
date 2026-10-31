@@ -112,6 +112,28 @@ service DaemonRegistryService {
     };
   }
 
+  // RenameMachine renames one of the caller's machines. The control plane
+  // owns the name, so it is written there first (UpdateDaemon new_name, which
+  // validates it and keeps it unique among the owner's live machines) and
+  // then onto this registry row, so every picker, trigger and agent tool
+  // shows it at once. The name is a label only: the machine's id, its
+  // workspace and every Kubernetes object named after them do not change.
+  // A name is 1-63 lowercase letters, digits or hyphens, starting and ending
+  // with a letter or digit. AlreadyExists when another of the caller's
+  // machines has it; NotFound for a machine the caller does not own;
+  // Unimplemented without a control plane.
+  rpc RenameMachine(RenameMachineRequest) returns (RenameMachineResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "rename_machine"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
+
   // forge:custom — the caller's pools joined with their members' live state,
   // not a page of rows.
   //
@@ -154,6 +176,16 @@ service DaemonRegistryService {
       }
     };
   }
+}
+
+message RenameMachineRequest {
+  string daemon_id = 1;
+  // The new name; surrounding whitespace is trimmed.
+  string name = 2;
+}
+
+message RenameMachineResponse {
+  DaemonInfo daemon = 1;
 }
 
 message SetMachineLabelsRequest {

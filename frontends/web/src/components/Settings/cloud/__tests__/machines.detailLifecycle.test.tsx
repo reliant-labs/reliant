@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   })),
   suspendDaemon: vi.fn(async () => {}),
   resumeEnvironment: vi.fn(async () => {}),
+  renameMachine: vi.fn(async (_req: { daemonId: string; name: string }) => ({})),
   navigate: vi.fn(),
 }))
 
@@ -99,7 +100,14 @@ import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport({
+      listDaemons: () => mocks.listDaemons(),
+      renameMachine: (req: { daemonId: string; name: string }) => mocks.renameMachine(req),
+    }),
+  ),
+)
 afterEach(() => setTransport(null))
 
 const ACTIVE = DaemonStatus.ACTIVE
@@ -304,5 +312,40 @@ describe('machine detail — status presentation', () => {
 
     expect(await screen.findByText(/^connected at$/i)).toBeInTheDocument()
     expect(screen.queryByText(/last connected/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('machine detail — rename', () => {
+  beforeEach(() => {
+    mocks.caps.cloudDaemons = true
+    vi.clearAllMocks()
+  })
+
+  // The header's name is the inline rename control: the pencil swaps it for
+  // a field, a save renames by id, and the header shows the new name.
+  it('renames the machine from its header', async () => {
+    const user = userEvent.setup()
+    showMachine(cloudDaemon({ name: 'cloud-2xl' }))
+    renderDetail()
+
+    const header = await screen.findByTestId('machine-detail-header')
+    await user.click(within(header).getByRole('button', { name: 'Rename cloud-2xl' }))
+    const input = within(header).getByRole('textbox', { name: 'Machine name' })
+    mocks.listDaemons.mockResolvedValue({ daemons: [cloudDaemon({ name: 'big-box' })] })
+    await user.clear(input)
+    await user.type(input, 'big-box{Enter}')
+
+    await waitFor(() => expect(mocks.renameMachine).toHaveBeenCalledTimes(1))
+    expect(mocks.renameMachine.mock.calls[0][0]).toMatchObject({ daemonId: 'd-1', name: 'big-box' })
+    expect(await within(header).findByRole('heading', { name: 'big-box' })).toBeInTheDocument()
+  })
+
+  it('offers no rename without a control plane, which owns the name', async () => {
+    mocks.caps.cloudDaemons = false
+    showMachine(selfHostedDaemon({ name: 'laptop' }))
+    renderDetail()
+
+    const header = await screen.findByTestId('machine-detail-header')
+    expect(within(header).queryByRole('button', { name: /^rename/i })).not.toBeInTheDocument()
   })
 })
