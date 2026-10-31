@@ -26,7 +26,20 @@ type retirementTree struct {
 	entries map[string]retirementEntry
 	bytes   int64
 	newest  time.Time
+	// subtree marks a regenerable directory inside a live checkout (a
+	// node_modules, build output) rather than a whole checkout: it holds no
+	// git pointer, a .git anywhere in it is a nested repository and a hold,
+	// and remove takes the directory itself last.
+	subtree bool
 }
+
+// maxRetirementEntries bounds one inventory. A checkout with its installs
+// is well over 100k entries (reliant's frontends/web/node_modules alone is
+// ~108k), so the 50k strip-walk budget this once shared refused exactly the
+// worktrees that hold the disk. It bounds memory, not safety: every entry is
+// still inspected, and hitting it holds the tree.
+const maxRetirementEntries = 500_000
+
 type retirementEntry struct {
 	stat unix.Stat_t
 }
@@ -104,7 +117,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if len(entries) >= maxStripWalk {
+			if len(entries) >= maxRetirementEntries {
 				return errors.New("retirement inventory budget exceeded")
 			}
 			name := child.Name()
@@ -115,7 +128,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if neverListed(path) {
 				return fmt.Errorf("protected descendant: %s", path)
 			}
-			if name == ".git" && rel != "" {
+			if name == ".git" && (rel != "" || t.subtree) {
 				return errors.New("nested repository in retirement tree")
 			}
 			var s unix.Stat_t
@@ -160,15 +173,19 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 				if !retirementSame(s, opened) {
 					return errors.New("file identity changed")
 				}
-				if s.Nlink != 1 {
-					return errors.New("hard-linked file has external ownership")
-				}
+				// A file with other links (pnpm hard-links its store into every
+				// node_modules) loses only this name: unlinkat never frees
+				// content another link still names.
 				entries[path] = retirementEntry{stat: s}
-				bytes += s.Size
+				if s.Nlink == 1 {
+					bytes += s.Size
+				}
 			case unix.S_IFLNK:
-				// Symlinks are never followed, even if their destination is in-tree.
-				// A conservative hold is simpler than inferring external ownership.
-				return errors.New("symlink in retirement tree")
+				// Symlinks are never followed: remove unlinks the link itself,
+				// which touches nothing it points at. Every node_modules has them
+				// (.bin, pnpm's whole layout), so refusing them held every
+				// worktree that had run an install.
+				entries[path] = retirementEntry{stat: s}
 			default:
 				return errors.New("special file in retirement tree")
 			}
@@ -282,10 +299,11 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		var st unix.Stat_t
 		err = unix.Fstatat(int(dir.Fd()), base, &st, unix.AT_SYMLINK_NOFOLLOW)
 		isDir := e.stat.Mode&unix.S_IFMT == unix.S_IFDIR
+		isLink := e.stat.Mode&unix.S_IFMT == unix.S_IFLNK
 		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementSame(e.stat, st))) {
 			err = errors.New("entry changed at deletion boundary")
 		}
-		if err == nil {
+		if err == nil && !isLink {
 			// Openat2 supplies NO_XDEV for directories including same-device binds.
 			f, openErr := retirementOpen(int(dir.Fd()), base, isDir)
 			if openErr != nil {
@@ -314,6 +332,9 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 	if err := check(); err != nil {
 		return err
 	}
+	if t.subtree {
+		return t.removeRoot()
+	}
 	// Keep .git until all other entries have been removed, so partial failures
 	// remain registered/recoverable. Never remove an unexpected final entry.
 	reader, err := retirementOpen(int(t.root.Fd()), ".", true)
@@ -338,6 +359,12 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 	if err := unix.Unlinkat(int(t.root.Fd()), ".git", 0); err != nil {
 		return err
 	}
+	return t.removeRoot()
+}
+
+// removeRoot removes the now-empty inventoried directory itself, only while
+// its name still names the directory that was inspected.
+func (t *retirementTree) removeRoot() error {
 	var named unix.Stat_t
 	if err := unix.Fstatat(int(t.parent.Fd()), t.name, &named, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
@@ -346,4 +373,23 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		return errors.New("checkout name replaced during retirement")
 	}
 	return unix.Unlinkat(int(t.parent.Fd()), t.name, unix.AT_REMOVEDIR)
+}
+
+// inspectRegenerableTree inventories a regenerable directory inside a live
+// checkout (node_modules, build output, a tool cache) for shedding. It is the
+// retirement inventory with the same holds — a protected descendant, a nested
+// repository, a mount, a special file — except that the directory has no git
+// pointer of its own and remove takes the directory itself.
+func inspectRegenerableTree(ctx context.Context, path string) (*retirementTree, error) {
+	t, err := retirementRoot(path)
+	if err != nil {
+		return nil, err
+	}
+	t.subtree = true
+	t.entries, t.bytes, t.newest, err = t.inventory(ctx)
+	if err != nil {
+		t.close()
+		return nil, err
+	}
+	return t, nil
 }
