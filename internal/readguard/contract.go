@@ -56,11 +56,16 @@ type Procedure interface {
 	Respond(msg proto.Message) connect.AnyResponse
 }
 
-// Deps is what the guard guards and how hard. A zero field takes its
-// default.
+// Deps is what the guard guards and how hard.
 type Deps struct {
 	// Procedures are the reads guarded. Every other procedure passes through.
 	Procedures []Procedure
+	// Limits is how hard. Production takes the defaults; tests tighten them.
+	Limits Limits
+}
+
+// Limits bounds the guard. A zero field takes its default.
+type Limits struct {
 	// PerUser bounds the distinct reads one user has running at once.
 	PerUser int
 	// Queue bounds how many more of one user's distinct reads wait for a slot.

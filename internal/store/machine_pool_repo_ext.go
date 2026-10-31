@@ -111,7 +111,7 @@ ON CONFLICT (user_id, name) DO UPDATE SET
     max_runs_per_member = EXCLUDED.max_runs_per_member,
     member_idle_timeout = EXCLUDED.member_idle_timeout,
     updated_at = EXCLUDED.updated_at
-RETURNING *`,
+RETURNING `+columnsOf[MachinePool]("machine_pools"),
 		newID, p.UserID, p.Name, string(selector), p.MinMembers, p.MaxMembers, p.MemberSize, p.MaxRunsPerMember, now, idleTimeout).Scan(ctx, &row)
 	if err != nil {
 		return nil, fmt.Errorf("write machine pool %q: %w", p.Name, err)

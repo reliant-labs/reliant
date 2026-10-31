@@ -20,7 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// Defaults for a zero Deps field.
+// Defaults for a zero Limits field.
 const (
 	DefaultPerUser     = 4
 	DefaultQueue       = 32
@@ -43,7 +43,7 @@ func (r read[Res]) Respond(msg proto.Message) connect.AnyResponse {
 	return connect.NewResponse(any(msg).(*Res))
 }
 
-func (c Deps) withDefaults() Deps {
+func (c Limits) withDefaults() Limits {
 	if c.PerUser <= 0 {
 		c.PerUser = DefaultPerUser
 	}
@@ -64,16 +64,15 @@ func (c Deps) withDefaults() Deps {
 
 // New returns the guard for deps' procedures.
 func New(deps Deps) Service {
-	cfg := deps.withDefaults()
-	g := &guard{cfg: cfg, procs: make(map[string]Procedure, len(cfg.Procedures)), users: map[string]*userReads{}}
-	for _, p := range cfg.Procedures {
+	g := &guard{cfg: deps.Limits.withDefaults(), procs: make(map[string]Procedure, len(deps.Procedures)), users: map[string]*userReads{}}
+	for _, p := range deps.Procedures {
 		g.procs[p.Name()] = p
 	}
 	return g
 }
 
 type guard struct {
-	cfg   Deps
+	cfg   Limits
 	procs map[string]Procedure
 
 	mu    sync.Mutex
