@@ -342,7 +342,7 @@ frontends/web/data
 .forge/*
 !.forge/scaffolded.json
 !.forge/disowned.json
-!.forge/hashes.json
+!.forge/hashes/
 
 # deploy/kcl/<env>/main.k's FileSecrets store (`forge env up dev` generates
 # secrets/dev.yaml: AUTH_API_KEY, RELIANT_VAULT_KEY). Never committed.
@@ -350,3 +350,8 @@ secrets/
 # ...whose env lives in deploy/kcl/dev/, which the bare `dev/` above would
 # otherwise swallow.
 !deploy/kcl/dev/
+
+# forge's proto descriptor: derived from proto/ by whichever forge command
+# reads it, and never committed (commitpolicy: only what the compiler needs is
+# committed). Added by `forge generate`.
+/gen/forge_descriptor/
