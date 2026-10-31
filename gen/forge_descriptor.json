@@ -40621,6 +40621,20 @@
           ]
         },
         {
+          "Name": "worktree_landed_idle",
+          "GoName": "WorktreeLandedIdle",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_WORKTREE_LANDED_IDLE",
+          "Flag": "",
+          "DefaultValue": "3h",
+          "Required": false,
+          "Description": "How long a landed worktree's chats must be quiet before it is archived (0 = off)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
+        },
+        {
           "Name": "worktree_live_shed_idle",
           "GoName": "WorktreeLiveShedIdle",
           "GoType": "string",
@@ -43383,7 +43397,7 @@
   ],
   "sources": {
     "reliant/config/v1/analytics_config.proto": "aee736b02a56e865ba9da6e827efb0ce56267256b44e37f5fd3e703ea7e461b9",
-    "reliant/config/v1/api_server_config.proto": "1da0ace7f3197f6068ac1a51a47d1fb1e2ba92eedbfeae6d82c9377bf14450fd",
+    "reliant/config/v1/api_server_config.proto": "32efd07dcbacf769f842d77d7f32745bd25a9b4aa63a3c19366264e1773a75fb",
     "reliant/config/v1/cli_config.proto": "314be8bdd3ea0da6c616bbbd8fc72b6474cc55366f172b54f66aa42508c66d94",
     "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
     "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",

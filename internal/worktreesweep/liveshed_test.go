@@ -40,7 +40,7 @@ func shedAsks(t *testing.T, s *Sweeper, store *fakeStore, keep bool) map[string]
 	t.Helper()
 	cands, err := store.ListWorktreesForReclaim(context.Background())
 	require.NoError(t, err)
-	req, _ := s.describe(context.Background(), cands, nil, keep)
+	req, _ := s.describe(context.Background(), cands, nil, keep, nil)
 	out := map[string]int64{}
 	for _, w := range req.Worktrees {
 		out[w.ID] = w.ProbeRecoverableAfterSeconds
