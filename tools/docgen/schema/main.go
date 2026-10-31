@@ -58,12 +58,16 @@ var toolHints = map[string]string{
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
-	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), optionally " +
-		"waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, " +
-		"\"superseded\", never failed) and key (a template over `trigger` grouping the firings that replace each " +
-		"other). See WorkflowConcurrency below.",
+	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} " +
+		"(K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing " +
+		"per key survives; older ones are recorded skipped, \"superseded\", never failed) and key (a template over " +
+		"`trigger` grouping the firings that replace each other). See WorkflowConcurrency below.",
 	// WorkflowConcurrency's fields (the generated descriptors carry no comments).
-	"max_running": "How many trigger-launched runs of the workflow run at once; later firings wait. Required, at least 1.",
+	"max_running": "How many trigger-launched runs of the workflow run at once; later firings wait. Set it, " +
+		"per_member, or both; with per_member it is a ceiling over the scaled cap.",
+	"per_member": "Scales the cap with the trigger's machine pool: this many runs for each member that can take " +
+		"work (installed, synced with the pool's catalog, not failed or removed), so adding a machine raises " +
+		"throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.",
 	"waiting": "What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps " +
 		"only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail " +
 		"\"superseded\" (never failed). Running runs are never touched.",

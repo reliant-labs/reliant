@@ -1703,7 +1703,7 @@ create_workflow or list_workflows.
 
 **Tags:** `workflow`, `readonly`
 
-Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id and current run state. Read-only; never fires or changes a trigger. Raw event payloads are not returned.
+Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id, current run state, and the workflow definition each firing resolved (file, machine, branch and commit, content hash, and the error when a broken definition refused it). Read-only; never fires or changes a trigger. Raw event payloads are not returned.
 
 Use after fire_trigger to see whether a firing launched, skipped or failed; acceptance of a manual fire is not a successful run. Recording is asynchronous, so an empty page may mean the firing has not been recorded yet. Use get_run with a launched chat_id for details. Concurrent fires can appear: do not assume the newest event necessarily belongs to your call. Match fire_workflow_id from fire_trigger to the event with that exact ID, then use its chat_id; do not guess from ordering. Continue with next_page_token when present.
 

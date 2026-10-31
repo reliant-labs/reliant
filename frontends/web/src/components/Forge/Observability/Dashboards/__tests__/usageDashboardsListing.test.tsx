@@ -65,14 +65,18 @@ describe("usage dashboards", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ canWrite: false, dashboards: [USAGE, BILLING] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
-    const listed = await screen.findByTestId("dashboards-builtin");
-    expect(within(listed).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-      ["Spend and usage", "/d/builtin/org-usage"],
-      ["Billing and infrastructure", "/d/builtin/org-billing"],
-      ["LLM usage", "/d/builtin/org-llm"],
+    // All three are in the Product group, the client's LLM usage after the
+    // server's built-ins.
+    const listed = await screen.findByTestId("dashboards-group-product");
+    expect(within(listed).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual([
+      "/d/builtin/org-usage",
+      "/d/builtin/org-billing",
+      "/d/builtin/org-llm",
     ]);
-    const llm = within(listed).getByRole("link", { name: "LLM usage" }).parentElement!;
-    expect(llm).not.toHaveTextContent("Requires cost-read permission");
+    const row = (name: string) => within(listed).getByRole("link", { name }).closest("tr")!;
+    expect(row("Spend and usage")).toHaveTextContent("Requires cost-read permission");
+    expect(row("Billing and infrastructure")).toHaveTextContent("Requires cost-read permission");
+    expect(row("LLM usage")).not.toHaveTextContent("Requires cost-read permission");
   });
 
   it("open org-usage as its typed view", async () => {
