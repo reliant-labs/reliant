@@ -1,0 +1,24 @@
+-- forge:backward-compatible — additive index; the previous release's save probe is served by it as well (same leading columns and predicate, and the loop columns are INCLUDEd).
+
+-- Migration: step_executions_save_scope_index
+--
+-- The BASIC view of ChatService/GetWorkflowExecutions finds each visible
+-- step's "-save" sibling by (workflow_id, step_id || '-save', loop scope)
+-- (store.BasicChatStepExecutionsSQL). idx_step_executions_saves keys only
+-- (workflow_id, step_id), so the loop scope was a Filter: an agent loop
+-- writes one execute_tools-save per turn under one step id, and every probe
+-- walked all of them to keep one. Prod, chat 9fbaace8 (636 runs, 247k steps):
+-- 60 probes walked 1,958 entries each, 111k buffers, 1.3-3.9s per open
+-- under load (pg_stat_statements max 2.0s).
+--
+-- Keying the loop scope makes each probe one index entry. It is one ARRAY
+-- column, not two, because the scope is matched null-safely (a step outside
+-- any loop has NULL for both), and IS NOT DISTINCT FROM is never an index
+-- condition; array equality treats NULL elements as equal and is.
+--
+-- The INCLUDE list is idx_step_executions_saves' own, so the next migration
+-- can drop that index without slowing the previous release's query.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_step_executions_save_scope ON public.step_executions USING btree (workflow_id, step_id, (ARRAY[loop_node_id, (loop_iteration)::text])) INCLUDE (loop_node_id, loop_iteration, saved_message_id, id, created_at) WHERE (saved_message_id IS NOT NULL);
