@@ -68,7 +68,7 @@ RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL kind=string flag="" default="10m" requi
 RELIANT_TEST_INTEGRATION_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_VAULT_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_WORKTREE_AUTO_ARCHIVE kind=string flag="" default="dry-run" required=false optional=false sensitive=false allowed=[dry-run on off] aliases=[]
-RELIANT_WORKTREE_LIVE_SHED_IDLE kind=google.protobuf.Duration flag="" default="24h" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_WORKTREE_LANDED_IDLE kind=google.protobuf.Duration flag="" default="3h" required=false optional=false sensitive=false allowed=[] aliases=[]
 SHUTDOWN_TIMEOUT kind=google.protobuf.Duration flag="" default="30s" required=false optional=false sensitive=false allowed=[] aliases=[]
 STREAMING_DRIVER kind=string flag="streaming-driver" default="nats" required=false optional=false sensitive=false allowed=[nats] aliases=[]
 TEMPORAL_HOST kind=string flag="temporal-host" default="localhost" required=false optional=false sensitive=false allowed=[] aliases=[]

@@ -261,6 +261,8 @@ type ExecuteToolsStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	// ReviveArchivedWorktree is reviveWorktree's (execute_tools_workspace.go).
+	ReviveArchivedWorktree(ctx context.Context, id string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetContextUsage(ctx context.Context, chatID string, thread string) (*db.ContextUsage, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
