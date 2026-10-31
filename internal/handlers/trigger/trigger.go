@@ -181,7 +181,7 @@ func (s *Service) GetTrigger(
 		return nil, svcerr.Wrap(err)
 	}
 	for _, c := range changes {
-		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339)})
+		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), Approval: c.Approval, CapabilitiesAdded: c.CapabilitiesAdded, CapabilitiesRemoved: c.CapabilitiesRemoved})
 	}
 	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
 }

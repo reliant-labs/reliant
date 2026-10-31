@@ -294,6 +294,9 @@ export const SETTINGS_SECTION_IDS = [
   // redirects here.
   "branches",
   "projects",
+  // When an agent's change to a trigger activation needs the owner's
+  // approval card (the automation.approvals setting).
+  "automations",
   "browser",
   "appearance",
   "notifications",
