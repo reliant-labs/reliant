@@ -78,6 +78,10 @@ func Wrap(c client.Client, pub Publisher, stopSignals ...string) client.Client {
 	return &nudgingClient{Client: c, pub: pub, stopSignals: set}
 }
 
+// Unwrap returns the client this one decorates. worker.New accepts only the
+// SDK's own client (it panics on any wrapper), so the worker builds on this.
+func (c *nudgingClient) Unwrap() client.Client { return c.Client }
+
 func (c *nudgingClient) SignalWorkflow(ctx context.Context, workflowID, runID, signalName string, arg interface{}) error {
 	err := c.Client.SignalWorkflow(ctx, workflowID, runID, signalName, arg)
 	if err == nil && c.stopSignals[signalName] {

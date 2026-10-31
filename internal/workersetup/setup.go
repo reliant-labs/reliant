@@ -196,6 +196,22 @@ func (c *Config) taskQueueName() string {
 // NewWorker creates a Temporal worker and registers every workflow and
 // activity on it. It does not start it: the returned Worker is a component,
 // polling from Run until Drain stops it (see Worker).
+// sdkClient is the SDK's own client under any decorator of it. worker.New
+// type-asserts its client and panics on anything else ("Client must be created
+// with client.Dial() or client.NewLazyClient()"), and the process's client is
+// decorated (stopnudge.Wrap) so its stop requests nudge running activities:
+// passing it straight through crash-looped the v1.7.85 worker at boot. The
+// activities keep the decorated client; only the poller needs the bare one.
+func sdkClient(c client.Client) client.Client {
+	for {
+		u, ok := c.(interface{ Unwrap() client.Client })
+		if !ok {
+			return c
+		}
+		c = u.Unwrap()
+	}
+}
+
 func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
 	registry := v2.NewActivityRegistry(cfg.Database)
@@ -237,7 +253,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	v2activities.RegisterAll(registry, activityDeps)
 
 	onFatalError, fatal := fatalErrorSink()
-	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOptions(cfg, onFatalError, runtime.GOMAXPROCS(0)))
+	w := worker.New(sdkClient(cfg.TemporalClient), cfg.taskQueueName(), workerOptions(cfg, onFatalError, runtime.GOMAXPROCS(0)))
 
 	// Register activities with worker
 	registry.RegisterWithWorker(w)
