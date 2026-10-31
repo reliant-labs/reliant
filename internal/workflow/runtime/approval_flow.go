@@ -35,6 +35,12 @@ type approvalExecution struct {
 	NodePath   string
 	Title      string
 	TimeoutStr string
+	// ToolCallID is the run's own tool call the approval is about (an
+	// activation change, a machine start); empty for an approval node.
+	ToolCallID string
+	// BatchID groups the approvals one step raises together; empty for one
+	// raised on its own.
+	BatchID string
 	// Unattended is true when the run has no human to act on an approval.
 	Unattended bool
 	Logger     log.Logger
@@ -176,6 +182,12 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 		"node_path":            input.NodePath,
 		"title":                input.Title,
 		"timeout":              input.TimeoutStr,
+	}
+	if input.ToolCallID != "" {
+		createInput["tool_call_id"] = input.ToolCallID
+	}
+	if input.BatchID != "" {
+		createInput["batch_id"] = input.BatchID
 	}
 
 	var createOutput struct {

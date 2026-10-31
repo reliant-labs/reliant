@@ -1123,6 +1123,11 @@
               "name": "action_taken",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "batch_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ApproveRequest": [
@@ -1281,7 +1286,8 @@
           ],
           "reliant.v1.ApprovalType": [
             "APPROVAL_TYPE_UNSPECIFIED",
-            "APPROVAL_TYPE_WORKFLOW_STEP"
+            "APPROVAL_TYPE_WORKFLOW_STEP",
+            "APPROVAL_TYPE_TOOL_CALL"
           ]
         },
         "EnumNumbers": {
@@ -1293,7 +1299,8 @@
           ],
           "reliant.v1.ApprovalType": [
             0,
-            2
+            2,
+            3
           ]
         },
         "EnumGoRefs": {
@@ -15012,6 +15019,10 @@
             {
               "name": "title",
               "kind": "string"
+            },
+            {
+              "name": "batch_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxAutomationDefinitionBroken": [
@@ -15516,7 +15527,8 @@
         "Enums": {
           "reliant.v1.ApprovalType": [
             "APPROVAL_TYPE_UNSPECIFIED",
-            "APPROVAL_TYPE_WORKFLOW_STEP"
+            "APPROVAL_TYPE_WORKFLOW_STEP",
+            "APPROVAL_TYPE_TOOL_CALL"
           ],
           "reliant.v1.CleanupStorageOutcome": [
             "CLEANUP_STORAGE_OUTCOME_UNSPECIFIED",
@@ -15554,7 +15566,8 @@
         "EnumNumbers": {
           "reliant.v1.ApprovalType": [
             0,
-            2
+            2,
+            3
           ],
           "reliant.v1.CleanupStorageOutcome": [
             0,

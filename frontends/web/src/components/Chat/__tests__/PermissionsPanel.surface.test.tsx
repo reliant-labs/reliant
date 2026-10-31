@@ -9,15 +9,16 @@ import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 // The batch "N Pending / Approve All / Deny All" bar ChatPresenter mounts
 // above the composer. On a 390px viewport its desktop `inline-flex` row does
 // not fit, and the keyboard-shortcut badge is meaningless without a keyboard.
-const pending: Approval[] = [
+// Two, so the bar is the batch's ("Approve all 2"); one alone reads "Approve".
+const pending: Approval[] = ["approval-1", "approval-2"].map((id) =>
   create(ApprovalSchema, {
-    id: "approval-1",
+    id,
     chatId: "chat-1",
-    entityId: "block-1",
+    entityId: `block-${id}`,
     status: ApprovalStatus.PENDING,
     createdAt: new Date().toISOString(),
   }),
-];
+);
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
@@ -27,6 +28,8 @@ vi.mock("../../../hooks/approval-queries", () => ({
   usePendingApprovals: () => ({ data: { approvals: pending } }),
   useBatchApproveInChat: () => ({ mutate: vi.fn() }),
   useBatchDenyInChat: () => ({ mutate: vi.fn() }),
+  useApproveToolRequest: () => ({ mutate: vi.fn() }),
+  useDenyToolRequest: () => ({ mutate: vi.fn() }),
 }));
 
 describe("PermissionsPanel batch approval bar", () => {
@@ -38,7 +41,7 @@ describe("PermissionsPanel batch approval bar", () => {
         </SurfaceProvider>,
       );
 
-      expect(screen.getByText("1 Pending")).toBeInTheDocument();
+      expect(screen.getByText("2 Pending")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /approve all/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /deny all/i })).toBeInTheDocument();
 

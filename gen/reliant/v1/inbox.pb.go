@@ -818,7 +818,10 @@ type InboxApproval struct {
 	ApprovalId   string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
 	ApprovalType ApprovalType           `protobuf:"varint,2,opt,name=approval_type,json=approvalType,proto3,enum=reliant.v1.ApprovalType" json:"approval_type,omitempty"`
 	// The approval's title.
-	Title         string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// Approval.batch_id: the approvals the run raised together. The Inbox
+	// offers a batch of more than one as a single decision.
+	BatchId       string `protobuf:"bytes,7,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -870,6 +873,13 @@ func (x *InboxApproval) GetApprovalType() ApprovalType {
 func (x *InboxApproval) GetTitle() string {
 	if x != nil {
 		return x.Title
+	}
+	return ""
+}
+
+func (x *InboxApproval) GetBatchId() string {
+	if x != nil {
+		return x.BatchId
 	}
 	return ""
 }
@@ -1909,12 +1919,13 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\toperation\x18\t \x01(\tR\toperation\x12#\n" +
 	"\roperation_key\x18\n" +
 	" \x01(\tR\foperationKey\x12(\n" +
-	"\x10target_daemon_id\x18\v \x01(\tR\x0etargetDaemonId\"\xc2\x01\n" +
+	"\x10target_daemon_id\x18\v \x01(\tR\x0etargetDaemonId\"\xdd\x01\n" +
 	"\rInboxApproval\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12=\n" +
 	"\rapproval_type\x18\x02 \x01(\x0e2\x18.reliant.v1.ApprovalTypeR\fapprovalType\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05titleJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\ttool_nameR\ftool_call_idR\x10argument_summary\"\xa9\x01\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x19\n" +
+	"\bbatch_id\x18\a \x01(\tR\abatchIdJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\ttool_nameR\ftool_call_idR\x10argument_summary\"\xa9\x01\n" +
 	"\rInboxQuestion\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x1b\n" +

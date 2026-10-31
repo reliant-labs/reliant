@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,7 @@ func TestAgentActivationApprovalOnCapabilityChange(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, preview.CardRequired, "a new activation is new standing power")
 	require.Contains(t, preview.Title, "Approval: A new activation")
+	require.True(t, strings.HasPrefix(preview.Title, "create_trigger_activation triage · nightly\n"), "the card's first line names the change: %q", preview.Title)
 	_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, create, "")
 	require.ErrorContains(t, err, tools.ApprovalRequiredMessage)
 	created, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, create, preview.Hash)

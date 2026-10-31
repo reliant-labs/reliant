@@ -8,15 +8,19 @@ import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// ApprovalType is the kind of approval request. Workflow step approvals are
-// the only kind left.
+// ApprovalType is the kind of approval request.
 enum ApprovalType {
   // 1 was APPROVAL_TYPE_TOOL: the integration action approval prompt, removed.
   // Rows recorded with it can still exist and still carry 1.
   reserved 1;
   reserved "APPROVAL_TYPE_TOOL";
   APPROVAL_TYPE_UNSPECIFIED = 0;
+  // A workflow approval node is waiting on it.
   APPROVAL_TYPE_WORKFLOW_STEP = 2;
+  // One of the run's own tool calls is waiting on it: an activation change
+  // (create/update/enable_trigger) or a machine start. The run answers that
+  // call itself, approved or not, so a denial writes no denial message.
+  APPROVAL_TYPE_TOOL_CALL = 3;
 }
 
 // ApprovalStatus tracks the lifecycle of an approval request
@@ -60,7 +64,10 @@ service ApprovalService {
     };
   }
   
-  // BatchApprove approves multiple pending approval requests at once
+  // BatchApprove approves several approvals of one chat at once: every
+  // listed approval that is still pending. One already decided (on another
+  // surface) is skipped and not counted; FAILED_PRECONDITION only when none
+  // of them was pending.
   rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {
     option (forge.v1.method) = {
       activity: {
@@ -77,7 +84,8 @@ service ApprovalService {
     };
   }
   
-  // BatchDeny denies multiple pending approval requests at once
+  // BatchDeny denies several approvals of one chat at once, with
+  // BatchApprove's rules for approvals already decided.
   rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {
     option (forge.v1.method) = {
       activity: {
@@ -113,6 +121,12 @@ message Approval {
   optional string workflow_id = 16;
   optional string run_id = 17;
   optional string action_taken = 19;  // Which action button was clicked (e.g., "Deploy Now")
+
+  // Set when the run raised this approval together with others in one step
+  // (one turn's tool calls): every approval of the batch carries the same id,
+  // so they can be offered, and decided, together. Each stays its own row and
+  // can still be decided on its own.
+  optional string batch_id = 23;
 
   // Tool approvals (the removed APPROVAL_TYPE_TOOL) asked about one call to an
   // integration action, and described it with these.

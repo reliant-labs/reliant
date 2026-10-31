@@ -289,6 +289,19 @@ func createRetiredToolApproval(t *testing.T, repo *db.Repo, chatID, workflowID s
 // tool_result for every call in the turn would duplicate that result. Denying
 // a workflow step approval in the same turn still writes one.
 func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing.T) {
+	testDenyAnsweredByItsRun(t, createRetiredToolApproval)
+}
+
+// A tool-call approval (an activation change, a machine start) is answered by
+// its run too: denying it must not write a denied tool_result for every call
+// in the turn, the others of which still run.
+func TestApprovalService_DenyToolCallApprovalWritesNoDenialMessage(t *testing.T) {
+	testDenyAnsweredByItsRun(t, func(t *testing.T, repo *db.Repo, chatID, workflowID string) string {
+		return createBatchedApproval(t, repo, chatID, workflowID, "batch-1", int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
+	})
+}
+
+func testDenyAnsweredByItsRun(t *testing.T, create func(t *testing.T, repo *db.Repo, chatID, workflowID string) string) {
 	ctx := approvalTestCtx()
 
 	for name, deny := range map[string]func(*Service, string) error{
@@ -307,7 +320,7 @@ func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing
 			workflowID := uuid.NewString()
 			require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: f.ChatID, WorkflowName: "agent", Thread: f.ThreadID, Status: db.Active()}))
 
-			retired := createRetiredToolApproval(t, repo, f.ChatID, workflowID)
+			retired := create(t, repo, f.ChatID, workflowID)
 			before, err := repo.ListMessages(ctx, f.ChatID, db.MessageListOptions{})
 			require.NoError(t, err)
 			require.NoError(t, deny(service, retired))
@@ -325,4 +338,69 @@ func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing
 			assert.Len(t, afterStep, len(after)+1, "a step approval's denial still writes its message")
 		})
 	}
+}
+
+// createBatchedApproval creates an approval about one of a run's own tool
+// calls, raised in batch.
+func createBatchedApproval(t *testing.T, repo *db.Repo, chatID, workflowID, batchID string, status int32) string {
+	t.Helper()
+	approvalID := uuid.NewString()
+	require.NoError(t, repo.CreateApproval(context.Background(), &db.Approval{
+		ID:                 approvalID,
+		ChatID:             chatID,
+		ApprovalType:       int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL),
+		EntityID:           workflowID + ":" + uuid.NewString(),
+		Status:             status,
+		Title:              "Approval: enable_trigger",
+		TemporalWorkflowID: workflowID,
+		CreatedAt:          time.Now().UTC(),
+		BatchID:            &batchID,
+	}))
+	return approvalID
+}
+
+// A batch approves what is still pending of itself: one of its approvals
+// decided elsewhere first is skipped, not an error, and each approved one's
+// run is signalled. Only a batch with nothing left pending is refused.
+func TestApprovalService_BatchApproveSkipsDecided(t *testing.T) {
+	service, repo, mockClient := setupTestApprovalServiceWithMockClient(t)
+	chatID, workflowID := createApprovalTestData(t, repo)
+	pending := int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING)
+	a := createBatchedApproval(t, repo, chatID, workflowID, "batch-1", pending)
+	b := createBatchedApproval(t, repo, chatID, workflowID, "batch-1", pending)
+	c := createBatchedApproval(t, repo, chatID, workflowID, "batch-1", pending)
+
+	_, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{RequestId: b}))
+	require.NoError(t, err)
+	resp, err := service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{a, b, c}}))
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), resp.Msg.Approved)
+	assert.Equal(t, chatID, resp.Msg.ChatId)
+	assert.Equal(t, 3, mockClient.signalCalls, "one denial, then two approvals")
+
+	for id, want := range map[string]reliantv1.ApprovalStatus{a: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED, b: reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED, c: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED} {
+		got, err := repo.GetApproval(context.Background(), id)
+		require.NoError(t, err)
+		assert.Equal(t, int32(want), got.Status, id)
+	}
+
+	_, err = service.BatchDeny(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: []string{a, b, c}}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+}
+
+// The chat's list carries each approval's batch.
+func TestApprovalService_ListCarriesBatch(t *testing.T) {
+	service, repo := setupTestApprovalService(t)
+	chatID, workflowID := createApprovalTestData(t, repo)
+	createBatchedApproval(t, repo, chatID, workflowID, "batch-1", int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
+	createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
+	resp, err := service.ListApprovalsByChat(approvalTestCtx(), connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: chatID}))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.Approvals, 2)
+	batches := map[string]bool{}
+	for _, a := range resp.Msg.Approvals {
+		batches[a.GetBatchId()] = true
+	}
+	assert.Equal(t, map[string]bool{"batch-1": true, "": true}, batches)
 }

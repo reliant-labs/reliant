@@ -26,6 +26,7 @@ import {
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
+import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
 import {
@@ -48,6 +49,8 @@ const mocks = vi.hoisted(() => ({
   restoreInboxItem: vi.fn(),
   approve: vi.fn(),
   deny: vi.fn(),
+  batchApprove: vi.fn(),
+  batchDeny: vi.fn(),
   resolveQuestion: vi.fn(),
   resumeDaemon: vi.fn(),
   setEnabled: vi.fn(),
@@ -102,6 +105,8 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.deny.mockResolvedValue({ success: true, message: "" });
+  mocks.batchApprove.mockResolvedValue({ success: true, message: "" });
+  mocks.batchDeny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
   setTransport(
     mockTransport({
@@ -118,6 +123,8 @@ beforeEach(() => {
         const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
         return mocks.deny(requestId, denialReason, actionTaken);
       },
+      "ApprovalService.BatchApprove": (req) => mocks.batchApprove((req as { requestIds: string[] }).requestIds),
+      "ApprovalService.BatchDeny": (req) => mocks.batchDeny((req as { requestIds: string[] }).requestIds),
       // Free-up-space goes through the generated DaemonRegistryService write.
       "DaemonRegistryService.ClearMachineCaches": (req) => mocks.clearMachineCaches(req),
       "QuestionService.ResolveQuestion": (req) => {
@@ -276,6 +283,59 @@ describe("InboxPage item kinds", () => {
     expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
+  });
+
+  it("approvals a run asked for together are one row, decided at once or one by one", async () => {
+    const batched = (id: string, title: string) =>
+      approvalItem(
+        {
+          payload: {
+            case: "approval",
+            value: { approvalId: id, approvalType: ApprovalType.TOOL_CALL, title, batchId: "wf/call-1" },
+          },
+        },
+        id,
+      );
+    const solo = approvalItem({ chatId: "chat-2", chatTitle: "Other run" }, "solo");
+    respond([
+      batched("a-1", "pause_trigger nightly\nApproval: details"),
+      solo,
+      batched("a-2", "pause_trigger weekly\nApproval: details"),
+      batched("a-3", "pause_trigger hourly\nApproval: details"),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText("3 approvals, asked together")).toBeInTheDocument();
+    // Each keeps its own row with the change's headline.
+    expect(within(batch).getByText("pause_trigger weekly")).toBeInTheDocument();
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+
+    // One of them on its own.
+    const second = within(batch).getByTestId("inbox-item-approval:a-2");
+    await userEvent.click(within(second).getByRole("button", { name: "Details" }));
+    expect(within(second).getByText(/Approval: details/)).toBeInTheDocument();
+    respond([batched("a-1", "pause_trigger nightly"), solo, batched("a-3", "pause_trigger hourly")]);
+    await userEvent.click(within(second).getByRole("button", { name: "Deny" }));
+    await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("a-2", undefined, undefined));
+    await waitFor(() => expect(within(batch).queryByTestId("inbox-item-approval:a-2")).toBeNull());
+
+    // The rest at once.
+    respond([solo]);
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+    await waitFor(() => expect(screen.queryByTestId("inbox-approval-batch-wf/call-1")).toBeNull());
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+  });
+
+  it("a batch already decided elsewhere says so", async () => {
+    const batched = (id: string) =>
+      approvalItem({ payload: { case: "approval", value: { approvalId: id, title: id, batchId: "b" } } }, id);
+    respond([batched("x-1"), batched("x-2")]);
+    mocks.batchDeny.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-b");
+    await userEvent.click(within(batch).getByRole("button", { name: "Deny all" }));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
   });
 
   it("an approval already handled elsewhere says so instead of erroring", async () => {

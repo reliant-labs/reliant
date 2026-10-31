@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -268,6 +269,17 @@ func isRetryableError(err error) bool {
 		strings.Contains(errMsg, "could not serialize") ||
 		strings.Contains(errMsg, "deadlock") ||
 		strings.Contains(errMsg, "transaction conflict") {
+		return true
+	}
+
+	// COMMIT of a transaction a statement had already aborted. The body
+	// swallowed that statement's error — a best-effort read (render, health)
+	// that logs and carries on — so the cause never reached this loop, and
+	// under SERIALIZABLE it is almost always a 40001. Nothing was committed,
+	// so a fresh attempt is safe; a cause that repeats every attempt just
+	// exhausts the budget and fails as it would have.
+	if errors.Is(err, pgx.ErrTxCommitRollback) ||
+		strings.Contains(errMsg, "commit unexpectedly resulted in rollback") {
 		return true
 	}
 
