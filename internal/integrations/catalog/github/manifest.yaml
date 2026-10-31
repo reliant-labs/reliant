@@ -110,6 +110,7 @@ actions:
   - $ref: actions/pr.review.create.yaml
   - $ref: actions/pr.create.yaml
   - $ref: actions/pr.update.yaml
+  - $ref: actions/pr.merge.yaml
   - $ref: actions/pr.reviews.list.yaml
   - $ref: actions/pr.review_comments.list.yaml
   - $ref: actions/pr.review_comment.reply.yaml
@@ -124,6 +125,9 @@ actions:
   - $ref: actions/repo.get_tree.yaml
   - $ref: actions/code.search.yaml
   - $ref: actions/workflow.dispatch.yaml
+  - $ref: actions/check_run.create.yaml
+  - $ref: actions/check_run.update.yaml
+  - $ref: actions/check_run.list.yaml
 
 triggers:
   - $ref: events/issue.opened.yaml
@@ -148,5 +152,6 @@ triggers:
   - $ref: events/workflow_run.completed.yaml
   - $ref: events/check_run.completed.yaml
   - $ref: events/check_suite.completed.yaml
+  - $ref: events/check_suite.requested.yaml
   - $ref: events/pull_request.auto_merge_disabled.yaml
   - $ref: events/pull_request.dequeued.yaml

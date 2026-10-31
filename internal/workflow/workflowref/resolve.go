@@ -154,7 +154,11 @@ func parsed(ref Ref, source Source, path string, data []byte) (*Resolved, error)
 		if path != "" {
 			where = path
 		}
-		return nil, fmt.Errorf("%s does not parse: %w", where, err)
+		err = fmt.Errorf("%s does not parse: %w", where, err)
+		if source == SourceProject {
+			return nil, &FileError{Path: ProjectRelative(path), Content: data, Err: err}
+		}
+		return nil, err
 	}
 	return &Resolved{Ref: ref, Source: source, Path: path, YAML: data, Workflow: wf}, nil
 }

@@ -54,8 +54,14 @@ type CreateDaemonRequest struct {
 	// the retry-safe commit a flow that may run twice needs (onboarding names
 	// its one machine and re-sends the create on every retry).
 	RefreshExisting bool `protobuf:"varint,12,opt,name=refresh_existing,json=refreshExisting,proto3" json:"refresh_existing,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Where a managed machine's disk lives; unspecified is PERSISTENT. EPHEMERAL
+	// gives every start a fresh disk that is deleted when the machine suspends,
+	// so a suspended machine costs nothing and keeps nothing: for stateless
+	// machines such as CI pool members. Fixed at create: refresh_existing with
+	// a different mode is FAILED_PRECONDITION.
+	DiskMode      v1.DaemonDiskMode `protobuf:"varint,13,opt,name=disk_mode,json=diskMode,proto3,enum=controlplane.v1.DaemonDiskMode" json:"disk_mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateDaemonRequest) Reset() {
@@ -170,6 +176,13 @@ func (x *CreateDaemonRequest) GetRefreshExisting() bool {
 		return x.RefreshExisting
 	}
 	return false
+}
+
+func (x *CreateDaemonRequest) GetDiskMode() v1.DaemonDiskMode {
+	if x != nil {
+		return x.DiskMode
+	}
+	return v1.DaemonDiskMode(0)
 }
 
 type CreateDaemonResponse struct {
@@ -417,7 +430,13 @@ type UpdateDaemonRequest struct {
 	// sets on every machine (DAEMON_*, RELIANT_*, WORKSPACE_*, PATH, HOME, the
 	// proxy variables, ...) are refused. A running machine picks the new set
 	// up the next time its pod is built: resume, resize or re-create.
-	Env           *MachineEnv `protobuf:"bytes,5,opt,name=env,proto3" json:"env,omitempty"`
+	Env *MachineEnv `protobuf:"bytes,5,opt,name=env,proto3" json:"env,omitempty"`
+	// idle_timeout, when present, replaces how long a managed machine may sit
+	// idle before it suspends (a duration such as "10m"; at most 4h). Absent
+	// leaves it as it is. It applies to the running machine at once: the
+	// operator reads it at every idle check. A machine pool sets its members'
+	// with it (the pool's member_idle_timeout).
+	IdleTimeout   *string `protobuf:"bytes,6,opt,name=idle_timeout,json=idleTimeout,proto3,oneof" json:"idle_timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -471,6 +490,13 @@ func (x *UpdateDaemonRequest) GetEnv() *MachineEnv {
 		return x.Env
 	}
 	return nil
+}
+
+func (x *UpdateDaemonRequest) GetIdleTimeout() string {
+	if x != nil && x.IdleTimeout != nil {
+		return *x.IdleTimeout
+	}
+	return ""
 }
 
 // MachineEnv is a managed machine's declared environment.
@@ -1413,7 +1439,7 @@ var File_services_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/daemon/v1/daemon.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\"\xd6\x03\n" +
+	"\x1fservices/daemon/v1/daemon.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\"\x94\x04\n" +
 	"\x13CreateDaemonRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\vdaemon_type\x18\x02 \x01(\x0e2\x1b.controlplane.v1.DaemonTypeR\n" +
@@ -1429,7 +1455,8 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04size\x18\n" +
 	" \x01(\x0e2\x1b.controlplane.v1.DaemonSizeR\x04size\x12!\n" +
 	"\fidle_timeout\x18\v \x01(\tR\vidleTimeout\x12)\n" +
-	"\x10refresh_existing\x18\f \x01(\bR\x0frefreshExisting\"G\n" +
+	"\x10refresh_existing\x18\f \x01(\bR\x0frefreshExisting\x12<\n" +
+	"\tdisk_mode\x18\r \x01(\x0e2\x1f.controlplane.v1.DaemonDiskModeR\bdiskMode\"G\n" +
 	"\x14CreateDaemonResponse\x12/\n" +
 	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\"/\n" +
 	"\x10GetDaemonRequest\x12\x1b\n" +
@@ -1444,11 +1471,13 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\f_daemon_typeB\t\n" +
 	"\a_status\"H\n" +
 	"\x13ListDaemonsResponse\x121\n" +
-	"\adaemons\x18\x01 \x03(\v2\x17.controlplane.v1.DaemonR\adaemons\"\x9a\x01\n" +
+	"\adaemons\x18\x01 \x03(\v2\x17.controlplane.v1.DaemonR\adaemons\"\xd3\x01\n" +
 	"\x13UpdateDaemonRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x19\n" +
 	"\bnew_name\x18\x02 \x01(\tR\anewName\x12-\n" +
-	"\x03env\x18\x05 \x01(\v2\x1b.controlplane.v1.MachineEnvR\x03envJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x05imageR\tresources\"\x80\x01\n" +
+	"\x03env\x18\x05 \x01(\v2\x1b.controlplane.v1.MachineEnvR\x03env\x12&\n" +
+	"\fidle_timeout\x18\x06 \x01(\tH\x00R\vidleTimeout\x88\x01\x01B\x0f\n" +
+	"\r_idle_timeoutJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x05imageR\tresources\"\x80\x01\n" +
 	"\n" +
 	"MachineEnv\x129\n" +
 	"\x04vars\x18\x01 \x03(\v2%.controlplane.v1.MachineEnv.VarsEntryR\x04vars\x1a7\n" +
@@ -1563,64 +1592,66 @@ var file_services_daemon_v1_daemon_proto_goTypes = []any{
 	(v1.DaemonType)(0),                   // 28: controlplane.v1.DaemonType
 	(*v1.ResourceRequirements)(nil),      // 29: controlplane.v1.ResourceRequirements
 	(v1.DaemonSize)(0),                   // 30: controlplane.v1.DaemonSize
-	(*v1.Daemon)(nil),                    // 31: controlplane.v1.Daemon
-	(v1.DaemonStatus)(0),                 // 32: controlplane.v1.DaemonStatus
-	(v1.PortAccessMode)(0),               // 33: controlplane.v1.PortAccessMode
-	(*v1.PortAccessRule)(nil),            // 34: controlplane.v1.PortAccessRule
+	(v1.DaemonDiskMode)(0),               // 31: controlplane.v1.DaemonDiskMode
+	(*v1.Daemon)(nil),                    // 32: controlplane.v1.Daemon
+	(v1.DaemonStatus)(0),                 // 33: controlplane.v1.DaemonStatus
+	(v1.PortAccessMode)(0),               // 34: controlplane.v1.PortAccessMode
+	(*v1.PortAccessRule)(nil),            // 35: controlplane.v1.PortAccessRule
 }
 var file_services_daemon_v1_daemon_proto_depIdxs = []int32{
 	28, // 0: controlplane.v1.CreateDaemonRequest.daemon_type:type_name -> controlplane.v1.DaemonType
 	29, // 1: controlplane.v1.CreateDaemonRequest.resources:type_name -> controlplane.v1.ResourceRequirements
 	30, // 2: controlplane.v1.CreateDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
-	31, // 3: controlplane.v1.CreateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	31, // 4: controlplane.v1.GetDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	28, // 5: controlplane.v1.ListDaemonsRequest.daemon_type:type_name -> controlplane.v1.DaemonType
-	32, // 6: controlplane.v1.ListDaemonsRequest.status:type_name -> controlplane.v1.DaemonStatus
-	31, // 7: controlplane.v1.ListDaemonsResponse.daemons:type_name -> controlplane.v1.Daemon
-	7,  // 8: controlplane.v1.UpdateDaemonRequest.env:type_name -> controlplane.v1.MachineEnv
-	27, // 9: controlplane.v1.MachineEnv.vars:type_name -> controlplane.v1.MachineEnv.VarsEntry
-	31, // 10: controlplane.v1.UpdateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	31, // 11: controlplane.v1.SuspendDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	31, // 12: controlplane.v1.ResumeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	30, // 13: controlplane.v1.ResizeDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
-	31, // 14: controlplane.v1.ResizeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
-	31, // 15: controlplane.v1.GrowDaemonDiskResponse.daemon:type_name -> controlplane.v1.Daemon
-	33, // 16: controlplane.v1.SetPortAccessRequest.access_mode:type_name -> controlplane.v1.PortAccessMode
-	34, // 17: controlplane.v1.SetPortAccessResponse.rule:type_name -> controlplane.v1.PortAccessRule
-	34, // 18: controlplane.v1.ListPortAccessRulesResponse.rules:type_name -> controlplane.v1.PortAccessRule
-	33, // 19: controlplane.v1.SetDefaultPortAccessRequest.default_access_mode:type_name -> controlplane.v1.PortAccessMode
-	31, // 20: controlplane.v1.SetDefaultPortAccessResponse.daemon:type_name -> controlplane.v1.Daemon
-	0,  // 21: controlplane.v1.DaemonService.CreateDaemon:input_type -> controlplane.v1.CreateDaemonRequest
-	2,  // 22: controlplane.v1.DaemonService.GetDaemon:input_type -> controlplane.v1.GetDaemonRequest
-	4,  // 23: controlplane.v1.DaemonService.ListDaemons:input_type -> controlplane.v1.ListDaemonsRequest
-	6,  // 24: controlplane.v1.DaemonService.UpdateDaemon:input_type -> controlplane.v1.UpdateDaemonRequest
-	9,  // 25: controlplane.v1.DaemonService.DeleteDaemon:input_type -> controlplane.v1.DeleteDaemonRequest
-	11, // 26: controlplane.v1.DaemonService.SuspendDaemon:input_type -> controlplane.v1.SuspendDaemonRequest
-	13, // 27: controlplane.v1.DaemonService.ResumeDaemon:input_type -> controlplane.v1.ResumeDaemonRequest
-	15, // 28: controlplane.v1.DaemonService.ResizeDaemon:input_type -> controlplane.v1.ResizeDaemonRequest
-	17, // 29: controlplane.v1.DaemonService.GrowDaemonDisk:input_type -> controlplane.v1.GrowDaemonDiskRequest
-	19, // 30: controlplane.v1.DaemonService.SetPortAccess:input_type -> controlplane.v1.SetPortAccessRequest
-	21, // 31: controlplane.v1.DaemonService.RemovePortAccess:input_type -> controlplane.v1.RemovePortAccessRequest
-	23, // 32: controlplane.v1.DaemonService.ListPortAccessRules:input_type -> controlplane.v1.ListPortAccessRulesRequest
-	25, // 33: controlplane.v1.DaemonService.SetDefaultPortAccess:input_type -> controlplane.v1.SetDefaultPortAccessRequest
-	1,  // 34: controlplane.v1.DaemonService.CreateDaemon:output_type -> controlplane.v1.CreateDaemonResponse
-	3,  // 35: controlplane.v1.DaemonService.GetDaemon:output_type -> controlplane.v1.GetDaemonResponse
-	5,  // 36: controlplane.v1.DaemonService.ListDaemons:output_type -> controlplane.v1.ListDaemonsResponse
-	8,  // 37: controlplane.v1.DaemonService.UpdateDaemon:output_type -> controlplane.v1.UpdateDaemonResponse
-	10, // 38: controlplane.v1.DaemonService.DeleteDaemon:output_type -> controlplane.v1.DeleteDaemonResponse
-	12, // 39: controlplane.v1.DaemonService.SuspendDaemon:output_type -> controlplane.v1.SuspendDaemonResponse
-	14, // 40: controlplane.v1.DaemonService.ResumeDaemon:output_type -> controlplane.v1.ResumeDaemonResponse
-	16, // 41: controlplane.v1.DaemonService.ResizeDaemon:output_type -> controlplane.v1.ResizeDaemonResponse
-	18, // 42: controlplane.v1.DaemonService.GrowDaemonDisk:output_type -> controlplane.v1.GrowDaemonDiskResponse
-	20, // 43: controlplane.v1.DaemonService.SetPortAccess:output_type -> controlplane.v1.SetPortAccessResponse
-	22, // 44: controlplane.v1.DaemonService.RemovePortAccess:output_type -> controlplane.v1.RemovePortAccessResponse
-	24, // 45: controlplane.v1.DaemonService.ListPortAccessRules:output_type -> controlplane.v1.ListPortAccessRulesResponse
-	26, // 46: controlplane.v1.DaemonService.SetDefaultPortAccess:output_type -> controlplane.v1.SetDefaultPortAccessResponse
-	34, // [34:47] is the sub-list for method output_type
-	21, // [21:34] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	31, // 3: controlplane.v1.CreateDaemonRequest.disk_mode:type_name -> controlplane.v1.DaemonDiskMode
+	32, // 4: controlplane.v1.CreateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	32, // 5: controlplane.v1.GetDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	28, // 6: controlplane.v1.ListDaemonsRequest.daemon_type:type_name -> controlplane.v1.DaemonType
+	33, // 7: controlplane.v1.ListDaemonsRequest.status:type_name -> controlplane.v1.DaemonStatus
+	32, // 8: controlplane.v1.ListDaemonsResponse.daemons:type_name -> controlplane.v1.Daemon
+	7,  // 9: controlplane.v1.UpdateDaemonRequest.env:type_name -> controlplane.v1.MachineEnv
+	27, // 10: controlplane.v1.MachineEnv.vars:type_name -> controlplane.v1.MachineEnv.VarsEntry
+	32, // 11: controlplane.v1.UpdateDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	32, // 12: controlplane.v1.SuspendDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	32, // 13: controlplane.v1.ResumeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	30, // 14: controlplane.v1.ResizeDaemonRequest.size:type_name -> controlplane.v1.DaemonSize
+	32, // 15: controlplane.v1.ResizeDaemonResponse.daemon:type_name -> controlplane.v1.Daemon
+	32, // 16: controlplane.v1.GrowDaemonDiskResponse.daemon:type_name -> controlplane.v1.Daemon
+	34, // 17: controlplane.v1.SetPortAccessRequest.access_mode:type_name -> controlplane.v1.PortAccessMode
+	35, // 18: controlplane.v1.SetPortAccessResponse.rule:type_name -> controlplane.v1.PortAccessRule
+	35, // 19: controlplane.v1.ListPortAccessRulesResponse.rules:type_name -> controlplane.v1.PortAccessRule
+	34, // 20: controlplane.v1.SetDefaultPortAccessRequest.default_access_mode:type_name -> controlplane.v1.PortAccessMode
+	32, // 21: controlplane.v1.SetDefaultPortAccessResponse.daemon:type_name -> controlplane.v1.Daemon
+	0,  // 22: controlplane.v1.DaemonService.CreateDaemon:input_type -> controlplane.v1.CreateDaemonRequest
+	2,  // 23: controlplane.v1.DaemonService.GetDaemon:input_type -> controlplane.v1.GetDaemonRequest
+	4,  // 24: controlplane.v1.DaemonService.ListDaemons:input_type -> controlplane.v1.ListDaemonsRequest
+	6,  // 25: controlplane.v1.DaemonService.UpdateDaemon:input_type -> controlplane.v1.UpdateDaemonRequest
+	9,  // 26: controlplane.v1.DaemonService.DeleteDaemon:input_type -> controlplane.v1.DeleteDaemonRequest
+	11, // 27: controlplane.v1.DaemonService.SuspendDaemon:input_type -> controlplane.v1.SuspendDaemonRequest
+	13, // 28: controlplane.v1.DaemonService.ResumeDaemon:input_type -> controlplane.v1.ResumeDaemonRequest
+	15, // 29: controlplane.v1.DaemonService.ResizeDaemon:input_type -> controlplane.v1.ResizeDaemonRequest
+	17, // 30: controlplane.v1.DaemonService.GrowDaemonDisk:input_type -> controlplane.v1.GrowDaemonDiskRequest
+	19, // 31: controlplane.v1.DaemonService.SetPortAccess:input_type -> controlplane.v1.SetPortAccessRequest
+	21, // 32: controlplane.v1.DaemonService.RemovePortAccess:input_type -> controlplane.v1.RemovePortAccessRequest
+	23, // 33: controlplane.v1.DaemonService.ListPortAccessRules:input_type -> controlplane.v1.ListPortAccessRulesRequest
+	25, // 34: controlplane.v1.DaemonService.SetDefaultPortAccess:input_type -> controlplane.v1.SetDefaultPortAccessRequest
+	1,  // 35: controlplane.v1.DaemonService.CreateDaemon:output_type -> controlplane.v1.CreateDaemonResponse
+	3,  // 36: controlplane.v1.DaemonService.GetDaemon:output_type -> controlplane.v1.GetDaemonResponse
+	5,  // 37: controlplane.v1.DaemonService.ListDaemons:output_type -> controlplane.v1.ListDaemonsResponse
+	8,  // 38: controlplane.v1.DaemonService.UpdateDaemon:output_type -> controlplane.v1.UpdateDaemonResponse
+	10, // 39: controlplane.v1.DaemonService.DeleteDaemon:output_type -> controlplane.v1.DeleteDaemonResponse
+	12, // 40: controlplane.v1.DaemonService.SuspendDaemon:output_type -> controlplane.v1.SuspendDaemonResponse
+	14, // 41: controlplane.v1.DaemonService.ResumeDaemon:output_type -> controlplane.v1.ResumeDaemonResponse
+	16, // 42: controlplane.v1.DaemonService.ResizeDaemon:output_type -> controlplane.v1.ResizeDaemonResponse
+	18, // 43: controlplane.v1.DaemonService.GrowDaemonDisk:output_type -> controlplane.v1.GrowDaemonDiskResponse
+	20, // 44: controlplane.v1.DaemonService.SetPortAccess:output_type -> controlplane.v1.SetPortAccessResponse
+	22, // 45: controlplane.v1.DaemonService.RemovePortAccess:output_type -> controlplane.v1.RemovePortAccessResponse
+	24, // 46: controlplane.v1.DaemonService.ListPortAccessRules:output_type -> controlplane.v1.ListPortAccessRulesResponse
+	26, // 47: controlplane.v1.DaemonService.SetDefaultPortAccess:output_type -> controlplane.v1.SetDefaultPortAccessResponse
+	35, // [35:48] is the sub-list for method output_type
+	22, // [22:35] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_services_daemon_v1_daemon_proto_init() }
@@ -1629,6 +1660,7 @@ func file_services_daemon_v1_daemon_proto_init() {
 		return
 	}
 	file_services_daemon_v1_daemon_proto_msgTypes[4].OneofWrappers = []any{}
+	file_services_daemon_v1_daemon_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

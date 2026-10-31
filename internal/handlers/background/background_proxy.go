@@ -223,6 +223,11 @@ func (s *Service) StreamProcessOutput(
 		return svcerr.InvalidArgument("process_id is required")
 	}
 
+	// A process lives on one machine. The router resolves a named one among
+	// the caller's own machines only, so another user's id is not found.
+	if daemonID := req.Msg.GetDaemonId(); daemonID != "" {
+		ctx = toolexec.WithDaemonSelector(ctx, &toolexec.DaemonSelector{ID: daemonID})
+	}
 	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
 	if err != nil {
 		return daemonFailure("subscribe process output", err)

@@ -1,0 +1,9 @@
+name: fixture
+entry: [review]
+nodes:
+# The agent is bounded by its turn budget.
+- id: review
+  type: workflow
+  ref: builtin://autopilot-agent
+  args:
+    max_turns: 40

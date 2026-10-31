@@ -37,6 +37,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// DeployServiceResolveHostedProjectProcedure is the fully-qualified name of the DeployService's
+	// ResolveHostedProject RPC.
+	DeployServiceResolveHostedProjectProcedure = "/controlplane.v1.DeployService/ResolveHostedProject"
 	// DeployServiceGetCapabilitiesProcedure is the fully-qualified name of the DeployService's
 	// GetCapabilities RPC.
 	DeployServiceGetCapabilitiesProcedure = "/controlplane.v1.DeployService/GetCapabilities"
@@ -173,6 +176,8 @@ const (
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
 type DeployServiceClient interface {
+	// Resolve server-owned project identity. Creation never guesses between orgs.
+	ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error)
 	// Feature negotiation is mandatory before sending immutable snapshot documents.
 	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
@@ -536,6 +541,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
 	return &deployServiceClient{
+		resolveHostedProject: connect.NewClient[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse](
+			httpClient,
+			baseURL+DeployServiceResolveHostedProjectProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ResolveHostedProject")),
+			connect.WithClientOptions(opts...),
+		),
 		getCapabilities: connect.NewClient[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse](
 			httpClient,
 			baseURL+DeployServiceGetCapabilitiesProcedure,
@@ -823,6 +834,7 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
+	resolveHostedProject    *connect.Client[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse]
 	getCapabilities         *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
 	getTenant               *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
 	createTenant            *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
@@ -870,6 +882,11 @@ type deployServiceClient struct {
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
 	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
 	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+}
+
+// ResolveHostedProject calls controlplane.v1.DeployService.ResolveHostedProject.
+func (c *deployServiceClient) ResolveHostedProject(ctx context.Context, req *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error) {
+	return c.resolveHostedProject.CallUnary(ctx, req)
 }
 
 // GetCapabilities calls controlplane.v1.DeployService.GetCapabilities.
@@ -1109,6 +1126,8 @@ func (c *deployServiceClient) GetDrift(ctx context.Context, req *connect.Request
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
 type DeployServiceHandler interface {
+	// Resolve server-owned project identity. Creation never guesses between orgs.
+	ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error)
 	// Feature negotiation is mandatory before sending immutable snapshot documents.
 	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
@@ -1468,6 +1487,12 @@ type DeployServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
+	deployServiceResolveHostedProjectHandler := connect.NewUnaryHandler(
+		DeployServiceResolveHostedProjectProcedure,
+		svc.ResolveHostedProject,
+		connect.WithSchema(deployServiceMethods.ByName("ResolveHostedProject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetCapabilitiesHandler := connect.NewUnaryHandler(
 		DeployServiceGetCapabilitiesProcedure,
 		svc.GetCapabilities,
@@ -1752,6 +1777,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case DeployServiceResolveHostedProjectProcedure:
+			deployServiceResolveHostedProjectHandler.ServeHTTP(w, r)
 		case DeployServiceGetCapabilitiesProcedure:
 			deployServiceGetCapabilitiesHandler.ServeHTTP(w, r)
 		case DeployServiceGetTenantProcedure:
@@ -1854,6 +1881,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedDeployServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeployServiceHandler struct{}
+
+func (UnimplementedDeployServiceHandler) ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ResolveHostedProject is not implemented"))
+}
 
 func (UnimplementedDeployServiceHandler) GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetCapabilities is not implemented"))

@@ -35,7 +35,7 @@ import {
   needsSetupItem,
   questionItem,
   renderInboxAt,
-  runFinishedItem,
+  runPausedItem,
   storageItem,
   waitingItem,
 } from "./inboxTestUtils";
@@ -267,11 +267,13 @@ describe("InboxPage item kinds", () => {
     expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1");
   });
 
-  it("a finished run opens its run", async () => {
-    respond([runFinishedItem()]);
+  it("a paused automation run says what paused it and opens the run", async () => {
+    respond([runPausedItem()]);
     const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+    const row = await screen.findByTestId("inbox-item-automation_run_paused:chat-1@20261030T082500.000000");
+    expect(within(row).getByLabelText("Automation run paused")).toBeInTheDocument();
+    expect(within(row).getByText("Paused: machine e164d47d did not answer the gate command")).toBeInTheDocument();
+    expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
@@ -443,6 +445,38 @@ describe("InboxPage states", () => {
 
 
 describe("InboxPage storage item", () => {
+  it("a machine near its process limit names the largest process trees by the agent that started each", async () => {
+    respond([
+      storageItem(
+        { itemId: "storage:d-1:procs:1760000000000" },
+        {
+          diskLow: false,
+          volumes: [],
+          held: [],
+          processes: {
+            count: 5_400n,
+            limit: 7_650n,
+            refusingHeavy: true,
+            top: [
+              { chatId: "a32b6a3d-0000", chatTitle: "Release gate under 1h", command: "bash scripts/ci-gate.sh all", tasks: 4_950n, tracked: true },
+              { chatId: "", command: "nohup /tmp/blitz/gate.sh 1631", tasks: 300n },
+            ],
+          },
+        },
+      ),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:procs:1760000000000");
+    expect(within(row).getByText("MacBook processes")).toBeInTheDocument();
+    expect(
+      within(row).getByText(
+        /5,400 of 7,650 processes \(71%\) · heavy background commands paused · Release gate under 1h: `bash scripts\/ci-gate\.sh all` 4,950 · untracked: `nohup \/tmp\/blitz\/gate\.sh 1631` 300/,
+      ),
+    ).toBeInTheDocument();
+    // Nothing to free or clean up: the disk is fine.
+    expect(within(row).queryByRole("button", { name: "Free up space" })).not.toBeInTheDocument();
+  });
+
   it("names the volume that is full and what fills it, and what it kept, under its own heading", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
@@ -550,14 +584,14 @@ describe("InboxPage storage item", () => {
   });
 
   it("while a clean-up runs, Clean up is disabled and says so", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
   });
 
   it("when nothing is removable, Clean up is disabled and explains why", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const button = within(row).getByRole("button", { name: "Clean up" });

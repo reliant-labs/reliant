@@ -5,7 +5,7 @@ package reliant.v1;
 
 import "forge/v1/forge.proto";
 import "reliant/v1/approval.proto";
-import "reliant/v1/tools_daemon.proto"; // for DiskVolume
+import "reliant/v1/tools_daemon.proto"; // for DiskVolume, ProcessReport
 import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -74,14 +74,19 @@ enum InboxItemKind {
   INBOX_ITEM_KIND_QUESTION = 2;
   // A live run is blocked on a suspended or starting machine. Blocks a run.
   INBOX_ITEM_KIND_WAITING_FOR_MACHINE = 3;
-  // An automation's health is FAILING. Informational.
+  // A run an automation launched failed (or its health is FAILING, or it is
+  // BROKEN), and no later run of it has succeeded. One item per failure
+  // streak; a later successful run resolves it. Informational.
   INBOX_ITEM_KIND_AUTOMATION_FAILING = 4;
   // An automation's newest firing failed to launch and no later firing has.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED = 5;
-  // An automation that opted in (Trigger.notify_on_complete) completed a run
-  // that has not been opened yet. Informational.
-  INBOX_ITEM_KIND_RUN_FINISHED = 6;
+  // 6 was RUN_FINISHED: a successful run of an automation with
+  // notify_on_complete. A run that completed successfully never puts anything
+  // in the Inbox, whatever its automation's notify setting: the Inbox lists
+  // what needs the person (waiting for input or approval, failed, broken).
+  reserved 6;
+  reserved "INBOX_ITEM_KIND_RUN_FINISHED";
   // A machine is low on disk, or holds archived worktrees it will not remove
   // on its own. One item per machine. Informational.
   INBOX_ITEM_KIND_STORAGE = 7;
@@ -93,6 +98,20 @@ enum InboxItemKind {
   INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP = 8;
   // Retained Git-host recovery, even if its source row/machine is gone.
   INBOX_ITEM_KIND_RECOVERY = 9;
+  // A run an automation launched is paused: a step failed and the run is
+  // waiting to retry it. While it is paused it holds its automation's
+  // capacity slot, so later firings queue behind it. An unattended run retries
+  // on its own and ends, failed, if the cause does not clear; this item says
+  // what paused it in the meantime. One item per pause. Informational.
+  INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED = 10;
+  // The newest version of a workflow file that enabled automations run does
+  // not parse or validate, so every firing of them is refused until a valid
+  // version is synced. ONE item per broken version (machine, file, content
+  // hash), however many automations and firings it refuses; it names the
+  // file, the error and the branch and commit, and leaves the list when a
+  // valid version lands. It replaces those automations' own failing items.
+  // Informational.
+  INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 11;
 }
 
 message ListInboxRequest {
@@ -130,11 +149,12 @@ message InboxItem {
 
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-  // "automation_launch_failed:", "run_finished:", "storage:",
-  // "automation_needs_setup:"). Approvals and questions
+  // "automation_launch_failed:", "storage:",
+  // "automation_needs_setup:", "automation_run_paused:"). An automation run
+  // paused embeds the chat id and when the failure that paused it happened,
+  // so a later pause is a new item. Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
-  // block began, so a later block is a new item; run-finished embeds the chat
-  // id. Automation failure items embed the id of the FIRST failing event of the
+  // block began, so a later block is a new item. Automation failure items embed the id of the FIRST failing event of the
   // current failure episode, so repeated failures stay one item and a new
   // episode is a new item. A needs-setup item embeds the automation and the
   // set of inputs it is missing, so dismissing it holds until a workflow edit
@@ -166,11 +186,24 @@ message InboxItem {
     InboxWaitingForMachine waiting_for_machine = 22;
     InboxAutomationFailing automation_failing = 23;
     InboxAutomationLaunchFailed automation_launch_failed = 24;
-    InboxRunFinished run_finished = 25;
     InboxStorage storage = 26;
     InboxAutomationNeedsSetup automation_needs_setup = 27;
     RecoveryInboxItem recovery = 28;
+    InboxAutomationRunPaused automation_run_paused = 29;
+    InboxAutomationDefinitionBroken automation_definition_broken = 30;
   }
+  // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
+  reserved 25;
+  reserved "run_finished";
+}
+
+// InboxAutomationRunPaused is a paused run of an automation. The item's
+// chat_id is the run to open; waiting_since is when the step that paused it
+// failed.
+message InboxAutomationRunPaused {
+  // The failure that paused the run (the failing step's error), or empty
+  // when none was recorded.
+  string reason = 1;
 }
 
 // Catalog-backed information; RestoreInboxItem still only undismisses.
@@ -228,6 +261,23 @@ message InboxAutomationFailing {
 // InboxAutomationNeedsSetup is an automation waiting for its owner to finish
 // setting it up. The item's workflow_name and project_id locate the workflow
 // page's automation.
+// InboxAutomationDefinitionBroken is one broken version of one workflow file
+// and the enabled automations it refuses.
+message InboxAutomationDefinitionBroken {
+  // The broken version: path, machine, branch, commit, content hash and the
+  // error.
+  TriggerEventDefinition definition = 1;
+
+  // The enabled automations whose firings it refuses, by name.
+  repeated InboxRefusedAutomation automations = 2;
+}
+
+// InboxRefusedAutomation is one automation a broken definition refuses.
+message InboxRefusedAutomation {
+  string trigger_id = 1;
+  string trigger_name = 2;
+}
+
 message InboxAutomationNeedsSetup {
   // What is missing, one entry per workflow input, in input-name order.
   repeated TriggerSetupIssue issues = 1;
@@ -242,11 +292,6 @@ message InboxAutomationLaunchFailed {
   // How many consecutive firings have failed to launch in this episode.
   int32 consecutive_failures = 3;
 }
-
-// InboxRunFinished is a completed run of an automation that opted in to
-// notifications. Open the item's chat_id to read the result; opening it clears
-// the item.
-message InboxRunFinished {}
 
 message DismissInboxItemRequest {
   // One row, or a whole section ("Dismiss all").
@@ -289,6 +334,10 @@ message InboxStorage {
   // pressure names itself ("build caches & docker") and, while it is, what is
   // using it.
   repeated DiskVolume volumes = 9;
+  // Set while the machine is refusing new background heavy commands because
+  // it is near its process limit: the count, the limit, and the largest
+  // process trees by the agent that started them.
+  ProcessReport processes = 10;
 }
 
 // HeldWorktree is one archived workspace kept on a machine, and why.

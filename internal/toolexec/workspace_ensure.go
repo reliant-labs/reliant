@@ -70,6 +70,13 @@ type WorkspaceEnsureRequest struct {
 	WorktreeID string                `json:"worktree_id,omitempty"`
 	Branch     string                `json:"branch,omitempty"`
 	Repos      []WorkspaceEnsureRepo `json:"repos,omitempty"`
+	// Retire is the archive fence of a worktree that was just made live again
+	// (its chat is working in it after the sweep archived it). Before looking
+	// at the directory the daemon re-locks every checkout still there as
+	// restored under this fence — the same retirement an unarchive makes —
+	// so a removal already in flight for that archive refuses, and checkouts
+	// it recreates are locked the same way.
+	Retire string `json:"retire,omitempty"`
 
 	// FallbackPath is where to run when Path is gone and cannot be recreated:
 	// the project's main checkout. When it is empty or missing too, the daemon
@@ -94,6 +101,9 @@ const (
 	// WorkspaceIncomplete: Path exists, but some of its checkouts are missing
 	// and could not be recreated. Calls still run in Path.
 	WorkspaceIncomplete = "incomplete"
+	// WorkspaceBlocked: cleanup has not positively retired. No machine tools
+	// may run in this workspace (or silently fall back); retry safely later.
+	WorkspaceBlocked = "blocked"
 )
 
 // WorkspaceEnsureResponse is the daemon's answer.

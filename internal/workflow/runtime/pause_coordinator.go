@@ -2,8 +2,10 @@
 package runtime
 
 import (
+	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -26,11 +28,15 @@ const resumeHoldVersionGate = "resume-hold"
 // does it itself, backing off because a cause that survived the last wait is
 // less likely to clear in the same interval again.
 //
-// The ladder is FINITE on purpose. After it runs out the run parks exactly as
-// it does today, because a self-pause that survived 33 minutes of escalating
-// retries is no longer evidence of a rate limit — it is evidence that
-// something needs a person, and burning tokens against it forever is worse
-// than stopping where a person can see it.
+// The ladder is FINITE on purpose: a self-pause that survived 33 minutes of
+// escalating retries is no longer evidence of a rate limit or a blip, and
+// burning tokens against it forever is worse than stopping. When it runs out
+// the run ENDS, failed with the cause (unattendedPauseGiveUpChangeID). It used
+// to park for a person instead, but nobody is watching an unattended run, and
+// a parked run is still an open Temporal execution: it held its automation's
+// capacity slot until someone noticed (cp-merge, 2026-10-30: two hours, every
+// later firing queued behind it). Ending it closes the chain, which frees the
+// slot on the next reconcile (#1850), and the failure is what the owner sees.
 var selfPauseBackoff = []time.Duration{
 	1 * time.Minute,
 	2 * time.Minute,
@@ -46,6 +52,31 @@ var selfPauseBackoff = []time.Duration{
 // long. The ladder is meant to bound one episode of a persistent cause, and an
 // episode that has been quiet this long is over.
 const selfPauseLadderReset = 30 * time.Minute
+
+// unattendedPauseGiveUpChangeID gates ending an unattended run whose
+// self-pause outlived selfPauseBackoff (workflow.GetVersion). It is consulted
+// only where the old and new shapes first differ — the ladder running out —
+// so a history recorded before it keeps parking there on replay.
+const unattendedPauseGiveUpChangeID = "unattended-pause-gives-up"
+
+// unattendedPauseGaveUpErrType is the error type an unattended run ends with
+// when its self-pause outlived the ladder.
+const unattendedPauseGaveUpErrType = "UnattendedPauseGaveUp"
+
+// unattendedPauseGaveUp is the error that ends an unattended run whose
+// self-pause outlived the ladder: what paused it, and how long it tried.
+func unattendedPauseGaveUp(cause error) error {
+	var total time.Duration
+	for _, d := range selfPauseBackoff {
+		total += d
+	}
+	msg := fmt.Sprintf("ended this unattended run: it paused itself and the cause did not clear after %d automatic retries over %s, so it was stopped rather than left holding its automation",
+		len(selfPauseBackoff), total)
+	if cause != nil {
+		msg += ". Cause: " + cleanTemporalError(cause.Error())
+	}
+	return temporal.NewNonRetryableApplicationError(msg, unattendedPauseGaveUpErrType, nil)
+}
 
 // pauseCoordinator owns the workflow's cooperative pause/resume machinery:
 // the signal.pause / signal.resume channels, the shared cancellable activity
@@ -116,6 +147,13 @@ type pauseCoordinator struct {
 	// selfPauseLadderReset starts the ladder over.
 	selfResumes    int
 	lastSelfResume time.Time
+	// selfPauseCause is the failure that armed the current self-pause
+	// (noteSelfPauseCause), named in the run's failure if it gives up.
+	selfPauseCause error
+	// gaveUp is set, once and for good, when an unattended run's self-pause
+	// outlived the ladder: the run must end with it. Every site that
+	// self-pauses reads it (GaveUp) before pausing and after resuming.
+	gaveUp error
 
 	activityCtx workflow.Context
 	cancelAll   workflow.CancelFunc
@@ -264,8 +302,25 @@ func (pc *pauseCoordinator) selfResumeLoop(gCtx workflow.Context) {
 			pc.selfResumes = 0
 		}
 		if pc.selfResumes >= len(selfPauseBackoff) {
-			// Ladder exhausted. Park exactly as an attended run does — a cause
-			// that outlived every rung needs a person, not another retry.
+			// Ladder exhausted: end the run with the cause (see
+			// selfPauseBackoff). The pause is released so the site that armed
+			// it wakes, reads GaveUp and returns it.
+			if workflow.GetVersion(gCtx, unattendedPauseGiveUpChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+				if pc.gaveUp == nil {
+					pc.gaveUp = unattendedPauseGaveUp(pc.selfPauseCause)
+					if !workflow.IsReplaying(gCtx) {
+						workflow.GetLogger(pc.root).Warn("[Workflow Runtime] Unattended self-resume ladder exhausted; ending the run",
+							"workflowID", pc.workflowID,
+							"selfResumes", pc.selfResumes,
+							"cause", pc.selfPauseCause,
+						)
+					}
+				}
+				pc.broadcastResume()
+				continue
+			}
+			// A history recorded before the give-up parks exactly as an
+			// attended run does.
 			if !workflow.IsReplaying(gCtx) {
 				workflow.GetLogger(pc.root).Warn("[Workflow Runtime] Unattended self-resume ladder exhausted, staying paused for a human",
 					"workflowID", pc.workflowID,
@@ -346,6 +401,15 @@ func (pc *pauseCoordinator) Arm() {
 // capacity wake may release; any other stays for a resume.
 func (pc *pauseCoordinator) noteSelfPauseCause(err error) {
 	pc.capacityPause = pc.selfPaused && providerCapacityError(err)
+	if pc.selfPaused {
+		pc.selfPauseCause = err
+	}
+}
+
+// GaveUp is the error an unattended run must end with because its self-pause
+// outlived the ladder, or nil. Once set it stays set: the run is ending.
+func (pc *pauseCoordinator) GaveUp() error {
+	return pc.gaveUp
 }
 
 // releaseCapacityPause ends a self-pause armed on a provider-capacity failure,

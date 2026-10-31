@@ -23,7 +23,7 @@ const (
 	ConsumerScanInterval = 5 * time.Minute
 	// consumerScanBudget bounds one whole scan; dirBudget and dirMaxEntries
 	// bound one directory. A walk cut short reports a lower bound.
-	consumerScanBudget = 60 * time.Second
+	consumerScanBudget = 90 * time.Second
 	dirBudget          = 15 * time.Second
 	dirMaxEntries      = 1_000_000
 	// maxConsumers caps what a volume reports, biggest first.
@@ -69,17 +69,22 @@ func isGoFormatCache(kind string) bool {
 // measured on their own). For a Go-format cache it also sums the entries
 // untouched since cutoff: what a trim would free.
 func measureDir(ctx context.Context, root string, skip map[string]bool, goCache bool, cutoff time.Time) dirMeasure {
+	return measureDirWithin(ctx, root, skip, goCache, cutoff, dirBudget, dirMaxEntries)
+}
+
+// measureDirWithin is measureDir with its own time and entry limits.
+func measureDirWithin(ctx context.Context, root string, skip map[string]bool, goCache bool, cutoff time.Time, budget time.Duration, maxEntries int) dirMeasure {
 	var m dirMeasure
 	rootInfo, err := os.Lstat(root)
 	if err != nil || !rootInfo.IsDir() {
 		return m
 	}
-	ctx, cancel := context.WithTimeout(ctx, dirBudget)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	rootDev, hasDev := deviceOf(rootInfo)
 	entries := 0
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if ctx.Err() != nil || entries >= dirMaxEntries {
+		if ctx.Err() != nil || entries >= maxEntries {
 			m.approx = true
 			return fs.SkipAll
 		}
@@ -219,7 +224,12 @@ func (w *Watcher) measureConsumers(ctx context.Context, v *volume) []*reliantv1.
 			measured = append(measured, m.Path)
 		}
 	}
-	for _, m := range v.members {
+	// The worktree root goes first, with a budget of its own: it is usually
+	// the biggest thing on the volume, and the cache walks below must not
+	// spend the scan before it is reached.
+	members := append([]member(nil), v.members...)
+	sort.SliceStable(members, func(i, j int) bool { return members[i].Kind == KindWorktrees && members[j].Kind != KindWorktrees })
+	for _, m := range members {
 		if m.Kind == "" || m.resolved != m.Path {
 			continue
 		}
@@ -229,7 +239,15 @@ func (w *Watcher) measureConsumers(ctx context.Context, v *volume) []*reliantv1.
 				skip[other] = true
 			}
 		}
-		dm := measureDir(ctx, m.Path, skip, isGoFormatCache(m.Kind), cutoff)
+		var dm dirMeasure
+		if m.Kind == KindWorktrees {
+			// Tens of millions of files (node_modules, mostly): one walk
+			// stopped after a few GB and "Other" got the rest. Each worktree
+			// is measured on its own and remembered across scans.
+			dm = w.wtSizes.measure(ctx, m.Path, w.now())
+		} else {
+			dm = measureDir(ctx, m.Path, skip, isGoFormatCache(m.Kind), cutoff)
+		}
 		if dm.bytes == 0 {
 			continue
 		}

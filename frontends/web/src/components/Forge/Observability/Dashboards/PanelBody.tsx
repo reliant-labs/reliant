@@ -126,11 +126,11 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     );
   }
   if (waitingForCapacity(query)) {
-    if (compact) return <p className="text-xs text-ink-muted" title="Waiting for capacity…">…</p>;
+    if (compact) return <p className="text-xs text-ink-muted" title="Queued…">…</p>;
     return (
       <p role="status" className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-panel-waiting">
         <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-        Waiting for capacity…
+        Queued…
       </p>
     );
   }
@@ -414,6 +414,8 @@ function LineChart({
         label={panel.title}
         compact={compact}
         bands={bands}
+        window={data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }}
+        calendar={data.bucketTimezone === "UTC" ? { timezone: "UTC", bucketSeconds: data.bucketSeconds } : undefined}
         // The drill-down legend below names the series; uPlot's would repeat them.
         legend={!compact && !onDrill}
       />

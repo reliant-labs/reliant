@@ -465,8 +465,9 @@ event: evaluation does not require enabling the trigger or waiting for a real ev
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with ` + bt + `--activation-params` + bt + ` and ` + bt + `--owner-github-id` + bt + ` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
-` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused.
+A deliberate start by hand still works: Run now, ` + bt + `reliant workflow run` + bt + `, an agent's ` + bt + `start_run` + bt + ` and a
+builder test run. Leave it unset for anything a person starts by chatting. A helper that only
 other workflows ` + bt + `ref:` + bt + ` sets ` + bt + `hidden: true` + bt + ` as well: hidden keeps it out of every picker and listing, and
 the pair marks it as an automation's internal step.
 
@@ -474,7 +475,11 @@ the pair marks it as an automation's internal step.
 Workflows → Runs, named by its automation. Once it finishes successfully it archives itself (still in Runs, marked
 Archived). A failed run, a completion into a declared ` + bt + `outcome: failure` + bt + `, a cancelled run and one awaiting input stay
 unarchived so they surface. So route a blocked or punted path to a terminal node with ` + bt + `outcome: failure` + bt + ` when a person
-should look at it. An automation with "notify me when it finishes" keeps its successful runs too.
+should look at it. An automation with "notify me when a run succeeds" keeps its successful runs too, and raises a
+desktop notification for each. A successful run is never an Inbox item, whatever that setting says: the Inbox holds
+what needs a person (a question, an approval, a failed run, a broken automation), and a later successful run clears
+the automation's failure item. A workflow that must tell a person something after a success does it with an explicit
+step: a Slack, SMS or email message, or an async ask_user question.
 
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 

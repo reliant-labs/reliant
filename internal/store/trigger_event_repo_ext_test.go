@@ -252,25 +252,25 @@ func TestTriggerEventQueries(t *testing.T) {
 	if stale, _ := store.ListStalePendingTriggerEvents(ctx, env.ORM, cutoff, 0); len(stale) != 2 || stale[0].ID != "ev-pending-0" || stale[1].ID != "ev-pending-1" {
 		t.Fatalf("ListStalePendingTriggerEvents = %+v, want the two stale ones, oldest first", stale)
 	}
-	if claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, "ev-pending-0", map[string]any{"start": "x"}); err != nil || !claimed {
+	if claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, "ev-pending-0", map[string]any{"start": "x"}, nil); err != nil || !claimed {
 		t.Fatalf("ClaimPendingTriggerEvent = %v, %v; want claimed", claimed, err)
 	}
-	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-0", nil); err != nil || claimed {
+	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-0", nil, nil); err != nil || claimed {
 		t.Fatalf("Repo.ClaimPendingTriggerEvent(claimed) = %v, %v; want the loser", claimed, err)
 	}
-	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-0", core.TriggerEventSkipped, "late"); err != nil || settled {
+	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-0", core.TriggerEventSkipped, "late", nil); err != nil || settled {
 		t.Fatalf("SettlePendingTriggerEvent(launched) = %v, %v; want no overwrite", settled, err)
 	}
 	if c, _ := env.Repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindWebhook, "dd-ev-pending-0"); c.Outcome != core.TriggerEventLaunched || c.OutcomeDetail != "" || c.Payload["start"] != "x" {
 		t.Fatalf("claimed event = %+v", c)
 	}
-	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventSkipped, "filtered"); err != nil || !settled {
+	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventSkipped, "filtered", nil); err != nil || !settled {
 		t.Fatalf("SettlePendingTriggerEvent = %v, %v; want settled", settled, err)
 	}
-	if settled, err := env.Repo.SettlePendingTriggerEvent(ctx, "ev-pending-1", core.TriggerEventFailed, "again"); err != nil || settled {
+	if settled, err := env.Repo.SettlePendingTriggerEvent(ctx, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
 		t.Fatalf("Repo.SettlePendingTriggerEvent(settled) = %v, %v; want not applied", settled, err)
 	}
-	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-2", map[string]any{"start": "y"}); err != nil || !claimed {
+	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-2", map[string]any{"start": "y"}, nil); err != nil || !claimed {
 		t.Fatalf("Repo.ClaimPendingTriggerEvent = %v, %v", claimed, err)
 	}
 	if c, _ := store.GetTriggerEventByDedupe(ctx, env.ORM, core.TriggerEventKindWebhook, "dd-ev-pending-2"); c.Outcome != core.TriggerEventLaunched || c.Payload["start"] != "y" {

@@ -666,7 +666,7 @@ export function InlineAutomationForm({
               className="forge-ui"
             />
           </div>
-          <p className={hintClass}>Failures always notify you, once per streak.</p>
+          <p className={hintClass}>A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.</p>
         </div>
 
         {(when.kind === "schedule" || showWritesAsInAdvanced) && (

@@ -63,6 +63,14 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 // and `approved_by` are set by the server from the caller's credential on
 // every one of these paths, including the two exceptions.
 service DeployService {
+  // Resolve server-owned project identity. Creation never guesses between orgs.
+  rpc ResolveHostedProject(ResolveHostedProjectRequest) returns (ResolveHostedProjectResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "Project identity resolution is also used before binding an unbound target."}
+    };
+  }
   // Feature negotiation is mandatory before sending immutable snapshot documents.
   rpc GetCapabilities(GetDeployCapabilitiesRequest) returns (GetDeployCapabilitiesResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -862,6 +870,19 @@ message GetDeployCapabilitiesResponse {
   // "object-summaries"). forge sends a hosted bundle only the parts named here;
   // a server that names none gets the document every older decoder knew.
   repeated string bundle_document_features = 4;
+}
+
+message ResolveHostedProjectRequest {
+  string project_id = 1;
+  string name = 2;
+  // Only used for unbound creation or explicit org administration.
+  optional string org_id = 3;
+  bool create = 4;
+}
+message ResolveHostedProjectResponse {
+  string project_id = 1;
+  string org_id = 2;
+  string name = 3;
 }
 
 message GetDeployTenantRequest {

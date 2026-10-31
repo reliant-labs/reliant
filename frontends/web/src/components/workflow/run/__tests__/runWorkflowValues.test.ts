@@ -81,6 +81,13 @@ describe("required inputs", () => {
     expect(coerceInputValue(input("github.label", "integrationInput"), "")).toBeUndefined();
   });
 
+  it("always sends a list for a multi typed input, even from a single value", () => {
+    // Chat 34cf88e4: `repos` arrived as "reliant-labs/control-plane" and the run failed.
+    const repos = input("github.repository", "integrationInput", { multi: true });
+    expect(coerceInputValue(repos, "reliant-labs/control-plane")).toEqual(["reliant-labs/control-plane"]);
+    expect(coerceInputValue(input("github.repository", "integrationInput"), "acme/api")).toBe("acme/api");
+  });
+
   it("counts a value from a preset or an override, and an empty model as unset", () => {
     const groups = [
       {

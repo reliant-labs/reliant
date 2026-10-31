@@ -102,27 +102,46 @@ type MachineWorkflowResolver interface {
 
 // resolveTriggerWorkflow loads the workflow t's runs execute: on t's target
 // machine when it has one and the resolver can read a machine's catalog.
+//
+// A pool-bound trigger has no machine of its own; it reads the pool's agreed
+// catalog through the member bindPoolCatalog chose (CatalogDaemonID).
 func resolveTriggerWorkflow(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*reliantv1.Workflow, error) {
-	if m, ok := workflows.(MachineWorkflowResolver); ok && t.DaemonID != "" {
-		return m.ResolveRunWorkflowOn(ctx, t.UserID, t.Workflow, t.ProjectID, t.DaemonID)
+	machine := t.DaemonID
+	if machine == "" {
+		machine = t.CatalogDaemonID
+	}
+	if m, ok := workflows.(MachineWorkflowResolver); ok && machine != "" {
+		return m.ResolveRunWorkflowOn(ctx, t.UserID, t.Workflow, t.ProjectID, machine)
 	}
 	return workflows.ResolveRunWorkflow(ctx, t.UserID, t.Workflow, t.ProjectID)
 }
 
 // LaunchWorkflows is the WorkflowResolver over the launcher's store: the same
-// resolution every run start uses.
-type LaunchWorkflows struct{ Repo launch.WorkflowResolver }
+// resolution every run start uses. CatalogPin, when set, resolves against
+// that catalog snapshot instead of the live catalog: the one a firing was
+// decided against (FiringDefinition, PinnedTo).
+type LaunchWorkflows struct {
+	Repo       launch.WorkflowResolver
+	CatalogPin string
+}
 
 var _ MachineWorkflowResolver = LaunchWorkflows{}
 
 // ResolveRunWorkflow implements WorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, launch.AutomationScope(userID, projectID, ""), workflow)
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, w.scope(userID, projectID, ""), workflow)
+}
+
+// scope is AutomationScope at w's catalog pin.
+func (w LaunchWorkflows) scope(userID, projectID, daemonID string) launch.Scope {
+	scope := launch.AutomationScope(userID, projectID, daemonID)
+	scope.CatalogPin = w.CatalogPin
+	return scope
 }
 
 // ResolveRunWorkflowOn implements MachineWorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflowOn(ctx context.Context, userID, workflow, projectID, daemonID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, launch.AutomationScope(userID, projectID, daemonID), workflow)
+	return launch.ResolveValidatedRunWorkflowOn(ctx, w.Repo, w.scope(userID, projectID, daemonID), workflow)
 }
 
 // ResolveDeclaration reads the declaration t activates from its workflow and
@@ -513,6 +532,12 @@ func BrokenHealth(err *DeclarationError) *reliantv1.TriggerHealth {
 type CachedWorkflows struct {
 	inner WorkflowResolver
 	cache map[[4]string]cachedWorkflow
+	defs  map[[4]string]cachedDefinition
+}
+
+type cachedDefinition struct {
+	def *core.TriggerEventDefinition
+	err error
 }
 
 var _ MachineWorkflowResolver = (*CachedWorkflows)(nil)
@@ -524,7 +549,7 @@ type cachedWorkflow struct {
 
 // NewCachedWorkflows wraps inner for the life of one request.
 func NewCachedWorkflows(inner WorkflowResolver) *CachedWorkflows {
-	return &CachedWorkflows{inner: inner, cache: map[[4]string]cachedWorkflow{}}
+	return &CachedWorkflows{inner: inner, cache: map[[4]string]cachedWorkflow{}, defs: map[[4]string]cachedDefinition{}}
 }
 
 // ResolveRunWorkflow implements WorkflowResolver.

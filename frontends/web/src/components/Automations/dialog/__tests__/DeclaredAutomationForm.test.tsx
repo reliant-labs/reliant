@@ -491,7 +491,7 @@ describe("DeclaredAutomationForm: set up", () => {
   it("words the notification as what it adds: failures always notify (O7)", async () => {
     render([nightly]);
     expect(await screen.findByRole("switch", { name: "Notify me when a run succeeds" })).toBeInTheDocument();
-    expect(screen.getByText("Failures always notify you, once per streak.")).toBeInTheDocument();
+    expect(screen.getByText("A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.")).toBeInTheDocument();
   });
 
   it("names the trigger it was opened from, and turns the whole set on together", async () => {

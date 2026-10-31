@@ -357,9 +357,16 @@ tasks:
         if: '[ -z "{{.CLI_ARGS}}" ]'
 
   test:integration:
-    desc: Run integration tests (-tags=integration)
+    # Only the packages with integration-tagged test files
+    # (scripts/integration-packages.sh); `--` args replace them. `./...` re-ran
+    # every unit test under an unused tag, since no file carries it.
+    desc: Run integration tests (-tags=integration) in the packages that have them
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - |
+        pkgs="{{.CLI_ARGS}}"
+        [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
+        if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
+        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
@@ -564,18 +571,33 @@ tasks:
 
   contract:controlplane:check:
     # proto-vendor/controlplane/ is a generated `buf export` of control-plane's
-    # public protos. CONTROL_PLANE_DIR is a control-plane checkout at main
-    # (default ../control-plane); control-plane is private, so CI reads it
-    # with a deploy key. --require: a missing sibling or buf fails rather than
-    # reporting a pass that checked nothing.
-    desc: "Fail unless proto-vendor/controlplane/ is exactly what control-plane main exports (CONTROL_PLANE_DIR, buf on PATH)"
+    # public protos, and its SOURCE names the control-plane commit it came
+    # from. This judges the tree against that declaration, never against
+    # control-plane's moving main: the tree must be exactly SOURCE's export,
+    # and SOURCE must be on control-plane main. CONTROL_PLANE_DIR is a
+    # control-plane checkout holding that commit (default ../control-plane);
+    # control-plane is private, so CI reads it with a deploy key. --require: a
+    # missing sibling, commit or buf fails rather than reporting a pass that
+    # checked nothing.
+    desc: "Fail unless proto-vendor/controlplane/ is exactly what its SOURCE control-plane commit exports, and SOURCE is on control-plane main (CONTROL_PLANE_DIR, buf on PATH)"
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs --check --require
 
+  contract:controlplane:drift:
+    # How far proto-vendor/controlplane/ is behind CONTROL_PLANE_DIR's checked-
+    # out tree (control-plane main). The script exits 3 when behind (Task
+    # reports that as 201; `task --exit-code` keeps the 3). Never a gate:
+    # .github/workflows/cp-contract-drift.yml runs the script directly and
+    # turns it into one open issue.
+    desc: "Report whether proto-vendor/controlplane/ is behind control-plane main (exit 3 when it is; CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs --upstream --require {{.CLI_ARGS}}
+
   contract:controlplane:sync:
     # Pull control-plane main's public contract into proto-vendor/controlplane/
-    # (a `buf export` over its proto/public-api.txt), then regenerate the
-    # clients from it. contract:controlplane:check is the drift gate.
+    # (a `buf export` over its proto/public-api.txt, plus SOURCE naming the
+    # commit), then regenerate the clients from it. CONTROL_PLANE_DIR must be a
+    # clean checkout of a commit on control-plane main.
     desc: "Re-vendor control-plane's public protos into proto-vendor/controlplane/ and regenerate the clients (CONTROL_PLANE_DIR, buf on PATH)"
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs
@@ -788,6 +810,16 @@ tasks:
     cmds:
       - '{{.GEN_GO}} run ./tools/docgen/changelog/... {{.MINTLIFY_DOCS_DIR}}/data/releases {{.MINTLIFY_DOCS_DIR}}/changelog.mdx'
 
+  generate:docs:changelog:draft:
+    # What the release workflow runs before ./scripts/release.sh (control-plane
+    # scripts/release-chain/reliant-bump.sh). Deterministic; refuses to replace an
+    # existing file (FORCE=1 does).
+    desc: Write docs/data/releases/VERSION.yaml from the PR titles merged since SINCE_TAG, grouped by conventional-commit type
+    requires:
+      vars: [VERSION, SINCE_TAG]
+    cmds:
+      - '{{.GEN_GO}} run ./tools/releasenotes --version {{.VERSION}} --since {{.SINCE_TAG}} --to {{.TO | default "HEAD"}} --out {{.MINTLIFY_DOCS_DIR}}/data/releases/{{.VERSION}}.yaml{{if .FORCE}} --force{{end}}'
+
   generate:docs:mintlify-reference:
     desc: Convert the generated reference markdown into Mintlify .mdx pages
     cmds:
@@ -880,10 +912,23 @@ tasks:
     cmds:
       - ./scripts/release-tag.sh --dry-run
 
+  flake:report:test:
+    desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
+    cmds:
+      - ./scripts/test-flake-report.sh
+
   release:lock:test:
     desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote
     cmds:
       - ./scripts/test-release-lock.sh
+
+  release:lock:sync:
+    desc: Copy scripts/release-lock.sh and its self-test from the pinned forge, their one source (TestReleaseLockIsForgesCopy holds them identical)
+    cmds:
+      - |
+        dir="$(go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/reliant-labs/forge)"
+        install -m 0644 "$dir/scripts/release-lock.sh" scripts/release-lock.sh
+        install -m 0755 "$dir/scripts/test-release-lock.sh" scripts/test-release-lock.sh
 
   release:check-tags:
     desc: Verify every release tag is an ancestor of main

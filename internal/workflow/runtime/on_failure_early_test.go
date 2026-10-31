@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -50,10 +52,13 @@ func TestOnFailure_RunsWhenTemplateResolutionFailsBeforeAnyNode(t *testing.T) {
 	wfJSON, err := protojson.Marshal(wf)
 	require.NoError(t, err)
 
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		return LoadedWorkflow{YAML: []byte(earlyFailureYAML), WorkflowJSON: wfJSON, HasTemplates: true}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
-	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "Cleanup", "WorkflowError"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	for _, name := range []string{"WorkflowStatus", "Cleanup", "WorkflowError"} {
 		env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{"success": true}, nil
 		}, activity.RegisterOptions{Name: name})

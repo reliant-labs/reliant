@@ -146,6 +146,17 @@ for tag in $TAGS; do
         continue
     fi
 
+    # The RC train's shape (control-plane docs/design/gitops-promotion.md): the tag is on the
+    # head of an RC branch release/vX.Y.Z-rc.N whose PARENT is on main — a main commit plus
+    # exactly one pin commit, gated as it is. Anything else off main still fails.
+    if git merge-base --is-ancestor "${commit}^" "$MAIN_REF" 2>/dev/null \
+        && git for-each-ref --points-at "$commit" --format='%(refname:lstrip=3)' refs/remotes/origin/release/ \
+            | grep -Eq '^release/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'; then
+        ON_MAIN=$((ON_MAIN + 1))
+        say "  ${GREEN}✓${NC} $tag  ${commit:0:9}  heads an RC branch whose parent is on ${MAIN_REF}"
+        continue
+    fi
+
     # Off main. Is it frozen history (at or below the baseline)?
     if version_le "$tag" "$BASELINE_TAG"; then
         GRANDFATHERED=$((GRANDFATHERED + 1))

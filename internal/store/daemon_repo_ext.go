@@ -40,6 +40,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -331,7 +332,41 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		LastStatusChangedAt: row.LastStatusChangedAt,
 		LastOOMKilledAt:     row.LastOomKilledAt,
 		OOMKillCount:        row.OomKillCount,
+		Labels:              daemonLabels(row.Labels),
+		IsDefault:           row.IsDefault,
 	}
+}
+
+// SetDefaultDaemon makes daemonID the user's one default machine, or clears
+// the user's default when daemonID is "". It reports false, writing nothing,
+// when daemonID is not one of the user's machines.
+//
+// It must run in a transaction: the user's rows are locked first, so two
+// concurrent sets for one user serialize instead of colliding on
+// daemons_one_default_per_user. updated_at is left alone — it orders the
+// daemon list and records the machine's own registration, not this choice.
+func SetDefaultDaemon(ctx context.Context, db orm.Context, userID, daemonID string) (bool, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT id FROM daemons WHERE user_id = ? FOR UPDATE`, userID).Scan(ctx, &ids); err != nil {
+		return false, fmt.Errorf("locking daemons of user %s: %w", userID, err)
+	}
+	if daemonID != "" && !slices.Contains(ids, daemonID) {
+		return false, nil
+	}
+	if _, err := db.Bun().NewRaw(
+		`UPDATE daemons SET is_default = false WHERE user_id = ? AND is_default AND id <> ?`, userID, daemonID,
+	).Exec(ctx); err != nil {
+		return false, fmt.Errorf("clearing default daemon of user %s: %w", userID, err)
+	}
+	if daemonID == "" {
+		return true, nil
+	}
+	if _, err := db.Bun().NewRaw(
+		`UPDATE daemons SET is_default = true WHERE id = ? AND user_id = ? AND NOT is_default`, daemonID, userID,
+	).Exec(ctx); err != nil {
+		return false, fmt.Errorf("setting default daemon %s: %w", daemonID, err)
+	}
+	return true, nil
 }
 
 // rowsWritten reports whether a write touched a row.

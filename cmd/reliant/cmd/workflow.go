@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/lint"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
@@ -45,6 +47,7 @@ func newWorkflowCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newWorkflowValidateCmd())
+	cmd.AddCommand(newWorkflowLintCmd())
 	cmd.AddCommand(newWorkflowValidateTreeCmd())
 	cmd.AddCommand(newWorkflowEvalCmd())
 	cmd.AddCommand(newWorkflowListCmd())
@@ -110,6 +113,9 @@ reported under "Breaks activations": each activation of it would turn BROKEN
 and fire nothing. These are warnings, since the CLI cannot see whether anyone
 activated the trigger; the server lists any enabled activation a synced change
 broke in its owner's Inbox.
+
+Each project workflow is also linted (reliant workflow lint --rules lists the
+rules): a lint error fails validation, a lint warning is reported.
 
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
@@ -363,7 +369,10 @@ format, exit codes, and --hook).`,
 				if len(parts) != 2 {
 					return fmt.Errorf("invalid input format %q — expected key=value", kv)
 				}
-				inputMap[parts[0]] = parts[1]
+				// Read as `workflow validate --input` reads it: asap=true is
+				// a boolean and every=10 a number, which a boolean or number
+				// input requires (the server never parses text into one).
+				inputMap[parts[0]] = parseCLIInputValue(parts[1])
 			}
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
@@ -525,8 +534,11 @@ type validateResult struct {
 	// existing activations cannot follow (activationBreaks). Warnings, kept
 	// apart so they are always printed.
 	ActivationBreaks []string `json:"activation_breaks,omitempty"`
-	Nodes            int      `json:"nodes,omitempty"`
-	Edges            int      `json:"edges,omitempty"`
+	// Lint is what `reliant workflow lint` finds in a project workflow; an
+	// error-severity finding makes the result invalid.
+	Lint  []lint.Finding `json:"lint,omitempty"`
+	Nodes int            `json:"nodes,omitempty"`
+	Edges int            `json:"edges,omitempty"`
 }
 
 func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample, base string) error {
@@ -835,7 +847,14 @@ func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout
 			addressProblem = entry.Problem
 		}
 	}
-	return validateWorkflowYAML(data, filepath.Base(path), addressProblem, layout)
+	result := validateWorkflowYAML(data, filepath.Base(path), addressProblem, layout)
+	if result.Name != "" {
+		result.Lint = lintWorkflowSource(data, layout)
+		if lint.HasErrors(result.Lint) {
+			result.Valid = false
+		}
+	}
+	return result
 }
 
 // validateWorkflowYAML validates one workflow definition, shown as file,
@@ -907,6 +926,7 @@ func printCompactValidateResult(r validateResult) {
 	for _, b := range r.ActivationBreaks {
 		fmt.Printf("      Breaks activations: %s\n", b)
 	}
+	printLintFindings("      ", r.Lint)
 }
 
 func printVerboseValidateResult(r validateResult) {
@@ -938,6 +958,10 @@ func printVerboseValidateResult(r validateResult) {
 		for _, b := range r.ActivationBreaks {
 			fmt.Printf("  - %s\n", b)
 		}
+	}
+	if len(r.Lint) > 0 {
+		fmt.Println("Lint:")
+		printLintFindings("  ", r.Lint)
 	}
 
 	fmt.Println()
@@ -1109,8 +1133,11 @@ func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}
 	return inputMap, nil
 }
 
-// parseCLIInputValue attempts to parse the raw value as JSON if it looks like a
-// JSON literal; otherwise returns the raw string.
+// parseCLIInputValue reads a --input value: a JSON literal (true, 10, 0.5,
+// null, "text", [..], {..}) as that value, anything else as text. A number is
+// read only when written canonically: 1.10 and 1e3 stay text, since reading
+// them as numbers would lose what was typed if the input is a string. Quote a
+// value to keep it text: --input 'sha="0123"'.
 func parseCLIInputValue(raw string) interface{} {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -1129,6 +1156,9 @@ func parseCLIInputValue(raw string) interface{} {
 	}
 	var v interface{}
 	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		return raw
+	}
+	if f, isNumber := v.(float64); isNumber && strconv.FormatFloat(f, 'f', -1, 64) != trimmed {
 		return raw
 	}
 	return v

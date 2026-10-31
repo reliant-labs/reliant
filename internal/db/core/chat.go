@@ -213,6 +213,11 @@ type Chat struct {
 	// daemon is asleep and gets woken). Every run in the chat is offered only
 	// tools that run without the user's machine. See research/DAEMONLESS_RUNS.md.
 	NoMachine bool `json:"no_machine,omitempty"`
+	// MachinePoolID is the machine pool that placed this chat's run on
+	// ActiveDaemonID (one of its members); nil when no pool placed it.
+	// Written at launch, where the pool counts its members' live runs from
+	// it; reads through chats_with_activity do not carry it yet.
+	MachinePoolID *string `json:"machine_pool_id,omitempty"`
 	// AdoptedAt is when the user adopted this run into their chats; nil if not.
 	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
 	// ListInSidebar is the view's sidebar policy for this chat: Origin is USER,
@@ -356,7 +361,21 @@ type QueuedForMachineChat struct {
 	// ActiveDaemonID is the machine the chat is pinned to; nil means the
 	// user's default machine.
 	ActiveDaemonID *string
-	QueuedAt       time.Time
+	// Machine is the machine the run that queued the message was waiting
+	// for (chats.queued_for_machine_selector). It wins over ActiveDaemonID:
+	// a workflow-level daemon selector targets a machine the chat's pin does
+	// not name. Nil when the run named none.
+	Machine  *QueuedMachine
+	QueuedAt time.Time
+}
+
+// QueuedMachine is the machine a queued message waits for, as the run that
+// queued it selected it: the fields of its daemon selector.
+type QueuedMachine struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // PausedForMachineChat is a chat whose root run the daemon-offline circuit

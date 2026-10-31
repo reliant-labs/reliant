@@ -1,0 +1,12 @@
+>-
+  {"id": response.id,
+   "node_id": response.?node_id.orValue(null),
+   "html_url": response.?html_url.orValue(null),
+   "name": response.name,
+   "head_sha": response.head_sha,
+   "status": response.status,
+   "conclusion": response.?conclusion.orValue(null),
+   "details_url": response.?details_url.orValue(null),
+   "external_id": response.?external_id.orValue(null),
+   "started_at": response.?started_at.orValue(null),
+   "completed_at": response.?completed_at.orValue(null)}

@@ -1,8 +1,9 @@
 /**
- * The dashboard panel read path: a bounded, first-come-first-served queue
- * under control-plane's cap of six concurrent reads per user, retry with
- * jitter for the cap's refusal (honouring RetryInfo), and a Retry that asks
- * again for one panel only.
+ * The panel hook's half of the read path: a refusal for the server's
+ * concurrent-read cap is retried (honouring RetryInfo) for as long as the panel
+ * is mounted and never becomes an error; the hourly quota and real errors do
+ * surface; unmounting or changing the range cancels the read. The queue every
+ * read waits in is obs-read-queue.test.tsx.
  */
 
 import type { ReactNode } from "react";
@@ -14,10 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
-import { PANEL_CONCURRENCY } from "@/services/controlPlane/observability/panelScheduler";
 import type { ObsScope, Panel, PanelResult } from "@/services/controlPlane/observability/types";
 
-import { PANEL_BUSY_RETRIES, panelBusyDelayMs, panelRetry, usePanelQuery } from "../observability-queries";
+import { inFlightRetryDelayMs, obsRetry } from "@/services/controlPlane/observability/errors";
+import { QUOTA_REASON } from "@/services/controlPlane/observability/quota";
+
+import { usePanelQuery } from "../observability-queries";
 
 const SCOPE: ObsScope = { orgId: "org", envIds: [], filters: [] };
 const EMPTY: PanelResult = { kind: "number", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] } as unknown as PanelResult;
@@ -93,54 +96,37 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("panelBusyDelayMs", () => {
-  it("is never below the server's Retry-After, and adds a random share of a growing window", () => {
-    expect(panelBusyDelayMs(0, busy(2), () => 0)).toBe(2000);
-    expect(panelBusyDelayMs(0, busy(2), () => 0.5)).toBe(2500);
-    expect(panelBusyDelayMs(2, busy(2), () => 0.5)).toBe(2000 + 2000);
-    expect(panelBusyDelayMs(0, busy(), () => 0.5)).toBe(500);
+describe("inFlightRetryDelayMs", () => {
+  it("never waits less than the server's Retry-After, and adds a jittered share of a growing window", () => {
+    expect(inFlightRetryDelayMs(0, busy(2), () => 0)).toBe(2000);
+    expect(inFlightRetryDelayMs(0, busy(2), () => 0.5)).toBe(2500);
+    expect(inFlightRetryDelayMs(2, busy(2), () => 0.5)).toBe(2000 + 2000);
+    expect(inFlightRetryDelayMs(0, busy(), () => 0.5)).toBe(500);
   });
 
-  it("jitters: different dice, different waits, so refused panels do not return together", () => {
-    const waits = [0.1, 0.4, 0.8].map((dice) => panelBusyDelayMs(1, busy(1), () => dice));
+  it("spreads refused reads out, and caps the window so a long wait stays bounded", () => {
+    const waits = [0.1, 0.4, 0.8].map((dice) => inFlightRetryDelayMs(1, busy(1), () => dice));
     expect(new Set(waits).size).toBe(3);
-  });
-
-  it("caps the window", () => {
-    expect(panelBusyDelayMs(20, busy(0), () => 1)).toBeLessThanOrEqual(16_000);
+    expect(inFlightRetryDelayMs(20, busy(0), () => 1)).toBeLessThanOrEqual(16_000);
   });
 });
 
-describe("panelRetry", () => {
-  it("retries the cap's refusal a bounded number of times and every other answer as before", () => {
-    expect(panelRetry(0, busy())).toBe(true);
-    expect(panelRetry(PANEL_BUSY_RETRIES - 1, busy())).toBe(true);
-    expect(panelRetry(PANEL_BUSY_RETRIES, busy())).toBe(false);
-    expect(panelRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
-    expect(panelRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
-    expect(panelRetry(0, new ConnectError("no", Code.PermissionDenied))).toBe(false);
+describe("obsRetry", () => {
+  it("retries the in-flight refusal without a count limit, and nothing else the server meant", () => {
+    expect(obsRetry(0, busy())).toBe(true);
+    expect(obsRetry(1_000, busy())).toBe(true);
+    expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
+    expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
+    expect(obsRetry(0, new ConnectError("no", Code.PermissionDenied))).toBe(false);
+    expect(obsRetry(0, quota())).toBe(false);
   });
 });
 
-describe("usePanelQuery scheduling", () => {
-  it("never has more reads in flight than the scheduler's cap, and starts panels in the order they asked", async () => {
-    const { api, calls, peak } = controlledApi();
-    const { wrapper } = setup(api);
-    const ids = Array.from({ length: 15 }, (_, i) => `p${String(i).padStart(2, "0")}`);
-    renderHook(() => ids.map((id) => usePanelQuery(SCOPE, "1h", panel(id), [])), { wrapper });
-    await flush();
+function quota() {
+  return new ConnectError("organization observability query quota exhausted", Code.ResourceExhausted, { "x-forge-error-reason": QUOTA_REASON });
+}
 
-    expect(PANEL_CONCURRENCY).toBeLessThan(6);
-    expect(calls.map((c) => c.id)).toEqual(ids.slice(0, PANEL_CONCURRENCY));
-
-    for (let i = 0; i < ids.length; i++) {
-      calls[i]!.resolve();
-      await flush();
-    }
-    expect(calls.map((c) => c.id)).toEqual(ids);
-    expect(peak()).toBe(PANEL_CONCURRENCY);
-  });
-
+describe("usePanelQuery", () => {
   it("does not read a disabled panel (not yet near the viewport)", async () => {
     const { api, calls } = controlledApi();
     const { wrapper } = setup(api);
@@ -152,22 +138,17 @@ describe("usePanelQuery scheduling", () => {
     expect(calls.map((c) => c.id)).toEqual(["far"]);
   });
 
-  it("drops a queued read, and aborts a running one, when its panel goes away", async () => {
+  it("aborts its read when the panel goes away", async () => {
     const { api, calls } = controlledApi();
     const { wrapper } = setup(api);
-    const ids = ["a", "b", "c", "d", "e"];
-    const { unmount } = renderHook(() => ids.map((id) => usePanelQuery(SCOPE, "1h", panel(id), [])), { wrapper });
+    const { unmount } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("a"), []), { wrapper });
     await flush();
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c"]);
-
     unmount();
     await flush();
-    expect(calls.every((c) => c.signal?.aborted)).toBe(true);
-    // The two that never got a slot never go out, even though slots were freed.
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c"]);
+    expect(calls[0]!.signal?.aborted).toBe(true);
   });
 
-  it("cancels the reads of the old range when the range changes, then reads the new one", async () => {
+  it("cancels the read of the old range when the range changes, then reads the new one", async () => {
     const { api, calls } = controlledApi();
     const { wrapper } = setup(api);
     const { rerender } = renderHook(({ range }) => usePanelQuery(SCOPE, range, panel("p"), []), { wrapper, initialProps: { range: "1h" as "1h" | "24h" } });
@@ -206,81 +187,51 @@ describe("usePanelQuery when the server is at its cap", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("backs off further on each refusal, and gives up with an error after the bounded attempts", async () => {
+  it("keeps asking for as long as the panel is mounted: dozens of refusals never become an error", async () => {
     const { api, calls } = controlledApi();
     const { wrapper } = setup(api);
     const { result } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("p"), []), { wrapper });
     await flush();
 
-    // Random pinned to 0: delay = Retry-After (1s) every time, so count the asks, not the waits.
-    for (let attempt = 1; attempt <= PANEL_BUSY_RETRIES; attempt++) {
+    const REFUSALS = 40;
+    for (let attempt = 1; attempt <= REFUSALS; attempt++) {
       expect(calls).toHaveLength(attempt);
       calls[attempt - 1]!.reject(busy(1));
       await flush();
-      expect(result.current.error).toBeNull();
+      expect(result.current.isError).toBe(false);
+      expect(result.current.isLoading).toBe(true);
       await advance(1000);
     }
-    expect(calls).toHaveLength(PANEL_BUSY_RETRIES + 1);
-    calls[PANEL_BUSY_RETRIES]!.reject(busy(1));
+    expect(calls).toHaveLength(REFUSALS + 1);
+    calls[REFUSALS]!.resolve();
     await flush();
+    expect(result.current.data).toEqual(EMPTY);
+    expect(result.current.isError).toBe(false);
+  });
 
+  it("stops asking once the panel is unmounted", async () => {
+    const { api, calls } = controlledApi();
+    const { wrapper } = setup(api);
+    const { unmount } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("p"), []), { wrapper });
+    await flush();
+    calls[0]!.reject(busy(1));
+    await flush();
+    unmount();
+    await advance(120_000);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("surfaces the org's hourly quota at once: it is not retried, and it is not the cap", async () => {
+    const { api, calls } = controlledApi();
+    const { wrapper } = setup(api);
+    const { result } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("p"), []), { wrapper });
+    await flush();
+    calls[0]!.reject(quota());
+    await flush();
     expect(result.current.isError).toBe(true);
     expect(result.current.isLoading).toBe(false);
     await advance(120_000);
-    expect(calls).toHaveLength(PANEL_BUSY_RETRIES + 1);
-  });
-
-  it("Retry after exhaustion reads that panel again, and only that panel", async () => {
-    const { api, calls } = controlledApi();
-    const { wrapper } = setup(api);
-    const { result } = renderHook(
-      () => ({ a: usePanelQuery(SCOPE, "1h", panel("a"), []), b: usePanelQuery(SCOPE, "1h", panel("b"), []) }),
-      { wrapper }
-    );
-    await flush();
-    calls[1]!.resolve();
-    await flush();
-    // a is refused until it gives up.
-    const asksOfA = () => calls.filter((c) => c.id === "a");
-    for (let i = 0; i <= PANEL_BUSY_RETRIES; i++) {
-      asksOfA().at(-1)!.reject(busy(1));
-      await flush();
-      await advance(1000);
-    }
-    expect(result.current.a.isError).toBe(true);
-    // Observers re-render only for the properties a test has read: read the ones asserted on later.
-    expect(result.current.a.data).toBeUndefined();
-    expect(result.current.b.data).toEqual(EMPTY);
-    const before = calls.length;
-
-    act(() => void result.current.a.refetch());
-    await flush();
-    expect(calls).toHaveLength(before + 1);
-    expect(calls.at(-1)!.id).toBe("a");
-    calls.at(-1)!.resolve();
-    await flush();
-    expect(result.current.a.data).toEqual(EMPTY);
-    expect(result.current.a.isError).toBe(false);
-  });
-
-  it("sends a retry to the back of the queue, so refused panels never jump ahead and the cap still holds", async () => {
-    const { api, calls, peak } = controlledApi();
-    const { wrapper } = setup(api);
-    renderHook(() => ["a", "b", "c", "d"].map((id) => usePanelQuery(SCOPE, "1h", panel(id), [])), { wrapper });
-    await flush();
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c"]);
-
-    calls[0]!.reject(busy(1));
-    await flush();
-    // d was waiting first: it takes a's freed slot.
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c", "d"]);
-    await advance(1000);
-    // a's retry waits behind the three running reads.
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c", "d"]);
-    calls[1]!.resolve();
-    await flush();
-    expect(calls.map((c) => c.id)).toEqual(["a", "b", "c", "d", "a"]);
-    expect(peak()).toBe(PANEL_CONCURRENCY);
+    expect(calls).toHaveLength(1);
   });
 
   it("does not wait on an error the server meant, and a plain failure keeps its Retry", async () => {

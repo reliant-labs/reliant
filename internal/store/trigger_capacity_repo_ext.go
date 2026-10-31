@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,9 +39,19 @@ func lockTriggerCapacity(ctx context.Context, db orm.Context, scope TriggerCapac
 	return err
 }
 
+// TriggerCapacitySuperseded is the outcome_detail of a waiting event that a
+// newer event of the same concurrency key replaced (`waiting: latest`). The
+// event is settled skipped: superseding is the policy working, not a failure.
+const TriggerCapacitySuperseded = "superseded by a newer firing (concurrency waiting: latest)"
+
 // EnqueueTriggerCapacity durably records a filtered trigger event and assigns
 // its immutable FIFO ordinal under the same lock used at launch. It is safe to
 // retry after commit/ack loss. It does not claim a slot or create a chat.
+//
+// An event with a CapacityKey also supersedes, in the same transaction, every
+// older WAITING event of its scope and key: they settle skipped with
+// TriggerCapacitySuperseded. Launched events are never touched, and a retried
+// enrollment supersedes nothing more.
 func EnqueueTriggerCapacity(ctx context.Context, db orm.Context, ev *core.TriggerEvent, scope TriggerCapacityScope) error {
 	if ev == nil || !scope.valid() || ev.UserID != scope.UserID || (ev.Outcome != core.TriggerEventPending && ev.Outcome != core.TriggerEventLaunched) {
 		return errors.New("invalid trigger capacity intent")
@@ -72,21 +83,51 @@ FROM trigger_events WHERE kind = ? AND dedupe_key = ? FOR UPDATE`, ev.Kind, ev.D
 			}
 			return nil
 		}
-		res, err := db.Bun().NewRaw(`UPDATE trigger_events
-SET capacity_project_id = ?, capacity_workflow_ref = ?, capacity_order = nextval('trigger_capacity_order_seq')
-WHERE id = ? AND outcome = 'pending' AND capacity_order IS NULL`, scope.ProjectID, scope.WorkflowRef, row.ID).Exec(ctx)
-		if err != nil {
-			return err
-		}
-		ok, err := oneRowTouched(res)
-		if err != nil {
-			return err
-		}
-		if !ok {
+		var order int64
+		err = db.Bun().NewRaw(`UPDATE trigger_events
+SET capacity_project_id = ?, capacity_workflow_ref = ?, capacity_key = ?, capacity_order = nextval('trigger_capacity_order_seq')
+WHERE id = ? AND outcome = 'pending' AND capacity_order IS NULL
+RETURNING capacity_order`, scope.ProjectID, scope.WorkflowRef, ev.CapacityKey, row.ID).Scan(ctx, &order)
+		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("cannot enroll an already settled trigger event")
+		}
+		if err != nil {
+			return err
+		}
+		if ev.CapacityKey == nil {
+			return nil
+		}
+		_, err = db.Bun().NewRaw(`UPDATE trigger_events
+SET outcome = 'skipped', outcome_detail = ?
+WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ? AND capacity_key = ?
+  AND outcome = 'pending' AND capacity_order < ?`,
+			TriggerCapacitySuperseded, scope.UserID, scope.ProjectID, scope.WorkflowRef, *ev.CapacityKey, order).Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("supersede waiting trigger events: %w", err)
 		}
 		return nil
 	})
+}
+
+// NextWaitingTriggerCapacityEvent returns the head of a scope's FIFO queue —
+// its oldest waiting event, the only one CanLaunchTriggerCapacity may admit —
+// or nil when nothing waits. Served by trigger_events_capacity_waiting.
+func NextWaitingTriggerCapacityEvent(ctx context.Context, db orm.Context, scope TriggerCapacityScope) (*core.TriggerEvent, error) {
+	if !scope.valid() {
+		return nil, errors.New("invalid trigger capacity scope")
+	}
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event
+WHERE event.user_id = ? AND event.capacity_project_id = ? AND event.capacity_workflow_ref = ?
+  AND event.capacity_order IS NOT NULL AND event.outcome = 'pending'
+ORDER BY event.capacity_order LIMIT 1`, scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("find waiting trigger capacity head: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return triggerEventToCore(rows[0])
 }
 
 // CanLaunchTriggerCapacity checks FIFO and capacity inside the caller's launch

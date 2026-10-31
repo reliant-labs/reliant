@@ -1,7 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { describe, expect, it } from "vitest";
-import { Code, ConnectError } from "@connectrpc/connect";
 
 import { fixtureMetricCatalog } from "../../__fixtures__/metricFixtures";
 import {
@@ -9,7 +8,6 @@ import {
   capNote,
   chartUnitOf,
   groupCatalog,
-  isInFlightLimit,
   kindLabel,
   orderedAttributes,
   seriesByValue,
@@ -105,9 +103,4 @@ describe("notes", () => {
     expect(warningText("brand_new_code")).toBe("brand new code");
   });
 
-  it("tells the in-flight cap from the org's quota, which share a code", () => {
-    expect(isInFlightLimit(new ConnectError("too many queries in flight", Code.ResourceExhausted))).toBe(true);
-    expect(isInFlightLimit(new ConnectError("query quota exhausted", Code.ResourceExhausted))).toBe(false);
-    expect(isInFlightLimit(new ConnectError("too many queries in flight", Code.Unavailable))).toBe(false);
-  });
 });

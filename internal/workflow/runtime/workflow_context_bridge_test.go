@@ -18,7 +18,7 @@ func TestWorkflowContextToTyped(t *testing.T) {
 			workflowContextKeyMode:         "auto",
 			workflowContextKeyRunID:        "run-456",
 			workflowContextKeyWorktreePath: "/tmp/worktree",
-			workflowContextKeyChatID:       "chat-abc", // intentionally ignored by typed model
+			workflowContextKeyChatID:       "chat-abc",
 			workflowContextKeyInputs: map[string]interface{}{
 				"thread": "main",
 			},
@@ -28,6 +28,7 @@ func TestWorkflowContextToTyped(t *testing.T) {
 
 		assert.Equal(t, "wf-123", typed.ID)
 		assert.Equal(t, "test-workflow", typed.Name)
+		assert.Equal(t, "chat-abc", typed.ChatID, "the run's own page is /workflows/runs/<chat_id>")
 		assert.Equal(t, "/tmp/worktree", typed.Path)
 		assert.Equal(t, "feature/test", typed.Branch)
 		assert.Equal(t, "auto", typed.Mode)

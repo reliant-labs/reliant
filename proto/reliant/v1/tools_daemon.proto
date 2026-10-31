@@ -344,6 +344,48 @@ message DiskReport {
   // The worktree sweep re-checks a machine's kept workspaces once per episode
   // instead of waiting out their back-off.
   int64 guard_since_ms = 4;
+  // The machine's process count against its process limit (the daemon's
+  // capacity guard, internal/procguard). It travels with the disk report
+  // because both are the machine's resources and both feed its storage inbox
+  // item; unset for daemons that cannot count processes (macOS, Windows).
+  ProcessReport processes = 5;
+}
+
+// ProcessReport is how close a machine is to its process limit, and whose
+// processes are using it. On 2026-10-30 a machine ran out of processes (one
+// command re-running a CI gate inside itself) and had to be restarted; this is
+// what lets the daemon refuse new heavy work first, and the person see which
+// agent's command is the problem.
+message ProcessReport {
+  // Tasks (processes and threads) counted against the limit.
+  uint64 count = 1;
+  // The limit they are counted against: the daemon user's RLIMIT_NPROC, or
+  // the kernel's threads-max where that is tighter. 0 when unknown.
+  uint64 limit = 2;
+  // The daemon is refusing new background heavy commands: count passed 70%
+  // of limit, and has not fallen back below 60%.
+  bool refusing_heavy = 3;
+  // When the current refusal episode began (unix ms). Gateway-stamped and
+  // carried forward like DiskReport.pressure_since_ms; 0 while not refusing.
+  int64 refusing_since_ms = 4;
+  // The largest process trees, largest first (at most five).
+  repeated ProcessTree top = 5;
+}
+
+// ProcessTree is one command's processes on a machine.
+message ProcessTree {
+  // The agent (chat or sub-agent thread) whose tool call started the
+  // command; empty for processes the daemon did not start or cannot place.
+  string chat_id = 1;
+  // The command line, shortened.
+  string command = 2;
+  // Tasks (processes and threads) in the tree.
+  uint64 tasks = 3;
+  // False for processes no daemon command owns: started outside the daemon,
+  // or detached from their command (nohup, setsid).
+  bool tracked = 4;
+  // The chat's title, filled in by the server for display.
+  string chat_title = 5;
 }
 
 // DiskGuardState is what the daemon's disk guard (internal/diskguard) is doing

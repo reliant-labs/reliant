@@ -1,0 +1,18 @@
+name: fixture
+entry: [count]
+nodes:
+# Runs in the project checkout, which sync-checkouts and every other run fetch
+# into at the same moment: "cannot lock ref", and a stale local tag fails it.
+- id: count
+  type: run
+  timeout: 5m
+  args:
+    credentials: inherit
+    command: |
+      git fetch origin main --tags
+      git rev-list --count v1.0.0..origin/main
+- id: done
+  type: save_message
+  args: {role: assistant, content: '{{ nodes.count.stdout }} (exit {{ nodes.count.exit_code }})'}
+edges:
+- {from: count, default: done}

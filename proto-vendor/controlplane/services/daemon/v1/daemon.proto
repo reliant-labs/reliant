@@ -139,6 +139,12 @@ message CreateDaemonRequest {
   // the retry-safe commit a flow that may run twice needs (onboarding names
   // its one machine and re-sends the create on every retry).
   bool refresh_existing = 12;
+  // Where a managed machine's disk lives; unspecified is PERSISTENT. EPHEMERAL
+  // gives every start a fresh disk that is deleted when the machine suspends,
+  // so a suspended machine costs nothing and keeps nothing: for stateless
+  // machines such as CI pool members. Fixed at create: refresh_existing with
+  // a different mode is FAILED_PRECONDITION.
+  controlplane.v1.DaemonDiskMode disk_mode = 13;
 }
 
 message CreateDaemonResponse {
@@ -178,6 +184,12 @@ message UpdateDaemonRequest {
   // proxy variables, ...) are refused. A running machine picks the new set
   // up the next time its pod is built: resume, resize or re-create.
   MachineEnv env = 5;
+  // idle_timeout, when present, replaces how long a managed machine may sit
+  // idle before it suspends (a duration such as "10m"; at most 4h). Absent
+  // leaves it as it is. It applies to the running machine at once: the
+  // operator reads it at every idle check. A machine pool sets its members'
+  // with it (the pool's member_idle_timeout).
+  optional string idle_timeout = 6;
 }
 
 // MachineEnv is a managed machine's declared environment.
