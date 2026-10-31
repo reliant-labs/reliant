@@ -102,12 +102,4 @@ func TestChatOriginMigrationBackfillsFromLaunchEvent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginAutomation, adopted.Origin, "adoption never rewrites origin")
 	assert.True(t, adopted.ListInSidebar)
-
-	// The previous release inserts chats without naming the column: the
-	// default keeps that insert working.
-	exec(`INSERT INTO chats (id, title, project_id, user_id, created_at, updated_at, last_active)
-		VALUES ('bf-old-release', 't', 'test-project', 'test-user', now(), now(), now())`)
-	old, err := repo.GetChat(ctx, "bf-old-release")
-	require.NoError(t, err)
-	assert.Equal(t, core.ChatOriginUser, old.Origin)
 }

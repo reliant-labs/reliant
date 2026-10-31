@@ -599,11 +599,14 @@ func chatToRow(chat *core.Chat) *Chat {
 	if state == core.ChatStateUnspecified {
 		state = core.ChatStateIdle
 	}
-	// A chat nobody classified is a person's (the column default): the
-	// launcher, the one creator of runs, always names the origin.
-	origin := chat.Origin
-	if origin == core.ChatOriginUnspecified {
-		origin = core.ChatOriginUser
+	// A chat nobody classified stores NULL, never a guess: chats_with_activity
+	// then reads its origin from its launch event (chat_origin_of_launch_kind),
+	// so an unclassified run stays out of the chat list. The launcher and
+	// BranchChat, the creators of chats, always name it.
+	var origin *core.ChatOrigin
+	if chat.Origin != core.ChatOriginUnspecified {
+		o := chat.Origin
+		origin = &o
 	}
 	row := &Chat{
 		ID:              chat.ID,
