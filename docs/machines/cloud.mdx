@@ -1,6 +1,6 @@
 ---
 title: "Cloud machines & plans"
-description: "Compute sizes and prices, included hours, and how cloud machines wake and suspend"
+description: "Compute sizes, included hours, and how cloud machines wake and suspend"
 ---
 
 A cloud machine is a computer Reliant runs for you. It has your project on its own disk, runs your agents' commands, and you can reach it from the web app, the desktop app or your phone. There is no free tier: a cloud machine needs a compute plan or a coupon that grants machine time.
@@ -11,15 +11,15 @@ A cloud machine is a computer Reliant runs for you. It has your project on its o
 
 ## Compute plans
 
-You buy a **compute plan**, a monthly subscription, and the plan decides the largest machine you can create. A plan always allows its own size and every smaller one.
+You buy a **compute plan**, a monthly subscription, and the plan decides the largest machine you can create. A plan always allows its own size and every smaller one. Cloud machines are monthly plans with included hours; current prices are on the [pricing page](https://reliantlabs.io/pricing).
 
-| Plan | Reserved CPU / RAM | Can burst to | Disk | Price |
-|------|--------------------|--------------|------|-------|
-| Compute Small | 0.5 CPU / 2 GB | 2 CPU / 4 GB | 120 GiB | $15 / month |
-| Compute Medium | 1 CPU / 4 GB | 4 CPU / 8 GB | 140 GiB | $35 / month |
-| Compute Large | 2 CPU / 8 GB | 8 CPU / 16 GB | 180 GiB | $79 / month |
-| Compute XL | 4 CPU / 16 GB | 16 CPU / 32 GB | 260 GiB | $159 / month |
-| Compute 2XL | 8 CPU / 32 GB | 32 CPU / 64 GB | 420 GiB | $299 / month |
+| Plan | Reserved CPU / RAM | Can burst to | Disk |
+|------|--------------------|--------------|------|
+| Compute Small | 0.5 CPU / 2 GB | 2 CPU / 4 GB | 120 GiB |
+| Compute Medium | 1 CPU / 4 GB | 4 CPU / 8 GB | 140 GiB |
+| Compute Large | 2 CPU / 8 GB | 8 CPU / 16 GB | 180 GiB |
+| Compute XL | 4 CPU / 16 GB | 16 CPU / 32 GB | 260 GiB |
+| Compute 2XL | 8 CPU / 32 GB | 32 CPU / 64 GB | 420 GiB |
 
 "Reserved" is what your machine is guaranteed; "can burst to" is how far it may go above that when the host has room, which is useful for a spiky build. The disk is the size's workspace volume (20, 40, 80, 160 or 320 GiB) plus 100 GiB for Docker images and build caches. Choose a size by the memory your builds and tests need: that is the limit people usually hit first.
 
@@ -27,13 +27,13 @@ You buy a **compute plan**, a monthly subscription, and the plan decides the lar
 
 Every plan includes **160 hours a month of its largest machine**, shared across all your machines. Smaller machines stretch the same allowance further: it is counted in Small-machine hours, and each size uses them at its own rate.
 
-| Plan | Included each month | Size | Uses included hours at | Extra time |
-|------|---------------------|------|------------------------|------------|
-| Compute Small | 160 Small hours | Small | 1× | $0.13 / hour |
-| Compute Medium | 320 Small hours | Medium | 2× | $0.26 / hour |
-| Compute Large | 640 Small hours | Large | 4× | $0.52 / hour |
-| Compute XL | 1,280 Small hours | XL | 8× | $1.04 / hour |
-| Compute 2XL | 2,560 Small hours | 2XL | 16× | $2.08 / hour |
+| Plan | Included each month | Size | Uses included hours at |
+|------|---------------------|------|------------------------|
+| Compute Small | 160 Small hours | Small | 1× |
+| Compute Medium | 320 Small hours | Medium | 2× |
+| Compute Large | 640 Small hours | Large | 4× |
+| Compute XL | 1,280 Small hours | XL | 8× |
+| Compute 2XL | 2,560 Small hours | 2XL | 16× |
 
 So Compute Large gives you 160 hours of a Large machine, or 320 of a Medium, or 640 of a Small, or any mix. The size picker shows how many hours of each size your plan includes. Time is counted while a machine is running, even when it is idle; a suspended machine uses no hours.
 
@@ -43,7 +43,7 @@ When the included hours are used up, you choose what happens in **Settings → B
 - **Allow extra time, up to a monthly limit.** Machines keep running and the extra time is billed, but never beyond the limit you set.
 - **Allow extra time with no limit.**
 
-Extra time is billed at the hourly price of the machine's size, in the last column above.
+Extra time is billed at an hourly rate that depends on the machine's size; the rates are on the [pricing page](https://reliantlabs.io/pricing).
 
 If you redeemed a coupon that grants machine time, those minutes are used after your included hours and before any extra time is billed. They are a one-time bonus and do not renew each period. The **Usage & invoices** tab shows hours included, hours of extra time, the estimated cost of that extra time, and any coupon minutes left.
 
@@ -59,7 +59,7 @@ You do not have to wake a suspended machine yourself. When a chat running on it,
 
 Processes you started yourself (a dev server, say) do not survive a suspend, because the machine's compute is gone; files on disk do.
 
-A suspended machine's disk is billed at $0.25 per GiB per month until you delete the machine, so a suspended Small machine (120 GiB) costs $30 a month. The Machines page and the size picker show each machine's disk and its fee while suspended. Delete a machine you no longer need to stop all charges for it.
+A suspended machine's disk is billed per GiB per month until you delete the machine (see [pricing](https://reliantlabs.io/pricing) for the rate). The Machines page and the size picker show each machine's disk and its fee while suspended. Delete a machine you no longer need to stop all charges for it.
 
 ## Creating and managing machines
 
