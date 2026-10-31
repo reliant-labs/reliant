@@ -138,11 +138,11 @@ func pinnedSources(ctx context.Context, store any, opts Options) (workflowref.So
 	if err != nil {
 		return workflowref.Sources{}, err
 	}
-	workflows, err := config.ParseStoredWorkflows(catalog.Workflows)
+	project, err := catalogIndex(catalog.Workflows)
 	if err != nil {
 		return workflowref.Sources{}, err
 	}
-	sources := workflowref.Sources{Project: config.ProjectWorkflowIndex(workflows), ProjectFirst: opts.ProjectFirst}
+	sources := workflowref.Sources{Project: project, ProjectFirst: opts.ProjectFirst}
 	if opts.UserID != "" {
 		sources.User = pinnedUserWorkflows(catalog.UserWorkflows, opts)
 	}
@@ -185,11 +185,7 @@ func ProjectIndex(ctx context.Context, store ProjectStore, projectID string) (*w
 	if err != nil {
 		return nil, &StoreError{Err: fmt.Errorf("read project workflows: %w", err)}
 	}
-	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
-	if err != nil {
-		return nil, err
-	}
-	return config.ProjectWorkflowIndex(workflows), nil
+	return catalogIndex(workflowsJSON)
 }
 
 // MachineProjectIndex is ProjectIndex for the catalog one machine synced, or
@@ -221,11 +217,11 @@ func machineProjectIndex(ctx context.Context, store ProjectStore, projectID, dae
 		index, err := ProjectIndex(ctx, store, projectID)
 		return index, false, err
 	}
-	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
+	index, err := catalogIndex(workflowsJSON)
 	if err != nil {
 		return nil, false, err
 	}
-	return config.ProjectWorkflowIndex(workflows), true, nil
+	return index, true, nil
 }
 
 // warnUnsyncedMachine says that a read for one machine is answered with the

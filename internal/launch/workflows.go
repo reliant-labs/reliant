@@ -878,23 +878,19 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 	return validateResolvedWorkflowTree(ctx, l.repo, scope, workflowName, wf)
 }
 
+// validateResolvedWorkflowTree validates wf and every workflow and preset it
+// reaches, as a run of it in scope would load them. The verdict is memoized
+// (treeVerdicts): a tree whose root and every dependency are unchanged is not
+// analysed again.
 func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string, wf *reliantv1.Workflow) error {
-	var lookupErr *WorkflowLookupError
-	validationOpts := &validation.ValidationOptions{
-		WorkflowLoader: func(ref string) (*reliantv1.Workflow, error) {
-			child, err := resolveRunWorkflow(ctx, repo, scope, ref)
-			var lookup *WorkflowLookupError
-			if errors.As(err, &lookup) {
-				lookupErr = lookup
-			}
-			return child, err
-		},
-		CanonicalWorkflowRef: workflowName,
+	loadChild := func(ref string) (*reliantv1.Workflow, error) {
+		return resolveRunWorkflow(ctx, repo, scope, ref)
 	}
+	var loadPreset func(name string) (map[string]interface{}, error)
 	if scope.ProjectID != "" {
 		// Reuse launch's preset resolution, without constructing its unrelated
 		// runtime collaborators or changing the validation source precedence.
-		validationOpts.PresetLoader = func(name string) (map[string]interface{}, error) {
+		loadPreset = func(name string) (map[string]interface{}, error) {
 			p, err := loadPresetFromDB(ctx, repo, "", scope.ProjectID, scope.DaemonID, scope.CatalogPin, name)
 			if err != nil {
 				return nil, err
@@ -903,19 +899,47 @@ func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, sc
 		}
 	}
 
-	result := validation.StaticAnalysisWithOptions(wf, validationOpts)
+	key, keyed := treeVerdictKey(scope, workflowName, wf)
+	if keyed {
+		if cached, ok := treeVerdicts.get(key); ok && cached.holds(loadChild, loadPreset) {
+			return cached.err()
+		}
+	}
+
+	var lookupErr *WorkflowLookupError
+	verdict := newTreeVerdict()
+	validationOpts := &validation.ValidationOptions{
+		WorkflowLoader: func(ref string) (*reliantv1.Workflow, error) {
+			child, err := loadChild(ref)
+			var lookup *WorkflowLookupError
+			if errors.As(err, &lookup) {
+				lookupErr = lookup
+			}
+			verdict.recordChild(ref, child, err)
+			return child, err
+		},
+		CanonicalWorkflowRef: workflowName,
+	}
+	if loadPreset != nil {
+		validationOpts.PresetLoader = func(name string) (map[string]interface{}, error) {
+			params, err := loadPreset(name)
+			verdict.recordPreset(name, params, err)
+			return params, err
+		}
+	}
+
+	result := analyzeTree(wf, validationOpts)
 	if lookupErr != nil {
 		// A child store outage is not a permanent verdict on the definition.
 		return lookupErr
 	}
 	if result != nil && result.HasErrors() {
-		return &ValidationError{
-			Kind:   ValidationFailedPrecondition,
-			Reason: fmt.Sprintf("workflow tree validation failed for '%s': %s", workflowName, result.Error()),
-		}
+		verdict.reason = fmt.Sprintf("workflow tree validation failed for '%s': %s", workflowName, result.Error())
 	}
-
-	return nil
+	if keyed && verdict.consistent {
+		treeVerdicts.add(key, verdict)
+	}
+	return verdict.err()
 }
 
 // refuseChatStart refuses a chat start of a workflow whose Chat trigger is
