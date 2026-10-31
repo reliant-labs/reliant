@@ -576,6 +576,22 @@ function TriggerDefinition({ trigger }: { trigger: Trigger }) {
  * page, and only fetch it while this trigger's detail is expanded. Snapshots
  * remain server-redacted; never reconstruct them from the editable definition.
  */
+/** How an agent's change was approved (TriggerChange.approval). */
+export function approvalLabel(approval: string): string {
+  switch (approval) {
+    case "card":
+      return "approved by you";
+    case "auto:pause":
+      return "pause, no approval needed";
+    case "auto:never":
+      return "auto-approved (approvals: never)";
+    case "auto:on_capability_change":
+      return "auto-approved (did not widen its power)";
+    default:
+      return approval;
+  }
+}
+
 function TriggerConfigurationHistory({ triggerId }: { triggerId: string }) {
   const query = useTrigger(triggerId);
 
@@ -592,8 +608,16 @@ function TriggerConfigurationHistory({ triggerId }: { triggerId: string }) {
             <details key={change.id} className="py-3 text-sm">
               <summary className="cursor-pointer text-foreground">
                 {change.operation} · {formatAbsoluteTime(change.createdAt)} · {change.chatId ? `Agent in chat ${change.chatId}` : `User ${change.userId}`}
+                {change.approval ? ` · ${approvalLabel(change.approval)}` : ""}
               </summary>
               {change.chatId && <p className="mt-2 text-xs text-muted-foreground">Thread {change.runId} · Call {change.toolCallId}</p>}
+              {(change.capabilitiesAdded?.length || change.capabilitiesRemoved?.length) ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {change.capabilitiesAdded?.length ? `Added: ${change.capabilitiesAdded.join(", ")}` : ""}
+                  {change.capabilitiesAdded?.length && change.capabilitiesRemoved?.length ? " · " : ""}
+                  {change.capabilitiesRemoved?.length ? `Removed: ${change.capabilitiesRemoved.join(", ")}` : ""}
+                </p>
+              ) : null}
               <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
                 {`Before: ${change.beforeState || "(new activation)"}\nAfter: ${change.afterState}`}
               </pre>

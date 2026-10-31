@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 
 	"github.com/reliant-labs/reliant/internal/db"
 
@@ -37,6 +38,19 @@ func settingToProto(s *db.Setting) *reliantv1.Setting {
 		setting.ProjectId = s.ProjectID
 	}
 	return setting
+}
+
+// validateSettingValue refuses a value the server would misread for a key it
+// interprets. Settings are otherwise free-form.
+func validateSettingValue(key, value string) error {
+	if key == automationpolicy.ApprovalSettingKey {
+		switch automationpolicy.ApprovalMode(value) {
+		case automationpolicy.ApprovalAlways, automationpolicy.ApprovalOnCapabilityChange, automationpolicy.ApprovalNever:
+		default:
+			return svcerr.InvalidArgument(fmt.Sprintf("%s must be always, on_capability_change or never", key))
+		}
+	}
+	return nil
 }
 
 // upsertSetting creates or updates a setting
@@ -81,6 +95,9 @@ func (s *Service) CreateSetting(ctx context.Context, req *connect.Request[relian
 	}
 	if req.Msg.Value == "" {
 		return nil, svcerr.InvalidArgument("value is required")
+	}
+	if err := validateSettingValue(req.Msg.Key, req.Msg.Value); err != nil {
+		return nil, err
 	}
 
 	valueType := "string"
@@ -190,6 +207,9 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 	}
 
 	if req.Msg.Value != nil {
+		if err := validateSettingValue(req.Msg.Key, *req.Msg.Value); err != nil {
+			return nil, err
+		}
 		setting.Value = *req.Msg.Value
 	}
 	if req.Msg.ValueType != nil {
@@ -228,6 +248,9 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 	for _, write := range req.Msg.Settings {
 		if write.GetKey() == "" {
 			return nil, svcerr.InvalidArgument("key is required for every setting in a batch")
+		}
+		if err := validateSettingValue(write.GetKey(), write.GetValue()); err != nil {
+			return nil, err
 		}
 	}
 

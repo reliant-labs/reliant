@@ -36520,6 +36520,20 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "approval",
+              "kind": "string"
+            },
+            {
+              "name": "capabilities_added",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "capabilities_removed",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.TriggerDefinition": [

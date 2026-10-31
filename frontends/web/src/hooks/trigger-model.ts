@@ -206,7 +206,7 @@ export interface TriggerHealth {
 export interface Trigger {
   id: string;
   name: string;
-  changes?: Array<{ id: string; userId: string; chatId: string; runId: string; toolCallId: string; operation: string; beforeState: string; afterState: string; createdAt: string }>;
+  changes?: Array<{ id: string; userId: string; chatId: string; runId: string; toolCallId: string; operation: string; beforeState: string; afterState: string; createdAt: string; approval?: string; capabilitiesAdded?: string[]; capabilitiesRemoved?: string[] }>;
   projectId: string;
   worktreeId?: string;
   enabled: boolean;

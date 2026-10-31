@@ -1926,18 +1926,28 @@ func (x *TriggerDefinitionSource) GetWarnings() []string {
 
 // TriggerChange is a configuration audit entry, not a firing.
 type TriggerChange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	ChatId        string                 `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ToolCallId    string                 `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
-	Operation     string                 `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
-	BeforeState   string                 `protobuf:"bytes,7,opt,name=before_state,json=beforeState,proto3" json:"before_state,omitempty"`
-	AfterState    string                 `protobuf:"bytes,8,opt,name=after_state,json=afterState,proto3" json:"after_state,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId      string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ChatId      string                 `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	RunId       string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	ToolCallId  string                 `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	Operation   string                 `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
+	BeforeState string                 `protobuf:"bytes,7,opt,name=before_state,json=beforeState,proto3" json:"before_state,omitempty"`
+	AfterState  string                 `protobuf:"bytes,8,opt,name=after_state,json=afterState,proto3" json:"after_state,omitempty"`
+	CreatedAt   string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// How an agent's change was approved: "card" (the owner approved a card),
+	// "auto:on_capability_change" or "auto:never" (the owner's automation
+	// approvals setting applied it without one), or "auto:pause". Empty for a
+	// change the owner made in the app.
+	Approval string `protobuf:"bytes,10,opt,name=approval,proto3" json:"approval,omitempty"`
+	// The capability items the change granted and dropped, such as
+	// "connection:github/conn_1", "identity:app", "machine:d_1",
+	// "secret:machine_credentials" or "deploy:prod".
+	CapabilitiesAdded   []string `protobuf:"bytes,11,rep,name=capabilities_added,json=capabilitiesAdded,proto3" json:"capabilities_added,omitempty"`
+	CapabilitiesRemoved []string `protobuf:"bytes,12,rep,name=capabilities_removed,json=capabilitiesRemoved,proto3" json:"capabilities_removed,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TriggerChange) Reset() {
@@ -2031,6 +2041,27 @@ func (x *TriggerChange) GetCreatedAt() string {
 		return x.CreatedAt
 	}
 	return ""
+}
+
+func (x *TriggerChange) GetApproval() string {
+	if x != nil {
+		return x.Approval
+	}
+	return ""
+}
+
+func (x *TriggerChange) GetCapabilitiesAdded() []string {
+	if x != nil {
+		return x.CapabilitiesAdded
+	}
+	return nil
+}
+
+func (x *TriggerChange) GetCapabilitiesRemoved() []string {
+	if x != nil {
+		return x.CapabilitiesRemoved
+	}
+	return nil
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -5219,7 +5250,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vdaemon_name\x18\x04 \x01(\tR\n" +
 	"daemonName\x12\x18\n" +
 	"\asummary\x18\x05 \x01(\tR\asummary\x12\x1a\n" +
-	"\bwarnings\x18\x06 \x03(\tR\bwarnings\"\x8b\x02\n" +
+	"\bwarnings\x18\x06 \x03(\tR\bwarnings\"\x89\x03\n" +
 	"\rTriggerChange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x17\n" +
@@ -5232,7 +5263,11 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vafter_state\x18\b \x01(\tR\n" +
 	"afterState\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\t \x01(\tR\tcreatedAt\"\xe4\x04\n" +
+	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1a\n" +
+	"\bapproval\x18\n" +
+	" \x01(\tR\bapproval\x12-\n" +
+	"\x12capabilities_added\x18\v \x03(\tR\x11capabilitiesAdded\x121\n" +
+	"\x14capabilities_removed\x18\f \x03(\tR\x13capabilitiesRemoved\"\xe4\x04\n" +
 	"\fTriggerEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +

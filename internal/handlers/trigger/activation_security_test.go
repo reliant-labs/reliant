@@ -109,9 +109,14 @@ func TestAgentActivationSecretsNeverEnterCardsOrAudit(t *testing.T) {
 		require.NotContains(t, change.BeforeState, secret)
 		require.NotContains(t, change.AfterState, secret)
 		require.LessOrEqual(t, len(change.AfterState), automationpolicy.MaxDisplayBytes)
+		require.NotContains(t, strings.Join(change.CapabilitiesAdded, " "), secret)
+		require.NotContains(t, strings.Join(change.CapabilitiesRemoved, " "), secret)
 	}
+	// A change that needs a card cannot be made by an unattended run, even
+	// with an approval in hand.
+	e.setApprovalMode(t, nil, automationpolicy.ApprovalAlways)
 	_, err = e.svc.ManageActivation(automationpolicy.WithExecution(e.ctx, automationpolicy.Execution{Unattended: true}), e.userID, tools.ToolUpdateTriggerActivation, update, next.Hash)
-	require.ErrorContains(t, err, "Unattended")
+	require.ErrorContains(t, err, "an unattended run cannot show one")
 }
 
 // Interpose at the app write after approval verification. The concurrent edit
