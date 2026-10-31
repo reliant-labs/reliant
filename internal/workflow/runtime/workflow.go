@@ -991,6 +991,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			}
 		}
 
+		// The launch boundary already wrapped a single valid item given for
+		// a list input; a start that reached the run another way gets the
+		// same reading here rather than a failed run.
+		for _, c := range validation.CoerceSingleToList(filteredInputs, wfWithPlaceholders.GetInputs(), nil) {
+			logger.Info("[Workflow Runtime] Coerced a single input value to a one-item list",
+				"workflowName", input.WorkflowName, "input", c.Input, "item_type", c.Type)
+		}
+
 		validationResult := validation.ValidateInputs(&reliantv1.Workflow{
 			Name:   wfWithPlaceholders.GetName(),
 			Inputs: wfWithPlaceholders.GetInputs(),

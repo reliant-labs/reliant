@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 const releaseWorkflowYAML = `
@@ -89,6 +90,67 @@ func TestLaunchRefusesOverflowingIntegerAfterDefaults(t *testing.T) {
 	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
 	require.NoError(t, err)
 	require.Empty(t, chats)
+}
+
+const reposWorkflowYAML = `
+name: release
+apiVersion: v2
+inputs:
+  model:
+    type: model
+  repos:
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
+  repo:
+    type: string
+    default: ''
+entry: [ask]
+nodes:
+  - id: ask
+    type: call_llm
+    args:
+      model: "{{inputs.model}}"
+`
+
+// Chat 34cf88e4 (2026-10-31): `reliant workflow run release -i
+// repos=reliant-labs/control-plane` sent the repository as a string for a
+// list-of-repositories input, and the run failed in its first second. A
+// single valid item is a one-item list at the launch boundary; a value that is
+// not a valid item is still refused before any run exists.
+func TestLaunchWrapsASingleValidItemForAListInput(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	seedCompleteWorkflow(t, ctx, repo, "release", reposWorkflowYAML)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	params := mockModelParams(t)
+	params["repos"] = structpb.NewStringValue("reliant-labs/control-plane")
+	params["repo"] = structpb.NewStringValue("reliant-labs/control-plane")
+	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindCLIRun, DedupeKey: "cli-repos", OccurredAt: time.Now().UTC()}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "release",
+		Params: params, Messages: userSeed("release control-plane"),
+	})
+	require.NoError(t, err)
+	require.Len(t, starter.calls, 1)
+	root, ok := starter.calls[0].args[0].(v2.WorkflowInput)
+	require.True(t, ok, "the root start carries the run's inputs")
+	assert.Equal(t, []any{"reliant-labs/control-plane"}, root.Inputs["repos"])
+	assert.Equal(t, "reliant-labs/control-plane", root.Inputs["repo"], "a string input is left alone")
+
+	params["repos"] = structpb.NewStringValue("not a repository")
+	_, err = launcher.Launch(ctx, Event{Kind: core.TriggerEventKindCLIRun, DedupeKey: "cli-repos-bad", OccurredAt: time.Now().UTC()}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "release",
+		Params: params, Messages: userSeed("release control-plane"),
+	})
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	assert.Contains(t, validation.Error(), "input 'repos' expects an array of github.repository values, got string")
+	assert.Len(t, starter.calls, 1, "a refused launch starts nothing")
+	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1, "a refused launch writes no run")
 }
 
 // Input validation that cannot read the workflow it validates against fails,
