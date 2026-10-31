@@ -15074,12 +15074,6 @@
               "oneof": "payload"
             },
             {
-              "name": "run_finished",
-              "kind": "message",
-              "type_name": "reliant.v1.InboxRunFinished",
-              "oneof": "payload"
-            },
-            {
               "name": "storage",
               "kind": "message",
               "type_name": "reliant.v1.InboxStorage",
@@ -15143,7 +15137,6 @@
               "kind": "string"
             }
           ],
-          "reliant.v1.InboxRunFinished": [],
           "reliant.v1.InboxStorage": [
             {
               "name": "daemon_id",
@@ -15437,7 +15430,6 @@
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
-          "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
@@ -15473,7 +15465,6 @@
             "INBOX_ITEM_KIND_WAITING_FOR_MACHINE",
             "INBOX_ITEM_KIND_AUTOMATION_FAILING",
             "INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED",
-            "INBOX_ITEM_KIND_RUN_FINISHED",
             "INBOX_ITEM_KIND_STORAGE",
             "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
             "INBOX_ITEM_KIND_RECOVERY",
@@ -15512,7 +15503,6 @@
             3,
             4,
             5,
-            6,
             7,
             8,
             9,

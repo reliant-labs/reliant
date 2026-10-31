@@ -240,8 +240,6 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.AUTOMATION_DEFINITION_BROKEN:
       return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Workflow definition broken" />;
-    case InboxItemKind.RUN_FINISHED:
-      return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
     case InboxItemKind.AUTOMATION_RUN_PAUSED:
       return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation run paused" />;
     case InboxItemKind.RECOVERY:
@@ -584,7 +582,6 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
-    case "runFinished":
     case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>

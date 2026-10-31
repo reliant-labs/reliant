@@ -75,7 +75,17 @@ brought to them.
 
 --trigger enables only the named declared triggers (all or nothing among
 them) and leaves the workflow's other activations as they are. A named
-trigger that is already activated is brought to the flags, not duplicated.`,
+trigger that is already activated is brought to the flags, not duplicated.
+
+--notify is about successful runs only. With it, a run that completes
+successfully is marked unread, which raises a desktop notification, and stays
+out of the archive so the notification has a run to open. It never puts the
+run in the Inbox: the Inbox lists only what needs you. Without it a successful
+run is silent. Either way, a failed run notifies you once per failure streak
+and is an Inbox item until a later run of the same trigger succeeds, and a run
+waiting for an answer or an approval, or an automation that is broken, is an
+Inbox item. A workflow that has something to tell you after a success says so
+itself, with a step that messages you.`,
 		Example: `  # Enable a GitHub-event workflow for three repositories on one machine
   reliant trigger activate --workflow pr-review --machine 2aab1465-... \
     --param 'repos=["acme/api","acme/web"]' --name-prefix "PR pipeline · pr-review"
@@ -122,7 +132,7 @@ trigger that is already activated is brought to the flags, not duplicated.`,
 	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none")
 	fl.StringVar(&f.namePrefix, "name-prefix", "", "Names new activations \"<prefix> · <trigger>\" (default: the workflow)")
 	fl.StringVar(&f.actingAs, "acting-as", "", "Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise)")
-	fl.BoolVar(&f.notify, "notify", false, "Notify you when a run completes")
+	fl.BoolVar(&f.notify, "notify", false, "Desktop notification when a run succeeds; never an Inbox item (failures always notify)")
 	return cmd
 }
 
