@@ -1,6 +1,6 @@
 # Machine pools
 
-Status: Stage 1 (placement, pool-scaled concurrency) implemented in reliant.
+Status: Stage 1 (placement, pool-scaled concurrency) merged in reliant (#1915); Stage 7 control-plane half in review (control-plane#1689).
 Stages 2–4 are designed here and not built. Owner requests 2026-10-30 16:22Z,
 17:26Z (no dedicated nodes) and 17:27Z (concurrency follows the pool).
 
@@ -264,13 +264,13 @@ approval.
 
 | Stage | Content | State |
 |---|---|---|
-| 1 | labels, pools, placement, catalog check, queue/wake, trigger + launch, pool-scaled concurrency, API, `list_machines` | this PR |
-| 2 | re-place never-started steps on member death | after #1889 merges |
+| 1 | labels, pools, placement, catalog check, queue/wake, trigger + launch, pool-scaled concurrency, API, `list_machines` | merged (#1915) |
+| 2 | re-place never-started steps on member death | unblocked (#1889 merged) |
 | 3 | UI: pool · member in Runs, chat header, trigger view; pool settings page | next |
 | 4 | sync-checkouts loops `inputs.machine_pool.members`; 10-minute schedule | with the migration |
 | 5 | scale-up via Inbox approval | when wanted |
 | 6 | PR pipeline onto pool `cicd` | needs owner approval for machines |
-| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | control-plane + reliant, after 6 |
+| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | control-plane disk mode in review (control-plane#1689); reliant wake-and-wait, warm caches and `member_idle_timeout` not started |
 
 ## What a member costs asleep vs running
 
@@ -366,13 +366,19 @@ would reintroduce both problems.
   is provisioning and attaching on wake: about **15 s** measured (provisioned
   in 1 s, attached 6 s later, mapped 6 s after that), against **~3.5 min** for
   the autoscaler to add the node that every wake already waits for. **Chosen.**
-- Three things that assume a persistent disk must learn the mode:
-  1. `volume_presence` must not mark an ephemeral member's absent disk as
-     *missing → Failed*.
-  2. The storage meter must bill an ephemeral member's disk only while it
-     runs, and an asleep one not at all.
-  3. `GrowDaemonDisk` on a suspended ephemeral member just sets the next
-     size.
+- Three things that assume a persistent disk must learn the mode
+  (control-plane#1689):
+  1. `volume_presence` skips ephemeral workspaces, so an absent disk is
+     never marked *missing → Failed*.
+  2. The storage meter needs no change. The claim carries the workspace
+     labels, so it bills while the pod runs; after suspend there is no Bound
+     claim, so the state is StateNone.
+  3. `GrowDaemonDisk` refuses an ephemeral disk (FailedPrecondition): it is
+     recreated at the tier's size on every wake, and a CI member that needs
+     more disk should be a larger size.
+- The same PR fixes `idle_timeout` never reaching the operator (every
+  machine slept after 30m whatever it asked for), so `idle_timeout: "10m"` on
+  a member now takes effect.
 
 ### Warm state without a disk
 
