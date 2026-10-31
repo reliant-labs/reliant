@@ -1448,10 +1448,13 @@ type Trigger struct {
 	// Read-only registry state: connected, disconnected, starting, suspended,
 	// failed, removed, or none for a no-machine activation.
 	MachineState string `protobuf:"bytes,30,opt,name=machine_state,json=machineState,proto3" json:"machine_state,omitempty"`
-	// When true, a completed run of this trigger marks its chat unread
-	// (raising the OS notification) and appears in the Inbox as "Run finished".
-	// Off by default: unattended completions are silent, failures always notify
-	// (research/WORKFLOW_UI.md §6.4).
+	// When true, a run of this trigger that completes successfully marks its
+	// chat unread, which raises an OS notification, and the run stays out of
+	// the archive so the notification has something to open. It never creates
+	// an Inbox item: the Inbox lists only what needs the person, and a
+	// successful run does not. Off by default: unattended completions are
+	// silent. Failures notify (once per failure streak) and are an Inbox item
+	// whatever this says (research/WORKFLOW_UI.md §6.4).
 	NotifyOnComplete bool `protobuf:"varint,18,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// CEL bool over the `trigger` root (trigger.payload.*) that an event must
 	// satisfy to launch a run. Empty matches every event. A miss is recorded as
@@ -2479,7 +2482,8 @@ type TriggerDefinition struct {
 	// for the run's life. Exactly one of daemon_id, no_machine and
 	// machine_pool_id is set. See dev-docs/design/machine-pools.md.
 	MachinePoolId string `protobuf:"bytes,26,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
-	// Notify the owner when a run completes. Replaced on update, like every
+	// Send an OS notification when a run completes successfully
+	// (Trigger.notify_on_complete); never an Inbox item. Replaced on update, like every
 	// other field here, so a client editing a trigger must send the current
 	// value back.
 	NotifyOnComplete bool `protobuf:"varint,10,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
@@ -3511,7 +3515,8 @@ type EnableWorkflowRequest struct {
 	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Preset assignments, as TriggerDefinition.presets.
 	Presets map[string]string `protobuf:"bytes,8,rep,name=presets,proto3" json:"presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+	// Send an OS notification when a run completes successfully, as
+	// TriggerDefinition.notify_on_complete; never an Inbox item.
 	NotifyOnComplete bool `protobuf:"varint,9,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// The prompt for a trigger whose declaration has none (TriggerDefinition.message).
 	// A declaration's own prompt is used when this is empty.

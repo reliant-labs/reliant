@@ -691,10 +691,13 @@ message Trigger {
   // failed, removed, or none for a no-machine activation.
   string machine_state = 30;
 
-  // When true, a completed run of this trigger marks its chat unread
-  // (raising the OS notification) and appears in the Inbox as "Run finished".
-  // Off by default: unattended completions are silent, failures always notify
-  // (research/WORKFLOW_UI.md §6.4).
+  // When true, a run of this trigger that completes successfully marks its
+  // chat unread, which raises an OS notification, and the run stays out of
+  // the archive so the notification has something to open. It never creates
+  // an Inbox item: the Inbox lists only what needs the person, and a
+  // successful run does not. Off by default: unattended completions are
+  // silent. Failures notify (once per failure streak) and are an Inbox item
+  // whatever this says (research/WORKFLOW_UI.md §6.4).
   bool notify_on_complete = 18;
 
   // CEL bool over the `trigger` root (trigger.payload.*) that an event must
@@ -979,7 +982,8 @@ message TriggerDefinition {
   // machine_pool_id is set. See dev-docs/design/machine-pools.md.
   string machine_pool_id = 26;
 
-  // Notify the owner when a run completes. Replaced on update, like every
+  // Send an OS notification when a run completes successfully
+  // (Trigger.notify_on_complete); never an Inbox item. Replaced on update, like every
   // other field here, so a client editing a trigger must send the current
   // value back.
   bool notify_on_complete = 10;
@@ -1166,7 +1170,8 @@ message EnableWorkflowRequest {
   // Preset assignments, as TriggerDefinition.presets.
   map<string, string> presets = 8;
 
-  // Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+  // Send an OS notification when a run completes successfully, as
+  // TriggerDefinition.notify_on_complete; never an Inbox item.
   bool notify_on_complete = 9;
 
   // The prompt for a trigger whose declaration has none (TriggerDefinition.message).

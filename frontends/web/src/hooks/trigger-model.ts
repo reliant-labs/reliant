@@ -218,7 +218,7 @@ export interface Trigger {
   daemonId: string;
   /** Runs have no machine: server-side tools only (research/DAEMONLESS_RUNS.md). */
   noMachine: boolean;
-  /** Tell the owner when a run completes (unread, OS notification, Inbox item). */
+  /** Tell the owner when a run succeeds (unread + OS notification; never an Inbox item). */
   notifyOnComplete: boolean;
   /** Who the runs' integration writes speak as: the owner, or the Reliant bot. */
   actingIdentity: ActingIdentityKey;

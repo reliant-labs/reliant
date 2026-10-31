@@ -710,10 +710,13 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
   machineState: string;
 
   /**
-   * When true, a completed run of this trigger marks its chat unread
-   * (raising the OS notification) and appears in the Inbox as "Run finished".
-   * Off by default: unattended completions are silent, failures always notify
-   * (research/WORKFLOW_UI.md §6.4).
+   * When true, a run of this trigger that completes successfully marks its
+   * chat unread, which raises an OS notification, and the run stays out of
+   * the archive so the notification has something to open. It never creates
+   * an Inbox item: the Inbox lists only what needs the person, and a
+   * successful run does not. Off by default: unattended completions are
+   * silent. Failures notify (once per failure streak) and are an Inbox item
+   * whatever this says (research/WORKFLOW_UI.md §6.4).
    *
    * @generated from field: bool notify_on_complete = 18;
    */
@@ -1338,7 +1341,8 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
   machinePoolId: string;
 
   /**
-   * Notify the owner when a run completes. Replaced on update, like every
+   * Send an OS notification when a run completes successfully
+   * (Trigger.notify_on_complete); never an Inbox item. Replaced on update, like every
    * other field here, so a client editing a trigger must send the current
    * value back.
    *
@@ -1863,7 +1867,8 @@ export type EnableWorkflowRequest = Message<"reliant.v1.EnableWorkflowRequest"> 
   presets: { [key: string]: string };
 
   /**
-   * Notify the owner when a run completes, as TriggerDefinition.notify_on_complete.
+   * Send an OS notification when a run completes successfully, as
+   * TriggerDefinition.notify_on_complete; never an Inbox item.
    *
    * @generated from field: bool notify_on_complete = 9;
    */

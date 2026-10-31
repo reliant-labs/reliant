@@ -32,7 +32,7 @@ You **enable** it in the app. Open **Workflows → Library**, open the workflow 
 - for an integration event, which **connected account** it listens through, once per integration;
 - the workflow's own **inputs**, set on every run;
 - a **prompt**, for any trigger whose author wrote none;
-- whether to **notify** you when a run completes. Off by default: finished runs land quietly in **Workflows → Runs**, while a failure always notifies you.
+- whether to **notify** you when a run succeeds. Off by default: successful runs land quietly in **Workflows → Runs**. On, a successful run is marked unread and raises a desktop notification. It never puts the run in the [Inbox](#the-inbox), which lists only what needs you. A failed run always notifies you, once per failure streak, and stays in the Inbox until a later run of the automation succeeds.
 
 When the workflow declares more than one trigger, a trigger that needs something different (another machine, another account, a prompt of its own) can be changed under **Advanced: per trigger**.
 
@@ -267,7 +267,7 @@ A workflow that should only ever start from its triggers, never from a chat, can
 
 An automation's runs stay out of your chat list. Each one is listed under **Workflows → Runs**, named by the automation that fired it, with its status. A run that finishes successfully archives itself: it stays in Runs, marked **Archived**, and out of the sidebar's Archived tab, which holds only chats you put away. A run that fails, completes into a declared `outcome: failure`, is cancelled, or is waiting on you stays unarchived, so it surfaces in Runs and the Inbox. Route a blocked path to a terminal node with `outcome: failure` when you want to look at it.
 
-An automation with **Notify me when it finishes** keeps its successful runs unarchived, since the notification points at them. **Open as chat** on a run moves it into your chat list, out of the archive if it was there.
+An automation with **Notify me when a run succeeds** keeps its successful runs unarchived, since the notification points at them. **Open as chat** on a run moves it into your chat list, out of the archive if it was there.
 
 ## Who an automation acts as
 
@@ -321,10 +321,11 @@ The **Inbox**, in the sidebar, is everything waiting on you across your projects
 | Approvals | A run is waiting for you to approve a tool call or a step |
 | Questions | An agent asked you something and is waiting for the answer |
 | Waiting for a machine | A run is blocked on a machine that is asleep or starting |
-| Failing automations | An automation's health turned **Failing** |
+| Failing automations | A run an automation started failed, or the automation is **Failing** or **broken**. One item per failure streak; a later run of the automation that succeeds clears it |
 | Automations that could not start | An automation's newest firing could not start a run |
-| Finished runs | A run of an automation that notifies on completion finished, and you have not opened it yet |
 | Storage | A machine is low on disk, or holds archived worktrees it will not remove on its own |
+
+A run that completed successfully is never in the Inbox, whatever its automation's notify setting: **Notify me when a run succeeds** is a desktop notification, not an Inbox item. A workflow that has something to tell you after a success says so itself, with a step that messages you (Slack, SMS or email) or an `ask_user` question.
 
 Approvals (**Approve** / **Deny**) and questions (**Answer**) can be dealt with from the Inbox itself; the rest **Open** the run, automation or machine. Every item, or a whole section, can be dismissed, with Undo. It shows the current project by default, with every project one click away. A run started by an automation is unattended and never waits on you, so the approvals and questions here come from chats and runs someone started by hand.
 

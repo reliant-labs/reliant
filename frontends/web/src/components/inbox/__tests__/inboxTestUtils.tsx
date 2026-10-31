@@ -167,18 +167,6 @@ export function needsSetupItem(overrides: Overrides<InboxItem> = {}): InboxItem 
   });
 }
 
-export function runFinishedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
-  return create(InboxItemSchema, {
-    ...base,
-    kind: InboxItemKind.RUN_FINISHED,
-    itemId: "run_finished:chat-1",
-    triggerId: "trg-3",
-    triggerName: "Nightly triage",
-    payload: { case: "runFinished", value: {} },
-    ...overrides,
-  });
-}
-
 export function runPausedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,

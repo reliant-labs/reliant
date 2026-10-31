@@ -287,6 +287,9 @@ type Streak struct {
 	First *core.TriggerEventWithRun
 	// Newest is the most recent failure. Nil when Count is 0.
 	Newest *core.TriggerEventWithRun
+	// RunFailures is how many of Count are runs that launched and then
+	// failed, as opposed to firings that could not launch a run at all.
+	RunFailures int32
 }
 
 // FailureStreak reads the failure streak from newest-first firings. Unlike
@@ -303,6 +306,9 @@ func FailureStreak(firings []*core.TriggerEventWithRun) Streak {
 			continue
 		}
 		streak.Count++
+		if f.Event.Outcome == core.TriggerEventLaunched {
+			streak.RunFailures++
+		}
 		streak.First = f
 		if streak.Newest == nil {
 			streak.Newest = f
