@@ -270,7 +270,7 @@ approval.
 | 4 | sync-checkouts loops `inputs.machine_pool.members`; 10-minute schedule | with the migration |
 | 5 | scale-up via Inbox approval | when wanted |
 | 6 | PR pipeline onto pool `cicd` | needs owner approval for machines |
-| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | control-plane disk mode in review (control-plane#1689); reliant wake-and-wait, warm caches and `member_idle_timeout` not started |
+| 7 | ephemeral members (`disk: ephemeral`, generic ephemeral volume, remote caches, wake-and-wait) | control-plane disk mode merged (control-plane#1689); reliant wake-then-place in review; restoring a woken member's checkout, warm caches and `member_idle_timeout` not started |
 
 ## What a member costs asleep vs running
 
@@ -397,11 +397,19 @@ barely notices. A gate pays the first-build cost once per wake.
 
 ### Placement changes
 
-- **Wake and wait instead of wake and pin.** A run must not be pinned to an
-  ephemeral member that has no checkouts yet. A `Wake` decision for an
-  ephemeral member wakes it and leaves the event pending. The redriver places
-  the event once the member is connected, its project is `installed`, and its
-  catalog matches. The eligibility rules already in place enforce all of this.
+- **Wake, then place (implemented, for every member).** A run is never
+  pinned to a member that is not up. A `Wake` decision wakes the member
+  (`WakeForRun`, the trigger owner's door) and leaves the event pending with
+  "waking <member>"; a starting member is waited for, not pinned to, and no
+  second member is woken beside it. A connected member takes runs only once
+  its checkout was seen on its disk since that connection:
+  `project_daemons.verified_at >= daemon_attachment.attached_at`, stamped by
+  every clone and by the connect-time reconcile that finds the path. This
+  needs no knowledge of the disk mode: an ephemeral member that comes up
+  empty simply never verifies until its checkout is back. The redriver
+  (every minute) places the event once the member is connected, verified and
+  on the pool's catalog. Persistent members pay at most one redrive interval
+  for it.
 - **No drift.** A woken ephemeral member clones origin/main, so its catalog is
   always current. Persistent members are the ones that drift.
 - **Scale to zero.** Members of a pool with `min_members: 0` all sleep when

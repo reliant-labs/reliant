@@ -18,7 +18,7 @@ import (
 // poolWaitingPrefix starts the reason a pool-bound fire records while no
 // member can take its run: the event stays pending and the redriver fires it
 // again, exactly as for workflow capacity.
-const poolWaitingPrefix = "waiting for a machine in pool "
+const poolWaitingPrefix = machinepool.WaitingPrefix
 
 // poolPlaceAttempts bounds re-placing after a concurrent launch took the
 // chosen member's last slot (machinepool.MemberBusy).
@@ -36,6 +36,8 @@ type Placer interface {
 	Place(ctx context.Context, userID, poolID, projectID string) (machinepool.Placement, error)
 	Capacity(ctx context.Context, userID, poolID, projectID, workflowRef string, perMember uint32) (uint32, error)
 	SlotGuard(pool machinepool.Pool, member machinepool.Member) func(ctx context.Context) (string, error)
+	// Wake wakes a member a Wake decision chose; the run is not pinned to it.
+	Wake(ctx context.Context, userID, daemonID string) error
 }
 
 // poolUnsyncedReason is a pool fire's wait reason when no member has synced
@@ -163,7 +165,18 @@ func launchOnPool(ctx context.Context, placer Placer, launcher Launcher, t *core
 		if d.ExpectedCatalog != catalog {
 			return nil, &launch.DeclinedError{Reason: poolWaitingPrefix + placed.Pool.Name + " (its catalog changed during this fire; it is read again)"}
 		}
-		if d.Kind == machinepool.Queue {
+		switch d.Kind {
+		case machinepool.Queue:
+			return nil, &launch.DeclinedError{Reason: d.Reason(placed.Pool.Name)}
+		case machinepool.Wake:
+			// Wake, then place: the member may come up with an empty disk
+			// (its disk is the pod's own), so the run waits and the redriver
+			// places it once the member is connected and its checkout
+			// verified. A failed wake waits too, saying why; the next
+			// redrive tries again.
+			if err := placer.Wake(ctx, t.UserID, d.Member.DaemonID); err != nil {
+				return nil, &launch.DeclinedError{Reason: fmt.Sprintf("%s%s (could not wake %s: %v)", poolWaitingPrefix, placed.Pool.Name, memberName(d.Member), err)}
+			}
 			return nil, &launch.DeclinedError{Reason: d.Reason(placed.Pool.Name)}
 		}
 		spec.DaemonID = d.Member.DaemonID
@@ -222,6 +235,13 @@ func composeGuards(first, next func(context.Context) (string, error)) func(conte
 		}
 		return next(ctx)
 	}
+}
+
+func memberName(m machinepool.Member) string {
+	if m.Name != "" {
+		return m.Name
+	}
+	return m.DaemonID
 }
 
 func poolPlacement(p machinepool.Placement) *launch.PoolPlacement {

@@ -130,6 +130,43 @@ func TestMachinePoolQueries(t *testing.T) {
 		t.Fatalf("b = %+v, want not installed, no runs", b)
 	}
 
+	// Verified: a's checkout was seen (UpsertProjectDaemon, above) since its
+	// current connection began, and stops being so the moment a newer
+	// connection begins, until the connect-time reconcile sees it again.
+	memberA := func() core.MachinePoolMemberRow {
+		t.Helper()
+		ms, err := env.Repo.ListMachinePoolMembers(ctx, again, storetest.SeedProjectID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ms {
+			if m.DaemonID == "mp-a" {
+				return m
+			}
+		}
+		t.Fatal("a is not a member")
+		return core.MachinePoolMemberRow{}
+	}
+	if _, err := store.UpsertDaemonAttachment(ctx, env.ORM, &core.DaemonAttachment{DaemonID: "mp-a", UserID: storetest.SeedUserID,
+		Source: core.DaemonAttachmentSourceInbound, AttachedAt: now.Add(-time.Hour), LastStreamActivity: time.Now()}); err != nil {
+		t.Fatalf("attach a: %v", err)
+	}
+	if a := memberA(); a.Phase != "connected" || !a.Verified {
+		t.Fatalf("a = %+v, want connected and verified", a)
+	}
+	if _, err := env.ORM.Bun().NewRaw(`UPDATE daemon_attachment SET attached_at = NOW() WHERE daemon_id = 'mp-a'`).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if a := memberA(); a.Phase != "connected" || !a.Installed || a.Verified {
+		t.Fatalf("a after a new connection = %+v, want installed but not verified", a)
+	}
+	if err := env.Repo.UpsertProjectDaemon(ctx, storetest.SeedProjectID, "mp-a", "/srv/a", nil); err != nil {
+		t.Fatal(err)
+	}
+	if a := memberA(); !a.Verified {
+		t.Fatalf("a after the reconcile saw its checkout = %+v, want verified", a)
+	}
+
 	// A pool a trigger runs on cannot be deleted; an unused one can.
 	trg := newStoreTrigger("trg-pool", "pooled", now)
 	trg.DaemonID, trg.MachinePoolID = "", pool.ID

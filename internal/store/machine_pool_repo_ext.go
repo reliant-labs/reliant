@@ -214,6 +214,7 @@ func ListMachinePoolMembers(ctx context.Context, db orm.Context, pool *core.Mach
 		Size            string     `bun:"size"`
 		Phase           string     `bun:"phase"`
 		Installed       bool       `bun:"installed"`
+		Verified        bool       `bun:"verified"`
 		WorkflowsJSON   *string    `bun:"workflows_json"`
 		PresetsJSON     *string    `bun:"presets_json"`
 		CatalogPushedAt *time.Time `bun:"pushed_at"`
@@ -231,6 +232,13 @@ SELECT d.id AS daemon_id,
          ELSE 'disconnected' END::text AS phase,
     EXISTS (SELECT 1 FROM project_daemons pd WHERE pd.project_id = ?2 AND pd.daemon_id = d.id
            AND pd.install_state = 'installed') AS installed,
+    -- The checkout was seen on disk since the machine's current connection.
+    -- A machine whose disk is the pod's own wakes with nothing on it while
+    -- install_state still says installed, so "installed" alone is not enough
+    -- to put a run on a member that just connected.
+    EXISTS (SELECT 1 FROM project_daemons pd JOIN daemon_attachment a ON a.daemon_id = pd.daemon_id
+           WHERE pd.project_id = ?2 AND pd.daemon_id = d.id AND pd.install_state = 'installed'
+           AND pd.verified_at >= a.attached_at) AS verified,
     c.workflows_json, c.presets_json, c.pushed_at,
     (SELECT count(*) FROM chats ch WHERE ch.machine_pool_id = ?3 AND ch.active_daemon_id = d.id AND `+liveRootSQL+`) AS live_runs
 FROM daemons d
