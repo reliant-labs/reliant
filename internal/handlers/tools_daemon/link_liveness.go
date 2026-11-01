@@ -226,7 +226,7 @@ func (s *Service) runConnectWork(conn *daemonConnection, reconcile bool) {
 				return
 			}
 			if reconciles >= reconcileMaxAttempts {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" reconcile: giving up for this connection; every pass met a transport failure",
+				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: giving up for this connection; every pass met a transport failure",
 					"userID", conn.userID, "daemonID", conn.daemonID, "passes", reconciles, "error", err)
 				return
 			}
@@ -235,7 +235,7 @@ func (s *Service) runConnectWork(conn *daemonConnection, reconcile bool) {
 		observability.DaemonConnectWorkDeferredTotal.WithLabelValues(reason).Inc()
 		span.AddEvent("daemon.link.deferred", trace.WithAttributes(
 			attribute.String("reason", reason), attribute.Int64("rtt_ms", rtt.Milliseconds())))
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Deferring connect-time work: the daemon's link is not ready",
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Deferring connect-time work: the daemon's link is not ready",
 			"userID", conn.userID, "daemonID", conn.daemonID, "reason", reason,
 			"attempt", attempt, "probeRttMs", rtt.Milliseconds(), "error", err, "retryIn", backoff)
 		select {
@@ -269,7 +269,7 @@ func (s *Service) linkReady(ctx context.Context, conn *daemonConnection, attempt
 	}
 	trace.SpanFromContext(ctx).AddEvent("daemon.link.ready", trace.WithAttributes(
 		attribute.Int("attempts", attempts), attribute.Int64("rtt_ms", rtt.Milliseconds())))
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon link ready",
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon link ready",
 		"userID", conn.userID, "daemonID", conn.daemonID,
 		"probeRttMs", rtt.Milliseconds(), "attempts", attempts, "sinceRegisteredMs", latency.Milliseconds())
 	s.notifyLinkReady(conn)
