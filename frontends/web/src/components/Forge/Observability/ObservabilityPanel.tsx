@@ -204,7 +204,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
                 id="obs-range"
                 value={range}
                 onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
-                className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-8 touch:h-11 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="obs-range"
               >
                 {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
@@ -217,7 +217,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           )}
           <Button
             variant="ghost"
-            size="sm"
+            size="md"
+            className="touch:h-11"
             onClick={() => {
               if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
               void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });

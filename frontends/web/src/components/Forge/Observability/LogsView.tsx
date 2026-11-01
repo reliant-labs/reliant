@@ -286,7 +286,7 @@ function LogsToolbar({
               onClick={() => toggleSeverity(severity)}
               data-testid={`obs-severity-${severity}`}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex h-8 touch:h-11 items-center rounded-full border px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
                   ? "border-primary bg-primary/10 text-ink"
                   : "border-border text-ink-muted hover:text-ink"
