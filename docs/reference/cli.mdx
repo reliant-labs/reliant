@@ -441,6 +441,12 @@ which exchanges this login — or the daemon's credential — for one that holds
 only deploy/secret/domain authority, for at most an hour. This login never
 leaves this machine's Reliant files.
 
+ONE ACCOUNT PER MACHINE. The daemon on this machine has its own sign-in
+(~/.reliant/daemon.json, see 'reliant daemon start'). Logging in as one
+account removes a saved daemon sign-in of any other account for this server,
+says so, and names any daemon still running as it; the next 'reliant daemon
+start' pairs the machine as you.
+
 For CI, skip login and set RELIANT_TOKEN.
 
 ```
@@ -725,8 +731,12 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register'). It says so before
-     connecting; 'reliant auth logout' removes it, to sign in as someone else.
+     earlier 'daemon start' or 'reliant daemon register'). It says so, and
+     whose it is, before connecting; 'reliant auth logout' removes it, to sign
+     in as someone else. When you are logged in to the CLI ('reliant auth
+     login'), only the daemon credential of that same account is used: one
+     of another account is passed over, said so, and the machine is paired
+     as you instead, so the daemon never connects as someone else.
   3. Otherwise it pairs the machine: it prints a short code and a link, and
      you approve "this machine" in the Reliant app — on the link, or by typing
      the code into the Add machine window. Nothing has to reach back to this

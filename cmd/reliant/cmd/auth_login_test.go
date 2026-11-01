@@ -36,6 +36,19 @@ type fakeCP struct {
 	// recorded in deviceForm.
 	offerDevice bool
 	deviceForm  url.Values
+	// account, when set, is who every token reply names (account_id,
+	// account_email), as a control plane that names accounts does.
+	account cliauth.Account
+}
+
+// tokenReply is the token endpoint's success body.
+func (cp *fakeCP) tokenReply(scope string) map[string]any {
+	reply := map[string]any{"access_token": cp.token, "token_type": "Bearer", "expires_in": 7776000, "scope": scope}
+	if cp.account.Known() {
+		reply["account_id"] = cp.account.ID
+		reply["account_email"] = cp.account.Email
+	}
+	return reply
 }
 
 func newFakeCP(t *testing.T, token string) *fakeCP {
@@ -76,9 +89,7 @@ func newFakeCP(t *testing.T, token string) *fakeCP {
 					_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 					return
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"access_token": cp.token, "token_type": "Bearer", "expires_in": 7776000, "scope": scope,
-				})
+				_ = json.NewEncoder(w).Encode(cp.tokenReply(scope))
 				return
 			}
 			cp.browserToken(w, r)
@@ -116,9 +127,7 @@ func (cp *fakeCP) browserToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"access_token": cp.token, "token_type": "Bearer", "expires_in": 7776000, "scope": scope,
-	})
+	_ = json.NewEncoder(w).Encode(cp.tokenReply(scope))
 }
 
 func (cp *fakeCP) lastRequest() url.Values {

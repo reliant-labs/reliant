@@ -372,6 +372,14 @@ function writeDaemonStore(store, opts = {}) {
  * PAT, the daemon registers under the wrong owner, and the new user's
  * ListDaemons comes back empty.
  *
+ * `account_id` and `account_email` name who the PAT acts as — Go's
+ * DaemonCredentials.AccountID / AccountEmail, which `reliant auth login` and
+ * `reliant daemon start` read to keep a machine's CLI login and daemon sign-in
+ * to one account. The app mints for its signed-in user, whose `sub` IS the
+ * account id (the IdP subject the gateway names a daemon credential's owner
+ * by), so `account_id` is `sub`; `email` is the session user's email. Both
+ * are omitted when unknown, and Go then asks the gateway.
+ *
  * There is deliberately no `daemon_id` here. The stable server-assigned id
  * used to live in this entry, keyed by origin alone, which meant every
  * worktree on one machine read and re-asserted the SAME id and the gateway
@@ -381,9 +389,9 @@ function writeDaemonStore(store, opts = {}) {
  * reappears on disk; do not reintroduce it here.
  *
  * @param {{ apiUrl: string, gatewayUrl?: string, pat: string, sub?: string,
- *           filePath?: string, logger?: { warn?: Function } }} args
+ *           email?: string, filePath?: string, logger?: { warn?: Function } }} args
  */
-function upsertEntry({ apiUrl, gatewayUrl, pat, sub, filePath, logger }) {
+function upsertEntry({ apiUrl, gatewayUrl, pat, sub, email, filePath, logger }) {
   const origin = endpointKey(apiUrl);
   if (!origin) {
     throw new Error(`invalid --server URL: ${apiUrl}`);
@@ -402,7 +410,8 @@ function upsertEntry({ apiUrl, gatewayUrl, pat, sub, filePath, logger }) {
     server_url: apiUrl,
     gateway_url: gatewayUrl || '',
     registered_at: new Date().toISOString(),
-    ...(sub ? { sub } : {}),
+    ...(sub ? { sub, account_id: sub } : {}),
+    ...(email ? { account_email: email } : {}),
   };
   store.default_accounts[origin] = account;
   writeDaemonStore(store, { filePath });
@@ -1025,6 +1034,7 @@ async function ensureDaemonPATForOrigin({
         gatewayUrl: resolvedGatewayUrl,
         pat: minted.token,
         sub: currentSub,
+        email: typeof session?.user?.email === 'string' ? session.user.email : '',
         logger: log,
       });
       log.info?.(

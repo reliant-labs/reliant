@@ -45,6 +45,18 @@ type DaemonCredentials struct {
 	// proactively re-mint before it lapses instead of booting on — and then
 	// fatally failing with — a dead PAT. nil means "never expires".
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// AccountID and AccountEmail name who the PAT acts as: the external id
+	// (the IdP subject the gateway's WhoAmI and RegistrationAck name) and the
+	// account email. They are not Sub. Sub is the store key and the daemon
+	// instance's account, which a machine paired with no account named keeps
+	// as DefaultAccount; these are the token's owner whatever it is filed
+	// under. They are what keeps the daemon sign-in in step with the CLI
+	// login (`reliant auth login`, `reliant daemon start`). Empty when not
+	// known yet — a sign-in saved before they were recorded, or by a control
+	// plane that does not name accounts; `daemon start` then asks the
+	// gateway and records the answer (RecordDaemonAccount).
+	AccountID    string `json:"account_id,omitempty"`
+	AccountEmail string `json:"account_email,omitempty"`
 }
 
 // DefaultAccount is the account name an entry takes when the caller has no
@@ -349,6 +361,59 @@ func DeleteDaemonCredentialsForServer(serverURL string) ([]*DaemonCredentials, e
 		return nil, err
 	}
 	return removed, nil
+}
+
+// ListDaemonCredentialsForServer returns the daemon credentials stored for
+// serverURL's origin, the account a no-account lookup resolves to first and
+// the rest sorted. Each entry's Sub is its store account, so it can be fed
+// back into ReadDaemonCredentials or DeleteDaemonCredentials.
+func ListDaemonCredentialsForServer(serverURL string) ([]*DaemonCredentials, error) {
+	store, err := readStore()
+	if err != nil {
+		return nil, err
+	}
+	origin := endpointKey(serverURL)
+	if origin == "" || len(store.Origins[origin]) == 0 {
+		return nil, nil
+	}
+	return store.originCredentials(origin), nil
+}
+
+// RecordDaemonAccount records who one stored daemon credential acts as
+// (DaemonCredentials.AccountID / AccountEmail) without touching anything
+// else — not the PAT, and not which account the origin defaults to. sub is
+// the store account, as ListDaemonCredentialsForServer reports it. A no-op
+// when no such entry exists. An empty email keeps one already recorded.
+func RecordDaemonAccount(serverURL, sub, accountID, email string) error {
+	store, err := readStore()
+	if err != nil {
+		return err
+	}
+	creds := store.Origins[endpointKey(serverURL)][accountKey(sub)]
+	if creds == nil {
+		return nil
+	}
+	creds.AccountID = accountID
+	if email != "" {
+		creds.AccountEmail = email
+	}
+	return writeStore(store)
+}
+
+// MakeDefaultDaemonAccount makes sub the account a no-account lookup on
+// serverURL's origin resolves to, as writing it would. A no-op when no such
+// entry exists.
+func MakeDefaultDaemonAccount(serverURL, sub string) error {
+	store, err := readStore()
+	if err != nil {
+		return err
+	}
+	origin, account := endpointKey(serverURL), accountKey(sub)
+	if store.Origins[origin][account] == nil || store.DefaultAccounts[origin] == account {
+		return nil
+	}
+	store.DefaultAccounts[origin] = account
+	return writeStore(store)
 }
 
 // ListDaemonCredentials returns every stored daemon credential, in a stable
