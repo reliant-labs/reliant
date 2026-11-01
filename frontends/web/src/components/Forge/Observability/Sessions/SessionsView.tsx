@@ -35,7 +35,7 @@ import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
-import { rumScopeOf, sessionTitle } from "./sessionModel";
+import { isReplayKnownUnplayable, noReplayReason, rumScopeOf, sessionTitle } from "./sessionModel";
 import { SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionsViewProps {
@@ -277,7 +277,7 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-ink-muted">
             {s.userId ? <span className="text-ink">{s.userId}</span> : <span>anonymous</span>}
             {s.envName && <span>{s.envName}</span>}
-            {s.hasReplay && <Tag title="This session's replay was recorded">replay</Tag>}
+            <ReplayMark session={s} />
             <Mono value={s.sessionId} length={8} />
           </span>
         </>
@@ -310,7 +310,40 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       columns={columns}
       data={sessions.map((session) => ({ session }))}
       getRowKey={({ session }) => `${session.service}-${session.sessionId}`}
-      getRowProps={({ session }) => ({ className: "align-top hover:bg-ink/5", "data-testid": `obs-session-${session.sessionId}` })}
+      getRowProps={({ session }) => {
+        const playable = replayPlayable(session);
+        // Dimmed, not hidden: a session without a playable replay still has a
+        // timeline worth opening, but it is not the row a reader wants first.
+        return {
+          className: cn("align-top hover:bg-ink/5", !playable && "opacity-60 hover:opacity-100 focus-within:opacity-100"),
+          "data-testid": `obs-session-${session.sessionId}`,
+          "data-replay": playable ? "playable" : session.hasReplay ? "unplayable" : "none",
+        };
+      }}
     />
+  );
+}
+
+/** Whether the row offers a replay worth opening: recorded, and not found unplayable. */
+function replayPlayable(session: SessionSummary): boolean {
+  return session.hasReplay && !isReplayKnownUnplayable(session.sessionId);
+}
+
+/** The row's replay mark: a replay, a replay this tab found unplayable, or none and why. */
+function ReplayMark({ session }: { session: SessionSummary }) {
+  if (session.hasReplay && !isReplayKnownUnplayable(session.sessionId)) {
+    return <Tag title="This session's replay was recorded">replay</Tag>;
+  }
+  if (session.hasReplay) {
+    return (
+      <span title="Its replay was opened and holds no full snapshot of the page to play from." data-testid={`obs-session-replay-incomplete-${session.sessionId}`}>
+        replay incomplete
+      </span>
+    );
+  }
+  return (
+    <span title={noReplayReason(session)} data-testid={`obs-session-no-replay-${session.sessionId}`}>
+      no replay
+    </span>
   );
 }
