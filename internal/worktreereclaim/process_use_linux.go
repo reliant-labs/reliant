@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -130,53 +131,74 @@ procs:
 		}
 		maps, err := os.Open(filepath.Join(base, "maps"))
 		if err != nil {
-			if processGone(base) {
+			if mapsVanished(base, err) {
 				continue
 			}
 			return fmt.Errorf("process mappings unavailable: %w", err)
 		}
-		scanner := bufio.NewScanner(maps)
-		scanner.Buffer(make([]byte, 4096), 1<<20)
-		lines := 0
-		for scanner.Scan() {
-			lines++
-			if lines > 100000 {
-				maps.Close()
-				return errors.New("process mapping budget exceeded")
-			}
-			if err := ctx.Err(); err != nil {
-				maps.Close()
-				return err
-			}
-			line := scanner.Text()
-			// First five fields are address/perms/offset/dev/inode; the remainder
-			// is a path that may itself contain spaces. Proc escapes newlines.
-			for i := 0; i < 5; i++ {
-				line = strings.TrimLeft(line, " \t")
-				n := strings.IndexAny(line, " \t")
-				if n < 0 {
-					line = ""
-					break
-				}
-				line = line[n:]
-			}
-			path := strings.TrimLeft(line, " \t")
-			path = strings.ReplaceAll(path, `\012`, "\n")
-			if processPathUses(path, roots) {
-				maps.Close()
-				return fmt.Errorf("workspace mapped by process %s", entry.Name())
-			}
-		}
-		scanErr := scanner.Err()
+		mapped, scanErr := mapsUse(ctx, maps, roots)
 		closeErr := maps.Close()
 		if scanErr != nil {
+			// The process exited between the open and the read: the read
+			// fails ESRCH (seen under parallel git, where every short-lived
+			// child exits mid-scan). Its mappings are gone with it.
+			if mapsVanished(base, scanErr) {
+				continue
+			}
 			return scanErr
+		}
+		if mapped {
+			return fmt.Errorf("workspace mapped by process %s", entry.Name())
 		}
 		if closeErr != nil {
 			return closeErr
 		}
 	}
 	return ctx.Err()
+}
+
+// mapsUse reports whether any mapping read from maps (a /proc/<pid>/maps
+// stream) is a file under roots.
+func mapsUse(ctx context.Context, maps io.Reader, roots []string) (bool, error) {
+	scanner := bufio.NewScanner(maps)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	lines := 0
+	for scanner.Scan() {
+		lines++
+		if lines > 100000 {
+			return false, errors.New("process mapping budget exceeded")
+		}
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		line := scanner.Text()
+		// First five fields are address/perms/offset/dev/inode; the remainder
+		// is a path that may itself contain spaces. Proc escapes newlines.
+		for i := 0; i < 5; i++ {
+			line = strings.TrimLeft(line, " \t")
+			n := strings.IndexAny(line, " \t")
+			if n < 0 {
+				line = ""
+				break
+			}
+			line = line[n:]
+		}
+		path := strings.TrimLeft(line, " \t")
+		path = strings.ReplaceAll(path, `\012`, "\n")
+		if processPathUses(path, roots) {
+			return true, nil
+		}
+	}
+	return false, scanner.Err()
+}
+
+// mapsVanished reports whether a failure to open or read base's maps means the
+// process has no mappings left, rather than that they could not be read. The
+// kernel answers ESRCH for a task that is gone or has dropped its mm on the way
+// out of exit, and a task without an mm maps nothing. Any other failure, with
+// the process still listed, is uncertainty and holds.
+func mapsVanished(base string, err error) bool {
+	return errors.Is(err, syscall.ESRCH) || processGone(base)
 }
 func processZombie(base string) (bool, error) {
 	data, err := os.ReadFile(filepath.Join(base, "stat"))

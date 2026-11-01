@@ -4,11 +4,16 @@ package worktreereclaim
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"testing/iotest"
 )
 
 func procUseFixture(t *testing.T) (string, string) {
@@ -168,6 +173,56 @@ func TestRecoveryInspectionExemptsOnlyExactLiveOwnDescriptors(t *testing.T) {
 	f.Close()
 	if err := checkProcessUseAt(ctx, proc, os.Geteuid(), []string{root}); err == nil {
 		t.Fatal("closed descriptor cannot retain exemption")
+	}
+}
+
+// A process that exits between the open of its maps and the read fails the read
+// ESRCH. Parallel git children do exactly that mid-scan, and holding on it kept
+// archived worktrees "in use" by processes that no longer existed.
+func TestRecoveryProcessUseMapsOfAnExitedProcessIsNotUse(t *testing.T) {
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("sleep not on PATH")
+	}
+	cmd := exec.Command(sleep, "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid))
+	maps, err := os.Open(filepath.Join(base, "maps"))
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal(err)
+	}
+	defer maps.Close()
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait() // reaped: the opened maps now belongs to no task
+	_, err = mapsUse(context.Background(), maps, []string{t.TempDir()})
+	if !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("reading an exited process's maps: got %v, want ESRCH", err)
+	}
+	if !mapsVanished(base, err) {
+		t.Fatal("an exited process has no mappings and cannot hold the workspace")
+	}
+}
+
+// Only ESRCH, or the process gone from /proc, proves the mappings are gone; any
+// other read failure of a listed process is uncertainty and holds.
+func TestRecoveryProcessUseMapsReadFailureHolds(t *testing.T) {
+	_, base := procUseFixture(t)
+	if mapsVanished(base, fmt.Errorf("read maps: %w", syscall.EIO)) {
+		t.Fatal("EIO from a listed process is not absence")
+	}
+	if !mapsVanished(base, &os.PathError{Op: "read", Path: filepath.Join(base, "maps"), Err: syscall.ESRCH}) {
+		t.Fatal("ESRCH means the task has no mm left")
+	}
+	if !mapsVanished(filepath.Join(t.TempDir(), "gone"), syscall.EIO) {
+		t.Fatal("a process no longer in /proc maps nothing")
+	}
+	_, err := mapsUse(context.Background(), iotest.ErrReader(syscall.EIO), []string{t.TempDir()})
+	if !errors.Is(err, syscall.EIO) {
+		t.Fatalf("a read failure must surface: %v", err)
 	}
 }
 
