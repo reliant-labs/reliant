@@ -66,8 +66,16 @@ import "uplot/dist/uPlot.min.css";
 import { cn } from "@/lib/utils";
 
 import { formatValue, type ValueUnit } from "../format";
+import { chartToken } from "./chartPalette";
 
-export type ChartTone = "primary" | "destructive" | "warning" | "success" | "secondary" | "muted";
+/**
+ * A STATUS colour, for a series, band or marker that is one: errors in
+ * destructive, an alert band, a neutral comparison in muted. Anything
+ * categorical ("which series") takes the shared palette instead: `color`, or by
+ * position when neither is set (chartPalette.ts). Green and red are never dealt
+ * as "the next series".
+ */
+export type ChartTone = "destructive" | "warning" | "success" | "muted";
 
 export interface ChartSeries {
   label: string;
@@ -129,15 +137,10 @@ export interface ChartBand {
   tone?: ChartTone;
 }
 
-/** The categorical order a multi-series chart cycles through. */
-const CATEGORICAL: ChartTone[] = ["primary", "secondary", "success", "warning", "destructive", "muted"];
-
 const TONE_VAR: Record<ChartTone, string> = {
-  primary: "--primary",
   destructive: "--destructive",
   warning: "--warning",
   success: "--success",
-  secondary: "--secondary",
   muted: "--muted-foreground",
 };
 
@@ -279,8 +282,8 @@ export function UPlotChart({
     if (!host || timestamps.length === 0) return;
     const palette = readPalette();
     const width = Math.max(host.clientWidth, 40);
-    const tones = series.map((s, index) => s.tone ?? CATEGORICAL[index % CATEGORICAL.length]);
-    const strokes = series.map((s, index) => (s.color ? palette.resolve(s.color) : palette.tones[tones[index]]));
+    // A palette token wins, then a status tone; otherwise the n-th categorical colour.
+    const strokes = series.map((s, index) => palette.resolve(s.color ?? (s.tone ? TONE_VAR[s.tone] : chartToken(index))));
     const solidIndexes = series.flatMap((s, index) => (s.dashed ? [] : [index]));
     const layoutExemplars = (u: uPlot) => {
       if (!exemplars) return;

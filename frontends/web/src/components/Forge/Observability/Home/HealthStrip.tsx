@@ -22,6 +22,7 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { UPlotChart, type ChartMarker } from "../charts/UPlotChart";
+import type { ChartPaletteToken } from "../charts/chartPalette";
 import { alertBands, rangeMs } from "../Dashboards/dashboardModel";
 import { unionTimestamps } from "../Dashboards/PanelBody";
 import { formatAgo, formatCount, formatDuration, formatPercent } from "../format";
@@ -134,7 +135,7 @@ function Strip({
         label="Requests"
         figure={loading ? null : failed ? "—" : formatCount(requests ?? 0)}
         detail={requests !== null && prevRequests ? change(requests, prevRequests, (d) => formatPercent(d / prevRequests), label) : null}
-        spark={{ timestamps, values: trendRequests, unit: "count", tone: "primary" }}
+        spark={{ timestamps, values: trendRequests, unit: "count", color: "--chart-1" }}
         markers={markers}
       />
       <Cell
@@ -149,7 +150,7 @@ function Strip({
         label="p95 latency"
         figure={loading ? null : failed ? "—" : p95 === null ? "—" : formatDuration(p95)}
         detail={change(p95, prevP95, (d) => formatDuration(d), label)}
-        spark={{ timestamps, values: trendP95, unit: "ms", tone: "secondary" }}
+        spark={{ timestamps, values: trendP95, unit: "ms", color: "--chart-2" }}
         markers={markers}
       />
       <Cell
@@ -178,7 +179,14 @@ function Cell({
   /** Null while loading. */
   figure: string | null;
   detail: string | null;
-  spark: { timestamps: number[]; values: (number | null)[]; unit: "count" | "percent" | "ms"; tone: "primary" | "destructive" | "secondary" | "warning" };
+  spark: {
+    timestamps: number[];
+    values: (number | null)[];
+    unit: "count" | "percent" | "ms";
+    /** A status colour for a trend that is one (errors, alerts); otherwise a palette colour. */
+    tone?: "destructive" | "warning";
+    color?: ChartPaletteToken;
+  };
   markers: readonly ChartMarker[];
   tone?: "warning";
   href?: string;
@@ -198,7 +206,7 @@ function Cell({
             compact
             height={36}
             timestamps={spark.timestamps}
-            series={[{ label, values: spark.values, tone: spark.tone }]}
+            series={[{ label, values: spark.values, tone: spark.tone, color: spark.color }]}
             unit={spark.unit}
             label={`${label} over the window`}
             markers={markers}
