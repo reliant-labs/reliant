@@ -232,7 +232,7 @@ function LogsToolbar({
               aria-invalid={queryError ? true : undefined}
               aria-describedby={queryError ? "obs-log-query-error" : undefined}
               className={cn(
-                "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-8 min-h-[32px] w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 queryError ? "border-danger" : "border-border"
               )}
               data-testid="obs-log-query"
@@ -244,7 +244,7 @@ function LogsToolbar({
             </p>
           )}
           <details className="mt-1 text-xs text-ink-muted">
-            <summary className="cursor-pointer rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <summary className="inline-flex min-h-[32px] cursor-pointer items-center rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Query syntax
             </summary>
             <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2">
@@ -266,7 +266,8 @@ function LogsToolbar({
         />
         <Button
           variant={live ? "primary" : "outline"}
-          size="sm"
+          size="md"
+          className="min-h-[32px] touch:h-11"
           aria-pressed={live}
           onClick={() => navigate({ live: live ? undefined : true }, { replace: true })}
           leftIcon={<Radio className={cn("h-3.5 w-3.5", live && "motion-safe:animate-pulse")} />}
@@ -286,7 +287,7 @@ function LogsToolbar({
               onClick={() => toggleSeverity(severity)}
               data-testid={`obs-severity-${severity}`}
               className={cn(
-                "inline-flex h-8 touch:h-11 items-center rounded-full border px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex h-8 min-h-[32px] touch:h-11 items-center rounded-full border px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
                   ? "border-primary bg-primary/10 text-ink"
                   : "border-border text-ink-muted hover:text-ink"
@@ -348,7 +349,7 @@ export function ServiceSelect({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
-        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+        className="h-8 min-h-[32px] rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
         data-testid={id}
       >
         {includeAll && <option value="">All services</option>}
@@ -539,7 +540,7 @@ function LogList({
       </div>
       {hasMore && (
         <div className="border-t border-border px-3 py-2">
-          <Button variant="ghost" size="sm" onClick={onLoadMore} loading={loadingMore} disabled={loadingMore} data-testid="obs-logs-more">
+          <Button variant="ghost" size="md" className="min-h-[32px] touch:h-11" onClick={onLoadMore} loading={loadingMore} disabled={loadingMore} data-testid="obs-logs-more">
             Load older
           </Button>
         </div>

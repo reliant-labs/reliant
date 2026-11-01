@@ -77,12 +77,14 @@ export interface ObsScopeBarProps {
 /**
  * Every control in the bar is at least 32px tall (44px on a touch screen), and
  * a chip's remove button fills the chip's height: 17 of the Logs page's 26
- * controls measured under 32px before.
+ * controls measured under 32px before. The floor is in px on purpose
+ * (`min-h-[32px]`): the root font size is a user setting, and at 15px `h-8`
+ * alone is 30px.
  */
 const CONTROL =
-  "inline-flex h-8 touch:h-11 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2 text-xs text-ink transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2 text-xs text-ink transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-const CHIP = "inline-flex h-8 touch:h-11 items-center gap-1 rounded-md border border-border bg-surface pl-2 text-xs";
+const CHIP = "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1 rounded-md border border-border bg-surface pl-2 text-xs";
 const CHIP_REMOVE =
   "inline-flex h-full w-7 touch:w-11 items-center justify-center rounded-r-md text-ink-muted hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -98,7 +100,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
       {props.environments ? (
         <EnvPicker environments={props.environments} selected={props.selectedEnvs} onChange={props.onEnvsChange} />
       ) : props.pinnedEnv ? (
-        <span className="inline-flex h-8 touch:h-11 items-center gap-1.5 rounded-md border border-border/60 bg-surface-sunken px-2 text-xs" data-testid="obs-pinned-env">
+        <span className="inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 rounded-md border border-border/60 bg-surface-sunken px-2 text-xs" data-testid="obs-pinned-env">
           <Server className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
           <span className="text-ink-muted">Environment</span>
           <span className="font-mono text-ink">{props.pinnedEnv}</span>
@@ -588,7 +590,7 @@ function ValueStep({
         <button
           type="submit"
           disabled={op !== "exists" && !value.trim()}
-          className="h-8 touch:h-11 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-8 min-h-[32px] touch:h-11 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-filter-apply"
         >
           Add filter
