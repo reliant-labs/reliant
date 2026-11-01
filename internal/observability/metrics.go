@@ -29,6 +29,69 @@ var (
 	)
 )
 
+// ─── Daemon link liveness ───────────────────────────────────────────────────
+//
+// A daemon that registers has proven only that its stream opened. The gateway
+// probes the stream with a no-op round trip before fanning connect-time work
+// out to it (internal/handlers/tools_daemon/link_liveness.go); these say how
+// long that takes and how often the work had to wait.
+
+var (
+	// DaemonLinkProbeSeconds is the round trip of the gateway's no-op probe
+	// of a daemon's stream, by outcome: ok, slow (answered, but too slowly
+	// to fan work out to), failed (no answer within the probe's timeout).
+	DaemonLinkProbeSeconds = newHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "link_probe_seconds",
+			Help:      "Round trip of the gateway's no-op probe of a daemon stream, by outcome (ok, slow, failed).",
+			Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+		},
+		[]string{"outcome"},
+	)
+	// DaemonReconnectLatencySeconds is how long after registering a daemon
+	// stream became usable: its first completed command round trip
+	// (stage=first_round_trip) and its link ready for connect-time work
+	// (stage=ready).
+	DaemonReconnectLatencySeconds = newHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "reconnect_latency_seconds",
+			Help:      "Time from a daemon's registration to its first completed command round trip (stage=first_round_trip) and to its link being ready for connect-time work (stage=ready).",
+			Buckets:   []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 900},
+		},
+		[]string{"stage"},
+	)
+	// DaemonConnectWorkDeferredTotal counts connect-time passes deferred
+	// because the daemon's link was not ready, by reason: probe_failed,
+	// probe_slow, reconcile_interrupted (a reconcile command hit a transport
+	// failure mid-pass).
+	DaemonConnectWorkDeferredTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "connect_work_deferred_total",
+			Help:      "Connect-time work deferred because the daemon's link was not ready, by reason (probe_failed, probe_slow, reconcile_interrupted).",
+		},
+		[]string{"reason"},
+	)
+	// DaemonCommandsHeldTotal counts daemon commands the gateway held for a
+	// stream that had not answered anything yet, by outcome: released (the
+	// link proved itself and the command was sent) or reconnecting (it did
+	// not in time, and the command was answered unsent).
+	DaemonCommandsHeldTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "commands_held_total",
+			Help:      "Daemon commands held for a stream that had not answered yet, by outcome (released, reconnecting).",
+		},
+		[]string{"outcome"},
+	)
+)
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
@@ -431,6 +494,11 @@ func initMetrics() {
 		NATSErrorsTotal,
 		// Egress
 		EgressLimitedTotal,
+		// Daemon link liveness
+		DaemonLinkProbeSeconds,
+		DaemonReconnectLatencySeconds,
+		DaemonConnectWorkDeferredTotal,
+		DaemonCommandsHeldTotal,
 		// DB
 		DBQueryDuration,
 		DBErrorsTotal,
