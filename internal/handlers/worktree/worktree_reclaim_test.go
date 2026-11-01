@@ -286,12 +286,17 @@ func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
 	sockDir, err := os.MkdirTemp("", "sa")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	agent := exec.Command(bin, "-D", "-a", filepath.Join(sockDir, "s"))
+	sock := filepath.Join(sockDir, "s")
+	agent := exec.Command(bin, "-D", "-a", sock)
 	require.NoError(t, agent.Start())
 	t.Cleanup(func() { _ = agent.Process.Kill(); _ = agent.Wait() })
+	// Running (its socket exists), not just undumpable: that starts inside
+	// execve.
+	require.Eventually(t, func() bool { _, err := os.Stat(sock); return err == nil }, 10*time.Second, 5*time.Millisecond, "ssh-agent never listened")
 	fdDir := filepath.Join("/proc", strconv.Itoa(agent.Process.Pid), "fd")
-	require.Eventually(t, func() bool { _, err := os.ReadDir(fdDir); return os.IsPermission(err) }, 10*time.Second, 5*time.Millisecond,
-		"ssh-agent never became undumpable, so this host cannot show the defect")
+	if _, err := os.ReadDir(fdDir); !os.IsPermission(err) {
+		t.Skipf("this host lets the daemon inspect ssh-agent (%v): nothing to prove", err)
+	}
 
 	wt, path := e.worktree(t, "sshagent")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))

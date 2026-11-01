@@ -65,7 +65,7 @@ const taskCommLen = 15
 type procIdentity struct {
 	comm  string   // stat's comm, field 2
 	name  string   // status's Name
-	argv  []string // cmdline; nil when it could not be read
+	argv  []string // cmdline; nil when it could not be read or was empty
 	pgrp  int      // stat field 5
 	start uint64   // stat field 22, clock ticks from boot
 }
@@ -102,11 +102,12 @@ func readProcIdentity(base string) (procIdentity, error) {
 			break
 		}
 	}
-	if cmdline, err := readProcFile(filepath.Join(base, "cmdline")); err == nil {
+	// An empty cmdline shows nothing either: a process inside execve has its
+	// new comm and is already undumpable before the kernel sets its argv (an
+	// ssh-agent start reads so ~30% of the time), and holding every
+	// retirement on the machine for that instant would be wrong.
+	if cmdline, err := readProcFile(filepath.Join(base, "cmdline")); err == nil && len(cmdline) != 0 {
 		id.argv = strings.Split(strings.TrimSuffix(string(cmdline), "\x00"), "\x00")
-		if len(cmdline) == 0 {
-			id.argv = []string{}
-		}
 	}
 	return id, nil
 }
@@ -136,11 +137,11 @@ func (id procIdentity) agent() (string, bool) {
 			continue
 		}
 		if id.argv == nil {
-			// cmdline unreadable: comm and Name are all there is, and they
-			// cannot show a required argument.
+			// No cmdline: comm and Name are all there is, and they cannot
+			// show a required argument.
 			return a.name, a.arg == ""
 		}
-		if len(id.argv) == 0 || filepath.Base(id.argv[0]) != a.name {
+		if filepath.Base(id.argv[0]) != a.name {
 			continue
 		}
 		if a.arg != "" && !slices.Contains(id.argv[1:], a.arg) {

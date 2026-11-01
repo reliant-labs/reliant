@@ -118,7 +118,8 @@ func TestUninspectable_KnownAgentsOnlyByExactIdentity(t *testing.T) {
 		{"argv[0] another program", "ssh-agent", "ssh-agent", argv("/usr/bin/python3", "ssh-agent"), true},
 		{"status Name disagrees with comm", "ssh-agent", "bash", argv("ssh-agent"), true},
 		{"cut comm, wrong full name", "gnome-keyring-d", "gnome-keyring-d", argv("/usr/bin/gnome-keyring-dump"), true},
-		{"empty cmdline", "ssh-agent", "ssh-agent", &empty, true},
+		{"empty cmdline (inside execve): comm and Name decide", "ssh-agent", "ssh-agent", &empty, false},
+		{"systemd, empty cmdline: --user unproven", "systemd", "systemd", &empty, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pid := 4900001
@@ -232,6 +233,19 @@ func waitUninspectable(t *testing.T, pid int) {
 	}
 }
 
+// waitListening waits for an agent's socket to exist: the agent is running.
+func waitListening(t *testing.T, sock string) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if _, err := os.Stat(sock); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ssh-agent never created %s", sock)
+		}
+	}
+}
+
 // startUndumpable starts this binary as an undumpable helper in dir, its own
 // process group's leader, and returns it once it is undumpable. Kept alive as
 // briefly as the caller needs: while it lives, every same-owner process-use
@@ -342,13 +356,17 @@ func TestUninspectable_RealSSHAgentIsNotUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	cmd := exec.Command(bin, "-D", "-a", filepath.Join(sockDir, "s"))
+	sock := filepath.Join(sockDir, "s")
+	cmd := exec.Command(bin, "-D", "-a", sock)
 	cmd.Dir = sockDir
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	pid := cmd.Process.Pid
+	// Wait for the agent itself, not only for undumpability, which starts
+	// inside execve: the agent is then fully what it says it is.
+	waitListening(t, sock)
 	waitUninspectable(t, pid)
 	root := t.TempDir()
 	if err := checkProcessUseAt(context.Background(), liveProc(t, pid), os.Geteuid(), []string{root}); err != nil {
