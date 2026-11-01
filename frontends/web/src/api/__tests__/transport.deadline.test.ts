@@ -178,7 +178,7 @@ describe("the budget is active time", () => {
 });
 
 describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
-  it("is replaced once at the stall deadline", async () => {
+  it("is hedged once at the stall deadline, and the hedge's answer wins", async () => {
     const { calls, call } = await loadChain();
     const result = call("reliant.v1.DaemonRegistryService", "ListDaemons");
     await flush();
@@ -187,13 +187,56 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
     expect(calls).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(200);
     expect(calls).toHaveLength(2);
-    expect(calls[0].req.signal.aborted).toBe(true);
+    // The stalled request stays on the wire: it may only be slow.
+    expect(calls[0].req.signal.aborted).toBe(false);
 
     calls[1].resolve({ daemons: [] });
     await expect(result).resolves.toMatchObject({ message: { daemons: [] } });
+    // Answered: the request still out is withdrawn, and that is not an error.
+    expect(calls[0].req.signal.aborted).toBe(true);
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 
-  it("is replaced at most once, then times out on its full budget", async () => {
+  // Prod, 2026-11-01: GetWorkflowExecutions on chat 9fbaace8 was aborted at
+  // 3.94s and resent, and the resend took 3.6s — 7.7s for an answer the first
+  // request was moments from. A slow read is not restarted from zero.
+  it("keeps the stalled request, whose late answer wins over the hedge", async () => {
+    const { calls, call } = await loadChain();
+    const result = call("reliant.v1.ChatService", "GetWorkflowExecutions");
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(4_100);
+    expect(calls).toHaveLength(2);
+
+    calls[0].resolve({ executions: ["first"] });
+    await expect(result).resolves.toMatchObject({ message: { executions: ["first"] } });
+    expect(calls[1].req.signal.aborted).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("waits for the hedge when the stalled request fails", async () => {
+    const { calls, call } = await loadChain();
+    const result = call("reliant.v1.ChatService", "GetChat");
+    let settled: unknown = "pending";
+    result.then(
+      (r) => (settled = r),
+      (e) => (settled = e),
+    );
+    await flush();
+    await vi.advanceTimersByTimeAsync(4_100);
+    expect(calls).toHaveLength(2);
+
+    // The connection the first request rode died under it.
+    calls[0].reject(new ConnectError("connection reset", Code.Unavailable));
+    await flush();
+    expect(settled).toBe("pending");
+
+    calls[1].resolve({ chat: {} });
+    await flush();
+    expect(settled).toMatchObject({ message: { chat: {} } });
+  });
+
+  it("is hedged at most once, then times out on its full budget", async () => {
     const { calls, call } = await loadChain();
     const result = call("reliant.v1.ChatService", "ListChats");
     let error: unknown;
@@ -207,6 +250,9 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
     await vi.advanceTimersByTimeAsync(200);
     expect((error as ConnectError).code).toBe(Code.DeadlineExceeded);
     expect(calls).toHaveLength(2);
+    expect(calls.every((c) => c.req.signal.aborted)).toBe(true);
+    // Both requests ran out of the one budget together: one timeout report.
+    expect(reporting.reportFailure).toHaveBeenCalledTimes(1);
   });
 
   it("leaves reads the server is genuinely slow on alone", async () => {
