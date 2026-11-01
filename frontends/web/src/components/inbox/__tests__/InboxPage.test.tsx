@@ -19,6 +19,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
+  InboxApprovalSchema,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -291,7 +292,12 @@ describe("InboxPage item kinds", () => {
         {
           payload: {
             case: "approval",
-            value: { approvalId: id, approvalType: ApprovalType.TOOL_CALL, title, batchId: "wf/call-1" },
+            value: create(InboxApprovalSchema, {
+              approvalId: id,
+              approvalType: ApprovalType.TOOL_CALL,
+              title,
+              batchId: "wf/call-1",
+            }),
           },
         },
         id,
@@ -329,7 +335,10 @@ describe("InboxPage item kinds", () => {
 
   it("a batch already decided elsewhere says so", async () => {
     const batched = (id: string) =>
-      approvalItem({ payload: { case: "approval", value: { approvalId: id, title: id, batchId: "b" } } }, id);
+      approvalItem(
+        { payload: { case: "approval", value: create(InboxApprovalSchema, { approvalId: id, title: id, batchId: "b" }) } },
+        id,
+      );
     respond([batched("x-1"), batched("x-2")]);
     mocks.batchDeny.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
