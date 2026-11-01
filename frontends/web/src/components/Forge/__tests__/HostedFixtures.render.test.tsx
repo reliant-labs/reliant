@@ -34,7 +34,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "hosted",
     project: "acme",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v1.5.15",
     releaseProvenance: null,

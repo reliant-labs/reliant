@@ -777,3 +777,51 @@ message GitRepo {
   string language = 6;
   google.protobuf.Timestamp updated_at = 7;
 }
+
+// === Panel results ===
+//
+// The result of a live Postgres dashboard panel (AppDatabaseService
+// QueryDatabasePanel). Wire-identical to observability's SqlColumn,
+// PanelSeriesResult, TimePoint and PanelTableRow, which stay where they are:
+// moving them would break every client generated from the old file. The two
+// sets can merge later through deprecate-first.
+
+// PanelResultColumn is one result column, in result order.
+message PanelResultColumn {
+  string name = 1;
+  // The Postgres type, e.g. "int8", "timestamptz", "text".
+  string type = 2;
+  // A number: drawn as a value (a series point or a row cell).
+  bool numeric = 3;
+  // A date or time: it can be the time axis.
+  bool time = 4;
+}
+
+// PanelResultPoint is one point of a series.
+message PanelResultPoint {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  // Always false for a Postgres panel; kept so the shape matches TimePoint.
+  bool partial = 3;
+  // No value at this point (NULL): a gap, not a zero. `value` is 0 and must be
+  // ignored.
+  bool null = 4;
+}
+
+// PanelResultSeries is one series: one numeric column for one group.
+message PanelResultSeries {
+  string label = 1;
+  // Group column -> value for this series. Empty without group columns.
+  map<string, string> group = 2;
+  repeated PanelResultPoint points = 3;
+  double value = 4;
+}
+
+// PanelResultRow is one result row of a panel that is not a time series.
+message PanelResultRow {
+  map<string, string> group = 1;
+  // One per entry of the response's columns. Values whose zero-based index is
+  // in missing_value_indexes MUST be ignored (NULL, not zero).
+  repeated double values = 2;
+  repeated uint32 missing_value_indexes = 3;
+}

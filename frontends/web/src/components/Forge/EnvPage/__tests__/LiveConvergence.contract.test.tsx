@@ -53,13 +53,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "prod",
     project: "hounders",
     kind: "persistent",
-    declaredShape: {
-      kind: "persistent",
-      workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
-      secrets: [],
-      domains: [],
-      clusters: [],
-    },
+    declared: true,
     declaredBy: null,
     release: "v12",
     releaseProvenance: null,
@@ -125,13 +119,7 @@ const SELF_MANAGED_CONVERGED = liveEnv({
   phase: "succeeded",
   observed: { state: "converged", observedAt: "2026-10-01T14:04:00.000Z" },
   drift: { state: "in_sync", observedAt: "2026-10-01T14:04:00.000Z" },
-  declaredShape: {
-    kind: "self_managed",
-    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
-    secrets: [],
-    domains: [],
-    clusters: ["prod-gke"],
-  },
+  declared: true,
 });
 
 // ── The state line ──────────────────────────────────────────────────────────
