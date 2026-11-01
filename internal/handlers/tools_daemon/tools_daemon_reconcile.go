@@ -4,6 +4,7 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,15 +15,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-const (
-	// reconcileTotalTimeout bounds the entire per-connect reconcile pass so a
-	// slow or unresponsive daemon can't leave a goroutine running forever.
-	reconcileTotalTimeout = 60 * time.Second
+// reconcileTotalTimeout bounds the entire per-connect reconcile pass so a
+// slow or unresponsive daemon can't leave a goroutine running forever.
+const reconcileTotalTimeout = 60 * time.Second
 
-	// reconcilePerCommandTimeoutMs bounds each per-project daemon round-trip.
-	// Kept short so one unreachable path doesn't starve the rest.
-	reconcilePerCommandTimeoutMs = 10_000
-)
+// reconcilePerCommandTimeoutMs bounds each per-project daemon round-trip. A
+// var so tests can shrink it.
+var reconcilePerCommandTimeoutMs int32 = 10_000
 
 // projectPathState is the reconcile-relevant on-disk state of a project path on
 // a specific daemon, as reported by that daemon.
@@ -42,26 +41,22 @@ type projectPathState struct {
 type daemonPathChecker func(ctx context.Context, path string) (projectPathState, error)
 
 // reconcileProjectDaemonsOnConnect reconciles project_daemons rows against the
-// filesystem of the daemon behind conn. It runs in its own goroutine off the
-// hot connect path. The existence signal is repo.discover: repo.Discover fails
+// filesystem of the daemon behind conn. runConnectWork calls it, off the hot
+// connect path, once the link answered a probe; ctx ends when the connection
+// does. The existence signal is repo.discover: repo.Discover fails
 // (Success=false) only when the requested path is not a directory, so a
 // successful response means the clone really exists on this daemon's disk.
-func (s *Service) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
+//
+// It returns errReconcileInterrupted when a check met a transport failure:
+// the pass stopped there, and runConnectWork retries it once the link proves
+// ready again. Only a complete pass goes on to restore missing checkouts.
+func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *daemonConnection) error {
 	if conn == nil {
-		return
+		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), reconcileTotalTimeout)
+	ctx, cancel := context.WithTimeout(ctx, reconcileTotalTimeout)
 	defer cancel()
-
-	// Cancel promptly if the daemon disconnects mid-reconcile.
-	go func() {
-		select {
-		case <-conn.done:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	check := func(ctx context.Context, path string) (projectPathState, error) {
 		payload, err := json.Marshal(map[string]any{"path": path, "max_depth": 1})
@@ -88,33 +83,40 @@ func (s *Service) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
 		}, nil
 	}
 
-	missing := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	missing, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	if err != nil {
+		return err
+	}
 	// A pool member whose disk came up empty gets its checkouts back
 	// (tools_daemon_restore.go). Its own, longer, budget: clones are slow.
 	s.restoreCheckoutsOnConnect(conn, missing)
+	return nil
 }
 
 // reconcileProjectDaemons is the testable core of the reconcile pass. For each
 // of the user's projects it asks check whether the path exists on the daemon;
 // if so it upserts a project_daemons row and, when the project has no remote
-// URL yet, backfills one from the discovered root remote. Individual failures
-// are logged and skipped, never fatal. It returns the projects whose path the
-// daemon reported absent (not those whose check failed).
+// URL yet, backfills one from the discovered root remote. A database failure
+// for one project is logged and skipped. A check failure is a transport
+// failure (check reports a path that is simply absent as {Exists: false}), and
+// stops the pass with errReconcileInterrupted: every later check would meet
+// the same dead link, one timeout at a time. It returns the projects whose
+// path the daemon reported absent.
 func reconcileProjectDaemons(
 	ctx context.Context,
 	database ProjectReconcileStore,
 	daemonID, userID string,
 	check daemonPathChecker,
-) (missing []*db.Project) {
+) (missing []*db.Project, _ error) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to list projects",
 			"error", err, "userID", userID, "daemonID", daemonID)
-		return nil
+		return nil, nil
 	}
 
 	var reconciled, backfilled, skipped int
-	for _, project := range projects {
+	for i, project := range projects {
 		if ctx.Err() != nil {
 			break
 		}
@@ -124,11 +126,11 @@ func reconcileProjectDaemons(
 
 		state, err := check(ctx, project.Path)
 		if err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: path check failed",
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: interrupted; a path check met a transport failure, so the pass stops here and is retried once the link is ready",
 				"error", err, "userID", userID, "daemonID", daemonID,
-				"projectID", project.ID, "path", project.Path)
-			skipped++
-			continue
+				"projectID", project.ID, "path", project.Path,
+				"reconciled", reconciled, "checked", i, "projects", len(projects))
+			return missing, fmt.Errorf("%w: %w", errReconcileInterrupted, err)
 		}
 		if !state.Exists {
 			// Not on this daemon — must not write a row.
@@ -154,10 +156,18 @@ func reconcileProjectDaemons(
 		}
 	}
 
+	if ctx.Err() != nil {
+		// The pass's own budget ran out, or the connection ended: not a
+		// complete pass, so it must not read as one.
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: stopped before it finished",
+			"userID", userID, "daemonID", daemonID, "error", ctx.Err(),
+			"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped, "projects", len(projects))
+		return missing, fmt.Errorf("%w: %w", errReconcileInterrupted, ctx.Err())
+	}
 	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: complete",
 		"userID", userID, "daemonID", daemonID,
 		"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped)
-	return missing
+	return missing, nil
 }
 
 // backfillProjectRemoteURL sets project.remote_url to remoteURL, respecting the
