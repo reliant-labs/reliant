@@ -1132,6 +1132,11 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 // immutable once the row exists.
 var ErrDaemonOwnedByAnotherUser = svcerr.PermissionDenied("daemon is owned by another user")
 
+// ErrDaemonRequiresBoundToken is returned when an unbound write (a daemon
+// connecting with a login token) names an id its owner's row reserves for
+// daemon-bound credentials (Daemon.RequiresBoundToken).
+var ErrDaemonRequiresBoundToken = svcerr.PermissionDenied("daemon id is reserved for daemon-bound credentials")
+
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
 		return fmt.Errorf("daemon cannot be nil")
@@ -1151,10 +1156,16 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
-	// The conflict branch only fires for the row's own owner, so a conflict
-	// against a different owner writes nothing — in a single statement, with
-	// no read-then-write window.
+	// The conflict branch only fires for the row's own owner, and for an
+	// unbound write only on a row not reserved for bound credentials, so
+	// either refusal writes nothing — in a single statement, with no
+	// read-then-write window. The read below only names which refusal it
+	// was; it decides nothing.
 	if !wrote {
+		if existing, getErr := store.GetDaemon(ctx, r.ORM(), daemon.ID); getErr == nil &&
+			existing.UserID == daemon.UserID && existing.RequiresBoundToken && !daemon.RequiresBoundToken {
+			return fmt.Errorf("%w: daemon %s", ErrDaemonRequiresBoundToken, daemon.ID)
+		}
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
 	return nil

@@ -87,6 +87,11 @@ func resolveUnboundDaemonID(ctx context.Context, repo daemonHostnameLookup, user
 				"error", lookupErr, "userID", userID, "hostname", hostname)
 		} else {
 			for _, d := range existing {
+				// A reserved row is a bound credential's machine; an unbound
+				// daemon reusing it by hostname would only be refused.
+				if d.RequiresBoundToken {
+					continue
+				}
 				if d.Hostname != nil && *d.Hostname == hostname {
 					logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
 						"daemonID", d.ID, "userID", userID, "hostname", hostname)
@@ -146,6 +151,23 @@ func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID stri
 	logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected daemon registration for a daemon id owned by another user",
 		"daemonID", daemonID, "requestingUserID", userID, "ownerUserID", ownerID)
 	return bootstrap.NewForeignDaemonIDError()
+}
+
+// rejectReservedDaemon refuses an unbound credential (a login token)
+// connecting as a daemon id reserved for daemon-bound credentials — every
+// managed cloud machine, and any daemon a bound credential has connected as.
+// The caller owns the daemon; what is refused is standing in for the
+// machine's own credential, which would take over its identity and supersede
+// its live connection. Like rejectForeignDaemon it runs before any
+// connection-map or NATS side effect.
+//
+// The refusal carries bootstrap.ReservedDaemonIDReason so the daemon treats
+// it as an identity problem, never a credential one: a daemon that read the
+// id from its own saved file sets it aside and registers as a new machine.
+func (s *Service) rejectReservedDaemon(ctx context.Context, userID, daemonID string) error {
+	logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected an unbound credential connecting as a daemon id reserved for daemon-bound credentials",
+		"daemonID", daemonID, "userID", userID)
+	return bootstrap.NewReservedDaemonIDError()
 }
 
 // WhoAmI names the account the presented daemon credential acts as. The daemon
@@ -225,8 +247,13 @@ func (s *Service) ConnectDaemon(
 		return err
 	}
 
+	// A credential bound to a daemon id reserves that id (and only that id:
+	// the bound id wins over any asserted one); an unbound login token may
+	// not connect as a reserved id.
+	boundID := auth.GetDaemonIDFromContext(ctx)
+	boundCredential := strings.TrimSpace(boundID) != ""
 	daemonID := resolveDaemonID(
-		auth.GetDaemonIDFromContext(ctx),
+		boundID,
 		reg.GetDaemonId(),
 		func() string {
 			return resolveUnboundDaemonID(ctx, s.deps.Repo, userID, reg.GetHostname())
@@ -256,9 +283,15 @@ func (s *Service) ConnectDaemon(
 		Capabilities: capabilitiesJSON,
 		ProjectPaths: projectPathsJSON,
 		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
+		// Reserves the id for bound credentials; an unbound registration on a
+		// reserved id writes nothing and is refused below.
+		RequiresBoundToken: boundCredential,
 	}); err != nil {
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
+		}
+		if errors.Is(err, db.ErrDaemonRequiresBoundToken) {
+			return s.rejectReservedDaemon(ctx, userID, daemonID)
 		}
 		return svcerr.WrapOr(err, svcerr.Internal("failed to persist daemon registration"))
 	}
@@ -295,6 +328,7 @@ func (s *Service) ConnectDaemon(
 		platform:            reg.GetPlatform(),
 		labels:              reg.GetLabels(),
 		daemonType:          reg.GetDaemonType(),
+		boundCredential:     boundCredential,
 		connectedAt:         now2,
 		lastActivity:        now2,
 		lastReceived:        now2,
@@ -321,6 +355,10 @@ func (s *Service) ConnectDaemon(
 	if oldConn != nil && oldConn.userID != userID {
 		s.mu.Unlock()
 		return s.rejectForeignDaemon(ctx, userID, daemonID)
+	}
+	if oldConn != nil && oldConn.boundCredential && !boundCredential {
+		s.mu.Unlock()
+		return s.rejectReservedDaemon(ctx, userID, daemonID)
 	}
 	s.connections[daemonID] = conn
 	if oldConn == nil {
@@ -439,6 +477,10 @@ func (s *Service) RegisterOutboundConnection(
 		Platform:     daemonStringPtrOrNil(reg.Platform),
 		Capabilities: capabilitiesJSON,
 		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
+		// The gateway dials only a pod the control plane's workspace
+		// snapshot names, so this identity is as authoritative as a bound
+		// credential and reserves the id the same way.
+		RequiresBoundToken: true,
 	}); err != nil {
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return nil, s.rejectForeignDaemon(ctx, userID, daemonID)
@@ -470,6 +512,7 @@ func (s *Service) RegisterOutboundConnection(
 		platform:            reg.GetPlatform(),
 		labels:              reg.GetLabels(),
 		daemonType:          reg.GetDaemonType(),
+		boundCredential:     true,
 		connectedAt:         now,
 		lastActivity:        now,
 		lastReceived:        now,
