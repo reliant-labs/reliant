@@ -27,6 +27,7 @@ import { formatClock, quotaOf } from "@/services/controlPlane/observability/quot
 import type { Provenance } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 
+import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
 
 function StateFrame({
@@ -160,10 +161,11 @@ export function ObsNotSetUp({ subject, topic, env }: { subject: string; topic?: 
       icon={<Activity className="h-4 w-4" />}
       title="Observability isn't set up for this organization yet"
       about={topic ? OBS_TOPICS[topic].about : "Observability shows the logs, traces, metrics and errors of the apps you deploy with forge."}
+      agent={<DeployWithAgentButton env={env ?? null} />}
       steps={[
         {
           text: "Deploy an environment through Reliant. The store is created with your organization's first one.",
-          command: `forge env deploy ${env ?? ENV_PLACEHOLDER}`,
+          command: `reliant forge env deploy ${env ?? ENV_PLACEHOLDER}`,
         },
         { text: "Telemetry then arrives on its own: services and frontends built with forge send it without any setup." },
       ]}
@@ -190,14 +192,15 @@ export function ObsNothingYet({ subject, topic, env }: { subject: string; topic:
       icon={<Rocket className="h-4 w-4" />}
       title={`Nothing has arrived from ${subject} yet`}
       about={copy.about}
+      agent={<DeployWithAgentButton env={env ?? null} />}
       steps={[
         {
           text: "Deploy a forge service or frontend. Its first data arrives once its pods are serving traffic.",
-          command: `forge env deploy ${target}`,
+          command: `reliant forge env deploy ${target}`,
         },
         {
           text: "Check what is arriving: it reports when the newest log and span landed, and whether the telemetry token reached the cluster.",
-          command: `forge obs status ${target}`,
+          command: `reliant forge obs status ${target}`,
         },
       ]}
       docs={copy.docs ?? { href: DOCS.nothingShowsUp, label: "Nothing showing up?" }}
@@ -216,14 +219,15 @@ export function ObsNoEnvironments({ topic }: { topic: ObsTopic }) {
       icon={<Activity className="h-4 w-4" />}
       title="No environments to observe yet"
       about={OBS_TOPICS[topic].about}
+      agent={<DeployWithAgentButton env={null} />}
       steps={[
         {
           text: "Deploy an environment through Reliant. Its telemetry starts arriving with its first release.",
-          command: `forge env deploy ${ENV_PLACEHOLDER}`,
+          command: `reliant forge env deploy ${ENV_PLACEHOLDER}`,
         },
         {
-          text: "Working locally? forge env up keeps development telemetry on your machine and prints the HyperDX URL to read it.",
-          command: "forge env up",
+          text: "Working locally? reliant forge env up keeps development telemetry on your machine and prints the HyperDX URL to read it.",
+          command: "reliant forge env up",
         },
       ]}
       docs={{ href: DOCS.observability, label: "How observability works" }}

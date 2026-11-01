@@ -119,7 +119,7 @@ describe("rules are code", () => {
     // The env place carries no declared shape: nothing in view declares a rule.
     renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" });
     const none = await screen.findByTestId("obs-rules-none");
-    expect(within(none).getByText("forge obs alerts check")).toBeInTheDocument();
+    expect(within(none).getByText("reliant forge obs alerts check")).toBeInTheDocument();
     expect(within(none).getByTestId("obs-rules-none-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability#alerts");
     expect(screen.getByTestId("obs-code-snippet")).toHaveTextContent("forge.AlertRule {");
   });

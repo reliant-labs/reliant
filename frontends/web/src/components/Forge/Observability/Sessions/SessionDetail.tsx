@@ -23,6 +23,7 @@ import type { RumScope, SessionSummary } from "@/services/controlPlane/observabi
 import { formatAgo, formatCount, formatDuration, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
+import { AskReliantMenu } from "../AskReliant/AskReliant";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
 import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
@@ -128,6 +129,11 @@ function SessionBody({
             <Status tone="neutral" label="no errors" />
           )}
           {live && <Status tone="neutral" pulse label="active now" />}
+          {session.errors > 0 && (
+            <span className="ml-auto" data-testid="session-ask">
+              <AskReliantMenu subject={{ kind: "session", sessionId: session.sessionId, env: session.envName || null }} appearance="button" label="Ask Reliant" />
+            </span>
+          )}
         </div>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
