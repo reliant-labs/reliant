@@ -166,6 +166,40 @@ func TestSecondHeavyCommandWaitsForTheSlot(t *testing.T) {
 	}
 }
 
+// writeLog records each Write it receives as its own entry.
+type writeLog struct{ writes []string }
+
+func (w *writeLog) Write(p []byte) (int, error) {
+	w.writes = append(w.writes, string(p))
+	return len(p), nil
+}
+
+// The waiting header and hostslot's first line, which names the holders, go
+// out in one write: a reader that sees WaitedFor's marker also sees who holds
+// the slot. Written separately, a reader polling the output (as
+// TestSecondHeavyCommandWaitsForTheSlot does) could catch the header alone.
+func TestWaitNoticeWritesHeaderWithTheFirstLine(t *testing.T) {
+	log := &writeLog{}
+	n := &waitNotice{w: log, label: "make test"}
+	first := "⏳ forge: waiting for a heavy slot (0s) — 1 of 1 held: pid 1 (make build) 3s.\n"
+	if got, err := n.Write([]byte(first)); err != nil || got != len(first) {
+		t.Fatalf("Write = %d, %v; want %d, nil", got, err, len(first))
+	}
+	later := "⏳ forge: waiting for a heavy slot (30s) — 1 of 1 held: pid 1 (make build) 33s.\n"
+	if got, err := n.Write([]byte(later)); err != nil || got != len(later) {
+		t.Fatalf("Write = %d, %v; want %d, nil", got, err, len(later))
+	}
+	if len(log.writes) != 2 {
+		t.Fatalf("got %d writes, want 2 (header+first line, then the later line): %q", len(log.writes), log.writes)
+	}
+	if !WaitedFor(log.writes[0]) || !strings.Contains(log.writes[0], "`make test`") || !strings.HasSuffix(log.writes[0], first) {
+		t.Fatalf("first write must carry the header and the first line together: %q", log.writes[0])
+	}
+	if log.writes[1] != later {
+		t.Fatalf("later lines are written as they are: %q", log.writes[1])
+	}
+}
+
 func TestCancelWhileWaitingLeavesNoTicket(t *testing.T) {
 	g, dir := oneSlotGate(t)
 	release, _ := holder(t, g)

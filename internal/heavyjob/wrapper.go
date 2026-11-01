@@ -161,6 +161,11 @@ func parseWrapperArgs(args []string) (hostslot.Options, []string, error) {
 // waitNotice is the writer hostslot prints its waiting lines to. Before the
 // first one it says, once, in reliant's words, what is happening and why;
 // hostslot's own line then names the holders and the queue.
+//
+// The header and that first line go out in ONE write. A reader of the
+// command's output (an agent's tool result, or WaitedFor polling it) that sees
+// the marker must also see who holds the slot: written separately, the header
+// could be read on its own.
 type waitNotice struct {
 	w      io.Writer
 	label  string
@@ -168,9 +173,12 @@ type waitNotice struct {
 }
 
 func (n *waitNotice) Write(p []byte) (int, error) {
-	if !n.headed {
-		n.headed = true
-		fmt.Fprintf(n.w, "%s: `%s` waits for one of this machine's heavy slots (shared by every agent and forge lane) before it runs\n", waitingMarker, n.label)
+	if n.headed {
+		return n.w.Write(p)
 	}
-	return n.w.Write(p)
+	n.headed = true
+	header := fmt.Sprintf("%s: `%s` waits for one of this machine's heavy slots (shared by every agent and forge lane) before it runs\n", waitingMarker, n.label)
+	written, err := n.w.Write(append([]byte(header), p...))
+	// The caller asked to write p: report how much of it went out.
+	return max(written-len(header), 0), err
 }
