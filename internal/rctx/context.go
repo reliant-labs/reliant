@@ -66,6 +66,15 @@ type ToolContext struct {
 	// MCP provides execution-time MCP access for tool discovery and invocation.
 	// Implementations may be local-manager-backed or daemon/NATS-backed.
 	MCP mcp.Runtime
+
+	// RunStep is true when the call is a workflow `run` node's command rather
+	// than a model's tool call. The shell tool then honours the node's declared
+	// timeout instead of the model's 10-minute foreground cap.
+	//
+	// It is set only from the request's server-built context
+	// (toolexec.ToolRequest.RunStep, which only the run-step executor sets),
+	// never from tool input, so a model cannot claim it.
+	RunStep bool
 }
 
 // NewToolContext creates a context for V2 tool execution

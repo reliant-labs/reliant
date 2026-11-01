@@ -117,6 +117,10 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		Timeout:        time.Duration(timeoutMs) * time.Millisecond,
 		Environment:    env,
 		DaemonSelector: e.execCtx.DaemonSelector,
+		// A run node's command, not a model's call: the shell tool lets
+		// timeoutMs (the node's declared timeout) bound it instead of the
+		// model's 10-minute foreground cap. Set here and nowhere else.
+		RunStep: true,
 	}
 
 	// Execute through the daemon
