@@ -5,7 +5,7 @@
 # release gate (scripts/release-gate.sh), on main, before a release is cut.
 # dev-docs/merge-and-release-gates.md is the design and the trade-offs.
 #
-#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen]
+#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--queue]
 #
 #   --base <rev>  diff base (default: the merge-base of HEAD and origin/main)
 #   --amend       a regenerate that changes only generated paths is amended
@@ -13,6 +13,12 @@
 #                 merge with main can leave generated files a step behind)
 #   --regen       run forge generate even if no forge input changed (the
 #                 merge queue resolved a generated-file conflict)
+#   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
+#                 whose budget is five minutes of wall time (owner, 2026-11-01):
+#                 vet and the scoped forge lint are left to the release gate,
+#                 which runs both over the whole module, and buf lint runs only
+#                 when a proto or buf config changed. Build, the affected
+#                 tests, typecheck, generate, docs, migsafety and migorder stay.
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
@@ -61,13 +67,14 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
-base="" amend=0 regen=0
+base="" amend=0 regen=0 queue=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,57p' "$0"; exit 0 ;;
+    --queue) queue=1; shift ;;
+    -h|--help) sed -n '2,63p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -81,7 +88,7 @@ export FORGE_NO_MERGE_DRIVER=1
 # (the pin) when set, else the forge on PATH.
 slotforge=${FORGE_BIN:-forge}
 if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen)
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -130,6 +137,8 @@ base=$(git rev-parse "$base")
 L=${MG_LOGDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-merge-gate/$(date -u +%Y%m%dT%H%M%SZ)-$$}
 mkdir -p "$L"
 echo "$slot_wait" >"$L/slot_wait"
+# gate-verify reads the tier: the queue's is not obliged to vet or lint.
+[ "$queue" = 1 ] && echo queue >"$L/tier"
 pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
 if [ -n "${FORGE_BIN:-}" ]; then forge=("$FORGE_BIN"); else forge=(env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin"); fi
 # Paths generators write. A regenerate in --amend mode may change only these.
@@ -409,19 +418,23 @@ if [ "$fail" = 0 ]; then
   # One awk, not a dirname per file: forking hundreds of processes on a
   # loaded host delayed lint's start by over a minute.
   scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
-  if [ -n "$scope" ]; then
+  if [ "$queue" = 1 ]; then
+    notes+=("queue tier: vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
+  elif [ -n "$scope" ]; then
     notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
     phase lint env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}" & pids+=($!)
   else
     notes+=("lint: not run (only root files changed; the release gate lints the module)")
   fi
-  phase proto task proto:lint & pids+=($!)
+  if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
+    phase proto task proto:lint & pids+=($!)
+  fi
   # Build reach includes ordinary production packages with no test binary.
   # Keep test-only changes too: vet checks their tests even when Build is empty.
   if [ "$gofull" = true ]; then vet_pkgs=(./...); else
     mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   fi
-  if [ ${#vet_pkgs[@]} -gt 0 ]; then
+  if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$queue" != 1 ]; then
     phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
