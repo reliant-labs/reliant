@@ -160,6 +160,38 @@ func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
 	}
 }
 
+// The merge queue's tier (merge-gate.sh --queue) leaves vet and the scoped
+// forge lint to the release gate; everything else it is obliged to keep.
+func TestQueueTierDoesNotRequireVetOrLint(t *testing.T) {
+	pl := &Plan{
+		Files: []FileReport{{Path: "internal/x/x.go"}, {Path: "db/migrations/1_a.up.sql"}},
+		Go:    GoPlan{Build: []string{"./internal/x"}, Packages: []string{"./internal/x"}},
+	}
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0})
+	if err := os.WriteFile(filepath.Join(dir, "tier"), []byte("queue\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := verify(t, dir); code == 0 {
+		t.Fatal("the queue tier passed a migration without migsafety")
+	}
+	v := verdict(t, dir)
+	if !strings.Contains(v, "migsafety") {
+		t.Fatalf("verdict %q does not name migsafety", v)
+	}
+	for _, unwanted := range []string{"vet", "lint"} {
+		if strings.Contains(v, unwanted+" never completed") {
+			t.Fatalf("the queue tier obliged %s: %q", unwanted, v)
+		}
+	}
+	if err := os.Remove(filepath.Join(dir, "tier")); err != nil {
+		t.Fatal(err)
+	}
+	verify(t, dir)
+	if v := verdict(t, dir); !strings.Contains(v, "vet never completed") || !strings.Contains(v, "lint never completed") {
+		t.Fatalf("without the queue tier vet and lint must be obliged: %q", v)
+	}
+}
+
 // A phase the script decided to run is declared in <dir>/expected; one that
 // left no row (the gate was cut off before it finished) fails.
 func TestDeclaredPhaseWithoutARowFails(t *testing.T) {

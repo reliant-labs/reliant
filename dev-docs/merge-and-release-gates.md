@@ -373,19 +373,28 @@ Say so in the release notes. There is no waiver for a red run: fix it.
 `main` merges only through GitHub's native merge queue. The ruleset
 "main: CI result + merge queue" requires the `CI result` check, squash-merges,
 and lists one bypass actor, the `reliant-01` account the pipeline acts as
-(never use it to bypass: no `--admin`). `ci.yml` runs on `merge_group`, so each
-queued PR is tested on main plus the entries ahead of it, and lands only if that
-run is green. That `merge_group` run is the only run of the merge gate an
+(never use it to bypass: no `--admin`). `merge-queue.yml` runs on
+`merge_group`, so each queued PR is tested on main plus the entries ahead of it,
+and lands only if that run is green. It is ONE job, `CI result`, running
+`task ci:merge -- --queue`, and its budget is five minutes of wall time, runner
+queue included (owner, 2026-11-01): the queue tier leaves vet and forge lint to
+the release gate and runs buf lint only for a proto change, and the renderer's
+release build, Playwright and the electron smoke run on main, where the release
+record requires them. Its last step reports the run's wall time split into
+runner wait and run time, and files one rolling `pipeline:slo` issue when it is
+over budget (it does not fail the group: a slow runner is not the change's
+fault). That `merge_group` run is the only run of the merge gate an
 unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
 required checks are green on its head. Only the `pr-review` workflow enqueues,
 with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
 passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
 `merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
-`CI result` also requires `pr-review`'s pass marker on every PR head in the
-group (`scripts/ci-review-marker.sh`). Because the PR's own `CI result` is
+the required `Reliant review` check (`reliant-review.yml`) requires
+`pr-review`'s pass marker on every PR head in the group
+(`scripts/ci-review-marker.sh`, fetched from main). Because the PR's own `CI result` is
 green within a minute, auto-merge an author arms before the review enqueues
-the unreviewed head at once: its group fails the review marker
+the unreviewed head at once: its group fails `Reliant review`
 (`latest: none`), and so does every group behind it. A queue failure dequeues
 the PR, which the pipeline's fixer picks up.
 
@@ -409,8 +418,8 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, and the path lanes below that the diff reaches; the review marker must pass |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed |
+| `merge_group` (`merge-queue.yml`) | `CI result` (one job) | `task ci:merge -- --base <the group's base> --queue`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. No path lanes |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
 
 ### Why the release gate runs as parts in CI
 

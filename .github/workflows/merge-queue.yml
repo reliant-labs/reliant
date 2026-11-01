@@ -1,0 +1,118 @@
+name: Merge queue
+
+# The merge queue's verdict: ONE job, named "CI result" (the ruleset's required
+# check), on every merge group. Its budget is five minutes of wall time, runner
+# queue included (owner, 2026-11-01: "merge-queue tests take at most 5 minutes;
+# anything longer belongs in the pre-release gate").
+#
+# WHAT RUNS HERE: `task ci:merge -- --queue`, the affected tier relative to the
+# group's base: build, the affected -short tests (direct importers), the web
+# typecheck when web changed, forge generate / docs drift when their inputs
+# changed, migration safety and order when a migration changed, buf lint when a
+# proto changed; then each new or changed Go test three times, and the cheap
+# repo checks.
+#
+# WHAT DOES NOT: vet, forge lint, golangci, buf lint on an unchanged proto, the
+# race detector, slow and integration tests, the whole vitest suite, the
+# renderer's release build, Playwright and the electron package smoke. ci.yml
+# runs every one of them on each push to main and nightly, and the release
+# gate's record requires them, so a release (an RC set) is never cut over them.
+#
+# WHY ONE JOB. The org runs at most 20 jobs at once across every repository,
+# and each job is a queue slot plus ~2 minutes of setup. The queue used to run
+# ci.yml here: eight jobs per group (lanes, migration order, review marker,
+# merge gate, web build, Playwright, CI result, plus Reliant review), and on
+# 2026-11-01 a group took 20-38 minutes, of which 5-15 were waiting for a
+# runner, five times, once per job hop. Its own review marker is not repeated
+# here: Reliant review (reliant-review.yml) is required too and runs the same
+# check from main.
+#
+# THE BUDGET is measured, not hoped for: the last step compares the run's wall
+# time with 300s and, when it is over, says so on the run and on one rolling
+# `pipeline:slo` issue. It does not fail the group: a slow runner is not the
+# change's fault, and ejecting it would cost every entry behind it a rebuild.
+on:
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+  issues: write
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+
+jobs:
+  ci-result:
+    name: CI result
+    runs-on: ubuntu-latest
+    # A runner that dies holds the queue entry until this fires (the ruleset's
+    # check timeout is 45 minutes).
+    timeout-minutes: 30
+    env:
+      BASE: ${{ github.event.merge_group.base_sha }}
+    steps:
+      - name: Start the clock
+        run: echo "JOB_T0=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          ripgrep: "true"
+          free-disk: background
+          buf: "true"
+      # Migration order is the gate's migorder phase whenever a migration changed.
+      - name: task ci:merge -- --queue
+        run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
+      - name: task test:flake (each new or changed test, three times)
+        if: ${{ !cancelled() }}
+        run: task test:flake -- --base "${BASE}"
+      - name: task ci:repo-checks
+        if: ${{ !cancelled() }}
+        run: task ci:repo-checks BASE="${BASE}"
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      - name: Upload the gate's phase logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-gate-logs
+          path: ${{ runner.temp }}/merge-gate
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Five-minute budget
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BUDGET: "300"
+        run: |
+          set -uo pipefail
+          now=$(date +%s)
+          created=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" -q .created_at)
+          c=$(date -d "${created}" +%s)
+          wall=$(( now - c )) queue=$(( JOB_T0 - c )) run=$(( now - JOB_T0 ))
+          line="merge-queue wall ${wall}s = ${queue}s waiting for a runner + ${run}s running (budget ${BUDGET}s); ${GROUP_REF}"
+          echo "### ${line}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${wall}" -le "${BUDGET}" ]; then echo "${line}"; exit 0; fi
+          echo "::error title=Merge queue over its ${BUDGET}s budget::${line}"
+          title="Merge queue CI over its 5-minute budget"
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh label create pipeline:slo --color B60205 --description "A pipeline SLO is breached" >/dev/null 2>&1 || true
+          issue=$(gh issue list --state open --label pipeline:slo --search "in:title \"${title}\"" --json number,updatedAt -q '.[0] | "\(.number) \(.updatedAt)"' 2>/dev/null || true)
+          if [ -z "${issue}" ]; then
+            gh issue create --label pipeline:slo --title "${title}" --body "$(printf '%s\n\n%s\n\n%s' \
+              "The merge queue's CI (.github/workflows/merge-queue.yml) has a five-minute wall-time budget, runner queue included (owner, 2026-11-01). This run was over it:" \
+              "- ${line} ([run](${url}))" \
+              "A large runner-queue share is a runner-capacity problem (the org's 20-job cap; self-hosted runners), not a test one. A large run share means a phase outgrew the tier: move it to the release gate. Further breaches are added as comments, at most one an hour.")" || true
+          else
+            # At most one comment an hour: one per group would bury the signal.
+            last=$(date -d "${issue#* }" +%s)
+            if [ $(( now - last )) -ge 3600 ]; then
+              gh issue comment "${issue%% *}" --body "- ${line} ([run](${url}))" || true
+            fi
+          fi
