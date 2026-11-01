@@ -91,14 +91,6 @@ func TestSnapshotHeadsQueryUsesPartialIndexUnderGenericPlan(t *testing.T) {
 			"expression (store.SnapshotRekeyKeySQL) or `update_type IN (...)` no longer matches the index. Plan:\n%s", plan)
 }
 
-// scanUsesIndex reports whether any scan node in the plan reads index. Plain
-// and bitmap index scans spell it differently ("using" vs "on").
-func scanUsesIndex(plan, index string) bool {
-	return strings.Contains(plan, "Index Scan using "+index+" ") ||
-		strings.Contains(plan, "Index Only Scan using "+index+" ") ||
-		strings.Contains(plan, "Bitmap Index Scan on "+index+" ")
-}
-
 // probeUsesIndex reports whether the plan node that applies a skip scan's
 // bound (the text `bound` names, e.g. `entity_id > h.entity_id`) is an index
 // scan on index — with the bound as an Index Cond — rather than a Filter over

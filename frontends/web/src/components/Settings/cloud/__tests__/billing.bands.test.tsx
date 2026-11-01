@@ -131,8 +131,8 @@ const HEALTHY_SUB = {
       priceCents: 4700n,
       displayOrder: 2,
       structuredLimits: {
-        allowedDaemonSizes: ["small", "medium"],
-        includedSmallDaemonHours: 41n,
+        allowedDaemonSizes: ["m", "l"],
+        machineIncludedHours: 41n,
       },
     },
   },
@@ -150,17 +150,19 @@ const DEGRADED_SUB = {
       displayOrder: 2,
       structuredLimits: {
         allowedDaemonSizes: [],
-        includedSmallDaemonHours: 0n,
+        machineIncludedHours: 0n,
       },
     },
   },
 };
 
 const USAGE = {
-  includedSmallDaemonSeconds: 147600,
-  usedSmallDaemonSeconds: 43200,
-  remainingSmallDaemonSeconds: 104400,
-  runningMultiplier: 0,
+  pricingVersion: "test-version",
+  allowanceWeightedSeconds: "147600/1",
+  consumedWeightedSeconds: "43200/1",
+  remainingWeightedSeconds: "104400/1",
+  runningCostWeightSum: "0/1",
+  grantRemainingWeightedSeconds: "0/1",
   estimatedOverageCostCents: 0,
   bySize: [],
   grantedSmallDaemonSecondsRemaining: 0,
@@ -245,8 +247,8 @@ describe("AI credit and compute are two regions, not two identical cards", () =>
 
     // Compute: hours against a ceiling, with a renewal date. No balance.
     const compute = within(computeBand());
-    expect(compute.getByText(/12\.0 h/)).toBeInTheDocument();
-    expect(compute.getByText(/41\.0 h included/i)).toBeInTheDocument();
+    expect(compute.getByText(/12\.0 weighted h/)).toBeInTheDocument();
+    expect(compute.getByText(/41\.0 weighted h included/i)).toBeInTheDocument();
     expect(compute.getByText(/renews/i)).toBeInTheDocument();
     expect(compute.queryByText("$18.40")).toBeNull();
   });
@@ -494,7 +496,7 @@ describe("invoices fold into usage without losing a surface", () => {
       screen.getByRole("heading", { name: /^invoices$/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /compute usage/i }),
+      screen.getByRole("heading", { name: /machine usage and allowance/i }),
     ).toBeInTheDocument();
   });
 

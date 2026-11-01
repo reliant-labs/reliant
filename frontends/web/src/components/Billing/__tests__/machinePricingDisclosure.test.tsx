@@ -5,8 +5,8 @@ import { MachinePricingLine, PlanTileRow, commonPlanHours, type ComputePlanOptio
 import { diskGrowPrice } from '@/components/Settings/cloud/diskGrow';
 import { formatMachineMinutes, formatMachineMinutesShort } from '@/lib/formatMachineMinutes';
 
-const pricing = { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 60 }], storageCentsPerGibMonth: '25', placeholder: false };
-const plan: ComputePlanOption = { planId: 'small', label: 'Small', detail: '2 GB · 0.5 CPU', size: 'small', monthlyPriceCents: 1500, includedHours: '160' };
+const pricing = { sizes: [{ size: 'm', multiplier: 1, hourlyPriceCents: '13', storageGib: 60 }], storageCentsPerGibMonth: '25', placeholder: false };
+const plan: ComputePlanOption = { planId: 'small', label: 'Small', detail: '2 GB · 0.5 CPU', size: 'm', monthlyPriceCents: 1500, includedHours: '160' };
 
 describe('machine pricing disclosure', () => {
   it('reads a machine disk as the one provisioned disk', () => {
@@ -39,9 +39,9 @@ describe('machine pricing disclosure', () => {
       'Includes 160 hours a month. Extra hours and storage are billed separately.',
     );
   });
-  it('names coupon time as hours on a Small machine, never jargon', () => {
-    expect(formatMachineMinutes(600)).toBe('10 hours on a Small machine');
-    expect(formatMachineMinutes(60)).toBe('1 hour on a Small machine');
-    expect(formatMachineMinutesShort(90)).toBe('1.5 h (Small)');
+  it('names coupon time as hours on an M machine (the coupon unit), never jargon', () => {
+    expect(formatMachineMinutes(600)).toBe('10 hours on an M machine');
+    expect(formatMachineMinutes(60)).toBe('1 hour on an M machine');
+    expect(formatMachineMinutesShort(90)).toBe('1.5 h (M)');
   });
 });

@@ -106,7 +106,9 @@ func (s *Service) DiscoverRepos(
 		RemoteURL    string `json:"remote_url,omitempty"`
 	}
 	var daemonResp struct {
-		Discovered []discoveredRepo `json:"discovered"`
+		Discovered      []discoveredRepo `json:"discovered"`
+		Truncated       bool             `json:"truncated"`
+		TruncatedReason string           `json:"truncated_reason"`
 	}
 	payload := map[string]interface{}{
 		"path":      project.Path,
@@ -128,7 +130,11 @@ func (s *Service) DiscoverRepos(
 			UpdatedAt:    now,
 		}
 	}
-	return connect.NewResponse(&reliantv1.DiscoverReposResponse{Discovered: out}), nil
+	return connect.NewResponse(&reliantv1.DiscoverReposResponse{
+		Discovered:      out,
+		Truncated:       daemonResp.Truncated,
+		TruncatedReason: daemonResp.TruncatedReason,
+	}), nil
 }
 
 // =============================================================================

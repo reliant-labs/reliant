@@ -317,10 +317,15 @@ test.describe('Onboarding Flow', () => {
     }));
   }
 
+  // QUARANTINED (reliant#2025): these two mock the retired small/medium/large/xl
+  // ladder and its spec strings. #1844 moved the app to the machine-pooled-v1
+  // ladder (S1-3XL), so they look for rows that no longer exist. The labels and
+  // specs of the new ladder are pinned by ComputeStep.machineSpecs.test and the
+  // AddMachineSheet unit tests until these are rewritten against it.
   const FOOTNOTE = 'Includes 160 hours a month. Extra hours and storage are billed separately.';
   const BANNED = /GiB|\/hr|hrs|while suspended|per month\b.*GB|after included hours|uses included hours|as fast|small-daemon|hours\/month included|2,?560|1,?280/;
 
-  test('onboarding plan rows: name, spec and monthly price only', async ({ page }, testInfo) => {
+  test.fixme('onboarding plan rows: name, spec and monthly price only', async ({ page }, testInfo) => {
     page.on('pageerror', error => console.error(error));
     await mockPricing(page);
     // Not covered by a coupon: every row shows its monthly price.
@@ -339,7 +344,7 @@ test.describe('Onboarding Flow', () => {
     await page.screenshot({ path: testInfo.outputPath('onboarding-plan-rows.png'), fullPage: true });
   });
 
-  test('add machine sheet: name and spec per size, included terms without duplicate prices', async ({ page }, testInfo) => {
+  test.fixme('add machine sheet: name and spec per size, included terms without duplicate prices', async ({ page }, testInfo) => {
     page.on('pageerror', error => console.error(error));
     await mockPricing(page);
     await page.route('**/controlplane.v1.UserService/GetCurrentUser', route =>
