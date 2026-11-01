@@ -32,6 +32,7 @@ import {
   SortDesc,
   Bell,
   GitBranch,
+  Folder,
   MessageSquare,
   Search,
   Settings,
@@ -61,6 +62,7 @@ import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { ProjectMark } from "./ProjectMark";
 import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
@@ -221,6 +223,11 @@ interface ArchivedChatGroup {
   worktreeId?: string; // Original worktree ID if available
   chats: ChatWithActivity[];
   isWorktreeArchived: boolean; // True if the worktree itself is archived
+  /**
+   * Set when the group is a whole project (All projects): `worktreeName` is
+   * then the project's name, and each row names its own workspace.
+   */
+  projectId?: string;
 }
 
 interface ChatWithActivity extends Chat {
@@ -263,6 +270,9 @@ interface ChatItemProps {
   inGroup?: boolean;
   editingChatId: string | null;
   editingTitle: string;
+  /** Out of a group (the flat list): the chat's project, when the list spans several. */
+  projectName?: string;
+  /** Out of a group: the chat's workspace branch, when it is worth naming. */
   workspaceBranch?: string;
   activeChatId: string | null;
   onChatClick: (chat: ChatWithActivity) => void;
@@ -278,6 +288,7 @@ const ChatItem = memo(function ChatItem({
   inGroup = false,
   editingChatId,
   editingTitle: propsEditingTitle,
+  projectName,
   workspaceBranch,
   activeChatId,
   onChatClick,
@@ -391,13 +402,8 @@ const ChatItem = memo(function ChatItem({
             </div>
           </div>
         )}
-        {!inGroup && workspaceBranch && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <GitBranch className="w-2.5 h-2.5 text-muted-foreground/60" />
-            <span className="text-2xs text-muted-foreground/60 truncate max-w-[120px]">
-              {workspaceBranch}
-            </span>
-          </div>
+        {!inGroup && (projectName || workspaceBranch) && (
+          <ChatWhere chatId={chat.id} projectName={projectName} workspaceBranch={workspaceBranch} />
         )}
       </div>
 
@@ -434,14 +440,55 @@ const ChatItem = memo(function ChatItem({
   );
 });
 
+/**
+ * A row's "where", under its title when no header above it says so: the
+ * project first (a folder glyph and its name, the stronger of the two), then
+ * the workspace branch. Real text, so a screen reader hears it with the title.
+ */
+function ChatWhere({
+  chatId,
+  projectName,
+  workspaceBranch,
+}: {
+  chatId: string;
+  projectName?: string;
+  workspaceBranch?: string;
+}) {
+  return (
+    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+      {projectName && (
+        <span className="flex min-w-0 items-center gap-1" data-testid={`chat-project-${chatId}`}>
+          <Folder className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+          <span className="truncate font-medium text-foreground/70">{projectName}</span>
+        </span>
+      )}
+      {workspaceBranch && (
+        <span className="flex min-w-0 items-center gap-1">
+          <GitBranch className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{workspaceBranch}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 // --- Extracted ArchivedChatItem (module-level for stable identity + React.memo) ---
 
 interface ArchivedChatItemProps {
   chat: ChatWithActivity;
   activeChatId: string | null;
+  /** The chat's project, when no header above the row names it. */
+  projectName?: string;
+  /** The chat's workspace, when no header above the row names it. */
+  workspaceName?: string;
 }
 
-const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: ArchivedChatItemProps) {
+const ArchivedChatItem = memo(function ArchivedChatItem({
+  chat,
+  activeChatId,
+  projectName,
+  workspaceName,
+}: ArchivedChatItemProps) {
   const chatId = chat.id;
   const chatTitle = chat.title || "New chat";
   const isActive = activeChatId === chatId;
@@ -478,6 +525,9 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
         <div className="truncate group-hover:text-foreground transition-colors duration-200">
           {chatTitle}
         </div>
+        {(projectName || workspaceName) && (
+          <ChatWhere chatId={chatId} projectName={projectName} workspaceBranch={workspaceName} />
+        )}
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -534,6 +584,17 @@ interface WorktreeGroupComponentProps {
     message: string;
     onClick?: () => void;
   };
+  /**
+   * Inside a project section (All projects): the workspace is the level
+   * under the project, so its header is a quiet branch label, not a second
+   * heading that outweighs the project's.
+   */
+  nested?: boolean;
+  /**
+   * No header at all: the project's main workspace when it is the project's
+   * only one, whose chats then sit directly under the project.
+   */
+  hideHeader?: boolean;
 }
 
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
@@ -551,21 +612,34 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   onArchiveWorktree,
   onContextMenu,
   emptyState,
+  nested = false,
+  hideHeader = false,
 }: WorktreeGroupComponentProps) {
+  if (hideHeader) {
+    return (
+      <div className="space-y-0.5" data-testid="sidebar-workspace-chats">
+        {chats.map((chat) => (
+          <div key={chat.id}>{renderChat(chat)}</div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="mb-1">
       {/* Worktree Container */}
       <div
         className={cn(
           "overflow-hidden rounded-md transition-all duration-150",
-          hasActiveChat
-            ? "bg-primary/10"
-            : "bg-transparent hover:bg-muted/30"
+          nested
+            ? "bg-transparent"
+            : hasActiveChat
+              ? "bg-primary/10"
+              : "bg-transparent hover:bg-muted/30"
         )}
       >
         {/* Header */}
         <div
-          className="group/header flex h-8 w-full items-center gap-1"
+          className={cn("group/header flex w-full items-center gap-1", nested ? "h-7" : "h-8")}
           onContextMenu={(e) => onContextMenu?.(e)}
         >
           <button
@@ -579,7 +653,8 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
               <div
                 className={cn(
-                  "min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide",
+                  "min-w-0 flex-1 truncate text-xs",
+                  nested ? "font-medium" : "font-semibold uppercase tracking-wide",
                   hasActiveChat ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -662,7 +737,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
         {/* Chats List */}
         {isExpanded && chats.length > 0 && (
-          <div className="space-y-0.5 pb-1 pt-0.5 pl-6">
+          <div className={cn("space-y-0.5 pb-1 pt-0.5", nested ? "pl-4" : "pl-6")}>
             {chats.map((chat) => (
               <div key={chat.id}>{renderChat(chat)}</div>
             ))}
@@ -715,6 +790,8 @@ function SidebarComponent({
     () => (projectFilterId ? projects.filter((p) => p.id === projectFilterId) : projects),
     [projects, projectFilterId],
   );
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const projectNameOf = useCallback((projectId: string) => projectNames.get(projectId), [projectNames]);
   // Get active chat from navigation store
   const activeChatId = useChatStore((state) => state.activeChatId);
   // The open chat stays in the list even when the server left it out (§6.2
@@ -914,10 +991,25 @@ function SidebarComponent({
     // Create flat list for flat view mode
     const flatList = sortChatList(activeWorktreeChats);
 
-    // Group archived chats by worktree_name (similar to active chats grouping)
+    // Group archived chats by project across projects, as the active list
+    // does (two projects' "main" workspaces used to merge into one group
+    // that named neither), and by workspace within one project.
     const archivedGroupsMap = new Map<string, ArchivedChatGroup>();
 
     archivedList.forEach((chat) => {
+      if (!projectFilterId) {
+        const groupKey = `project:${chat.projectId}`;
+        if (!archivedGroupsMap.has(groupKey)) {
+          archivedGroupsMap.set(groupKey, {
+            worktreeName: projectNames.get(chat.projectId) ?? "Project",
+            chats: [],
+            isWorktreeArchived: false,
+            projectId: chat.projectId,
+          });
+        }
+        archivedGroupsMap.get(groupKey)!.chats.push(chat);
+        return;
+      }
       // Use worktree_name from archived chat metadata, or worktree_id, or fallback to "Unknown Workspace"
       const groupKey = chat.worktreeName || chat.worktreeId || "unknown";
       const displayName = chat.worktreeName || "Unknown Workspace";
@@ -959,6 +1051,7 @@ function SidebarComponent({
     mainWorktrees,
     projectFilterId,
     scopedProjects,
+    projectNames,
   ]);
 
   // The global New chat: the filter's project, else the open chat's, else the
@@ -1298,9 +1391,15 @@ function SidebarComponent({
     () => <FolderGit2 className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />,
     []
   );
+  const nestedWorktreeIcon = useMemo(
+    () => <GitBranch className="w-3 h-3 text-muted-foreground flex-shrink-0" aria-hidden="true" />,
+    []
+  );
 
+  // `layout`: a workspace inside a project section is nested under it, and
+  // the project's only workspace, its main one, has no header of its own.
   const renderWorktreeGroup = useCallback(
-    (group: ChatGroup) => {
+    (group: ChatGroup, layout: { nested?: boolean; hideHeader?: boolean } = {}) => {
       // Handle main branch (no worktree) special case
       const isNoWorktree = group.worktreeId.startsWith("no-worktree");
       const isExpanded = isNoWorktree
@@ -1355,7 +1454,9 @@ function SidebarComponent({
           id={group.worktreeId}
           title={group.worktreeBranch}
           subtitle={null}
-          icon={worktreeIcon}
+          icon={layout.nested ? nestedWorktreeIcon : worktreeIcon}
+          nested={layout.nested}
+          hideHeader={layout.hideHeader}
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
@@ -1390,6 +1491,7 @@ function SidebarComponent({
       editingChatId,
       editingTitle,
       worktreeIcon,
+      nestedWorktreeIcon,
       handleChatClick,
       handleChatContextMenu,
       handleSaveRename,
@@ -1402,34 +1504,54 @@ function SidebarComponent({
 
   // A project section of the All projects view: the project's name, its chat
   // count, New chat in this project, and its workspace groups.
+  //
+  // The project is the strongest level of the list, so which project a chat
+  // is in reads at a glance: a project mark and the name at body size, a
+  // header that stays pinned while its chats scroll under it, and a guide
+  // line down the chats it holds. Its workspaces are quiet branch labels
+  // under it, and a project whose only workspace is main lists its chats
+  // directly: a "main" header under every project said nothing.
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
     const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
     const hasActiveChat = group.chats.some((chat) => chat.id === activeChatId);
     const toggle = () =>
       setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
+    const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
+    const mainWorkspace = onlyMain ? group.workspaces[0] : undefined;
     return (
       <section
         key={group.projectId}
         aria-label={group.projectName}
         data-testid={`sidebar-project-${group.projectId}`}
       >
-        <div className="group/project flex h-7 items-center gap-1">
+        <div
+          className="group/project sticky top-0 z-10 -mx-1 flex h-8 items-center gap-1 bg-card px-1"
+          data-testid={`sidebar-project-header-${group.projectId}`}
+          // The main workspace's header is folded into the project's, so its
+          // actions are here.
+          onContextMenu={
+            mainWorkspace && !mainWorkspace.worktreeId.startsWith("no-worktree")
+              ? (e) => handleWorktreeContextMenu(e, mainWorkspace.worktreeId)
+              : undefined
+          }
+        >
           <button
             type="button"
             onClick={toggle}
             aria-expanded={isExpanded}
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-semibold transition-colors",
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left text-sm font-semibold transition-colors",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              hasActiveChat ? "text-primary" : "text-foreground/80 hover:text-foreground",
+              hasActiveChat ? "text-primary" : "text-foreground",
             )}
           >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
+            <ProjectMark name={group.projectName} active={hasActiveChat} />
             <span className="min-w-0 truncate">{group.projectName}</span>
+            {isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
           </button>
           {group.chats.length > 0 && (
             <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
@@ -1448,8 +1570,19 @@ function SidebarComponent({
           </Tooltip>
         </div>
         {isExpanded && (
-          <div className="space-y-1.5 pl-2 pt-0.5">
-            {group.workspaces.map((workspace) => renderWorktreeGroup(workspace))}
+          <div className="ml-3.5 space-y-0.5 border-l border-border/60 pb-1 pl-2 pt-0.5">
+            {group.workspaces.map((workspace) =>
+              renderWorktreeGroup(workspace, { nested: true, hideHeader: onlyMain }),
+            )}
+            {group.chats.length === 0 && (
+              <button
+                type="button"
+                onClick={() => void openNewChat({ projectId: group.projectId })}
+                className="rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                No chats yet · start one
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -1490,6 +1623,8 @@ function SidebarComponent({
         ? (e: React.MouseEvent) => handleWorktreeContextMenu(e, group.worktreeId as string)
         : undefined;
 
+      // A whole project's archive: its mark, and each row names its workspace.
+      const isProject = Boolean(group.projectId);
       return (
         <WorktreeGroupComponent
           key={groupKey}
@@ -1497,13 +1632,23 @@ function SidebarComponent({
           title={group.worktreeName}
           subtitle={subtitle}
           icon={
-            <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+            isProject ? (
+              <ProjectMark name={group.worktreeName} active={hasActiveChat} className="h-4 w-4" />
+            ) : (
+              <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+            )
           }
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
           chatCount={group.chats.length}
-          renderChat={(chat) => <ArchivedChatItem chat={chat} activeChatId={activeChatId} />}
+          renderChat={(chat) => (
+            <ArchivedChatItem
+              chat={chat}
+              activeChatId={activeChatId}
+              workspaceName={isProject ? chat.worktreeName || undefined : undefined}
+            />
+          )}
           hasActiveChat={hasActiveChat}
           onContextMenu={handleWorktreeMenu}
         />
@@ -1728,11 +1873,10 @@ function SidebarComponent({
                 <div className="space-y-1">
                   {flatList.map((chat) => {
                     const worktree = getWorktreeForChat(chat);
-                    // Across projects, the row names its project as well.
-                    const projectName = projectFilterId
-                      ? undefined
-                      : projects.find((p) => p.id === chat.projectId)?.name;
-                    const where = [projectName, worktree?.branch].filter(Boolean).join(" · ");
+                    // Across projects, the row names its project first; the
+                    // branch only when it is not the project's main checkout.
+                    const projectName = projectFilterId ? undefined : projectNameOf(chat.projectId);
+                    const branch = projectFilterId || !worktree?.isMain ? worktree?.branch : undefined;
                     return (
                       <ChatItem
                         key={chat.id}
@@ -1740,7 +1884,8 @@ function SidebarComponent({
                         inGroup={false}
                         editingChatId={editingChatId}
                         editingTitle={editingTitle}
-                        workspaceBranch={where || undefined}
+                        projectName={projectName}
+                        workspaceBranch={branch || undefined}
                         activeChatId={activeChatId}
                         onChatClick={handleChatClick}
                         onContextMenu={handleChatContextMenu}
@@ -1762,7 +1907,12 @@ function SidebarComponent({
             ) : (
               <div className="space-y-1">
                 {filteredArchivedChats.map((chat) => (
-                  <ArchivedChatItem key={chat.id} chat={chat} activeChatId={activeChatId} />
+                  <ArchivedChatItem
+                    key={chat.id}
+                    chat={chat}
+                    activeChatId={activeChatId}
+                    projectName={projectFilterId ? undefined : projectNameOf(chat.projectId)}
+                  />
                 ))}
               </div>
             )

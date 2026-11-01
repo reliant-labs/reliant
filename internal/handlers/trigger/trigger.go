@@ -181,7 +181,7 @@ func (s *Service) GetTrigger(
 		return nil, svcerr.Wrap(err)
 	}
 	for _, c := range changes {
-		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339)})
+		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), Approval: c.Approval, CapabilitiesAdded: c.CapabilitiesAdded, CapabilitiesRemoved: c.CapabilitiesRemoved})
 	}
 	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
 }
@@ -219,10 +219,15 @@ func (s *Service) ListTriggers(
 		regs = nil
 	}
 
-	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
+	// Every activation resolves its workflow, that workflow's children and
+	// presets, and where it reads them from; most of them against the same
+	// machine catalog and the same account drafts. Read each once for the
+	// whole list (launch.NewRequestResolver).
+	resolver := launch.NewRequestResolver(s.deps.Repo)
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: resolver})
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
-		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows))
+		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows, resolver))
 	}
 	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
 }
@@ -954,14 +959,14 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}
-	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo})
+	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo}, s.deps.Repo)
 }
 
 // renderWithWorkflows renders a trigger, resolving an activation's
 // declaration through workflows so that a broken one reports BROKEN health.
 // It is computed on read, from the workflow as it is now: a stored verdict
 // would go stale the moment someone fixed the YAML.
-func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
+func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver, sources launch.WorkflowResolver) *reliantv1.Trigger {
 	proto := s.renderFirings(ctx, t, firings, reg)
 	if t.WorkflowTrigger == nil {
 		return proto
@@ -978,7 +983,7 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 		}
 		return proto
 	}
-	proto.DefinitionSource = s.definitionSource(ctx, t)
+	proto.DefinitionSource = definitionSource(ctx, sources, t)
 	// Broken wins over this (a broken declaration cannot be set up); this wins
 	// over everything the firings say, because nothing launches until the
 	// activation is finished.
@@ -991,9 +996,10 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 // definitionSource says where an activation's runs read its workflow from,
 // resolved exactly as they resolve it (on its machine, project first), and
 // what about that choice the owner should know. Nil when it does not resolve
-// right now: the declaration's health already says so.
-func (s *Service) definitionSource(ctx context.Context, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
-	desc, err := launch.DescribeRunWorkflow(ctx, s.deps.Repo, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
+// right now: the declaration's health already says so. It reads through
+// sources: a list passes its request resolver.
+func definitionSource(ctx context.Context, sources launch.WorkflowResolver, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
+	desc, err := launch.DescribeRunWorkflow(ctx, sources, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
 	if err != nil {
 		return nil
 	}

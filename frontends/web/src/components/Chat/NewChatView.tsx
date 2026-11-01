@@ -19,11 +19,19 @@ import {
   defaultChatMachine,
   defaultMachineDaemon,
   hasMachine,
-  installedDaemonIds,
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
-import { useProjectDaemonInstalls } from "@/hooks/project-queries";
+import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
+import {
+  canChoose,
+  canSetUpElsewhere,
+  isSettingUpAnywhere,
+  preferredDaemonIds,
+  projectPlacement,
+  startBlockedReason,
+} from "@/lib/projectPlacement";
+import { describeCloneError } from "../Projects/cloneTargets";
 import {
   choiceLeavesWorkspace,
   resolveChatMachine,
@@ -50,6 +58,7 @@ import {
   Search,
   FolderPlus,
   CloudOff,
+  Loader2,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
@@ -156,7 +165,18 @@ export function NewChatView({
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
   // The machine a new chat lands on is the one the project is installed on
   // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
-  const installs = useProjectDaemonInstalls();
+  // While a clone onto one of them is landing, the rows are re-read so the
+  // machine turns ready (and the composer opens) without a reload.
+  const [installsPollMs, setInstallsPollMs] = useState<number | false>(false);
+  const installs = useProjectDaemonInstalls(true, installsPollMs);
+  const installRows = installs.data ?? [];
+  // Which of the user's machines have this project (lib/projectPlacement.ts):
+  // the picker offers those, and sets the project up on any other first.
+  const placement = projectPlacement(installRows, currentProject?.id);
+  const settingUpAnywhere = isSettingUpAnywhere(installRows, currentProject?.id);
+  useEffect(() => {
+    setInstallsPollMs(settingUpAnywhere ? 3_000 : false);
+  }, [settingUpAnywhere]);
   const { makeDefault } = useMakeDefaultMachine();
   // Until the registry has answered, nothing is known about the user's
   // machines — including when the first read failed (a tab waking with a dead
@@ -168,11 +188,19 @@ export function NewChatView({
     awaitingBundledDaemon,
   });
   // A different project is a different set of checkouts: its new chat starts
-  // from the default machine again, not the one picked for another project.
+  // from the default machine again, unless the user picked a machine first
+  // and the new project is on it (or being set up there) — the project
+  // picker offers exactly those for a picked machine (NewChatProjectChip).
   const [machineChoiceProjectId, setMachineChoiceProjectId] = useState(currentProject?.id);
   if (machineChoiceProjectId !== currentProject?.id) {
     setMachineChoiceProjectId(currentProject?.id);
-    setMachineChoice(null);
+    const keep =
+      machineChoice !== null &&
+      machineChoice !== DEFAULT_MACHINE &&
+      machineChoice !== NO_MACHINE &&
+      placement.known &&
+      canChoose(placement, machineChoice);
+    if (!keep) setMachineChoice(null);
   }
   // A branch workspace is a checkout on one machine, so selecting one selects
   // its machine (lib/workspaceMachine.ts); the server refuses anything else.
@@ -194,6 +222,46 @@ export function NewChatView({
   // A chat on a machine still waits for one to be connected, as before.
   const machineReady = noMachine || daemonConnected;
 
+  // The machine "default" names: where the project is (or is landing), by
+  // the server's own default order (lib/chatMachine defaultMachineDaemon).
+  const defaultDaemon = defaultMachineDaemon(daemons, preferredDaemonIds(installRows, currentProject?.id));
+  const machineName = (daemonId: string) =>
+    daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId);
+  // The machine the chat will run on, when it is one: the pick, else what the
+  // default resolves to. A workspace's machine has the project by definition.
+  const runsOnDaemonId = noMachine
+    ? undefined
+    : machine === DEFAULT_MACHINE
+      ? defaultDaemon?.daemonId
+      : machine;
+  // Never a send that fails: a machine the project is not set up on (or is
+  // still landing on) holds the composer, and says what to do.
+  const placementBlock =
+    canPickMachine && currentProject && runsOnDaemonId && !resolvedMachine.lockedBy
+      ? startBlockedReason({
+          placement,
+          daemonId: runsOnDaemonId,
+          projectName: currentProject.name,
+          machineName: machineName(runsOnDaemonId),
+        })
+      : null;
+  const placementSettingUp = Boolean(runsOnDaemonId) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
+
+  // Set the project up on a machine that lacks it: the same clone "Clone it
+  // onto <machine>" runs (CreateProjectFromRepo), into the project's path. A
+  // plain folder has nothing to clone from, so it is only explained.
+  const setUpProjectOn =
+    currentProject && canSetUpElsewhere(currentProject)
+      ? async (daemonId: string) => {
+          await createProjectFromRepo({
+            cloneUrl: currentProject.remote_url ?? "",
+            daemonId,
+            name: currentProject.name,
+            path: currentProject.path,
+          });
+        }
+      : undefined;
+
   const daemonWait = useDaemonWait({
     waiting: !machineReady && !daemonLoading,
     onRetry: refreshDaemons,
@@ -210,8 +278,6 @@ export function NewChatView({
   );
   // With several machines and none chosen, each workspace says where it is.
   const showWorkspaceMachines = daemons.length > 1 && !workspaceMachineId;
-  const machineName = (daemonId: string) =>
-    daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId);
 
   // Auto-focus input when new chat view is shown
   useEffect(() => {
@@ -293,6 +359,10 @@ export function NewChatView({
       toast.error("No machine connected", {
         description: "Start a machine to begin chatting, or continue without a machine.",
       });
+      return;
+    }
+    if (placementBlock) {
+      toast.error("Not set up on that machine yet", { description: placementBlock });
       return;
     }
     if ((!content.trim() && !attachmentIds?.length) || isCreating) return;
@@ -463,15 +533,37 @@ export function NewChatView({
               >
                 {/* The project the chat starts in: the global New chat picks
                     it (filter, open chat, last used); change it here. */}
-                {showProjectChip && <NewChatProjectChip disabled={isCreating} />}
+                {showProjectChip && (
+                  <NewChatProjectChip
+                    disabled={isCreating}
+                    // A machine the user picked themselves: the projects on
+                    // it come first, the rest are set up there on the way.
+                    machine={
+                      canPickMachine && effectiveChoice && effectiveChoice !== NO_MACHINE
+                        ? { daemonId: effectiveChoice, name: machineName(effectiveChoice) }
+                        : undefined
+                    }
+                    installs={installRows}
+                  />
+                )}
 
                 {canPickMachine && (
                   <MachinePicker
                     value={machine}
                     onChange={handleMachineChange}
                     daemons={daemons}
-                    defaultDaemon={defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))}
+                    defaultDaemon={defaultDaemon}
                     onMakeDefault={makeDefault}
+                    project={
+                      currentProject
+                        ? {
+                            name: currentProject.name,
+                            placement,
+                            onSetUp: setUpProjectOn,
+                            describeError: describeCloneError,
+                          }
+                        : undefined
+                    }
                     disabled={isCreating}
                   />
                 )}
@@ -613,6 +705,21 @@ export function NewChatView({
                 </p>
               )}
 
+              {/* Why the composer is holding: the project is not on the
+                  chosen machine yet. The picker has the action. */}
+              {placementBlock && (
+                <p
+                  role="status"
+                  data-testid="new-chat-placement-note"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                >
+                  {placementSettingUp && (
+                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  )}
+                  {placementBlock}
+                </p>
+              )}
+
               {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}
             </div>
           </div>
@@ -676,7 +783,7 @@ export function NewChatView({
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating || !machineReady}
+            disabled={isCreating || !machineReady || Boolean(placementBlock)}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
             prefill={restoredPrefill ?? composerPrefill}
           />

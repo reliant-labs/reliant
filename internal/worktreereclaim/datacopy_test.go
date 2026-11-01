@@ -202,8 +202,11 @@ func TestReconcile_SymlinkOutOfCheckoutIsInsideIt(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.one(w); got.Outcome != OutcomeHeld || !exists(link) {
-		t.Fatalf("uncertain symlink layout must remain intact: %+v", got)
+	// Retirement unlinks a symlink and never follows it (#1962: every
+	// node_modules/.bin is one), so the checkout goes and what the link named
+	// outside it stays.
+	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
+		t.Fatalf("a clean idle checkout holding a symlink out of it is retired: %+v", got)
 	}
 	if !exists(target) {
 		t.Fatal("the symlink's target was deleted")

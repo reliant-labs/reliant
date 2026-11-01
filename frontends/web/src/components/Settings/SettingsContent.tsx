@@ -18,6 +18,7 @@ import { PromptsSettings } from "./PromptsSettings";
 import { PresetsSettings } from "./PresetsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { ProjectsSection } from "./ProjectsSection";
+import { AutomationSettings } from "./AutomationSettings";
 
 // Cloud settings sections are lazy-loaded so they code-split out of the main
 // SettingsContent chunk — they're only fetched when the user opens a cloud
@@ -95,6 +96,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <PresetsSettings />;
       case "branches":
         return <BranchesSection />;
+      case "automations":
+        return <AutomationSettings />;
       case "billing":
       case "machines": {
         const CloudSection = activeSection === "billing" ? BillingSection : MachinesSection;

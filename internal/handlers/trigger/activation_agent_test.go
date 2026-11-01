@@ -71,7 +71,9 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	require.NoError(t, e)
 	staleCtx := automationpolicy.WithRevision(env.ctx, stored.UpdatedAt.Add(-time.Second))
 	require.ErrorContains(t, env.repo.SetTriggerEnabled(staleCtx, created.ID, true), "changed after approval")
-	// Approval is invalidated if either the saved definition or workflow changes.
+	// Approval is invalidated if either the saved definition or workflow
+	// changes. Under always, a resume needs a card, so the card's hash binds.
+	env.setApprovalMode(t, nil, automationpolicy.ApprovalAlways)
 	resume, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolEnableTrigger, p)
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&pb.SetTriggerEnabledRequest{Id: created.ID, Enabled: false}))

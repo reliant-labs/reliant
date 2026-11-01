@@ -22,7 +22,7 @@ func Revision(ctx context.Context) (time.Time, bool) {
 }
 
 func Refusal() string {
-	return "Unattended runs cannot manage trigger activations. Ask the owner to make this change in an interactive chat, where it requires an approval card."
+	return "This activation change needs the owner's approval card, and an unattended run cannot show one. Ask the owner to make it in an interactive chat, or to relax Settings > Automations > Automation approvals."
 }
 
 // Execution is supplied by the workflow runtime, never by model parameters.

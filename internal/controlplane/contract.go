@@ -106,6 +106,12 @@ type Service interface {
 	// its members' with it. jwt is the owner's session token.
 	SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error
 
+	// RenameDaemon renames one of the caller's daemons (UpdateDaemon
+	// new_name). The control plane validates the name and refuses one
+	// another of the owner's live machines has (AlreadyExists); the id and
+	// the workspace never change. jwt is the owner's session token.
+	RenameDaemon(ctx context.Context, jwt, daemonID, name string) error
+
 	// ResumeDaemonForRun wakes a run owner's suspended machine for a run that
 	// resumes after a hold, with this process's internal-service identity
 	// (Deps.Sign) rather than the owner's session token, which may have

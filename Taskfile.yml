@@ -508,6 +508,17 @@ tasks:
     cmds:
       - ./scripts/ci-lanes.sh {{.CLI_ARGS}}
 
+  ci:migration-order:
+    # Every CI event, labelled or not (ci.yml's migration-order job), so a PR
+    # merged without the merge queue is still judged (reliant#1970: #1666
+    # merged 20261027140617 under prod's 20261029064544 with the merge gate
+    # skipped). A PR or merge group is judged against a freshly fetched
+    # origin/main; a push to main against the commit before it (BASE), which
+    # fails main's release record before a release can carry the file.
+    desc: "Fail a migration added since BASE (default: a fresh origin/main) whose version is at or below BASE's newest"
+    cmds:
+      - '{{if .BASE}}MIGRATION_ORDER_OFFLINE=1 go run ./tools/test-affected migration-order --base {{.BASE}}{{else}}go run ./tools/test-affected migration-order{{end}}'
+
   ci:repo-checks:
     # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
     # pre-commit hook is opt-in, and --no-verify skips it), the committed

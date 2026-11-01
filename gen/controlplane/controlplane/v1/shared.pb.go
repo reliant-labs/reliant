@@ -273,37 +273,47 @@ func (OwnerType) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{3}
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 type DaemonSize int32
 
 const (
 	DaemonSize_DAEMON_SIZE_UNSPECIFIED DaemonSize = 0
-	DaemonSize_DAEMON_SIZE_SMALL       DaemonSize = 1 // 500m/2 CPU, 2Gi/4Gi RAM
-	DaemonSize_DAEMON_SIZE_MEDIUM      DaemonSize = 2 // 1/4 CPU, 4Gi/8Gi RAM
-	DaemonSize_DAEMON_SIZE_LARGE       DaemonSize = 3 // 2/8 CPU, 8Gi/16Gi RAM
-	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 4 // 4/16 CPU, 16Gi/32Gi RAM
-	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 5 // 8/32 CPU, 32Gi/64Gi RAM
+	DaemonSize_DAEMON_SIZE_S1          DaemonSize = 6  // 1 vCPU, 2 GiB
+	DaemonSize_DAEMON_SIZE_S2          DaemonSize = 7  // 1 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_M           DaemonSize = 8  // 2 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_L           DaemonSize = 9  // 4 vCPU, 8 GiB
+	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 10 // 8 vCPU, 16 GiB
+	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 11 // 15 vCPU, 32 GiB
+	DaemonSize_DAEMON_SIZE_3XL         DaemonSize = 12 // 30 vCPU, 64 GiB
 )
 
 // Enum value maps for DaemonSize.
 var (
 	DaemonSize_name = map[int32]string{
-		0: "DAEMON_SIZE_UNSPECIFIED",
-		1: "DAEMON_SIZE_SMALL",
-		2: "DAEMON_SIZE_MEDIUM",
-		3: "DAEMON_SIZE_LARGE",
-		4: "DAEMON_SIZE_XL",
-		5: "DAEMON_SIZE_2XL",
+		0:  "DAEMON_SIZE_UNSPECIFIED",
+		6:  "DAEMON_SIZE_S1",
+		7:  "DAEMON_SIZE_S2",
+		8:  "DAEMON_SIZE_M",
+		9:  "DAEMON_SIZE_L",
+		10: "DAEMON_SIZE_XL",
+		11: "DAEMON_SIZE_2XL",
+		12: "DAEMON_SIZE_3XL",
 	}
 	DaemonSize_value = map[string]int32{
 		"DAEMON_SIZE_UNSPECIFIED": 0,
-		"DAEMON_SIZE_SMALL":       1,
-		"DAEMON_SIZE_MEDIUM":      2,
-		"DAEMON_SIZE_LARGE":       3,
-		"DAEMON_SIZE_XL":          4,
-		"DAEMON_SIZE_2XL":         5,
+		"DAEMON_SIZE_S1":          6,
+		"DAEMON_SIZE_S2":          7,
+		"DAEMON_SIZE_M":           8,
+		"DAEMON_SIZE_L":           9,
+		"DAEMON_SIZE_XL":          10,
+		"DAEMON_SIZE_2XL":         11,
+		"DAEMON_SIZE_3XL":         12,
 	}
 )
 
@@ -1995,8 +2005,13 @@ type DaemonPricing struct {
 	// month (730 hours), running or suspended, in cents, as an exact decimal
 	// string (never a float: it is money).
 	StorageCentsPerGibMonth string `protobuf:"bytes,4,opt,name=storage_cents_per_gib_month,json=storageCentsPerGibMonth,proto3" json:"storage_cents_per_gib_month,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Immutable accepted exchange/rate version, independent of retail merchandising.
+	PricingVersion string `protobuf:"bytes,5,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	// Candidate catalog is staged only; false until all routes are commissioned.
+	ActivationReady      bool   `protobuf:"varint,6,opt,name=activation_ready,json=activationReady,proto3" json:"activation_ready,omitempty"`
+	ActivationHoldReason string `protobuf:"bytes,7,opt,name=activation_hold_reason,json=activationHoldReason,proto3" json:"activation_hold_reason,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DaemonPricing) Reset() {
@@ -2050,12 +2065,40 @@ func (x *DaemonPricing) GetStorageCentsPerGibMonth() string {
 	return ""
 }
 
+func (x *DaemonPricing) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *DaemonPricing) GetActivationReady() bool {
+	if x != nil {
+		return x.ActivationReady
+	}
+	return false
+}
+
+func (x *DaemonPricing) GetActivationHoldReason() string {
+	if x != nil {
+		return x.ActivationHoldReason
+	}
+	return ""
+}
+
 // DaemonSizePrice is one size's row of DaemonPricing.
 type DaemonSizePrice struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Size  string                 `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
-	// Small-daemon-hours this size burns per wall-clock hour.
+	// Deprecated integer multiplier cannot represent exact cost-weight fractions.
+	//
+	// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
 	Multiplier int64 `protobuf:"varint,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
+	// Exact rational num/den; not retail-price credit or a runtime billing multiplier.
+	CostWeight string `protobuf:"bytes,5,opt,name=cost_weight,json=costWeight,proto3" json:"cost_weight,omitempty"`
+	RouteId    string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// Canonical exact rational cents per running hour (num/den).
+	ExactHourlyPriceCents string `protobuf:"bytes,7,opt,name=exact_hourly_price_cents,json=exactHourlyPriceCents,proto3" json:"exact_hourly_price_cents,omitempty"`
 	// Overage price per wall-clock hour at this size, in cents, as an exact
 	// decimal string: multiplier × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
@@ -2103,11 +2146,33 @@ func (x *DaemonSizePrice) GetSize() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
 func (x *DaemonSizePrice) GetMultiplier() int64 {
 	if x != nil {
 		return x.Multiplier
 	}
 	return 0
+}
+
+func (x *DaemonSizePrice) GetCostWeight() string {
+	if x != nil {
+		return x.CostWeight
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetRouteId() string {
+	if x != nil {
+		return x.RouteId
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetExactHourlyPriceCents() string {
+	if x != nil {
+		return x.ExactHourlyPriceCents
+	}
+	return ""
 }
 
 func (x *DaemonSizePrice) GetHourlyPriceCents() string {
@@ -3947,16 +4012,23 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\fmachine_size\x18$ \x01(\tR\vmachineSize\x124\n" +
 	"\x16machine_included_hours\x18% \x01(\x03R\x14machineIncludedHours\x12?\n" +
 	"\x1cmachine_included_storage_gib\x18& \x01(\x03R\x19machineIncludedStorageGibJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x1fdaemon_compute_included_minutesR\x1fdaemon_overage_per_minute_cents\"\xd1\x01\n" +
+	"\x10\vJ\x04\b\v\x10\fR\x1fdaemon_compute_included_minutesR\x1fdaemon_overage_per_minute_cents\"\xdb\x02\n" +
 	"\rDaemonPricing\x126\n" +
 	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12 \n" +
 	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\x12<\n" +
-	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonthJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x94\x01\n" +
+	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonth\x12'\n" +
+	"\x0fpricing_version\x18\x05 \x01(\tR\x0epricingVersion\x12)\n" +
+	"\x10activation_ready\x18\x06 \x01(\bR\x0factivationReady\x124\n" +
+	"\x16activation_hold_reason\x18\a \x01(\tR\x14activationHoldReasonJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x8d\x02\n" +
 	"\x0fDaemonSizePrice\x12\x12\n" +
-	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1e\n" +
+	"\x04size\x18\x01 \x01(\tR\x04size\x12\"\n" +
 	"\n" +
-	"multiplier\x18\x02 \x01(\x03R\n" +
-	"multiplier\x12,\n" +
+	"multiplier\x18\x02 \x01(\x03B\x02\x18\x01R\n" +
+	"multiplier\x12\x1f\n" +
+	"\vcost_weight\x18\x05 \x01(\tR\n" +
+	"costWeight\x12\x19\n" +
+	"\broute_id\x18\x06 \x01(\tR\arouteId\x127\n" +
+	"\x18exact_hourly_price_cents\x18\a \x01(\tR\x15exactHourlyPriceCents\x12,\n" +
 	"\x12hourly_price_cents\x18\x03 \x01(\tR\x10hourlyPriceCents\x12\x1f\n" +
 	"\vstorage_gib\x18\x04 \x01(\x03R\n" +
 	"storageGib\"\x87\x03\n" +
@@ -4186,15 +4258,18 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\tOwnerType\x12\x1a\n" +
 	"\x16OWNER_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fOWNER_TYPE_USER\x10\x01\x12\x1b\n" +
-	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\x98\x01\n" +
+	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\xf5\x01\n" +
 	"\n" +
 	"DaemonSize\x12\x1b\n" +
-	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11DAEMON_SIZE_SMALL\x10\x01\x12\x16\n" +
-	"\x12DAEMON_SIZE_MEDIUM\x10\x02\x12\x15\n" +
-	"\x11DAEMON_SIZE_LARGE\x10\x03\x12\x12\n" +
-	"\x0eDAEMON_SIZE_XL\x10\x04\x12\x13\n" +
-	"\x0fDAEMON_SIZE_2XL\x10\x05*s\n" +
+	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S1\x10\x06\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S2\x10\a\x12\x11\n" +
+	"\rDAEMON_SIZE_M\x10\b\x12\x11\n" +
+	"\rDAEMON_SIZE_L\x10\t\x12\x12\n" +
+	"\x0eDAEMON_SIZE_XL\x10\n" +
+	"\x12\x13\n" +
+	"\x0fDAEMON_SIZE_2XL\x10\v\x12\x13\n" +
+	"\x0fDAEMON_SIZE_3XL\x10\f\"\x04\b\x01\x10\x05*\x11DAEMON_SIZE_SMALL*\x12DAEMON_SIZE_MEDIUM*\x11DAEMON_SIZE_LARGE*s\n" +
 	"\x0eDaemonDiskMode\x12 \n" +
 	"\x1cDAEMON_DISK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bDAEMON_DISK_MODE_PERSISTENT\x10\x01\x12\x1e\n" +

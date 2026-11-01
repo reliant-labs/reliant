@@ -118,7 +118,7 @@ type ApprovalCreateStore interface {
 
 // ApprovalResolveStore is what ApprovalResolveActivity writes.
 type ApprovalResolveStore interface {
-	UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 }
 
 // CallLLMStore is what CallLLMActivity reads and writes. It forwards the store
@@ -159,7 +159,7 @@ type CleanupStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)

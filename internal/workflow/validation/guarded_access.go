@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/ast"
@@ -478,7 +479,12 @@ func provenDirect(e ast.Expr, polarity bool) factSet {
 // guardParseEnv parses an expression in its original nodes.X.f form, with
 // every namespace dyn, so the chains the walker sees are the ones the author
 // wrote (the typed compile pass rewrites nodes.X to nodes_X).
-func guardParseEnv() (*cel.Env, error) {
+//
+// It is built once: the env depends on nothing but this binary, a *cel.Env is
+// safe for concurrent use, and building one costs far more than parsing the
+// expression it is for. Rebuilding it per expression was a sixth of every
+// workflow validation's CPU (ListInbox revalidates each activated workflow).
+var guardParseEnv = sync.OnceValues(func() (*cel.Env, error) {
 	opts := []cel.EnvOption{wfcel.StdLib(), cel.OptionalTypes()}
 	for _, ns := range wfcel.AllNamespaces() {
 		opts = append(opts, cel.Variable(string(ns), cel.DynType))
@@ -486,7 +492,7 @@ func guardParseEnv() (*cel.Env, error) {
 	opts = append(opts, wfcel.Extensions()...)
 	opts = append(opts, wfcel.CustomFunctions()...)
 	return cel.NewCustomEnv(opts...)
-}
+})
 
 // analyzeGuardedAccess parses expr and returns every unguarded risky read.
 func analyzeGuardedAccess(expr string, gate factSet, classify func([]string) []accessRisk) []accessRisk {

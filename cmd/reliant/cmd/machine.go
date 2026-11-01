@@ -45,11 +45,13 @@ var machineSizes = []struct {
 	name string
 	size controlplanev1.DaemonSize
 }{
-	{"small", controlplanev1.DaemonSize_DAEMON_SIZE_SMALL},
-	{"medium", controlplanev1.DaemonSize_DAEMON_SIZE_MEDIUM},
-	{"large", controlplanev1.DaemonSize_DAEMON_SIZE_LARGE},
+	{"s1", controlplanev1.DaemonSize_DAEMON_SIZE_S1},
+	{"s2", controlplanev1.DaemonSize_DAEMON_SIZE_S2},
+	{"m", controlplanev1.DaemonSize_DAEMON_SIZE_M},
+	{"l", controlplanev1.DaemonSize_DAEMON_SIZE_L},
 	{"xl", controlplanev1.DaemonSize_DAEMON_SIZE_XL},
 	{"2xl", controlplanev1.DaemonSize_DAEMON_SIZE_2XL},
+	{"3xl", controlplanev1.DaemonSize_DAEMON_SIZE_3XL},
 }
 
 func parseMachineSize(s string) (controlplanev1.DaemonSize, error) {
@@ -142,18 +144,19 @@ func newMachineCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "machine",
 		Aliases: []string{"machines"},
-		Short:   "List, start, stop and resize your machines",
+		Short:   "List, start, stop, resize and rename your machines",
 		Long: `Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
-suspends a running one; resize changes a SUSPENDED machine's size (small,
-medium, large, xl, 2xl), which takes effect when it next starts. To resize a
-running machine: stop, resize, start.
+suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
+m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
+running machine: stop, resize, start. rename changes what a machine is
+called, and nothing else.
 
 Needs a login made by this release ('reliant auth login'): it carries the
 daemon:manage permission, which only a person's login can hold.`,
 	}
-	cmd.AddCommand(newMachineListCmd(), newMachineStartCmd(), newMachineStopCmd(), newMachineResizeCmd())
+	cmd.AddCommand(newMachineListCmd(), newMachineStartCmd(), newMachineStopCmd(), newMachineResizeCmd(), newMachineRenameCmd())
 	return cmd
 }
 
@@ -244,7 +247,7 @@ func newMachineStopCmd() *cobra.Command {
 
 func newMachineResizeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "resize <name|id> <small|medium|large|xl|2xl>",
+		Use:   "resize <name|id> <s1|s2|m|l|xl|2xl|3xl>",
 		Short: "Change a suspended machine's size",
 		Long: `Change a SUSPENDED machine's size; it takes effect when the machine next
 starts. A running machine is refused: stop it first. Disks only grow, so a
@@ -271,6 +274,36 @@ downsize keeps the larger disk.`,
 				return explainMachineErr(err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s (%s) is now %s; it takes effect when it next starts.\n", d.GetName(), d.GetId(), args[1])
+			return err
+		},
+	}
+}
+
+func newMachineRenameCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rename <name|id> <new-name>",
+		Short: "Rename a machine",
+		Long: `Rename one of your machines, cloud or self-hosted, running or not. The name
+is a label only: the machine's id and its workspace do not change, so chats,
+automations and links that point at it keep working.
+
+A name is 1-63 lowercase letters, digits or hyphens, starting and ending with
+a letter or digit, and no two of your machines share one.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			newName := strings.TrimSpace(args[1])
+			client, err := machineClient(cmd.Context(), cmd)
+			if err != nil {
+				return err
+			}
+			d, err := resolveMachine(cmd.Context(), client, args[0])
+			if err != nil {
+				return err
+			}
+			if _, err := client.UpdateDaemon(cmd.Context(), connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: d.GetId(), NewName: newName})); err != nil {
+				return explainMachineErr(err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s to %s (%s).\n", d.GetName(), newName, d.GetId())
 			return err
 		},
 	}

@@ -57,9 +57,9 @@ func TestGatewayReadiness(t *testing.T) {
 
 // ToolsDaemonService's connection listeners hear a daemon connect in the
 // order they registered: the tool bridge first (the daemon's routes exist
-// before anything else hears of it), then the lifecycle publisher, the
-// DAEMON_EVENTS publisher, the status responder and the per-user liveness
-// responder.
+// before anything else hears of it), then the DAEMON_EVENTS publisher — the
+// one publisher of daemon.v1.events.* — the status responder and the per-user
+// liveness responder.
 func TestGatewayConnectionListenersRegisterInOrder(t *testing.T) {
 	names := PlanGateway().Names()
 	require.Less(t, slices.Index(names, "tool_bridge"), slices.Index(names, "connection_listeners"),
@@ -69,13 +69,12 @@ func TestGatewayConnectionListenersRegisterInOrder(t *testing.T) {
 	events := &daemonevents.Publisher{}
 	got := registerConnectionListeners(reg, nil, nil, events)
 	require.Equal(t, []string{
-		"*toolexec.DaemonLifecyclePublisher",
 		"*daemonevents.Publisher",
 		"*daemonquery.Responder",
 		"*daemonquery.UserResponder",
 	}, reg.types)
 	require.Equal(t, reg.added, got.Registered)
-	require.Same(t, events, got.Registered[1])
+	require.Same(t, events, got.Registered[0])
 }
 
 type recordingRegistrar struct {

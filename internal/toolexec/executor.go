@@ -65,6 +65,15 @@ type ToolRequest struct {
 	// nil means use default daemon resolution (local → cloud → wake).
 	DaemonSelector *DaemonSelector // Target daemon selector (optional)
 
+	// RunStep marks a workflow `run` node's command, as opposed to a model's
+	// tool call. Only the run-step executor (handlers.RemoteRunExecutor) sets
+	// it; the agent path (execute_tools) never does. It travels in the
+	// server-built context map (RunStepContextKey), not in ToolInput, so
+	// nothing a model writes can set it. The shell tool reads it as
+	// rctx.ToolContext.RunStep and lets the node's own timeout bound the
+	// command instead of the model's 10-minute cap.
+	RunStep bool
+
 	// Repos lists every repo in the project. Tools with a `repo` param resolve
 	// it to workspaceRoot/repo.relative_path. Empty for legacy single-repo /
 	// projects.

@@ -340,9 +340,6 @@ func (c *Capabilities) withheldIntegration(name string) string {
 
 // withheldUnattended is why this unattended run is not handed name, or "".
 func (c *Capabilities) withheldUnattended(name string) string {
-	if c.Unattended && IsActivationManagementTool(name) {
-		return UnattendedWithholding(name)
-	}
 	if !c.Unattended || containsSorted(c.UnattendedOptIn, name) {
 		return ""
 	}

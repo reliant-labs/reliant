@@ -373,3 +373,75 @@ func TestGetLatestWorkflowNodeUpdates_OneRunsNewestPerNode(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, none)
 }
+
+// The re-keyed half of the snapshot heads is a skip scan over its key
+// (store.SnapshotRekeyKeySQL), one probe per thread or question. It replaced a
+// DISTINCT ON over every thread and question update the chat ever wrote; the
+// two must pick the same rows. The oracle below is that DISTINCT ON, written
+// out independently, over a chat whose keys interleave in sequence and whose
+// thread payloads exercise every branch of the key: a `thread` field, an empty
+// one, none at all. A second chat's updates, sharing keys, must not leak in.
+func TestGetLatestNonMessageUpdatesPerEntity_RekeyedSkipScanMatchesDistinctOn(t *testing.T) {
+	t.Parallel()
+
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+	otherChatID := seedChatForUpdates(t, repo, ctx)
+
+	threads := []string{uuid.New().String(), uuid.New().String(), uuid.New().String()}
+	questions := []string{uuid.New().String(), uuid.New().String()}
+	for round := 0; round < 4; round++ {
+		for _, chat := range []string{chatID, otherChatID} {
+			for i, thread := range threads {
+				// One workflow entity carries several threads, so the payload,
+				// not the entity, must decide the key.
+				data := fmt.Sprintf(`{"thread":%q,"status":"r%d"}`, thread, round)
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeThread, "wf-shared", data))
+				// No usable `thread`: the entity is the key.
+				payload := []string{`{"thread":"","status":"r%d"}`, `{"status":"r%d"}`}[i%2]
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeThread,
+					fmt.Sprintf("wf-%d", i), fmt.Sprintf(payload, round)))
+			}
+			for _, q := range questions {
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeQuestion,
+					fmt.Sprintf("question-%s-%d", q, round), fmt.Sprintf(`{"status":"r%d"}`, round)))
+			}
+		}
+	}
+
+	rows, err := raw.QueryContext(ctx, `
+		SELECT DISTINCT ON (k) sequence_number
+		  FROM (SELECT sequence_number,
+		               CASE WHEN update_type = 18
+		                    THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
+		                    ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
+		               END AS k
+		          FROM chat_updates
+		         WHERE chat_id = $1 AND update_type IN (3, 18)) x
+		 ORDER BY k, sequence_number DESC`, chatID)
+	require.NoError(t, err)
+	defer rows.Close()
+	var want []int64
+	for rows.Next() {
+		var seq int64
+		require.NoError(t, rows.Scan(&seq))
+		want = append(want, seq)
+	}
+	require.NoError(t, rows.Err())
+	// Three payload-keyed threads, three entity-keyed ones, two questions.
+	require.Len(t, want, len(threads)+len(threads)+len(questions))
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+	var got []int64
+	for _, u := range updates {
+		require.Equal(t, chatID, u.ChatID, "another chat's update leaked into the snapshot")
+		if u.UpdateType == UpdateTypeThread || u.UpdateType == UpdateTypeQuestion {
+			got = append(got, u.SequenceNumber)
+		}
+	}
+	require.ElementsMatch(t, want, got)
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -36,11 +37,15 @@ type activationSnapshot struct {
 	// Summary contains only structural counts and tool declaration categories,
 	// never a prompt, expression, input value, command or graph literal.
 	Summary []string
-	bytes   int
+	// Capabilities are the powers the closure uses (activation_capabilities.go):
+	// what the approval policy compares before and after a change. The row's
+	// own identity and machine are added by the caller.
+	Capabilities automationpolicy.Capabilities
+	bytes        int
 }
 
 func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.TriggerDefinition, wf *pb.Workflow) (*activationSnapshot, error) {
-	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}}
+	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}, Capabilities: automationpolicy.Capabilities{}}
 	bindings, err := s.deps.Repo.ListSettingsByKey(ctx, user, "tool.bindings.%")
 	if err != nil {
 		return nil, svcerr.Wrap(err)
@@ -53,6 +58,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				return nil, svcerr.Wrap(err)
 			}
 			snap.Connection = c
+			snap.Capabilities.Add(connectionCapabilities(c)...)
 		}
 	}
 	// Raw values only enter the memory-only digest, never its safe summary.
@@ -272,6 +278,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				}
 				for _, node := range w.GetNodes() {
 					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k, tainted)...)
+					snap.Capabilities.Add(nodeCapabilities(node, values, k, tainted)...)
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {
@@ -296,14 +303,15 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					if a := node.GetWorkflow(); a != nil && a.GetInline() == nil {
 						// The thread config (mode, injected message) grants nothing
 						// and routinely reads node outputs, which do not exist before
-						// a run; only the fields that pick the child and its inputs
-						// must resolve. The whole node is still fingerprinted.
+						// a run; only the fields that pick the child must resolve. An
+						// argument that reads them reaches the child as unbounded
+						// (maskRunTimeArgs). The whole node is still fingerprinted.
 						a = proto.Clone(a).(*pb.SubWorkflowArgs)
 						a.Thread = nil
 						if referencesTaintedIn(&pb.SubWorkflowArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
 						}
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
+						a.Args = maskRunTimeArgs(maskTaintedArgs(a.GetArgs(), tainted))
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
@@ -360,8 +368,13 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						if referencesTaintedIn(&pb.LoopArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
 						}
+						// As for a workflow node: the iteration controls (items,
+						// while, parallel, thread) read what the run computes and
+						// pick no child, so only the ref, presets and arguments
+						// are resolved here.
 						a = proto.Clone(a).(*pb.LoopArgs)
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
+						a.Items, a.While, a.Parallel, a.Thread = nil, nil, nil, nil
+						a.Args = maskRunTimeArgs(maskTaintedArgs(a.GetArgs(), tainted))
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")

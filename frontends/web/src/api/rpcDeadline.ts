@@ -30,8 +30,13 @@
  *     a wall-clock jump from a sleep), a read that was in flight across the
  *     absence is replaced at once with a fresh request instead of waiting.
  *  3. A read the server reliably answers in well under a second, that has had
- *     no answer after STALL_RETRY_MS, is replaced once. That turns "lost
- *     response, wait 10s, retry" into "lost response, retry at 4s".
+ *     no answer after STALL_RETRY_MS, is HEDGED once: a second request goes
+ *     out and the first answer from either wins. That turns "lost response,
+ *     wait 10s, retry" into "lost response, retry at 4s" — without throwing
+ *     away a request that was merely slow. Replacing it instead (abort, then
+ *     resend) restarted a slow read from zero: prod, 2026-11-01, chat
+ *     9fbaace8's GetWorkflowExecutions was aborted at 3.94s and its resend
+ *     took another 3.6s, 7.7s for an answer the first request was ~0.1s from.
  *
  * Replacement is limited to reads: a request that may have changed something
  * on the server is never sent twice. Writes keep their full active-time budget.
@@ -41,10 +46,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { Interceptor, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import type { PageActivity, ResumeEvent } from "../lib/pageActivity";
 
-/** A read with no answer after this long is replaced (see FAST_READS). */
+/** A read with no answer after this long is hedged (see FAST_READS). */
 export const STALL_RETRY_MS = 4_000;
 
-/** At most one replacement per call: two answers lost in a row is an outage. */
+/** At most one extra request per call: two answers lost in a row is an outage. */
 export const MAX_ATTEMPTS = 2;
 
 /**
@@ -202,7 +207,14 @@ export type ReplaceReason = "stalled" | `resumed:${ResumeEvent["reason"]}`;
 
 type AttemptOutcome =
   | { kind: "done"; response: UnaryResponse }
-  | { kind: "replace"; why: ReplaceReason };
+  | { kind: "replace"; why: ReplaceReason }
+  | { kind: "superseded" };
+
+/** One request on the wire, and a way to withdraw it once another answered. */
+interface Attempt {
+  outcome: Promise<AttemptOutcome>;
+  cancel(): void;
+}
 
 export interface DeadlineInterceptor {
   interceptor: Interceptor;
@@ -231,24 +243,72 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
     inFlight.set(id, { method: methodName, startedAt: Date.now(), startedActive });
 
     try {
-      for (let attempt = 1; ; attempt++) {
-        const canReplace = replaceable && attempt < MAX_ATTEMPTS;
-        const outcome = await runAttempt(next as UnaryNext, req, {
-          activity,
-          budgetMs,
-          startedActive,
-          stallMs: canReplace ? stallDeadlineFor(req.service.typeName, methodName) : undefined,
-          canReplace,
-          onTimeout: () => {
-            // Snapshot BEFORE aborting so the line still includes this call and
-            // everything queued behind the same connection.
-            const diagnostics = describeInFlight();
-            options.onTimeout?.(methodName, budgetMs, `attempt ${attempt}; ${diagnostics}`);
-          },
-        });
-        if (outcome.kind === "done") return outcome.response;
-        options.onReplace?.(methodName, outcome.why, describeInFlight());
-      }
+      return await new Promise<UnaryResponse>((resolve, reject) => {
+        // Every attempt of this call still on the wire. A stalled attempt is
+        // not withdrawn when its hedge goes out: whichever answers first is
+        // the call's answer, and the other is cancelled then.
+        const live = new Set<Attempt>();
+        let attempts = 0;
+        let settled = false;
+        let timeoutReported = false;
+        const stallMs = replaceable ? stallDeadlineFor(req.service.typeName, methodName) : undefined;
+        const canStartAnother = () => replaceable && attempts < MAX_ATTEMPTS;
+
+        const finish = (settle: () => void) => {
+          settled = true;
+          for (const other of live) other.cancel();
+          live.clear();
+          settle();
+        };
+
+        const launch = () => {
+          attempts++;
+          const attemptNumber = attempts;
+          const attempt = runAttempt(next as UnaryNext, req, {
+            activity,
+            budgetMs,
+            startedActive,
+            stallMs: canStartAnother() ? stallMs : undefined,
+            canReplace: canStartAnother,
+            onStall: () => {
+              if (settled || !canStartAnother()) return;
+              options.onReplace?.(methodName, "stalled", describeInFlight());
+              launch();
+            },
+            onTimeout: () => {
+              // Every attempt shares the call's budget, so they run out
+              // together; it is one timeout.
+              if (timeoutReported) return;
+              timeoutReported = true;
+              // Snapshot BEFORE aborting so the line still includes this call and
+              // everything queued behind the same connection.
+              const diagnostics = describeInFlight();
+              options.onTimeout?.(methodName, budgetMs, `attempt ${attemptNumber}; ${diagnostics}`);
+            },
+          });
+          live.add(attempt);
+          attempt.outcome.then(
+            (outcome) => {
+              live.delete(attempt);
+              if (settled) return;
+              if (outcome.kind === "done") {
+                finish(() => resolve(outcome.response));
+              } else if (outcome.kind === "replace") {
+                options.onReplace?.(methodName, outcome.why, describeInFlight());
+                launch();
+              }
+            },
+            (error: unknown) => {
+              live.delete(attempt);
+              if (settled) return;
+              // A sibling still on the wire may yet answer.
+              if (live.size === 0) finish(() => reject(error));
+            },
+          );
+        };
+
+        launch();
+      });
     } finally {
       inFlight.delete(id);
     }
@@ -264,26 +324,31 @@ interface AttemptOptions {
   budgetMs: number;
   startedActive: number;
   stallMs: number | undefined;
-  canReplace: boolean;
+  /** Asked when the page resumes: may this attempt be abandoned for a fresh one? */
+  canReplace: () => boolean;
+  /** The stall deadline passed unanswered. The attempt stays on the wire. */
+  onStall: () => void;
   onTimeout: () => void;
 }
 
 /**
- * One request on the wire. Resolves with the response, resolves "replace" when
- * this attempt was abandoned for a fresh one, and rejects with the call's
- * failure (including its timeout).
+ * One request on the wire. Its outcome resolves with the response, resolves
+ * "replace" when this attempt was abandoned for a fresh one, "superseded" when
+ * it was cancelled because another attempt answered, and rejects with the
+ * call's failure (including its timeout).
  */
 function runAttempt(
   next: UnaryNext,
   req: UnaryRequest,
   opts: AttemptOptions,
-): Promise<AttemptOutcome> {
+): Attempt {
   const { activity } = opts;
   const controller = new AbortController();
   const attemptStartedAt = Date.now();
   const attemptStartedActive = activity.activeNow();
 
-  return new Promise<AttemptOutcome>((resolve, reject) => {
+  let cancel = () => {};
+  const outcome = new Promise<AttemptOutcome>((resolve, reject) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -304,6 +369,15 @@ function runAttempt(
       resolve({ kind: "replace", why });
     };
 
+    cancel = () => {
+      if (settled) return;
+      cleanup();
+      controller.abort(
+        clientAbort(`${req.method.name} answered by another attempt`, Code.Canceled),
+      );
+      resolve({ kind: "superseded" });
+    };
+
     const onUpstreamAbort = () => {
       if (settled) return;
       cleanup();
@@ -314,7 +388,7 @@ function runAttempt(
     // A request that was on the wire before the page went away rode a
     // connection that may be gone; its answer may never come.
     const unsubscribeResume = activity.onResume((event) => {
-      if (!opts.canReplace) return;
+      if (!opts.canReplace()) return;
       const absenceBegan = event.at - event.inactiveMs;
       if (attemptStartedAt > absenceBegan) return;
       abandon(`resumed:${event.reason}`);
@@ -339,11 +413,10 @@ function runAttempt(
         return;
       }
       if (stallLeft <= 0) {
-        if (opts.canReplace) {
-          abandon("stalled");
-          return;
-        }
+        // Hedge, never abandon: a stalled read may only be slow, and its
+        // answer may be moments away.
         stallMs = undefined;
+        opts.onStall();
       }
       timer = setTimeout(arm, Math.max(1, Math.min(budgetLeft, stallLeft)));
     };
@@ -368,6 +441,7 @@ function runAttempt(
       },
     );
   });
+  return { outcome, cancel: () => cancel() };
 }
 
 /**

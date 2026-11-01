@@ -13,6 +13,33 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.15" description="November 1, 2026">
+### Rename machines, see each chat's project, faster inbox reads
+
+Machines can be renamed, the sidebar shows which project each chat is in, the new-chat pickers only offer pairs that work, inbox and workflow reads do less work, and the Temporal worker no longer crash-loops at boot.
+
+#### Added
+
+- **machines: rename a machine from Settings -\> Machines, the CLI, or DaemonRegistryService.RenameMachine** [#1974](https://github.com/reliant-labs/reliant/pull/1974)
+- **web: the sidebar shows which project each chat is in** [#1975](https://github.com/reliant-labs/reliant/pull/1975)
+- **web: the new-chat pickers never offer a project/machine pair that fails** [#1976](https://github.com/reliant-labs/reliant/pull/1976)
+- **tracing: RPC server spans carry chat.id, workflow.id and thread.id** [#1982](https://github.com/reliant-labs/reliant/pull/1982)
+
+#### Changed
+
+- **chat: GetWorkflowExecutions' save probe keys the loop scope, not filters it** [#1979](https://github.com/reliant-labs/reliant/pull/1979)
+- **inbox: ListInbox reuses workflow-tree verdicts instead of re-validating every activation on every read** [#1981](https://github.com/reliant-labs/reliant/pull/1981)
+- **deps: pin forge 820b3ef — trace filters by span attribute, forge.ExternalDatabase** [#1984](https://github.com/reliant-labs/reliant/pull/1984)
+- **pin: forge v1.0.12 — merge-friendly generated output, release_dependencies fix, ExternalDatabase, obs attribute filter** [#1989](https://github.com/reliant-labs/reliant/pull/1989)
+
+#### Fixed
+
+- **cli: reliant github token|gh load CLIConfig instead of failing before they run** [#1978](https://github.com/reliant-labs/reliant/pull/1978)
+- **worker: build the Temporal worker on the SDK client under stopnudge's decorator (worker crash-looped at boot)** [#1983](https://github.com/reliant-labs/reliant/pull/1983)
+- **release-tag: --skip-release-gate is honoured with --rc (it was silently ignored)** [#1987](https://github.com/reliant-labs/reliant/pull/1987)
+
+</Update>
+
 <Update label="v1.8.14" description="October 30, 2026">
 ### Faster chat lists, steadier workflow streams
 

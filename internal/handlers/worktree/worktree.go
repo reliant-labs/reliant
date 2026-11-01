@@ -4,6 +4,7 @@ package worktree
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -304,6 +305,11 @@ func (s *Service) listProjectRepos(ctx context.Context, userID string, project *
 func (s *Service) repoDiscoveryError(ctx context.Context, userID string, project *db.Project, target machinewake.Target, err error) error {
 	if toolexec.DaemonReportedMissingPath(err) {
 		return svcerr.FailedPrecondition(fmt.Sprintf("the project folder %s does not exist on the machine this workspace would be created on", project.Path))
+	}
+	var cutShort *repopkg.SearchCutShortError
+	if errors.As(err, &cutShort) {
+		// The machine answered: waking it or retrying will not change that.
+		return svcerr.FailedPrecondition(cutShort.Error())
 	}
 	err = s.wake().AfterFailure(ctx, userID, target, err)
 	if machinewake.IsWaking(err) {

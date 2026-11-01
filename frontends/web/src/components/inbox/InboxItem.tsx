@@ -56,6 +56,7 @@ import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { relativeTime as compactAge } from "../Mobile/relativeTime";
+import { hasErrorReason } from "@/lib/errorReasons";
 import { cn } from "@/lib/utils";
 import { useSurface } from "@/lib/surfaceContext";
 import { CardInset } from "../forge-ui/card";
@@ -114,19 +115,21 @@ interface InboxItemProps {
 }
 
 export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
-  const [handled, setHandled] = useState(false);
+  // What already happened to the item, once an action lost the race to it:
+  // the server's sentence for an approval ("This request expired: …").
+  const [handled, setHandled] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   // "Already handled": show it, then take the row out (§8.3).
   useEffect(() => {
-    if (!handled) return;
+    if (handled === null) return;
     const timer = window.setTimeout(() => removeInboxItems([item.itemId]), ALREADY_HANDLED_MS);
     return () => window.clearTimeout(timer);
   }, [handled, item.itemId]);
 
   const onRaceOrError = (verb: string) => (error: unknown) => {
     if (isAlreadyResolvedError(error)) {
-      setHandled(true);
+      setHandled(hasErrorReason(error, "approval_not_pending") ? errorText(error) : "Already handled");
       return;
     }
     toast.error(`Could not ${verb}`, { description: errorText(error) });
@@ -168,8 +171,8 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
             </span>
           )}
           {handled ? (
-            <span className="text-xs text-muted-foreground" role="status">
-              Already handled
+            <span className="max-w-72 truncate text-xs text-muted-foreground" role="status" title={handled}>
+              {handled}
             </span>
           ) : (
             <InlineAction

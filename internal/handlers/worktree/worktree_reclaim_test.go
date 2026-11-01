@@ -128,14 +128,22 @@ func (e *reclaimEnv) worktree(t *testing.T, name string) (*db.Worktree, string) 
 	return wt, path
 }
 
-// age makes a worktree look untouched for two days: its directory, the index
-// and HEAD of its git admin directory, and its reflog. The reclaimer reads the
+// age makes a worktree look untouched for two days: every file and directory
+// of the checkout, the index and HEAD of its git admin directory, and its
+// reflog. Whole-worktree retirement inventories the checkout and holds it as
+// recently active when any entry's mtime is inside the idle floor, so a
+// freshly checked-out file must be re-dated too. The reclaimer reads the
 // reflog's EVENT times, not its mtime (gc and `reflog expire` rewrite the file
 // without any user activity), so every entry is re-dated as well.
 func age(t *testing.T, path string) {
 	t.Helper()
 	old := time.Now().Add(-48 * time.Hour)
-	_ = os.Chtimes(path, old, old)
+	_ = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+		if err == nil && d.Type()&os.ModeSymlink == 0 {
+			_ = os.Chtimes(p, old, old)
+		}
+		return nil
+	})
 	if b, err := os.ReadFile(filepath.Join(path, ".git")); err == nil {
 		dir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
 		redateReflog(t, filepath.Join(dir, "logs", "HEAD"), old)
@@ -179,6 +187,22 @@ func redateReflog(t *testing.T, path string, at time.Time) {
 }
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
+
+// requireInspectableHost skips a test that needs a whole-worktree retirement to
+// go through when this host cannot prove ANY path idle. The retirement's
+// process-use check fails closed on a same-owner process whose /proc state it
+// cannot read, and a non-dumpable process (ssh-agent, gpg-agent, credsandbox's
+// init) reads EACCES for its cwd, fds and maps. With one running, every
+// retirement is held in_use whatever the test does, so asserting that it
+// succeeds measures the host, not the code: GitHub's release-gate runners have
+// one, and these tests failed there on every run (reliant#1998, which also
+// tracks what production should do about such processes).
+func requireInspectableHost(t *testing.T) {
+	t.Helper()
+	if err := worktreereclaim.CheckProcessUse(context.Background(), []string{t.TempDir()}); err != nil {
+		t.Skipf("this host cannot prove an unrelated empty directory idle (%v), so a retirement is held here whatever the code does; see reliant#1998", err)
+	}
+}
 
 // S1: Unarchive re-locks as active BEFORE flipping the row, so a removal that
 // was claimed under the archive's fence can no longer proceed.
@@ -262,6 +286,7 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 }
 
 func TestPermanentDelete_SucceedsOnceTheMachineRemovedTheDirectory(t *testing.T) {
+	requireInspectableHost(t)
 	e := newReclaimEnv(t)
 	wt, path := e.worktree(t, "pd2")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
@@ -432,6 +457,7 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 // R-S2: unarchiving a workspace whose directory a removal already finished is
 // refused, and the row records that the directory is gone.
 func TestUnarchive_RefusedWhenTheMachineSaysGone(t *testing.T) {
+	requireInspectableHost(t)
 	e := newReclaimEnv(t)
 	wt, path := e.worktree(t, "gonerow")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))

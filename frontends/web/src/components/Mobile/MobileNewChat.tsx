@@ -42,7 +42,7 @@
  * new pattern for this one screen.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
@@ -62,7 +62,7 @@ import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
-import { useProjectDaemonInstalls } from "@/hooks/project-queries";
+import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { useCapability } from "@/lib/surfaceContext";
 import {
   DEFAULT_MACHINE,
@@ -71,9 +71,18 @@ import {
   chatMachineOptions,
   defaultChatMachine,
   defaultMachineDaemon,
-  installedDaemonIds,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
+import {
+  canSetUpElsewhere,
+  isSettingUpAnywhere,
+  preferredDaemonIds,
+  projectPlacement,
+  sectionMachines,
+  startBlockedReason,
+  type PlacementState,
+} from "@/lib/projectPlacement";
+import { describeCloneError } from "../Projects/cloneTargets";
 import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 import {
   choiceLeavesWorkspace,
@@ -173,7 +182,16 @@ export function MobileNewChat() {
 
   const canPickMachine = useCapability("chatDaemonSelection");
   const { data: daemons = [], isLoading: daemonsLoading } = useDaemonList();
-  const installs = useProjectDaemonInstalls();
+  // Re-read while a clone onto one of the machines is landing (as desktop).
+  const [installsPollMs, setInstallsPollMs] = useState<number | false>(false);
+  const installs = useProjectDaemonInstalls(true, installsPollMs);
+  const installRows = installs.data ?? [];
+  const placement = projectPlacement(installRows, currentProject?.id);
+  const settingUpAnywhere = isSettingUpAnywhere(installRows, currentProject?.id);
+  useEffect(() => {
+    setInstallsPollMs(settingUpAnywhere ? 3_000 : false);
+  }, [settingUpAnywhere]);
+  const [settingUp, setSettingUp] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   // A branch workspace is a checkout on one machine: picking it picks its
   // machine, and a machine offers only its own workspaces (lib/workspaceMachine.ts).
@@ -198,20 +216,67 @@ export function MobileNewChat() {
   };
   // DEFAULT_MACHINE sends no daemon (the server picks); show the machine it
   // will land on — an awake one, or one still starting.
-  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))?.daemonId ?? "") : machine;
+  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons, preferredDaemonIds(installRows, currentProject?.id))?.daemonId ?? "") : machine;
+  // The project's machines first, each saying whether it has the project
+  // (lib/projectPlacement.ts); the rest say they are not set up, and picking
+  // one offers the set-up below instead of a send that fails.
+  const machineOptions = chatMachineOptions(daemons);
+  const sections = placement.known
+    ? sectionMachines(machineOptions, (o) => o.value, placement)
+    : { ready: machineOptions, notSetUp: [] };
+  const placementWords: Record<PlacementState, string> = {
+    ready: "Ready",
+    setting_up: "Setting up…",
+    failed: `Set-up failed`,
+    absent: `Not set up for ${currentProject?.name ?? "this project"}`,
+  };
   const machineRowOptions = [
-    ...chatMachineOptions(daemons).map((option) => ({
-      value: option.value,
-      label: option.label,
-      description: option.statusLabel === "suspended" ? "suspended · wakes when you send" : option.statusLabel,
-    })),
+    ...[...sections.ready, ...sections.notSetUp].map((option) => {
+      const status = option.statusLabel === "suspended" ? "suspended · wakes when you send" : option.statusLabel;
+      return {
+        value: option.value,
+        label: option.label,
+        description: placement.known ? `${placementWords[placement.stateOn(option.value)]} · ${status}` : status,
+      };
+    }),
     { value: NO_MACHINE, label: "No machine", description: "Web & integrations · can't read or change files" },
   ];
-  const canSend = message.trim().length > 0 && !isCreating && !!currentProject;
+  const runsOnDaemonId = noMachine || resolvedMachine.lockedBy ? undefined : machineRowValue || undefined;
+  const placementBlock =
+    canPickMachine && currentProject
+      ? startBlockedReason({
+          placement,
+          daemonId: runsOnDaemonId,
+          projectName: currentProject.name,
+          machineName: daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? ""),
+        })
+      : null;
+  const canSetUpHere =
+    Boolean(runsOnDaemonId) &&
+    canSetUpElsewhere(currentProject) &&
+    ["absent", "failed"].includes(placement.stateOn(runsOnDaemonId ?? ""));
+  const setUpHere = async () => {
+    if (!currentProject || !runsOnDaemonId || settingUp) return;
+    setSettingUp(true);
+    setError("");
+    try {
+      await createProjectFromRepo({
+        cloneUrl: currentProject.remote_url ?? "",
+        daemonId: runsOnDaemonId,
+        name: currentProject.name,
+        path: currentProject.path,
+      });
+    } catch (err) {
+      setError(describeCloneError(err, daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId)));
+    } finally {
+      setSettingUp(false);
+    }
+  };
+  const canSend = message.trim().length > 0 && !isCreating && !!currentProject && !placementBlock;
 
   const handleSend = async () => {
     const content = message.trim();
-    if (!content || isCreating || !currentProject) return;
+    if (!content || isCreating || !currentProject || placementBlock) return;
 
     setIsCreating(true);
     setError("");
@@ -299,6 +364,23 @@ export function MobileNewChat() {
                 options={machineRowOptions}
                 onChange={handleMachineChange}
               />
+            )}
+            {placementBlock && (
+              <div className="space-y-2 px-4 py-3 text-xs text-muted-foreground" data-testid="mobile-new-chat-placement">
+                <p role="status">{placementBlock}</p>
+                {canSetUpHere && (
+                  <button
+                    type="button"
+                    onClick={() => void setUpHere()}
+                    disabled={settingUp}
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary active:bg-muted disabled:opacity-60"
+                  >
+                    {settingUp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Set up {currentProject?.name} on{" "}
+                    {daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? "")}
+                  </button>
+                )}
+              </div>
             )}
             {/* Shown only when there is something to do with it: another
                 workspace to pick, or one to create. A row with main as the

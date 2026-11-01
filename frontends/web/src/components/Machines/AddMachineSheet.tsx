@@ -160,7 +160,7 @@ function AddMachineSheetBody({
   const [repo, setRepo] = useState<GitRepo | null>(callerRepo);
   const [pickingRepo, setPickingRepo] = useState(false);
   const takenNames = daemons.map((d) => d.name);
-  const generatedName = defaultMachineName(row?.size ?? "small", takenNames, repo?.cloneUrl);
+  const generatedName = defaultMachineName(row?.size ?? "m", takenNames, repo?.cloneUrl);
   const name = typedName ?? generatedName;
   const nameValid = MACHINE_NAME_RULE.test(name);
 

@@ -3,6 +3,7 @@ package project_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -60,4 +61,44 @@ func TestGetProject_Generated(t *testing.T) {
 			},
 		},
 	}, routed.GetProject)
+}
+
+// stalledDaemon never answers: it holds every command until the caller gives
+// up, the way a daemon stuck in a slow filesystem walk does.
+type stalledDaemon struct{ fakeDaemon }
+
+func (stalledDaemon) SendDaemonCommand(ctx context.Context, _, _ string, _ []byte, _ int32) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// Prod (2026-10-31/11-01): GetProject waited out the client's whole 10s
+// deadline on project.check_git, and the client then failed the read. The
+// check refreshes a cached flag; a daemon that does not answer in its budget
+// costs the read that budget, and the stored flag is served.
+func TestGetProject_SlowDaemonCostsOnlyTheGitCheckBudget(t *testing.T) {
+	project.SetGitCheckBudget(t, 50*time.Millisecond)
+
+	store := ownedProjectRepo(t)
+	store.UpdateProjectFunc = func(context.Context, *db.Project, string) error {
+		t.Error("a check that did not answer must not change the stored flag")
+		return nil
+	}
+	svc := newService(t, store, stalledDaemon{})
+
+	// The request's own deadline is far away, as the client's 10s was.
+	ctx, cancel := context.WithTimeout(project.AuthedContext(t), 10*time.Second)
+	defer cancel()
+	start := time.Now()
+	resp, err := svc.GetProject(ctx, connect.NewRequest(&pb.GetProjectRequest{ProjectId: "p-1"}))
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if !resp.Msg.GetProject().GetIsGitRepo() {
+		t.Fatal("the stored git flag must be served when the daemon does not answer")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("GetProject took %s: it waited on the daemon past the git-check budget", elapsed)
+	}
 }

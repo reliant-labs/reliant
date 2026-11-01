@@ -59,12 +59,14 @@ func executeWithActivationApprovals(ctx, activityCtx workflow.Context, rtx types
 			}
 			if preview.NoApproval {
 				// The tool judged this call card-free (manage_machine's
-				// stop, or an unattended start of the activation's own
-				// machine); its execution re-checks the policy.
+				// stop, an unattended start of the activation's own
+				// machine, a pause, or an activation change the owner's
+				// automation-approvals setting allows without a card); its
+				// execution re-checks the policy.
 				continue
 			}
 			if unattended {
-				rtx.ActivationRefusals[tc.GetId()] = "Unattended runs cannot manage activations."
+				rtx.ActivationRefusals[tc.GetId()] = "This change needs the owner's approval card, and an unattended run cannot show one; nothing changed."
 				continue
 			}
 			output, err := executeApprovalSignalFlow(activityCtx, approvalExecution{ChatID: rtx.ChatID, WorkflowID: rtx.WorkflowID, ThreadID: rtx.Thread, StepID: rtx.StepID, LoopNodeID: rtx.LoopNodeID, LoopIteration: rtx.LoopIteration, NodePath: rtx.NodePath, Title: preview.Title, Logger: workflow.GetLogger(gctx)})

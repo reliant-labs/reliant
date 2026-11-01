@@ -294,28 +294,31 @@ func (a *ApprovalResolveActivity) Category() schema.ActivityCategory {
 	return schema.CategoryAgentic
 }
 
-// Execute resolves the approval record with the given status.
+// Execute closes the approval the run stopped waiting on: "timeout" (its
+// timer fired) is EXPIRED, anything else ("interrupted") CANCELLED. The close
+// is announced on the chat feed, or clients keep showing it as pending. A
+// person's decision that landed first is kept.
 func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalResolveInput) (ApprovalResolveOutput, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("[ApprovalResolve] Resolving approval",
 		"approvalID", input.ApprovalID,
 		"status", input.Status)
 
-	// Map string status to proto enum
-	var statusEnum int32
-	switch input.Status {
-	case "timeout":
-		statusEnum = int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED)
-	default:
-		statusEnum = int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED)
-	}
-
-	actionTaken := input.Status
-	if err := a.repo.UpdateApprovalStatus(ctx, input.ApprovalID, statusEnum, nil, &actionTaken, nil); err != nil {
+	status, reason := approvalCloseFor(input.Status)
+	if _, err := a.repo.ResolvePendingApproval(ctx, input.ApprovalID, status, reason, input.Status); err != nil {
 		return ApprovalResolveOutput{}, fmt.Errorf("failed to resolve approval: %w", err)
 	}
 
 	return ApprovalResolveOutput{Success: true}, nil
+}
+
+// approvalCloseFor maps the reason a run stopped waiting on an approval to
+// the status it closes with and the reason recorded for the person.
+func approvalCloseFor(why string) (int32, string) {
+	if why == "timeout" {
+		return int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), "No one answered before the request's time limit; nothing was approved."
+	}
+	return int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "The run waiting on this request was interrupted; nothing was approved."
 }
 
 // ============================================================================
@@ -329,6 +332,11 @@ func approvalStatusString(status int32) string {
 		return "approved"
 	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED):
 		return "denied"
+	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED):
+		// What the wait itself returns when its timer fires.
+		return "timeout"
+	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED):
+		return "cancelled"
 	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING):
 		return "pending"
 	default:

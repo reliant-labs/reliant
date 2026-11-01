@@ -47,6 +47,13 @@ type ReconcilerStore interface {
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
+	// Approvals nothing waits on any more, and closed approvals whose chat
+	// feed still says pending (approval_sweep.go).
+	ListStaleApprovals(ctx context.Context, limit int) ([]db.StaleApproval, error)
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
+	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
+	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
+
 	// Stranded spawns, backgrounded processes and the tool-call rows they
 	// close.
 	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
