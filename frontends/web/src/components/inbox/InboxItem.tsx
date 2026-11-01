@@ -8,7 +8,9 @@
  * Inbox spans projects, how long it has waited, and the inline action.
  *
  * A row is one line by default. Anything taller — an answer form, a failure's
- * full reason — opens on demand, so ten waiting items fit on one screen.
+ * full reason — opens on demand, so ten waiting items fit on one screen. An
+ * approval is the exception: it opens with its whole card (ApprovalCardView),
+ * and Approve sits under it, so what is granted is read before it is approved.
  *
  * The actions reuse the chat's own pieces, through their store-free cores:
  * ApprovalActions for approve/deny, QuestionPrompt + answerQuestion for an
@@ -54,13 +56,15 @@ import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
-import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
+import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { relativeTime as compactAge } from "../Mobile/relativeTime";
 import { hasErrorReason } from "@/lib/errorReasons";
 import { cn } from "@/lib/utils";
 import { useSurface } from "@/lib/surfaceContext";
 import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
+import { ApprovalCardView } from "../Chat/ApprovalCardView";
+import { parseApprovalCard } from "@/lib/approvalCard";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
@@ -101,9 +105,36 @@ export function failedTimesInARow(failures: number): string {
   return `Failed ${failures} times in a row.`;
 }
 
-/** A server error string ("daemon x is offline") shown on its own reads as a sentence. */
-function sentenceCase(text: string): string {
+/**
+ * A server error string ("daemon x is offline") shown on its own reads as a
+ * sentence. A leading identifier ("default_repo is now required") is a name,
+ * not a word: capitalising it would misspell it.
+ */
+export function sentenceCase(text: string): string {
+  const first = text.split(/\s/, 1)[0] ?? "";
+  if (/[_./:@]|[a-z][A-Z]/.test(first)) return text;
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const AGE_UNITS: Record<string, [string, string]> = {
+  m: ["minute", "minutes"],
+  h: ["hour", "hours"],
+  d: ["day", "days"],
+  w: ["week", "weeks"],
+};
+
+/**
+ * How long an item has waited: "1d" for the row and "1 day" for its
+ * accessible name and tooltip, from one rounding, so what is shown and what
+ * is announced never disagree (41 hours is "1d" and "1 day", not "2 days").
+ */
+export function waitedFor(iso: string): { short: string; long: string } {
+  const short = compactAge(iso);
+  const match = /^(\d+)([mhdw])$/.exec(short);
+  if (!match) return { short, long: short === "now" ? "just now" : short };
+  const count = Number(match[1]);
+  const [one, many] = AGE_UNITS[match[2]];
+  return { short, long: `${count} ${count === 1 ? one : many}` };
 }
 
 interface InboxItemProps {
@@ -118,7 +149,9 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
   // What already happened to the item, once an action lost the race to it:
   // the server's sentence for an approval ("This request expired: …").
   const [handled, setHandled] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  // An approval opens with its whole card showing: what it grants is read
+  // before Approve is reachable, and Approve sits under it.
+  const [expanded, setExpanded] = useState(item.payload.case === "approval");
 
   // "Already handled": show it, then take the row out (§8.3).
   useEffect(() => {
@@ -139,8 +172,10 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
   const expandable = hasExpansion(item);
   // "2h" in the row (a dense list wants a narrow, fixed column); the long
   // form and the exact time are the tooltip and the accessible name.
-  const waited = compactAge(item.waitingSince);
-  const waitedLong = formatRelativeTime(item.waitingSince);
+  const { short: waited, long: waitedLong } = waitedFor(item.waitingSince);
+  // An open approval shows its full card below; the one-line lead would only
+  // repeat its first sentence, cut short.
+  const showDetail = detail && !(expanded && item.payload.case === "approval");
 
   return (
     <li
@@ -157,7 +192,7 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
           </span>
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             <SubjectLink item={item} />
-            {detail && (
+            {showDetail && (
               <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail.title}>
                 {detail.node}
               </span>
@@ -179,16 +214,15 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
               item={item}
               expanded={expanded}
               onToggle={expandable ? () => setExpanded((open) => !open) : undefined}
-              onRaceOrError={onRaceOrError}
             />
           )}
           <time
             dateTime={item.waitingSince}
-            title={`Waiting since ${waitedLong} · ${formatAbsoluteTime(item.waitingSince)}`}
+            title={`Waiting for ${waitedLong} · since ${formatAbsoluteTime(item.waitingSince)}`}
             className="w-8 whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground"
           >
             <span aria-hidden="true">{waited}</span>
-            <span className="sr-only">waiting since {waitedLong}</span>
+            <span className="sr-only">waiting for {waitedLong}</span>
           </time>
           {!handled && (
             <button
@@ -371,8 +405,9 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
   const { payload } = item;
   switch (payload.case) {
     case "approval": {
-      const title = payload.value.title;
-      return title ? { node: title, title } : null;
+      // The lead sentence; the rest of the card is the expansion.
+      const lead = parseApprovalCard(payload.value.title).lead;
+      return lead ? { node: lead, title: lead } : null;
     }
     case "question": {
       const prompt = payload.value.prompt;
@@ -510,8 +545,12 @@ export function processesDetail(storage: InboxStorageData): string {
   return parts.join(" · ");
 }
 
-/** A row opens downward only when its action needs more than a line. */
+/**
+ * A row opens downward only when its action needs more than a line: an
+ * answer form, or an approval (which is decided under its full card).
+ */
 function hasExpansion(item: InboxItemData): boolean {
+  if (item.payload.case === "approval") return true;
   return item.payload.case === "question" && askUserQuestionItems(item.payload.value.metadata) !== null;
 }
 
@@ -522,15 +561,20 @@ interface InlineActionProps {
   item: InboxItemData;
   expanded: boolean;
   onToggle?: () => void;
-  onRaceOrError: (verb: string) => (error: unknown) => void;
 }
 
-function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionProps) {
+function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
   const { payload } = item;
   const mobile = useSurface() === "mobile";
   switch (payload.case) {
     case "approval":
-      return <ApprovalRowAction approvalId={payload.value.approvalId} itemId={item.itemId} onFailure={onRaceOrError} />;
+      // Approve and Deny are in the expansion, under what is approved.
+      return onToggle ? (
+        <button type="button" className={actionButtonClass} aria-expanded={expanded} onClick={onToggle}>
+          {expanded ? "Hide" : "Review"}
+          <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
+        </button>
+      ) : null;
     case "question":
       if (onToggle) {
         return (
@@ -603,6 +647,19 @@ function Expansion({
   item: InboxItemData;
   onRaceOrError: (verb: string) => (error: unknown) => void;
 }) {
+  if (item.payload.case === "approval") {
+    return (
+      <CardInset padding="sm" className="space-y-3">
+        <ApprovalCardView title={item.payload.value.title} />
+        <ApprovalRowAction
+          approvalId={item.payload.value.approvalId}
+          itemId={item.itemId}
+          subject={subjectName(item)}
+          onFailure={onRaceOrError}
+        />
+      </CardInset>
+    );
+  }
   if (item.payload.case !== "question") return null;
   return (
     <QuestionAnswerForm
@@ -618,10 +675,12 @@ function Expansion({
 function ApprovalRowAction({
   approvalId,
   itemId,
+  subject,
   onFailure,
 }: {
   approvalId: string;
   itemId: string;
+  subject: string;
   onFailure: (verb: string) => (error: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -640,11 +699,13 @@ function ApprovalRowAction({
     }
   };
   return (
-    <div className="shrink-0">
+    <div className="flex justify-end">
       <ApprovalActions
         compact
         approveLabel="Approve"
         denyLabel="Deny"
+        approveName={`Approve ${subject}`}
+        denyName={`Deny ${subject}`}
         disabled={busy}
         onApprove={() => void act("approve")}
         onDeny={() => void act("deny")}

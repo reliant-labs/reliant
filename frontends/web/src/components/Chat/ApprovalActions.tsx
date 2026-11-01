@@ -1,13 +1,17 @@
 /**
  * ApprovalActions - Renders approve/deny buttons for workflow approvals.
  *
- * Props only: the caller decides what approving means. The chat's batch bar
- * (PermissionsPanel) approves every pending approval of the open chat; the
- * Inbox approves one approval of any chat, so it passes its own labels and no
- * shortcut.
+ * Props only: the caller decides what approving means. The chat's approval
+ * panel (PermissionsPanel) approves one approval, or every routine one at
+ * once; the Inbox approves one approval of any chat.
+ *
+ * Approve is the brand's primary fill and Deny an outline with danger text:
+ * approving should follow reading, not be the loudest thing on the row, and
+ * green is reserved for success. Name the buttons after their subject
+ * (`approveName`), so a list of approvals is not a list of identical
+ * "Approve" buttons to a screen reader.
  */
 
-import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 
@@ -18,6 +22,9 @@ interface ApprovalActionsProps {
   shortcutKey?: string;
   approveLabel?: string;
   denyLabel?: string;
+  /** Accessible names, when the visible label does not say what is approved. */
+  approveName?: string;
+  denyName?: string;
   disabled?: boolean;
   /** Row-height buttons, for a dense list (the Inbox) on a desktop surface. */
   compact?: boolean;
@@ -27,8 +34,10 @@ export function ApprovalActions({
   onApprove,
   onDeny,
   shortcutKey,
-  approveLabel = "Approve All",
-  denyLabel = "Deny All",
+  approveLabel = "Approve",
+  denyLabel = "Deny",
+  approveName,
+  denyName,
   disabled,
   compact,
 }: ApprovalActionsProps) {
@@ -38,43 +47,40 @@ export function ApprovalActions({
   const surface = useSurface();
   const isNarrow = surface !== "desktop";
   const size = isNarrow ? "min-h-[44px] flex-1 px-3 text-sm" : compact ? "h-7 px-2.5 text-xs" : "px-3 py-1.5 text-sm";
+  const showShortcut = !isNarrow && !!shortcutKey;
 
   return (
     <div className={cn("flex items-center gap-2", isNarrow && "flex-1 flex-wrap")}>
-      <Tooltip content={approveLabel} side="bottom" delay={300} triggerClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
-<button
+      <button
         type="button"
         onClick={onApprove}
         disabled={disabled}
+        aria-label={approveName}
+        aria-keyshortcuts={showShortcut ? `${shortcutKey === "⌘" ? "Meta" : "Control"}+Enter` : undefined}
         className={cn(
-          "flex items-center justify-center gap-2 rounded font-medium bg-success hover:bg-success/90 text-success-foreground transition-colors disabled:opacity-60",
-          size
+          "flex items-center justify-center gap-2 rounded font-medium bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+          size,
         )}
       >
         {approveLabel}
-        {!isNarrow && shortcutKey && (
-          <span className="px-1.5 py-0.5 rounded text-xs font-mono" style={{
-            backgroundColor: 'hsl(var(--success-foreground) / 0.2)',
-            color: 'hsl(var(--success-foreground))'
-          }}>
+        {showShortcut && (
+          <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-xs" aria-hidden="true">
             {shortcutKey}+↵
           </span>
         )}
       </button>
-</Tooltip>
-
-      <Tooltip content={denyLabel} side="bottom" delay={300} triggerClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
-<button
+      <button
         type="button"
         onClick={onDeny}
         disabled={disabled}
+        aria-label={denyName}
         className={cn(
-          "rounded font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground transition-colors disabled:opacity-60",
-          size
-        )} aria-label={denyLabel}>
+          "rounded border border-border bg-background font-medium text-destructive-ink transition-colors hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+          size,
+        )}
+      >
         {denyLabel}
       </button>
-</Tooltip>
     </div>
   );
 }

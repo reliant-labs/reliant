@@ -24,7 +24,8 @@ describe("definitionBrokenDetail", () => {
       ],
     });
     expect(definitionBrokenDetail(broken)).toBe(
-      "Release.yaml does not parse · feat/x 1a2b3c4 on cicd · uncommitted changes · refuses Nightly, On push",
+      // A file name is not capitalised: it would no longer name the file.
+      "release.yaml does not parse · feat/x 1a2b3c4 on cicd · uncommitted changes · refuses Nightly, On push",
     );
   });
 
