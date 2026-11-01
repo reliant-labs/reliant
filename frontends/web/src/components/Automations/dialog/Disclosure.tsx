@@ -27,7 +27,7 @@ export function Disclosure({ open, onToggle, title, summary, children, testId }:
         aria-expanded={open}
         aria-controls={panelId}
         onClick={onToggle}
-        className="flex w-full items-baseline gap-2 rounded-sm text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="flex w-full items-baseline gap-2 rounded-sm text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {open ? (
           <ChevronDown className="h-4 w-4 shrink-0 self-center" aria-hidden />

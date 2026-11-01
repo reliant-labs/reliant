@@ -24,9 +24,12 @@ export function ProgressBar({ steps, currentStepIndex }: ProgressBarProps) {
               <div
                 className={cn(
                   "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium transition-all",
-                  isCompleted && "bg-gradient-to-br from-emerald-400 to-cyan-500 text-white shadow-sm shadow-cyan-500/30",
-                  isCurrent && "bg-gradient-to-br from-sky-500 to-violet-500 text-white ring-2 ring-white/40 shadow-md shadow-violet-500/25",
-                  !isCompleted && !isCurrent && "border border-white/10 bg-white/[0.06] text-muted-foreground",
+                  // One hue, the action color: green is for success states
+                  // and a stepper is progress, not success. Done steps are a
+                  // tint with a check, the current step the filled pill.
+                  isCompleted && "bg-primary/15 text-primary-ink",
+                  isCurrent && "bg-primary text-primary-foreground ring-2 ring-ring ring-offset-2 ring-offset-background",
+                  !isCompleted && !isCurrent && "border border-border bg-background text-muted-foreground",
                 )}
               >
                 {isCompleted ? <Check className="w-3.5 h-3.5" /> : index + 1}
@@ -42,11 +45,11 @@ export function ProgressBar({ steps, currentStepIndex }: ProgressBarProps) {
             </div>
 
             {index < steps.length - 1 && (
-              <div className="mx-1 h-px min-w-4 flex-1 overflow-hidden rounded-full bg-white/10">
+              <div className="mx-1 h-px min-w-4 flex-1 overflow-hidden rounded-full bg-border">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    isCompleted ? "w-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-500" : "w-0",
+                    isCompleted ? "w-full bg-primary" : "w-0",
                   )}
                 />
               </div>

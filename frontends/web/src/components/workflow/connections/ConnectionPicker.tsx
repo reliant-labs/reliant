@@ -93,7 +93,7 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
               onClick={() => setExpanded(true)}
               disabled={disabled}
               aria-label={`Change ${integration.displayName} connection`}
-              className="shrink-0 rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="shrink-0 rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Change
             </button>

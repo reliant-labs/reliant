@@ -254,7 +254,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="https://github.com/org/repo"
                   required
                   autoFocus
@@ -274,7 +274,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="main"
                   disabled={modalState === "loading" || modalState === "success"}
                 />
@@ -295,7 +295,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="/home/workspace/projects/repo-name"
                   disabled={modalState === "loading" || modalState === "success"}
                 />

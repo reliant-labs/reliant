@@ -39,7 +39,7 @@ export function ChildRunsStrip({ chatId }: { chatId: string }) {
       <Link
         to="/workflows/runs"
         search={{ parent: chatId }}
-        className="rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {label}
       </Link>
@@ -52,7 +52,7 @@ export function ChildRunsStrip({ chatId }: { chatId: string }) {
                 to="/workflows/runs/$runId"
                 params={{ runId: run.chatId }}
                 title={`${run.title || "Untitled run"} · ${status.label}`}
-                className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-border/60 bg-background px-2 py-0.5 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-border/60 bg-background px-2 py-0.5 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <RunStatusDot status={status} size="sm" />
                 <span className="truncate">{run.title || "Untitled run"}</span>

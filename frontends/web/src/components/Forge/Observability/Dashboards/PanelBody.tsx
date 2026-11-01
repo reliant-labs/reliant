@@ -90,7 +90,7 @@ function RetryButton({ query }: { query: PanelQuery }) {
   return (
     <button
       type="button"
-      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       onClick={() => void query.refetch?.()}
       disabled={query.isFetching}
       data-testid="obs-panel-retry"
@@ -426,7 +426,7 @@ function LineChart({
               key={c.label}
               type="button"
               onClick={(event) => onDrill({ panel: panel.title, label: c.label, group: c.source.group, signal: panel.signal }, pointOf(event))}
-              className="inline-flex max-w-full items-center gap-1.5 truncate rounded text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="inline-flex max-w-full items-center gap-1.5 truncate rounded text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title={`Drill into ${c.label}`}
             >
               {c.label}

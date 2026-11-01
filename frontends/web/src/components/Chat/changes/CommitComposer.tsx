@@ -123,7 +123,7 @@ export function CommitComposer({
         disabled={busy}
         className={cn(
           "field-sizing-content max-h-40 min-h-14 w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm",
-          "placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20",
+          "placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-60",
         )}
       />
@@ -149,7 +149,7 @@ export function CommitComposer({
             disabled={!canCommit}
             className={cn(
               "inline-flex h-8 w-8 items-center justify-center rounded-r-md border border-l-0 border-primary/20 bg-primary text-primary-foreground",
-              "shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+              "shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "disabled:cursor-not-allowed disabled:opacity-50",
               "relative before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-primary-foreground/25",
             )}
@@ -223,7 +223,7 @@ function PullRequestAction({
           rel="noopener noreferrer"
           className={cn(
             "inline-flex h-7 w-full min-w-0 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground",
-            "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary-ink" />

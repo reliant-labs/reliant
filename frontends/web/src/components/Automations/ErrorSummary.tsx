@@ -54,7 +54,7 @@ export function ErrorSummary({ title, items, autoFocus = true, focusKey, childre
       tabIndex={-1}
       aria-labelledby={titleId}
       data-testid="error-summary"
-      className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={<span id={titleId}>{title}</span>}
       message={
         <>
@@ -65,7 +65,7 @@ export function ErrorSummary({ title, items, autoFocus = true, focusKey, childre
                   {item.fieldId ? (
                     <a
                       href={`#${item.fieldId}`}
-                      className="underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={(event) => {
                         event.preventDefault();
                         focusField(item.fieldId!);

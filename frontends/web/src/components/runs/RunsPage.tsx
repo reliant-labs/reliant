@@ -117,7 +117,7 @@ export function RunsView() {
                 <button
                   type="button"
                   onClick={() => void list.fetchNextPage()}
-                  className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Retry
                 </button>
@@ -202,7 +202,7 @@ function NoMatchingRuns() {
               <button
                 type="button"
                 onClick={widen}
-                className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Widen to 30 days
               </button>

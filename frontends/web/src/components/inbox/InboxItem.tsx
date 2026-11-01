@@ -200,7 +200,7 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
                 "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition",
                 // A finger needs 44px; explicit px because rem renders at 87.5% here.
                 "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:w-[44px]",
-                "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Hidden until the row is hovered or anything in it has focus;
                 // always shown where there is no hover (touch).
                 "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:opacity-100",
@@ -268,7 +268,7 @@ export function subjectName(item: InboxItemData): string {
 }
 
 const subjectClass =
-  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm [@media(pointer:coarse)]:py-3";
+  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm [@media(pointer:coarse)]:py-3";
 
 /**
  * A link to a run. On the mobile surface a run opens as the chat it is: the
@@ -516,7 +516,7 @@ function hasExpansion(item: InboxItemData): boolean {
 }
 
 const actionButtonClass =
-  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60 [@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm";
+  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 [@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm";
 
 interface InlineActionProps {
   item: InboxItemData;

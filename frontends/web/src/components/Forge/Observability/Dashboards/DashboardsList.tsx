@@ -243,7 +243,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               disabled={!canWrite}
               title={writeHint}
               onClick={() => setCreating("blank")}
-              className="flex min-h-24 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-ink-muted transition-colors hover:border-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-24 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-ink-muted transition-colors hover:border-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="dashboards-template-blank"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -258,7 +258,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                     disabled={!canWrite}
                     title={writeHint}
                     onClick={() => setFromTemplate(template)}
-                    className="flex min-h-24 flex-col items-start gap-1 rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex min-h-24 flex-col items-start gap-1 rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     data-testid={`dashboards-template-${template.ref.key}`}
                   >
                     <span className="flex w-full items-center justify-between gap-2">
@@ -513,7 +513,7 @@ function GroupSection({ group, count, open, onToggle, children }: { group: Dashb
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={onToggle}
-          className="group flex items-baseline gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="group flex items-baseline gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid={`dashboards-group-${group}-toggle`}
         >
           <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 self-center text-ink-muted transition-transform motion-reduce:transition-none", open && "rotate-90")} aria-hidden="true" />
@@ -598,7 +598,7 @@ function updatedOf(d: DashboardSummary): string {
   return at ? formatAgo(at) : "—";
 }
 
-const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function Toolbar({
   search,
@@ -621,7 +621,7 @@ function Toolbar({
   const chip = (on: boolean) => cn(CHIP, on ? "border-ink/40 bg-ink/8 text-ink" : "border-border bg-surface text-ink-muted hover:text-ink");
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="dashboards-toolbar">
-      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="sr-only">Search dashboards</span>
         <input

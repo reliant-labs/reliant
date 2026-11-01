@@ -254,7 +254,7 @@ function UsedByCard({ workflowRef, workflows }: { workflowRef: string; workflows
                 <Link
                   to="/workflows/library/$workflowRef"
                   params={{ workflowRef: workflow.name }}
-                  className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {workflowDisplayName(workflow)}
                 </Link>
@@ -308,7 +308,7 @@ function RecentRunsCard({
           <Link
             to="/workflows/runs"
             search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
-            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             View all
           </Link>
@@ -474,7 +474,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
       </p>
       <Link
         to="/workflows/library"
-        className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         Back to workflows
       </Link>

@@ -788,7 +788,7 @@ function CreateKeyForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. production-agent"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
         />
       </div>
 
@@ -837,7 +837,7 @@ function CreateKeyForm({
             onChange={(e) => setBudget(e.target.value)}
             inputMode="decimal"
             placeholder="e.g. 25"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
           />
         </div>
         <div className="space-y-2">
@@ -848,7 +848,7 @@ function CreateKeyForm({
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             disabled={!budget.trim()}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40 disabled:opacity-50"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             <option value="1d">Daily</option>
             <option value="7d">Weekly</option>

@@ -1833,8 +1833,10 @@ function App() {
       {showHeader && (
         <Header
           ref={headerRef}
-          logoSize="xl"
           windowAligned={true}
+          onNavigateHome={() => {
+            navigate({ to: '/' });
+          }}
           onNavigateToSettings={() => {
             navigate({ to: '/settings' });
           }}

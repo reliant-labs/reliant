@@ -137,7 +137,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
               value={filePattern}
               onChange={(e) => setFilePattern(e.target.value)}
               placeholder="*.ts, *.go"
-              className="min-h-[44px] flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-1 focus:ring-primary/50"
+              className="min-h-[44px] flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         </div>

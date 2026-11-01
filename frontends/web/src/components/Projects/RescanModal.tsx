@@ -74,7 +74,7 @@ export function RescanModal({
           {onDismissForever && (
             <button
               onClick={onDismissForever}
-              className="px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
+              className="px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background rounded-lg"
             >
               Don't ask again
             </button>
@@ -82,13 +82,13 @@ export function RescanModal({
           <div className="flex gap-3 ml-auto">
             <button
               onClick={onCancel}
-              className="px-5 py-2.5 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 border border-border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              className="px-5 py-2.5 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 border border-border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             >
               Later
             </button>
             <button
               onClick={onConfirm}
-              className="px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              className="px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             >
               Rescan Now
             </button>

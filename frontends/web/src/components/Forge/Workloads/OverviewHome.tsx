@@ -332,7 +332,7 @@ export function OverviewHome({
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
-            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
               <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="sr-only">Filter services</span>
               <input
@@ -525,7 +525,7 @@ function EnvStrip({
                 <Link
                   href={scopedHref(preview.name)}
                   aria-current={preview.name === env ? "page" : undefined}
-                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", preview.name === env && "font-medium text-ink")}
+                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", preview.name === env && "font-medium text-ink")}
                 >
                   {preview.name}
                 </Link>
@@ -563,7 +563,7 @@ function EnvCell({
       data-testid={`overview-env-${env.name}`}
       data-tone={loading || failed ? undefined : cell.tone}
       className={cn(
-        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         !first && "border-l border-border"
       )}
     >

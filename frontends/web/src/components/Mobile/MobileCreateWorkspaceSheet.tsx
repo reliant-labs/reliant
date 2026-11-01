@@ -41,7 +41,7 @@ import { createWorktree } from "../../hooks/worktree-actions";
 import { type Worktree, fetchLiveWorktrees, getCachedWorktrees } from "../../hooks/worktree-queries";
 
 const MOBILE_FIELD =
-  "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20";
+  "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 /**
  * Base-branch choices, in the order the desktop picker uses: a detached HEAD

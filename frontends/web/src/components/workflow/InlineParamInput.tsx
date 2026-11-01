@@ -544,7 +544,7 @@ function InlineStringInput({
         onKeyDown={handleKeyDown}
         className={cn(
           "h-6 px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "min-w-20 max-w-32",
           className
         )}
@@ -653,7 +653,7 @@ function InlineNumberInput({
         step={schema.type === "integer" ? 1 : 0.1}
         className={cn(
           "h-6 px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "w-20",
           className
         )}

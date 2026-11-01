@@ -115,7 +115,7 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
       <button
         type="button"
         onClick={() => void navigate({ href: target })}
-        className="ml-auto inline-flex shrink-0 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="ml-auto inline-flex shrink-0 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="deployed-app-open"
       >
         {app ? "View app" : "Apps"} <ArrowRight className="h-3 w-3" aria-hidden="true" />

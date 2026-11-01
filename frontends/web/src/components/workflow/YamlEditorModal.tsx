@@ -178,7 +178,7 @@ export function YamlEditorModal({
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              className="w-full h-full p-3 font-mono text-sm bg-muted/50 border border-border rounded-lg resize-none overscroll-contain focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+              className="w-full h-full p-3 font-mono text-sm bg-muted/50 border border-border rounded-lg resize-none overscroll-contain focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
               spellCheck={false}
               placeholder="Enter YAML content..."
             />

@@ -73,7 +73,7 @@ function RotationSelect({ provider, variant }: { provider: string; variant: "des
         value={mode}
         onChange={(e) => void setMode(e.target.value as RoutingMode)}
         className={cn(
-          "rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40",
+          "rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
           variant === "mobile" ? "min-h-[44px] text-sm" : "py-0.5",
         )}
       >

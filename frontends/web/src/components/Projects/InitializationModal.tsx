@@ -54,7 +54,7 @@ export function InitializationModal({
                 type="checkbox"
                 checked={initGit}
                 onChange={(e) => setInitGit(e.target.checked)}
-                className="mt-0.5 w-4 h-4 text-primary-ink border-border rounded focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                className="mt-0.5 w-4 h-4 text-primary-ink border-border rounded focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
@@ -100,13 +100,13 @@ export function InitializationModal({
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
           <button
             onClick={onCancel}
-            className="px-5 py-2.5 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 border border-border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="px-5 py-2.5 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 border border-border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
-            className="px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
           >
             Initialize Project
           </button>

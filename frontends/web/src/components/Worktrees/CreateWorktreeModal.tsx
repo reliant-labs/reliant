@@ -374,7 +374,7 @@ export function CreateWorktreeModal({
                     setNormalizedName(null);
                   }
                 }}
-                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                 placeholder="awesome-feature"
                 required
                 autoFocus
@@ -423,7 +423,7 @@ export function CreateWorktreeModal({
                           setNormalizedBranch(null);
                         }
                       }}
-                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                       placeholder={formData.name ? normalizeName(formData.name) : "Defaults to name"}
                     />
                   </div>
@@ -464,7 +464,7 @@ export function CreateWorktreeModal({
                                 base_branches: { ...prev.base_branches, [r.id]: v },
                               }));
                             }}
-                            className="flex-1 px-3 py-2 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                            className="flex-1 px-3 py-2 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                             placeholder="Auto-detect (e.g. main, master, develop)"
                           />
                         </div>
@@ -524,7 +524,7 @@ export function CreateWorktreeModal({
                         const files = parseCopyPathsInput(e.target.value);
                         setFormData((prev) => ({ ...prev, copy_files: files }));
                       }}
-                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                       placeholder={isMultiRepo ? `.env, ${repos[0]?.relativePath || "repo"}/.env, ${repos[0]?.relativePath || "repo"}/node_modules` : ".env, .env.local, node_modules"}
                     />
                   </div>

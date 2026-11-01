@@ -510,7 +510,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
       <div
         className={cn(
           "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 text-sm",
-          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring",
           invalid && "border-destructive",
           blocked && "opacity-70",
         )}
@@ -573,7 +573,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
               e.stopPropagation();
               onChange("");
             }}
-            className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
           </button>
@@ -598,7 +598,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
             <button
               type="button"
               onClick={onConnect}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden /> Connect {nouns.integration}
             </button>
@@ -697,7 +697,7 @@ function Chip({
         onKeyDown={onKeyDown}
         disabled={disabled}
         aria-label={`Remove ${label}`}
-        className="-mr-0.5 rounded-sm p-0.5 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="-mr-0.5 rounded-sm p-0.5 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-3 w-3" aria-hidden />
       </button>
@@ -755,7 +755,7 @@ function PickerPanel(p: PickerPanelProps) {
           onChange={(e) => p.onQuery(e.target.value)}
           onKeyDown={p.onSearchKeyDown}
           placeholder={`Search ${p.nouns.plural}…`}
-          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
           data-testid="picker-search"
         />
       </div>
@@ -815,7 +815,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Try again
             </button>
@@ -828,7 +828,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Refresh
             </button>

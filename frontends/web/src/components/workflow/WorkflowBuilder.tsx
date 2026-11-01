@@ -2483,7 +2483,7 @@ function WorkflowBuilderInner({
                 }}
                 placeholder="my-workflow"
                 autoFocus
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Use lowercase letters, numbers, and underscores for node IDs

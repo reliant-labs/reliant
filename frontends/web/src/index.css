@@ -411,14 +411,16 @@
     --status-pending: 280 85% 56%;    /* Purple */
 
     /*
-     * Font family variables. Both default to the typefaces we vendor under
-     * web/public/fonts, so the app renders identically on every OS instead of
-     * inheriting whatever the platform's UI/monospace default happens to be.
-     * The system stacks remain as fallbacks (and as an explicit user choice
-     * via data-font="system").
+     * Font family variables. Both default to bundled typefaces, so the app
+     * renders identically on every OS instead of inheriting whatever the
+     * platform's UI/monospace default happens to be: Geist and Geist Mono,
+     * the brand faces the site uses (@fontsource-variable, imported in
+     * main.tsx). 'Geist Fallback' is metric-matched Arial, so the swap to the
+     * web font does not reflow. The system stacks remain as fallbacks (and as
+     * an explicit user choice via data-font="system").
      */
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'Geist Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
 
     /* Neutral elevation */
     --surface-base: 0 0% 98%;
@@ -592,10 +594,10 @@
 
   /* Font family presets override the default --font-sans token. */
 
-  /* "default" — the bundled Inter. Same stack as :root, named so the
+  /* "default" — the bundled Geist. Same stack as :root, named so the
      Appearance picker has an explicit option for it. */
   :root[data-font="default"] {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
 
   :root[data-font="system"] {
@@ -611,7 +613,7 @@
   }
 
   :root[data-font="geist"] {
-    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   :root[data-font="comic"] {
@@ -619,16 +621,33 @@
   }
 
   /*
-   * Bundled typefaces, vendored under web/public/fonts — no runtime
-   * dependency on fonts.gstatic.com, and identical rendering in Electron,
-   * the browser, and the cloud build. Both are variable fonts, so the whole
-   * weight range costs one file each.
+   * Bundled typefaces — no runtime dependency on fonts.gstatic.com, and
+   * identical rendering in Electron, the browser, and the cloud build. All
+   * are variable fonts, so the whole weight range costs one file each.
    *
-   * Inter is the app's default UI face; JetBrains Mono is the default
-   * monospace (paths, code, the file viewer, terminals). Because
-   * --font-sans / --font-mono list them first, everything picks them up
-   * without touching call sites.
+   * Geist (UI) and Geist Mono (paths, code, inline mono) are the defaults;
+   * their @font-face rules ship with @fontsource-variable/geist{,-mono},
+   * imported in main.tsx, one file per unicode subset. vite.config.ts
+   * preloads the Latin Geist file. Inter stays as an Appearance choice, and
+   * JetBrains Mono stays the editor and terminal face (MONACO_FONT_FAMILY):
+   * its box-drawing and powerline coverage is what xterm relies on. Both are
+   * vendored under web/public/fonts. Because --font-sans / --font-mono list
+   * them first, everything picks them up without touching call sites.
    */
+
+  /* Arial resized to Geist's metrics, used until Geist Variable loads, so
+     the swap does not rewrap text. Measured from the bundled
+     geist-latin-wght-normal.woff2 (the site uses the same numbers): hhea
+     ascent 1005, descent 295 per 1000 em, average advance 5.5% wider than
+     Arial's, so size-adjust 105.5% and the metrics divided by it. */
+  @font-face {
+    font-family: 'Geist Fallback';
+    src: local('Arial');
+    ascent-override: 95.28%;
+    descent-override: 27.97%;
+    line-gap-override: 0%;
+    size-adjust: 105.48%;
+  }
   @font-face {
     font-family: 'Inter';
     font-style: normal;
@@ -673,7 +692,7 @@
   }
 
   :root[data-chat-font="geist"] {
-    --chat-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --chat-font-family: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   :root[data-chat-font="comic"] {
@@ -714,7 +733,7 @@
 
   :root[data-editor-font="geist"] .monaco-editor,
   :root[data-editor-font="geist"] .monaco-editor * {
-    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-family: 'Geist Mono Variable', 'JetBrains Mono', ui-monospace, monospace !important;
   }
 
   :root[data-editor-font="comic"] .monaco-editor,
@@ -930,9 +949,14 @@
     border: 1px solid hsl(var(--primary) / 0.3);
   }
 
-  /* Global keyboard focus outline */
+  /* Global keyboard focus outline. ONE focus treatment app-wide: a solid 2px
+     --ring with a 2px gap, at full strength (a 45% ring measured ~3.7:1 on
+     a card: it passed, but faintly). Components that draw a box-shadow ring
+     instead use the same color: `focus-visible:ring-2 focus-visible:ring-ring`,
+     never an alpha step of it or of --primary / --accent (the web-styling
+     skill, "Focus"). */
   *:focus-visible {
-    outline: 2px solid hsl(var(--ring) / 0.45);
+    outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
 
@@ -1269,8 +1293,8 @@
     transition: box-shadow 0.2s ease-in-out;
   }
 
-  .focus-ring:focus {
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
   }
 
   /* Copy button styling */
