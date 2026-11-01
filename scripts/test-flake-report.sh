@@ -88,7 +88,7 @@ gh_run() { # <issues json> <args...> -> the script's output; calls in $fx/gh.log
   printf '%s' "$1" >"$fx/issues.json"
   shift
   : >"$fx/gh.log"
-  (cd "$mod" && PATH="$bin:$PATH" GH_LOG="$fx/gh.log" GH_ISSUES="$fx/issues.json" GITHUB_REPOSITORY=fx/fx GOFLAGS= \
+  (cd "$mod" && PATH="$bin:$PATH" GH_LOG="$fx/gh.log" GH_ISSUES="$fx/issues.json" GITHUB_REPOSITORY=fx/fx GOFLAGS='' \
     FLAKE_SWEEP_NOW=1793491200 bash "$src" "$@" 2>&1) # now = 2026-11-01T00:00:00Z
 }
 
