@@ -796,8 +796,7 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Fprintf(logging.Notices(), "\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
-		fmt.Fprintf(logging.Notices(), "    Press Ctrl+C to disconnect.\n\n")
+		fmt.Fprint(logging.Notices(), connectedNotice(d.currentUserID()))
 	case daemonstate.StreamAwaitingCredentials:
 		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
@@ -815,6 +814,19 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 			fmt.Fprintf(logging.Notices(), "  ! Disconnected: %s\n", detail)
 		}
 	}
+}
+
+// connectedNotice is the connected banner. It names the account the gateway
+// says the credential acts as (RegistrationAck.user_id) — the account's id,
+// the only identity the gateway has for an access token — so a daemon that
+// connected as someone other than the person at the keyboard does not look
+// like a success for them. No account named, no account claimed.
+func connectedNotice(account string) string {
+	headline := "Daemon connected — you can head back to Reliant and start working."
+	if account != "" {
+		headline = "Connected as account " + account + " — head back to Reliant to start working."
+	}
+	return "\n  ✓ " + headline + "\n\n    Press Ctrl+C to disconnect.\n\n"
 }
 
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
@@ -1242,6 +1254,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			if s != nil {
 				d.activateSession(s)
 			}
+			// The account first: the connected notice names it, so a daemon
+			// running on another person's saved credential says so.
+			if m.RegistrationAck.UserId != "" {
+				d.identityMu.Lock()
+				d.userID = m.RegistrationAck.UserId
+				d.identityMu.Unlock()
+			}
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {
@@ -1265,11 +1284,6 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.
 				d.persistDaemonID(m.RegistrationAck.DaemonId)
-			}
-			if m.RegistrationAck.UserId != "" {
-				d.identityMu.Lock()
-				d.userID = m.RegistrationAck.UserId
-				d.identityMu.Unlock()
 			}
 			// Watchers start here, in stream order, so a later
 			// Watch/UnwatchProjectConfigs for the same path cannot be

@@ -378,7 +378,7 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog).toBeVisible();
 
     // First step is Compute — verify the heading is visible.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
   });
 
@@ -466,7 +466,8 @@ test.describe('Onboarding Flow', () => {
     await expect(
       dialog.getByText('Install Reliant on that machine', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(dialog.getByText('reliant daemon start', { exact: true })).toBeVisible();
+    // .first(): the folded "Not seeing a code?" hint repeats the command.
+    await expect(dialog.getByText('reliant daemon start', { exact: true }).first()).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'Pairing code' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
 
@@ -646,7 +647,7 @@ test.describe('Onboarding Flow', () => {
     await expect(backButton).toBeVisible();
     await backButton.click();
 
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -668,7 +669,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -755,7 +756,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
     // Still on Compute — the step did not navigate away.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
   });
 });
 
@@ -1005,7 +1006,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
 
