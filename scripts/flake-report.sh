@@ -9,8 +9,9 @@
 #
 # Run it from the root of the Go module at the run's commit.
 #
-# Owner policy (2026-10-30): a flaky test never keeps main red; it is fixed
-# within the day or removed with a `flake:removed` issue. New tests are kept
+# Owner policy (2026-11-01): flaky = delete immediately; rewrite as a new
+# deterministic test if it's worth having. A deleted test gets a
+# `flake:removed` issue. New tests are kept
 # out by the flake check (each added or edited test runs three times before it
 # merges). This script is the net for EXISTING tests: it turns "failed, then
 # passed on the same commit" into an issue somebody triages, instead of a red
@@ -234,7 +235,7 @@ for entry in "${passed[@]}"; do
     continue
   fi
   # shellcheck disable=SC2016 # the backticks are markdown, not command substitution
-  body="$(printf '`%s` in `%s` failed on main in %s (commit `%s`), then **passed** when rerun alone on the same commit (`go test -count=1 -run ^%s$`).\n\n### Failure\n\n```\n%s\n```\n\n### What to do\n\nOwner policy: a flaky test never keeps main red. Fix it within the day, or delete the test (or its flaky assertion) and open a `flake:removed` issue with its body, the failure signature and its frequency. If the failure is the host (inotify, fd or disk budget, a download), make the test skip with a message naming the missing resource.\n\nFiled by `scripts/flake-report.sh`; later occurrences are added as comments.\n' \
+  body="$(printf '`%s` in `%s` failed on main in %s (commit `%s`), then **passed** when rerun alone on the same commit (`go test -count=1 -run ^%s$`).\n\n### Failure\n\n```\n%s\n```\n\n### What to do\n\nOwner policy: flaky = delete immediately; rewrite as a new deterministic test if it is worth having. Delete the test (or its flaky assertion) and open a `flake:removed` issue with its body and the failure signature. If the failure is the host (inotify, fd or disk budget, a download), make the test skip with a message naming the missing resource.\n\nFiled by `scripts/flake-report.sh`; later occurrences are added as comments.\n' \
     "$t" "$pkg" "$run_url" "${sha:0:12}" "$t" "$ex")"
   if gh issue create -R "$repo" --title "$title" --label "$label" --body "$body" >/dev/null; then
     say "opened an issue for $t"

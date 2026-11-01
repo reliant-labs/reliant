@@ -108,12 +108,12 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
   repeat does not merge. A red main opens a `ci:main-red` issue. Details:
   `dev-docs/merge-and-release-gates.md`.
-- **A flaky test never blocks a merge or keeps main red** (owner, 2026-10-30:
-  "I'd rather remove a test than have it be flaky"). An existing test that
-  fails intermittently is fixed within the day, or deleted (the test, or just
-  its flaky assertion) in the same PR that finds it, with an issue labelled
-  `flake:removed` holding the test body, the failure signature and its
-  frequency, so coverage is restored on purpose later. A failure caused by the
+- **Flaky = delete immediately; rewrite as a new deterministic test if it's
+  worth having** (owner, 2026-11-01: "a flaky test is a broken test, and is
+  less useful than if we just deleted that test"). An existing test that fails
+  intermittently is deleted, not root-caused (the test, or just its flaky
+  assertion), in the same PR that finds it, with an issue labelled
+  `flake:removed` holding the test body and the failure signature. A failure caused by the
   host (inotify or fd budget exhausted, disk full) makes the test `t.Skip` with
   a message naming the missing resource, never fail. Never re-run to green: the
   `Flake report` workflow on main reruns failed tests once and files a
