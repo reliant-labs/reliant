@@ -185,7 +185,7 @@ func (s *Service) CreateWorktree(
 	pending := *worktree
 	go func() {
 		defer cancel()
-		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
+		s.finishWorktreeCreate(bgCtx, userID, placement, createReq, &pending)
 	}()
 
 	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
@@ -218,8 +218,10 @@ const worktreeCreateBudget = 10 * time.Minute
 // finishWorktreeCreate performs the daemon-side worktree creation and settles
 // the row to ACTIVE or FAILED, then tells clients. It runs on a context
 // detached from the client request; nothing here may assume a caller is still
-// listening.
-func (s *Service) finishWorktreeCreate(ctx context.Context, userID string, req workspacecreate.Request, worktree *db.Worktree) {
-	_ = workspacecreate.Finish(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, daemonID: req.OwnerDaemonID}, req, worktree)
+// listening. placement is the target the request placed it on
+// (req.OwnerDaemonID is its daemon), so a no-machine chat's checkouts wake
+// nothing.
+func (s *Service) finishWorktreeCreate(ctx context.Context, userID string, placement machinewake.Target, req workspacecreate.Request, worktree *db.Worktree) {
+	_ = workspacecreate.Finish(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, target: placement}, req, worktree)
 	s.emitWorktreeChanged(ctx, userID, req.Project.ID, worktree.ID)
 }
