@@ -79,16 +79,24 @@ enum OwnerType {
   OWNER_TYPE_ORGANIZATION = 2;
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 enum DaemonSize {
+  reserved 1 to 5;
+  reserved "DAEMON_SIZE_SMALL", "DAEMON_SIZE_MEDIUM", "DAEMON_SIZE_LARGE";
   DAEMON_SIZE_UNSPECIFIED = 0;
-  DAEMON_SIZE_SMALL = 1; // 500m/2 CPU, 2Gi/4Gi RAM
-  DAEMON_SIZE_MEDIUM = 2; // 1/4 CPU, 4Gi/8Gi RAM
-  DAEMON_SIZE_LARGE = 3; // 2/8 CPU, 8Gi/16Gi RAM
-  DAEMON_SIZE_XL = 4; // 4/16 CPU, 16Gi/32Gi RAM
-  DAEMON_SIZE_2XL = 5; // 8/32 CPU, 32Gi/64Gi RAM
+  DAEMON_SIZE_S1 = 6; // 1 vCPU, 2 GiB
+  DAEMON_SIZE_S2 = 7; // 1 vCPU, 4 GiB
+  DAEMON_SIZE_M = 8; // 2 vCPU, 4 GiB
+  DAEMON_SIZE_L = 9; // 4 vCPU, 8 GiB
+  DAEMON_SIZE_XL = 10; // 8 vCPU, 16 GiB
+  DAEMON_SIZE_2XL = 11; // 15 vCPU, 32 GiB
+  DAEMON_SIZE_3XL = 12; // 30 vCPU, 64 GiB
 }
 
 // DaemonDiskMode is where a managed machine's disk lives, fixed at create.
@@ -513,13 +521,23 @@ message DaemonPricing {
   // month (730 hours), running or suspended, in cents, as an exact decimal
   // string (never a float: it is money).
   string storage_cents_per_gib_month = 4;
+  // Immutable accepted exchange/rate version, independent of retail merchandising.
+  string pricing_version = 5;
+  // Candidate catalog is staged only; false until all routes are commissioned.
+  bool activation_ready = 6;
+  string activation_hold_reason = 7;
 }
 
 // DaemonSizePrice is one size's row of DaemonPricing.
 message DaemonSizePrice {
   string size = 1;
-  // Small-daemon-hours this size burns per wall-clock hour.
-  int64 multiplier = 2;
+  // Deprecated integer multiplier cannot represent exact cost-weight fractions.
+  int64 multiplier = 2 [deprecated = true];
+  // Exact rational num/den; not retail-price credit or a runtime billing multiplier.
+  string cost_weight = 5;
+  string route_id = 6;
+  // Canonical exact rational cents per running hour (num/den).
+  string exact_hourly_price_cents = 7;
   // Overage price per wall-clock hour at this size, in cents, as an exact
   // decimal string: multiplier × the small hourly price.
   string hourly_price_cents = 3;

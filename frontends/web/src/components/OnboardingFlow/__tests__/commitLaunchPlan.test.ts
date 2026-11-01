@@ -454,10 +454,13 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
   // the tile, was charged for the XL plan at checkout, and got a 1-CPU box —
   // the tile changed the price and nothing else.
   it.each([
-    ["plan_compute_small", 1],
-    ["plan_compute_medium", 2],
-    ["plan_compute_large", 3],
-    ["plan_compute_xl", 4],
+    ["plan_compute_s1", 6],
+    ["plan_compute_s2", 7],
+    ["plan_compute_m", 8],
+    ["plan_compute_l", 9],
+    ["plan_compute_xl", 10],
+    ["plan_compute_2xl", 11],
+    ["plan_compute_3xl", 12],
   ])("provisions the size %s names", async (computePlanId, expectedSize) => {
     const deps = makeDeps();
 
@@ -468,16 +471,15 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
     );
   });
 
-  // An unknown or absent plan id falls back to the smallest machine rather
-  // than failing: the user still gets something to work on, and small is the
-  // only size every plan allows.
-  it("falls back to the smallest machine when no plan was recorded", async () => {
+  // An unknown or absent plan id falls back to M (the default size and the
+  // coupon unit) rather than failing: the user still gets something to work on.
+  it("falls back to M when no plan was recorded", async () => {
     const deps = makeDeps();
 
     await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(deps.createDaemon).toHaveBeenCalledWith(
-      expect.objectContaining({ size: 1 }),
+      expect.objectContaining({ size: 8 }),
     );
   });
 

@@ -34,11 +34,10 @@ import Button from "@/components/forge-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui";
 import { AllowanceMeter } from "./AllowanceMeter";
 import { AttributionTable } from "./AttributionTable";
-import { BudgetCapControl } from "./BudgetCapControl";
 import { EnforcementPanel } from "./EnforcementPanel";
 import { formatCents } from "./usageModel";
 
-import type { OverageRequestFields, UsageSummary } from "./usageModel";
+import type { UsageSummary } from "./usageModel";
 
 export interface DeployUsageSectionProps {
   /** Everything to render, already folded by buildUsageSummary. */
@@ -51,9 +50,6 @@ export interface DeployUsageSectionProps {
    */
   error?: { message?: string } | null;
   onRetry?: () => void;
-  /** Receives the FULL infra overage request — budgetCents, always. */
-  onSaveCap: (fields: OverageRequestFields) => void;
-  isSavingCap?: boolean;
   /** id → name, for the attribution table. */
   deploymentNames?: Map<string, string>;
   environmentNames?: Map<string, string>;
@@ -88,8 +84,6 @@ export function DeployUsageSection({
   isLoading,
   error,
   onRetry,
-  onSaveCap,
-  isSavingCap,
   deploymentNames,
   environmentNames,
 }: DeployUsageSectionProps) {
@@ -143,10 +137,8 @@ export function DeployUsageSection({
     );
   }
 
-  // A plan that declares no infrastructure dimensions at all is the
-  // no-subscription state: the server reports allowances from the active
-  // compute subscription and from nowhere else.
-  const hasPlan = summary.dimensions.length > 0;
+  // Zero included units is normal PAYG, not evidence of a missing subscription.
+  const hasDimensions = summary.dimensions.length > 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -169,38 +161,18 @@ export function DeployUsageSection({
           These are estimates, not an invoice.
         </span>{" "}
         We measure what your deployments are running once a minute and price
-        it against your plan, so figures trail slightly behind. Your final
+        it at app hosting usage rates, so figures trail slightly behind. Your final
         invoice is produced when the period closes and may differ.
       </p>
 
-      {/*
-        NO SUBSCRIPTION. Explained, not rendered as an empty dashboard: there
-        is no free tier, so this state is normal for a new account rather than
-        an error, and the consequence (every unit bills from the first, one
-        deployment permitted) is what the user actually needs to know.
-      */}
-      {!hasPlan ? (
-        <div className="rounded-md border border-warning/40 bg-warning/10 p-4">
-          <p className="text-sm font-medium text-foreground">
-            No compute plan on this account
-          </p>
-          <div className="mt-2 flex flex-col gap-2 text-xs leading-relaxed text-muted-foreground">
-            <p>
-              You have access to deployments, but no compute plan — so there is
-              no included allowance to draw down. There is no free tier.
-            </p>
-            <p>
-              Until a plan is active you can run{" "}
-              <span className="font-medium text-foreground">one</span>{" "}
-              deployment, and any usage bills from the first unit.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      <p className="text-sm text-muted-foreground">
+        Pay-as-you-go app hosting has no included CPU, memory or storage allowance.
+        Machine subscriptions are separate. Authorizing hosting does not bill historical unpaid usage.
+      </p>
 
-      {/* 1. What am I using, against what am I allowed? */}
-      {hasPlan ? (
-        <Panel title="Consumption against allowance">
+      {/* 1. Resource usage, independent of machine entitlements. */}
+      {hasDimensions ? (
+        <Panel title="App hosting resource usage">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {summary.dimensions.map((reading) => (
               <AllowanceMeter
@@ -222,14 +194,13 @@ export function DeployUsageSection({
               {formatCents(summary.accruedCents)}
             </p>
             <p className="text-xs text-muted-foreground">
-              Estimated cost of everything metered so far, including usage inside
-              your allowance.
+              Estimated retail cost of the attribution rows shown below, not a complete monthly charge.
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex flex-col gap-1">
-            <StatCaption>Overage this period</StatCaption>
+            <StatCaption>Hosting usage charges this period</StatCaption>
             {/*
               The SERVER's accrued-overage figure, not a client re-derivation.
               It is the number the ceiling is compared against, and the proto is
@@ -250,8 +221,8 @@ export function DeployUsageSection({
               {summary.cap.kind === "capped"
                 ? `Against your ${formatCents(summary.cap.budgetCents)} monthly ceiling.`
                 : summary.accruedOverageCents > 0
-                  ? "Consumption past your included allowance. You have no ceiling set."
-                  : "You are inside your included allowance on every dimension."}
+                  ? "Metered app hosting usage, independent of machine billing."
+                  : "No app hosting usage charges reported for this period."}
             </p>
             {summary.budgetCapReached ? (
               <p className="text-xs font-medium text-destructive-ink">
@@ -273,17 +244,9 @@ export function DeployUsageSection({
 
       {/* 4. How do I stop it? — plus where the tenant sits on the ladder. */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Spending cap">
-          <BudgetCapControl
-            value={summary.cap}
-            onSubmit={onSaveCap}
-            isSubmitting={isSavingCap}
-            disabledReason={
-              hasPlan
-                ? undefined
-                : "A spending ceiling limits overage against a plan's included allowance. With no plan on this account there is no allowance to exceed."
-            }
-          />
+        <Panel title="Monthly admission budget">
+          <p className="text-sm">Your budget is recorded with the app hosting billing agreement above. Changing it is not supported here.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Admission and suspension follow measured usage. Enforcement can lag and in-flight work may keep accruing charges; this is not a guaranteed maximum bill. Storage is not deleted.</p>
         </Panel>
         <Panel title="Enforcement">
           <EnforcementPanel dimensions={summary.dimensions} />
