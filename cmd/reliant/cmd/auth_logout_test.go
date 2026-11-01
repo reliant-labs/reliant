@@ -25,7 +25,7 @@ func isolateLogout(t *testing.T) {
 func writeDaemonSignIn(t *testing.T, server, sub string) {
 	t.Helper()
 	require.NoError(t, auth.WriteDaemonCredentials(&auth.DaemonCredentials{
-		PAT: "rlat_DAEMON_" + sub, ServerURL: server, Sub: sub, RegisteredAt: time.Now().UTC(),
+		PAT: "rlat_DAEMON_" + sub, ServerURL: server, Sub: sub, RegisteredAt: fixtureTime,
 	}))
 }
 

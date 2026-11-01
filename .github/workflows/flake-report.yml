@@ -4,9 +4,9 @@
 # WHY THIS EXISTS
 # ===============
 #
-# Owner policy (2026-10-30): "I'd rather remove a test than have it be flaky."
-# A flaky test is fixed within the day or removed with a `flake:removed` issue;
-# it never keeps main red. NEW tests are kept out before they merge: `task
+# Owner policy (2026-11-01): flaky = delete immediately; rewrite as a new
+# deterministic test if it's worth having. A deleted test gets a
+# `flake:removed` issue; a flake never keeps main red. NEW tests are kept out before they merge: `task
 # test:flake` runs every added or edited test three times. EXISTING tests have
 # no such net, and the 2026-10-30 purge found the cost of that: a test failing
 # one main run in nine (rollout_test.go's lagging-replica check) read as "main

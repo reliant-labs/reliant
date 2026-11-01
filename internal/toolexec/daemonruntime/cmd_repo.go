@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -34,6 +35,11 @@ type repoDiscoverFound struct {
 
 type repoDiscoverResponse struct {
 	Discovered []repoDiscoverFound `json:"discovered"`
+	// Truncated is true when the scan stopped before covering the project
+	// (repo.Discovery.Truncated): Discovered is then partial, and
+	// TruncatedReason says why. A caller shows what was found and says so.
+	Truncated       bool   `json:"truncated,omitempty"`
+	TruncatedReason string `json:"truncated_reason,omitempty"`
 	// HasForge is true when forge.yaml exists at the requested root path.
 	// Used by ProjectService.CreateProject to set projects.is_forge without a
 	// second daemon round-trip. Detection mirrors the os.Stat check in
@@ -55,15 +61,17 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	found, err := repo.Discover(ctx, req.Path, req.MaxDepth)
+	found, err := repo.Discover(ctx, req.Path, repo.Options{MaxDepth: req.MaxDepth, Deadline: answerBy(ctx)})
 	if err != nil {
 		return nil, fmt.Errorf("repo discovery failed: %w", err)
 	}
 
 	resp := repoDiscoverResponse{
-		Discovered: make([]repoDiscoverFound, len(found)),
+		Discovered:      make([]repoDiscoverFound, len(found.Repos)),
+		Truncated:       found.Truncated,
+		TruncatedReason: found.TruncatedReason,
 	}
-	for i, f := range found {
+	for i, f := range found.Repos {
 		resp.Discovered[i] = repoDiscoverFound{
 			RelativePath: f.RelativePath,
 			Name:         f.Name,
@@ -75,6 +83,22 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 		resp.ForgeProjectName = readForgeProjectName(req.Path)
 	}
 	return json.Marshal(resp)
+}
+
+// answerBy is when a scan answering under ctx's deadline stops walking, so its
+// partial answer still reaches the caller: a fifth of the time left, at most a
+// second, before the deadline. Zero (no bound beyond the walk's own) when ctx
+// has none.
+func answerBy(ctx context.Context) time.Time {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return time.Time{}
+	}
+	margin := time.Until(deadline) / 5
+	if margin > time.Second {
+		margin = time.Second
+	}
+	return deadline.Add(-margin)
 }
 
 // forgeYAMLMaxBytes bounds the forge.yaml read. A real manifest is a few KB;

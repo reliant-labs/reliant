@@ -2,11 +2,13 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +17,7 @@ func TestDiscover_SingleRepo(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
 
-	found, err := Discover(context.Background(), dir, 2)
+	found, err := discover(t, dir, 2)
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	require.Equal(t, "", found[0].RelativePath)
@@ -28,7 +30,7 @@ func TestDiscover_MultiRepo_NoParentGit(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, name, ".git"), 0o755))
 	}
 
-	found, err := Discover(context.Background(), dir, 2)
+	found, err := discover(t, dir, 2)
 	require.NoError(t, err)
 	require.Len(t, found, 2)
 
@@ -49,7 +51,7 @@ func TestDiscover_MultiRepo_WithParentGit(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, name, ".git"), 0o755))
 	}
 
-	found, err := Discover(context.Background(), dir, 2)
+	found, err := discover(t, dir, 2)
 	require.NoError(t, err)
 	// Should find the children, not the parent
 	require.Len(t, found, 2)
@@ -70,7 +72,7 @@ func TestDiscover_SkipsIgnoredDirs(t *testing.T) {
 	// But a real child repo should be found
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "api", ".git"), 0o755))
 
-	found, err := Discover(context.Background(), dir, 3)
+	found, err := discover(t, dir, 3)
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	require.Equal(t, "api", found[0].Name)
@@ -79,7 +81,7 @@ func TestDiscover_SkipsIgnoredDirs(t *testing.T) {
 func TestDiscover_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
-	found, err := Discover(context.Background(), dir, 2)
+	found, err := discover(t, dir, 2)
 	require.NoError(t, err)
 	require.Empty(t, found)
 }
@@ -95,7 +97,7 @@ func TestDiscover_SymlinkedRootFindsNestedRepos(t *testing.T) {
 	link := filepath.Join(t.TempDir(), "reliant-labs")
 	require.NoError(t, os.Symlink(target, link))
 
-	found, err := Discover(context.Background(), link, 2)
+	found, err := discover(t, link, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"control-plane": true, "forge": true, "reliant": true}, names(found))
 }
@@ -104,7 +106,7 @@ func TestDiscover_SymlinkedRootFindsNestedRepos(t *testing.T) {
 // directory", which the server reads as "not on this machine" rather than as
 // a scan that found nothing.
 func TestDiscover_MissingPathSaysSo(t *testing.T) {
-	_, err := Discover(context.Background(), filepath.Join(t.TempDir(), "gone"), 2)
+	_, err := discover(t, filepath.Join(t.TempDir(), "gone"), 2)
 	require.Error(t, err)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.Contains(t, err.Error(), "no such file or directory")
@@ -143,7 +145,7 @@ func TestDiscover_LinkedWorktreesCollapseToMain(t *testing.T) {
 	linkedCheckout(t, filepath.Join(root, "b-wt"), filepath.Join(root, "zmain"), "b")
 	mainCheckout(t, filepath.Join(root, "other"))
 
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"zmain": true, "other": true}, names(found))
 }
@@ -154,7 +156,7 @@ func TestDiscover_LinkedWorktreeRelativeGitdir(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "w"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "w", ".git"), []byte("gitdir: ../main/.git/worktrees/w\n"), 0o644))
 
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"main": true}, names(found))
 }
@@ -169,7 +171,7 @@ func TestDiscover_LinkedWorktreesWithMainOutsideScan(t *testing.T) {
 		linkedCheckout(t, filepath.Join(root, n), filepath.Join(outside, n), "t")
 	}
 
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"cp": true, "forge": true, "reliant": true}, names(found))
 }
@@ -181,7 +183,7 @@ func TestDiscover_TwoLinkedWorktreesMainOutsideKeepFirst(t *testing.T) {
 	linkedCheckout(t, filepath.Join(root, "a"), filepath.Join(outside, "m"), "x")
 	linkedCheckout(t, filepath.Join(root, "b"), filepath.Join(outside, "m"), "y")
 
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"a": true}, names(found))
 }
@@ -192,7 +194,7 @@ func TestDiscover_UnparseableGitFileIsOwnIdentity(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, n), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, n, ".git"), []byte("garbage"), 0o644))
 	}
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"a": true, "b": true}, names(found))
 }
@@ -201,7 +203,7 @@ func TestDiscover_NestedLinkedWorktree(t *testing.T) {
 	root := t.TempDir()
 	mainCheckout(t, filepath.Join(root, "grp", "main"), "w")
 	linkedCheckout(t, filepath.Join(root, "grp2", "w"), filepath.Join(root, "grp", "main"), "w")
-	found, err := Discover(context.Background(), root, 2)
+	found, err := discover(t, root, 2)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{filepath.Join("grp", "main"): true}, names(found))
 }
@@ -224,7 +226,7 @@ func TestDiscover_RemoteURLNeverCarriesACredential(t *testing.T) {
 		require.NoError(t, err, string(out))
 	}
 
-	found, err := Discover(context.Background(), dir, 0)
+	found, err := discover(t, dir, 0)
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	require.Equal(t, "https://github.com/acme/app.git", found[0].RemoteURL)
@@ -260,7 +262,7 @@ func TestContainsRepo_AgreesWithDiscover(t *testing.T) {
 				}
 				require.NoError(t, os.MkdirAll(full, 0o755))
 			}
-			found, err := Discover(context.Background(), dir, 2)
+			found, err := discover(t, dir, 2)
 			require.NoError(t, err)
 			got, err := ContainsRepo(context.Background(), dir, 2)
 			require.NoError(t, err)
@@ -302,4 +304,120 @@ func TestContainsRepo_MissingPathIsAnError(t *testing.T) {
 	t.Parallel()
 	_, err := ContainsRepo(context.Background(), filepath.Join(t.TempDir(), "nope"), 2)
 	require.Error(t, err)
+}
+
+// discover is Discover to depth maxDepth with the default bounds, asserting a
+// scan this small is never cut short.
+func discover(t *testing.T, path string, maxDepth int) ([]Found, error) {
+	t.Helper()
+	d, err := Discover(context.Background(), path, Options{MaxDepth: maxDepth})
+	if err != nil {
+		return nil, err
+	}
+	require.False(t, d.Truncated, d.TruncatedReason)
+	return d.Repos, nil
+}
+
+// A project rooted at a home directory: repos under Dev/ are found, and the
+// scan never enters ~/Library, hidden directories or dependency/cache trees,
+// whatever checkouts they hold.
+func TestDiscover_SkipsLibraryHiddenAndCacheDirs(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	for _, p := range []string{
+		"Dev/app/.git",
+		"Library/Mobile Documents/.git",
+		"Library/x/.git",
+		".config/dotfiles/.git",
+		".cache/repo/.git",
+		"code/node_modules/.git",
+		"Pods/.git",
+		"ios/DerivedData/.git",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(home, p), 0o755))
+	}
+	found, err := discover(t, home, 2)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{filepath.Join("Dev", "app"): true}, names(found))
+}
+
+// A walk that hits its entry budget stops, keeps what it found, and says so.
+// Walk order is lexical, so "aaa" is found before the budget is spent on
+// "many/".
+func TestDiscover_EntryBudgetReturnsPartialAndSaysSo(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "aaa", ".git"), 0o755))
+	for i := 0; i < 50; i++ {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "many", fmt.Sprintf("d%02d", i)), 0o755))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "zzz", ".git"), 0o755))
+
+	d, err := Discover(context.Background(), root, Options{MaxEntries: 20})
+	require.NoError(t, err)
+	require.True(t, d.Truncated)
+	require.Contains(t, d.TruncatedReason, "20 entries")
+	require.Equal(t, map[string]bool{"aaa": true}, names(d.Repos))
+
+	// Unbounded, the same tree is whole.
+	found, err := discover(t, root, 2)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"aaa": true, "zzz": true}, names(found))
+}
+
+// A deadline that has passed, or a caller that has gone, stops the walk with
+// an answer flagged partial — never an error that reads as a failed scan, and
+// never an empty list that reads as "no repositories".
+func TestDiscover_DeadlineAndCancellationAreTruncationNotErrors(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub", ".git"), 0o755))
+
+	d, err := Discover(context.Background(), root, Options{Deadline: time.Now().Add(-time.Second)})
+	require.NoError(t, err)
+	require.True(t, d.Truncated)
+	require.Contains(t, d.TruncatedReason, "ran out of time")
+	// The root checkout is known without walking.
+	require.Equal(t, map[string]bool{"": true}, names(d.Repos))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	d, err = Discover(ctx, root, Options{})
+	require.NoError(t, err)
+	require.True(t, d.Truncated)
+	require.Contains(t, d.TruncatedReason, "request ended")
+}
+
+// Remotes come from the repositories' config files: discovery runs no git, so
+// it works, and costs the same, with no git on PATH.
+func TestDiscover_ReadsRemotesWithoutRunningGit(t *testing.T) {
+	t.Setenv("PATH", "")
+	root := t.TempDir()
+	for name, url := range map[string]string{"api": "git@github.com:acme/api.git", "web": "https://example.com/web.git"} {
+		gitDir := filepath.Join(root, name, ".git")
+		require.NoError(t, os.MkdirAll(gitDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(gitDir, "config"),
+			[]byte("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = "+url+"\n"), 0o644))
+	}
+	// A linked worktree whose .git file points into api's .git/worktrees.
+	wtMeta := filepath.Join(root, "api", ".git", "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(wtMeta, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wtMeta, "commondir"), []byte("../..\n"), 0o644))
+	wt := filepath.Join(t.TempDir(), "feature")
+	require.NoError(t, os.MkdirAll(wt, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+wtMeta+"\n"), 0o644))
+
+	found, err := discover(t, root, 2)
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, f := range found {
+		got[f.RelativePath] = f.RemoteURL
+	}
+	require.Equal(t, map[string]string{"api": "git@github.com:acme/api.git", "web": "https://example.com/web.git"}, got)
+
+	linked, err := discover(t, wt, 2)
+	require.NoError(t, err)
+	require.Len(t, linked, 1)
+	require.Equal(t, "git@github.com:acme/api.git", linked[0].RemoteURL)
 }

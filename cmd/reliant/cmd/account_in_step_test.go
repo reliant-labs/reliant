@@ -7,7 +7,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ var (
 func loginAs(t *testing.T, server, token string, account cliauth.Account) {
 	t.Helper()
 	_, err := cliauth.Store(server, cliauth.Session{
-		Credential: credentials.Credential{Token: token, TokenPrefix: token, CreatedAt: time.Now()},
+		Credential: credentials.Credential{Token: token, TokenPrefix: token, CreatedAt: fixtureTime},
 		Account:    account,
 	})
 	require.NoError(t, err)
@@ -41,7 +40,7 @@ func loginAs(t *testing.T, server, token string, account cliauth.Account) {
 func saveDaemonSignIn(t *testing.T, server, sub, pat string, account cliauth.Account, gatewayURL string) {
 	t.Helper()
 	require.NoError(t, auth.WriteDaemonCredentials(&auth.DaemonCredentials{
-		PAT: pat, ServerURL: server, GatewayURL: gatewayURL, Sub: sub, RegisteredAt: time.Now().UTC(),
+		PAT: pat, ServerURL: server, GatewayURL: gatewayURL, Sub: sub, RegisteredAt: fixtureTime,
 		AccountID: account.ID, AccountEmail: account.Email,
 	}))
 }

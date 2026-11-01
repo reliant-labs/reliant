@@ -301,13 +301,43 @@ func (s *Service) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonI
 // correlation logic but targets the passed conn directly rather than resolving
 // the user's default daemon — required when a user has multiple daemons and the
 // caller needs to ask one particular connection about its own disk.
-func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (resp *reliantv1.DaemonCommandResponse, err error) {
+//
+// A connection whose stream has not yet carried a round trip holds the command
+// first (awaitLinkForCommand): see link_liveness.go.
+func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return s.sendCommand(ctx, conn, req, true)
+}
+
+// sendCommand is sendCommandToConn, with the link hold optional: the link
+// probe is what proves the link, so it cannot wait for the proof.
+func (s *Service) sendCommand(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest, awaitLink bool) (resp *reliantv1.DaemonCommandResponse, err error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
 	ctx, span := startDaemonCommandSpan(ctx, conn, req)
 	start := time.Now()
 	defer func() { endDaemonCommandSpan(span, resp, err, time.Since(start)) }()
+
+	timeout := 30 * time.Second
+	if req.TimeoutMs > 0 {
+		timeout = time.Duration(req.TimeoutMs) * time.Millisecond
+	}
+	if awaitLink {
+		held, err := s.awaitLinkForCommand(ctx, conn, req, timeout)
+		if err != nil {
+			return nil, err
+		}
+		if held > 0 {
+			// The hold spent part of the command's budget: what is left
+			// is the daemon's to use, and the round trip is measured from
+			// here so transit_ms is the stream's, not the hold's.
+			timeout -= held
+			if req.TimeoutMs > 0 {
+				req.TimeoutMs = int32(timeout / time.Millisecond)
+			}
+			start = time.Now()
+		}
+	}
 	// The daemon continues this span's trace (its log lines carry the
 	// trace_id). Set on the request the caller handed us; it is ours to
 	// stamp, like RequestId's correlation below.
@@ -346,13 +376,11 @@ func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection,
 	span.AddEvent("daemon.command.queued")
 
 	// Wait for the correlated response.
-	timeout := 30 * time.Second
-	if req.TimeoutMs > 0 {
-		timeout = time.Duration(req.TimeoutMs) * time.Millisecond
-	}
-
 	select {
 	case resp := <-respCh:
+		// Any answer, success or failure, proves the stream carries
+		// traffic both ways.
+		s.linkAnswered(conn, req.CommandType)
 		return resp, nil
 	case <-time.After(timeout):
 		s.cancelDaemonCommand(conn.userID, conn.daemonID, req.RequestId, "daemon command timed out")

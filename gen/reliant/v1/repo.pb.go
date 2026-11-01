@@ -171,10 +171,16 @@ func (x *DiscoverReposRequest) GetMaxDepth() int32 {
 }
 
 type DiscoverReposResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Discovered    []*Repo                `protobuf:"bytes,1,rep,name=discovered,proto3" json:"discovered,omitempty"` // repos found on disk (not yet persisted)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Discovered []*Repo                `protobuf:"bytes,1,rep,name=discovered,proto3" json:"discovered,omitempty"` // repos found on disk (not yet persisted)
+	// truncated is set when the machine's scan stopped before covering the
+	// project (its entry budget or deadline): discovered is then what it found
+	// until then, and truncated_reason says why ("it ran out of time"). Show the
+	// list as partial; never present it, or an empty one, as the whole answer.
+	Truncated       bool   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	TruncatedReason string `protobuf:"bytes,3,opt,name=truncated_reason,json=truncatedReason,proto3" json:"truncated_reason,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DiscoverReposResponse) Reset() {
@@ -212,6 +218,20 @@ func (x *DiscoverReposResponse) GetDiscovered() []*Repo {
 		return x.Discovered
 	}
 	return nil
+}
+
+func (x *DiscoverReposResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *DiscoverReposResponse) GetTruncatedReason() string {
+	if x != nil {
+		return x.TruncatedReason
+	}
+	return ""
 }
 
 type ListReposRequest struct {
@@ -675,11 +695,13 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\x14DiscoverReposRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
-	"\tmax_depth\x18\x02 \x01(\x05R\bmaxDepth\"I\n" +
+	"\tmax_depth\x18\x02 \x01(\x05R\bmaxDepth\"\x92\x01\n" +
 	"\x15DiscoverReposResponse\x120\n" +
 	"\n" +
 	"discovered\x18\x01 \x03(\v2\x10.reliant.v1.RepoR\n" +
-	"discovered\"9\n" +
+	"discovered\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12)\n" +
+	"\x10truncated_reason\x18\x03 \x01(\tR\x0ftruncatedReason\"9\n" +
 	"\x10ListReposRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\";\n" +

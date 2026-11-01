@@ -129,7 +129,8 @@ func attach(t *testing.T, svc *Service, userID, daemonID string) (*pipeStream, b
 	svc.connections[daemonID] = conn
 	svc.userDaemons[userID] = []string{daemonID}
 	svc.mu.Unlock()
-	svc.notifyConnected(userID, daemonID, "", "", "")
+	svc.notifyConnected(userID, daemonID)
+	svc.notifyLinkReady(conn)
 	go svc.runSender(conn)
 	go func() {
 		_ = svc.handleIncoming(context.Background(), conn)

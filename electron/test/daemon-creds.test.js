@@ -990,7 +990,8 @@ test('ensureDaemonPATForOrigin: records the signed-in user as the account the PA
       }),
     };
     await withFetchStub(
-      async () => jsonResponse(200, { token: 'rlat_fresh000000000000000000000000000', info: { id: 'tok_1' } }),
+      // A placeholder of the rlat_ shape (32 characters after the prefix), not a credential.
+      async () => jsonResponse(200, { token: `rlat_${'fresh'.padEnd(32, '0')}`, info: { id: 'tok_1' } }),
       async () => {
         await ensureDaemonPATForOrigin({ authStorage, apiUrl: 'https://reliantapi.com' });
       }
