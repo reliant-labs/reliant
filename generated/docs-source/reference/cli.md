@@ -6222,6 +6222,15 @@ SUPERSEDED rather than succeeding on bytes it was never asked about.
 page's `next_before` as --before, and stop on an EMPTY next_before rather than
 on a short page.
 
+BOUND IS NOT APPLIED. A promotion is recorded before it is applied, so the
+newest promotion names what the env is BOUND to, which is what it runs only if
+its apply passed. Every --history entry carries `apply.status` (passed,
+failed, or unrecorded), and so does the default view's --json (`apply`,
+with `last_applied_release` when the bound one's apply failed). The text
+view says it in one line:
+  current  v1.7.83 applied; v1.7.85 promoted but NOT APPLIED (apply failed: …)
+A script that acts on "the env runs X" checks apply.status == "passed".
+
 EXIT CODES — a pipeline branches on these directly:
 
   0  everything declared is running (or nothing is declared)
@@ -6260,6 +6269,7 @@ Examples:
   forge env status prod --wait                      # gate a release on the rollout
   forge env status prod --wait --timeout 0 --json   # where is it NOW? one read
   forge env status prod --history --limit 1 --json | jq -r '.promotions[0].id'
+  forge env status prod --history --limit 1 --json | jq -r '.promotions[0].apply.status'
   forge env status prod --json | jq -r '.images[] | select(.state == "drift")'
 
 ```
@@ -14081,8 +14091,8 @@ List, start, stop, resize and rename your machines
 Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
-suspends a running one; resize changes a SUSPENDED machine's size (small,
-medium, large, xl, 2xl), which takes effect when it next starts. To resize a
+suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
+m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
 called, and nothing else.
 
@@ -14148,7 +14158,7 @@ starts. A running machine is refused: stop it first. Disks only grow, so a
 downsize keeps the larger disk.
 
 ```
-reliant machine resize <name|id> <small|medium|large|xl|2xl>
+reliant machine resize <name|id> <s1|s2|m|l|xl|2xl|3xl>
 ```
 
 ---
