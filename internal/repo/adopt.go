@@ -68,6 +68,19 @@ func NoReposMessage(project *db.Project) string {
 		project.Path, DefaultMaxDepth)
 }
 
+// SearchCutShortError is AdoptFromDaemon's answer when the machine's scan of
+// the project stopped early (repo.Discovery.Truncated) before finding any
+// repository: unlike NoReposMessage's case, the machine did not finish
+// looking, so the caller must not say the project has none.
+type SearchCutShortError struct {
+	Path, Reason string
+}
+
+func (e *SearchCutShortError) Error() string {
+	return fmt.Sprintf("the search for git repositories in %s stopped early, because %s, without finding one; add the repository by its folder inside the project, or open the project at the repository's own folder",
+		e.Path, e.Reason)
+}
+
 // AdoptFromDaemon reconciles the repos registry with the filesystem. Registry
 // rows are written by the local create/init/add flows, so a repo that came to
 // exist any other way — a project cloned onto a cloud machine, a project the
@@ -98,9 +111,19 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCom
 			Name         string `json:"name"`
 			RemoteURL    string `json:"remote_url,omitempty"`
 		} `json:"discovered"`
+		Truncated       bool   `json:"truncated"`
+		TruncatedReason string `json:"truncated_reason"`
 	}
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, fmt.Errorf("read repo.discover answer for %s: %w", project.Path, err)
+	}
+	if resp.Truncated {
+		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", project.Path,
+			"reason", resp.TruncatedReason, "found", len(resp.Discovered))
+		if len(resp.Discovered) == 0 {
+			// Not "there is no repository": the machine did not finish looking.
+			return nil, &SearchCutShortError{Path: project.Path, Reason: resp.TruncatedReason}
+		}
 	}
 	if len(resp.Discovered) == 0 {
 		return nil, nil

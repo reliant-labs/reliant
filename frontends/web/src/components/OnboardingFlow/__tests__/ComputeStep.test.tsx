@@ -473,7 +473,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     ).not.toBeDisabled();
   });
 
-  it("redeeming a compute coupon shows the granted minutes and refetches eligibility so the button enables in place", async () => {
+  it("redeeming a compute coupon confirms it and refetches eligibility so the button enables in place", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -502,6 +502,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await waitFor(() => {
       expect(
+        // #1844: the usage balance, not the coupon toast, states the hours.
         screen.getByText(/Machine-time coupon redeemed/),
       ).toBeInTheDocument();
     });

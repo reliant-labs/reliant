@@ -1319,6 +1319,10 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		switch resp.ErrorCode {
 		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))
+		case ErrorCodeDaemonReconnecting:
+			// The gateway held it for a stream that had not answered yet
+			// and released it unsent: nothing ran.
+			return nil, notDispatched(fmt.Errorf("daemon command %q: %w", commandType, ErrDaemonReconnecting), daemonID)
 		case ErrorCodeDaemonRoundTrip:
 			// The gateway could not complete the round trip; the daemon
 			// said nothing.
