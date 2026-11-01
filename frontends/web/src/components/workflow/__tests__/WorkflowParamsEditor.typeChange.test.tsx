@@ -43,9 +43,15 @@ function nameFields(): HTMLInputElement[] {
   return screen.getAllByPlaceholderText("input_name") as HTMLInputElement[];
 }
 
-/** Each input's Type select, in order: the selects that offer "Integer". */
-function typeSelects(): HTMLSelectElement[] {
-  return screen.getAllByRole("option", { name: "Integer" }).map((o) => o.closest("select") as HTMLSelectElement);
+/** Each input's Type picker, in order. */
+function typeSelects(): HTMLElement[] {
+  return screen.getAllByLabelText(/^type$/i);
+}
+
+/** Picks an option of a Combobox: opens it, then clicks the option. */
+async function choose(trigger: HTMLElement, name: RegExp) {
+  await userEvent.click(trigger);
+  await userEvent.click(screen.getByRole("option", { name }));
 }
 
 describe("WorkflowParamsEditor type change", () => {
@@ -58,7 +64,7 @@ describe("WorkflowParamsEditor type change", () => {
     await userEvent.click(screen.getByRole("button", { name: /add input/i }));
     fireEvent.change(nameFields()[0], { target: { value: "max_attempts" } });
 
-    await userEvent.selectOptions(typeSelects()[0], "integer");
+    await choose(typeSelects()[0], /^Integer/);
 
     expect(nameFields()[0]).toHaveValue("max_attempts");
     const params = lastParams(onUpdate);
@@ -73,8 +79,8 @@ describe("WorkflowParamsEditor type change", () => {
     await userEvent.click(addInput);
     await userEvent.click(addInput);
 
-    await userEvent.selectOptions(typeSelects()[0], "boolean");
-    await userEvent.selectOptions(typeSelects()[1], "enum");
+    await choose(typeSelects()[0], /^Boolean/);
+    await choose(typeSelects()[1], /^Enum/);
 
     expect(nameFields().map((f) => f.value)).toEqual(["input1", "input2"]);
     const params = lastParams(onUpdate);
@@ -92,9 +98,9 @@ describe("WorkflowParamsEditor type change", () => {
     const onUpdate = renderEmptyEditor();
     await userEvent.click(screen.getByRole("button", { name: /add input/i }));
     fireEvent.change(nameFields()[0], { target: { value: "max_attempts" } });
-    await userEvent.selectOptions(typeSelects()[0], "integer");
+    await choose(typeSelects()[0], /^Integer/);
     fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "3" } });
-    await userEvent.selectOptions(screen.getByLabelText(/visibility in chat/i), "toolbar");
+    await choose(screen.getByLabelText(/visibility in chat/i), /^Toolbar/);
 
     const params = lastParams(onUpdate);
     expect(Object.keys(params)).toEqual(["max_attempts"]);
