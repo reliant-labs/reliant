@@ -104,7 +104,15 @@ func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
 
 	assert.Empty(t, execCtx.WorktreeID)
 	assert.Nil(t, execCtx.DaemonSelector, "plain chat must not pin a daemon selector")
-	assert.Equal(t, "/tmp/project-main", execCtx.ProjectPath)
+	assert.Empty(t, execCtx.ProjectPath, "the directory is the command machine's, resolved once that machine is final")
+
+	// resolveRunCheckout: the project's machine and its own checkout, with
+	// the command pinned there so the two agree.
+	installTestCheckout(t, repo, projectID, userID, "/srv/checkouts/p")
+	require.NoError(t, resolveRunCheckout(ctx, repo, &execCtx))
+	assert.Equal(t, "/srv/checkouts/p", execCtx.ProjectPath, "never projects.path")
+	require.NotNil(t, execCtx.DaemonSelector)
+	assert.Equal(t, testMachine, execCtx.DaemonSelector.ID)
 }
 
 // TestResolveRunExecutorContext_WorktreeWithoutDaemon verifies a legacy worktree

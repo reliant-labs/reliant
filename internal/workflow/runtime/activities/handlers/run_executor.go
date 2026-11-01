@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -28,9 +30,11 @@ type RunExecutor interface {
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
 // Set by the activity before calling ExecuteCommand.
 type RunExecutorContext struct {
-	UserID       string
-	ChatID       string
-	ProjectID    string
+	UserID    string
+	ChatID    string
+	ProjectID string
+	// ProjectPath is the project's checkout on the machine the command runs
+	// on (resolveRunCheckout), never projects.path.
 	ProjectPath  string
 	ProjectName  string
 	WorktreeID   string
@@ -45,6 +49,9 @@ type RunExecutorContext struct {
 	// Credentials is the run node's `credentials` setting ("none" strips
 	// GitHub, git, ssh and cloud credentials from the command's environment).
 	Credentials string
+
+	// project is the chat's project, for resolveRunCheckout.
+	project *db.Project
 }
 
 // RemoteRunExecutor routes shell commands through the daemon via ToolExecutor.
@@ -187,17 +194,16 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 	if project == nil {
 		return RunExecutorContext{}, fmt.Errorf("project not found for chat %s", chatID)
 	}
-	if project.Path == "" {
-		return RunExecutorContext{}, fmt.Errorf("project %s has no path", project.ID)
-	}
 
+	// ProjectPath is resolved once the command's machine is final
+	// (resolveRunCheckout): it is that machine's checkout.
 	execCtx := RunExecutorContext{
 		UserID:      project.UserID,
 		ChatID:      chatID,
 		ProjectID:   project.ID,
-		ProjectPath: project.Path,
 		ProjectName: project.Name,
 		NoMachine:   chat.NoMachine,
+		project:     project,
 	}
 
 	// Check if chat has a worktree
@@ -208,8 +214,12 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 			return RunExecutorContext{}, fmt.Errorf("worktree %s lookup failed: %w", *chat.WorktreeID, err)
 		}
 		execCtx.WorktreeID = worktree.ID
-		execCtx.WorktreePath = worktree.Path
-		worktreeOwner = ptrValue(worktree.DaemonID)
+		// The main worktree row mirrors projects.path: the main checkout
+		// is resolved on the command's machine instead.
+		if !worktree.IsMain {
+			execCtx.WorktreePath = worktree.Path
+			worktreeOwner = ptrValue(worktree.DaemonID)
+		}
 	}
 	execCtx.WorktreeDaemonID = worktreeOwner
 	// Live workflow snapshots can predate launch-time pinning. The durable
@@ -219,4 +229,38 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 	execCtx.DaemonSelector = toolDaemonSelector(worktreeOwner, chatDaemonSelector(chat, nil))
 
 	return execCtx, nil
+}
+
+// resolveRunCheckout fills execCtx.ProjectPath with the project's checkout on
+// the machine the command runs on: the selector's machine when it names one,
+// else the machine the project's work goes to — and then pins the command
+// there, so the path and the machine agree. A selector by name or label is
+// left to route as it does (no router here to resolve it), with the project's
+// default checkout as its path.
+//
+// A command in the main checkout of a machine without one returns
+// projectcheckout's refusal (the machines that have it, or cloning it there):
+// the step reports it as a failed command, never a stuck run. A branch
+// worktree's command runs at the worktree, so its machine's checkout is only
+// the project root it is told, best effort.
+func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, execCtx *RunExecutorContext) error {
+	if execCtx.project == nil {
+		return nil
+	}
+	daemonID := ""
+	if execCtx.DaemonSelector != nil {
+		daemonID = execCtx.DaemonSelector.ID
+	}
+	target, err := projectcheckout.ForMachine(ctx, r, nil, execCtx.UserID, execCtx.project, daemonID, checkoutPurpose)
+	if err != nil {
+		if execCtx.WorktreePath != "" {
+			return nil
+		}
+		return err
+	}
+	execCtx.ProjectPath = target.Path
+	if execCtx.DaemonSelector == nil {
+		execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: target.DaemonID}
+	}
+	return nil
 }

@@ -199,6 +199,15 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	}
 	execCtx.Credentials = credentials
 
+	// The command's machine is final: its checkout is the working directory.
+	// A machine without one fails the command with the reason and the way
+	// out (exit -1), never a stuck step.
+	if err := resolveRunCheckout(ctx, a.repo, &execCtx); err != nil {
+		refusal := missingRefusal(err)
+		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
+	}
+
 	// Determine working directory
 	workingDir := execCtx.ProjectPath
 	worktreeID := execCtx.WorktreeID

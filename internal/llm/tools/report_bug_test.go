@@ -121,7 +121,7 @@ func validBugReportInput(title string) map[string]any {
 }
 
 func reportBugContext(chatID string) *rctx.ToolContext {
-	return rctx.NewToolContext(context.Background(), chatID, "thread-main", &db.Project{ID: "project-1"}, nil)
+	return rctx.NewToolContext(context.Background(), chatID, "thread-main", &rctx.Project{ID: "project-1"}, nil)
 }
 
 func TestReportBug_RejectsInvalidInputWithoutFiling(t *testing.T) {

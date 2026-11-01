@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -92,6 +94,18 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 			// The probe runs where the run's commands run: the project root,
 			// with the machine's own credentials (ls-remote authenticates).
 			execCtx.WorktreeID, execCtx.WorktreePath = "", ""
+			// The project root is that machine's own checkout. A machine
+			// without one is the run's one unmet requirement, with the way
+			// out, and nothing runs.
+			if err := resolveRunCheckout(ctx, a.repo, &execCtx); err != nil {
+				report := requirements.Report{Problems: []requirements.Problem{{
+					Kind: "project", Name: execCtx.ProjectName,
+					Problem: svcerr.ToConnect(err).Message(),
+					Fix:     "switch the chat to a machine that has the project, or clone it onto this one",
+				}}}
+				return PreflightRequirementsOutput{Problems: report.Problems},
+					temporal.NewNonRetryableApplicationError(report.Error(), PreflightRequirementsErrType, nil, report.Problems)
+			}
 			if a.machine != nil {
 				machine = a.machine(execCtx)
 			} else {

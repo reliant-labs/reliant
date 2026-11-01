@@ -3020,7 +3020,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=f8d3aa47d4472f5839ed4eeb3477dba9f6189746e3c49a87e00810364160fef3
+// forge:hash=79bba44aba0d1823f9ceeaa462101533731c733cdefb622ec5d02d1e62fe46a6
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3039,6 +3039,7 @@ type MockworktreeStore struct {
 	CreateRepoFunc               func(context.Context, *core.Repo) error
 	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
 	UpdateProjectFunc            func(context.Context, *db.Project, string) error
+	GetProjectFunc               func(context.Context, string) (*db.Project, error)
 	EmitUserRefetchFunc          func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
 	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
@@ -3124,6 +3125,15 @@ func (m *MockworktreeStore) UpdateProject(ctx context.Context, project *db.Proje
 		return m.UpdateProjectFunc(ctx, project, userID)
 	}
 	return contractkit.MockNotSet("MockworktreeStore", "UpdateProject")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockworktreeStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeStore", "GetProject")
 }
 
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.

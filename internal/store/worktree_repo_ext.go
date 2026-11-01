@@ -301,6 +301,18 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN false
 	ELSE COALESCE((worktrees.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false`
 
+// ownerCheckoutPath is the project's checkout ON THE WORKTREE'S OWNER — its
+// project_daemons row — which is the repo a reclaim runs git in on that
+// machine. projects.path is where the project was created, on whichever
+// machine created it; it answers only for a row with no owner checkout on
+// record (a legacy row from before owners were recorded, whose only possible
+// machine is the creating one). The architecture guard
+// (TestProjectPathNeverReachesADaemon) lists this as the one SQL read of it.
+const ownerCheckoutPath = "COALESCE(NULLIF(pd.path, ''), p.path)"
+
+// ownerCheckoutJoin joins a worktree to its owner's checkout of the project.
+const ownerCheckoutJoin = "LEFT JOIN project_daemons AS pd ON pd.project_id = worktrees.project_id AND pd.daemon_id = worktrees.daemon_id"
+
 // ListWorktreesForReclaim returns every workspace whose directory a daemon
 // may still hold: not main, has a path, and not already known to be
 // removed. CREATING and FAILED rows have no directory yet. Archived rows are
@@ -311,8 +323,9 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.user_id AS owner_user_id").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("worktrees.is_main = false").
 		Where("worktrees.path <> ''").
 		Where("worktrees.status NOT IN (?, ?)",
@@ -342,8 +355,9 @@ func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.name AS project_name").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("p.user_id = ?", userID).
 		Where("worktrees.is_main = false").
 		Where("worktrees.deleted_at IS NOT NULL").

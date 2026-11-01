@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 type provenanceStore struct {
@@ -33,7 +33,7 @@ func TestListWorkflowsShowsWhereProjectWorkflowsAreDefined(t *testing.T) {
 		{Name: "release", RelativePath: path, Machine: "laptop", Repo: &config.SyncedRepoState{Repo: "control-plane", Branch: "feat/x", Commit: sha, Dirty: true, DefaultBranch: "main"}},
 	}}}
 	ctx := createTestContext(t, "chat")
-	ctx.Project = &db.Project{ID: "p"}
+	ctx.Project = &rctx.Project{ID: "p"}
 	var sb strings.Builder
 	tool.writeProvenance(ctx, &sb)
 	out := sb.String()
