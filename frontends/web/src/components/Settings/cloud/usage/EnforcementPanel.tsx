@@ -47,12 +47,12 @@ const RUNG_SEVERITY: LadderRung[] = [
 
 const RUNG_COPY: Record<LadderRung, { title: string; body: string }> = {
   none: {
-    title: "Inside your allowance",
+    title: "No resource restrictions reported",
     body: "No restrictions are in effect.",
   },
   notify: {
-    title: "Approaching your allowance",
-    body: "Nothing is restricted yet. Scale-ups are blocked once an allowance is exhausted.",
+    title: "Usage notice",
+    body: "No resource restriction is reported yet. Admission is checked against your hosting budget and resource limits.",
   },
   block_scale_up: {
     title: "Scale-ups are blocked",
@@ -60,7 +60,7 @@ const RUNG_COPY: Record<LadderRung, { title: string; body: string }> = {
   },
   throttle: {
     title: "Throttled",
-    body: "You have been over your allowance long enough that workloads are now rate-limited. They are still running and still serving, just more slowly.",
+    body: "The platform reports workloads are rate-limited. They are still running and still serving, just more slowly.",
   },
   suspend: {
     title: "Suspended",
@@ -107,7 +107,7 @@ const TIER_BEHAVIOUR = [
     tier: "Backend services",
     effect: "Scaled to 0 replicas",
     detail:
-      "Requests return 503. Fully reversible — your configuration is untouched and it restarts once you are back inside the allowance.",
+      "Requests return 503. Your configuration is retained; resolve the reported billing or resource restriction before restarting.",
     tone: "danger" as const,
   },
   {
@@ -140,7 +140,7 @@ function formatOverSince(date: Date): string {
 }
 
 export function EnforcementPanel({ dimensions }: EnforcementPanelProps) {
-  const current = worstRung(dimensions);
+  const current = dimensions.length ? worstRung(dimensions) : "unknown";
   const copy = RUNG_COPY[current];
   const affected = dimensions.filter((d) => d.rung !== "none");
 

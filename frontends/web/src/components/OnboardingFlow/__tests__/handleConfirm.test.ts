@@ -152,7 +152,7 @@ describe("addRepoProject", () => {
     expect(mockCreateDaemon).toHaveBeenCalledWith({
       name: "onboarding-daemon",
       daemonType: 1,
-      size: 1,
+      size: 8, // DAEMON_SIZE_M
       gitRepo: CLONE_URL,
       gitBranch: "main",
       refreshExisting: true,

@@ -146,8 +146,9 @@ export function useCloudEligibility() {
     eligible,
     reason,
     isLoading,
-    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
     refetch,
+    /** The sizes the server will admit for this caller ([] until known). */
+    allowedDaemonSizes: computeEligibility?.allowedDaemonSizes ?? [],
   };
 }
 
