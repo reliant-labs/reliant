@@ -435,7 +435,10 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc AcceptNextMachinePricing(AcceptNextMachinePricingRequest) returns (AcceptNextMachinePricingResponse) {
-    option (forge.v1.method) = {auth_required: true activity: {none: "explicit future-period pricing consent is persisted in the acceptance ledger"}};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "explicit future-period pricing consent is persisted in the acceptance ledger"}
+    };
   }
 
   // Independent organization-wide hosted usage funding; never requires a machine plan.

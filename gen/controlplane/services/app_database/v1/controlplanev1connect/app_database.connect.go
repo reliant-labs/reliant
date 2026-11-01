@@ -36,6 +36,12 @@ const (
 	// AppDatabaseServiceQueryDatabaseProcedure is the fully-qualified name of the AppDatabaseService's
 	// QueryDatabase RPC.
 	AppDatabaseServiceQueryDatabaseProcedure = "/controlplane.v1.AppDatabaseService/QueryDatabase"
+	// AppDatabaseServiceQueryDatabasePanelProcedure is the fully-qualified name of the
+	// AppDatabaseService's QueryDatabasePanel RPC.
+	AppDatabaseServiceQueryDatabasePanelProcedure = "/controlplane.v1.AppDatabaseService/QueryDatabasePanel"
+	// AppDatabaseServiceListDashboardDatabasesProcedure is the fully-qualified name of the
+	// AppDatabaseService's ListDashboardDatabases RPC.
+	AppDatabaseServiceListDashboardDatabasesProcedure = "/controlplane.v1.AppDatabaseService/ListDashboardDatabases"
 )
 
 // AppDatabaseServiceClient is a client for the controlplane.v1.AppDatabaseService service.
@@ -43,6 +49,21 @@ type AppDatabaseServiceClient interface {
 	// QueryDatabase runs one read-only statement and returns its rows, bounded by
 	// max_rows and timeout_ms.
 	QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error)
+	// QueryDatabasePanel runs one dashboard panel's read-only statement as the
+	// database's dashboard role and returns it folded for drawing: a time series
+	// when draw is "line" (or "auto" and the first column is a time), otherwise
+	// rows. $1 (from), $2 (to) and $3 (step_seconds) are bound, never spliced.
+	//
+	// Not declared as an activity: a panel refreshes every minute, so the handler
+	// records one dashboard_db_access event per person, dashboard, environment
+	// and day instead. The audit_log row is written for every request.
+	QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error)
+	// ListDashboardDatabases returns the environment's databases that have
+	// dashboards enabled, their limits, and the tables and columns the dashboard
+	// role may SELECT (the editor's schema browser). Same admission as
+	// QueryDatabasePanel, without the database/placement steps for databases that
+	// are not enabled: those are simply absent.
+	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
 }
 
 // NewAppDatabaseServiceClient constructs a client for the controlplane.v1.AppDatabaseService
@@ -62,12 +83,26 @@ func NewAppDatabaseServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabase")),
 			connect.WithClientOptions(opts...),
 		),
+		queryDatabasePanel: connect.NewClient[v1.QueryDatabasePanelRequest, v1.QueryDatabasePanelResponse](
+			httpClient,
+			baseURL+AppDatabaseServiceQueryDatabasePanelProcedure,
+			connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabasePanel")),
+			connect.WithClientOptions(opts...),
+		),
+		listDashboardDatabases: connect.NewClient[v1.ListDashboardDatabasesRequest, v1.ListDashboardDatabasesResponse](
+			httpClient,
+			baseURL+AppDatabaseServiceListDashboardDatabasesProcedure,
+			connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // appDatabaseServiceClient implements AppDatabaseServiceClient.
 type appDatabaseServiceClient struct {
-	queryDatabase *connect.Client[v1.QueryDatabaseRequest, v1.QueryDatabaseResponse]
+	queryDatabase          *connect.Client[v1.QueryDatabaseRequest, v1.QueryDatabaseResponse]
+	queryDatabasePanel     *connect.Client[v1.QueryDatabasePanelRequest, v1.QueryDatabasePanelResponse]
+	listDashboardDatabases *connect.Client[v1.ListDashboardDatabasesRequest, v1.ListDashboardDatabasesResponse]
 }
 
 // QueryDatabase calls controlplane.v1.AppDatabaseService.QueryDatabase.
@@ -75,11 +110,36 @@ func (c *appDatabaseServiceClient) QueryDatabase(ctx context.Context, req *conne
 	return c.queryDatabase.CallUnary(ctx, req)
 }
 
+// QueryDatabasePanel calls controlplane.v1.AppDatabaseService.QueryDatabasePanel.
+func (c *appDatabaseServiceClient) QueryDatabasePanel(ctx context.Context, req *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error) {
+	return c.queryDatabasePanel.CallUnary(ctx, req)
+}
+
+// ListDashboardDatabases calls controlplane.v1.AppDatabaseService.ListDashboardDatabases.
+func (c *appDatabaseServiceClient) ListDashboardDatabases(ctx context.Context, req *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
+	return c.listDashboardDatabases.CallUnary(ctx, req)
+}
+
 // AppDatabaseServiceHandler is an implementation of the controlplane.v1.AppDatabaseService service.
 type AppDatabaseServiceHandler interface {
 	// QueryDatabase runs one read-only statement and returns its rows, bounded by
 	// max_rows and timeout_ms.
 	QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error)
+	// QueryDatabasePanel runs one dashboard panel's read-only statement as the
+	// database's dashboard role and returns it folded for drawing: a time series
+	// when draw is "line" (or "auto" and the first column is a time), otherwise
+	// rows. $1 (from), $2 (to) and $3 (step_seconds) are bound, never spliced.
+	//
+	// Not declared as an activity: a panel refreshes every minute, so the handler
+	// records one dashboard_db_access event per person, dashboard, environment
+	// and day instead. The audit_log row is written for every request.
+	QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error)
+	// ListDashboardDatabases returns the environment's databases that have
+	// dashboards enabled, their limits, and the tables and columns the dashboard
+	// role may SELECT (the editor's schema browser). Same admission as
+	// QueryDatabasePanel, without the database/placement steps for databases that
+	// are not enabled: those are simply absent.
+	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
 }
 
 // NewAppDatabaseServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -95,10 +155,26 @@ func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect
 		connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabase")),
 		connect.WithHandlerOptions(opts...),
 	)
+	appDatabaseServiceQueryDatabasePanelHandler := connect.NewUnaryHandler(
+		AppDatabaseServiceQueryDatabasePanelProcedure,
+		svc.QueryDatabasePanel,
+		connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabasePanel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	appDatabaseServiceListDashboardDatabasesHandler := connect.NewUnaryHandler(
+		AppDatabaseServiceListDashboardDatabasesProcedure,
+		svc.ListDashboardDatabases,
+		connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.AppDatabaseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AppDatabaseServiceQueryDatabaseProcedure:
 			appDatabaseServiceQueryDatabaseHandler.ServeHTTP(w, r)
+		case AppDatabaseServiceQueryDatabasePanelProcedure:
+			appDatabaseServiceQueryDatabasePanelHandler.ServeHTTP(w, r)
+		case AppDatabaseServiceListDashboardDatabasesProcedure:
+			appDatabaseServiceListDashboardDatabasesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,4 +186,12 @@ type UnimplementedAppDatabaseServiceHandler struct{}
 
 func (UnimplementedAppDatabaseServiceHandler) QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.QueryDatabase is not implemented"))
+}
+
+func (UnimplementedAppDatabaseServiceHandler) QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.QueryDatabasePanel is not implemented"))
+}
+
+func (UnimplementedAppDatabaseServiceHandler) ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.ListDashboardDatabases is not implemented"))
 }
