@@ -286,6 +286,18 @@ describe("InboxPage item kinds", () => {
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
   });
+
+  it("an approval that expired says what happened to it", async () => {
+    respond([approvalItem()]);
+    const message = "This request expired: No one answered before the request's time limit; nothing was approved.";
+    mocks.approve.mockRejectedValue(
+      new ConnectError(message, Code.FailedPrecondition, { "x-forge-error-reason": "approval_not_pending" }),
+    );
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    expect(await within(row).findByText(message)).toBeInTheDocument();
+  });
 });
 
 describe("InboxPage layout", () => {

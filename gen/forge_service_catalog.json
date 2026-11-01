@@ -1277,7 +1277,9 @@
             "APPROVAL_STATUS_UNSPECIFIED",
             "APPROVAL_STATUS_PENDING",
             "APPROVAL_STATUS_APPROVED",
-            "APPROVAL_STATUS_DENIED"
+            "APPROVAL_STATUS_DENIED",
+            "APPROVAL_STATUS_EXPIRED",
+            "APPROVAL_STATUS_CANCELLED"
           ],
           "reliant.v1.ApprovalType": [
             "APPROVAL_TYPE_UNSPECIFIED",
@@ -1289,7 +1291,9 @@
             0,
             1,
             2,
-            3
+            3,
+            4,
+            5
           ],
           "reliant.v1.ApprovalType": [
             0,

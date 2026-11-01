@@ -230,6 +230,15 @@ type mockRepo struct {
 	orphanedMailboxResolveErr error
 	resolvedMailboxThreads    []string
 
+	// Approval sweep (approval_sweep_test.go): the stale approvals the query
+	// reports, which closes find them still pending, the closes made, and
+	// the unannounced resolutions and announcements.
+	staleApprovals        []db.StaleApproval
+	approvalAlreadyClosed map[string]bool
+	closedApprovals       map[string]string // id -> reason
+	unannounced           []*db.Approval
+	announcedApprovals    []string
+
 	// Backgrounded-process sweep: the calls the query reports, the daemon
 	// rows that exist (absent = deleted), and the status events emitted.
 	backgroundedProcessCalls []*db.BackgroundedProcessCall
