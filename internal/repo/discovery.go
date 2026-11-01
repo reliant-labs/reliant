@@ -158,6 +158,72 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	return found, nil
 }
 
+// ContainsRepo reports whether Discover would find any repository under
+// projectPath: the root is a checkout, or a directory within maxDepth (outside
+// skipDirs) is. It answers that yes/no without Discover's cost: it stops at
+// the first `.git` it sees (at once when the root has one) and runs no git.
+//
+// Discover on a root that is itself a checkout still walks every child to
+// depth maxDepth and spawns `git config` per repository it keeps. On a project
+// rooted at a home directory that walk lists ~/Library and the like; prod's
+// project.check_git took 5.3s at p50 and hit the 10s request deadline in 18 of
+// 32 calls (2026-10-28..11-01), and GetProject waited on it every time.
+//
+// An unreadable or missing path is an error, as it is for Discover.
+func ContainsRepo(ctx context.Context, projectPath string, maxDepth int) (bool, error) {
+	if maxDepth <= 0 {
+		maxDepth = DefaultMaxDepth
+	}
+	abs, err := filepath.Abs(projectPath)
+	if err != nil {
+		return false, fmt.Errorf("resolve project path: %w", err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return false, fmt.Errorf("project path: %w", err)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("project path is not a directory: %s", abs)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	if isGitDir(abs) {
+		return true, nil
+	}
+	rootDepth := strings.Count(abs, string(filepath.Separator))
+	found := false
+	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			if os.IsPermission(walkErr) {
+				return fs.SkipDir
+			}
+			return walkErr
+		}
+		if !d.IsDir() || path == abs {
+			return nil
+		}
+		if strings.Count(path, string(filepath.Separator))-rootDepth > maxDepth {
+			return fs.SkipDir
+		}
+		if _, skip := skipDirs[d.Name()]; skip {
+			return fs.SkipDir
+		}
+		if isGitDir(path) {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return false, fmt.Errorf("scan project: %w", walkErr)
+	}
+	return found, nil
+}
+
 // isGitDir reports whether the given directory contains a `.git` entry.
 // A `.git` directory indicates a normal checkout; a `.git` file indicates
 // a worktree linked to a parent repo. Both count as a repo for our purposes.

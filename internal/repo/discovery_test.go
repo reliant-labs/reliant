@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -227,4 +228,78 @@ func TestDiscover_RemoteURLNeverCarriesACredential(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	require.Equal(t, "https://github.com/acme/app.git", found[0].RemoteURL)
+}
+
+// ContainsRepo is Discover's "found anything" as a yes/no. It must agree with
+// Discover on every layout Discover distinguishes, including the ones where
+// the answer comes only from a nested checkout or is cut off by depth or by a
+// skipped directory.
+func TestContainsRepo_AgreesWithDiscover(t *testing.T) {
+	t.Parallel()
+	layouts := map[string][]string{
+		"root checkout":             {".git"},
+		"root linked worktree":      {".git:file"},
+		"nested only":               {"api/.git", "web/.git"},
+		"nested at max depth":       {"a/b/.git"},
+		"nested past max depth":     {"a/b/c/.git"},
+		"only inside a skipped dir": {"node_modules/pkg/.git", "vendor/x/.git"},
+		"no checkout at all":        {"docs/readme"},
+		"root and nested":           {".git", "sub/.git"},
+	}
+	for name, entries := range layouts {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			for _, e := range entries {
+				path, kind, _ := strings.Cut(e, ":")
+				full := filepath.Join(dir, path)
+				if kind == "file" || filepath.Base(path) == "readme" {
+					require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+					require.NoError(t, os.WriteFile(full, []byte("gitdir: /elsewhere\n"), 0o644))
+					continue
+				}
+				require.NoError(t, os.MkdirAll(full, 0o755))
+			}
+			found, err := Discover(context.Background(), dir, 2)
+			require.NoError(t, err)
+			got, err := ContainsRepo(context.Background(), dir, 2)
+			require.NoError(t, err)
+			require.Equal(t, len(found) > 0, got)
+		})
+	}
+}
+
+// The root being a checkout is the answer: nothing under it is read. An
+// unreadable child would fail a walk that visited it; here it is never
+// visited.
+func TestContainsRepo_RootCheckoutAnswersWithoutWalking(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	// A dangling symlink named like a directory to descend into, and a
+	// cancelled context: either would surface if the walk ran.
+	require.NoError(t, os.Symlink(filepath.Join(dir, "gone"), filepath.Join(dir, "child")))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, err := ContainsRepo(ctx, dir, 2)
+	require.NoError(t, err)
+	require.True(t, got)
+}
+
+// A caller that gave up stops the walk; out of time is an error, never a
+// "not a git project" answer the API would persist.
+func TestContainsRepo_CancelledWalkIsAnError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "a", "b"), 0o755))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := ContainsRepo(ctx, dir, 2)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestContainsRepo_MissingPathIsAnError(t *testing.T) {
+	t.Parallel()
+	_, err := ContainsRepo(context.Background(), filepath.Join(t.TempDir(), "nope"), 2)
+	require.Error(t, err)
 }
