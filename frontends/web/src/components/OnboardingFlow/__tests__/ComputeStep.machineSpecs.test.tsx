@@ -201,10 +201,10 @@ beforeEach(() => {
 describe("ComputeStep — every size says what it gives you", () => {
   // THE REPORT. A size name with a price and no specification.
   it.each([
-    ["M", "4 GB RAM", "2 CPU"],
-    ["L", "8 GB RAM", "4 CPU"],
-    ["XL", "16 GB RAM", "8 CPU"],
-    ["2XL", "32 GB RAM", "15 CPU"],
+    ["M", "4 GB RAM", "2 vCPU"],
+    ["L", "8 GB RAM", "4 vCPU"],
+    ["XL", "16 GB RAM", "8 vCPU"],
+    ["2XL", "32 GB RAM", "15 vCPU"],
   ])("labels %s with its memory and CPU", (size, memory, cpu) => {
     renderStep();
 
@@ -227,8 +227,8 @@ describe("ComputeStep — every size says what it gives you", () => {
 
     const small = screen.getByRole("button", { name: /^M / });
     expect(small).toHaveTextContent("4 GB RAM");
-    expect(small).toHaveTextContent("2 CPU");
-    expect(small).not.toHaveTextContent("0.5 CPU");
+    expect(small).toHaveTextContent("2 vCPU");
+    expect(small).not.toHaveTextContent("0.5 vCPU");
   });
 
   /**
@@ -276,7 +276,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     const note = screen.getByTestId("compute-step-coverage-note");
-    expect(note).toHaveTextContent(/covers the M machine/i);
+    expect(note).toHaveTextContent(/on an M machine/i);
     expect(note).not.toHaveTextContent(/GB RAM/);
   });
 

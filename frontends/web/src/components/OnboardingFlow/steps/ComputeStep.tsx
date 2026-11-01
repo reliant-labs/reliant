@@ -13,7 +13,6 @@ import {
   type ComputePlanOption,
 } from "@/components/Billing/PlanTiles";
 import {
-  formatCentsAsDollars,
   formatSizeLabel,
   isPurchasableComputePlan,
   sortPlansForDisplay,
@@ -42,6 +41,8 @@ import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
 import { StepFooterAction } from "../StepFooter";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
+import { formatPrice } from "@/components/Billing/priceFormat";
+import { formatMachineSeconds } from "@/lib/formatMachineMinutes";
 
 const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 
@@ -134,6 +135,8 @@ export function ComputeStep({
     isLoading: cloudLoading,
     refetch: refetchCloudEligibility,
     allowedDaemonSizes,
+    hasActiveSubscription: hasSubscription,
+    grantedSmallDaemonSecondsRemaining: grantedSecondsRemaining = 0,
   } = useCloudEligibility();
 
   const eligible =
@@ -692,7 +695,7 @@ export function ComputeStep({
                   <span className="block text-sm font-semibold text-foreground">
                     Reliant Cloud machines
                     {cheapestMonthlyCents !== null &&
-                      ` · from ${formatCentsAsDollars(cheapestMonthlyCents)}/mo`}
+                      ` · from ${formatPrice(cheapestMonthlyCents)}/mo`}
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     Hosted by us, nothing to install.
@@ -742,10 +745,12 @@ export function ComputeStep({
                       // survived a coupon redemption and told the user they
                       // were about to be charged for the thing they had just
                       // paid for with a code.
-                      "The paid machines are ours: nothing to install, and we start one for you, ready in a few minutes. Setup continues while it boots."
+                      "We host it, so there's nothing to install. We start it for you, and setup continues while it boots."
                     : "Paid machines run in Reliant Cloud, and allow access from any device, including mobile."}
               </p>
-              {planOptions.length > 0 && <MachinePricingLine hours={commonPlanHours(planOptions)} />}
+              {/* A coupon-only user has no monthly plan, so "Includes 160 hours
+                  a month" would promise them something they did not get. */}
+              {planOptions.length > 0 && <MachinePricingLine hours={machineCovered && !hasSubscription ? null : commonPlanHours(planOptions)} />}
               {/* The burst ceiling, said once for the same reason the hours
                   are: it does not vary by size, so it is a property of hosted
                   machines rather than of any row. Reserved figures are what
@@ -770,10 +775,12 @@ export function ComputeStep({
                     under the user on redeem — the price becomes "Covered" —
                     but nothing connects that to the code they just entered.
                     It also names the LIMIT, because the server enforces one:
-                    a compute grant buys machine time at the free plan's size
-                    (small), not a bigger machine, and a user who picks Large
-                    on the strength of a coupon is refused at provisioning
-                    with "your plan does not include daemon size large". */}
+                    a compute grant buys machine time on the M machine only,
+                    and a user who picks another size on the strength of a
+                    coupon is refused at provisioning with "your plan does not
+                    include daemon size l". S1 and S2 are smaller and still
+                    not covered, so the sentence says "other sizes", never
+                    "larger". */}
               {machineCovered &&
                 !plansQ.isLoading &&
                 planOptions.length > 0 && (
@@ -781,9 +788,12 @@ export function ComputeStep({
                     className="text-xs leading-relaxed text-primary"
                     data-testid="compute-step-coverage-note"
                   >
-                    Your code covers the {coveredSizeLabel} machine — no charge
-                    today. Larger machines need a monthly plan, and you can
-                    upgrade any time.
+                    {grantedSecondsRemaining >= 60
+                      ? `Your code covers ${formatMachineSeconds(grantedSecondsRemaining)}, one-time — no charge today.`
+                      : `Your code covers the ${coveredSizeLabel} machine — no charge today.`}{" "}
+                    {coveredSize === "m"
+                      ? "S1, S2 and the larger sizes need a monthly plan."
+                      : "Other sizes need a monthly plan."}
                   </p>
                 )}
               {!plansQ.isLoading && planOptions.length === 0 && (
@@ -956,7 +966,13 @@ export function ComputeStep({
 }
 
 // Sized to sit beside the footer's Back button (px-4 py-2 text-sm).
+//
+// The brand button fill, #0a70e0 (the landing page's primary), as a literal
+// because the app has no brand token yet. White 14px/600 text on it measures
+// ≈4.8:1, which passes WCAG AA; the bg-sky-600 it replaces measured ≈4.0:1,
+// which failed. The hover darkens rather than lightens so it never drops
+// below AA. Replace both with the brand token when it lands.
 const FOOTER_PRIMARY =
-  "inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60";
+  "inline-flex items-center gap-2 rounded-lg bg-[#0a70e0] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0861c4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const FOOTER_PENDING =
   "inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-muted-foreground";
