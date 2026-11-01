@@ -21,6 +21,7 @@ import (
 // and the machine it asked. err, when set, is what every mkdir fails with.
 type mkdirRecordingRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 	mu       sync.Mutex
 	mkdired  []string
 	targets  []string

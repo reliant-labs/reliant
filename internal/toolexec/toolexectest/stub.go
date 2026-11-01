@@ -140,15 +140,6 @@ func (r *Stub) ResolveDaemonID(_ context.Context, _ string) (string, error) {
 	return "test-daemon-id", nil
 }
 
-// PlacementDaemonID places every named machine as itself and default
-// resolution on "test-daemon-id" (daemonplacement.Machines).
-func (r *Stub) PlacementDaemonID(_ context.Context, _, daemonID string) (string, error) {
-	if daemonID == "" {
-		return "test-daemon-id", nil
-	}
-	return daemonID, nil
-}
-
 func (r *Stub) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
 	return nil, nil
 }

@@ -24,6 +24,7 @@ import (
 // daemon. It stands in for the workspace filesystem the API tier cannot see.
 type stalePathRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 	dirExists    bool
 	daemonDown   bool
 	statCommands int

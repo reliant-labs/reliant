@@ -22,6 +22,7 @@ import (
 // initGitDaemonRouter fakes a daemon whose git init always succeeds.
 type initGitDaemonRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 }
 
 func (r *initGitDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
