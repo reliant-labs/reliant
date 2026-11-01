@@ -80,13 +80,7 @@ procs:
 		for _, name := range []string{"cwd", "exe"} {
 			target, err := os.Readlink(filepath.Join(base, name))
 			if err != nil {
-				if processGone(base) {
-					break
-				}
-				// A task inside exit has dropped its mm and fs, so these
-				// links read ENOENT before it is a zombie. It never touches
-				// the filesystem again; anything else unreadable holds.
-				if os.IsNotExist(err) && processExiting(base) {
+				if processDone(base) {
 					continue procs
 				}
 				return fmt.Errorf("process %s %s unreadable: %w", entry.Name(), name, err)
@@ -100,7 +94,7 @@ procs:
 		}
 		fds, err := os.ReadDir(filepath.Join(base, "fd"))
 		if err != nil {
-			if processGone(base) {
+			if processDone(base) {
 				continue
 			}
 			return fmt.Errorf("process fd enumeration unavailable: %w", err)
@@ -118,12 +112,17 @@ procs:
 			}
 			target, err := os.Readlink(filepath.Join(base, "fd", fd.Name()))
 			// FDs legitimately close between enumeration and readlink. ENOENT is
-			// safe for that one fd; permission/other failures are uncertainty.
+			// safe for that one fd; permission/other failures are uncertainty
+			// unless the process has gone or is inside exit, whose teardown
+			// makes its descriptors read EACCES.
 			if os.IsNotExist(err) {
 				continue
 			}
 			if err != nil {
-				return fmt.Errorf("process fd unreadable: %w", err)
+				if processDone(base) {
+					continue procs
+				}
+				return fmt.Errorf("process %s fd unreadable: %w", entry.Name(), err)
 			}
 			if processPathUses(target, roots) {
 				return fmt.Errorf("workspace open by process %s", entry.Name())
@@ -145,7 +144,7 @@ procs:
 			if mapsVanished(base, scanErr) {
 				continue
 			}
-			return scanErr
+			return fmt.Errorf("process %s mappings unreadable: %w", entry.Name(), scanErr)
 		}
 		if mapped {
 			return fmt.Errorf("workspace mapped by process %s", entry.Name())
@@ -195,10 +194,11 @@ func mapsUse(ctx context.Context, maps io.Reader, roots []string) (bool, error) 
 // mapsVanished reports whether a failure to open or read base's maps means the
 // process has no mappings left, rather than that they could not be read. The
 // kernel answers ESRCH for a task that is gone or has dropped its mm on the way
-// out of exit, and a task without an mm maps nothing. Any other failure, with
-// the process still listed, is uncertainty and holds.
+// out of exit, and a task without an mm maps nothing; so does one processDone
+// proves gone or exiting. Any other failure, of a live process, is uncertainty
+// and holds.
 func mapsVanished(base string, err error) bool {
-	return errors.Is(err, syscall.ESRCH) || processGone(base)
+	return errors.Is(err, syscall.ESRCH) || processDone(base)
 }
 func processZombie(base string) (bool, error) {
 	data, err := os.ReadFile(filepath.Join(base, "stat"))
@@ -246,6 +246,14 @@ func processExiting(base string) bool {
 const pfExiting = 0x00000004
 
 func processGone(base string) bool { _, err := os.Stat(base); return os.IsNotExist(err) }
+
+// processDone reports whether an unreadable piece of base's state is explained
+// by the process having gone, or being a single-threaded task inside exit.
+// Exit drops the task's mm and fs (cwd and exe read ENOENT, a maps read fails
+// ESRCH) and tears down its descriptors (fd links read EACCES) before it is a
+// zombie; such a task never touches the filesystem again. PF_EXITING stays set
+// on the zombie, so this holds through reaping. Anything else unreadable holds.
+func processDone(base string) bool { return processGone(base) || processExiting(base) }
 func processPathUses(path string, roots []string) bool {
 	path = strings.TrimSuffix(path, " (deleted)")
 	if !filepath.IsAbs(path) {
