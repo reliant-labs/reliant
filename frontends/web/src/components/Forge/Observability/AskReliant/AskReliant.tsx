@@ -303,8 +303,8 @@ export function DeployWithAgentButton({ env, forgeProject, envChoices }: AskReli
     <>
       <Button
         variant="primary"
-        size="sm"
-        leftIcon={<Rocket className="h-3.5 w-3.5" />}
+        size="md"
+        leftIcon={<Rocket className="h-4 w-4" />}
         onClick={() => void ask({ kind: "deploy", env })}
         loading={busy}
         title={`Open a new chat with the deploy${env ? ` to ${env}` : ""} written up for an agent. Nothing runs until you send it.`}
