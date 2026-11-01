@@ -95,8 +95,23 @@ func StartExecDeadline(parent context.Context, timeout time.Duration) *ExecDeadl
 	// The package knobs are read here, on the caller's goroutine, so the
 	// watcher never reads a var a test may be restoring.
 	wallNow, interval := ExecWallClock, ExecWallClockCheckInterval
-	go d.watch(parent, timeout, wallNow, wallNow().Add(timeout), interval)
+	go d.watch(parent, timeout, time.Now(), wallNow, wallNow().Add(timeout), interval)
 	return d
+}
+
+// wallClockCause is why a command found past its deadline on the wall clock is
+// stopped. It is a machine sleep (ErrWallClockDeadline) only when the wall
+// clock ran meaningfully ahead of the monotonic one — when the command was
+// awake for less than its timeout by more than one check interval. Otherwise
+// the timeout simply elapsed: the wall check and the monotonic timer fall due
+// in the same instant at the deadline, and the check winning that race must
+// not blame a sleep that never happened. It did, for every run step stopped
+// at its timeout (reliant#2003).
+func wallClockCause(awake, timeout, interval time.Duration) error {
+	if awake+interval >= timeout {
+		return context.DeadlineExceeded
+	}
+	return ErrWallClockDeadline
 }
 
 // Context is what the command runs under: done when it must be stopped.
@@ -117,7 +132,7 @@ func (d *ExecDeadline) Release() {
 	d.once.Do(func() { close(d.released) })
 }
 
-func (d *ExecDeadline) watch(parent context.Context, timeout time.Duration, wallNow func() time.Time, wallDeadline time.Time, interval time.Duration) {
+func (d *ExecDeadline) watch(parent context.Context, timeout time.Duration, started time.Time, wallNow func() time.Time, wallDeadline time.Time, interval time.Duration) {
 	// Both nil (never ready) when there is no timeout: the command is then
 	// bound only by the caller's context.
 	var monotonic, wallCheck <-chan time.Time
@@ -143,7 +158,9 @@ func (d *ExecDeadline) watch(parent context.Context, timeout time.Duration, wall
 			return
 		case <-wallCheck:
 			if !wallNow().Before(wallDeadline) {
-				d.stop(ErrWallClockDeadline)
+				// time.Since reads started's monotonic reading: the time the
+				// command was actually awake.
+				d.stop(wallClockCause(time.Since(started), timeout, interval))
 				return
 			}
 		}
