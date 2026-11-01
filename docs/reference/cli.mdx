@@ -6219,6 +6219,15 @@ SUPERSEDED rather than succeeding on bytes it was never asked about.
 page's `next_before` as --before, and stop on an EMPTY next_before rather than
 on a short page.
 
+BOUND IS NOT APPLIED. A promotion is recorded before it is applied, so the
+newest promotion names what the env is BOUND to, which is what it runs only if
+its apply passed. Every --history entry carries `apply.status` (passed,
+failed, or unrecorded), and so does the default view's --json (`apply`,
+with `last_applied_release` when the bound one's apply failed). The text
+view says it in one line:
+  current  v1.7.83 applied; v1.7.85 promoted but NOT APPLIED (apply failed: …)
+A script that acts on "the env runs X" checks apply.status == "passed".
+
 EXIT CODES — a pipeline branches on these directly:
 
   0  everything declared is running (or nothing is declared)
@@ -6257,6 +6266,7 @@ Examples:
   forge env status prod --wait                      # gate a release on the rollout
   forge env status prod --wait --timeout 0 --json   # where is it NOW? one read
   forge env status prod --history --limit 1 --json | jq -r '.promotions[0].id'
+  forge env status prod --history --limit 1 --json | jq -r '.promotions[0].apply.status'
   forge env status prod --json | jq -r '.images[] | select(.state == "drift")'
 
 ```
