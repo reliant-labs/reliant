@@ -426,7 +426,7 @@ export function ComputeStep({
         aria-live="polite"
         data-testid="compute-step-loading"
       >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary-ink">
           <Loader2 className="h-7 w-7 animate-spin" />
         </div>
         <div className="space-y-1">
@@ -634,7 +634,7 @@ export function ComputeStep({
                 <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   Use your own computer
                   {showLocal && (
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <CheckCircle2 className="h-4 w-4 text-primary-ink" />
                   )}
                 </span>
                 <span className="block text-xs text-muted-foreground">
@@ -778,7 +778,7 @@ export function ComputeStep({
                 !plansQ.isLoading &&
                 planOptions.length > 0 && (
                   <p
-                    className="text-xs leading-relaxed text-primary"
+                    className="text-xs leading-relaxed text-primary-ink"
                     data-testid="compute-step-coverage-note"
                   >
                     Your code covers the {coveredSizeLabel} machine — no charge

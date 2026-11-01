@@ -113,7 +113,7 @@ export function ResetPassword({ onSubmit, onSuccess }: ResetPasswordProps) {
       <div className="w-full max-w-md mx-auto p-8">
         <div className="text-center space-y-6">
           <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center bg-primary/15">
-            <CheckCircle className="w-8 h-8 text-primary" />
+            <CheckCircle className="w-8 h-8 text-primary-ink" />
           </div>
           
           <div className="space-y-2">

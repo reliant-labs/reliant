@@ -182,7 +182,7 @@ export function WorkflowParamsEditorContent({ params, onUpdate }: WorkflowParams
 
       <button
         onClick={addParam}
-        className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
+        className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-ink border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
       >
         <Plus className="w-4 h-4" />
         Add input
@@ -768,7 +768,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
         )}
         <span>Validation</span>
         {hasValidation && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
             configured
           </span>
         )}
@@ -972,7 +972,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
           )}
           <span>Object Properties</span>
           {propertyCount > 0 && (
-            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
               {propertyCount} {propertyCount === 1 ? 'property' : 'properties'}
             </span>
           )}
@@ -1004,7 +1004,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
             <button
               type="button"
               onClick={addProperty}
-              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs text-primary border border-dashed border-primary/50 rounded hover:bg-primary/5 transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs text-primary-ink border border-dashed border-primary/50 rounded hover:bg-primary/5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Property
@@ -1151,7 +1151,7 @@ function ObjectPropertyEditor({
               id={`required-${name}`}
               checked={isRequired}
               onChange={onToggleRequired}
-              className="w-3 h-3 rounded border-input text-primary focus:ring-1 focus:ring-ring"
+              className="w-3 h-3 rounded border-input text-primary-ink focus:ring-1 focus:ring-ring"
             />
             <label htmlFor={`required-${name}`} className="text-xs text-foreground">
               Required field

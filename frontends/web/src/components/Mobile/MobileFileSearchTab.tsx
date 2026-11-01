@@ -180,7 +180,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
                 className="flex w-full min-h-[44px] flex-col items-start gap-1 rounded-lg px-4 py-3 text-left elevation-1 active:bg-foreground/5"
               >
                 <span className="flex w-full items-center gap-1.5 text-xs text-muted-foreground">
-                  <FileText className="h-3 w-3 shrink-0 text-primary" />
+                  <FileText className="h-3 w-3 shrink-0 text-primary-ink" />
                   <span className="truncate">{match.path}</span>
                   <span className="shrink-0">:{match.lineNumber}</span>
                 </span>

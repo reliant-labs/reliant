@@ -378,7 +378,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }:
               aria-expanded={payloadOpen || payloadInvalid}
               aria-controls={id("payload-panel")}
               onClick={() => setPayloadOpen((open) => !open)}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               {payloadOpen || payloadInvalid ? "Hide the event payload" : "Edit the event payload"}
             </button>

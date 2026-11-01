@@ -204,7 +204,7 @@ function ToolExecutionGroupComponent({
 
         <div className="flex items-center gap-1">
           {summary.running > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary">
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary-ink">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> {summary.running}
             </span>
           )}

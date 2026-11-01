@@ -310,7 +310,7 @@ export function AuthScreen() {
                   <button
                     type="button"
                     onClick={() => setPhase('forgot-password')}
-                    className="text-sm text-primary hover:underline"
+                    className="text-sm text-primary-ink hover:underline"
                   >
                     Forgot password?
                   </button>

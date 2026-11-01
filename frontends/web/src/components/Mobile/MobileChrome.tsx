@@ -208,7 +208,7 @@ export const MOBILE_ROW =
  */
 export function MobileRowIcon({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
       <Icon className="h-4 w-4" />
     </span>
   );
@@ -235,7 +235,7 @@ export function MobileEmptyState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
-      <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary-ink">
         <Icon className="h-7 w-7" />
       </span>
       <p className="text-base font-semibold text-foreground">{title}</p>

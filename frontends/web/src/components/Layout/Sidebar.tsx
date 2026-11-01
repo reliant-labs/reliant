@@ -655,7 +655,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
                 className={cn(
                   "min-w-0 flex-1 truncate text-xs",
                   nested ? "font-medium" : "font-semibold uppercase tracking-wide",
-                  hasActiveChat ? "text-primary" : "text-muted-foreground"
+                  hasActiveChat ? "text-primary-ink" : "text-muted-foreground"
                 )}
               >
                 {title}
@@ -678,7 +678,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             <span
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-2xs font-medium",
-                hasActiveChat ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                hasActiveChat ? "bg-primary/10 text-primary-ink" : "bg-muted text-muted-foreground"
               )}
             >
               {chatCount}
@@ -1388,7 +1388,7 @@ function SidebarComponent({
 
   // Memoized icon to avoid new JSX reference each render
   const worktreeIcon = useMemo(
-    () => <FolderGit2 className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />,
+    () => <FolderGit2 className="w-3.5 h-3.5 text-primary-ink/80 flex-shrink-0" />,
     []
   );
   const nestedWorktreeIcon = useMemo(
@@ -1542,7 +1542,7 @@ function SidebarComponent({
             className={cn(
               "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left text-sm font-semibold transition-colors",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              hasActiveChat ? "text-primary" : "text-foreground",
+              hasActiveChat ? "text-primary-ink" : "text-foreground",
             )}
           >
             <ProjectMark name={group.projectName} active={hasActiveChat} />

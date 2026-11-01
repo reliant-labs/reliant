@@ -130,7 +130,7 @@ export function MobileGitHubCloneSheet({
             </div>
           ) : state === "cloning" ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <Loader2 className="h-6 w-6 animate-spin text-primary-ink" />
               <p className="text-sm font-medium text-foreground">Cloning…</p>
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-left">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />

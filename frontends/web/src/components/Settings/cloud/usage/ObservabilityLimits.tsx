@@ -12,7 +12,7 @@ export function BillingUnavailable({ label, error, retry }: { label: string; err
   const undeployed = error instanceof ConnectError && error.code === Code.Unimplemented;
   return <div role="status" className="rounded-lg border border-border bg-background p-4 text-sm">
     <p>{label} {undeployed ? "is not available on this server yet." : "is unavailable."}</p>
-    {retry && <button type="button" className="mt-2 text-primary underline" onClick={retry}>Try again</button>}
+    {retry && <button type="button" className="mt-2 text-primary-ink underline" onClick={retry}>Try again</button>}
   </div>;
 }
 
@@ -93,7 +93,7 @@ export function ObservabilityLimits({ limits, orgId, save, reload }: {
     <p className="mt-2 text-xs text-muted-foreground">Self-serve cap: {dollars(limits.bounds?.minCents ?? 0n)}–{dollars(limits.bounds?.maxCents ?? 100000n)}. Default: {dollars(limits.bounds?.defaultCents ?? 5000n)}. No uncapped overage.</p>
     {!editing && <>
       <p className="mt-3 text-sm">Thresholds: {limits.alertThresholdsPercent.length ? limits.alertThresholdsPercent.map(n => `${n}%`).join(", ") : "None"}; cap reached: {limits.alertOnCap ? "On" : "Off"}.</p>
-      {limits.canUpdate && <button type="button" className="mt-3 text-primary underline" onClick={start}>Edit observability limits</button>}
+      {limits.canUpdate && <button type="button" className="mt-3 text-primary-ink underline" onClick={start}>Edit observability limits</button>}
     </>}
     {editing && <form className="mt-4 space-y-4" onSubmit={e => { e.preventDefault(); void submit(); }}>
       <fieldset disabled={saving || conflict || !limits.canUpdate} className="space-y-3">
@@ -107,11 +107,11 @@ export function ObservabilityLimits({ limits, orgId, save, reload }: {
         </div>
         <button type="submit" className="rounded border border-border px-3 py-2 text-sm">{saving ? "Saving…" : "Save observability limits"}</button>
       </fieldset>
-      <button type="button" className="text-sm text-primary underline" onClick={cancel}>Cancel</button>
+      <button type="button" className="text-sm text-primary-ink underline" onClick={cancel}>Cancel</button>
     </form>}
     <p className="mt-3 text-xs text-muted-foreground">Usage threshold and cap-reached notices are wired to email organization owners and admins via Resend. Delivery has not been live-tested. Selecting recipients, Slack channels or webhooks for these notices is not supported.</p>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
-    {conflict && <button type="button" className="mt-2 text-primary underline" disabled={pending === "reload"} onClick={() => void reloadLatest()}>Reload latest limits</button>}
+    {conflict && <button type="button" className="mt-2 text-primary-ink underline" disabled={pending === "reload"} onClick={() => void reloadLatest()}>Reload latest limits</button>}
     {limits.updatedAt && <p className="mt-3 text-xs text-muted-foreground">Last changed {at(limits.updatedAt)} by {limits.updatedByEmail || "system"}.</p>}
   </Card>;
 }

@@ -338,9 +338,9 @@ function CheckoutReturnBanner({
     <div className="flex flex-col gap-3 rounded-md border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-2">
         {confirmed ? (
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
         ) : (
-          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary-ink" />
         )}
         <div>
           <p className="text-sm font-medium text-foreground">
@@ -979,7 +979,7 @@ function OverviewTab({
             <button
               type="button"
               onClick={onGoToUsage}
-              className="text-sm font-medium text-primary hover:underline"
+              className="text-sm font-medium text-primary-ink hover:underline"
             >
               See usage and invoices →
             </button>
@@ -1469,7 +1469,7 @@ function InvoicesPanel() {
                       href={invoice.pdfUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary-ink hover:underline"
                     >
                       <Download className="h-4 w-4" />
                       Download

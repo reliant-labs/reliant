@@ -226,7 +226,7 @@ function PullRequestAction({
             "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           )}
         >
-          <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary-ink" />
           <span className="truncate">PR #{existing.number}</span>
           {state && state !== "open" && <span className="text-muted-foreground">{state}</span>}
           <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />

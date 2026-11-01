@@ -84,7 +84,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
         type="button"
         onClick={() => retry.mutate(undefined)}
         disabled={retry.isPending}
-        className="text-xs font-medium text-primary hover:underline disabled:no-underline disabled:opacity-60"
+        className="text-xs font-medium text-primary-ink hover:underline disabled:no-underline disabled:opacity-60"
       >
         {retry.isPending ? "Retrying…" : "Retry now"}
       </button>
@@ -93,7 +93,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
           type="button"
           onClick={() => retry.mutate(offer.modelAtDriver)}
           disabled={retry.isPending}
-          className="text-xs font-medium text-primary hover:underline disabled:no-underline disabled:opacity-60"
+          className="text-xs font-medium text-primary-ink hover:underline disabled:no-underline disabled:opacity-60"
         >
           Use {offer.label} now
         </button>

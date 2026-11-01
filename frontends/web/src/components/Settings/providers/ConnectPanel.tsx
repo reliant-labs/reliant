@@ -303,7 +303,7 @@ export function ConnectPanel({
         {config?.docsUrl && (
           <p className="text-xs text-muted-foreground">
             Create a key in the{" "}
-            <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">
               {config.shortName} console
             </a>
             .

@@ -238,7 +238,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
             to="/m/projects"
             className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
               <FolderOpen className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
                   // current destination easy to miss at a glance, and it is
                   // the drawer's only orientation cue.
                   active
-                    ? "bg-primary/10 font-medium text-primary"
+                    ? "bg-primary/10 font-medium text-primary-ink"
                     : "text-foreground/85",
                 )}
               >

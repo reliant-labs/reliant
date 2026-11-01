@@ -607,7 +607,7 @@ export function NewChatView({
                               <div className="text-xs opacity-60">Main workspace</div>
                             </div>
                             {selectedWorkspaceId === mainWorktree?.id && (
-                              <Check className="w-3 h-3 text-primary flex-shrink-0" />
+                              <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />
                             )}
                           </div>
                         </button>
@@ -632,7 +632,7 @@ export function NewChatView({
                                 )}
                               </div>
                               {selectedWorkspaceId === worktree.id && (
-                                <Check className="w-3 h-3 text-primary flex-shrink-0" />
+                                <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />
                               )}
                             </div>
                           </button>
@@ -657,7 +657,7 @@ export function NewChatView({
                           }}
                           className="w-full px-3 py-2 text-xs text-center border-b"
                         >
-                          <div className="flex items-center justify-center gap-2 text-primary">
+                          <div className="flex items-center justify-center gap-2 text-primary-ink">
                             <Search className="w-3 h-3" />
                             <span className="font-medium">Discover workspace</span>
                           </div>
@@ -671,7 +671,7 @@ export function NewChatView({
                           }}
                           className="w-full px-3 py-2 text-xs text-center"
                         >
-                          <div className="flex items-center justify-center gap-2 text-primary">
+                          <div className="flex items-center justify-center gap-2 text-primary-ink">
                             <FolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
                             <span className="font-medium leading-none">New workspace</span>
                           </div>
@@ -759,7 +759,7 @@ export function NewChatView({
                 type="button"
                 onClick={() => setMachineChoice(NO_MACHINE)}
                 data-testid="new-chat-continue-without-machine"
-                className="font-medium text-primary hover:underline"
+                className="font-medium text-primary-ink hover:underline"
               >
                 Continue without machine
               </button>{" "}

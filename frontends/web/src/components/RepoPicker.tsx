@@ -217,7 +217,7 @@ export function RepoPicker({
               )}
 
               {isSelected && (
-                <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                <Check className="w-4 h-4 text-primary-ink flex-shrink-0" />
               )}
             </button>
           );
@@ -236,7 +236,7 @@ export function RepoPicker({
             <button
               type="button"
               onClick={onLoadMore}
-              className="text-sm text-primary hover:text-primary/80 transition-colors"
+              className="text-sm text-primary-ink hover:text-primary-ink/80 transition-colors"
             >
               Load more
             </button>

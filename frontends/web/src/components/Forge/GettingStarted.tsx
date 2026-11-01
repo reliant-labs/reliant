@@ -89,7 +89,7 @@ export function GettingStarted({ icon, title, about, children, steps = [], docs,
                 href={docs.href}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid={`${testId}-docs`}
               >
                 {docs.label}

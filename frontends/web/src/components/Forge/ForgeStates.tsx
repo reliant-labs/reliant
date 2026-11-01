@@ -138,7 +138,7 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
       <ul className="space-y-4">
         {FORGE_PITCH_POINTS.map(({ icon: Icon, title, body }) => (
           <li key={title} className="flex items-start gap-3">
-            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" aria-hidden="true" />
             <div className="space-y-1">
               <h3 className="text-sm font-medium text-ink">{title}</h3>
               <p className="text-sm text-ink-muted">{body}</p>

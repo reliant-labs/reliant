@@ -10,7 +10,7 @@ function statusBadge(status: TaskItem["status"]) {
     case "completed":
       return <CheckCircle2 className="w-4 h-4 text-success-ink" />;
     case "in_progress":
-      return <Zap className="w-4 h-4 text-primary animate-pulse" />;
+      return <Zap className="w-4 h-4 text-primary-ink animate-pulse" />;
     case "blocked":
       return <AlertOctagon className="w-4 h-4 text-warning-ink" />;
     case "failed":
@@ -113,7 +113,7 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
               {stats.total > 0 ? `${stats.completed}/${stats.total} complete` : "No tasks yet"}
             </div>
           </div>
-          <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+          <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary-ink">
             {stats.percent}%
           </div>
         </div>

@@ -140,7 +140,7 @@ export function OrgRow({ org, selected, onSelect }: { org: MyOrg; selected: bool
           {org.isDefault && " · Default"}
         </span>
       </span>
-      <Check className={cn("h-4 w-4 shrink-0 text-primary", !selected && "invisible")} aria-hidden="true" />
+      <Check className={cn("h-4 w-4 shrink-0 text-primary-ink", !selected && "invisible")} aria-hidden="true" />
     </button>
   );
 }

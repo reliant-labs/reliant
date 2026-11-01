@@ -129,7 +129,7 @@ export function UpdateSection() {
         return {
           icon: RefreshCw,
           message: 'Checking for updates...',
-          iconClass: 'animate-spin text-primary',
+          iconClass: 'animate-spin text-primary-ink',
         };
       case 'available':
         return {
@@ -153,7 +153,7 @@ export function UpdateSection() {
         return {
           icon: Download,
           message: `Downloading ${Math.round(updateStatus.progress?.percent || 0)}%`,
-          iconClass: 'text-primary animate-pulse',
+          iconClass: 'text-primary-ink animate-pulse',
         };
       case 'error':
         return {
@@ -193,7 +193,7 @@ export function UpdateSection() {
             <button
               onClick={handleCheckForUpdates}
               disabled={isChecking || isDownloading}
-              className="text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="text-xs font-medium text-primary-ink hover:text-primary-ink/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isChecking ? 'Checking...' : 'Check'}
             </button>

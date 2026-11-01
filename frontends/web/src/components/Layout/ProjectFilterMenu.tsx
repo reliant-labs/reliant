@@ -48,7 +48,7 @@ export function ProjectFilterMenu({
 
   const needsYouHint = (count: number | undefined) =>
     count && count > 0 ? (
-      <span className="rounded-full bg-primary/10 px-1.5 text-2xs font-medium text-primary">{count}</span>
+      <span className="rounded-full bg-primary/10 px-1.5 text-2xs font-medium text-primary-ink">{count}</span>
     ) : undefined;
 
   const totalNeedsYou = needsYouByProject

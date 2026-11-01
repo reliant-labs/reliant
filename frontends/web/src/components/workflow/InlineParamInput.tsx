@@ -204,7 +204,7 @@ function InlineEnumInput({
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -244,7 +244,7 @@ function InlineEnumInput({
                   )}
                 >
                   <span>{formatOption(option)}</span>
-                  {isSelected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                  {isSelected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
                 </button>
               );
             })}
@@ -344,7 +344,7 @@ function InlineMultiEnumInput({
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -376,7 +376,7 @@ function InlineMultiEnumInput({
               <button 
                 type="button" 
                 onClick={selectAll} 
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-primary-ink hover:underline"
               >
                 All
               </button>
@@ -464,7 +464,7 @@ function InlineBooleanInput({
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
           isOn
-            ? "bg-primary/20 text-primary"
+            ? "bg-primary/20 text-primary-ink"
             : isStreaming
             ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
             : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",

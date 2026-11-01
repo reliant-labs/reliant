@@ -180,7 +180,7 @@ export function FloatingWorkflowSidebar({
               ) : integrations.isError ? (
                 <div role="alert" className="flex items-center gap-2 px-2 py-1 text-xs">
                   <span className="text-muted-foreground">Couldn't load integrations.</span>
-                  <button type="button" onClick={integrations.refetch} className="font-medium text-primary hover:underline">
+                  <button type="button" onClick={integrations.refetch} className="font-medium text-primary-ink hover:underline">
                     Retry
                   </button>
                 </div>
@@ -204,7 +204,7 @@ export function FloatingWorkflowSidebar({
                     <button
                       type="button"
                       onClick={() => onOpenIntegration()}
-                      className="w-full rounded-md px-2 py-1 text-left text-xs font-medium text-primary transition-colors hover:bg-muted/60"
+                      className="w-full rounded-md px-2 py-1 text-left text-xs font-medium text-primary-ink transition-colors hover:bg-muted/60"
                     >
                       All {integrations.totalSize} integrations…
                     </button>

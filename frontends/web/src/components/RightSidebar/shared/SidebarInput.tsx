@@ -49,7 +49,7 @@ export const SidebarInput = forwardRef<HTMLInputElement, SidebarInputProps>(
         {hasLeftIcon && (
           <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
             {isLoading ? (
-              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />
             ) : (
               <span className="text-muted-foreground">{leftIcon}</span>
             )}

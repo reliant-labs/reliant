@@ -1236,7 +1236,7 @@ function ResizeMachineModal({
       {someDisallowed && (
         <p className="mt-2 text-xs text-muted-foreground">
           Larger sizes need a bigger compute plan.{" "}
-          <button type="button" onClick={onSeePlans} className="font-medium text-primary hover:underline">
+          <button type="button" onClick={onSeePlans} className="font-medium text-primary-ink hover:underline">
             See plans
           </button>
         </p>
@@ -1713,7 +1713,7 @@ function EnvironmentDetail({
                                   type="button"
                                   onClick={openGrow}
                                   disabled={busy}
-                                  className="font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="font-medium text-primary-ink hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Grow
                                 </button>
@@ -1920,7 +1920,7 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                     render: (_, { r }) => {
                       const url = workspaceBaseDomain ? workspaceBaseDomain.replace("{port}", String(r.port)) : "";
                       return url ? (
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary-ink hover:underline">
                           {url} <ExternalLink className="h-3 w-3" />
                         </a>
                       ) : (

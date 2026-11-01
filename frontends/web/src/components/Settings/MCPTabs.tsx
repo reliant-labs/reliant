@@ -97,7 +97,7 @@ export function MCPTabs({ tabs, activeTab, onTabChange, className }: MCPTabsProp
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-xs",
                   isActive
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/10 text-primary-ink"
                     : "bg-muted text-muted-foreground"
                 )}
               >

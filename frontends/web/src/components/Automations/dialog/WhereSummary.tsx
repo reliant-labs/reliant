@@ -119,7 +119,7 @@ export function WhereSummary(props: WhereSummaryProps) {
             aria-expanded={expanded}
             aria-controls={panelId}
             onClick={() => setOpen((o) => !o)}
-            className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {open ? "Done" : "Change"}
           </button>
@@ -174,7 +174,7 @@ export function WhereSummary(props: WhereSummaryProps) {
                 <button
                   type="button"
                   onClick={() => setAdding(true)}
-                  className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                 >
                   Set up a machine
                 </button>
@@ -184,7 +184,7 @@ export function WhereSummary(props: WhereSummaryProps) {
                     <button
                       type="button"
                       onClick={() => onMachineChange(NO_MACHINE)}
-                      className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       choose No machine
                     </button>{" "}

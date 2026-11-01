@@ -268,7 +268,7 @@
   --color-on-accent: hsl(var(--primary-foreground));
   --color-accent-surface: hsl(var(--primary) / 0.12);
   --color-accent-border: hsl(var(--primary) / 0.38);
-  --color-accent-ink: hsl(var(--primary));
+  --color-accent-ink: hsl(var(--primary-ink));
 
   /* Keep reliant primitives nested here on a coherent fill/text pair. */
   --accent: var(--primary);
@@ -356,6 +356,10 @@
     --primary: 221 83% 50%;          /* Vibrant blue */
     --primary-foreground: 0 0% 100%;
     --primary-hover: 221 83% 44%; /* the pressed/hovered fill: darker in light, lighter in dark, so its label keeps contrast */
+    /* Accent TEXT (text-primary-ink): links, active labels, accent copy. Not
+       --primary, which is a fill tuned for the label on it; held AA on every
+       surface and on the primary tints by primaryInkContrast.test.ts. */
+    --primary-ink: 221 83% 44%;
     --secondary: 220 14% 94%;        /* Purple accent */
     --secondary-foreground: 220 10% 12%;
     --muted: 220 14% 95.5%;            /* Very light blue-gray */
@@ -467,6 +471,7 @@
     --primary: 215 92% 70%;          /* Bright blue */
     --primary-foreground: 222 47% 9%;
     --primary-hover: 215 92% 77%; /* the pressed/hovered fill: darker in light, lighter in dark, so its label keeps contrast */
+    --primary-ink: 215 92% 70%;
     --secondary: 220 12% 19%;        /* Purple accent */
     --secondary-foreground: 220 10% 95%;
     --muted: 220 12% 18.5%;            /* Reads against the lifted card */
@@ -868,7 +873,7 @@
 
   /* Color utilities for consistent theming */
   .text-primary-accent {
-    color: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
   }
 
   .text-secondary-accent {
@@ -885,7 +890,7 @@
 
   /* Hover states with primary color */
   .hover-primary:hover {
-    color: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
   }
 
   .hover-bg-primary:hover {
@@ -896,7 +901,7 @@
   .active-item,
   [aria-selected="true"],
   [data-state="active"] {
-    color: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
   }
 
   /* Important headings and labels get subtle primary tint */
@@ -910,18 +915,18 @@
 
   /* Links get primary color */
   a:not(.no-color) {
-    color: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
     transition: color 0.2s;
   }
 
   a:not(.no-color):hover {
-    color: hsl(var(--primary) / 0.8);
+    color: hsl(var(--primary-ink) / 0.8);
   }
 
   /* Badges and pills with primary accent */
   .badge-primary {
     background-color: hsl(var(--primary) / 0.15);
-    color: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
     border: 1px solid hsl(var(--primary) / 0.3);
   }
 

@@ -197,7 +197,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
             <div className="flex justify-center border-t border-border p-2">
               <button
                 type="button"
-                className="text-xs text-primary hover:underline disabled:opacity-60"
+                className="text-xs text-primary-ink hover:underline disabled:opacity-60"
                 disabled={isLoading}
                 onClick={loadMoreArchived}
                 data-testid="load-more-archived"

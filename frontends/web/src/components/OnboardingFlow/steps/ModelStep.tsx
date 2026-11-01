@@ -455,7 +455,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       <div className="space-y-3">
         <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
           <div className="flex items-start gap-3">
-            <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+            <KeyRound className="mt-0.5 h-4 w-4 text-primary-ink" />
             <div>
               <h3 className="text-sm font-medium text-foreground">
                 Choose a provider

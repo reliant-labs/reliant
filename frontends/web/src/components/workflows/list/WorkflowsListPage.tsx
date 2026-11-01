@@ -153,7 +153,7 @@ function WorkflowsHeader({ projectId }: { projectId?: string }) {
               href="https://docs.reliantlabs.io/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-primary-ink hover:underline"
             >
               <BookOpen className="h-3 w-3" aria-hidden="true" />
               Docs
@@ -603,7 +603,7 @@ function WorkflowsBody() {
               <button
                 type="button"
                 onClick={() => void navigate({ to: "/workflow/new" })}
-                className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 create your own
               </button>

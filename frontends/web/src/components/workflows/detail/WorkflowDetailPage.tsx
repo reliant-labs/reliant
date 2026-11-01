@@ -308,7 +308,7 @@ function RecentRunsCard({
           <Link
             to="/workflows/runs"
             search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
-            className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             View all
           </Link>
@@ -464,7 +464,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
             <Link
               to="/workflows/runs"
               search={{ workflow: [workflowRef], range: "all" }}
-              className="font-medium text-primary hover:underline"
+              className="font-medium text-primary-ink hover:underline"
             >
               Runs
             </Link>

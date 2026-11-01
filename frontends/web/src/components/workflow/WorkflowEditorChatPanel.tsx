@@ -105,7 +105,7 @@ export function WorkflowEditorChatPanel({
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
-          <ReliantIcon className="w-4 h-4 text-primary" />
+          <ReliantIcon className="w-4 h-4 text-primary-ink" />
           <span className="font-medium text-sm">Chat</span>
         </div>
         <div className="flex items-center gap-2">

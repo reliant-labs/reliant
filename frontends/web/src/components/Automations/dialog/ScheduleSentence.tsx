@@ -215,7 +215,7 @@ export function ScheduleSentence({
             matches.{" "}
             <button
               type="button"
-              className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               aria-expanded={examplesOpen}
               aria-controls={id("cron-examples")}
               onClick={() => setExamplesOpen((o) => !o)}

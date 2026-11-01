@@ -178,7 +178,7 @@ function ParamField({
           checked={value}
           onChange={(e) => onChange(e.target.checked)}
           disabled={readOnly}
-          className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-ring/20"
+          className="h-4 w-4 rounded border-border bg-background text-primary-ink focus:ring-ring/20"
         />
       </div>
     )

@@ -185,7 +185,7 @@ export function WorkflowSelector({
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
@@ -248,7 +248,7 @@ export function WorkflowSelector({
                         >
                           <div className="flex-shrink-0 w-4 flex justify-center">
                             {isSelected ? (
-                              <Check className="w-3.5 h-3.5 text-primary" />
+                              <Check className="w-3.5 h-3.5 text-primary-ink" />
                             ) : (
                               <Workflow className="w-3.5 h-3.5 text-muted-foreground" />
                             )}
@@ -300,7 +300,7 @@ export function WorkflowSelector({
                         >
                           <div className="flex-shrink-0 w-4 flex justify-center">
                             {isSelected ? (
-                              <Check className="w-3.5 h-3.5 text-primary" />
+                              <Check className="w-3.5 h-3.5 text-primary-ink" />
                             ) : (
                               <Workflow className="w-3.5 h-3.5 text-muted-foreground" />
                             )}

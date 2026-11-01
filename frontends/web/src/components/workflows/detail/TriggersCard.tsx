@@ -239,7 +239,7 @@ export function TriggersCard({
             <button
               type="button"
               onClick={onShowAllProjects}
-              className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               Show all projects
             </button>
@@ -651,7 +651,7 @@ function TriggerHistory({ trigger }: { trigger: Trigger }) {
         <Link
           to="/workflows/runs"
           search={{ trigger: trigger.id, range: "all", allProjects: true }}
-          className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           View all in Runs
         </Link>

@@ -815,7 +815,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Try again
             </button>
@@ -828,7 +828,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Refresh
             </button>
@@ -895,7 +895,7 @@ function OptionRow({
   };
   if (row.kind === "select_all") {
     return (
-      <div {...common} role="option" aria-selected={false} className={cn(base, "text-primary")}>
+      <div {...common} role="option" aria-selected={false} className={cn(base, "text-primary-ink")}>
         <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Select all {row.values.length} in {row.group}
       </div>

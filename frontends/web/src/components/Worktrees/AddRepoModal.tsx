@@ -198,7 +198,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   onClick={() => setSelectedAccount("")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                     selectedAccount === ""
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-primary-ink"
                       : "border-border text-muted-foreground hover:border-primary/50"
                   }`}
                 >
@@ -211,7 +211,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                     onClick={() => setSelectedAccount(acct.account_login)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                       selectedAccount === acct.account_login
-                        ? "border-primary bg-primary/10 text-primary"
+                        ? "border-primary bg-primary/10 text-primary-ink"
                         : "border-border text-muted-foreground hover:border-primary/50"
                     }`}
                   >

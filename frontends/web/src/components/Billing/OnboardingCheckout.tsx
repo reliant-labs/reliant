@@ -350,7 +350,7 @@ function OrderSummary({
             )}
           >
             {line.covered ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
             ) : (
               <span
                 aria-hidden
@@ -361,7 +361,7 @@ function OrderSummary({
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                 {line.label}
                 {line.covered && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary-ink">
                     {line.coveredBy ?? "covered"}
                   </span>
                 )}
@@ -981,8 +981,8 @@ function Notice({
   const iconTones = {
     error: "text-destructive-ink",
     muted: "text-muted-foreground",
-    pending: "text-primary",
-    success: "text-primary",
+    pending: "text-primary-ink",
+    success: "text-primary-ink",
   } as const;
 
   return (

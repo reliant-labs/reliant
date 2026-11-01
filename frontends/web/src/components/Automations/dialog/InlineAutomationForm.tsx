@@ -478,7 +478,7 @@ export function InlineAutomationForm({
                       <button
                         type="button"
                         onClick={() => onUseWorkflow!(w.name, workflowDisplayName(w), projectId)}
-                        className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         Use it
                       </button>
@@ -492,7 +492,7 @@ export function InlineAutomationForm({
             <button
               type="button"
               onClick={onBackToDeclared}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               Use the workflow's own triggers instead
             </button>

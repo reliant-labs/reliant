@@ -429,7 +429,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                           <ChevronRight className="w-3 h-3 text-muted-foreground" />
                         )}
                       </button>
-                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <FileText className="w-4 h-4 text-primary-ink flex-shrink-0" />
                       <span
                         className="text-sm font-mono truncate flex-1"
                         onClick={() => handleResultClick(result.path, undefined, false)} // Click - don't auto-focus

@@ -114,12 +114,12 @@ export function InitializeGitModal({
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
-            <GitBranch className="w-5 h-5 text-primary" />
+            <GitBranch className="w-5 h-5 text-primary-ink" />
           </div>
           <div className="flex-1">
             <p className="text-sm text-foreground mb-2">
               Initialize git for{" "}
-              <span className="font-semibold text-primary">{projectName}</span>
+              <span className="font-semibold text-primary-ink">{projectName}</span>
             </p>
             <p className="text-xs text-muted-foreground">
               This will create a <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">.git</code>{" "}
@@ -170,7 +170,7 @@ export function InitializeGitModal({
               id="initial-commit"
               checked={createInitialCommit}
               onChange={(e) => setCreateInitialCommit(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              className="w-3.5 h-3.5 rounded border-border text-primary-ink focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             />
             <label
               htmlFor="initial-commit"
@@ -187,24 +187,24 @@ export function InitializeGitModal({
           </p>
           <ul className="text-xs text-muted-foreground space-y-1">
             <li className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>
                 <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">.git/</code> directory
               </span>
             </li>
             <li className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>
                 <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">.gitignore</code> file
               </span>
             </li>
             <li className="flex items-start gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>Branch "{initialBranch.trim() || "main"}"</span>
             </li>
             {createInitialCommit && (
               <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-primary-ink mt-0.5 flex-shrink-0" />
                 <span>Initial commit</span>
               </li>
             )}

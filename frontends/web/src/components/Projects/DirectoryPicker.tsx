@@ -264,7 +264,7 @@ export function DirectoryPicker({
         {isCreatingFolder && (
           <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background p-3">
             <div className="flex items-center gap-2">
-              <FolderPlus className="w-4 h-4 text-primary flex-shrink-0" />
+              <FolderPlus className="w-4 h-4 text-primary-ink flex-shrink-0" />
               <input
                 autoFocus
                 type="text"
@@ -358,7 +358,7 @@ export function DirectoryPicker({
                   }`}
                 >
                   {entry.isDirectory ? (
-                    <Folder className="w-4 h-4 text-primary flex-shrink-0" />
+                    <Folder className="w-4 h-4 text-primary-ink flex-shrink-0" />
                   ) : (
                     <File className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
                   )}

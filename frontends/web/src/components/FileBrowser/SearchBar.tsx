@@ -10,7 +10,7 @@ export function SearchBar({ value, onChange, isSearching = false }: SearchBarPro
   return (
     <div className="relative w-full">
       {isSearching ? (
-        <Loader2 className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-primary animate-spin" />
+        <Loader2 className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-primary-ink animate-spin" />
       ) : (
         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
       )}

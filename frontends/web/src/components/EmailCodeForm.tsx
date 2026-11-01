@@ -193,7 +193,7 @@ export function EmailCodeForm({
               type="button"
               onClick={() => void handleResend()}
               disabled={submitting}
-              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+              className="text-sm font-medium text-primary-ink hover:text-primary-ink/80 transition-colors disabled:opacity-50"
             >
               Send another code
             </button>

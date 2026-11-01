@@ -28,14 +28,14 @@ export function RescanModal({
       <div className="space-y-6">
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-xl bg-primary/10 ring-1 ring-primary/20">
-            <RefreshCw className="w-6 h-6 text-primary" />
+            <RefreshCw className="w-6 h-6 text-primary-ink" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-3">
               <GitCommit className="w-4 h-4 text-muted-foreground" />
               <p className="text-sm text-foreground">
-                <span className="font-semibold text-primary">{commitCount} commits</span> since 
-                last scan of <span className="font-semibold text-primary">{projectName}</span>
+                <span className="font-semibold text-primary-ink">{commitCount} commits</span> since 
+                last scan of <span className="font-semibold text-primary-ink">{projectName}</span>
               </p>
             </div>
             
@@ -52,19 +52,19 @@ export function RescanModal({
           </p>
           <ul className="text-sm text-muted-foreground space-y-2">
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>Analyzes new code and structural changes</span>
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>Updates LLM testing scenarios</span>
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>Refreshes project-meta.json</span>
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-ink mt-0.5 flex-shrink-0" />
               <span>Adjusts debugging strategies</span>
             </li>
           </ul>

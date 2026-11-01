@@ -145,7 +145,7 @@ export function OAuthHelperPanel({
 
   const loginButtonClass =
     buttonVariant === "subtle"
-      ? "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+      ? "border border-primary/40 bg-primary/10 text-primary-ink hover:bg-primary/20"
       : "bg-primary text-primary-foreground hover:bg-primary/90";
 
   const loginButton = (

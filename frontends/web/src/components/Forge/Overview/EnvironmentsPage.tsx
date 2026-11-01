@@ -171,7 +171,7 @@ function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: s
                   · forge ledger: <span className="font-mono text-ink">{env.forge.release}</span>
                 </span>
               )}
-              <span className="ml-auto text-xs text-primary">Open</span>
+              <span className="ml-auto text-xs text-primary-ink">Open</span>
             </button>
           </li>
         ))}

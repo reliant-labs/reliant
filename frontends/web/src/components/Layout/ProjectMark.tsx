@@ -20,7 +20,7 @@ export function ProjectMark({ name, active = false, className }: { name: string;
       data-testid="project-mark"
       className={cn(
         "flex h-5 w-5 shrink-0 items-center justify-center rounded border text-2xs font-semibold leading-none",
-        active ? "border-primary/40 bg-primary/10 text-primary" : "border-border/60 bg-background text-muted-foreground",
+        active ? "border-primary/40 bg-primary/10 text-primary-ink" : "border-border/60 bg-background text-muted-foreground",
         className,
       )}
     >

@@ -134,7 +134,7 @@ export function SettingsNavigation({
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
                         isCollapsed ? "flex items-center justify-center px-2" : "text-left",
                         isActive
-                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          ? "border-primary bg-primary/10 text-primary-ink font-medium"
                           : "border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
                       )}
                     >

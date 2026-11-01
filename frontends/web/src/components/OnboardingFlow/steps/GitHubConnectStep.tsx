@@ -252,7 +252,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
                 setSelectedRepo(null);
                 setBranch("");
               }}
-              className="text-xs text-primary hover:text-primary/80 transition-colors"
+              className="text-xs text-primary-ink hover:text-primary-ink/80 transition-colors"
             >
               Change repo
             </button>

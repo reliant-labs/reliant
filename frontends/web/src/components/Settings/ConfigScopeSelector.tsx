@@ -121,7 +121,7 @@ export function ConfigScopeSelector({
               <Icon
                 className={cn(
                   "w-5 h-5 flex-shrink-0 mt-0.5",
-                  isSelected ? "text-primary" : "text-muted-foreground"
+                  isSelected ? "text-primary-ink" : "text-muted-foreground"
                 )}
               />
 
@@ -155,7 +155,7 @@ export function ConfigScopeSelector({
             checked={rememberChoice}
             onChange={(e) => onRememberChoiceChange?.(e.target.checked)}
             disabled={disabled}
-            className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
+            className="w-4 h-4 rounded border-border text-primary-ink focus:ring-primary focus:ring-offset-0"
           />
           <span className="text-sm text-muted-foreground">
             Remember this choice

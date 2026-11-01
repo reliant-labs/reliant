@@ -173,7 +173,7 @@ export function RedeemCouponForm({
                 "inline-flex w-full items-center justify-center rounded-lg border border-transparent bg-primary font-semibold text-primary-foreground transition-colors hover:bg-primary/90",
                 small ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
               )
-            : "text-sm font-medium text-primary hover:underline",
+            : "text-sm font-medium text-primary-ink hover:underline",
           className,
         )}
       >

@@ -203,7 +203,7 @@ function WorkflowIntroStep(props: StepProps) {
         <div className="space-y-2">
           <p>{step.description}</p>
           <div className="flex items-start gap-2 p-2 rounded bg-primary/5 border border-primary/10">
-            <Workflow className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <Workflow className="w-4 h-4 text-primary-ink flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground">
               Workflows are defined in YAML and run multi-agent pipelines with loops, branches, parallelization, and human-in-the-loop approvals.
             </p>

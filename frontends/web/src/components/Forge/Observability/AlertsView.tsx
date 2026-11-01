@@ -254,7 +254,7 @@ function AlertingNotConfigured({ ruleCount, onRules }: { ruleCount: number; onRu
           <>
             Your environments already declare {ruleCount} rule{ruleCount === 1 ? "" : "s"}; they start being evaluated as soon as it
             runs.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               See the rules
             </button>
           </>
@@ -342,14 +342,14 @@ function FiringTab({
           <p>
             {evaluated} rule{evaluated === 1 ? " is" : "s are"} evaluated across {environments.length} environment
             {environments.length === 1 ? "" : "s"} every minute.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               See the rules
             </button>
           </p>
         ) : (
           <p>
             No environment in view declares a rule yet, so nothing can fire.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Add one in code
             </button>
           </p>
@@ -460,7 +460,7 @@ function AnnotationRow({ name, value }: { name: string; value: string }) {
       <dt className="text-ink-muted">{name}</dt>
       <dd className="min-w-0 break-words text-ink">
         {link ? (
-          <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
+          <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary-ink underline-offset-2 hover:underline">
             {value}
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </a>
@@ -509,7 +509,7 @@ function HistoryTab({
         <p>
           Every time an alert starts pending, fires, or resolves it is recorded here.{" "}
           {range !== "7d" && (
-            <button type="button" onClick={() => navigate({ range: "7d" })} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => navigate({ range: "7d" })} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Look at the last 7 days
             </button>
           )}
@@ -591,7 +591,7 @@ function RulesTab({
               href={DOCS.alerts}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="obs-rules-none-docs"
             >
               How alerts work

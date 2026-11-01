@@ -696,12 +696,12 @@ function EnumDropdown({
                 className={cn(
                   PARAM_DROPDOWN_ITEM_CLASS,
                   "rounded-lg",
-                  currentValue === option && "bg-primary/10 text-primary"
+                  currentValue === option && "bg-primary/10 text-primary-ink"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <span>{getDisplayLabel(option)}</span>
-                  {currentValue === option && <Check className="w-4 h-4 text-primary" />}
+                  {currentValue === option && <Check className="w-4 h-4 text-primary-ink" />}
                 </div>
               </button>
             ))}
@@ -849,7 +849,7 @@ function MultiEnumDropdown({
               {selectedValues.length} selected
             </span>
             <div className="flex gap-2">
-              <button type="button" onClick={selectAll} className="text-xs text-primary hover:underline">
+              <button type="button" onClick={selectAll} className="text-xs text-primary-ink hover:underline">
                 All
               </button>
               <button type="button" onClick={clearAll} className="text-xs text-muted-foreground hover:text-foreground">
@@ -1145,7 +1145,7 @@ function ModelDropdown({
                 className={cn(
                   PARAM_DROPDOWN_ITEM_CLASS,
                   "rounded-lg",
-                  (currentValue === model.id || model.id.split('@')[0] === currentValue) && "bg-primary/10 text-primary"
+                  (currentValue === model.id || model.id.split('@')[0] === currentValue) && "bg-primary/10 text-primary-ink"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -1153,7 +1153,7 @@ function ModelDropdown({
                     <div className="font-medium">{model.name}</div>
                     <div className="text-xs text-muted-foreground">{model.provider}</div>
                   </div>
-                  {(currentValue === model.id || model.id.split('@')[0] === currentValue) && <Check className="w-4 h-4 text-primary" />}
+                  {(currentValue === model.id || model.id.split('@')[0] === currentValue) && <Check className="w-4 h-4 text-primary-ink" />}
                 </div>
               </button>
             ))}
@@ -1166,7 +1166,7 @@ function ModelDropdown({
                       e.stopPropagation();
                       navigate({ to: '/settings/$section', params: { section: 'ai' } });
                     }}
-                    className="text-primary hover:underline text-xs"
+                    className="text-primary-ink hover:underline text-xs"
                   >
                     Add API key
                   </button>

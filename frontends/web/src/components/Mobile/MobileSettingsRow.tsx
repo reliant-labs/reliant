@@ -250,7 +250,7 @@ export function MobileOptionSheet({
                     </p>
                   )}
                 </div>
-                {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                {isSelected && <Check className="h-4 w-4 shrink-0 text-primary-ink" />}
               </button>
             );
           })}
@@ -268,7 +268,7 @@ export function MobileOptionSheet({
             <button
               type="button"
               onClick={action.onSelect}
-              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-sm font-medium text-primary active:bg-primary/10"
+              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-sm font-medium text-primary-ink active:bg-primary/10"
             >
               {action.icon}
               {action.label}

@@ -391,7 +391,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                       ) : (
                         <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                       )}
-                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <FileText className="w-4 h-4 text-primary-ink flex-shrink-0" />
                       <span className="text-sm font-mono truncate flex-1">{result.path}</span>
                       <span className="text-xs text-muted-foreground">
                         {result.matches.length} match{result.matches.length !== 1 ? "es" : ""}
