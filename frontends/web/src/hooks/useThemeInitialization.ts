@@ -11,7 +11,7 @@ import { useEffect } from "react";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
-import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { COLOR_SCHEME_ATTR, DEFAULT_COLOR_SCHEME, DEFAULT_COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
 
 
 const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
@@ -58,15 +58,15 @@ export function useThemeInitialization() {
       // If no theme saved, keep whatever index.html set (system preference or default)
       
       // Apply color scheme
-      const colorScheme = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black");
+      const colorScheme = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME);
       document.documentElement.setAttribute(
-        "data-color-scheme", 
-        COLOR_SCHEME_MAP[colorScheme] || "pure-black"
+        "data-color-scheme",
+        COLOR_SCHEME_MAP[colorScheme] || DEFAULT_COLOR_SCHEME_ATTR
       );
       logger.debug("[Theme] Applied color scheme from database:", colorScheme);
       
       // Apply font settings
-      // "default" (bundled Inter), matching every other read site — see the
+      // "default" (bundled Geist), matching every other read site — see the
       // note in lib/theme.ts.
       const font = settingsSync.getSetting(SETTINGS_KEYS.FONT, "default");
       const chatFont = settingsSync.getSetting(SETTINGS_KEYS.CHAT_FONT, "default");
