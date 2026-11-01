@@ -281,6 +281,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge scaffold webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`reliant forge scaffold worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 | [`reliant forge secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
+| [`reliant forge secret access`](#reliant-forge-secret-access) | Show who may use a hosted secret |
+| [`reliant forge secret allow`](#reliant-forge-secret-allow) | Allow a workflow to use a hosted secret |
+| [`reliant forge secret deny`](#reliant-forge-secret-deny) | Revoke a workflow's use of a hosted secret |
 | [`reliant forge secret ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
 | [`reliant forge secret import`](#reliant-forge-secret-import) | Copy existing values into the env's secret store, create-only |
 | [`reliant forge secret list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
@@ -6222,6 +6225,15 @@ SUPERSEDED rather than succeeding on bytes it was never asked about.
 page's `next_before` as --before, and stop on an EMPTY next_before rather than
 on a short page.
 
+BOUND IS NOT APPLIED. A promotion is recorded before it is applied, so the
+newest promotion names what the env is BOUND to, which is what it runs only if
+its apply passed. Every --history entry carries `apply.status` (passed,
+failed, or unrecorded), and so does the default view's --json (`apply`,
+with `last_applied_release` when the bound one's apply failed). The text
+view says it in one line:
+  current  v1.7.83 applied; v1.7.85 promoted but NOT APPLIED (apply failed: …)
+A script that acts on "the env runs X" checks apply.status == "passed".
+
 EXIT CODES — a pipeline branches on these directly:
 
   0  everything declared is running (or nothing is declared)
@@ -6260,6 +6272,7 @@ Examples:
   forge env status prod --wait                      # gate a release on the rollout
   forge env status prod --wait --timeout 0 --json   # where is it NOW? one read
   forge env status prod --history --limit 1 --json | jq -r '.promotions[0].id'
+  forge env status prod --history --limit 1 --json | jq -r '.promotions[0].apply.status'
   forge env status prod --json | jq -r '.images[] | select(.state == "drift")'
 
 ```
@@ -10255,6 +10268,7 @@ value is ever spliced into the SQL:
   {step:UInt32}                              a bucket width in seconds (--step)
   {services:Array(String)}                   the --service values; [] = all
   {envs:Array(String)}  {env_ids:Array(String)}   the env being read
+  {reliant_env_id:String}                    that env's id, as an alert rule names it
 
   cli forge obs query dev --sql "SELECT toStartOfMinute(Timestamp) AS t, count() AS n
       FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}
@@ -13227,6 +13241,11 @@ secret_provider is, and set / list / import act on it there:
   forge.GCPSecretManagerStore   Google Secret Manager, with your Application
                                 Default Credentials.
 
+  forge secret allow / deny / access
+                        a HOSTED secret's access list: which Reliant workflows
+                        may use it ({{ secrets.NAME }} in an http/request
+                        header). Hosted envs only.
+
   forge secret import   copy values that already exist into a store, create-only
                         (the first step of moving a Secret onto ESO)
 
@@ -13245,6 +13264,9 @@ service references does nothing — config belongs in deploy/kcl/<env>/config.k.
   forge secret set   --env dev STRIPE_SECRET_KEY   # value on stdin; add, or replace (= rotate)
   forge secret unset --env dev STRIPE_SECRET_KEY
   forge secret list  --env dev                     # names + presence, never values
+  forge secret allow --env prod --workflow trader-bot --project <id> TRADER_KEY   # hosted: let a workflow use it
+  forge secret deny  --env prod --workflow trader-bot --project <id> TRADER_KEY
+  forge secret access --env prod [TRADER_KEY]      # hosted: who may use it
   forge secret ensure --env dev                    # FileSecrets: create the file + report missing
   forge secret migrate --env dev                   # FileSecrets: convert a legacy .env file
 
@@ -13256,6 +13278,9 @@ reliant forge secret [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`access`](#reliant-forge-secret-access) | Show who may use a hosted secret |
+| [`allow`](#reliant-forge-secret-allow) | Allow a workflow to use a hosted secret |
+| [`deny`](#reliant-forge-secret-deny) | Revoke a workflow's use of a hosted secret |
 | [`ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
 | [`import`](#reliant-forge-secret-import) | Copy existing values into the env's secret store, create-only |
 | [`list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
@@ -13268,6 +13293,88 @@ reliant forge secret [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge secret access
+
+Show who may use a hosted secret
+
+Show the access list of one hosted secret, or of every secret in the env
+when NAME is omitted. Metadata only; values are never printed.
+
+  forge secret access --env staging TRADER_KEY
+  forge secret access --env staging --json
+
+```
+reliant forge secret access --env <environment> [NAME] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit machine-readable JSON |
+
+---
+
+#### reliant forge secret allow
+
+Allow a workflow to use a hosted secret
+
+Add a workflow to a hosted secret's access list. A Reliant workflow that
+references the secret ({{ secrets.NAME }} in an http/request header) runs only
+if its (project, workflow name) is on the list; any run or trigger of that
+workflow may then use it. Idempotent.
+
+The list is the whole policy: it names no destination, path or step.
+Only org owners and admins may edit it, and a protected environment asks for
+step-up; the control plane's refusal is printed as it is sent.
+
+  forge secret allow --env staging --workflow trader-bot --project <id> TRADER_KEY
+
+--project is the Reliant project id that owns the workflow (find it with
+`reliant project list`). Hosted secrets only: a FileSecrets store has no access
+lists.
+
+```
+reliant forge secret allow --env <environment> --workflow <name> --project <id> <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--project` | `string` | - | Reliant project id that owns the workflow (required; run 'reliant project list') |
+| `--workflow` | `string` | - | Workflow name (required) |
+
+---
+
+#### reliant forge secret deny
+
+Revoke a workflow's use of a hosted secret
+
+Remove a workflow from a hosted secret's access list. Its runs lose the
+secret at their next use. Idempotent; the same authorization as 'allow'.
+
+  forge secret deny --env staging --workflow trader-bot --project <id> TRADER_KEY
+
+```
+reliant forge secret deny --env <environment> --workflow <name> --project <id> <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--project` | `string` | - | Reliant project id that owns the workflow (required; run 'reliant project list') |
+| `--workflow` | `string` | - | Workflow name (required) |
 
 ---
 
@@ -14081,8 +14188,8 @@ List, start, stop, resize and rename your machines
 Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
-suspends a running one; resize changes a SUSPENDED machine's size (small,
-medium, large, xl, 2xl), which takes effect when it next starts. To resize a
+suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
+m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
 called, and nothing else.
 
@@ -14148,7 +14255,7 @@ starts. A running machine is refused: stop it first. Disks only grow, so a
 downsize keeps the larger disk.
 
 ```
-reliant machine resize <name|id> <small|medium|large|xl|2xl>
+reliant machine resize <name|id> <s1|s2|m|l|xl|2xl|3xl>
 ```
 
 ---
