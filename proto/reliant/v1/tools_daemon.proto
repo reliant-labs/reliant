@@ -69,6 +69,10 @@ message WhoAmIResponse {
   // user_id is the account the credential acts as — the same id the gateway
   // returns in RegistrationAck.user_id once a daemon connects.
   string user_id = 1;
+  // account_email is that account's email, as the token authority knows it
+  // when asked (so it is current, however the credential was minted). Empty
+  // when the authority names none: self-hosted, or an older control plane.
+  string account_email = 2;
 }
 
 // FileChangeType categorizes file system change events
@@ -596,6 +600,11 @@ message RegistrationAck {
   repeated string requested_project_paths = 2; // "send me config for these"
   string daemon_id = 3; // Gateway-assigned daemon identity (from PAT binding or newly generated)
   string user_id = 4;   // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
+  // account_email is user_id's account email, from the token authority at
+  // connect (WhoAmIResponse.account_email). The daemon names it in its
+  // connected banner, so a machine signed in as the wrong person is obvious.
+  // Empty when the authority names none.
+  string account_email = 5;
 }
 
 message LoadProjectConfigsRequest {

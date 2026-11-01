@@ -148,6 +148,15 @@ func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID stri
 	return bootstrap.NewForeignDaemonIDError()
 }
 
+// accountEmail is the email of the account the daemon credential acts as, as
+// the token authority named it when the daemon auth interceptor resolved the
+// credential — "" when it named none. It is told only to that credential's
+// own holder, so a daemon can say which account it is signed in as.
+func accountEmail(ctx context.Context) string {
+	email, _ := auth.GetUserEmailFromContext(ctx)
+	return strings.TrimSpace(email)
+}
+
 // WhoAmI names the account the presented daemon credential acts as. The daemon
 // auth interceptor has already resolved the credential; this reads the result
 // and touches nothing else — no daemon row, no connection, no NATS.
@@ -162,7 +171,7 @@ func (s *Service) WhoAmI(
 	if !ok || strings.TrimSpace(userID) == "" {
 		return nil, svcerr.Unauthenticated("a daemon credential is required")
 	}
-	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
+	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID, AccountEmail: accountEmail(ctx)}), nil
 }
 
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
@@ -361,6 +370,7 @@ func (s *Service) ConnectDaemon(
 				RequestedProjectPaths: requestedProjectPaths,
 				DaemonId:              daemonID,
 				UserId:                userID,
+				AccountEmail:          accountEmail(ctx),
 			},
 		},
 	}

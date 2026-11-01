@@ -59,16 +59,19 @@ const (
 )
 
 type daemonClient struct {
-	// identityMu guards daemonID and userID: a registration ack on a new
-	// stream writes them while calls still running from a draining stream
-	// read them (gateway_session.go).
+	// identityMu guards daemonID, userID and accountEmail: a registration
+	// ack on a new stream writes them while calls still running from a
+	// draining stream read them (gateway_session.go).
 	identityMu sync.RWMutex
 	daemonID   string
 	daemonName string
 	userID     string
-	hostname   string
-	platform   string
-	cwd        string
+	// accountEmail is userID's email as the gateway last named it
+	// (RegistrationAck.account_email); "" when it named none.
+	accountEmail string
+	hostname     string
+	platform     string
+	cwd          string
 	// serverURL is the API server origin these credentials belong to. Used
 	// as the per-origin key into ~/.reliant/daemon.json when persisting the
 	// server-assigned daemonID after registration. Empty in server mode.
@@ -192,6 +195,29 @@ func (d *daemonClient) currentUserID() string {
 	d.identityMu.RLock()
 	defer d.identityMu.RUnlock()
 	return d.userID
+}
+
+// recordAccount takes the account a registration ack names. The email is
+// replaced along with the id, never kept from an earlier ack: a stale email
+// beside a new account would name the wrong person. An ack naming no account
+// changes nothing.
+func (d *daemonClient) recordAccount(ack *reliantv1.RegistrationAck) {
+	if ack.GetUserId() == "" {
+		return
+	}
+	d.identityMu.Lock()
+	d.userID = ack.GetUserId()
+	d.accountEmail = strings.TrimSpace(ack.GetAccountEmail())
+	d.identityMu.Unlock()
+}
+
+// currentAccount is the account the gateway last said this daemon serves, as
+// the connected banner names it: its email when the gateway named one, else
+// its user id.
+func (d *daemonClient) currentAccount() (userID, email string) {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.userID, d.accountEmail
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
@@ -796,7 +822,7 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Fprint(logging.Notices(), connectedNotice(d.currentUserID()))
+		fmt.Fprint(logging.Notices(), connectedNotice(d.currentAccount()))
 	case daemonstate.StreamAwaitingCredentials:
 		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
@@ -817,14 +843,19 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 }
 
 // connectedNotice is the connected banner. It names the account the gateway
-// says the credential acts as (RegistrationAck.user_id) — the account's id,
-// the only identity the gateway has for an access token — so a daemon that
-// connected as someone other than the person at the keyboard does not look
-// like a success for them. No account named, no account claimed.
-func connectedNotice(account string) string {
+// says the credential acts as, so a daemon that connected as someone other
+// than the person at the keyboard does not look like a success for them: by
+// email (RegistrationAck.account_email, which the gateway reads from the token
+// authority at connect) when the gateway named one, else by user id
+// (RegistrationAck.user_id; a self-hosted gateway or an older control plane
+// names no email). No account named, no account claimed.
+func connectedNotice(userID, email string) string {
 	headline := "Daemon connected — you can head back to Reliant and start working."
-	if account != "" {
-		headline = "Connected as account " + account + " — head back to Reliant to start working."
+	switch {
+	case email != "":
+		headline = "Connected as " + email + " — head back to Reliant to start working."
+	case userID != "":
+		headline = "Connected as account " + userID + " — head back to Reliant to start working."
 	}
 	return "\n  ✓ " + headline + "\n\n    Press Ctrl+C to disconnect.\n\n"
 }
@@ -1256,11 +1287,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			}
 			// The account first: the connected notice names it, so a daemon
 			// running on another person's saved credential says so.
-			if m.RegistrationAck.UserId != "" {
-				d.identityMu.Lock()
-				d.userID = m.RegistrationAck.UserId
-				d.identityMu.Unlock()
-			}
+			d.recordAccount(m.RegistrationAck)
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {

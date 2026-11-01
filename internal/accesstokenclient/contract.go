@@ -42,6 +42,8 @@ import (
 	"net/http"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // Service is the adapter's surface: one method per operation reliant needs
@@ -49,6 +51,9 @@ import (
 type Service interface {
 	// Introspect resolves a presented token, uncached.
 	Introspect(ctx context.Context, token string) (*fat.Principal, error)
+	// IntrospectAccount is Introspect plus the acting user's email, which
+	// control-plane reads from its users row ("" from one that predates it).
+	IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error)
 	// MintForUser mints a token acting as req.UserID in their primary org.
 	MintForUser(ctx context.Context, req MintRequest) (Minted, error)
 	// ListForUser lists a user's live tokens, optionally one scope.
