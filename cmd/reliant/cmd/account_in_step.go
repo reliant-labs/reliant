@@ -90,18 +90,18 @@ func identifyDaemonSignIn(ctx context.Context, server string, c *auth.DaemonCred
 	}
 	gateway, err := gatewayFor(c)
 	if err != nil {
-		logging.Warn("cannot ask the gateway whose saved daemon sign-in this is", "account", c.Sub, "error", err)
+		logging.WarnContext(ctx, "cannot ask the gateway whose saved daemon sign-in this is", "account", c.Sub, "error", err)
 		return cliauth.Account{}
 	}
 	ctx, cancel := context.WithTimeout(ctx, daemonIdentifyTimeout)
 	defer cancel()
 	owner, err := whoAmI(ctx, gateway, c.PAT)
 	if err != nil {
-		logging.Warn("the gateway did not say whose saved daemon sign-in this is", "account", c.Sub, "error", err)
+		logging.WarnContext(ctx, "the gateway did not say whose saved daemon sign-in this is", "account", c.Sub, "error", err)
 		return cliauth.Account{}
 	}
 	if err := auth.RecordDaemonAccount(server, c.Sub, owner, ""); err != nil {
-		logging.Warn("could not record whose saved daemon sign-in this is", "account", c.Sub, "error", err)
+		logging.WarnContext(ctx, "could not record whose saved daemon sign-in this is", "account", c.Sub, "error", err)
 	}
 	c.AccountID = owner
 	return cliauth.Account{ID: owner}
@@ -203,7 +203,7 @@ func daemonAccountForCLILogin(ctx context.Context, cmd *cobra.Command, conn *con
 	}
 	saved, err := auth.ListDaemonCredentialsForServer(conn.ServerURL)
 	if err != nil {
-		logging.Warn("could not read this machine's daemon sign-ins", "error", err)
+		logging.WarnContext(ctx, "could not read this machine's daemon sign-ins", "error", err)
 	}
 	var others []string
 	unconfirmed := false
@@ -212,7 +212,7 @@ func daemonAccountForCLILogin(ctx context.Context, cmd *cobra.Command, conn *con
 		switch {
 		case a.Same(login):
 			if err := auth.MakeDefaultDaemonAccount(conn.ServerURL, c.Sub); err != nil {
-				logging.Warn("could not make the CLI login's daemon sign-in the default", "error", err)
+				logging.WarnContext(ctx, "could not make the CLI login's daemon sign-in the default", "error", err)
 			}
 			return instanceAccountOf(c), login
 		case a.Known():
