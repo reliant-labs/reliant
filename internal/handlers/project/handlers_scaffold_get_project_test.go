@@ -31,8 +31,8 @@ func TestGetProject_Generated(t *testing.T) {
 			Req:  connect.NewRequest(&pb.GetProjectRequest{ProjectId: "p-1"}),
 			Ctx:  project.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectResponse]) {
-				if got := resp.Msg.GetProject(); got.GetId() != "p-1" || got.GetPath() != "/work" || !got.GetIsGitRepo() {
-					t.Fatalf("project = %v, want p-1 at /work, a git repository", got)
+				if got := resp.Msg.GetProject(); got.GetId() != "p-1" || got.GetPath() != creatorPath || !got.GetIsGitRepo() {
+					t.Fatalf("project = %v, want p-1 at its creator path, a git repository", got)
 				}
 			},
 		},

@@ -41,7 +41,7 @@ func TestUpdateProject_Generated(t *testing.T) {
 			Req:  connect.NewRequest(&pb.UpdateProjectRequest{ProjectId: "p-1", Name: ptr.Of("renamed")}),
 			Ctx:  project.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.UpdateProjectResponse]) {
-				if stored == nil || stored.Name != "renamed" || stored.Path != "/work" || stored.DefaultBranch == nil || *stored.DefaultBranch != "main" {
+				if stored == nil || stored.Name != "renamed" || stored.Path != creatorPath || stored.DefaultBranch == nil || *stored.DefaultBranch != "main" {
 					t.Fatalf("stored = %+v, want p-1 renamed and otherwise unchanged", stored)
 				}
 				if got := resp.Msg.GetProject(); got.GetName() != "renamed" || got.GetId() != "p-1" {

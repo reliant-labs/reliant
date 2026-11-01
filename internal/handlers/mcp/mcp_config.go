@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -336,7 +337,7 @@ func (s *Service) readMergedScopedServers(ctx context.Context, projectID string)
 }
 
 func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, userID, name string) (map[reliantv1.ConfigScope]*MCPConfigFile, error) {
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, user
 			continue
 		}
 		delete(cfg.MCPServers, name)
-		if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, cfg); err != nil {
+		if err := s.writeMCPConfigViaDaemon(ctx, checkout, scope, cfg); err != nil {
 			return nil, err
 		}
 		updatedScopes[scope] = cfg
@@ -366,13 +367,7 @@ func (s *Service) removeServerFromAllScopes(ctx context.Context, projectID, user
 	return updatedScopes, nil
 }
 
-func (s *Service) ensureProjectLocalGitignore(ctx context.Context, projectID string) {
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
-	if err != nil {
-		logging.WarnContext(ctx, "Failed to get project while ensuring .reliant.local is gitignored", "project_id", projectID, "error", err)
-		return
-	}
-
+func (s *Service) ensureProjectLocalGitignore(ctx context.Context, checkout projectcheckout.Target) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || s.deps.Router == nil {
 		logging.WarnContext(ctx, "Cannot ensure gitignore: no user context or daemon router")
@@ -382,15 +377,16 @@ func (s *Service) ensureProjectLocalGitignore(ctx context.Context, projectID str
 	payload, _ := json.Marshal(struct {
 		ProjectPath string `json:"project_path"`
 		Pattern     string `json:"pattern"`
-	}{ProjectPath: project.Path, Pattern: ".reliant.local/"})
+	}{ProjectPath: checkout.Path, Pattern: ".reliant.local/"})
 
-	if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.ensure_gitignore", payload, 10000); err != nil {
-		logging.WarnContext(ctx, "Failed to ensure .reliant.local/ is gitignored via daemon", "project_path", project.Path, "error", err)
+	if _, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.ensure_gitignore", payload, 10000); err != nil {
+		logging.WarnContext(ctx, "Failed to ensure .reliant.local/ is gitignored via daemon", "project_path", checkout.Path, "error", err)
 	}
 }
 
-// writeMCPConfigViaDaemon sends a daemon command to write the MCP config file on the daemon's filesystem.
-func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projectPath string, scope reliantv1.ConfigScope, cfg *MCPConfigFile) error {
+// writeMCPConfigViaDaemon writes the MCP config file on the machine holding
+// the project's checkout, under its path there.
+func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, checkout projectcheckout.Target, scope reliantv1.ConfigScope, cfg *MCPConfigFile) error {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return fmt.Errorf("no user context for daemon config write")
@@ -410,7 +406,7 @@ func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projec
 		Content     string `json:"content"`
 	}{
 		Scope:       scopeToDaemonWriteScope(scope),
-		ProjectPath: projectPath,
+		ProjectPath: checkout.Path,
 		Content:     string(data),
 	})
 	if err != nil {
@@ -419,7 +415,7 @@ func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projec
 
 	// The daemon reloads servers when their config changes.
 	defer s.statuses.invalidateUser(userID)
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.write_config", payload, 15000)
+	respBytes, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.write_config", payload, 15000)
 	if err != nil {
 		return daemonerr.Error("daemon config write", err)
 	}

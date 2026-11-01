@@ -19,7 +19,7 @@ func TestUploadScenario_Generated(t *testing.T) {
 	t.Parallel()
 
 	// The daemon accepts every write; the Recorder keeps what was sent.
-	router := &scenario.MockSender{SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) {
+	router := &scenario.MockSender{PlacementDaemonIDFunc: placeAsNamed, SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
 		return nil, nil
 	}}
 	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: router}))
@@ -65,12 +65,13 @@ func TestUploadScenario_Generated(t *testing.T) {
 			Req:  upload(func(*pb.UploadScenarioRequest) {}),
 			Ctx:  scenario.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.UploadScenarioResponse]) {
-				sends := router.Calls("SendDaemonCommand")
+				sends := router.Calls("SendDaemonCommandToDaemon")
 				require.Len(t, sends, 1, "only the valid upload reaches the machine")
 				var payload map[string]string
-				require.NoError(t, json.Unmarshal(sends[0].Args[3].([]byte), &payload))
+				require.NoError(t, json.Unmarshal(sends[0].Args[4].([]byte), &payload))
 				require.Equal(t, "test-user", sends[0].Args[1])
-				require.Equal(t, "fs.write_file", sends[0].Args[2])
+				require.Equal(t, scenarioDaemon, sends[0].Args[2], "written on the machine holding the checkout")
+				require.Equal(t, "fs.write_file", sends[0].Args[3])
 				require.Equal(t, "/home/test/project/.reliant/workflows/tail-flow/scenarios/drafts.yaml", payload["path"])
 				require.Equal(t, payload["path"], resp.Msg.GetPath())
 				require.Equal(t, "project:tail-flow:drafts", resp.Msg.GetScenario().GetId())
