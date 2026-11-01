@@ -360,6 +360,9 @@ export function useLiveView(forgeProject: string | null | undefined) {
   return useQuery<LiveViewResult>({ ...liveViewQuery(forgeProject ?? ""), enabled });
 }
 
+/** How many times the Live read is sent before an unreachable answer is final (liveViewQuery). */
+export const LIVE_VIEW_ATTEMPTS = 2;
+
 export interface LiveViewResult {
   availability: LiveAvailability;
   envs: LiveEnv[];
@@ -376,14 +379,23 @@ export function liveViewQuery(forgeProject: string) {
   return {
     queryKey: forgeCloudKeys.liveView(forgeProject),
     queryFn: async (): Promise<LiveViewResult> => {
-      try {
-        return {
-          availability: "available" as const,
-          envs: await getLiveView(forgeProject),
-          detail: "",
-        };
-      } catch (err) {
-        return { availability: liveAvailabilityFromError(err), envs: [], detail: liveErrorDetail(err) };
+      // An UNREACHABLE answer (a timeout, a dropped response) is asked once
+      // more before it is resolved: this one read is the roster every console
+      // page draws from, and settling a blip as `unreachable` leaves every page
+      // without an environment until the next refetch. The answers the server
+      // gave on purpose (no access, not configured) are final at once.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return {
+            availability: "available" as const,
+            envs: await getLiveView(forgeProject),
+            detail: "",
+          };
+        } catch (err) {
+          const availability = liveAvailabilityFromError(err);
+          if (availability === "unreachable" && attempt < LIVE_VIEW_ATTEMPTS) continue;
+          return { availability, envs: [], detail: liveErrorDetail(err) };
+        }
       }
     },
     staleTime: 15_000,
