@@ -27,11 +27,14 @@ export interface ToolApprovalUpdate {
   title: string;
   description?: string;
   content_block_id?: string;
-  status: "pending" | "approved" | "denied";
+  /** Anything but "pending" is resolved; see approvalStatusFromFeed. */
+  status: "pending" | "approved" | "denied" | "expired" | "cancelled" | (string & {});
   denial_reason?: string;
   sequence_number: number;
   created_at: string;
   responded_at?: string;
+  /** When it was resolved; what every server write sends. */
+  resolved_at?: string;
   action_taken?: string;
 }
 

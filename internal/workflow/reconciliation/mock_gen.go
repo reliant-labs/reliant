@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockReconcilerStore
-// forge:hash=4e2cfe81359769a4e7281531fa036cd7720d18ab68519f0ea27413df46d964a7
+// forge:hash=3846e326af2bb0ba35d72f5e9b3194ae87b277e7f22e29c0fb1e4e2679690685
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -46,6 +46,10 @@ type MockReconcilerStore struct {
 	GetThreadFunc                                   func(context.Context, string) (*db.Thread, error)
 	ListPendingQuestionsByChatFunc                  func(context.Context, string) ([]*db.Question, error)
 	ListPendingApprovalsByChatFunc                  func(context.Context, string) ([]*db.Approval, error)
+	ListStaleApprovalsFunc                          func(context.Context, int) ([]db.StaleApproval, error)
+	ResolvePendingApprovalFunc                      func(context.Context, string, int32, string, string) (bool, error)
+	ListUnannouncedApprovalResolutionsFunc          func(context.Context, int) ([]*db.Approval, error)
+	AnnounceApprovalResolutionFunc                  func(context.Context, *db.Approval) error
 	ListStrandedSpawnToolCallsFunc                  func(context.Context) ([]*db.ToolCall, error)
 	ListStrandedBackgroundSpawnToolCallsFunc        func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
 	ListBackgroundedProcessToolCallsFunc            func(context.Context) ([]*db.BackgroundedProcessCall, error)
@@ -222,6 +226,42 @@ func (m *MockReconcilerStore) ListPendingApprovalsByChat(ctx context.Context, ch
 		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListPendingApprovalsByChat")
+}
+
+// ListStaleApprovals records the call and delegates to ListStaleApprovalsFunc when set.
+func (m *MockReconcilerStore) ListStaleApprovals(ctx context.Context, limit int) ([]db.StaleApproval, error) {
+	m.Recorder.Record("ListStaleApprovals", ctx, limit)
+	if m.ListStaleApprovalsFunc != nil {
+		return m.ListStaleApprovalsFunc(ctx, limit)
+	}
+	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListStaleApprovals")
+}
+
+// ResolvePendingApproval records the call and delegates to ResolvePendingApprovalFunc when set.
+func (m *MockReconcilerStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason string, actionTaken string) (bool, error) {
+	m.Recorder.Record("ResolvePendingApproval", ctx, id, status, reason, actionTaken)
+	if m.ResolvePendingApprovalFunc != nil {
+		return m.ResolvePendingApprovalFunc(ctx, id, status, reason, actionTaken)
+	}
+	return false, contractkit.MockNotSet("MockReconcilerStore", "ResolvePendingApproval")
+}
+
+// ListUnannouncedApprovalResolutions records the call and delegates to ListUnannouncedApprovalResolutionsFunc when set.
+func (m *MockReconcilerStore) ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error) {
+	m.Recorder.Record("ListUnannouncedApprovalResolutions", ctx, limit)
+	if m.ListUnannouncedApprovalResolutionsFunc != nil {
+		return m.ListUnannouncedApprovalResolutionsFunc(ctx, limit)
+	}
+	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListUnannouncedApprovalResolutions")
+}
+
+// AnnounceApprovalResolution records the call and delegates to AnnounceApprovalResolutionFunc when set.
+func (m *MockReconcilerStore) AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error {
+	m.Recorder.Record("AnnounceApprovalResolution", ctx, a)
+	if m.AnnounceApprovalResolutionFunc != nil {
+		return m.AnnounceApprovalResolutionFunc(ctx, a)
+	}
+	return contractkit.MockNotSet("MockReconcilerStore", "AnnounceApprovalResolution")
 }
 
 // ListStrandedSpawnToolCalls records the call and delegates to ListStrandedSpawnToolCallsFunc when set.
