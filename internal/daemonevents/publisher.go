@@ -148,22 +148,20 @@ func NewPublisher(nc *nats.Conn) (*Publisher, error) {
 	return &Publisher{js: js}, nil
 }
 
-// OnDaemonConnected satisfies toolexec.DaemonConnectionListener. Callers that
-// have the daemon's registered identity available should call
-// OnDaemonConnectedWithInfo instead so the control plane gets a usable name.
-func (p *Publisher) OnDaemonConnected(userID, daemonID string) {
-	p.publishConnected(userID, daemonID, "", "", "")
-}
+// OnDaemonConnected satisfies toolexec.DaemonConnectionListener and publishes
+// nothing: a registered stream is not yet a usable machine. The connected
+// event is published from OnDaemonLinkReady, once a probe round trip proved
+// the stream carries traffic. Its consumers — queued-message delivery and
+// project-dir heal — fan commands out to the machine at once, and on a laptop
+// that re-registers while mostly asleep every one of those commands timed out
+// (prod 2026-10-30).
+func (p *Publisher) OnDaemonConnected(userID, daemonID string) {}
 
-// OnDaemonConnectedWithInfo satisfies toolexec.DaemonConnectionInfoListener.
-// name/hostname/platform are whatever the daemon asserted in its
-// DaemonRegister message (internal/handlers/tools_daemon/tools_daemon.go); any of
-// them may be empty. ToolsDaemonService.notifyConnected calls this instead
-// of OnDaemonConnected when the listener implements the interface, so this
-// is the path actually used in production; OnDaemonConnected above only
-// exists to satisfy the base interface and covers callers/tests with no
-// identity to give.
-func (p *Publisher) OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform string) {
+// OnDaemonLinkReady satisfies toolexec.DaemonLinkReadyListener: the daemon's
+// stream answered a probe, so the machine is connected in the sense every
+// consumer of the event means. name/hostname/platform are whatever the daemon
+// asserted in its DaemonRegister message; any of them may be empty.
+func (p *Publisher) OnDaemonLinkReady(userID, daemonID, name, hostname, platform string) {
 	p.publishConnected(userID, daemonID, name, hostname, platform)
 }
 

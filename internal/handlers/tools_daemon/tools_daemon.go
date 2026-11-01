@@ -164,8 +164,12 @@ type daemonConnection struct {
 	// sends; written only by the receive loop.
 	ackedDaemonHeartbeat atomic.Int64
 	sendCh               chan *reliantv1.ServerMessage
-	done                 chan struct{}
-	doneOnce             sync.Once
+	// link is whether this stream has carried a round trip yet, and whether
+	// it is ready for connect-time work (link_liveness.go). nil reads as
+	// proven.
+	link     *linkState
+	done     chan struct{}
+	doneOnce sync.Once
 	// closeReason records why done was closed, so the stream handler can
 	// return a distinguishable error instead of a bare EOF.
 	closeReason atomic.Pointer[error]
@@ -394,20 +398,15 @@ func (s *Service) AddConnectionListener(l toolexec.DaemonConnectionListener) {
 	s.listenersMu.Unlock()
 }
 
-// notifyConnected calls OnDaemonConnectedWithInfo on any listener that
-// implements toolexec.DaemonConnectionInfoListener (currently just
-// daemonevents.Publisher), falling back to plain OnDaemonConnected for
-// listeners that only care about identity (NATSToolBridge,
-// daemonquery.Responder/UserResponder). Each listener gets exactly one call.
-// Must be called OUTSIDE s.mu to avoid deadlocks.
-func (s *Service) notifyConnected(userID, daemonID, name, hostname, platform string) {
+// notifyConnected calls OnDaemonConnected on every listener, at registration:
+// what must be in place before the daemon is acknowledged (the NATS bridge's
+// subscriptions, the status responders). Work that needs the daemon to answer
+// waits for notifyLinkReady (link_liveness.go). Must be called OUTSIDE s.mu to
+// avoid deadlocks.
+func (s *Service) notifyConnected(userID, daemonID string) {
 	s.listenersMu.RLock()
 	defer s.listenersMu.RUnlock()
 	for _, l := range s.listeners {
-		if infoListener, ok := l.(toolexec.DaemonConnectionInfoListener); ok {
-			infoListener.OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform)
-			continue
-		}
 		l.OnDaemonConnected(userID, daemonID)
 	}
 }
