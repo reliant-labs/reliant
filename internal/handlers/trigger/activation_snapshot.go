@@ -303,14 +303,15 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					if a := node.GetWorkflow(); a != nil && a.GetInline() == nil {
 						// The thread config (mode, injected message) grants nothing
 						// and routinely reads node outputs, which do not exist before
-						// a run; only the fields that pick the child and its inputs
-						// must resolve. The whole node is still fingerprinted.
+						// a run; only the fields that pick the child must resolve. An
+						// argument that reads them reaches the child as unbounded
+						// (maskRunTimeArgs). The whole node is still fingerprinted.
 						a = proto.Clone(a).(*pb.SubWorkflowArgs)
 						a.Thread = nil
 						if referencesTaintedIn(&pb.SubWorkflowArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
 						}
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
+						a.Args = maskRunTimeArgs(maskTaintedArgs(a.GetArgs(), tainted))
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
@@ -367,8 +368,13 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						if referencesTaintedIn(&pb.LoopArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
 						}
+						// As for a workflow node: the iteration controls (items,
+						// while, parallel, thread) read what the run computes and
+						// pick no child, so only the ref, presets and arguments
+						// are resolved here.
 						a = proto.Clone(a).(*pb.LoopArgs)
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
+						a.Items, a.While, a.Parallel, a.Thread = nil, nil, nil, nil
+						a.Args = maskRunTimeArgs(maskTaintedArgs(a.GetArgs(), tainted))
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")

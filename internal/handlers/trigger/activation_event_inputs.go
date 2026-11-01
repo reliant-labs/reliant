@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -35,9 +36,11 @@ import (
 // maxEventContexts bounds the product of the bounded inputs' value sets.
 const maxEventContexts = maxApprovalDependencies
 
-// eventSupplied is an unbounded event input's value during approval. A target
-// field resolved from it is not a scope identifier, so discloseScope withholds
-// it as dynamic. It also marks the input as event-tainted: see taintedInputs.
+// eventSupplied is an unbounded event input's value during approval, and a
+// child's input whose argument reads what only a run has (maskRunTimeArgs). A
+// target field resolved from it is not a scope identifier, so discloseScope
+// withholds it as dynamic. It also marks the input as tainted: see
+// taintedInputs.
 const eventSupplied = "\u27e8event-supplied\u27e9"
 
 // An unbounded event input must not choose a privilege: a child workflow or
@@ -219,6 +222,55 @@ func maskTaintedArgs(args map[string]*structpb.Value, tainted map[string]bool) m
 		out[name] = maskTainted(v, tainted)
 	}
 	return out
+}
+
+// runTimeNamespaces are what only a run has: node outputs, a loop's
+// iteration, the event that started it, a failure. inputs and workflow are
+// what an approval evaluates against.
+var runTimeNamespaces = []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELTrigger, wfcel.CELFailure}
+
+// maskRunTimeArgs replaces every argument leaf that reads a run-time namespace
+// with the sentinel. A child's arguments routinely read what the run computes
+// first (a model chosen by a classifier node, a prompt a compute node built, a
+// loop's item); none of that exists at approval, so evaluating it fails. The
+// child then sees that input as unbounded, exactly as it sees an
+// event-supplied one: a target derived from it is disclosed as dynamic, and it
+// may not choose a workflow, preset, tool, spawn or permission — those checks
+// refuse the sentinel. The check is by reference, as for event inputs: an
+// argument that reads only inputs must still resolve, and one that does not
+// parse is left for the resolver to refuse. The workflow's ref and presets
+// never pass through here: they must resolve.
+func maskRunTimeArgs(args map[string]*structpb.Value) map[string]*structpb.Value {
+	if len(args) == 0 {
+		return args
+	}
+	out := make(map[string]*structpb.Value, len(args))
+	for name, v := range args {
+		out[name] = maskRunTime(v)
+	}
+	return out
+}
+
+func maskRunTime(v *structpb.Value) *structpb.Value {
+	switch k := v.GetKind().(type) {
+	case *structpb.Value_StringValue:
+		if runTime, err := wfcel.TemplateReferencesAny(k.StringValue, runTimeNamespaces); err == nil && runTime {
+			return structpb.NewStringValue(eventSupplied)
+		}
+	case *structpb.Value_ListValue:
+		items := make([]*structpb.Value, len(k.ListValue.GetValues()))
+		for i, item := range k.ListValue.GetValues() {
+			items[i] = maskRunTime(item)
+		}
+		return structpb.NewListValue(&structpb.ListValue{Values: items})
+	case *structpb.Value_StructValue:
+		fields := make(map[string]*structpb.Value, len(k.StructValue.GetFields()))
+		for name, item := range k.StructValue.GetFields() {
+			fields[name] = maskRunTime(item)
+		}
+		return structpb.NewStructValue(&structpb.Struct{Fields: fields})
+	}
+	return v
 }
 
 func maskTainted(v *structpb.Value, tainted map[string]bool) *structpb.Value {
