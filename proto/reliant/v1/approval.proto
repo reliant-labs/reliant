@@ -23,12 +23,18 @@ enum ApprovalType {
   APPROVAL_TYPE_TOOL_CALL = 3;
 }
 
-// ApprovalStatus tracks the lifecycle of an approval request
+// ApprovalStatus tracks the lifecycle of an approval request. Only PENDING is
+// actionable. APPROVED and DENIED are a person's decision; EXPIRED and
+// CANCELLED are the system closing a request nobody can answer any more (its
+// wait timed out, or the run waiting on it ended or was interrupted), with the
+// reason in denial_reason.
 enum ApprovalStatus {
   APPROVAL_STATUS_UNSPECIFIED = 0;
   APPROVAL_STATUS_PENDING = 1;
   APPROVAL_STATUS_APPROVED = 2;
   APPROVAL_STATUS_DENIED = 3;
+  APPROVAL_STATUS_EXPIRED = 4;
+  APPROVAL_STATUS_CANCELLED = 5;
 }
 
 // ApprovalService handles workflow approval operations.

@@ -79,7 +79,11 @@ func (ApprovalType) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{0}
 }
 
-// ApprovalStatus tracks the lifecycle of an approval request
+// ApprovalStatus tracks the lifecycle of an approval request. Only PENDING is
+// actionable. APPROVED and DENIED are a person's decision; EXPIRED and
+// CANCELLED are the system closing a request nobody can answer any more (its
+// wait timed out, or the run waiting on it ended or was interrupted), with the
+// reason in denial_reason.
 type ApprovalStatus int32
 
 const (
@@ -87,6 +91,8 @@ const (
 	ApprovalStatus_APPROVAL_STATUS_PENDING     ApprovalStatus = 1
 	ApprovalStatus_APPROVAL_STATUS_APPROVED    ApprovalStatus = 2
 	ApprovalStatus_APPROVAL_STATUS_DENIED      ApprovalStatus = 3
+	ApprovalStatus_APPROVAL_STATUS_EXPIRED     ApprovalStatus = 4
+	ApprovalStatus_APPROVAL_STATUS_CANCELLED   ApprovalStatus = 5
 )
 
 // Enum value maps for ApprovalStatus.
@@ -96,12 +102,16 @@ var (
 		1: "APPROVAL_STATUS_PENDING",
 		2: "APPROVAL_STATUS_APPROVED",
 		3: "APPROVAL_STATUS_DENIED",
+		4: "APPROVAL_STATUS_EXPIRED",
+		5: "APPROVAL_STATUS_CANCELLED",
 	}
 	ApprovalStatus_value = map[string]int32{
 		"APPROVAL_STATUS_UNSPECIFIED": 0,
 		"APPROVAL_STATUS_PENDING":     1,
 		"APPROVAL_STATUS_APPROVED":    2,
 		"APPROVAL_STATUS_DENIED":      3,
+		"APPROVAL_STATUS_EXPIRED":     4,
+		"APPROVAL_STATUS_CANCELLED":   5,
 	}
 )
 
@@ -951,12 +961,14 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\fApprovalType\x12\x1d\n" +
 	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\x12\x1b\n" +
-	"\x17APPROVAL_TYPE_TOOL_CALL\x10\x03\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\x88\x01\n" +
+	"\x17APPROVAL_TYPE_TOOL_CALL\x10\x03\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\xc4\x01\n" +
 	"\x0eApprovalStatus\x12\x1f\n" +
 	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17APPROVAL_STATUS_PENDING\x10\x01\x12\x1c\n" +
 	"\x18APPROVAL_STATUS_APPROVED\x10\x02\x12\x1a\n" +
-	"\x16APPROVAL_STATUS_DENIED\x10\x032\xa3\x05\n" +
+	"\x16APPROVAL_STATUS_DENIED\x10\x03\x12\x1b\n" +
+	"\x17APPROVAL_STATUS_EXPIRED\x10\x04\x12\x1d\n" +
+	"\x19APPROVAL_STATUS_CANCELLED\x10\x052\xa3\x05\n" +
 	"\x0fApprovalService\x12h\n" +
 	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x00\x12y\n" +
 	"\aApprove\x12\x1a.reliant.v1.ApproveRequest\x1a\x1b.reliant.v1.ApproveResponse\"5\xa2\xbb\x181:/\n" +

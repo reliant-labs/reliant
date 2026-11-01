@@ -8,7 +8,7 @@ import {
   ChatState,
   AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus, ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
+import { ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -114,7 +114,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { approvalsFromCache, approvalStatusFromFeed, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
 import { invalidatePlanTasks } from "../hooks/task-queries";
@@ -167,19 +167,6 @@ function getGlobalUpdatesStore() {
 /** Called once from globalUpdatesStore after it finishes initializing. */
 export function initGlobalUpdatesStoreRef(mod: typeof import("./globalUpdatesStore")) {
   _globalUpdatesStoreModule = mod;
-}
-
-function toApprovalStatus(
-  status: "pending" | "approved" | "denied",
-): ApprovalStatus {
-  switch (status) {
-    case "approved":
-      return ApprovalStatus.APPROVED;
-    case "denied":
-      return ApprovalStatus.DENIED;
-    default:
-      return ApprovalStatus.PENDING;
-  }
 }
 
 /**
@@ -3424,10 +3411,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             id: approvalUpdate.id,
             chatId: approvalUpdate.chat_id,
             entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
-            status: toApprovalStatus(approvalUpdate.status),
+            status: approvalStatusFromFeed(approvalUpdate.status),
             denialReason: approvalUpdate.denial_reason,
             createdAt: approvalUpdate.created_at,
-            resolvedAt: approvalUpdate.responded_at,
+            resolvedAt: approvalUpdate.resolved_at ?? approvalUpdate.responded_at,
             actionTaken: approvalUpdate.action_taken, // Which action was clicked
             ...approvalFields(approvalUpdate),
           });

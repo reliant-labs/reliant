@@ -70,7 +70,7 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
     daemonId: 'd1',
     hostname: 'work-box',
     status: DaemonStatus.ACTIVE,
-    size: 'medium',
+    size: 'l',
     platform: '',
     lastStatusMessage: '',
     ...overrides,
@@ -95,7 +95,7 @@ describe('MobileDaemonScreen', () => {
       screen.getByRole('heading', { name: 'work-box' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
-    expect(screen.getByText('Medium')).toBeInTheDocument()
+    expect(screen.getByText('L')).toBeInTheDocument()
   })
 
   it('does NOT offer Resume for a running daemon', () => {

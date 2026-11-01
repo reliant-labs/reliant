@@ -80,6 +80,46 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 	return proto
 }
 
+// ReasonApprovalNotPending is the error reason for acting on an approval that
+// is no longer pending: someone decided it, its wait expired, or the run
+// waiting on it ended. Clients branch on it to drop the approval and show
+// the message, which says what happened.
+const ReasonApprovalNotPending = "approval_not_pending"
+
+// notActionable is the error for acting on a, which is no longer pending.
+func notActionable(a *db.Approval) error {
+	return svcerr.WithReason(svcerr.FailedPrecondition(resolvedMessage(a)), ReasonApprovalNotPending)
+}
+
+// resolvedMessage says, for the person, what already happened to a.
+func resolvedMessage(a *db.Approval) string {
+	reason := ""
+	if a.DenialReason != nil {
+		reason = *a.DenialReason
+	}
+	withReason := func(head string) string {
+		if reason == "" {
+			return head + "."
+		}
+		return head + ": " + reason
+	}
+	switch reliantv1.ApprovalStatus(a.Status) {
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED:
+		return "This request was already approved."
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED:
+		// Timed-out approvals were recorded as denied with action "timeout"
+		// before EXPIRED existed.
+		if a.ActionTaken != nil && *a.ActionTaken == "timeout" {
+			return "This request expired: no one answered before its time limit, so nothing was approved."
+		}
+		return withReason("This request was already denied")
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED:
+		return withReason("This request expired")
+	default:
+		return withReason("This request was already resolved")
+	}
+}
+
 // retiredToolApprovalType is the approval_type of a row recorded by the
 // removed integration action approval prompt: 1, the reserved
 // APPROVAL_TYPE_TOOL. Retire it with runtime's actionApprovalRemovedChangeID.
@@ -132,7 +172,7 @@ func (s *Service) Approve(
 	if req.Msg.RequestId == "" {
 		return nil, svcerr.InvalidArgument("request_id is required")
 	}
-	if _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{approved: true, actionTaken: req.Msg.ActionTaken}); err != nil {
+	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{approved: true, actionTaken: req.Msg.ActionTaken}); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.ApproveResponse{
@@ -149,7 +189,7 @@ func (s *Service) Deny(
 	if req.Msg.RequestId == "" {
 		return nil, svcerr.InvalidArgument("request_id is required")
 	}
-	if _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied this approval"), actionTaken: req.Msg.ActionTaken}); err != nil {
+	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied this approval"), actionTaken: req.Msg.ActionTaken}); err != nil {
 		return nil, err
 	}
 	logging.InfoContext(ctx, "Denied request and signalled workflow", "requestID", req.Msg.RequestId)
@@ -167,14 +207,14 @@ func (s *Service) BatchApprove(
 	if len(req.Msg.RequestIds) == 0 {
 		return nil, svcerr.InvalidArgument("request_ids cannot be empty")
 	}
-	chatID, approved, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{approved: true, actionTaken: req.Msg.ActionTaken})
+	chatID, approved, skipped, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{approved: true, actionTaken: req.Msg.ActionTaken})
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.BatchApproveResponse{
 		Success:  true,
 		Approved: int32(approved),
-		Message:  fmt.Sprintf("Approved %d requests", approved),
+		Message:  batchMessage("Approved", approved, skipped),
 		ChatId:   chatID,
 	}), nil
 }
@@ -187,14 +227,14 @@ func (s *Service) BatchDeny(
 	if len(req.Msg.RequestIds) == 0 {
 		return nil, svcerr.InvalidArgument("request_ids cannot be empty")
 	}
-	chatID, denied, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied one or more approvals"), actionTaken: req.Msg.ActionTaken})
+	chatID, denied, skipped, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied one or more approvals"), actionTaken: req.Msg.ActionTaken})
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.BatchDenyResponse{
 		Success: true,
 		Denied:  int32(denied),
-		Message: fmt.Sprintf("Denied %d requests", denied),
+		Message: batchMessage("Denied", denied, skipped),
 		ChatId:  chatID,
 	}), nil
 }
@@ -217,33 +257,35 @@ func denialReasonOr(reason *string, fallback string) string {
 
 // resolveApprovals records d on every listed approval that is still pending,
 // all in one transaction, then signals each one's waiting run. It returns the
-// chat they belong to and how many it resolved.
+// chat they belong to, how many it resolved and how many it skipped as
+// already resolved.
 //
 // Every id is checked before anything is written: it must exist, and all of
 // them must be one chat the caller owns. An approval already decided — on
 // another surface, or by its run timing out — is skipped, read again inside
 // the transaction so a decision that lands concurrently is never overwritten.
 // Only when none of them was still pending is that an error
-// (FailedPrecondition), which is what lets a batch approve what is left of
-// itself after one of its approvals was decided elsewhere.
-func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision) (string, int, error) {
+// (FailedPrecondition, ReasonApprovalNotPending, saying what happened), which
+// is what lets a batch approve what is left of itself after one of its
+// approvals expired or was decided elsewhere.
+func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision) (string, int, int, error) {
 	var chatID string
 	for _, id := range ids {
 		approval, err := s.deps.Repo.GetApproval(ctx, id)
 		if err != nil {
-			return "", 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
+			return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
 		}
 		if approval == nil {
-			return "", 0, svcerr.NotFound("approval")
+			return "", 0, 0, svcerr.NotFound("approval")
 		}
 		// The same-chat rule makes one ownership check cover every id.
 		if chatID == "" {
 			chatID = approval.ChatID
 			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
-				return "", 0, err
+				return "", 0, 0, err
 			}
 		} else if chatID != approval.ChatID {
-			return "", 0, svcerr.InvalidArgument("all approvals must belong to the same chat")
+			return "", 0, 0, svcerr.InvalidArgument("all approvals must belong to the same chat")
 		}
 	}
 
@@ -260,15 +302,19 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		actionTaken = d.actionTaken
 	}
 
-	var resolved []*db.Approval
+	var resolved, skipped []*db.Approval
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-		resolved = nil
+		resolved, skipped = nil, nil
 		for _, id := range ids {
 			approval, err := s.deps.Repo.GetApproval(txCtx, id)
 			if err != nil {
 				return err
 			}
-			if approval == nil || approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+			if approval == nil {
+				continue
+			}
+			if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+				skipped = append(skipped, approval)
 				continue
 			}
 			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(status), denialReason, actionTaken, nil); err != nil {
@@ -301,10 +347,15 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		return nil
 	})
 	if err != nil {
-		return "", 0, svcerr.WrapOr(err, svcerr.Internal("failed to resolve approval"))
+		return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to resolve approval"))
 	}
 	if len(resolved) == 0 {
-		return "", 0, svcerr.FailedPrecondition("approval already processed")
+		if len(skipped) == 1 {
+			return "", 0, 0, notActionable(skipped[0])
+		}
+		return "", 0, 0, svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
+			"These %d requests were already resolved (decided, expired, or their run ended); nothing changed.", len(skipped))),
+			ReasonApprovalNotPending)
 	}
 
 	// One denial message for the chat, unless every denied approval is
@@ -330,7 +381,17 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 	for _, approval := range resolved {
 		s.signalApproval(ctx, approval, signal)
 	}
-	return chatID, len(resolved), nil
+	return chatID, len(resolved), len(skipped), nil
+}
+
+// batchMessage is a batch response's message: what was done, and how many
+// were skipped as already resolved.
+func batchMessage(verb string, done, skipped int) string {
+	msg := fmt.Sprintf("%s %d requests", verb, done)
+	if skipped > 0 {
+		msg += fmt.Sprintf("; %d already resolved, skipped", skipped)
+	}
+	return msg
 }
 
 // signalApproval sends a signal to the workflow using PauseService.SignalWithRecovery

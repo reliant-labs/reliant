@@ -340,7 +340,7 @@ frontends/web/data
 # deleted; forge's CI workflows are, because reliant's CI is pr-ci.yml) and the
 # disown / hash records.
 .forge/*
-!.forge/scaffolded.json
+!.forge/scaffolded/
 !.forge/disowned.json
 !.forge/hashes/
 

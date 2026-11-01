@@ -45,7 +45,7 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
     daemonId: "d1",
     hostname: "work-box",
     status: DaemonStatus.ACTIVE,
-    size: "small",
+    size: "m",
     ...overrides,
   } as Daemon;
 }

@@ -717,12 +717,15 @@ func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
 	// discovers for memories, skills and workflow sync.
 	if conventional {
 		projectPath := filepath.Dir(filepath.Dir(filepath.Clean(dir)))
-		found, err := repo.Discover(context.Background(), projectPath, 0)
+		found, err := repo.Discover(context.Background(), projectPath, repo.Options{})
 		if err != nil {
 			return nil, err
 		}
+		if found.Truncated {
+			return nil, fmt.Errorf("scanning %s for nested repositories stopped early because %s", projectPath, found.TruncatedReason)
+		}
 		nested := map[string]*workflowref.Layout{}
-		for _, r := range found {
+		for _, r := range found.Repos {
 			if r.RelativePath == "" || r.RelativePath == "." {
 				continue
 			}

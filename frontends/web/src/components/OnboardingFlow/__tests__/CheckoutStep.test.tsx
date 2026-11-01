@@ -143,11 +143,11 @@ vi.mock("../useOnboardingFacts", () => ({
 }));
 
 const PLAN_SMALL = {
-  id: "plan_compute_small",
+  id: "plan_compute_m",
   priceCents: 2000n,
   displayOrder: 1,
   structuredLimits: {
-    allowedDaemonSizes: ["small"],
+    allowedDaemonSizes: ["m"],
     includedSmallDaemonHours: 16n,
   },
 };
@@ -186,7 +186,7 @@ function renderStep(
 const CLOUD_OWN_KEY: Partial<LaunchPlan> = {
   compute: "cloud_paid",
   modelProvider: "anthropic",
-  computePlanId: "plan_compute_small",
+  computePlanId: "plan_compute_m",
 };
 
 const LOCAL_RELIANT: Partial<LaunchPlan> = {
@@ -197,7 +197,7 @@ const LOCAL_RELIANT: Partial<LaunchPlan> = {
 const CLOUD_AND_RELIANT: Partial<LaunchPlan> = {
   compute: "cloud_paid",
   modelProvider: "reliant_credits",
-  computePlanId: "plan_compute_small",
+  computePlanId: "plan_compute_m",
 };
 
 beforeEach(() => {
@@ -211,7 +211,7 @@ beforeEach(() => {
 describe("CheckoutStep — what it asks for", () => {
   it("buys a compute subscription when only compute is owed", () => {
     renderStep(CLOUD_OWN_KEY);
-    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_small");
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_m");
     expect(lastLine("compute")).toMatchObject({ covered: false });
     // Own API key: no credit line at all, because nothing about this plan buys
     // Reliant's models.
@@ -242,7 +242,7 @@ describe("CheckoutStep — what it asks for", () => {
 
     expect(lastLine("compute")).toMatchObject({ covered: false });
     expect(lastLine("credit")).toMatchObject({ covered: false });
-    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_small");
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_m");
     expect(mockPanelRequests.at(-1)?.creditCents).toBeGreaterThan(0);
 
     // The flow is no longer numbered, because there is no second payment to

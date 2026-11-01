@@ -612,7 +612,7 @@ describe("a queued deploy", () => {
       expect.objectContaining({
         to: "/settings/$section",
         params: { section: "billing" },
-        search: expect.objectContaining({ tab: "plans", from: "forge", returnTo: expect.stringMatching(/^\//) }),
+        search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
       })
     );
     expect(daemonCalls).toEqual([]);

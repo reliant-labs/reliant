@@ -263,7 +263,8 @@ export function timeoutForProcedure(serviceTypeName: string, methodName: string)
 // See rpcDeadline.ts. In short: a call's budget is measured in time the page
 // was visible and running, a read stranded across a sleep / network change /
 // dead connection is replaced with a fresh request instead of waiting out its
-// timer, and a fast read whose answer was lost is replaced at STALL_RETRY_MS.
+// timer, and a fast read with no answer by STALL_RETRY_MS is hedged with a
+// second request (the first answer wins).
 //
 // During the 2026-07-09 incident a hung daemon command (worktree.git_changes)
 // left GetWorktreeChanges pending and every later unary RPC queued behind it

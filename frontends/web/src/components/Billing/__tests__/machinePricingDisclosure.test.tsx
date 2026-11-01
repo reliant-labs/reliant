@@ -39,9 +39,9 @@ describe('machine pricing disclosure', () => {
       'Includes 160 hours a month. Extra hours and storage are billed separately.',
     );
   });
-  it('names coupon time as hours on a Small machine, never jargon', () => {
-    expect(formatMachineMinutes(600)).toBe('10 hours on a Small machine');
-    expect(formatMachineMinutes(60)).toBe('1 hour on a Small machine');
-    expect(formatMachineMinutesShort(90)).toBe('1.5 h (Small)');
+  it('names coupon time as hours on an M machine (the coupon unit), never jargon', () => {
+    expect(formatMachineMinutes(600)).toBe('10 hours on an M machine');
+    expect(formatMachineMinutes(60)).toBe('1 hour on an M machine');
+    expect(formatMachineMinutesShort(90)).toBe('1.5 h (M)');
   });
 });

@@ -1022,7 +1022,7 @@ func (m *MockApprovalCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ ApprovalCreateStore = (*MockApprovalCreateStore)(nil)
 
 // forge:section MockApprovalResolveStore
-// forge:hash=2aac1c4ce8cda22128c9a5f836d0bda91bb3700da718c4453f977fa447730057
+// forge:hash=63c72dedc81d6360d817c1ffc03475929670181a182e6089b4ee007f50e7690c
 
 // MockApprovalResolveStore is a test mock for the ApprovalResolveStore interface.
 //
@@ -1032,16 +1032,16 @@ var _ ApprovalCreateStore = (*MockApprovalCreateStore)(nil)
 // "MockApprovalResolveStore.<Method>Func not set" error.
 type MockApprovalResolveStore struct {
 	contractkit.Recorder
-	UpdateApprovalStatusFunc func(context.Context, string, int32, *string, *string, *string) error
+	ResolvePendingApprovalFunc func(context.Context, string, int32, string, string) (bool, error)
 }
 
-// UpdateApprovalStatus records the call and delegates to UpdateApprovalStatusFunc when set.
-func (m *MockApprovalResolveStore) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
-	m.Recorder.Record("UpdateApprovalStatus", ctx, id, status, denialReason, actionTaken, metadata)
-	if m.UpdateApprovalStatusFunc != nil {
-		return m.UpdateApprovalStatusFunc(ctx, id, status, denialReason, actionTaken, metadata)
+// ResolvePendingApproval records the call and delegates to ResolvePendingApprovalFunc when set.
+func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason string, actionTaken string) (bool, error) {
+	m.Recorder.Record("ResolvePendingApproval", ctx, id, status, reason, actionTaken)
+	if m.ResolvePendingApprovalFunc != nil {
+		return m.ResolvePendingApprovalFunc(ctx, id, status, reason, actionTaken)
 	}
-	return contractkit.MockNotSet("MockApprovalResolveStore", "UpdateApprovalStatus")
+	return false, contractkit.MockNotSet("MockApprovalResolveStore", "ResolvePendingApproval")
 }
 
 // Compile-time check.
@@ -1744,7 +1744,7 @@ func (m *MockCallLLMStore) GetToolCallResultForMessage(ctx context.Context, tool
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
 // forge:section MockCleanupStore
-// forge:hash=a7b8572c5264f97fe7316b837b3eb298715ed6481b1296af682807508c2de2dd
+// forge:hash=b48e07579223d2d954610c02d29053c15ec51033c99d5c1ed2a2549f46425d55
 
 // MockCleanupStore is a test mock for the CleanupStore interface.
 //
@@ -1757,7 +1757,7 @@ type MockCleanupStore struct {
 	RunTxFunc                       func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	GetWorkflowFunc                 func(context.Context, string) (*db.Workflow, error)
 	ListPendingApprovalsByChatFunc  func(context.Context, string) ([]*db.Approval, error)
-	UpdateApprovalStatusFunc        func(context.Context, string, int32, *string, *string, *string) error
+	ResolvePendingApprovalFunc      func(context.Context, string, int32, string, string) (bool, error)
 	CreateChatUpdateFunc            func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	ListMessagesFunc                func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksFunc           func(context.Context, string) ([]*db.MessageContentBlock, error)
@@ -1798,13 +1798,13 @@ func (m *MockCleanupStore) ListPendingApprovalsByChat(ctx context.Context, chatI
 	return nil, contractkit.MockNotSet("MockCleanupStore", "ListPendingApprovalsByChat")
 }
 
-// UpdateApprovalStatus records the call and delegates to UpdateApprovalStatusFunc when set.
-func (m *MockCleanupStore) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
-	m.Recorder.Record("UpdateApprovalStatus", ctx, id, status, denialReason, actionTaken, metadata)
-	if m.UpdateApprovalStatusFunc != nil {
-		return m.UpdateApprovalStatusFunc(ctx, id, status, denialReason, actionTaken, metadata)
+// ResolvePendingApproval records the call and delegates to ResolvePendingApprovalFunc when set.
+func (m *MockCleanupStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason string, actionTaken string) (bool, error) {
+	m.Recorder.Record("ResolvePendingApproval", ctx, id, status, reason, actionTaken)
+	if m.ResolvePendingApprovalFunc != nil {
+		return m.ResolvePendingApprovalFunc(ctx, id, status, reason, actionTaken)
 	}
-	return contractkit.MockNotSet("MockCleanupStore", "UpdateApprovalStatus")
+	return false, contractkit.MockNotSet("MockCleanupStore", "ResolvePendingApproval")
 }
 
 // CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
