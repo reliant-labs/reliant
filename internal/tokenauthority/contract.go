@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // Shared request/response shapes, identical for every store.
@@ -57,6 +58,10 @@ type (
 // forge:contract
 type Authority interface {
 	Introspect(ctx context.Context, token string) (*fat.Principal, error)
+	// IntrospectAccount is Introspect plus the email of the account the token
+	// acts as, when the store knows one: control-plane does; the self-hosted
+	// stores keep no user records and name none.
+	IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error)
 	MintForUser(ctx context.Context, req MintRequest) (Minted, error)
 	ListForUser(ctx context.Context, userID string, scope fat.Scope) ([]TokenInfo, error)
 	RevokeForUser(ctx context.Context, userID, tokenID string) error

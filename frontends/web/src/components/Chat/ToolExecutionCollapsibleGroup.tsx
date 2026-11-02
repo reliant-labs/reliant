@@ -3,14 +3,15 @@
  * Similar to Cursor's "Explored X files Y searches" grouping
  */
 
-import { useState, useEffect, memo } from 'react';
+import { memo, useId } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ToolExecution, type ToolResultData } from './ToolExecution';
 import type { Approval } from '../../gen/reliant/v1/approval_pb';
 import { generateReadOnlyToolsSummary } from '../../lib/toolFormatters';
-import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from '../Settings/ToolCallSettings';
 import { useSurface } from '../../lib/surfaceContext';
+import { ApprovalStatus } from '../../gen/reliant/v1/approval_pb';
+import { useToolGroupExpansion } from './useToolGroupExpansion';
 
 // Mirrors the subset of lib/messageProcessor's ToolCallData this group reads.
 // `input` is OPTIONAL there — undefined while the call is still streaming and
@@ -47,22 +48,7 @@ function ToolExecutionCollapsibleGroupComponent({
   onSelectThread,
   density = "compact",
 }: ToolExecutionCollapsibleGroupProps) {
-  // Determine initial expanded state based on first tool's settings
-  // If any tool in the group should be expanded, expand the group
   const surface = useSurface();
-  const [isExpanded, setIsExpanded] = useState(() => {
-    // Check if any tool in the group should be expanded by default
-    return executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface));
-  });
-
-  // Pick up preference changes made in Settings without a reload.
-  useEffect(() => {
-    const applyNewDefault = () => {
-      setIsExpanded(executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface)));
-    };
-    window.addEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
-    return () => window.removeEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
-  }, [executions, surface]);
 
   // Generate summary text like "Explored 2 files 1 search"
   const summaryText = generateReadOnlyToolsSummary(
@@ -84,6 +70,15 @@ function ToolExecutionCollapsibleGroupComponent({
     ({ status, result }) => status === 'completed' || status === 'backgrounded' || result !== undefined
   );
 
+  // Open while a read is still running, closed once all of them are done.
+  const { expanded: isExpanded, toggle } = useToolGroupExpansion({
+    live: !allCompleted,
+    failed: hasWarnings,
+    pendingApproval: executions.some(({ approval }) => approval?.status === ApprovalStatus.PENDING),
+    collapseAll: surface !== 'desktop',
+  });
+  const panelId = useId();
+
   return (
     <div
       className={cn(
@@ -91,43 +86,47 @@ function ToolExecutionCollapsibleGroupComponent({
         density === 'card' ? 'rounded-xl shadow-sm' : 'rounded-lg',
         density === 'minimal' && 'rounded-md shadow-none',
         hasWarnings
-          ? 'border-warning/40 bg-warning/5'
+          ? 'border-destructive/40 bg-destructive/5'
           : allCompleted
           ? 'border-muted/30 bg-muted/5'
           : 'border-muted/50 bg-muted/10'
       )}
     >
       {/* Collapsible header */}
-      <div
+      <button
+        type="button"
         className={cn(
-          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          "flex w-full items-center justify-between text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
           density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggle}
+        aria-expanded={isExpanded}
+        aria-controls={panelId}
       >
-        <div className="flex items-center gap-1.5">
+        <span className="flex min-w-0 items-center gap-1.5">
           {hasWarnings ? (
-            <AlertCircle className="w-3.5 h-3.5 text-warning" />
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 text-destructive" aria-hidden="true" />
           ) : (
-            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+            <Eye className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           )}
-          <span className={cn("text-xs font-mono", hasWarnings ? "text-warning-ink" : "text-muted-foreground")}>
+          <span className={cn("truncate text-xs font-mono", hasWarnings ? "text-destructive-ink" : "text-muted-foreground")}>
             {summaryText}
+            {hasWarnings && <span className="sr-only"> (a call failed)</span>}
           </span>
-        </div>
+        </span>
 
-        <div className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           {isExpanded ? (
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           )}
-        </div>
-      </div>
+        </span>
+      </button>
 
       {/* Expanded content - show individual tool executions */}
       {isExpanded && (
-        <div className={cn("border-t border-muted/30 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
+        <div id={panelId} className={cn("border-t border-muted/30 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => (
             <ToolExecution
               key={`${messageId || 'msg'}-readonly-${index}-${execution.call.id}`}

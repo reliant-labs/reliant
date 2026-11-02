@@ -64,18 +64,18 @@ const reconciles: Panel = {
 beforeEach(() => vi.mocked(UPlotChart).mockClear());
 
 describe("a busy grouped line", () => {
-  it("draws the top eight in the result's order, folds the rest into a summed Other, and paints errors in danger", () => {
+  it("draws the top six (the palette's size) in the result's order, folds the rest into a summed Other, and paints errors in danger", () => {
     render(<PanelBody panel={reconciles} query={ready(result({ series: busy }))} links={{ onDrill: vi.fn() }} />);
     const drawn = lastChart().series;
-    expect(drawn).toHaveLength(10);
-    // Ranked by total, the tail is gitrepository·error (50) and ocirepository's three (40, 35, 30);
+    expect(drawn).toHaveLength(8);
+    // Ranked by total, the tail is gitrepository's three (60, 55, 50) and ocirepository's three (40, 35, 30);
     // its error series are never folded into grey: they are "Other errors", in danger.
-    expect(drawn[8]).toMatchObject({ label: "Other (2 series)", color: OTHER_TOKEN, values: [75, 75, 75] });
-    expect(drawn[9]).toMatchObject({ label: "Other errors (2 series)", color: DANGER_PALETTE[0], values: [80, 80, 80] });
+    expect(drawn[6]).toMatchObject({ label: "Other (4 series)", color: OTHER_TOKEN, values: [190, 190, 190] });
+    expect(drawn[7]).toMatchObject({ label: "Other errors (2 series)", color: DANGER_PALETTE[0], values: [80, 80, 80] });
     // Errors are red; nothing else is.
-    const tokens = drawn.slice(0, 8).map((s) => [s.label, s.color]);
+    const tokens = drawn.slice(0, 6).map((s) => [s.label, s.color]);
     for (const [label, color] of tokens) expect(DANGER_PALETTE.includes(color as never), String(label)).toBe(String(label).endsWith("error"));
-    expect(drawn.slice(0, 8).every((s) => [...CHART_PALETTE, ...DANGER_PALETTE].includes(s.color as never))).toBe(true);
+    expect(drawn.slice(0, 6).every((s) => [...CHART_PALETTE, ...DANGER_PALETTE].includes(s.color as never))).toBe(true);
     // The legend replaces uPlot's.
     expect(lastChart().legend).toBe(false);
 
@@ -83,7 +83,7 @@ describe("a busy grouped line", () => {
     const rows = within(legend).getAllByRole("row").slice(1);
     expect(rows[0]).toHaveAttribute("data-series", "kustomization · success");
     expect(rows[0]).toHaveTextContent("300");
-    expect(within(legend).getAllByTestId("obs-panel-legend-other").map((r) => r.textContent)).toEqual([expect.stringContaining("Other · 2 series"), expect.stringContaining("Other errors · 2 series")]);
+    expect(within(legend).getAllByTestId("obs-panel-legend-other").map((r) => r.textContent)).toEqual([expect.stringContaining("Other · 4 series"), expect.stringContaining("Other errors · 2 series")]);
     expect(within(legend).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["12 series", "Last", "Max", "Total", "Open in explorer"]);
   });
 
@@ -93,8 +93,8 @@ describe("a busy grouped line", () => {
     await user.click(screen.getByTestId("obs-panel-legend-show-all"));
     expect(lastChart().series).toHaveLength(12);
     expect(screen.queryByTestId("obs-panel-legend-other")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show the top 8" }));
-    expect(lastChart().series).toHaveLength(10);
+    await user.click(screen.getByRole("button", { name: "Show the top 6" }));
+    expect(lastChart().series).toHaveLength(8);
   });
 
   it("highlights a series on hover, isolates it on click, adds one with ⌘-click, and resets", async () => {
@@ -118,16 +118,16 @@ describe("a busy grouped line", () => {
     expect(lastChart().series.map((s) => s.label).sort()).toEqual(["helmrelease · error", "kustomization · success"]);
 
     await user.click(screen.getByTestId("obs-panel-legend-reset"));
-    expect(lastChart().series).toHaveLength(10);
+    expect(lastChart().series).toHaveLength(8);
   });
 
   it("does not sum what does not add up: a p95's tail is left out and named, not drawn as Other", () => {
     const p95: Panel = { ...reconciles, signal: "traces", unit: "ms", series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "span.duration" }] };
     render(<PanelBody panel={p95} query={ready(result({ series: busy.map((s) => ({ ...s, label: "p95" })) }))} />);
-    // The top 8 by last value, plus the tail's errors drawn as themselves (they cannot be summed).
-    expect(lastChart().series).toHaveLength(10);
+    // The top 6 by last value, plus the tail's errors drawn as themselves (they cannot be summed).
+    expect(lastChart().series).toHaveLength(8);
     expect(lastChart().series.map((s) => s.label)).toEqual(expect.arrayContaining(["gitrepository · error", "ocirepository · error"]));
-    expect(screen.getByTestId("obs-panel-legend-other")).toHaveTextContent("Other · 2 series (not drawn)");
+    expect(screen.getByTestId("obs-panel-legend-other")).toHaveTextContent("Other · 4 series (not drawn)");
     expect(within(screen.getByTestId("obs-panel-legend")).getAllByRole("columnheader").map((h) => h.textContent)).toContain("Avg");
   });
 

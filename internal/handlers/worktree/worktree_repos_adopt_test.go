@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -55,9 +56,19 @@ func (r *adoptTestDaemonRouter) discover(daemonID string) ([]byte, error) {
 	return json.Marshal(map[string]any{"discovered": r.discovered})
 }
 
-// placeOn is a placement that names daemonID.
-func placeOn(daemonID string) func() (machinewake.Target, error) {
-	return func() (machinewake.Target, error) { return machinewake.Target{DaemonID: daemonID}, nil }
+// adoptCheckout is the project's checkout on the placed machine, which is not
+// where the project was created (newAdoptTestProject's Path).
+const adoptCheckout = "/home/workspace/projects/adopt-test"
+
+// placeOn is a placement that names daemonID, with the project's checkout
+// there.
+func placeOn(daemonID string) func() (placed, error) {
+	return func() (placed, error) {
+		return placed{
+			machine:  machinewake.Target{DaemonID: daemonID},
+			checkout: projectcheckout.Target{DaemonID: daemonID, Path: adoptCheckout},
+		}, nil
+	}
 }
 
 func newAdoptTestProject(t *testing.T, repo *db.Repo) *db.Project {
@@ -67,7 +78,7 @@ func newAdoptTestProject(t *testing.T, repo *db.Repo) *db.Project {
 		ID:         uuid.New().String(),
 		UserID:     "user-" + uuid.New().String(),
 		Name:       "adopt-test",
-		Path:       "/home/workspace/projects/adopt-test",
+		Path:       "/Users/creator/adopt-test",
 		IsGitRepo:  false,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -175,9 +186,9 @@ func TestListProjectReposPlacesOnlyWhenTheRegistryIsEmpty(t *testing.T) {
 	_, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("m"))
 	require.NoError(t, err)
 
-	repos, err := s.listProjectRepos(ctx, project.UserID, project, func() (machinewake.Target, error) {
+	repos, err := s.listProjectRepos(ctx, project.UserID, project, func() (placed, error) {
 		t.Fatal("placement must not run when the registry has repos")
-		return machinewake.Target{}, nil
+		return placed{}, nil
 	})
 	require.NoError(t, err)
 	assert.Len(t, repos, 1)

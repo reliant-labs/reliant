@@ -107,6 +107,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	e.project = &db.Project{ID: "p-" + userID, UserID: userID, Name: "proj", Path: projectPath, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateProject(e.ctx, e.project))
 	require.NoError(t, repo.UpsertDaemon(e.ctx, &db.Daemon{ID: e.daemon, UserID: userID}))
+	require.NoError(t, repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, projectPath, nil))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	e.sweeper = worktreesweep.New(repo, e.router)
@@ -338,6 +339,7 @@ func newMultiRepoEnv(t *testing.T) (*reclaimEnv, []string) {
 	now := time.Now().UTC()
 	e.project = &db.Project{ID: "mp-" + e.userID, UserID: e.userID, Name: "multi", Path: root, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, e.repo.CreateProject(e.ctx, e.project))
+	require.NoError(t, e.repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, root, nil))
 	for _, name := range []string{"api", "web"} {
 		p := filepath.Join(root, name)
 		gitIn(t, root, "init", "-q", "-b", "main", p)

@@ -46,6 +46,8 @@
 export const MILLI_PER_VCPU = 1000;
 /** Raw mem_mib meter units per GiB. ATTRIBUTION DISPLAY ONLY. */
 export const MIB_PER_GIB = 1024;
+/** Raw static_egress_kib meter units per GiB. ATTRIBUTION DISPLAY ONLY. */
+export const KIB_PER_GIB = 1024 * 1024;
 /**
  * Mean hours in a month — the ONE place the GiB-hour ↔ GiB-month conversion
  * is declared, matching planlimits.HoursPerMonth. Display only; no comparison
@@ -59,14 +61,19 @@ const NANOS_PER_CENT = 10_000_000;
  * The meter kinds attribution reads, by their proto tag numbers
  * (controlplane.v1.DeployResourceKind).
  *
- * Only the three that are rendered. Tags 6/7/8 (egress, CDN egress, CDN
- * requests) and the tombstoned 3/4/9 are deliberately absent — see
- * UsageDimensionId.
+ * Every kind a hosting bill can carry: compute, storage, internet egress
+ * (recorded in MiB despite its name), static-site egress (KiB) and extra
+ * static sites (site-hours beyond the free one). Each is a billed line under
+ * the hosting price list, so attribution that left one out under-reported
+ * the bill. CDN egress/requests (7/8) are not sold and stay absent.
  */
 export const DeployResourceKind = {
   CPU_MILLI: 1,
   MEM_MIB: 2,
+  EGRESS_MIB: 6,
   STORAGE_GIB: 10,
+  STATIC_EGRESS_KIB: 11,
+  STATIC_SITE: 12,
 } as const;
 
 /** A protobuf Timestamp, as the generated messages carry it. */
@@ -108,13 +115,13 @@ export interface InfraOverageResponse {
 }
 
 /**
- * The three billable dimensions, and only those three.
+ * The allowance-bearing dimensions GetCurrentUserInfraOverage reports.
  *
- * Egress, CDN egress and CDN requests are deliberately absent: they were
- * removed from the catalog because nothing measures them, and a dimension
- * rendered at zero reads as "you used none" rather than "we do not know".
- * Build minutes are absent for the same reason — the ImageBuild tier is not a
- * product and must not appear on a customer surface.
+ * Egress and extra static sites are billed too, but through the hosting price
+ * list's flat monthly terms rather than a plan allowance, so they appear in
+ * attribution (by deployment) rather than here. Build minutes are absent —
+ * the ImageBuild tier is not a product and must not appear on a customer
+ * surface.
  */
 export type UsageDimensionId = "cpu" | "memory" | "storage";
 
@@ -200,6 +207,10 @@ export interface AttributionRow {
   cpuDisplay: number;
   memoryDisplay: number;
   storageDisplay: number;
+  /** Internet plus static-site egress, in GiB (shown as GB, as the price list does). */
+  egressDisplay: number;
+  /** Extra static-site hours: sites beyond the free one, times hours live. */
+  staticSiteHours: number;
   /** Accrued cost across every row folded in here, in cents. */
   accruedCents: number;
 }
@@ -251,9 +262,7 @@ interface DimensionPresentation {
 /**
  * Maps the server's stable dimension ids to how this product talks about them.
  *
- * ONLY these three exist. Egress, CDN and build dimensions cannot appear at
- * all — they were removed from the catalog because nothing measures them. A
- * dimension id the server reports that is not listed here is folded out
+ * A dimension id the server reports that is not listed here is folded out
  * rather than shown as an allowance a customer cannot act on.
  */
 const PRESENTATION: Record<string, DimensionPresentation> = {
@@ -309,7 +318,9 @@ export function timestampToDate(ts: WireTimestamp | undefined): Date | undefined
  *
  * The conversions here are the ONLY unit arithmetic in this file, and they are
  * display-only: ListUsage reports raw meter quantities (milli-vCPU-hours,
- * MiB-hours), and nothing downstream compares these against an allowance.
+ * MiB-hours; egress and static-site rows are hourly flows, so their
+ * "unit-hours" are plain MiB, KiB and site-hours), and nothing downstream
+ * compares these against an allowance.
  */
 export function buildAttribution(rows: DeployUsageRow[]): AttributionRow[] {
   const byKey = new Map<string, AttributionRow>();
@@ -323,6 +334,8 @@ export function buildAttribution(rows: DeployUsageRow[]): AttributionRow[] {
         cpuDisplay: 0,
         memoryDisplay: 0,
         storageDisplay: 0,
+        egressDisplay: 0,
+        staticSiteHours: 0,
         accruedCents: 0,
       };
       byKey.set(key, entry);
@@ -334,6 +347,12 @@ export function buildAttribution(rows: DeployUsageRow[]): AttributionRow[] {
       entry.memoryDisplay += quantity / MIB_PER_GIB;
     } else if (row.resourceKind === DeployResourceKind.STORAGE_GIB) {
       entry.storageDisplay += quantity;
+    } else if (row.resourceKind === DeployResourceKind.EGRESS_MIB) {
+      entry.egressDisplay += quantity / MIB_PER_GIB;
+    } else if (row.resourceKind === DeployResourceKind.STATIC_EGRESS_KIB) {
+      entry.egressDisplay += quantity / KIB_PER_GIB;
+    } else if (row.resourceKind === DeployResourceKind.STATIC_SITE) {
+      entry.staticSiteHours += quantity;
     }
     entry.accruedCents += Number(row.costUsdNanos) / NANOS_PER_CENT;
   }

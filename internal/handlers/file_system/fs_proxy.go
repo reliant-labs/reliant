@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -61,18 +62,46 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 // Every client reaches these RPCs with a project id (frontends/web/src/api/fileSystem.ts
 // returns early when there is no current project), so nothing legitimate
 // depended on the passthrough.
-func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
+//
+// The base is a branch worktree's path, or else the project's main checkout ON
+// THE MACHINE the request runs on (target): projects.path is the creating
+// machine's path. A machine with no checkout is projectcheckout's refusal,
+// whose ProjectCheckoutMissing detail the Files tab renders with its action.
+//
+// resolvedOn is the machine the main checkout was resolved on, so a request
+// left to default resolution is pinned to the machine whose path it carries;
+// "" when a branch worktree scoped it.
+func (s *Service) requireProjectBase(ctx context.Context, userID, projectID string, worktreeID *string, chatID *string, target machinewake.Target) (basePath, resolvedOn string, err error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
+		return "", "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
 	}
-	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
+	mainCheckout := func(ctx context.Context) (string, error) {
+		project, err := s.deps.Repo.GetProject(ctx, projectID)
+		if err != nil {
+			return "", err
+		}
+		// A request left to default resolution is resolved on the machine
+		// that resolution names, so the path is that machine's checkout.
+		machine := target.DaemonID
+		if machine == "" && !target.NoMachine && s.deps.Router != nil {
+			machine, _ = s.deps.Router.ResolveDaemonID(ctx, userID)
+		}
+		machines, _ := s.deps.Router.(daemonplacement.Machines)
+		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, machine, "browse its files")
+		if err != nil {
+			return "", err
+		}
+		resolvedOn = checkout.DaemonID
+		return checkout.Path, nil
+	}
+	basePath, err = filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID, mainCheckout)
 	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
+		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
 	if strings.TrimSpace(basePath) == "" {
-		return "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
+		return "", "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
 	}
-	return basePath, nil
+	return basePath, resolvedOn, nil
 }
 
 // workspaceScope is where a workspace-scoped request acts: the directory it
@@ -90,13 +119,19 @@ type workspaceScope struct {
 // here, so a file tree, a preview and a save of the same file cannot land on
 // different machines.
 func (s *Service) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
-	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
-	if err != nil {
-		return workspaceScope{}, err
-	}
 	target, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
 	if err != nil {
 		return workspaceScope{}, err
+	}
+	basePath, resolvedOn, err := s.requireProjectBase(ctx, userID, projectID, worktreeID, chatID, target)
+	if err != nil {
+		return workspaceScope{}, err
+	}
+	if target.DaemonID == "" && !target.NoMachine && resolvedOn != "" {
+		// The path is that machine's: every command of the request goes
+		// there, not to a second default resolution that could pick another
+		// (the tree, a preview and a delete all scope through here).
+		target.DaemonID = resolvedOn
 	}
 	return workspaceScope{basePath: basePath, target: target}, nil
 }

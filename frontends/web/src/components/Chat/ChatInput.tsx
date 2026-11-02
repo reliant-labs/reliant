@@ -72,6 +72,7 @@ import {
 } from "../../lib/paramUtils";
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
+import { COMPOSER_CONTROL } from "./composerControl";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { fetchThreadWorkflowInputs } from "../../hooks/chat-pull-queries";
 import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
@@ -346,7 +347,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       () => askUserQuestionItems(pendingQuestion?.metadata),
       [pendingQuestion?.metadata]
     );
-    const showAskOnly = hasPendingQuestion && !!askUserQuestion;
+    // A blocking question takes the composer's place, but never locks the
+    // user out of it: "Send a message instead" brings the textarea back (to
+    // say "stop, wrong branch" rather than pick an answer), per question.
+    const [composeDuringQuestionId, setComposeDuringQuestionId] = useState<string | null>(null);
+    const composingDespiteQuestion =
+      !!pendingQuestion && composeDuringQuestionId === pendingQuestion.questionId;
+    const showAskOnly = hasPendingQuestion && !!askUserQuestion && !composingDespiteQuestion;
 
     // The composer's params. For an existing chat they are the chat's
     // server-side selection, adopted by an effect below (chatParamsStore holds
@@ -1725,7 +1732,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           <div className="max-w-[1200px] mx-auto">
             <div ref={containerRef} className="mt-1 mb-1.5">
               <div
-                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-warning/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
@@ -1748,11 +1755,45 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 />
                 <div className="flex flex-col gap-1 relative z-[1001]">
                   {/* Question prompt - replaces normal input when ask_user question is pending */}
-                  {hasPendingQuestion && askUserQuestion && (
-                    <QuestionPrompt
-                      questions={askUserQuestion}
-                      onSubmit={handleQuestionSubmit}
-                    />
+                  {showAskOnly && askUserQuestion && (
+                    <>
+                      <QuestionPrompt
+                        questions={askUserQuestion}
+                        onSubmit={handleQuestionSubmit}
+                      />
+                      <div className="flex justify-end px-2 pb-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!pendingQuestion) return;
+                            setComposeDuringQuestionId(pendingQuestion.questionId);
+                            requestAnimationFrame(() => textareaRef.current?.focus());
+                          }}
+                          className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          Send a message instead
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Writing a message while a question waits: say so, and
+                      offer the way back to the answer form. */}
+                  {composingDespiteQuestion && askUserQuestion && (
+                    <div className="flex items-center justify-between gap-2 px-2 pt-2 text-xs text-warning-ink">
+                      <span>The agent is waiting on your answer to a question.</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setComposeDuringQuestionId(null);
+                        }}
+                        className="inline-flex min-h-8 shrink-0 items-center rounded-md px-2 font-medium hover:bg-warning/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Answer it
+                      </button>
+                    </div>
                   )}
 
                   {/* Normal input UI - hidden when question prompt is shown */}
@@ -1796,13 +1837,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     </div>
                   )}
 
-                  {/* Question prompt - shown when agent is waiting for user input */}
-                  {hasPendingQuestion && askUserQuestion && (
-                      <QuestionPrompt
-                        questions={askUserQuestion}
-                        onSubmit={handleQuestionSubmit}
-                      />
-                  )}
 
                   {/* Single Bottom Row: All Controls */}
                   {<div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
@@ -1927,7 +1961,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
 <button
                               className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
+                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
+                                COMPOSER_CONTROL,
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
@@ -1964,7 +1999,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                               }
                               disabled={disabled || !isMessagingAllowed}
                               className={cn(
-                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6 touch:h-[44px] touch:w-[44px]",
+                                "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:h-[44px] touch:w-[44px]",
+                                COMPOSER_CONTROL,
                                 !disabled
                                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                                   : "cursor-default opacity-60",
@@ -1975,7 +2011,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             >
                               <Settings2 className="w-3.5 h-3.5" />
                               {hasUnsetParams && (
-                                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
+                                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
                               )}
                             </button>
                           </Tooltip>

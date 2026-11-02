@@ -55,7 +55,7 @@ function prod(args: { queued?: boolean; observed?: LiveConvergenceState }): Live
     name: "prod",
     project: "hounders",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v13",
     releaseProvenance: null,

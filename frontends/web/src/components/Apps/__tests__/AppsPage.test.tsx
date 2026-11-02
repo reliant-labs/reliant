@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   loading: false,
   availability: "available",
   search: {} as Record<string, string>,
+  alerts: [] as { envId: string; state: string }[],
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -25,6 +26,10 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 }));
 vi.mock("@/hooks/apps-queries", () => ({
   useApps: () => ({ apps: state.apps, loading: state.loading, availability: state.availability, detail: "" }),
+}));
+vi.mock("@/hooks/observability-queries", () => ({
+  useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
+  useAlerts: () => ({ data: state.alerts }),
 }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("../startBuilding", () => ({ useStartBuildingApp: () => vi.fn() }));
@@ -60,6 +65,7 @@ beforeEach(() => {
   state.loading = false;
   state.availability = "available";
   state.search = {};
+  state.alerts = [];
 });
 
 describe("the Apps page", () => {
@@ -86,6 +92,23 @@ describe("the Apps page", () => {
     expect(within(row).getByTestId("app-env-prod")).toHaveAttribute("data-verdict", "converged");
     expect(within(row).getByTestId("app-env-staging")).toHaveAttribute("data-verdict", "converging");
     expect(row).toHaveTextContent("+2 previews");
+  });
+
+  it("calls an environment Healthy only when no alert fires there; otherwise it leads with the alerts", () => {
+    state.alerts = [
+      { envId: "prod-id", state: "firing" },
+      { envId: "prod-id", state: "firing" },
+      { envId: "prod-id", state: "resolved" },
+    ];
+    render(<AppsPage />);
+    const row = screen.getByTestId("app-row-storefront");
+    const prod = within(row).getByTestId("app-env-prod");
+    expect(prod).toHaveAttribute("data-firing", "2");
+    expect(within(prod).getByTestId("app-env-prod-alerts")).toHaveTextContent("Alerts firing (2)");
+    expect(prod).not.toHaveTextContent("Healthy");
+    expect(prod.getAttribute("title")).toContain("Alerts firing (2)");
+    // staging has nothing firing: its own verdict, no alert count.
+    expect(within(row).queryByTestId("app-env-staging-alerts")).toBeNull();
   });
 
   it("never links an API, and says why there is nothing to open", () => {

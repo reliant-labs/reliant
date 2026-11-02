@@ -145,7 +145,7 @@ function liveEnv(overrides: Partial<LiveEnv>): LiveEnv {
     name: "x",
     project: "hounders",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "",
     releaseProvenance: null,
@@ -176,13 +176,7 @@ const PROD: LiveEnv = liveEnv({
   drift: { state: "in_sync", observedAt: "2026-10-01T10:04:00.000Z" },
   driftDetail: "",
   provenance: "v12 · images main@abc1234 · config feat-x@def5678, unmerged, dirty",
-  declaredShape: {
-    kind: "persistent",
-    workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
-    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: [],
-  },
+  declared: true,
 });
 
 /** Declared from a Preview render, nothing promoted. Secrets must be settable. */
@@ -193,13 +187,7 @@ const STAGING: LiveEnv = liveEnv({
   release: "",
   declaredAt: "2026-10-02T09:00:00.000Z",
   provenance: "feat-x@def5678, unmerged",
-  declaredShape: {
-    kind: "self_managed",
-    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
-    secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: ["prod-gke"],
-  },
+  declared: true,
 });
 
 /**
@@ -222,9 +210,27 @@ const getLiveView = vi.fn((_project: string) => Promise.resolve([PROD, STAGING])
 const listEnvironmentConvergences = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? CONVERGENCES : [])
 );
+/** Each env's declared shape: a control-plane read of its own (GetEnvironmentShape). */
+const SHAPES: Record<string, unknown> = {
+  "cp-prod": {
+    kind: "persistent",
+    workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declaredBy: ["api"] }],
+    domains: [],
+    clusters: [],
+  },
+  "cp-staging": {
+    kind: "self_managed",
+    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
+    secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
+    domains: [],
+    clusters: ["prod-gke"],
+  },
+};
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: (project: string) => getLiveView(project),
+  getEnvironmentShape: (id: string) => Promise.resolve(SHAPES[id] ?? null),
   listEnvironmentConvergences: (id: string) => listEnvironmentConvergences(id),
 }));
 

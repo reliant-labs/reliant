@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Files, GitBranch, ListTodo, Check, Terminal, Globe, PanelBottom } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
@@ -29,12 +29,12 @@ import { useFileTreePushRefresh } from "./useFileTreePushRefresh";
 import type { FileNode } from "./index";
 import { useCurrentWorktree, useActiveWorktreeId } from "../../hooks/worktree-queries";
 
-interface RightSidebarProps {
-  /** When provided, clicking the active tab again will close the sidebar */
-  onCloseSidebar?: () => void;
-}
-
-export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
+/**
+ * The right sidebar's tabbed panel. It has no close control of its own:
+ * clicking the open tab used to close it, a surprising thing for a tab to
+ * do. The header's sidebar toggle (and its shortcut) shows and hides it.
+ */
+export function RightSidebar() {
   const shortcuts = {
     files: useShortcutLabel("sidebarFiles"),
     changes: useShortcutLabel("sidebarChanges"),
@@ -475,26 +475,103 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     setCreatingType(null);
   };
 
-  // Handle Files tab click - if already on files tab, close sidebar (or sync to active file if no close handler)
-  const handleFilesTabClick = () => {
-    if (activeSidebarTab === "files") {
-      if (onCloseSidebar) {
-        onCloseSidebar();
-      } else {
-        fileTreeRef.current?.syncToActiveFile();
-        fileTreeRef.current?.focus();
-      }
-    } else {
-      setActiveSidebarTab("files");
+  // Clicking the tab that is already open does not close the sidebar — a tab
+  // never hides its own panel (the header's toggle does that). On Files it
+  // brings the tree to the open file.
+  const handleTabClick = (tab: RightSidebarTab) => {
+    if (activeSidebarTab !== tab) {
+      setActiveSidebarTab(tab);
+      return;
+    }
+    if (tab === "files") {
+      fileTreeRef.current?.syncToActiveFile();
+      fileTreeRef.current?.focus();
     }
   };
 
-  const handleTabClick = (tab: RightSidebarTab) => {
-    if (activeSidebarTab === tab) {
-      onCloseSidebar?.();
-    } else {
-      setActiveSidebarTab(tab);
+  // The tabs, as a WAI-ARIA tablist: the open tab is the one tab stop, the
+  // arrow keys move along the strip (and open what they land on), and each
+  // tab's status dot is in its accessible name, not only its colour.
+  const tabRefs = useRef<Partial<Record<RightSidebarTab, HTMLButtonElement | null>>>({});
+  const tabs: Array<{
+    id: RightSidebarTab;
+    label: string;
+    tooltip: string;
+    icon: ReactNode;
+    status?: { dotClass?: string; icon?: ReactNode; label: string };
+  }> = [
+    { id: "files", label: "Files", tooltip: withShortcut("Files", shortcuts.files), icon: <Files className="w-4 h-4" /> },
+    {
+      id: "changes",
+      label: "Changes",
+      tooltip: withShortcut("Changes", shortcuts.changes),
+      icon: <GitBranch className="w-4 h-4" />,
+    },
+    {
+      id: "processes",
+      label: "Processes",
+      tooltip: withShortcut("Processes: monitor running commands", shortcuts.processes),
+      icon: <Terminal className="w-4 h-4" />,
+      status:
+        totalRunningCount > 0
+          ? { dotClass: "bg-primary animate-pulse motion-reduce:animate-none", label: `${totalRunningCount} running` }
+          : undefined,
+    },
+    {
+      id: "tasks",
+      label: "Tasks",
+      tooltip: withShortcut("Tasks", shortcuts.tasks),
+      icon: <ListTodo className="w-4 h-4" />,
+      status:
+        taskStats.inProgress > 0
+          ? { dotClass: "bg-primary animate-pulse motion-reduce:animate-none", label: `${taskStats.inProgress} in progress` }
+          : taskStats.pending > 0
+            ? { dotClass: "bg-warning", label: `${taskStats.pending} not started` }
+            : taskStats.total > 0 && taskStats.completed === taskStats.total
+              ? { icon: <Check className="w-2.5 h-2.5 text-success-ink" />, label: "all done" }
+              : undefined,
+    },
+    // The in-app browser is an Electron <webview>: no tab in the web build,
+    // where it cannot be mounted.
+    ...(isElectron()
+      ? [
+          {
+            id: "browser" as const,
+            label: "Browser",
+            tooltip: withShortcut("Browser", shortcuts.browser),
+            icon: <Globe className="w-4 h-4" />,
+            status:
+              worktreeBrowserTabs.length > 0
+                ? { dotClass: "bg-muted-foreground", label: `${worktreeBrowserTabs.length} open` }
+                : undefined,
+          },
+        ]
+      : []),
+  ];
+
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = tabs.length - 1;
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = index === last ? 0 : index + 1;
+        break;
+      case "ArrowLeft":
+        next = index === 0 ? last : index - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      default:
+        return;
     }
+    event.preventDefault();
+    const tab = tabs[next];
+    setActiveSidebarTab(tab.id);
+    tabRefs.current[tab.id]?.focus();
   };
 
   return (
@@ -509,131 +586,47 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     >
       {/* Tabs */}
       <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <Tooltip content={withShortcut("Files", shortcuts.files)} side="bottom" delay={300}>
-          <button
-            aria-label="Files"
-            onClick={handleFilesTabClick}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "files"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "files" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <Files className="w-4 h-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content={withShortcut("Changes", shortcuts.changes)} side="bottom" delay={300}>
-          <button
-            aria-label="Changes"
-            onClick={() => handleTabClick("changes")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "changes"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "changes" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <GitBranch className="w-4 h-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content={withShortcut("Processes: monitor running commands", shortcuts.processes)} side="bottom" delay={300}>
-          <button
-            aria-label="Processes"
-            onClick={() => handleTabClick("processes")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "processes"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "processes" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <Terminal className="w-4 h-4" />
-              {totalRunningCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              )}
-            </span>
-          </button>
-        </Tooltip>
-        <Tooltip content={withShortcut("Tasks", shortcuts.tasks)} side="bottom" delay={300}>
-          <button
-            aria-label="Tasks"
-            onClick={() => handleTabClick("tasks")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "tasks"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "tasks" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <ListTodo className="w-4 h-4" />
-              {/* Yellow dot for pending tasks (not yet started) */}
-              {taskStats.pending > 0 && taskStats.inProgress === 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-yellow-500" />
-              )}
-              {/* Green pulsing dot for in-progress tasks */}
-              {taskStats.inProgress > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              )}
-              {/* Checkmark for all tasks completed */}
-              {taskStats.total > 0 && taskStats.completed === taskStats.total && (
-                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center">
-                  <Check className="w-2.5 h-2.5 text-green-500" />
-                </span>
-              )}
-            </span>
-          </button>
-        </Tooltip>
-        {/* The in-app browser is an Electron <webview> — hide its sidebar entirely
-            in the web build, where it cannot be mounted. */}
-        {isElectron() && (
-          <Tooltip content={withShortcut("Browser", shortcuts.browser)} side="bottom" delay={300}>
-            <button
-            aria-label="Browser"
-              onClick={() => handleTabClick("browser")}
-              tabIndex={-1}
-              className={cn(
-                "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-                activeSidebarTab === "browser"
-                  ? "text-foreground"
-                  : "text-muted-foreground bg-accent header-icon-btn"
-              )}
-              style={activeSidebarTab === "browser" ? {
-                backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-                borderBottomColor: 'hsl(var(--tab-active))'
-              } : undefined}
-            >
-              <span className="relative">
-                <Globe className="w-4 h-4" />
-                {worktreeBrowserTabs.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
-                )}
-              </span>
-            </button>
-          </Tooltip>
-        )}
+        <div role="tablist" aria-label="Sidebar" className="flex h-full">
+          {tabs.map((tab, index) => {
+            const selected = activeSidebarTab === tab.id;
+            return (
+              <Tooltip key={tab.id} content={tab.tooltip} side="bottom" delay={300}>
+                <button
+                  ref={(el) => {
+                    tabRefs.current[tab.id] = el;
+                  }}
+                  type="button"
+                  role="tab"
+                  id={`right-sidebar-tab-${tab.id}`}
+                  aria-selected={selected}
+                  aria-controls="right-sidebar-panel"
+                  aria-label={tab.status ? `${tab.label}, ${tab.status.label}` : tab.label}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => handleTabClick(tab.id)}
+                  onKeyDown={(event) => onTabKeyDown(event, index)}
+                  className={cn(
+                    "px-3 h-full transition-colors border-b-2 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    selected ? "text-foreground" : "border-transparent text-muted-foreground bg-accent header-icon-btn",
+                  )}
+                  style={selected ? {
+                    backgroundColor: 'hsl(var(--tab-active) / 0.15)',
+                    borderBottomColor: 'hsl(var(--tab-active))'
+                  } : undefined}
+                >
+                  <span className="relative">
+                    {tab.icon}
+                    {tab.status?.dotClass && (
+                      <span className={cn("absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full", tab.status.dotClass)} />
+                    )}
+                    {tab.status?.icon && (
+                      <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center">{tab.status.icon}</span>
+                    )}
+                  </span>
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
 
         {/* Terminal toggle. Not a tab — the terminal panel lives below the
             viewer, so this shows/hides it rather than switching sidebar
@@ -643,12 +636,12 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <span className="self-center h-4 w-px bg-border mx-1" />
             <Tooltip content={withShortcut(isTerminalOpen ? "Hide terminal" : "Show terminal", shortcuts.terminal)} side="bottom" delay={300}>
               <button
+                type="button"
                 onClick={toggleTerminal}
-                tabIndex={-1}
                 aria-pressed={isTerminalOpen}
                 aria-label={isTerminalOpen ? "Hide Terminal" : "Show Terminal"}
                 className={cn(
-                  "px-3 h-full transition-colors border-b-2 border-transparent flex items-center justify-center",
+                  "px-3 h-full transition-colors border-b-2 border-transparent flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                   isTerminalOpen
                     ? "text-foreground"
                     : "text-muted-foreground bg-accent header-icon-btn"
@@ -677,7 +670,12 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+      <div
+        className="flex-1 overflow-hidden flex flex-col min-h-0"
+        role="tabpanel"
+        id="right-sidebar-panel"
+        aria-labelledby={`right-sidebar-tab-${activeSidebarTab}`}
+      >
         {/* Keep FileTree mounted but hidden to preserve state and scroll position */}
         <div className={cn("flex-1 overflow-y-auto", activeSidebarTab !== "files" && "hidden")}>
           <FileTree

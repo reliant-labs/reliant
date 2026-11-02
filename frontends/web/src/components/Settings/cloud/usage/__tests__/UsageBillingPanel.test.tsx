@@ -30,7 +30,8 @@ it("submits explicit org/policy/budget and does not treat checkout success as ac
   mount();
   await screen.findByRole("checkbox");
   expect(mocks.read).toHaveBeenCalledWith({ orgId: "org-a" });
-  expect(screen.getByText("CPU: 9 cents / vCPU-hour")).toBeInTheDocument();
+  expect(screen.getByText("CPU: $0.09/vCPU-hr")).toBeInTheDocument();
+  expect(screen.queryByText(/cents/)).not.toBeInTheDocument();
   await consent();
   await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 2500n, successUrl: "https://app.test/settings/billing?tab=usage#app-hosting", cancelUrl: "https://app.test/settings/billing?tab=usage#app-hosting" }));
   await waitFor(() => expect(mocks.open).toHaveBeenCalled());
@@ -97,4 +98,20 @@ it("keeps genuine read failures actionable rather than treating them as disabled
   fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
   expect(await screen.findByText(/App hosting billing is unavailable/)).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+it("discloses the server's free egress allowance and monthly minimum, never its own", async () => {
+  mocks.read.mockResolvedValue({
+    enabled: true, policyVersion: "p1", minimumMonthlyCents: 500n,
+    rates: [{ resourceKind: "egress_gib", displayName: "Internet egress", priceCents: "15", unit: "GiB", includedMonthly: "10" }],
+  });
+  mount();
+  expect(await screen.findByText("Internet egress: $0.15/GB after 10 GB free each month")).toBeInTheDocument();
+  expect(screen.getByTestId("hosting-minimum")).toHaveTextContent("A $5 minimum applies in any month with hosting usage.");
+  expect(screen.queryByText(/no base fee/i)).not.toBeInTheDocument();
+});
+it("states no minimum or allowance the server did not send", async () => {
+  mount();
+  await screen.findByRole("checkbox");
+  expect(screen.queryByTestId("hosting-minimum")).not.toBeInTheDocument();
+  expect(screen.queryByText(/free each month/)).not.toBeInTheDocument();
 });
