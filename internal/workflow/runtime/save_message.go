@@ -743,8 +743,14 @@ func executeSaveMessageInline(
 	// Execute SaveMessage activity
 	// Let Temporal auto-generate ActivityID for deterministic replay.
 	// The activity handler gets the ID via activity.GetInfo(ctx).ActivityID.
+	//
+	// The timeout is long enough for an attempt to hold for a database that
+	// stopped answering (ActivityWrapper.awaitDatabase, bounded by this
+	// deadline): five attempts of ~2 minutes ride out a maintenance restart,
+	// where five 30-second ones did not (reliant#2100). Activity options are
+	// not part of replay's determinism check, so this needs no version gate.
 	saveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
+		StartToCloseTimeout: inlineSaveMessageStartToClose,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
