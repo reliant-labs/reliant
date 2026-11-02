@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import type { GitAppInstallation } from "@/services/controlPlane/git";
 
 /**
- * index.css carries a global `a:not(.no-color) { color: hsl(var(--primary)) }`.
+ * index.css carries a global `a:not(.no-color) { color: hsl(var(--primary-ink)) }`.
  * Its specificity (0,1,1) beats a utility class (0,1,0), so an anchor styled as
  * a filled button loses `text-primary-foreground` and is repainted in the
  * BACKGROUND colour it already sits on — white-on-white in dark mode. Opting

@@ -84,6 +84,11 @@ export interface CleanupMetadata {
    */
   stripped_paths?: string[];
   stripped_bytes?: number;
+  /**
+   * The user forgot the folder: no machine was on record for it and none
+   * connected had it. directory_deleted is set, but nothing was deleted.
+   */
+  forgotten?: boolean;
 }
 
 export interface Worktree {
@@ -163,6 +168,7 @@ function cleanupFromProto(proto: ProtoCleanupMetadata): CleanupMetadata {
     snapshot_refs: proto.snapshotRefs.length > 0 ? [...proto.snapshotRefs] : undefined,
     stripped_paths: proto.strippedPaths.length > 0 ? [...proto.strippedPaths] : undefined,
     stripped_bytes: proto.strippedBytes > 0n ? Number(proto.strippedBytes) : undefined,
+    forgotten: proto.forgotten || undefined,
   };
 }
 

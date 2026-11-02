@@ -126,7 +126,7 @@ function SettingSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+        className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -387,14 +387,16 @@ export function AppearanceSettings() {
             </label>
             <select
               id="appearance-font"
-              value={font}
+              // "geist" was its own option before Geist became the default;
+              // a stored "geist" renders the same face, so show it as Default.
+              value={font === "geist" ? "default" : font}
               onChange={(e) => setFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
             >
-              <option value="default">Inter (Default)</option>
+              <option value="default">Geist (Default)</option>
+              <option value="inter">Inter</option>
               <option value="system">System Default</option>
               <option value="mono">JetBrains Mono</option>
-              <option value="geist">Geist</option>
               <option value="comic">Comic Sans (Fun)</option>
             </select>
           </div>
@@ -417,13 +419,13 @@ export function AppearanceSettings() {
                 aria-label="Code font"
                 value={editorFont === "default" ? "mono" : editorFont}
                 onChange={(e) => setEditorFont(e.target.value)}
-                className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+                className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
               >
                 <option value="mono">JetBrains Mono</option>
                 <option value="inherit">Inherit from System</option>
                 <option value="system">System Default</option>
                 <option value="inter">Inter (Modern)</option>
-                <option value="geist">Geist</option>
+                <option value="geist">Geist Mono</option>
                 <option value="comic">Comic Sans (Fun)</option>
               </select>
             )}
@@ -438,7 +440,7 @@ export function AppearanceSettings() {
               id="font-size"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSize)}
-              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
             >
               {Object.entries(FONT_SIZE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -458,7 +460,7 @@ export function AppearanceSettings() {
                   type="button"
                   onClick={() => setChatTimelineVariant(variant.id)}
                   className={cn(
-                    "rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                    "rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
                     chatTimelineVariant === variant.id
                       ? "border-primary bg-primary/10 text-foreground shadow-sm"
                       : "border-border/60 bg-background text-muted-foreground hover:border-border/80 hover:bg-foreground/5 hover:text-foreground"
@@ -581,7 +583,7 @@ export function AppearanceSettings() {
           <select
             value={workflowViewerDefaultMode}
             onChange={(e) => setWorkflowViewerDefaultMode(e.target.value as 'inline' | 'side')}
-            className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+            className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
           >
             <option value="side">Side Panel (beside chat)</option>
             <option value="inline">Inline (above chat)</option>
@@ -807,7 +809,7 @@ function MonacoEditorSettings() {
             <select
               value={settings.diffSideBySide ? "side-by-side" : "inline"}
               onChange={(e) => updateSettings({ diffSideBySide: e.target.value === "side-by-side" })}
-              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
             >
               <option value="side-by-side">Side-by-side</option>
               <option value="inline">Inline</option>

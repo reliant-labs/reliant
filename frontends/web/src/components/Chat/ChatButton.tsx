@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import Tooltip from "../forge-ui/tooltip";
+import { COMPOSER_CONTROL } from "./composerControl";
 
 interface ChatButtonProps {
   onClick: () => void;
@@ -23,13 +24,12 @@ export function ChatButton({
   return (
     <Tooltip content={tooltip} side="top" delay={300} triggerClassName="inline-flex">
       <button
+        type="button"
         onClick={onClick}
         disabled={disabled}
         aria-label={tooltip}
-        className={`chat-button flex items-center justify-center rounded-full text-2xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          compact
-            ? "p-1 h-6 w-6"
-            : "p-1 h-6 w-6 gap-1"
+        className={`chat-button flex items-center justify-center rounded-full text-2xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${COMPOSER_CONTROL} ${
+          compact ? "p-1 w-[32px]" : "p-1 w-[32px] gap-1"
         } touch:h-[44px] touch:w-[44px] ${className}`}
         data-testid={testId}
       >

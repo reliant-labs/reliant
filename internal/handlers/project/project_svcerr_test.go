@@ -126,6 +126,37 @@ func TestRemoveProjectFromDaemon_OnlyAMissNotAnOutageIsSuccess(t *testing.T) {
 	}
 }
 
+// Removing a project from a machine that is not connected is refused, and the
+// row kept: the checkout is still on that disk and the row is its only record.
+// The refusal names both ways out, because nothing else ever drops the row of
+// a machine that never comes back — bring it online, or remove the machine.
+func TestRemoveProjectFromDaemon_AnOfflineMachineIsRefusedWithTheWayOut(t *testing.T) {
+	t.Parallel()
+	for name, offline := range map[string]error{
+		"asleep or still starting": fmt.Errorf("resolve: %w", toolexec.ErrDaemonPending),
+		"no responder":             svcerr.Unavailable("no daemon connected: nats: no responders available for request"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			deleted := false
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error {
+				deleted = true
+				return nil
+			}
+			svc := newService(t, store, fakeDaemon(func(string, []byte) ([]byte, error) { return nil, offline }))
+			_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
+				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+			requireCode(t, err, connect.CodeUnavailable)
+			msg := svcerr.ToConnect(err).Message()
+			assert.Contains(t, msg, "bring it online")
+			assert.Contains(t, msg, "remove the machine")
+			assert.NotContains(t, msg, "nats", "the transport's words stay off the wire")
+			assert.False(t, deleted, "the row is the checkout's only record; it stays")
+		})
+	}
+}
+
 // A daemon command that failed: the daemon's own words (git, from the user's
 // machine) reach the user; the router's and the transport's do not.
 func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T) {
@@ -160,7 +191,10 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 			store := ownedProjectRepo(t)
 			store.GetProjectFunc = func(context.Context, string) (*db.Project, error) { return gitProject, nil }
 			router := &project.MockRouter{
-				SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) { return nil, tc.err },
+				SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
+					return nil, tc.err
+				},
+				PlacementDaemonIDFunc: func(_ context.Context, _, id string) (string, error) { return id, nil },
 			}
 			_, err := newService(t, store, router).GetProjectGitInfo(project.AuthedContext(t),
 				connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}))

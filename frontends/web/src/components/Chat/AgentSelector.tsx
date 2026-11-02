@@ -136,9 +136,9 @@ export function AgentSelector({
                   <div className="flex items-center gap-2">
                     <Users className="w-3 h-3 opacity-50 flex-shrink-0" />
                     <span>General</span>
-                    <span className="text-3xs text-primary opacity-70">(default)</span>
+                    <span className="text-3xs text-primary-ink opacity-70">(default)</span>
                   </div>
-                  {isGeneralAgent && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                  {isGeneralAgent && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
                 </div>
               </button>
 
@@ -177,7 +177,7 @@ export function AgentSelector({
                             </div>
                           </div>
                           {isSelected && (
-                            <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                            <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                           )}
                         </div>
                       </button>

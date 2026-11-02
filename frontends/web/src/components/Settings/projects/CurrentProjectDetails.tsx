@@ -178,7 +178,7 @@ export function CurrentProjectDetails({
                   <button
                     type="button"
                     onClick={onManageWorkspaces}
-                    className="rounded-sm text-xs text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-sm text-xs text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Manage
                   </button>
@@ -285,7 +285,7 @@ function GitFacts({ project, loading, failed, info }: GitFactsProps) {
               href={remote.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-1 rounded-sm font-mono text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex max-w-full items-center gap-1 rounded-sm font-mono text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="truncate">{remote.repo}</span>
               <ExternalLink className="h-3 w-3 flex-shrink-0" aria-hidden="true" />

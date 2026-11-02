@@ -413,7 +413,7 @@ function StepPaletteBody({
         {unconnected && !notAvailable && (
           <span
             data-palette-connect
-            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary hover:bg-background"
+            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary-ink hover:bg-background"
           >
             Connect
           </span>
@@ -447,7 +447,7 @@ function StepPaletteBody({
             <button
               type="button"
               onClick={() => expanded.refetch()}
-              className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Retry
             </button>
@@ -597,7 +597,7 @@ function StepPaletteBody({
                   <button
                     type="button"
                     onClick={() => paged.refetch()}
-                    className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Retry
                   </button>
@@ -633,7 +633,7 @@ function StepPaletteBody({
                 <button
                   type="button"
                   onClick={() => changeCategory("")}
-                  className="mt-3 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-3 text-xs font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Search all categories
                 </button>
@@ -652,7 +652,7 @@ function StepPaletteBody({
               <button
                 type="button"
                 onClick={() => onConnect(activeEntry)}
-                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Why?
               </button>
@@ -663,7 +663,7 @@ function StepPaletteBody({
               <button
                 type="button"
                 onClick={() => onConnect(activeEntry)}
-                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Connect {activeEntry.integration.displayName}
               </button>

@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=731cc1b31ebdc5ea626eb78a488f4f1b58e37241c9316f043e0cae81e5a0f95c
+// forge:hash=9aeaa0d41f3963b54afb54d8cd4a454c85541c4a8780d1b48b4caaa9c86c16ad
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -29,38 +29,39 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	ListWorktreeRecoveriesFunc         func(context.Context, string, string) ([]*core.WorktreeRecovery, error)
-	ListHeldWorktreesForUserFunc       func(context.Context, string) ([]*core.HeldWorktree, error)
-	ListDaemonStorageStateFunc         func(context.Context, string) (map[string]string, error)
-	AdoptWorktreeDaemonFunc            func(context.Context, string, string) (string, error)
-	GetWorktreeFunc                    func(context.Context, string) (*core.Worktree, error)
-	ListAttachedDaemonIDsForUserFunc   func(context.Context, string, time.Duration) ([]string, error)
-	ListLiveWorktreePathsForUserFunc   func(context.Context, string) ([]core.WorktreePath, error)
-	ListReposByProjectFunc             func(context.Context, string) ([]*core.Repo, error)
-	ListWorktreesForReclaimFunc        func(context.Context) ([]*core.ReclaimCandidate, error)
-	MergeWorktreeCleanupMetadataFunc   func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
-	TryAdvisoryLockFunc                func(context.Context, int64) (func(), bool, error)
-	UpdateWorktreeCleanupMetadataFunc  func(context.Context, string, *core.CleanupMetadata) error
-	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetPresetBySlugFunc                func(context.Context, string, string) (*db.Preset, error)
-	GetPresetBySlugAndProjectFunc      func(context.Context, string, string, string) (*db.Preset, error)
-	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
-	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
-	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
-	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
-	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
-	ListInboxPendingFunc               func(context.Context, string) ([]*core.InboxPending, error)
-	ListDismissedInboxItemIDsFunc      func(context.Context, string, []string) (map[string]bool, error)
-	DismissInboxItemsFunc              func(context.Context, string, []string, time.Time) error
-	RestoreInboxItemsFunc              func(context.Context, string, []string) error
-	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	RecentTriggerOutcomesFunc          func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccessFunc        func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
-	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
-	ListDaemonsByUserIDFunc            func(context.Context, string) ([]*db.Daemon, error)
-	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
+	ListWorktreeRecoveriesFunc              func(context.Context, string, string) ([]*core.WorktreeRecovery, error)
+	ListHeldWorktreesForUserFunc            func(context.Context, string) ([]*core.HeldWorktree, error)
+	ListDaemonStorageStateFunc              func(context.Context, string) (map[string]string, error)
+	MergeUnownedWorktreeCleanupMetadataFunc func(context.Context, string, func(m *core.CleanupMetadata) bool) (bool, error)
+	AdoptWorktreeDaemonFunc                 func(context.Context, string, string) (string, error)
+	GetWorktreeFunc                         func(context.Context, string) (*core.Worktree, error)
+	ListAttachedDaemonIDsForUserFunc        func(context.Context, string, time.Duration) ([]string, error)
+	ListLiveWorktreePathsForUserFunc        func(context.Context, string) ([]core.WorktreePath, error)
+	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
+	ListWorktreesForReclaimFunc             func(context.Context) ([]*core.ReclaimCandidate, error)
+	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
+	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
+	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
+	GetWorkflowDraftBySlugFunc              func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc             func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetPresetBySlugFunc                     func(context.Context, string, string) (*db.Preset, error)
+	GetPresetBySlugAndProjectFunc           func(context.Context, string, string, string) (*db.Preset, error)
+	GetProjectWorkflowsJSONFunc             func(context.Context, string) (*string, error)
+	GetProjectPresetsJSONFunc               func(context.Context, string) (*string, error)
+	GetProjectMachineWorkflowsJSONFunc      func(context.Context, string, string) (*string, bool, error)
+	GetProjectMachinePresetsJSONFunc        func(context.Context, string, string) (*string, bool, error)
+	WorkflowSourceDiagnosticFunc            func(context.Context, string, string, string) (string, error)
+	ListInboxPendingFunc                    func(context.Context, string) ([]*core.InboxPending, error)
+	ListDismissedInboxItemIDsFunc           func(context.Context, string, []string) (map[string]bool, error)
+	DismissInboxItemsFunc                   func(context.Context, string, []string, time.Time) error
+	RestoreInboxItemsFunc                   func(context.Context, string, []string) error
+	ListTriggersFunc                        func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
+	RecentTriggerOutcomesFunc               func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	FiringsSinceLastSuccessFunc             func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	ListTriggerRegistrationsFunc            func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
+	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
+	ListDaemonsByUserIDFunc                 func(context.Context, string) ([]*db.Daemon, error)
+	GetChatFunc                             func(context.Context, string) (*db.Chat, error)
 }
 
 // ListWorktreeRecoveries records the call and delegates to ListWorktreeRecoveriesFunc when set.
@@ -88,6 +89,15 @@ func (m *MockRepository) ListDaemonStorageState(ctx context.Context, userID stri
 		return m.ListDaemonStorageStateFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonStorageState")
+}
+
+// MergeUnownedWorktreeCleanupMetadata records the call and delegates to MergeUnownedWorktreeCleanupMetadataFunc when set.
+func (m *MockRepository) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	m.Recorder.Record("MergeUnownedWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeUnownedWorktreeCleanupMetadataFunc != nil {
+		return m.MergeUnownedWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "MergeUnownedWorktreeCleanupMetadata")
 }
 
 // AdoptWorktreeDaemon records the call and delegates to AdoptWorktreeDaemonFunc when set.

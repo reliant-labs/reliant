@@ -12,8 +12,10 @@
  *
  * It is a note, not an error: dashed, recessed and neutral, like the
  * observability states beside it (Observability/ObsStates). Commands are
- * quoted exactly as `forge` spells them; every one shown here was checked
- * against `forge <verb> --help` before it was written down.
+ * quoted as a Reliant user runs them (`reliant forge …`); every one shown
+ * here was checked against `reliant forge <verb> --help` before it was
+ * written down. Where an agent can do the work, its action (`agent`) leads
+ * and the steps follow as the way to do it by hand.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -44,6 +46,12 @@ export interface GettingStartedProps {
   about: ReactNode;
   /** Anything the reader needs before the steps (why it is empty, a caveat). */
   children?: ReactNode;
+  /**
+   * The primary way through: an action that hands the work to an agent
+   * ("Deploy with an agent", AskReliant). It leads; the steps follow as the
+   * way to do it by hand.
+   */
+  agent?: ReactNode;
   steps?: GettingStartedStep[];
   docs?: { href: string; label: string };
   /** Buttons that act in place (clear a filter, widen the window). */
@@ -51,7 +59,7 @@ export interface GettingStartedProps {
   testId: string;
 }
 
-export function GettingStarted({ icon, title, about, children, steps = [], docs, actions, testId }: GettingStartedProps) {
+export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, testId }: GettingStartedProps) {
   return (
     <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
       <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
@@ -63,8 +71,14 @@ export function GettingStarted({ icon, title, about, children, steps = [], docs,
           <p data-testid={`${testId}-about`}>{about}</p>
           {children}
         </div>
+        {agent && (
+          <div className="flex flex-wrap items-center gap-2 pt-1" data-testid={`${testId}-agent`}>
+            {agent}
+          </div>
+        )}
+        {agent && steps.length > 0 && <p className="pt-1 text-xs text-ink-muted">Or do it yourself, from the project&apos;s checkout:</p>}
         {steps.length > 0 && (
-          <ol className="max-w-2xl space-y-2 pt-1 text-xs text-ink-muted" aria-label="Get started" data-testid={`${testId}-steps`}>
+          <ol className="max-w-2xl space-y-2 pt-1 text-xs text-ink-muted" aria-label={agent ? "Do it yourself" : "Get started"} data-testid={`${testId}-steps`}>
             {steps.map((step, index) => (
               <li key={index} className="flex gap-2">
                 <span
@@ -89,7 +103,7 @@ export function GettingStarted({ icon, title, about, children, steps = [], docs,
                 href={docs.href}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid={`${testId}-docs`}
               >
                 {docs.label}

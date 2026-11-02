@@ -83,7 +83,7 @@ function SidebarOrgSwitcher({ orgs, active, onSelect }: { orgs: MyOrg[]; active:
           className={cn(
             "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
             "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-            "focus:outline-none focus:ring-2 focus:ring-ring/40"
+            "focus:outline-none focus:ring-2 focus:ring-ring"
           )}
         >
           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -140,7 +140,7 @@ export function OrgRow({ org, selected, onSelect }: { org: MyOrg; selected: bool
           {org.isDefault && " · Default"}
         </span>
       </span>
-      <Check className={cn("h-4 w-4 shrink-0 text-primary", !selected && "invisible")} aria-hidden="true" />
+      <Check className={cn("h-4 w-4 shrink-0 text-primary-ink", !selected && "invisible")} aria-hidden="true" />
     </button>
   );
 }

@@ -444,7 +444,7 @@ function EnumSelect({
               >
                 <div className="flex items-center justify-between">
                   <span>{option}</span>
-                  {value === option && <Check className="w-4 h-4 text-primary" />}
+                  {value === option && <Check className="w-4 h-4 text-primary-ink" />}
                 </div>
               </button>
             ))}

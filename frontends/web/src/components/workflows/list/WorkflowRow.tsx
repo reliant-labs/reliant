@@ -10,6 +10,12 @@
  * A real table with a header row and fixed column widths (forge-ui
  * DataTable, `layout="fixed"`), so every row's cells line up under a label.
  *
+ * Name takes the width the other columns leave, so as the table narrows the
+ * other columns give way instead of Name shrinking to nothing: the table's
+ * wrapper is a size container (`@container`, in WorkflowsListPage), and below
+ * each step a column folds into a line under another one (FOLD). Hidden
+ * cells are `display: none`, which takes them out of the fixed layout.
+ *
  * The NAME links to the workflow's page, where its triggers are configured;
  * editing the definition is one click from there. Every other action sits in
  * the row's menu, so nothing is hover-only and all of it is reachable from
@@ -23,11 +29,13 @@ import type { RunSummary } from "@/hooks/run-queries";
 import type { AutomationCtaSpec } from "@/lib/automationHealth";
 import type { Trigger } from "@/hooks/trigger-model";
 import { formatRelativeTime } from "@/lib/relativeTime";
+import { cn } from "@/lib/utils";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../runs/RunStatusIndicator";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
 import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { workflowSummary } from "../../../lib/workflowSummary";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { HealthIndicator, NextFire } from "../automationStatus";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
@@ -82,6 +90,21 @@ export function workflowRowQualifier(workflow: Pick<WorkflowRowItem, "name" | "s
   return `${state}, ${stripWorkflowRefPrefix(workflow.name)}${projectName ? `, ${projectName}` : ""}`;
 }
 
+/**
+ * The container widths below which a column folds into another cell, widest
+ * first: Health and Next run go under Name and Last run, then Runs by itself
+ * under Name, then Last run under Name. Each step keeps Name at least ~16rem
+ * wide. Written out whole, as Tailwind reads class names from the source.
+ */
+const FOLD = {
+  // < 1040px: Health under Name, Next run under Last run.
+  wide: { hide: "@max-[1040px]:hidden", show: "hidden @max-[1040px]:inline-flex" },
+  // < 780px: Runs by itself under Name.
+  medium: { hide: "@max-[780px]:hidden", show: "hidden @max-[780px]:inline" },
+  // < 600px: Last run under Name.
+  narrow: { hide: "@max-[600px]:hidden", show: "hidden @max-[600px]:inline" },
+} as const;
+
 /** The column model. Widths are fixed so every row lines up; Name takes the remainder. */
 export function workflowsColumns() {
   return [
@@ -94,13 +117,15 @@ export function workflowsColumns() {
     {
       key: "startsOn",
       header: "Runs by itself",
-      width: "12rem",
+      headerClassName: `w-[12rem] ${FOLD.medium.hide}`,
+      className: FOLD.medium.hide,
       render: (_: unknown, row: WorkflowsTableRow) => <StartsOnCell row={row} />,
     },
     {
       key: "health",
       header: "Health",
-      width: "8.5rem",
+      headerClassName: `w-[8.5rem] ${FOLD.wide.hide}`,
+      className: FOLD.wide.hide,
       render: (_: unknown, row: WorkflowsTableRow) =>
         row.view.health ? (
           <div className="min-w-0 truncate" data-testid="workflow-row-health">
@@ -113,17 +138,26 @@ export function workflowsColumns() {
     {
       key: "lastRun",
       header: "Last run",
-      width: "9.5rem",
+      headerClassName: `w-[9.5rem] ${FOLD.narrow.hide}`,
+      className: FOLD.narrow.hide,
       render: (_: unknown, row: WorkflowsTableRow) => (
         <div className="min-w-0 truncate" data-testid="workflow-row-last-run">
           <LastRun run={row.lastRun} />
+          {row.view.nextFireAt && (row.view.state === "on" || row.view.state === "partly") && (
+            // A second line under the last run, not beside it.
+            <span className="mt-0.5 hidden truncate text-xs text-muted-foreground @max-[1040px]:block" data-testid="workflow-row-next-run-folded">
+              <span aria-hidden="true">Next </span>
+              <NextFire trigger={{ enabled: true, nextFireAt: row.view.nextFireAt }} />
+            </span>
+          )}
         </div>
       ),
     },
     {
       key: "nextRun",
       header: "Next run",
-      width: "6.5rem",
+      headerClassName: `w-[6.5rem] ${FOLD.wide.hide}`,
+      className: FOLD.wide.hide,
       render: (_: unknown, row: WorkflowsTableRow) => (
         <span className="block truncate text-xs text-muted-foreground" data-testid="workflow-row-next-run">
           <NextFire trigger={{ enabled: row.view.state === "on" || row.view.state === "partly", nextFireAt: row.view.nextFireAt }} />
@@ -133,14 +167,14 @@ export function workflowsColumns() {
     {
       key: "on",
       header: "On",
-      width: "4rem",
+      headerClassName: "w-[4rem]",
       render: (_: unknown, row: WorkflowsTableRow) => <OnCell row={row} />,
     },
     {
       key: "actions",
       header: "Actions",
       srHeader: true,
-      width: "10.5rem",
+      headerClassName: "w-[10.5rem]",
       className: "text-right",
       render: (_: unknown, row: WorkflowsTableRow) => <ActionsCell row={row} />,
     },
@@ -158,6 +192,8 @@ function Dash({ label }: { label: string }) {
 
 function NameCell({ row }: { row: WorkflowsTableRow }) {
   const { workflow, view } = row;
+  // One sentence, not the author's whole description (lib/workflowSummary).
+  const summary = workflowSummary(workflow.description);
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
@@ -168,8 +204,8 @@ function NameCell({ row }: { row: WorkflowsTableRow }) {
           search={row.href.project ? { project: row.href.project } : {}}
           // The description is read on request, not as part of the row: it
           // is clipped to one line on screen and was read out in full.
-          aria-description={workflow.description || undefined}
-          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          aria-description={summary || undefined}
+          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {workflowDisplayName(workflow)}
         </Link>
@@ -179,13 +215,43 @@ function NameCell({ row }: { row: WorkflowsTableRow }) {
         {workflow.isDraft && <DraftStatusBadge errorCount={workflow.draftErrorCount} />}
         {workflow.isHidden && <WorkflowBadge label="Hidden" variant="neutral" />}
       </div>
-      {(view.projectName || workflow.description) && (
-        <p aria-hidden="true" className="mt-0.5 truncate text-xs text-muted-foreground" title={workflow.description}>
+      {(view.projectName || summary) && (
+        <p aria-hidden="true" className="mt-0.5 truncate text-xs text-muted-foreground" title={summary}>
           {view.projectName && <span className="font-medium text-foreground/80">{view.projectName}</span>}
-          {view.projectName && workflow.description && " · "}
-          {workflow.description}
+          {view.projectName && summary && " · "}
+          {summary}
         </p>
       )}
+      <FoldedColumns row={row} />
+    </div>
+  );
+}
+
+/**
+ * The columns a narrow table folds away, as one line under the name: its
+ * health, what starts it, its last run. Each part shows only below the width
+ * that hides its own column (FOLD), so nothing is shown twice.
+ */
+function FoldedColumns({ row }: { row: WorkflowsTableRow }) {
+  const { view } = row;
+  const status = row.lastRun ? runStatusFromDisplayState(row.lastRun.displayState, row.lastRun.outcome) : undefined;
+  return (
+    <div className="mt-0.5 hidden min-w-0 items-center gap-x-1.5 text-xs text-muted-foreground @max-[1040px]:flex" data-testid="workflow-row-folded">
+      {view.health && (
+        <span className={cn("min-w-0 shrink-0", FOLD.wide.show)}>
+          <HealthIndicator health={view.health} />
+        </span>
+      )}
+      <span className={cn("min-w-0 truncate", FOLD.medium.show)}>
+        {view.health && <span aria-hidden="true">· </span>}
+        {view.state === "none" ? "Only when started" : row.startsOn}
+      </span>
+      <span className={cn("min-w-0 truncate", FOLD.narrow.show)}>
+        <span aria-hidden="true">· </span>
+        {row.lastRun && status
+          ? `Last run ${status.label.toLowerCase()} ${formatRelativeTime(new Date(row.lastRun.createdAt).toISOString())}`
+          : "Not run yet"}
+      </span>
     </div>
   );
 }
@@ -257,7 +323,7 @@ function ActionsCell({ row }: { row: WorkflowsTableRow }) {
             type="button"
             onClick={row.onSetUp}
             aria-label={`Set up ${displayName} (${qualifier})`}
-            className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Set up…
           </button>
@@ -268,7 +334,7 @@ function ActionsCell({ row }: { row: WorkflowsTableRow }) {
           type="button"
           onClick={row.onRun}
           aria-label={`Run ${displayName} (${qualifier})`}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Play className="h-3.5 w-3.5" aria-hidden="true" />
           Run…
@@ -289,7 +355,7 @@ function LastRun({ run }: { run?: RunSummary }) {
     <Link
       to="/workflows/runs/$runId"
       params={{ runId: run.chatId }}
-      className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`${status.label} · ${run.title || "Untitled run"}`}
     >
       <RunStatusDot status={status} size="sm" />

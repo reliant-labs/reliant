@@ -949,6 +949,10 @@ type CleanupMetadata struct {
 	// workspace needs its install/generate step run again.
 	StrippedPaths []string `protobuf:"bytes,7,rep,name=stripped_paths,json=strippedPaths,proto3" json:"stripped_paths,omitempty"`
 	StrippedBytes int64    `protobuf:"varint,8,opt,name=stripped_bytes,json=strippedBytes,proto3" json:"stripped_bytes,omitempty"`
+	// The user forgot the folder (InboxService.ForgetStorageWorktree): no
+	// machine was on record for it and no connected machine had it.
+	// directory_deleted is set so nothing tracks it, but nothing was deleted.
+	Forgotten     bool `protobuf:"varint,9,opt,name=forgotten,proto3" json:"forgotten,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1037,6 +1041,13 @@ func (x *CleanupMetadata) GetStrippedBytes() int64 {
 		return x.StrippedBytes
 	}
 	return 0
+}
+
+func (x *CleanupMetadata) GetForgotten() bool {
+	if x != nil {
+		return x.Forgotten
+	}
+	return false
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
@@ -4612,7 +4623,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\b \x01(\tR\tprojectIdB\r\n" +
-	"\v_deleted_at\"\xb9\x02\n" +
+	"\v_deleted_at\"\xd7\x02\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +
 	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\x12\x1f\n" +
@@ -4624,7 +4635,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12#\n" +
 	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\x12%\n" +
 	"\x0estripped_paths\x18\a \x03(\tR\rstrippedPaths\x12%\n" +
-	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\"\x97\x02\n" +
+	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\x12\x1c\n" +
+	"\tforgotten\x18\t \x01(\bR\tforgotten\"\x97\x02\n" +
 	"\x12DiscoveredWorktree\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

@@ -121,7 +121,7 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
 
 function CatalogRefetchProbe() {
   const client = useQueryClient();
-  return <button className="text-sm text-primary underline" onClick={() => void client.invalidateQueries({ predicate: (q) => q.queryKey.includes("graph-catalog") || q.queryKey.includes("graph-catalog-exact") })}>Preview: refetch retained catalog</button>;
+  return <button className="text-sm text-primary-ink underline" onClick={() => void client.invalidateQueries({ predicate: (q) => q.queryKey.includes("graph-catalog") || q.queryKey.includes("graph-catalog-exact") })}>Preview: refetch retained catalog</button>;
 }
 
 export default function ObservabilityPreview() {

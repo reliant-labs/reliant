@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -106,6 +107,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	e.project = &db.Project{ID: "p-" + userID, UserID: userID, Name: "proj", Path: projectPath, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateProject(e.ctx, e.project))
 	require.NoError(t, repo.UpsertDaemon(e.ctx, &db.Daemon{ID: e.daemon, UserID: userID}))
+	require.NoError(t, repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, projectPath, nil))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	e.sweeper = worktreesweep.New(repo, e.router)
@@ -269,6 +271,42 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	assert.True(t, exists(path))
 }
 
+// reliant#1998: an ssh-agent of the daemon's user is undumpable, so /proc
+// shows no one its cwd, descriptors or mappings, and the retirement's
+// process-use check used to hold every workspace while one ran. It is a known
+// agent that never holds a worktree: the retirement goes through.
+func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("undumpable processes are a Linux /proc matter")
+	}
+	bin, err := exec.LookPath("ssh-agent")
+	if err != nil {
+		t.Skip("ssh-agent is not installed")
+	}
+	e := newReclaimEnv(t)
+	sockDir, err := os.MkdirTemp("", "sa")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sock := filepath.Join(sockDir, "s")
+	agent := exec.Command(bin, "-D", "-a", sock)
+	require.NoError(t, agent.Start())
+	t.Cleanup(func() { _ = agent.Process.Kill(); _ = agent.Wait() })
+	// Running (its socket exists), not just undumpable: that starts inside
+	// execve.
+	require.Eventually(t, func() bool { _, err := os.Stat(sock); return err == nil }, 10*time.Second, 5*time.Millisecond, "ssh-agent never listened")
+	fdDir := filepath.Join("/proc", strconv.Itoa(agent.Process.Pid), "fd")
+	if _, err := os.ReadDir(fdDir); !os.IsPermission(err) {
+		t.Skipf("this host lets the daemon inspect ssh-agent (%v): nothing to prove", err)
+	}
+
+	wt, path := e.worktree(t, "sshagent")
+	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
+	age(t, path)
+	_, err = e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
+	require.NoError(t, err)
+	assert.False(t, exists(path))
+}
+
 // S2: an import may not claim an archived workspace's directory.
 func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	e := newReclaimEnv(t)
@@ -301,6 +339,7 @@ func newMultiRepoEnv(t *testing.T) (*reclaimEnv, []string) {
 	now := time.Now().UTC()
 	e.project = &db.Project{ID: "mp-" + e.userID, UserID: e.userID, Name: "multi", Path: root, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, e.repo.CreateProject(e.ctx, e.project))
+	require.NoError(t, e.repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, root, nil))
 	for _, name := range []string{"api", "web"} {
 		p := filepath.Join(root, name)
 		gitIn(t, root, "init", "-q", "-b", "main", p)

@@ -254,7 +254,7 @@ export function IdentityUsers({
                 placeholder="Search by email"
                 maxLength={200}
                 data-testid="identity-users-search"
-                className="w-full rounded-md border border-input bg-surface-sunken py-1.5 pl-8 pr-2 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+                className="w-full rounded-md border border-input bg-surface-sunken py-1.5 pl-8 pr-2 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
             <div role="group" aria-label="Filter by state" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
@@ -640,7 +640,7 @@ function InvitePanel({
             placeholder="person@example.com"
             aria-invalid={touched && !valid}
             data-testid="identity-invite-email"
-            className="w-full max-w-md rounded-md border border-input bg-surface-sunken px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            className="w-full max-w-md rounded-md border border-input bg-surface-sunken px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
           />
           {touched && !valid && email && <span className="text-xs text-danger-ink">That doesn&apos;t look like an email address.</span>}
         </label>

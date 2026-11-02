@@ -71,10 +71,10 @@ func (t *ProjectAnalyzerTool) Execute(rctx *rctx.ToolContext, params ProjectAnal
 	// Use params.Path if provided, otherwise require project context
 	path := params.Path
 	if path == "" {
-		if rctx.Project == nil || rctx.Project.Path == "" {
+		if rctx.Project == nil || rctx.Project.Checkout == "" {
 			return nil, fmt.Errorf("no project context available and no path provided")
 		}
-		path = rctx.Project.Path
+		path = rctx.Project.Checkout
 	}
 
 	switch params.Action {

@@ -101,7 +101,7 @@ describe("ComputeStep — cloud machines fold away when Free is chosen", () => {
 
     const toggle = screen.getByTestId("compute-cloud-toggle");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveTextContent("Reliant Cloud machines · from $20.00/mo");
+    expect(toggle).toHaveTextContent("Reliant Cloud machines · from $20/mo");
     expect(screen.queryByText("M")).toBeNull();
     expect(screen.getByTestId("self-hosted-connect")).toBeVisible();
 

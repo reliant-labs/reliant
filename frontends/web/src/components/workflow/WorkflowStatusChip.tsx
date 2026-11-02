@@ -98,7 +98,7 @@ export function WorkflowStatusChip({
               setOpen(false);
               onSelect(finding);
             }}
-            className="w-full rounded-md px-2 py-1.5 text-left hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="w-full rounded-md px-2 py-1.5 text-left hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {content}
           </button>

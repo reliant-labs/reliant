@@ -280,6 +280,11 @@ export function useBatchDenyInChat(chatId?: string) {
  * useBatchApproveInChat: optimistic, rolled back on error, and the service's
  * reads invalidated once the server has recorded it.
  */
+/** How many of the chat's approvals are waiting, from the cache (no fetch). */
+export function countPendingApprovals(chatId: string): number {
+  return approvalsFromCache(chatId).filter((a) => a.status === ApprovalStatus.PENDING).length;
+}
+
 export async function approveAllPendingApprovals(chatId: string): Promise<void> {
   const pendingIds = approvalsFromCache(chatId)
     .filter((a) => a.status === ApprovalStatus.PENDING && !approvalGrantsPower(a.title))

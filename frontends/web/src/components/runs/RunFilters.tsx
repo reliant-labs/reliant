@@ -124,7 +124,7 @@ export function RunFilters({ triggerName, parentTitle }: RunFiltersProps) {
             setQuery("");
             setSearch(clearRunFilters(search));
           }}
-          className="h-8 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="h-8 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Clear filters"
         >
           Clear
@@ -153,7 +153,7 @@ function RemovableFilter({ label, onRemove }: { label: string; onRemove: () => v
         type="button"
         onClick={onRemove}
         aria-label={`Remove filter ${label}`}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

@@ -52,6 +52,7 @@ vi.mock("uplot", () => {
     }
     destroy() {}
     setSize() {}
+    setSeries() {}
   }
   return { default: FakeUPlot };
 });

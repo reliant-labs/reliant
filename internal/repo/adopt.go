@@ -61,11 +61,12 @@ const adoptDiscoverTimeoutMs = 30_000
 
 // NoReposMessage is the sentence a caller refuses worktree creation with when
 // the registry is empty AND the machine confirmed there is no git repository
-// in the project folder. It names the folder and how deep the search went, so
-// a user whose repo is real but elsewhere can see why it was not found.
-func NoReposMessage(project *db.Project) string {
+// in the project folder. It names the folder — checkout, the project's
+// checkout on that machine — and how deep the search went, so a user whose
+// repo is real but elsewhere can see why it was not found.
+func NoReposMessage(checkout string) string {
 	return fmt.Sprintf("no git repository found in %s (searched it and %d levels of subfolders); run `git init` there or clone a repository into it before creating a workspace",
-		project.Path, DefaultMaxDepth)
+		checkout, DefaultMaxDepth)
 }
 
 // SearchCutShortError is AdoptFromDaemon's answer when the machine's scan of
@@ -91,19 +92,22 @@ func (e *SearchCutShortError) Error() string {
 // anything missing, and true up project.IsGitRepo alongside. Returns the
 // project's repos after adoption.
 //
+// checkout is the project's checkout ON machine (projectcheckout): the
+// directory searched is that machine's, never projects.path.
+//
 // An error means the machine could not answer (unreachable, asleep, the
 // project folder missing on it): the caller must say so rather than claim the
 // project has no repos. A nil error with no repos means the machine looked and
 // found none (NoReposMessage).
-func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCommander, project *db.Project) ([]*core.Repo, error) {
-	payload, err := json.Marshal(map[string]string{"path": project.Path})
+func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCommander, project *db.Project, checkout string) ([]*core.Repo, error) {
+	payload, err := json.Marshal(map[string]string{"path": checkout})
 	if err != nil {
 		return nil, fmt.Errorf("marshal repo.discover payload: %w", err)
 	}
 	respBytes, err := machine.SendDaemonCommand(ctx, project.UserID, "repo.discover", payload, adoptDiscoverTimeoutMs)
 	if err != nil {
-		logging.WarnContext(ctx, "repo adoption: discover failed", "error", err, "project_id", project.ID, "path", project.Path)
-		return nil, fmt.Errorf("look for git repositories in %s: %w", project.Path, err)
+		logging.WarnContext(ctx, "repo adoption: discover failed", "error", err, "project_id", project.ID, "path", checkout)
+		return nil, fmt.Errorf("look for git repositories in %s: %w", checkout, err)
 	}
 	var resp struct {
 		Discovered []struct {
@@ -115,14 +119,14 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCom
 		TruncatedReason string `json:"truncated_reason"`
 	}
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, fmt.Errorf("read repo.discover answer for %s: %w", project.Path, err)
+		return nil, fmt.Errorf("read repo.discover answer for %s: %w", checkout, err)
 	}
 	if resp.Truncated {
-		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", project.Path,
+		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", checkout,
 			"reason", resp.TruncatedReason, "found", len(resp.Discovered))
 		if len(resp.Discovered) == 0 {
 			// Not "there is no repository": the machine did not finish looking.
-			return nil, &SearchCutShortError{Path: project.Path, Reason: resp.TruncatedReason}
+			return nil, &SearchCutShortError{Path: checkout, Reason: resp.TruncatedReason}
 		}
 	}
 	if len(resp.Discovered) == 0 {

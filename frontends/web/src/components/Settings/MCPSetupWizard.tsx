@@ -20,7 +20,7 @@ function withLinks(text: string) {
         href={part}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-0.5 text-primary underline hover:text-primary/80"
+        className="inline-flex items-center gap-0.5 text-primary-ink underline hover:text-primary-ink/80"
       >
         {part}
         <ExternalLink className="h-2.5 w-2.5" aria-hidden="true" />

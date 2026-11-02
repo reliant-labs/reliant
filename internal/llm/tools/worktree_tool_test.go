@@ -115,13 +115,15 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	project, err := repo.GetProject(context.Background(), chat.ProjectID)
 	require.NoError(t, err)
 	// The project lives on the machine; on the worker this path is nothing.
+	// The tool knows it only as the run machine's checkout (rc.Project).
 	project.Path = worktreeToolHome + "/project"
 	if len(repos) == 0 {
 		repos = []*core.Repo{{ID: uuid.NewString(), ProjectID: project.ID, Name: "project", RelativePath: ""}}
 	}
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, runTestUser)
-	rc := rctx.NewToolContext(ctx, chatID, chatID, project, nil)
+	// The dispatcher resolved the run machine's checkout into the request.
+	rc := rctx.NewToolContext(ctx, chatID, chatID, &rctx.Project{ID: project.ID, Name: project.Name, Checkout: project.Path}, nil)
 	rc.Repos = repos
 	return &worktreeToolFixture{
 		repo:    repo,

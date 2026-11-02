@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -23,7 +22,7 @@ func TestWorkspaceNoticeText_FallbackToMainCheckout(t *testing.T) {
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeWorkspace, RunningIn: noticeProject,
 		Branch: "fix/errors", Reason: "branch 'fix/errors' no longer exists in " + noticeProject + "/reliant",
-	}, &db.Project{Path: noticeProject})
+	}, noticeProject)
 
 	assert.Contains(t, text, noticeWorkspace)
 	assert.Contains(t, text, "no longer exists in "+noticeProject+"/reliant")
@@ -42,7 +41,7 @@ func TestWorkspaceNoticeText_FallbackWhenTheProjectIsGoneToo(t *testing.T) {
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeWorkspace, RunningIn: "/home/workspace",
 		Branch: "fix/errors", Reason: "the project's repository " + noticeProject + "/forge is missing on this machine",
-	}, &db.Project{Path: noticeProject})
+	}, noticeProject)
 
 	assert.Contains(t, text, "this call ran in /home/workspace, because the project's checkout "+noticeProject+" is missing too")
 	assert.Contains(t, text, "cloned again to "+noticeProject)
@@ -57,7 +56,7 @@ func TestWorkspaceNoticeText_MainCheckoutChatFallsBackToHome(t *testing.T) {
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeProject, RunningIn: "/home/workspace",
 		Reason: "it is not a worktree reliant created, and only those are recreated",
-	}, &db.Project{Path: noticeProject})
+	}, noticeProject)
 
 	assert.Contains(t, text, "This chat's working directory "+noticeProject)
 	assert.Contains(t, text, "Instead, this call ran in /home/workspace.")
@@ -71,7 +70,7 @@ func TestWorkspaceNoticeText_RepairedNamesTheBranchAndWhatWasLost(t *testing.T) 
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeRepaired, WorkspacePath: noticeWorkspace, RunningIn: noticeWorkspace,
 		Branch: "fix/errors", Checkouts: []string{"control-plane", "forge", "reliant"},
-	}, &db.Project{Path: noticeProject})
+	}, noticeProject)
 
 	assert.Contains(t, text, "recreated from branch `fix/errors` (control-plane, forge, reliant)")
 	assert.Contains(t, text, "Uncommitted changes")
@@ -80,6 +79,6 @@ func TestWorkspaceNoticeText_RepairedNamesTheBranchAndWhatWasLost(t *testing.T) 
 func TestWorkspaceNoticeText_NothingToSay(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, workspaceNoticeText(nil, &db.Project{Path: noticeProject}))
-	assert.Empty(t, workspaceNoticeText(&toolexec.WorkspaceNotice{Kind: "something-new"}, nil))
+	assert.Empty(t, workspaceNoticeText(nil, noticeProject))
+	assert.Empty(t, workspaceNoticeText(&toolexec.WorkspaceNotice{Kind: "something-new"}, ""))
 }

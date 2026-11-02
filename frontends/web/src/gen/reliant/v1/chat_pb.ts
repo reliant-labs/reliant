@@ -4261,8 +4261,10 @@ export const ChatService: GenService<{
     output: typeof UpdateChatResponseSchema;
   },
   /**
-   * DeleteChat archives or permanently deletes a chat
-   * forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
+   * DeleteChat permanently deletes an archived chat. A chat that is not
+   * archived is refused (FailedPrecondition): archive it with UpdateChatState
+   * first, so a delete can never silently be an archive, or the reverse.
+   * forge:custom — refuses a chat that is not archived, and cancels its run before deleting
    *
    * @generated from rpc reliant.v1.ChatService.DeleteChat
    */

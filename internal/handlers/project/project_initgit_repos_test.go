@@ -22,6 +22,7 @@ import (
 // initGitDaemonRouter fakes a daemon whose git init always succeeds.
 type initGitDaemonRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 }
 
 func (r *initGitDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -38,16 +39,21 @@ func (r *initGitDaemonRouter) SendDaemonCommand(_ context.Context, _ string, com
 func newInitGitProject(t *testing.T, repo *db.Repo, userID, projectID string) {
 	t.Helper()
 	now := time.Now().UTC()
+	path := t.TempDir()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
 		ID:         projectID,
 		UserID:     userID,
 		Name:       "Test Project",
-		Path:       t.TempDir(),
+		Path:       path,
 		IsGitRepo:  false,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	// The checkout git init runs in: the project on one of the user's machines.
+	daemonID := "daemon-" + projectID
+	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID, CreatedAt: now, UpdatedAt: now}))
+	require.NoError(t, repo.UpsertProjectDaemon(context.Background(), projectID, daemonID, path, nil))
 }
 
 // TestInitializeGitRepoDoesNotPolluteNestedRepos pins the multi-repo case: when

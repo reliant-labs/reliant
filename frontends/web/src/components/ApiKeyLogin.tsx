@@ -45,7 +45,7 @@ export function ApiKeyLogin() {
                 value={apiKey}
                 onChange={e => setApiKey(e.target.value)}
                 placeholder="Enter your API key..."
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
                 required
               />
             </div>

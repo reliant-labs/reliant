@@ -185,6 +185,12 @@ func watcherOn(t *testing.T, fs *fakeFS, env Environment, now *time.Time) *Watch
 		reaper: func(context.Context, string) (reaperRun, error) { return reaperRun{}, nil }})
 	// A policy location of its own, so a clean-up never reads the machine's.
 	w.ConfigureReaper(ReaperConfig{PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+	// A forge that holds the live-build floor, not the one this test binary
+	// links: under a directory replace (forge's consumer canary builds this
+	// package against forge main) the linked version reads "(devel)", the
+	// floor guard refuses every Go-cache trim, and every reaper test fails
+	// for a reason none of them is about. The guard's own tests set theirs.
+	w.reaper.forgeVersion = func() string { return fixedForge }
 	return w
 }
 

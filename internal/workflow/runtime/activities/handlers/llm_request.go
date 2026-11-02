@@ -62,6 +62,11 @@ type llmCallSpec struct {
 	ClearProviderPins bool
 	Descendant        bool
 	PresetModelTags   []string
+	// ChatModel is the chat's own model, what a descendant whose selector the
+	// chat provider cannot serve runs on instead (chatModelFallback), unless
+	// ThreadModelChosen: the user picked the descendant's model themselves.
+	ChatModel         models.ModelSelector
+	ThreadModelChosen bool
 
 	// ThreadID is the thread the call belongs to. It is what keeps a thread on
 	// one account of its provider (prompt cache and reasoning envelopes are per
@@ -187,7 +192,34 @@ func promptCeiling(def *models.ModelDefinition, providerDriver string, model mod
 //
 // When resolver is non-nil (injected, e.g. in tests) the registry is skipped
 // and the model is probed from the resolver, matching CallLLM's behavior.
+//
+// On a bound chat, a descendant whose own selector the chat's provider cannot
+// serve runs on the chat's model (chatModelFallback) rather than holding.
 func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec llmCallSpec) (*resolvedLLMCall, error) {
+	res, err := resolveLLMCallOnce(ctx, resolver, spec)
+	if err == nil || !isProviderSwitchHold(err) {
+		return res, err
+	}
+	fallback, ok := chatModelFallback(spec)
+	if !ok {
+		return nil, err
+	}
+	res, fallbackErr := resolveLLMCallOnce(ctx, resolver, fallback)
+	if fallbackErr != nil {
+		// The thread's own selector is what the user can act on, so the
+		// hold that names it is the one reported.
+		logging.WarnContext(ctx, "[LLMRequest] Chat model cannot run on the chat's provider either; holding the thread",
+			"chatProvider", spec.ChatProvider, "chatModel", spec.ChatModel.ID, "chatModelTags", spec.ChatModel.Tags, "error", fallbackErr)
+		return nil, err
+	}
+	logging.InfoContext(ctx, "[LLMRequest] Descendant's model cannot run on the chat's provider; running on the chat's model",
+		"chatProvider", spec.ChatProvider,
+		"ownModel", spec.Selector.ID, "ownTags", spec.Selector.Tags, "ownProviders", spec.Selector.Providers,
+		"chatModel", res.ModelID, "threadID", spec.ThreadID)
+	return res, nil
+}
+
+func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, spec llmCallSpec) (*resolvedLLMCall, error) {
 	var legacyModel models.Model
 	var definition *models.ModelDefinition
 	var modelIDForDriver string
@@ -202,6 +234,10 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	// provider for the run outranks the user's per-tag model preference and
 	// the tier's own order. runPinned records that it did.
 	selector, runPinned := withRunProviders(spec.Selector, spec.RunProviders)
+	// What a hold reports: the thread's own selector, not the probe that
+	// pins it to the chat's provider (a "<model>@<chat provider>" that the
+	// provider was never going to serve).
+	ownSelector := spec.Selector
 	if spec.ChatProvider != "" {
 		selector = switchSelector(spec)
 		spec.Selector = selector
@@ -225,7 +261,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		)
 	} else if local.IsSelector(spec.Selector) {
 		if spec.ChatProvider != "" && spec.ChatProvider != "local" {
-			return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("an explicit local model cannot run on a registry provider"))
+			return nil, providerSwitchHold(spec.ChatProvider, ownSelector, fmt.Errorf("an explicit local model cannot run on a registry provider"))
 		}
 		var err error
 		legacyModel, definition, modelIDForDriver, effectiveThinkingLevel, localTransport, err = resolveLocalModel(ctx, spec)
@@ -290,7 +326,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			resolved, err = resolve(selector, availableProviders)
 			if err != nil {
 				if spec.ChatProvider != "" {
-					return nil, providerSwitchHold(spec.ChatProvider, selector, err)
+					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, err)
 				}
 				return nil, resolutionError(err, availableDrivers)
 			}
@@ -307,12 +343,12 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 
 		if spec.ChatProvider != "" {
 			if resolved.Provider.Driver != spec.ChatProvider {
-				return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("resolution selected a different provider %s", resolved.Provider.Driver))
+				return nil, providerSwitchHold(spec.ChatProvider, ownSelector, fmt.Errorf("resolution selected a different provider %s", resolved.Provider.Driver))
 			}
 			if selector.ID != "" {
 				id, _, _ := strings.Cut(selector.ID, "@")
 				if resolved.Definition.ID != id {
-					return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("the exact model is retired or unavailable; choose its replacement explicitly"))
+					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, fmt.Errorf("the exact model is retired or unavailable; choose its replacement explicitly"))
 				}
 			}
 		}

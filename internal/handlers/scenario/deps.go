@@ -6,6 +6,7 @@ package scenario
 import (
 	"context"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -25,10 +26,17 @@ type Repository interface {
 	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+
+	// Installs is each machine's checkout of the project and who owns each
+	// machine (projectcheckout.Resolve).
+	daemonplacement.Installs
 }
 
-// Sender runs a command on the caller's daemon. toolexec.DaemonRouter
-// implements it.
+// Sender runs a command on the machine holding a project's checkout.
+// *toolexec.NATSDaemonRouter implements it.
 type Sender interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	// PlacementDaemonID ranks the machines holding a checkout the way the
+	// project's other work is placed (daemonplacement.Machines).
+	PlacementDaemonID(ctx context.Context, userID, daemonID string) (string, error)
 }

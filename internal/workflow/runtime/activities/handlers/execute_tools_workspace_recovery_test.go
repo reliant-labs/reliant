@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -87,6 +88,10 @@ func setupWorkspaceRecoveryFixture(t *testing.T) *workspaceRecoveryFixture {
 	wt := h.CreateTestWorktree(ctx, projectID, chatID, workspace)
 	_, err := h.Repo().AdoptWorktreeDaemon(ctx, wt.ID, "daemon-owner")
 	require.NoError(t, err)
+	// The owner holds the project's checkout too: a workspace is rebuilt
+	// from its owner's repos.
+	require.NoError(t, h.Repo().UpsertDaemon(ctx, &db.Daemon{ID: "daemon-owner", UserID: userID}))
+	require.NoError(t, h.Repo().UpsertProjectDaemon(ctx, projectID, "daemon-owner", projectPath, nil))
 
 	return &workspaceRecoveryFixture{h: h, chatID: chatID, projectPath: projectPath, workspace: workspace, worktreeID: wt.ID}
 }

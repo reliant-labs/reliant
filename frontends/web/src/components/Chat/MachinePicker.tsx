@@ -179,7 +179,7 @@ export function MachinePicker({
                 <span>{option.statusLabel}</span>
               </div>
             </div>
-            {selected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+            {selected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
           </div>
         </button>
         {onMakeDefault && !isUserDefault && (
@@ -221,7 +221,7 @@ export function MachinePicker({
             onClick={() => void setUp(option)}
             disabled={Boolean(settingUp)}
             data-testid={`machine-set-up-${option.value}`}
-            className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 px-2 py-1 font-medium text-primary transition-colors hover:border-border hover:bg-muted disabled:opacity-60"
+            className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 px-2 py-1 font-medium text-primary-ink transition-colors hover:border-border hover:bg-muted disabled:opacity-60"
           >
             {busy ? (
               <Loader2 className="h-3 w-3 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -312,7 +312,7 @@ export function MachinePicker({
                   <div className="font-medium">No machine</div>
                   <div className="text-xs text-muted-foreground">Web &amp; integrations · can&apos;t read or change files</div>
                 </div>
-                {noMachine && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                {noMachine && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
               </div>
             </button>
           </div>

@@ -191,7 +191,7 @@ export function ForgeDomainsPage() {
               href={CUSTOM_DOMAINS_DOCS_URL}
               target="_blank"
               rel="noreferrer"
-              className="text-primary underline underline-offset-2"
+              className="text-primary-ink underline underline-offset-2"
             >
               How custom domains work
             </a>
