@@ -25,6 +25,7 @@ import {
   type Approval,
   type ListApprovalsByChatResponse,
 } from "../gen/reliant/v1/approval_pb";
+import { approvalGrantsPower } from "../lib/approvalCard";
 import { connectClient } from "../lib/connect";
 import { hasErrorReason } from "../lib/errorReasons";
 import { queryClient } from "../lib/query-client";
@@ -272,8 +273,10 @@ export function useBatchDenyInChat(chatId?: string) {
 }
 
 /**
- * Imperatively approve every pending approval for a chat — for non-component
- * contexts like the global keyboard shortcut. Same contract as
+ * Imperatively approve every routine pending approval for a chat — for
+ * non-component contexts like the global keyboard shortcut. An approval that
+ * grants an automation standing power (lib/approvalCard) is never in it: it
+ * is approved on its own card, after reading it. Same contract as
  * useBatchApproveInChat: optimistic, rolled back on error, and the service's
  * reads invalidated once the server has recorded it.
  */
@@ -284,7 +287,7 @@ export function countPendingApprovals(chatId: string): number {
 
 export async function approveAllPendingApprovals(chatId: string): Promise<void> {
   const pendingIds = approvalsFromCache(chatId)
-    .filter((a) => a.status === ApprovalStatus.PENDING)
+    .filter((a) => a.status === ApprovalStatus.PENDING && !approvalGrantsPower(a.title))
     .map((a) => a.id);
   if (pendingIds.length === 0) return;
 

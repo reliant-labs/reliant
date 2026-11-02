@@ -46,11 +46,11 @@ const daemonIdentifyTimeout = 5 * time.Second
 // cliLoginAccount is the account the CLI login for server signed in as: zero
 // when there is no login, or it names none. Offline.
 func cliLoginAccount(server string) cliauth.Account {
-	s, _, err := cliauth.LookupSession(server)
+	c, _, err := cliauth.Lookup(server)
 	if err != nil {
 		return cliauth.Account{}
 	}
-	return s.Account
+	return cliauth.AccountOf(c)
 }
 
 // daemonSignInAccount is who a saved daemon sign-in acts as, as recorded.

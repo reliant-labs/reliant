@@ -18,12 +18,29 @@
  * A retry after a refusal goes back to the END of the queue (it is a fresh
  * `run`), so refused reads never jump ahead of ones still waiting their first
  * turn.
+ *
+ * ── ACROSS TABS ─────────────────────────────────────────────────────────────
+ *
+ * The cap is per user, and a user has more than one page: nine console tabs on
+ * 2026-11-01 were nine queues of four, and the server refused the overflow.
+ * Two rules make the queue the browser's rather than the page's:
+ *
+ *  1. A read that starts takes one of the browser's shared slots first
+ *     (crossTabSlots: OBS_READ_CONCURRENCY Web Locks every same-origin tab
+ *     draws on), so the browser as a whole stays under the server's cap.
+ *     Without Web Locks the limit is per tab instead (crossTabSlots
+ *     perTabGate, reported once): each tab holds its own cap, no more.
+ *  2. A hidden page starts nothing new. The tab being read goes first, rather
+ *     than queueing behind every dashboard opened in a background tab; a
+ *     hidden page's reads start when it is shown. Reads already running finish.
  */
+
+import { browserSlotGate, perTabGate, type SlotGate } from "./crossTabSlots";
 
 /** control-plane's per-user, per-org concurrent-read cap (obsratelimit.DefaultMaxInFlight). */
 export const SERVER_READ_CAP = 6;
 
-/** At or below the server's cap; the difference is headroom for the user's other tabs and devices. */
+/** At or below the server's cap, for the whole browser (crossTabSlots; per tab without Web Locks); the difference is headroom for the user's other devices. */
 export const OBS_READ_CONCURRENCY = 4;
 
 interface Entry {
@@ -34,13 +51,40 @@ interface Entry {
   onAbort: (() => void) | undefined;
 }
 
+/** Whether the page is hidden, and a way to hear when that changes (document visibility, injectable for tests). */
+export interface PageVisibility {
+  hidden(): boolean;
+  onChange(listener: () => void): void;
+}
+
+/** The document's visibility; a context with no document (a worker, SSR) is always visible. */
+export const documentVisibility: PageVisibility = {
+  hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  onChange: (listener) => {
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", listener);
+  },
+};
+
+export interface ReadSchedulerOptions {
+  /** The browser-wide slots a starting read takes (crossTabSlots). Default: perTabGate, this scheduler's own cap alone. */
+  gate?: SlotGate;
+  /** Default: always visible. */
+  visibility?: PageVisibility;
+}
+
 export class ReadScheduler {
   private readonly queue: Entry[] = [];
   private running = 0;
   private readonly maxConcurrent: number;
+  private readonly gate: SlotGate;
+  private readonly visibility: PageVisibility | undefined;
 
-  constructor(maxConcurrent: number = OBS_READ_CONCURRENCY) {
+  constructor(maxConcurrent: number = OBS_READ_CONCURRENCY, options: ReadSchedulerOptions = {}) {
     this.maxConcurrent = Math.max(1, maxConcurrent);
+    this.gate = options.gate ?? perTabGate;
+    this.visibility = options.visibility;
+    // Shown again: start what waited while the page was hidden.
+    this.visibility?.onChange(() => this.pump());
   }
 
   get stats(): { running: number; queued: number } {
@@ -76,6 +120,7 @@ export class ReadScheduler {
   }
 
   private pump(): void {
+    if (this.visibility?.hidden()) return;
     while (this.running < this.maxConcurrent && this.queue.length > 0) {
       this.start(this.queue.shift()!);
     }
@@ -109,9 +154,13 @@ export class ReadScheduler {
       signal?.removeEventListener("abort", onRunningAbort);
       release();
     };
+    const taskSignal = signal ?? new AbortController().signal;
     let result: Promise<unknown>;
     try {
-      result = entry.task(signal ?? new AbortController().signal);
+      // The browser-wide slot is taken here, after the page admitted the read:
+      // waiting for one holds this page's turn, so the page never has more
+      // than its own cap waiting on the browser either.
+      result = this.gate.run(() => entry.task(taskSignal), signal);
     } catch (error) {
       entry.reject(error);
       finish();
@@ -132,9 +181,9 @@ export class ReadScheduler {
 
 let shared: ReadScheduler | null = null;
 
-/** The page's scheduler, made on first use. */
+/** The page's scheduler, made on first use: browser-wide slots, and nothing new starts while the page is hidden. */
 export function obsReadScheduler(): ReadScheduler {
-  shared ??= new ReadScheduler();
+  shared ??= new ReadScheduler(OBS_READ_CONCURRENCY, { gate: browserSlotGate(OBS_READ_CONCURRENCY), visibility: documentVisibility });
   return shared;
 }
 

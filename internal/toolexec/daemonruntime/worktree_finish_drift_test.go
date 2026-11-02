@@ -28,7 +28,7 @@ func TestWorktreeFinishDriftPreservesExistingWorktreeAndBranch(t *testing.T) {
 	require.NoError(t, os.WriteFile(sentinel, []byte("keep my work"), 0600))
 	store := &finishDriftStore{}
 	machine := &finishDriftMachine{}
-	req := workspacecreate.Request{Project: &db.Project{ID: "p", Name: "p", Path: r.clone}, Repos: []*core.Repo{{ID: "r", Name: "r", RelativePath: ""}}, Name: "review", Branch: "worktree/review", Force: true, FetchRepoID: "r", FetchBranch: "feat/x", ExpectedHead: expected}
+	req := workspacecreate.Request{Project: &db.Project{ID: "p", Name: "p", Path: r.clone}, Checkout: r.clone, Repos: []*core.Repo{{ID: "r", Name: "r", RelativePath: ""}}, Name: "review", Branch: "worktree/review", Force: true, FetchRepoID: "r", FetchBranch: "feat/x", ExpectedHead: expected}
 	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	require.NoError(t, err)
 	err = workspacecreate.Finish(context.Background(), store, machine, req, wt)

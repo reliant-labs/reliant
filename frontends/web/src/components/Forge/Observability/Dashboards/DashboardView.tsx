@@ -106,6 +106,7 @@ import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds
 import { OrgEnvPicker } from "./OrgEnvPicker";
 import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
+import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 
 export interface DashboardHrefs extends ExploreHrefs {
@@ -321,8 +322,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
         {shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => (
-          <DashboardPanelCard
+          // One panel's bad definition stops at its own cell (PanelErrorBoundary).
+          <PanelErrorBoundary
             key={panel.id}
+            panel={panel}
+            onRemove={layout ? () => setLayout(removePanel(layout, panel.id)) : editable ? () => setRemoving(panel) : undefined}
+          >
+          {() => (
+          <DashboardPanelCard
             panel={panel}
             queryPanel={viewerQuery(spec, panel, search).panel}
             layout={
@@ -374,6 +381,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
             bands={bands}
             links={{ ...links, onDrill: (drillTarget, at) => setDrill({ target: drillTarget, panel: viewerQuery(spec, panel, search).panel, at }) }}
           />
+          )}
+          </PanelErrorBoundary>
         ))}
       </div>
       {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (

@@ -24,7 +24,6 @@ import { Activity } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
-import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useOrgEnvironments } from "@/hooks/apps-queries";
@@ -42,6 +41,14 @@ const ObservabilityPanel = lazy(() =>
   import("../Observability/ObservabilityPanel").catch((error: unknown) => {
     if (!isChunkLoadError(error)) throw error;
     return staleChunkModule(error, "default") as unknown as typeof import("../Observability/ObservabilityPanel");
+  })
+);
+
+// The metrics explorer, likewise.
+const OrgMetrics = lazy(() =>
+  import("./OrgMetrics").catch((error: unknown) => {
+    if (!isChunkLoadError(error)) throw error;
+    return staleChunkModule(error, "default") as unknown as typeof import("./OrgMetrics");
   })
 );
 
@@ -111,7 +118,7 @@ export function OrgObservabilityPage() {
         <EmptyState
           icon={<Activity className="h-6 w-6" aria-hidden="true" />}
           title="No environments to observe yet"
-          description="Telemetry is filed under the environments Reliant records. Deploy one through Reliant (forge env deploy <env>) and its logs, traces, metrics and dashboards appear here, across every app."
+          description="Telemetry is filed under the environments Reliant records. Deploy one through Reliant (reliant forge env deploy <env>) and its logs, traces, metrics and dashboards appear here, across every app."
         />
       </div>
     );
@@ -119,18 +126,9 @@ export function OrgObservabilityPage() {
     body = <OrgDashboards environments={environments} />;
   } else if (page.kind === "obs-view" && page.view === "metrics") {
     body = (
-      <Card data-testid="org-metrics">
-        <p className="text-sm text-ink-muted">
-          A metrics explorer — any metric, filtered and grouped — lands here. Until then, metric panels live in{" "}
-          <Link
-            href={withSearch(orgPath({ kind: "obs-view", view: "dashboards" }), carriedOrgSearch(search))}
-            className="text-ink underline-offset-2 hover:underline"
-          >
-            Dashboards
-          </Link>
-          .
-        </p>
-      </Card>
+      <Suspense fallback={loading}>
+        <OrgMetrics environments={environments} apps={apps} />
+      </Suspense>
     );
   } else {
     body = (

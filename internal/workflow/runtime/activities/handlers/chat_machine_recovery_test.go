@@ -65,9 +65,17 @@ func (f *chatMachineRecovery) register(t *testing.T, id, user string, updated ti
 	t.Helper()
 	managed := "managed"
 	ctx := context.Background()
-	require.NoError(t, f.h.Repo().UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: user, DaemonType: &managed}))
+	// A managed machine connects with a daemon-bound credential: its id is
+	// reserved once the control plane's lifecycle is applied to it, and an
+	// unbound re-registration of it is refused (#2070).
+	require.NoError(t, f.h.Repo().UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: user, DaemonType: &managed, RequiresBoundToken: true}))
 	_, err := f.h.sqlDB.ExecContext(ctx, `UPDATE daemons SET updated_at = $1 WHERE id = $2`, updated, id)
 	require.NoError(t, err)
+	// Each of the user's machines has its own installed checkout of the
+	// project: a run is refused on a machine with none (projectcheckout).
+	if user == f.user {
+		require.NoError(t, f.h.Repo().UpsertProjectDaemon(ctx, f.project, id, f.path, nil))
+	}
 	now := time.Now()
 	require.NoError(t, f.h.Repo().UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID: id, UserID: user, Source: db.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now,
@@ -266,9 +274,15 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	foreign := "foreign"
 	require.NoError(t, f.h.Repo().UpdateChatActiveDaemon(ctx, f.chat, &foreign))
 	f.wait = shortMachineWait()
-	_, err = f.run(nil, f.remote)
+	// Refused as a command (exit -1): the pinned machine has no checkout of
+	// this user's project, and the refusal never describes another
+	// account's machine beyond the id the chat already holds.
+	out, err = f.run(nil, f.remote)
 	f.wait = nil
-	require.Error(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, -1, out.ExitCode)
+	assert.Contains(t, out.Stderr, "machine foreign")
+	assert.NotContains(t, out.Stderr, "cloud machine foreign", "another account's machine is never described")
 	assert.Zero(t, f.count("foreign"))
 	assert.Equal(t, ciBefore, f.count(f.ci))
 	f.pinIs(t, foreign)

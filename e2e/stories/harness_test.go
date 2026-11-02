@@ -311,6 +311,14 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		UpdatedAt:  now,
 		LastActive: now,
 	}), "create story project")
+	// The user's machine and its installed checkout of the project: every
+	// machine call runs in the checkout of the machine it is routed to
+	// (internal/projectcheckout), never projects.path, and is refused on a
+	// project no machine of the user's holds. The local executor stands in
+	// for this machine.
+	machineID := "e2e-machine-" + shortID()
+	require.NoError(t, s.Repo.UpsertDaemon(ctx, &db.Daemon{ID: machineID, UserID: userID}), "register story machine")
+	require.NoError(t, s.Repo.UpsertProjectDaemon(ctx, projectID, machineID, projectPath, nil), "install story checkout")
 	require.NoError(t, s.Repo.CreateWorktree(ctx, &db.Worktree{
 		ID:         uuid.New().String(),
 		Name:       "main",

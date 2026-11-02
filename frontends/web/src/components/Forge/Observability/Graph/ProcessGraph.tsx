@@ -91,7 +91,9 @@ export function ProcessGraph({ nodes, links, stats, envLabel, selectedId, onNode
       onEdgeMouseEnter={(event, e) => { const link = linkById.get(e.id); if (link) setHover({ link, ...point(event) }); }}
       onEdgeMouseMove={(event, e) => { const link = linkById.get(e.id); if (link) setHover({ link, ...point(event) }); }}
       onEdgeMouseLeave={() => setHover(undefined)}
-      proOptions={{ hideAttribution: false }}>
+      // React Flow is MIT-licensed, which asks for no in-product attribution; the
+      // in-canvas badge (10px, 1.4:1) failed AA. The workflow canvases hide it too.
+      proOptions={{ hideAttribution: true }}>
       <Background gap={24} size={1} /><Controls showInteractive={false} />
     </ReactFlow>
     {hover && <LinkTooltip hover={hover} from={byId.get(hover.link.source)} to={byId.get(hover.link.target)} />}

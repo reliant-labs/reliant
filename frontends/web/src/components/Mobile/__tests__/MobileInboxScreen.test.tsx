@@ -116,11 +116,11 @@ describe("MobileInboxScreen", () => {
     expect(useMobileDrawerStore.getState().isOpen).toBe(true);
   });
 
-  it("approves from the row, through the same approval call as desktop", async () => {
+  it("approves under the card, through the same approval call as desktop", async () => {
     respond([approvalItem()]);
     renderScreen();
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: /^Approve / }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
   });
 

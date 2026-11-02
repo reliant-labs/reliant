@@ -30,9 +30,14 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
 }));
 import { ReliantAISection } from "../reliantAI";
 
+/** Rotate the key through the in-app confirmation (no native confirm()). */
+function rotateConfirmed() {
+  fireEvent.click(screen.getByRole("button", { name: /^rotate$/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Rotate key" }));
+}
+
 beforeEach(() => {
   useActiveOrgStore.setState({ userId: "alice", chosenId: "org-a", effectiveId: "org-a" });
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   mocks.rotate.mockReset();
   mocks.create.mockReset();
 });
@@ -58,8 +63,8 @@ it("does not replace a newer same-org secret with an older operation", async () 
   mocks.rotate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   mocks.rotate.mockResolvedValueOnce({ plaintextKey: "test-only-newer-secret" });
   render(<QueryClientProvider client={new QueryClient()}><ReliantAISection /></QueryClientProvider>);
-  fireEvent.click(screen.getByRole("button", { name: /rotate/i }));
-  fireEvent.click(screen.getByRole("button", { name: /rotate/i }));
+  rotateConfirmed();
+  rotateConfirmed();
   expect(await screen.findByText("test-only-newer-secret")).toBeInTheDocument();
   await act(async () => finish({ plaintextKey: "test-only-older-secret" }));
   expect(screen.queryByText("test-only-older-secret")).toBeNull();
@@ -70,7 +75,11 @@ it("never reveals a prior org's delayed rotated key after A → B → A", async 
   let finish!: (value: unknown) => void;
   mocks.rotate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   render(<QueryClientProvider client={new QueryClient()}><ReliantAISection /></QueryClientProvider>);
-  fireEvent.click(screen.getByRole("button", { name: /rotate/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^rotate$/i }));
+  // Nothing rotates until the dialog is confirmed.
+  expect(mocks.rotate).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog", { name: /rotate/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Rotate key" }));
   expect(mocks.rotate).toHaveBeenCalledOnce();
   act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
   act(() => useActiveOrgStore.setState({ effectiveId: "org-a" }));
