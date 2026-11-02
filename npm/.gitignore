@@ -1,0 +1,2 @@
+# npm/bin/forge.js is the package entry point; the repo-wide bin/ rule is for build output.
+!bin/

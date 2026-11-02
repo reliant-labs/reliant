@@ -1,0 +1,203 @@
+# Publish @reliantlabs/forge (npm/, the `npx @reliantlabs/forge` shim) to npm
+# when a forge release is published.
+#
+# WHAT IS PUBLISHED. The shim is a thin wrapper: on first run it downloads the
+# forge binary for the package's own version from the GitHub release and checks
+# it against that release's checksums.txt. So the package can only be published
+# AFTER the release carries its archives, and its version must equal the
+# release's. That is why this triggers on `release: published` (which
+# scripts/release-forge.sh's `gh release create` fires once the assets are
+# uploaded) and not on the tag push.
+#
+# THE VERSION COMES FROM THE TAG, not from npm/package.json at the tagged
+# commit. A release cut with `release-forge.sh --commit <sha>` tags a green
+# commit and lands the version bookkeeping afterwards as a separate pull
+# request, so the tagged commit's manifest still names the PREVIOUS version
+# (v1.0.12's says 1.0.11). Publishing that manifest as-is would make the
+# "1.0.12" install download 1.0.11's binary — or collide with 1.0.11 on the
+# registry.
+#
+# HOW IT AUTHENTICATES: npm TRUSTED PUBLISHING (OIDC), exactly like
+# release-web-runtime.yml. There is no stored npm credential and none should be
+# created. The trusted publisher is registered on npmjs.com against
+# reliant-labs/forge + release-npm.yml; renaming this file, or moving the
+# publish into another workflow, breaks publishing until that registration is
+# updated (docs/releasing.md, "Installers").
+#
+# BACKFILL / RETRY. `gh workflow run release-npm.yml -f version=X.Y.Z -f
+# dry_run=false` publishes an existing release (a release whose tagged commit
+# predates this file never fired it). Re-running for a version the registry
+# already serves is a no-op, so a retry cannot 403 on an immutable version.
+name: Release npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "forge release to publish (X.Y.Z; its GitHub release must exist)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate, pack and smoke-test, but do not publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  # The OIDC token npm exchanges for a short-lived publish credential, and that
+  # --provenance signs the attestation with.
+  id-token: write
+
+concurrency:
+  # Never let two publishes of one version race; never cancel one half-way.
+  group: release-npm-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @reliantlabs/forge
+    runs-on: ubuntu-latest
+    # A prerelease is never published: the `latest` dist-tag would move to it.
+    # (A dispatched version is checked for the same thing below.)
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    steps:
+      - name: Resolve version
+        id: version
+        env:
+          RAW: ${{ github.event.release.tag_name || inputs.version }}
+        run: |
+          VERSION="${RAW#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version must look like X.Y.Z (got: '$RAW'); prereleases are not published to npm"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          # The shim as it was released, whichever ref dispatched this run.
+          ref: v${{ steps.version.outputs.version }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          # Writes the .npmrc that points npm at the registry it performs the
+          # OIDC exchange against. Required under trusted publishing too.
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Ensure npm supports trusted publishing
+        # Node 22 bundles npm 10.x, below the 11.5.1 floor for OIDC trusted
+        # publishing; an older npm skips the exchange and fails with a 404
+        # that reads like "the package does not exist" (release-web-runtime.yml).
+        run: |
+          npm install -g npm@^11.5.1
+          NPM_VERSION="$(npm --version)"
+          if [ "$(printf '%s\n11.5.1\n' "$NPM_VERSION" | sort -V | head -n1)" != "11.5.1" ]; then
+            echo "::error::npm ${NPM_VERSION} is older than 11.5.1 and cannot use OIDC trusted publishing."
+            exit 1
+          fi
+          echo "npm ${NPM_VERSION} supports trusted publishing"
+
+      - name: Verify the GitHub release carries every archive
+        # The shim downloads these; publishing before they exist ships an
+        # install that fails for everyone.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json assets,isPrerelease,isDraft >release.json
+          if [ "$(jq -r '.isPrerelease or .isDraft' release.json)" = "true" ]; then
+            echo "::error::v$VERSION is a draft or prerelease; not publishing it to npm"
+            exit 1
+          fi
+          missing=0
+          for asset in checksums.txt forge_{linux,darwin,windows}_{amd64,arm64}.tar.gz; do
+            if ! jq -e --arg a "$asset" 'any(.assets[]; .name == $a)' release.json >/dev/null; then
+              echo "::error::the v$VERSION GitHub release has no $asset"
+              missing=1
+            fi
+          done
+          rm release.json
+          [ "$missing" = 0 ]
+
+      - name: Set the package version from the tag
+        working-directory: npm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm pkg set version="$VERSION"
+          echo "packaging $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")"
+
+      - name: Verify provenance metadata
+        # --provenance rejects (422, AFTER signing) a package whose
+        # repository.url does not name the repository that built it.
+        working-directory: npm
+        run: |
+          REPO_URL="$(node -p "require('./package.json').repository?.url ?? ''")"
+          case "$REPO_URL" in
+            *"github.com/${GITHUB_REPOSITORY}"*) echo "repository.url agrees with ${GITHUB_REPOSITORY}" ;;
+            *)
+              echo "::error::package.json repository.url is '${REPO_URL}', which does not name github.com/${GITHUB_REPOSITORY}"
+              exit 1 ;;
+          esac
+
+      - name: Test
+        working-directory: npm
+        run: npm test
+
+      - name: Pack and smoke-test the tarball
+        # Install the exact tarball that would be published, and run it: the
+        # shim downloads this release's linux archive, checks its sha256 and
+        # must report the released version. A pack missing a file, or a
+        # version that disagrees with the release, fails here instead of on a
+        # stranger's machine.
+        working-directory: npm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TARBALL="$RUNNER_TEMP/$(npm pack --pack-destination "$RUNNER_TEMP" | tail -n1)"
+          tar -tzf "$TARBALL" | tee "$RUNNER_TEMP/pack.txt"
+          for required in package/bin/forge.js package/lib/install.js package/package.json package/LICENSE package/NOTICE package/README.md; do
+            grep -qx "$required" "$RUNNER_TEMP/pack.txt" || { echo "::error::$required is missing from the tarball"; exit 1; }
+          done
+          SMOKE="$RUNNER_TEMP/smoke"
+          mkdir -p "$SMOKE"
+          (cd "$SMOKE" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TARBALL")
+          OUT="$(FORGE_NPM_CACHE_DIR="$RUNNER_TEMP/forge-cache" "$SMOKE/node_modules/.bin/forge" version)"
+          echo "$OUT"
+          echo "$OUT" | head -n1 | grep -q "v$VERSION" || { echo "::error::the packed shim did not run forge v$VERSION"; exit 1; }
+
+      - name: Check whether the registry already serves this version
+        id: existing
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$(npm view "@reliantlabs/forge@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "::notice::@reliantlabs/forge@$VERSION is already published; nothing to do"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        id: publish
+        if: ${{ steps.existing.outputs.published != 'true' && (github.event_name == 'release' || !inputs.dry_run) }}
+        working-directory: npm
+        # No NODE_AUTH_TOKEN, deliberately: it would take precedence over the
+        # OIDC exchange and silently revert this to token auth.
+        # --access public: npm defaults a scoped package to restricted.
+        run: npm publish --provenance --access public
+
+      - name: Confirm the registry actually serves it
+        if: ${{ steps.existing.outputs.published != 'true' && (github.event_name == 'release' || !inputs.dry_run) }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/verify-npm-published.sh --name @reliantlabs/forge --version "$VERSION" \
+            ${{ steps.publish.outcome == 'success' && '--publish-reported-success' || '' }}
+
+      - name: Dry run — publish skipped
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: echo "Dry run - every validation passed; publish deliberately skipped."

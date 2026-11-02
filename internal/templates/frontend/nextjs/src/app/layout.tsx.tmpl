@@ -1,0 +1,143 @@
+import { Inter } from "next/font/google";
+
+import { AppShell } from "@/components/app_shell";
+import { joinBasePath } from "@/lib/basepath_gen";
+{{if .HasMockAPI}}import { loadConfig } from "@/lib/config_gen";
+{{end}}
+import { Providers } from "./providers";
+
+import type { Metadata } from "next";
+
+import "./globals.css";
+
+// Inter is this project's DECLARED body face, not a taste choice: it is the
+// neutral default a scaffold owes an app that has no brief yet, self-hosted
+// by next/font (no third-party request, no layout shift). The `design` skill
+// blocklists Inter for fonts YOU pick and exempts this one for that reason.
+// To rebrand, swap the loader here and the `--font-sans` token in
+// globals.css — never per-component `font-*` classes.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+export const metadata: Metadata = {
+  title: "{{.FrontendName}} | {{.ProjectName}}",
+  description: "Frontend for the {{.ProjectName}} project",
+};
+
+// The pre-paint theme script, hoisted to a const so the JSX below stays a
+// plain attribute reference.
+//
+// It is a const rather than an inline object literal for a scaffolding
+// reason, not a style one: forge renders this file through Go's
+// text/template, which treats a doubled brace as an action delimiter. An
+// inline `dangerouslySetInnerHTML` literal opens with exactly that, so it
+// fails to render at scaffold time. Keeping the object up here leaves the
+// JSX attribute a bare identifier.
+const THEME_BOOT_SCRIPT = {
+  __html: `(function(){try{var t=localStorage.getItem("forge-theme");if(t==="dark"||t==="light"){document.documentElement.setAttribute("data-theme",t)}}catch(e){}})();`,
+};
+
+// MockModeBanner renders a loud, always-visible reminder when the app is
+// running against mock data instead of the real backend. Mock mode is
+// opt-in (the forge.Frontend `config.mock` KCL knob); the banner exists so a
+// working-looking UI can never silently masquerade as a working stack.
+//
+// It is loud through the SEMANTIC warning tokens (`bg-warning` /
+// `text-on-warning` from globals.css), not a raw palette color — the same
+// rule every other surface in this app follows, so rebranding moves the
+// banner too.
+{{- if .HasMockAPI}}
+//
+// The mode is read through the typed config module — the same source
+// src/lib/connect.ts selects its transport from, so the banner cannot
+// disagree with the transport about whether this is mock data. Reading
+// NEXT_PUBLIC_MOCK_API here instead would split that decision across two
+// sources AND inline it at build time, which is what makes a bundle
+// unpromotable between environments.
+function MockModeBanner() {
+  const mode = loadConfig().MOCK_API;
+{{- else}}
+function MockModeBanner() {
+  const mode = process.env.NEXT_PUBLIC_MOCK_API;
+{{- end}}
+  if (mode !== "true" && mode !== "hybrid") return null;
+  return (
+    <div className="bg-warning px-4 py-1.5 text-center text-sm font-semibold text-on-warning">
+      {mode === "true"
+        ? "MOCK DATA — backend not connected (unset mock_api in deploy/kcl/<env>/config.k to use the real backend)"
+        : "HYBRID MOCK MODE — ?scenario= overlays active; unmatched RPCs hit the real backend"}
+    </div>
+  );
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <head>
+        {/*
+          Runtime configuration, rendered by KCL for THIS environment and
+          served as a static asset. It must be a plain blocking <script>
+          in the head: it assigns window.__FORGE_CONFIG__, and
+          src/lib/config_gen.ts reads that global synchronously at module
+          scope (the OIDC provider needs its issuer during initialization,
+          before any component renders).
+
+          This is what lets one built bundle be promoted between
+          environments — NEXT_PUBLIC_* values are inlined at BUILD time and
+          freeze an artifact to the environment it was built against, so
+          they cannot be. Ship the same bundle beside a different
+          config.js instead; nothing is rebuilt.
+
+          next/script is deliberately NOT used: its strategies all defer
+          execution past the point the bundle first reads the global.
+        */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src={joinBasePath("/config.js")} />
+        {/*
+          Theme, applied BEFORE first paint.
+
+          Without this the page paints the light palette, React hydrates,
+          an effect reads localStorage and only then swaps to dark — a
+          white flash on every single load for every dark-mode user. The
+          fix has to run synchronously in <head>, before the browser
+          paints, which rules out a component and rules out next/script
+          (every strategy defers past first paint).
+
+          It only sets the attribute for an EXPLICIT choice. Left absent,
+          the `prefers-color-scheme` block in globals.css applies, so a
+          user on "system" is already correct with no JS at all.
+
+          The storage key is duplicated from THEME_STORAGE_KEY in
+          src/lib/theme/use-theme.ts — this script cannot import (it is a
+          raw string in the document head), so a contract test asserts the
+          two spellings stay identical.
+        */}
+        <script dangerouslySetInnerHTML={THEME_BOOT_SCRIPT} />
+      </head>
+      {/*
+        bg-surface/text-ink on the BODY are load-bearing, not decoration. The
+        palette in globals.css flips with the OS preference, so a page that
+        paints no background of its own lands the dark palette's near-white ink
+        on the browser's default white sheet — 1.12:1, invisible. That is a
+        measured defect, not a hypothetical.
+
+        The app shell below happens to paint the same tokens on a wrapper div,
+        which masks this today. That is accidental cover: it is `yours` code,
+        the first person to restyle the shell can drop it, and it never covers
+        the overscroll gutter. Painting the body is what makes the guarantee
+        survive an edit.
+      */}
+      <body className={`${inter.variable} bg-surface font-sans text-ink antialiased`}>
+        <Providers>
+          <AppShell banner={<MockModeBanner />}>{children}</AppShell>
+        </Providers>
+      </body>
+    </html>
+  );
+}

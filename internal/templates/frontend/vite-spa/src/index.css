@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 does not scan node_modules. @reliantlabs/forge-web-runtime renders
+ * the SAME semantic utilities declared below (text-ink, bg-danger-surface,
+ * border-border, …), so without this directive every class only the runtime
+ * uses is absent from the built CSS and its components render unstyled.
+ * The path is relative to THIS file: src/ → the frontend root.
+ */
+@source "../node_modules/@reliantlabs/forge-web-runtime";
+
+/*
+ * Semantic theme tokens — the ONE place brand + light/dark live.
+ *
+ * This token set is IDENTICAL to the Next.js scaffold's globals.css, and has
+ * to be: the component library under src/components/ui/ and the runtime's
+ * own components are shared byte-for-byte between the two scaffolds, so a
+ * token declared in only one of them renders as a missing color in the
+ * other. (That was a real defect — success-*, accent-surface and warning-*
+ * were referenced by shared components and declared only on the Next.js
+ * side, so badges in a Vite SPA came out unstyled.) The palette contract
+ * test asserts the two files declare the same token names.
+ *
+ * Generated pages, runtime components (<Resource>, error boundary, route
+ * guard), and the component library reference the SEMANTIC utilities these
+ * variables generate — `bg-surface`, `text-ink`, `border-border`,
+ * `bg-accent`, `text-danger`, … — never a raw palette color (`bg-white`,
+ * `text-gray-900`, `bg-blue-600`). Rebranding or adding a theme is therefore
+ * a one-file change: edit the values below.
+ *
+ * Tailwind v4 turns each `--color-<name>` into `bg-<name>` / `text-<name>` /
+ * `border-<name>` / `ring-<name>` utilities. Light values live in `@theme`;
+ * the dark overrides re-declare the SAME variables (unlayered rules beat the
+ * layered `@theme` defaults), so every semantic utility flips automatically.
+ * Dark is driven by the OS preference AND an explicit `data-theme` on
+ * <html> ("dark"/"light"), so the theme toggle can override the OS default.
+ *
+ * ── Geometry: radius and elevation are tokens too ─────────────────────
+ *
+ * Tailwind turns `--radius-*` and `--shadow-*` into the SAME utilities the
+ * components already use (`rounded-lg`, `shadow-sm`), so retuning the values
+ * here restyles every card, button and panel in the app — including the
+ * component library and the runtime — without editing a single component.
+ * That is the whole point: geometry is a theme decision, not 160 local ones.
+ *
+ * The values encode one rule — radius scales with the SIZE of the surface.
+ * A 0.75rem corner on a card reads as considered; the same corner on a 32px
+ * button reads as a pill. So controls get `--radius-md`, containers
+ * `--radius-lg`, and full-bleed surfaces `--radius-xl`. Use the utility that
+ * matches the ROLE (`rounded-md` on a button) rather than picking a corner
+ * that looks right in isolation.
+ *
+ * Shadows are tinted with the ink hue and kept low-opacity, two-layer: a
+ * tight contact shadow plus a wider ambient one. A single large black blur
+ * is the default that makes a UI look like a 2015 Material demo — real
+ * elevation is subtle, and neutral-black shadows go muddy over tinted
+ * surfaces. Dark mode deliberately does NOT re-tint these: shadows barely
+ * read on a dark surface, where elevation is carried by the border and the
+ * lighter `surface` instead.
+ *
+ * ── How this palette was chosen ───────────────────────────────────────
+ *
+ * Every color is oklch, because oklch is perceptually uniform: holding L
+ * and C fixed and moving only H gives a family that reads as one palette
+ * rather than a pile of unrelated hues. Concretely:
+ *
+ *   - NEUTRALS carry chroma 0.002–0.012 at a cool blue-gray hue (262deg), not
+ *     chroma 0. A literally-grey grey next to a saturated accent looks
+ *     dirty; a neutral tinted toward the accent looks intentional. This is
+ *     also why there is no `#fff` and no `#000` anywhere below.
+ *   - STATUS hues (accent 258, danger 25-27, success 155, warning 72-85) sit
+ *     at matched lightness within each role, so a danger badge and a
+ *     success badge have the same visual weight.
+ *   - Every `-ink` on its matching `-surface`, and every `on-*` on its
+ *     matching fill, clears WCAG AA (4.5:1); body text on both surfaces
+ *     clears AAA (7:1). Those pairs are asserted in
+ *     internal/templates/frontend_palette_contract_test.go — if you retune
+ *     a token, that test tells you what you broke.
+ *   - Chromas are trimmed to what sRGB can actually display. An oklch color
+ *     outside the gamut is silently clipped by the browser, which flattens
+ *     exactly the hue relationships above.
+ *
+ * NOTE — two stylelint traps live in THIS file. The frontend lint lane
+ * (`npm run lint:styles`) fails on either:
+ *
+ *   1. `custom-property-empty-line-before` forbids a blank line between
+ *      consecutive custom properties, so the surface/ink/accent/danger
+ *      groups are delimited by the trailing comment on each group's first
+ *      token, NOT by blank lines. Do not re-introduce blank lines between
+ *      the `--color-*` declarations.
+ *   2. A color written in oklch needs PERCENTAGE lightness and a `deg`
+ *      hue: `oklch(72% 0.12 250deg)`, never `oklch(0.72 0.12 250)`. Both
+ *      are valid CSS, but `lightness-notation` / `hue-degree-notation`
+ *      accept only the first. `npm run lint:styles:fix` rewrites an
+ *      existing file into the passing form.
+ */
+@theme {
+  --radius-md: 0.375rem; /* controls: buttons, inputs, chips */
+  --radius-lg: 0.625rem; /* containers: cards, panels, tiles */
+  --radius-xl: 0.875rem; /* the largest surfaces: modals, auth card */
+  --shadow-sm: 0 1px 2px 0 oklch(21% 0.012 262deg / 6%); /* resting elevation */
+  --shadow-md:
+    0 4px 12px -2px oklch(21% 0.012 262deg / 8%), 0 2px 4px -2px oklch(21% 0.012 262deg / 5%); /* hover / raised */
+  --shadow-lg:
+    0 12px 28px -6px oklch(21% 0.012 262deg / 12%), 0 4px 8px -4px oklch(21% 0.012 262deg / 6%); /* popovers, dropdowns */
+  --color-surface: oklch(99.5% 0.002 262deg); /* page / card background */
+
+  /* an inset INSIDE a surface — below it in light AND dark; see ui/card.tsx */
+  --color-surface-sunken: oklch(96.6% 0.004 262deg);
+  --color-surface-muted: oklch(97.7% 0.003 262deg); /* subtle fills: table head, hovers */
+  --color-border: oklch(92.2% 0.005 262deg);
+  --color-border-strong: oklch(86.5% 0.008 262deg);
+  --color-ink: oklch(21% 0.012 262deg); /* primary text */
+  --color-ink-muted: oklch(47.5% 0.012 262deg); /* secondary text */
+  --color-ink-subtle: oklch(60% 0.01 262deg); /* tertiary / placeholder / icons */
+  --color-accent: oklch(53% 0.17 258deg); /* primary action */
+  --color-accent-hover: oklch(47% 0.16 258deg);
+  --color-on-accent: oklch(99.2% 0.004 258deg); /* text/icon on an accent fill */
+  --color-accent-surface: oklch(
+    96% 0.016 258deg
+  ); /* accent-tinted fill: info badge, active chip / tab */
+  --color-accent-border: oklch(87.5% 0.052 258deg);
+  --color-accent-ink: oklch(44.5% 0.15 258deg); /* accent text on an accent-surface fill */
+  --color-danger: oklch(54% 0.195 27deg); /* destructive action / error */
+  --color-danger-hover: oklch(48% 0.18 27deg);
+  --color-on-danger: oklch(99.2% 0.004 27deg); /* text/icon on a danger fill */
+  --color-danger-surface: oklch(96.4% 0.017 25deg); /* danger banner background */
+  --color-danger-border: oklch(87.5% 0.062 25deg);
+  --color-danger-ink: oklch(45.5% 0.165 27deg); /* danger text on a light surface */
+  --color-success: oklch(57% 0.135 155deg); /* positive status: badge dot / solid */
+  --color-success-surface: oklch(96.4% 0.03 155deg); /* success badge background */
+  --color-success-border: oklch(87.5% 0.07 155deg);
+  --color-success-ink: oklch(44% 0.105 155deg); /* success text on a light surface */
+  --color-warning: oklch(76% 0.155 75deg); /* caution status: mock-mode banner, badge dot */
+  --color-warning-hover: oklch(70% 0.14 72deg);
+  --color-on-warning: oklch(27% 0.058 72deg); /* text/icon on a warning fill */
+  --color-warning-surface: oklch(97% 0.03 85deg); /* warning badge background */
+  --color-warning-border: oklch(87.5% 0.09 85deg);
+  --color-warning-ink: oklch(46.5% 0.096 75deg); /* warning text on a light surface */
+}
+
+/* Dark palette — OS preference, unless data-theme forces light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface: oklch(16% 0.008 262deg);
+    --color-surface-sunken: oklch(12.5% 0.006 262deg);
+    --color-surface-muted: oklch(20% 0.009 262deg);
+    --color-border: oklch(25.5% 0.01 262deg);
+    --color-border-strong: oklch(34% 0.012 262deg);
+    --color-ink: oklch(96.5% 0.004 262deg);
+    --color-ink-muted: oklch(72.5% 0.011 262deg);
+    --color-ink-subtle: oklch(59% 0.012 262deg);
+    --color-accent: oklch(71% 0.14 256deg);
+    --color-accent-hover: oklch(78% 0.11 256deg);
+    --color-on-accent: oklch(16% 0.02 258deg);
+    --color-accent-surface: oklch(27.5% 0.06 258deg);
+    --color-accent-border: oklch(39% 0.09 258deg);
+    --color-accent-ink: oklch(83% 0.085 256deg);
+    --color-danger: oklch(69.5% 0.165 25deg);
+    --color-danger-hover: oklch(77% 0.125 25deg);
+    --color-on-danger: oklch(16% 0.02 25deg);
+    --color-danger-surface: oklch(27.5% 0.07 25deg);
+    --color-danger-border: oklch(40% 0.11 25deg);
+    --color-danger-ink: oklch(82% 0.1 25deg);
+    --color-success: oklch(71.5% 0.145 155deg);
+    --color-success-surface: oklch(27.5% 0.055 155deg);
+    --color-success-border: oklch(40% 0.085 155deg);
+    --color-success-ink: oklch(84% 0.125 155deg);
+    --color-warning: oklch(80% 0.145 80deg);
+    --color-warning-hover: oklch(86% 0.115 85deg);
+    --color-on-warning: oklch(24% 0.05 80deg);
+    --color-warning-surface: oklch(29.5% 0.058 80deg);
+    --color-warning-border: oklch(42% 0.085 80deg);
+    --color-warning-ink: oklch(86% 0.125 85deg);
+  }
+}
+
+/* Explicit opt-in dark (theme toggle), regardless of OS preference. */
+:root[data-theme="dark"] {
+  --color-surface: oklch(16% 0.008 262deg);
+  --color-surface-sunken: oklch(12.5% 0.006 262deg);
+  --color-surface-muted: oklch(20% 0.009 262deg);
+  --color-border: oklch(25.5% 0.01 262deg);
+  --color-border-strong: oklch(34% 0.012 262deg);
+  --color-ink: oklch(96.5% 0.004 262deg);
+  --color-ink-muted: oklch(72.5% 0.011 262deg);
+  --color-ink-subtle: oklch(59% 0.012 262deg);
+  --color-accent: oklch(71% 0.14 256deg);
+  --color-accent-hover: oklch(78% 0.11 256deg);
+  --color-on-accent: oklch(16% 0.02 258deg);
+  --color-accent-surface: oklch(27.5% 0.06 258deg);
+  --color-accent-border: oklch(39% 0.09 258deg);
+  --color-accent-ink: oklch(83% 0.085 256deg);
+  --color-danger: oklch(69.5% 0.165 25deg);
+  --color-danger-hover: oklch(77% 0.125 25deg);
+  --color-on-danger: oklch(16% 0.02 25deg);
+  --color-danger-surface: oklch(27.5% 0.07 25deg);
+  --color-danger-border: oklch(40% 0.11 25deg);
+  --color-danger-ink: oklch(82% 0.1 25deg);
+  --color-success: oklch(71.5% 0.145 155deg);
+  --color-success-surface: oklch(27.5% 0.055 155deg);
+  --color-success-border: oklch(40% 0.085 155deg);
+  --color-success-ink: oklch(84% 0.125 155deg);
+  --color-warning: oklch(80% 0.145 80deg);
+  --color-warning-hover: oklch(86% 0.115 85deg);
+  --color-on-warning: oklch(24% 0.05 80deg);
+  --color-warning-surface: oklch(29.5% 0.058 80deg);
+  --color-warning-border: oklch(42% 0.085 80deg);
+  --color-warning-ink: oklch(86% 0.125 85deg);
+}
+
+/*
+ * The theme toggle writes data-theme BEFORE first paint (see the inline
+ * script in index.html), so a reload cannot flash the wrong palette. That
+ * script runs with JS enabled only; without it the OS preference above is
+ * still honored, which is the correct no-JS fallback.
+ */
+
+/*
+ * Paint the PAGE, not just the app shell.
+ *
+ * The palette above flips with the OS preference. A document that paints no
+ * background of its own keeps the browser's default white sheet, so on a
+ * dark-mode machine the near-white --color-ink lands on white: 1.12:1,
+ * effectively invisible. That is a measured defect, not a hypothetical.
+ *
+ * App.tsx does paint these tokens on its root div, but that is `yours` code —
+ * the first restyle can drop it — and a div never covers the overscroll
+ * gutter. This rule is the guarantee that survives both. It sits in `base`, the
+ * lowest layer, so every utility class still wins over it.
+ */
+@layer base {
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+  }
+}
