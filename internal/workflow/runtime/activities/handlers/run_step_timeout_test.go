@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -110,8 +111,10 @@ func TestRunStep_LongNodeOutlivesTheModelCap(t *testing.T) {
 	// The agent tool path: what execute_tools dispatches for a model's call.
 	modelCall := func(input string) *toolexec.ToolRequest {
 		tec := &toolExecutionContext{
-			chat:          &db.Chat{ID: "c"},
-			project:       &db.Project{ID: "p", UserID: "u", Path: dir},
+			chat:    &db.Chat{ID: "c"},
+			project: &db.Project{ID: "p", UserID: "u", Path: dir},
+			// The machine's checkout, resolved at dispatch (callCheckout).
+			checkout:      callCheckout{main: projectcheckout.Target{Path: dir}},
 			worktree:      &rctx.WorktreeInfo{},
 			chatID:        "c",
 			toolName:      names.ToolShell,

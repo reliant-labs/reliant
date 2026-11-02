@@ -35,6 +35,13 @@ import (
 // (projectTypeIndex): a parameter or variable declared as a db.Project, the
 // result of any function or method that returns one, an element of a slice of
 // them, or a field of that type, as well as by the receiver's name.
+// TestProjectPathSQLIsReviewed holds SQL text to the same rule.
+//
+// The chat runtime is not on the list. A chat's directory is resolved at
+// dispatch on the machine that runs each call (projectcheckout.On), the
+// daemon-side tool context carries that machine's checkout (rctx.Project,
+// not a db.Project), and a main worktree row is read as "the main checkout on
+// this machine", never as a path.
 
 // projectPathReason is why a function may still read projects.path.
 type projectPathReason string
@@ -51,15 +58,10 @@ const (
 	// project-dir-heal recreates a plain folder on the machine that
 	// connected, only when no other machine holds it.
 	reasonHeal projectPathReason = "recreating a plain folder on the machine that connected, when no other machine holds it"
-	// Text in a message; nothing is sent.
-	reasonMessage projectPathReason = "text in a message"
-	// TRACKED DEBT, not a precedent: the chat runtime, workspace placement
-	// and the Files tab still root a machine's MAIN checkout at
-	// projects.path. They pick the machine by the chat or workspace (not by
-	// default resolution), so they break only when that machine's checkout
-	// is at a different path. Moving them to the machine's own project_daemons
-	// row is the follow-up; do not add new entries under this reason.
-	reasonRuntimeDebt projectPathReason = "TRACKED: runtime/workspace main checkout still rooted at projects.path (follow-up)"
+	// Target.Rebase recognises a path under the creation path (a run started
+	// before checkouts were resolved per machine) and moves it onto the
+	// chosen machine's checkout; the creation path is never the result.
+	reasonRebaseRoot projectPathReason = "recognising a run path under the creation path, moved onto the chosen machine's checkout; never the result"
 )
 
 // projectPathAllowed is every function that may read a project's .Path, how
@@ -72,37 +74,12 @@ var projectPathAllowed = map[string]struct {
 	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
 	"internal/handlers/project/project.go:projectToProto":                              {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
-	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {6, reasonHeal},
-	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {4, reasonProbe},
-	"internal/repo/adopt.go:NoReposMessage":                                            {1, reasonMessage},
-
-	"internal/filepreview/access.go:ResolveBasePath":                                                {1, reasonRuntimeDebt},
-	"internal/handlers/tools_daemon/tools_daemon_connect.go:listAllProjectPaths":                    {2, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_create_worktree.go:CreateWorktree":                              {1, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_discover_worktrees.go:ImportWorktree":                           {2, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_discover_worktrees.go:projectRepoRefs":                          {1, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_list_worktrees.go:ListWorktrees":                                {1, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_worktree_lifecycle.go:ArchiveWorktree":                          {1, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_worktree_lifecycle.go:DeleteWorktree":                           {4, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_worktree_lifecycle.go:RecreateWorktree":                         {2, reasonRuntimeDebt},
-	"internal/handlers/worktree/rpc_worktree_lifecycle.go:repairActiveWorktree":                     {2, reasonRuntimeDebt},
-	"internal/handlers/worktree/worktree.go:repoDiscoveryError":                                     {2, reasonRuntimeDebt},
-	"internal/launch/session.go:GetEffectiveCheckout":                                               {1, reasonRuntimeDebt},
-	"internal/llm/tools/metadata_writer.go:Execute":                                                 {2, reasonRuntimeDebt},
-	"internal/llm/tools/project_analyzer.go:Execute":                                                {2, reasonRuntimeDebt},
-	"internal/llm/tools/worktree_tool.go:handleDelete":                                              {1, reasonRuntimeDebt},
-	"internal/rctx/context.go:WorkingDir":                                                           {1, reasonRuntimeDebt},
-	"internal/repo/adopt.go:AdoptFromDaemon":                                                        {6, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/call_llm.go:streamLLMResponse":                   {1, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/execute_tools.go:buildToolRequest":               {1, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/execute_tools.go:loadWorktreeInfo":               {2, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/execute_tools_workspace.go:describeFallback":     {4, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/execute_tools_workspace.go:ensureBatchWorkspace": {4, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/execute_tools_workspace.go:workspaceNoticeText":  {6, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/load_workflow.go:resolveWorkflowContext":         {1, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/run_executor.go:resolveRunExecutorContext":       {2, reasonRuntimeDebt},
-	"internal/workflow/runtime/activities/handlers/worktree.go:Execute":                             {2, reasonRuntimeDebt},
-	"internal/workspacecreate/workspacecreate.go:Finish":                                            {5, reasonRuntimeDebt},
+	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {7, reasonHeal},
+	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {6, reasonProbe},
+	"internal/projectcheckout/machine.go:Rebase":                                       {1, reasonRebaseRoot},
+	// The main worktree row mirrors projects.path for display; every runtime
+	// reader treats an is_main row as the main checkout ON ITS OWN MACHINE.
+	"internal/handlers/worktree/rpc_list_worktrees.go:ListWorktrees": {1, reasonProjectRow},
 }
 
 func TestProjectPathNeverReachesADaemon(t *testing.T) {

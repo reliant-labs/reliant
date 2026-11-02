@@ -19,6 +19,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -269,7 +270,7 @@ func (s *Service) ConnectDaemon(
 		},
 	)
 
-	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
+	requestedProjectPaths, err := s.daemonProjectPaths(ctx, daemonID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to list project paths"))
 	}
@@ -639,20 +640,24 @@ func jsonStringSlicePtr(values []string) (*string, error) {
 	return &v, nil
 }
 
-func (s *Service) listAllProjectPaths(ctx context.Context, userID string) ([]string, error) {
-	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
+// daemonProjectPaths is where THIS machine holds the user's projects: its own
+// project_daemons rows, recorded by create, clone and every connect's
+// reconcile. projects.path is where each project was created, on whichever
+// machine created it, so it says nothing about this machine's disk. The
+// daemon's project discovery replaces the list with what it finds.
+func (s *Service) daemonProjectPaths(ctx context.Context, daemonID string) ([]string, error) {
+	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
 
-	paths := make([]string, 0, len(projects))
-	seen := make(map[string]struct{}, len(projects))
-	for _, project := range projects {
-		if project == nil || strings.TrimSpace(project.ID) == "" || strings.TrimSpace(project.Path) == "" {
+	paths := make([]string, 0, len(rows))
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if row == nil || row.InstallState != core.ProjectInstallInstalled {
 			continue
 		}
-
-		normalizedPath := normalizeProjectPath(project.Path)
+		normalizedPath := normalizeProjectPath(row.Path)
 		if normalizedPath == "" {
 			continue
 		}

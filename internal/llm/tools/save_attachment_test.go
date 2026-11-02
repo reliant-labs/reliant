@@ -40,7 +40,7 @@ func storedPNG(t *testing.T, repo *fakeAttachmentRepo, id, userID string) *db.At
 func saveAttachmentCtx(t *testing.T) *rctx.ToolContext {
 	t.Helper()
 	ctx := createTestContext(t, "")
-	ctx.Project = &db.Project{Path: "/workspace"}
+	ctx.Project = &rctx.Project{Checkout: "/workspace"}
 	return ctx
 }
 

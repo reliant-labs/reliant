@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
@@ -60,9 +61,14 @@ func (s *Service) ImportWorktree(
 	}
 	// An empty registry is reconciled against the machine the import would
 	// be placed on; a populated one reaches no daemon before confirm_move.
-	repos, err := s.listProjectRepos(ctx, userID, project, func() (machinewake.Target, error) {
-		return s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
-	})
+	place := func() (placed, error) {
+		placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
+		if err != nil {
+			return placed{}, err
+		}
+		return s.withCheckout(ctx, userID, project, placement, "import a worktree into it")
+	}
+	repos, err := s.listProjectRepos(ctx, userID, project, place)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +92,12 @@ func (s *Service) ImportWorktree(
 		return nil, svcerr.InvalidArgument("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue")
 	}
 
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
+	target, err := place()
 	if err != nil {
 		return nil, err
 	}
-	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
+	placement := target.machine
+	if err := s.wakeIfAsleep(ctx, userID, placement, target.checkout.Path); err != nil {
 		return nil, err
 	}
 	ownerDaemonID := placement.DaemonID
@@ -100,7 +107,7 @@ func (s *Service) ImportWorktree(
 	if err != nil {
 		return nil, err
 	}
-	repoPath := filepath.Join(project.Path, repo.RelativePath)
+	repoPath := target.checkout.Join(repo.RelativePath)
 	var found struct {
 		Worktrees []discoveredEntry `json:"worktrees"`
 	}
@@ -133,6 +140,7 @@ func (s *Service) ImportWorktree(
 	}
 	createReq := workspacecreate.Request{
 		Project:       project,
+		Checkout:      target.checkout.Path,
 		Repos:         repos,
 		Name:          name,
 		Branch:        entry.Branch,
@@ -299,9 +307,10 @@ type discoveredEntry struct {
 	PrunableReason string `json:"prunable_reason"`
 }
 
-// projectRepoRefs lists the project's repos with their checkout paths on the
-// daemon. A repo with relative path "" or "." is the project root itself.
-func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project) ([]discoverRepoRef, map[string]*core.Repo, error) {
+// projectRepoRefs lists the project's repos with their paths in checkout, the
+// project's checkout on the machine asked. A repo with relative path "" or
+// "." is the checkout itself.
+func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project, checkout projectcheckout.Target) ([]discoverRepoRef, map[string]*core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
@@ -309,7 +318,7 @@ func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project) ([]d
 	refs := make([]discoverRepoRef, 0, len(repos))
 	byID := make(map[string]*core.Repo, len(repos))
 	for _, r := range repos {
-		refs = append(refs, discoverRepoRef{RepoID: r.ID, Path: filepath.Join(project.Path, r.RelativePath)})
+		refs = append(refs, discoverRepoRef{RepoID: r.ID, Path: checkout.Join(r.RelativePath)})
 		byID[r.ID] = r
 	}
 	return refs, byID, nil
@@ -342,19 +351,24 @@ func (s *Service) DiscoverWorktrees(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	refs, byID, err := s.projectRepoRefs(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-
 	// A background poll (the sidebar hint) never wakes a suspended machine:
 	// it answers Unavailable and the hint stays hidden.
 	if req.Msg.Background {
 		ctx = machinewake.Suppress(ctx)
 	}
 
-	// The same machine a new workspace for this project would be placed on.
+	// The same machine a new workspace for this project would be placed on,
+	// and the project's checkout there.
 	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "discover")
+	if err != nil {
+		return nil, err
+	}
+	target, err := s.withCheckout(ctx, userID, project, placement, "list its git worktrees")
+	if err != nil {
+		return nil, err
+	}
+	placement = target.machine
+	refs, byID, err := s.projectRepoRefs(ctx, project, target.checkout)
 	if err != nil {
 		return nil, err
 	}
@@ -420,11 +434,16 @@ func (s *Service) PruneWorktrees(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	refs, byID, err := s.projectRepoRefs(ctx, project)
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "prune")
 	if err != nil {
 		return nil, err
 	}
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "prune")
+	target, err := s.withCheckout(ctx, userID, project, placement, "prune its git worktrees")
+	if err != nil {
+		return nil, err
+	}
+	placement = target.machine
+	refs, byID, err := s.projectRepoRefs(ctx, project, target.checkout)
 	if err != nil {
 		return nil, err
 	}

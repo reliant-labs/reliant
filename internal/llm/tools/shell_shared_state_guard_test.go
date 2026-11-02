@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -330,7 +329,7 @@ func TestShellTool_RefusesSharedStateCommandsBeforeDispatch(t *testing.T) {
 	}
 	// Background commands go through the same gate.
 	d := &requestRecordingDaemon{}
-	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1", Project: &db.Project{ID: "p", Path: "/home/u/project"}, Daemon: d}
+	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1", Project: &rctx.Project{ID: "p", Checkout: "/home/u/project"}, Daemon: d}
 	resp, err := (&shellTool{}).Execute(tc, ShellParams{Command: "go clean -modcache", RunInBackground: true})
 	if err != nil {
 		t.Fatal(err)

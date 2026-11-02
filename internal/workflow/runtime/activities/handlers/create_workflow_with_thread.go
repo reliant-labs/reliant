@@ -253,7 +253,11 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		if err != nil {
 			return CreateWorkflowWithThreadOutput{}, fmt.Errorf("load thread worktree %s: %w", *createdThread.WorktreeID, err)
 		}
-		out.WorktreePath = wt.Path
+		// The main row mirrors projects.path, the creating machine's: the
+		// child's main checkout is resolved per machine at dispatch.
+		if !wt.IsMain {
+			out.WorktreePath = wt.Path
+		}
 	}
 	return out, nil
 }

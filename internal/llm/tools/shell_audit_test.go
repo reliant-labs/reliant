@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 )
@@ -74,7 +73,7 @@ func TestShellTool_AuditsEveryInvocation(t *testing.T) {
 			Context: context.Background(),
 			ChatID:  chatID,
 			Thread:  "thread-" + chatID,
-			Project: &db.Project{ID: "p", Path: "/work/p"},
+			Project: &rctx.Project{ID: "p", Checkout: "/work/p"},
 			Daemon:  d,
 		}
 		if _, err := (&shellTool{}).Execute(tc, p); err != nil {

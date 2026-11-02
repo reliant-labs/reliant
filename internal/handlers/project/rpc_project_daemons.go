@@ -215,6 +215,17 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 				"error", err, "userID", userID, "daemonID", daemonID, "path", project.Path)
 			return err
 		}
+		// The folder this made is the project's checkout on this machine, so
+		// it is recorded in the same step: a chat's directory comes only from
+		// a machine's own project_daemons row. Recorded here rather than left
+		// to the connect-time reconcile, which runs concurrently and may have
+		// probed before the mkdir landed — the outcome no longer depends on
+		// which finishes first. Neither ever removes a row, and both write the
+		// same (project, machine, path).
+		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+			logging.Warn("project-dir-heal: made the folder but could not record it; the next connect's reconcile records it",
+				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
+		}
 		healed++
 	}
 	return nil

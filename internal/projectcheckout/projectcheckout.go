@@ -53,6 +53,8 @@ type Target struct {
 	DaemonID string
 	// Path is where the checkout is ON THAT MACHINE.
 	Path string
+	// roots are the project's checkouts on every machine (Rebase).
+	roots []string
 }
 
 // Join is rel under the checkout, on the target's machine. "" and "." are
@@ -112,7 +114,11 @@ func Resolve(ctx context.Context, r Reader, machines daemonplacement.Machines, u
 	case err != nil:
 		return Target{}, svcerr.WithCause(svcerr.Internal("failed to resolve the machine holding the project"), err)
 	}
-	return Target{Project: project, DaemonID: checkout.DaemonID, Path: checkout.Path}, nil
+	t := Target{Project: project, DaemonID: checkout.DaemonID, Path: checkout.Path}
+	if rows, err := r.ListProjectDaemonsForProject(ctx, project.ID); err == nil {
+		t.roots = installedRoots(rows)
+	}
+	return t, nil
 }
 
 // IsMissing reports whether err is Resolve's "no machine holds a checkout"
