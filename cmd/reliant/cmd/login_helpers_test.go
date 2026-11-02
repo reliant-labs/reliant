@@ -47,7 +47,7 @@ func isolateCLI(t *testing.T) string {
 // `reliant auth login --server <server>` would.
 func loginFor(t *testing.T, server, token string) {
 	t.Helper()
-	if _, err := cliauth.Store(server, cliauth.Session{Credential: credentials.Credential{Token: token, CreatedAt: fixtureTime}}); err != nil {
+	if _, err := cliauth.Store(server, credentials.Credential{Token: token, CreatedAt: fixtureTime}); err != nil {
 		t.Fatal(err)
 	}
 }

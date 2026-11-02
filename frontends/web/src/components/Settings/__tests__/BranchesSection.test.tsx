@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   switchWorktreeContext: vi.fn(async () => {}),
   closeSettings: vi.fn(),
   navigate: vi.fn(),
+  selectProject: vi.fn(async () => {}),
   preferences: {
     worktree: {
       archiveMode: "ask_me",
@@ -33,6 +34,8 @@ vi.mock("../../../store/projectStore", () => {
   const state = () => ({
     currentProject: { id: "project-1", name: "reliant", is_git_repo: true, default_branch: "main" },
     refreshCurrentProject: vi.fn(),
+    selectProject: mocks.selectProject,
+    restoreLastProject: vi.fn(),
   });
   return {
     useProjectStore: Object.assign((selector: (s: unknown) => unknown) => selector(state()), {
@@ -40,6 +43,19 @@ vi.mock("../../../store/projectStore", () => {
     }),
   };
 });
+
+vi.mock("../../../hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/project-queries")>()),
+  useProjects: () => ({
+    projects: [
+      { id: "project-1", name: "reliant" },
+      { id: "project-2", name: "shopfront" },
+    ],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
 
 vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ selectChat: vi.fn() }) },
@@ -194,7 +210,11 @@ describe("Settings → Branches", () => {
     await renderLoaded();
     expect(screen.getByRole("heading", { level: 1, name: "Branches" })).toBeInTheDocument();
     expect(screen.getByText(/each branched chat works in its own git worktree/i)).toBeInTheDocument();
-    expect(screen.getByTitle("Branches are listed for the open project")).toHaveTextContent("reliant");
+    // The header names the project, and switching it opens that project.
+    const picker = screen.getByLabelText("Project");
+    expect(picker).toHaveValue("project-1");
+    await userEvent.selectOptions(picker, "project-2");
+    expect(mocks.selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-2" }));
     expect(screen.getByText("studio.local")).toBeInTheDocument();
   });
 

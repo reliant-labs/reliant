@@ -324,7 +324,7 @@ func TestAdoptFinish_RollbackMovesCheckoutBack(t *testing.T) {
 		project := &db.Project{ID: "p", Name: "proj", Path: f.root}
 		repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 		store := &adoptStore{rows: map[string]db.Worktree{}}
-		req := workspacecreate.Request{Project: project, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
+		req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
 		wt, err := workspacecreate.Insert(context.Background(), store, req)
 		require.NoError(t, err)
 		moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)
@@ -368,7 +368,7 @@ func TestAdoptFinish_ReusesExistingBranchAsIs(t *testing.T) {
 	project := &db.Project{ID: "p", Name: "proj", Path: f.root}
 	repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 	store := &adoptStore{rows: map[string]db.Worktree{}}
-	req := workspacecreate.Request{Project: project, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
+	req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
 	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	require.NoError(t, err)
 	moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)
@@ -395,7 +395,7 @@ func TestAdoptFinish_CreatesBranchWhenAbsent(t *testing.T) {
 	project := &db.Project{ID: "p", Name: "proj", Path: f.root}
 	repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 	store := &adoptStore{rows: map[string]db.Worktree{}}
-	req := workspacecreate.Request{Project: project, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
+	req := workspacecreate.Request{Project: project, Checkout: project.Path, Repos: repos, Name: "adopted", Branch: "feat-a", OwnerDaemonID: "d", WorkspaceID: ws}
 	wt, err := workspacecreate.Insert(context.Background(), store, req)
 	require.NoError(t, err)
 	moved := adoptMove(t, f.a, f.aWT, ws, "a", wt.ID)

@@ -56,7 +56,9 @@ const isErrorPredicate = (p: Predicate) =>
 /** Whether the panel (or every one of its series) counts failures only. */
 export function countsErrors(panel: Panel): boolean {
   if ((panel.where ?? []).some(isErrorPredicate)) return true;
-  return panel.series.length > 0 && panel.series.every((s) => (s.where ?? []).some(isErrorPredicate));
+  // A definition may arrive without `series` (a forge spec read raw, a newer kind): it counts nothing.
+  const series = panel.series ?? [];
+  return series.length > 0 && series.every((s) => (s.where ?? []).some(isErrorPredicate));
 }
 
 /** The service a series is about: its group's, the panel's own `service.name = …`, or the variable. */

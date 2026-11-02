@@ -190,10 +190,11 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	if !scopeGranted(cred.Scopes, cliauth.ScopeDaemon) {
 		return fmt.Errorf("the control plane did not grant %s (granted: %v)", cliauth.ScopeDaemon, cred.Scopes)
 	}
-	if want.Known() && cred.Account.Known() && !cred.Account.Same(want) {
+	approved := cliauth.AccountOf(cred)
+	if want.Known() && approved.Known() && !approved.Same(want) {
 		return fmt.Errorf("this machine was approved as %s, but you are logged in to the CLI as %s, so the sign-in was not saved.\n"+
 			"Approve the code while signed in to Reliant as %s, or run 'reliant auth login%s' as %s first",
-			cred.Account, want, want, conn.serverFlagHint(), cred.Account)
+			approved, want, want, conn.serverFlagHint(), approved)
 	}
 
 	creds := &auth.DaemonCredentials{
@@ -203,8 +204,8 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		RegisteredAt: time.Now().UTC(),
 		Sub:          account,
 		ExpiresAt:    cred.ExpiresAt,
-		AccountID:    cred.Account.ID,
-		AccountEmail: cred.Account.Email,
+		AccountID:    cred.AccountID,
+		AccountEmail: cred.AccountEmail,
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
@@ -212,8 +213,8 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
-	if cred.Account.Known() {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Account:     %s\n", cred.Account)
+	if approved.Known() {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Account:     %s\n", approved)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", conn.describeServer())

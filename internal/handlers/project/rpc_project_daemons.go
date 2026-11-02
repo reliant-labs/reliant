@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -238,10 +239,12 @@ func (s *Service) healProjectDir(ctx context.Context, userID, daemonID, path str
 }
 
 // installedElsewhere reports whether the project's checkout is recorded on
-// another live machine of the user's (daemonplacement.UserCheckouts). A row
-// of a removed or replaced machine, or of another user's, is not "elsewhere":
-// nothing can run there, and counting it left a replaced machine's plain
-// folders (onboarding's my-project among them) never healed again. An error
+// another machine that exists and is the user's (daemonplacement.UserCheckouts),
+// whether or not it is connected. A row of a removed or replaced machine, or
+// of another user's, is not "elsewhere": nothing can run there, and counting
+// it left a replaced machine's plain folders (onboarding's my-project among
+// them) never healed again. A machine that is kept but never reconnects still
+// counts: the refusal names it, and removing it lets the heal run. An error
 // reads as "elsewhere": the heal is best effort, and creating a directory is
 // the irreversible direction.
 func (s *Service) installedElsewhere(ctx context.Context, userID, projectID, daemonID string) (bool, error) {
@@ -568,6 +571,12 @@ func (s *Service) RemoveProjectFromDaemon(
 	// from here; a machine that is gone for good releases its rows when it
 	// is removed (db.Repo.RemoveDaemon).
 	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
+		if daemonerr.Unreachable(err) {
+			// Refused, with the two ways out: nothing else ever drops the
+			// row of a machine that never comes back.
+			return nil, svcerr.WithReason(svcerr.WithCause(svcerr.WithClass(
+				svcerr.Unavailable(removeFromOfflineMachine), svcerr.ClassUser), err), errreason.DaemonNotConnected)
+		}
 		return nil, daemonerr.Error("remove the project from the machine", err)
 	}
 	if !removeResp.Success {
@@ -582,6 +591,12 @@ func (s *Service) RemoveProjectFromDaemon(
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 }
+
+// removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine
+// that is not connected. The checkout is still on that disk and the row is
+// its only record, so the row stays; the message names what lets it go.
+const removeFromOfflineMachine = "that machine is offline, so the project could not be removed from it: " +
+	"bring it online and try again, or remove the machine (that releases every project recorded on it)"
 
 // RecloneProjectOnDaemon blows away the existing clone and re-clones from the
 // project's remote_url at the recorded default branch. Refuses to run when

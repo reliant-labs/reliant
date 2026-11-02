@@ -303,7 +303,15 @@ func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	_, err = e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
-	require.NoError(t, err)
+	if err != nil {
+		// The refusal says only "in_use"; the recorded hold names the process
+		// that held it, which is what a red run on another host needs.
+		var detail string
+		if got, gerr := e.repo.GetWorktree(e.ctx, wt.ID); gerr == nil && got.CleanupMetadata != nil {
+			detail = got.CleanupMetadata.HeldDetail
+		}
+		require.NoError(t, err, "held by: %s", detail)
+	}
 	assert.False(t, exists(path))
 }
 
@@ -312,7 +320,10 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	e := newReclaimEnv(t)
 	wt, path := e.worktree(t, "imp")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
+	// Asked of the machine the directory is on (the one discovery ran on),
+	// which holds the project's checkout: unset, the import is placed on the
+	// default machine, which has none, and is refused for that instead.
+	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path, DaemonId: &e.daemon}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }

@@ -315,16 +315,23 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval snapshot size limit exceeded")
 	}
 	safe, _ := automationpolicy.SafeJSON(row)
-	connectionIdentity := "default/delegated at runtime (dynamic identity)"
-	if c, ok := closure.Connection.(*core.Connection); ok && c != nil {
-		connectionIdentity = fmt.Sprintf("id %s; integration %s; account %s", discloseScope(c.ID), discloseScope(c.IntegrationID), discloseScope(func() string {
-			if c.ExternalAccountID != nil {
-				return *c.ExternalAccountID
-			}
-			return "unknown"
-		}()))
+	connection, _ := closure.Connection.(*core.Connection)
+	workflowTitle := wf.GetTitle()
+	if strings.TrimSpace(workflowTitle) == "" {
+		workflowTitle = def.Workflow
 	}
-	title := fmt.Sprintf("Approval: %s\nMachine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", decision.Reason, machineName, row.DaemonID, operation, user, row.ActingIdentity.OrOwner(), connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
+	title := activationCard{
+		Operation:    operation,
+		Workflow:     workflowTitle,
+		Reason:       decision.Reason,
+		Row:          row,
+		Inputs:       closure.EffectiveInputs,
+		Connection:   connection,
+		MachineName:  machineName,
+		Capabilities: next.Sorted(),
+		Summary:      closure.Summary,
+		SafeRow:      safe,
+	}.String()
 	if len(title) > automationpolicy.MaxDisplayBytes {
 		return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval display size limit exceeded")
 	}
