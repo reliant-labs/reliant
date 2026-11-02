@@ -43,26 +43,26 @@ function getClassificationStyles(classification: PathClassification, inline: boo
     case 'current':
       return cn(
         baseStyles,
-        "text-primary hover:text-primary/80",
+        "text-primary-ink hover:text-primary-ink/80",
         "hover:underline cursor-pointer",
         "transition-colors duration-200",
-        "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
+        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
       );
     case 'other-worktree':
       return cn(
         baseStyles,
-        "text-primary hover:text-primary/80",
+        "text-primary-ink hover:text-primary-ink/80",
         "hover:underline cursor-pointer",
         "transition-colors duration-200",
-        "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
+        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
       );
     case 'project-only':
       return cn(
         baseStyles,
-        "text-primary/70 hover:text-primary/60",
+        "text-primary-ink/70 hover:text-primary-ink/60",
         "hover:underline cursor-pointer",
         "transition-colors duration-200",
-        "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
+        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
       );
     case 'external':
       return cn(

@@ -1,10 +1,11 @@
-import { useMemo, useState, memo, useEffect } from "react";
+import { useId, useMemo, memo } from "react";
 import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
-import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { useSurface } from "../../lib/surfaceContext";
+import { useToolGroupExpansion } from "./useToolGroupExpansion";
 import { formatToolParams, type ToolInput, isSpawnTool } from "../../lib/toolFormatters";
+import { toolActionVerb } from "../../lib/toolAction";
 import type { ToolCallStatus } from "../../gen/reliant/v1/chat_pb";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
@@ -46,7 +47,6 @@ interface ToolExecutionGroupProps {
     onConvertToBackground?: (id: string) => void;
   }>;
   messageId?: string;
-  defaultCollapsed?: boolean;
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -56,7 +56,6 @@ interface ToolExecutionGroupProps {
 function ToolExecutionGroupComponent({
   executions,
   messageId,
-  defaultCollapsed: _defaultCollapsed = true,
   chatId,
   showRichContent = false,
   onSelectThread,
@@ -66,28 +65,7 @@ function ToolExecutionGroupComponent({
     return executions.some(execution => execution.approval?.status === ApprovalStatus.PENDING);
   }, [executions]);
 
-  // Honor the per-tool collapse settings: the group starts open only if at
-  // least one tool in it would have opened on its own. Collapsing the group
-  // while its rows were individually collapsed would hide them twice over.
   const surface = useSurface();
-  const [expanded, setExpanded] = useState(() =>
-    executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface))
-  );
-
-  useEffect(() => {
-    if (hasPendingApprovals) {
-      setExpanded(true);
-    }
-  }, [hasPendingApprovals]);
-
-  // Pick up preference changes made in Settings without a reload.
-  useEffect(() => {
-    const applyNewDefault = () => {
-      setExpanded(executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface)));
-    };
-    window.addEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
-    return () => window.removeEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
-  }, [executions, surface]);
 
   // Async spawn returns its tool result the moment the child agent is
   // dispatched, so a spawn call's own status/result reads "completed" while
@@ -160,7 +138,22 @@ function ToolExecutionGroupComponent({
         ? undefined
         : formatToolParams(rawName, lead.call.input as ToolInput);
     const preview = formatted?.summary?.trim();
-    const head = preview ? `${name}(${truncate(preview, LEAD_PREVIEW_MAX)})` : name;
+    // Say what the lead call did ("Edited src/cart/totals.ts"), as its row
+    // does; a tool with no plain-words verb keeps its name(preview) form. A
+    // shell call's description is already an action ("Run cart tests").
+    const leadDone = lead.result !== undefined || lead.status === "completed" || lead.status === "failed";
+    const verb = toolActionVerb(rawName, leadDone ? "done" : "live");
+    const isDescribedShell =
+      verb !== null && typeof formatted?.structured?.description === "string" && !!preview;
+    const head = isDescribedShell
+      ? truncate(preview, LEAD_PREVIEW_MAX)
+      : verb
+        ? preview
+          ? `${verb} ${truncate(preview, LEAD_PREVIEW_MAX)}`
+          : verb
+        : preview
+          ? `${name}(${truncate(preview, LEAD_PREVIEW_MAX)})`
+          : name;
 
     const rest = executions.length - 1;
     if (rest <= 0) return head;
@@ -171,6 +164,17 @@ function ToolExecutionGroupComponent({
   const hasAnyCancelled = summary.cancelled > 0;
   const isAllCompleted = summary.completed === summary.total && summary.total > 0;
 
+  // Open while its calls run (what the agent is doing now), closed once they
+  // finish — the reverse of the old default, which hid live work behind one
+  // row and kept finished work open. The user's toggle wins either way.
+  const { expanded, toggle } = useToolGroupExpansion({
+    live: summary.running > 0,
+    failed: hasAnyErrors,
+    pendingApproval: hasPendingApprovals,
+    collapseAll: surface !== "desktop",
+  });
+  const panelId = useId();
+
   return (
     <div
       className={cn(
@@ -178,7 +182,7 @@ function ToolExecutionGroupComponent({
         density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
         density === "minimal" && "rounded-md shadow-none",
         hasAnyErrors
-          ? "border-warning/40 bg-warning/5"
+          ? "border-destructive/40 bg-destructive/5"
           : hasAnyCancelled
           ? "border-muted/60 bg-muted/10"
           : isAllCompleted
@@ -188,53 +192,60 @@ function ToolExecutionGroupComponent({
           : "border-muted/50 elevation-1"
       )}
     >
-      <div
+      <button
+        type="button"
         className={cn(
-          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          "flex w-full items-center justify-between text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
           density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggle}
+        aria-expanded={expanded}
+        aria-controls={panelId}
       >
-        <div className="flex items-center gap-1">
-          <ListTree className="w-3.5 h-3.5 text-muted-foreground/60" />
-          <span className="text-xs font-mono font-medium text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1">
+          <ListTree className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
+          <span className="truncate text-xs font-medium text-muted-foreground">
             {headerLabel}
           </span>
-        </div>
+        </span>
 
-        <div className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           {summary.running > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {summary.running}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary-ink">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> {summary.running}
+              <span className="sr-only">running</span>
             </span>
           )}
           {summary.completed > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-success-ink/60">
-              <CheckCircle2 className="w-3.5 h-3.5" /> {summary.completed}
+              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> {summary.completed}
+              <span className="sr-only">done</span>
             </span>
           )}
           {summary.cancelled > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground">
-              <XCircle className="w-3.5 h-3.5" /> {summary.cancelled}
+              <XCircle className="w-3.5 h-3.5" aria-hidden="true" /> {summary.cancelled}
+              <span className="sr-only">cancelled</span>
             </span>
           )}
           {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-warning-ink">
-              <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-destructive-ink">
+              <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" /> {summary.errors}
+              <span className="sr-only">failed</span>
             </span>
           )}
 
           {expanded ? (
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           )}
-        </div>
-      </div>
+        </span>
+      </button>
 
       {/* Show all tool calls when expanded */}
       {expanded && (
-        <div className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
+        <div id={panelId} className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => {
             return (
               <ToolExecution

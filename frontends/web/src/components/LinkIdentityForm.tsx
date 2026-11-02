@@ -304,14 +304,14 @@ export function LinkIdentityForm({
             disabled={submitting}
             maxLength={6}
             placeholder="000000"
-            className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+            className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
           />
         </div>
 
         <button
           type="submit"
           disabled={submitting || code.length !== 6}
-          className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? 'Verifying...' : 'Verify and continue'}
         </button>
@@ -349,7 +349,7 @@ export function LinkIdentityForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={submitting}
-            className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+            className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             placeholder="you@example.com"
           />
         </div>
@@ -383,7 +383,7 @@ export function LinkIdentityForm({
       <button
         type="submit"
         disabled={submitting}
-        className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {submitting ? 'Processing...' : submitLabel}
       </button>

@@ -43,7 +43,7 @@ function GenerateVideoToolRendererComponent({ ctx }: ToolContentProps) {
           role="status"
           data-testid="generate-video-progress"
         >
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-ink" aria-hidden="true" />
           <span>
             Generating video ({formatElapsed(elapsed)} elapsed, typically 30s–3min)
           </span>

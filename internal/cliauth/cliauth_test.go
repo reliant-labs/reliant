@@ -48,7 +48,7 @@ func TestLookup_ExpiredIsNotLoggedIn(t *testing.T) {
 		t.Fatalf("empty file: %v", err)
 	}
 	past := mustPast()
-	if _, err := Store("https://api.example.com", credentials.Credential{Token: "rlat_x", ExpiresAt: &past}); err != nil {
+	if _, err := Store("https://api.example.com", Session{Credential: credentials.Credential{Token: "rlat_x", ExpiresAt: &past}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := Lookup("https://api.example.com"); !errors.Is(err, ErrNotLoggedIn) {
@@ -63,7 +63,7 @@ func TestAdapter_ExpiryIsJudgedOnItsClock(t *testing.T) {
 	now := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	svc := New(Deps{Dirs: credentials.Dirs{ForgeHome: t.TempDir()}, Now: func() time.Time { return now }})
 	exp := now.Add(time.Hour)
-	if _, err := svc.Store("https://api.example.com", credentials.Credential{Token: "rlat_x", ExpiresAt: &exp}); err != nil {
+	if _, err := svc.Store("https://api.example.com", Session{Credential: credentials.Credential{Token: "rlat_x", ExpiresAt: &exp}}); err != nil {
 		t.Fatal(err)
 	}
 	if c, _, err := svc.Lookup("https://api.example.com"); err != nil || c.Token != "rlat_x" {

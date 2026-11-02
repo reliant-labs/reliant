@@ -88,7 +88,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         <Link
           to="/workflows/runs/$runId"
           params={{ runId: run.chatId }}
-          className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {run.title || "Untitled run"}
         </Link>
@@ -106,7 +106,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         {run.triggerId && run.triggerName ? (
           <a
             href={automationHref({ id: run.triggerId, workflow: run.workflowName, projectId: run.projectId })}
-            className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {run.triggerName}
           </a>
@@ -163,7 +163,7 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
       <div className="min-w-0">
         <a
           href={href}
-          className="block truncate rounded-sm text-sm text-foreground/80 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="block truncate rounded-sm text-sm text-foreground/80 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title={event.outcomeDetail || undefined}
         >
           {outcome.label}
@@ -180,7 +180,7 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
         <LaunchKindIcon kind={launch.kind} />
         <a
           href={href}
-          className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {event.triggerName || launch.shortLabel}
         </a>

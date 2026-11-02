@@ -91,7 +91,7 @@ export interface PanelDrawerProps {
 
 const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", bytes: "bytes", percent: "percent", s: "seconds" };
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60";
+  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);
@@ -148,7 +148,7 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
               aria-selected={tab === id}
               onClick={() => setTab(id)}
               className={cn(
-                "-mb-px h-9 border-b-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                "-mb-px h-9 border-b-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === id ? "border-ink font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink"
               )}
               data-testid={`panel-drawer-tab-${id}`}
@@ -254,7 +254,7 @@ function Choice<T extends string>({ label, value, options, onChange, testId }: {
           onClick={() => onChange(option.value)}
           data-value={option.value}
           className={cn(
-            "h-7 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            "h-7 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             value === option.value ? "border-ink/40 bg-ink/8 font-medium text-ink" : "border-border bg-surface text-ink-muted hover:text-ink"
           )}
         >
@@ -638,7 +638,7 @@ function SpecTab({ draft, setDraft, readOnly }: { draft: Panel; setDraft: (panel
           }
         }}
         rows={18}
-        className="block w-full resize-y rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-xs leading-relaxed text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="block w-full resize-y rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-xs leading-relaxed text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="panel-spec-json"
       />
       {problem && (

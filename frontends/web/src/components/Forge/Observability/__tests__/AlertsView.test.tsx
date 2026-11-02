@@ -119,9 +119,18 @@ describe("rules are code", () => {
     // The env place carries no declared shape: nothing in view declares a rule.
     renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" });
     const none = await screen.findByTestId("obs-rules-none");
-    expect(within(none).getByText("forge obs alerts check")).toBeInTheDocument();
+    expect(within(none).getByText("reliant forge obs alerts check")).toBeInTheDocument();
     expect(within(none).getByTestId("obs-rules-none-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability#alerts");
     expect(screen.getByTestId("obs-code-snippet")).toHaveTextContent("forge.AlertRule {");
+  });
+
+  it("waits for the declared shapes instead of saying no rule is declared", async () => {
+    // Each env's shape is fetched on its own (GetEnvironmentShape): until it
+    // arrives, "none declared" would be a guess.
+    const pending: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: FIXTURE_ENVS.map((env) => ({ ...env, declaredPending: true })) };
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" }, pending);
+    expect(await screen.findByTestId("obs-rules-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-rules-none")).not.toBeInTheDocument();
   });
 
   it("shows a forge default with how to turn it off and how to tune it", async () => {

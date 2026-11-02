@@ -148,3 +148,26 @@ describe("a failed page", () => {
     expect(delivered).toHaveLength(30);
   });
 });
+
+describe("playable events", () => {
+  it("counts only events from the first full snapshot on, across pages", async () => {
+    const pages: ReplayPage[] = [
+      // A previous session's tail, then a Meta, then the snapshot.
+      { events: [{ type: 3, timestamp: T }, { type: 4, timestamp: T + 1 }, { type: 2, timestamp: T + 2 }], unreadable: 0, nextPageToken: "1", resumeToken: "r0" },
+      { events: [{ type: 3, timestamp: T + 3 }, { type: 3, timestamp: T + 4 }], unreadable: 0, nextPageToken: "", resumeToken: "r1" },
+    ];
+    const fetchPage = vi.fn(async (token: string | undefined) => pages[token ? Number(token) : 0]);
+    const feed = new ReplayFeed({ fetchPage, onEvents: () => {}, onChange: () => {}, live: false });
+    feed.start();
+    await vi.waitFor(() => expect(feed.snapshot.phase).toBe("complete"));
+    expect(feed.snapshot).toMatchObject({ events: 5, hasFullSnapshot: true, playableEvents: 3 });
+  });
+
+  it("counts none for a recording without a full snapshot", async () => {
+    const fetchPage = vi.fn(async (): Promise<ReplayPage> => ({ events: [{ type: 3, timestamp: T }], unreadable: 0, nextPageToken: "", resumeToken: "r" }));
+    const feed = new ReplayFeed({ fetchPage, onEvents: () => {}, onChange: () => {}, live: false });
+    feed.start();
+    await vi.waitFor(() => expect(feed.snapshot.phase).toBe("complete"));
+    expect(feed.snapshot).toMatchObject({ events: 1, hasFullSnapshot: false, playableEvents: 0 });
+  });
+});

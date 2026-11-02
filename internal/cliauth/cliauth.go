@@ -61,21 +61,21 @@ type Login struct {
 // needs a browser and a human.
 var ErrInteractiveRequired = errors.New("interactive login required but running non-interactively")
 
-// Run performs the login and returns the credential. It does not store it; see
-// Store. The two are split because a daemon registration keeps its credential in
-// the daemon store, not the CLI's.
-func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
+// Run performs the login and returns the credential with the account it
+// signed in as. It does not store it; see Store. The two are split because a
+// daemon registration keeps its credential in the daemon store, not the CLI's.
+func (l Login) Run(ctx context.Context) (Session, error) {
 	if l.NonInteractive {
-		return credentials.Credential{}, ErrInteractiveRequired
+		return Session{}, ErrInteractiveRequired
 	}
 	meta, err := oauth2.DiscoverAuthorizationServer(ctx, l.HTTPClient, l.Server)
 	if err != nil {
 		if errors.Is(err, oauth2.ErrNoAuthorizationServer) {
-			return credentials.Credential{}, fmt.Errorf("%s does not offer browser login (%w)\n"+
+			return Session{}, fmt.Errorf("%s does not offer browser login (%w)\n"+
 				"it must publish %s naming its control plane; for a self-hosted server, "+
 				"mint a token there and pass it with RELIANT_TOKEN", l.Server, err, oauth2.AuthorizationServerMetadataPath)
 		}
-		return credentials.Credential{}, err
+		return Session{}, err
 	}
 	open := l.OpenURL
 	if open == nil {
@@ -97,7 +97,7 @@ func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 		HTTPClient:        l.HTTPClient,
 	}.Run(ctx)
 	if err != nil {
-		return credentials.Credential{}, fmt.Errorf("login via %s: %w", meta.Issuer, err)
+		return Session{}, fmt.Errorf("login via %s: %w", meta.Issuer, err)
 	}
 	now := time.Now().UTC()
 	c := credentials.Credential{
@@ -112,7 +112,7 @@ func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 	if exp := tok.Expiry(now); !exp.IsZero() {
 		c.ExpiresAt = &exp
 	}
-	return c, nil
+	return Session{Credential: c, Account: accountFromToken(tok)}, nil
 }
 
 // adapter is the Service over one credentials-file location and one set of
@@ -139,7 +139,7 @@ func DepsFromEnv() Deps {
 	return Deps{Dirs: credentials.DirsFromEnv()}
 }
 
-func (a *adapter) Login(ctx context.Context, l Login) (credentials.Credential, error) {
+func (a *adapter) Login(ctx context.Context, l Login) (Session, error) {
 	if l.HTTPClient == nil {
 		l.HTTPClient = a.deps.HTTPClient
 	}
@@ -151,12 +151,15 @@ func (a *adapter) Login(ctx context.Context, l Login) (credentials.Credential, e
 
 func (a *adapter) CredentialsPath() (string, error) { return a.deps.Dirs.Path() }
 
-func (a *adapter) Store(server string, c credentials.Credential) (string, error) {
+func (a *adapter) Store(server string, s Session) (string, error) {
 	path, err := a.CredentialsPath()
 	if err != nil {
 		return "", err
 	}
-	return path, credentials.Store(path, server, ClientID, c)
+	if err := credentials.Store(path, server, ClientID, s.Credential); err != nil {
+		return path, err
+	}
+	return path, recordAccount(path, server, s.Token, s.Account)
 }
 
 func (a *adapter) Lookup(server string) (credentials.Credential, string, error) {
@@ -177,13 +180,24 @@ func (a *adapter) Lookup(server string) (credentials.Credential, string, error) 
 	return c, path, nil
 }
 
+func (a *adapter) LookupSession(server string) (Session, string, error) {
+	c, path, err := a.Lookup(server)
+	if err != nil {
+		return Session{}, path, err
+	}
+	return Session{Credential: c, Account: recordedAccount(path, server, c.Token)}, path, nil
+}
+
 func (a *adapter) Remove(server string) (bool, string, error) {
 	path, err := a.CredentialsPath()
 	if err != nil {
 		return false, "", err
 	}
 	existed, err := credentials.Remove(path, server, ClientID)
-	return existed, path, err
+	if err != nil {
+		return existed, path, err
+	}
+	return existed, path, forgetAccount(path, server)
 }
 
 // The CLI's entry points: the adapter over the environment's credentials
@@ -194,16 +208,22 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 // `forge login` writes.
 func CredentialsPath() (string, error) { return New(DepsFromEnv()).CredentialsPath() }
 
-// Store saves c as the reliant CLI's credential for server and returns the
-// file path.
-func Store(server string, c credentials.Credential) (string, error) {
-	return New(DepsFromEnv()).Store(server, c)
+// Store saves s as the reliant CLI's login for server, with the account it
+// signed in as, and returns the credentials file path.
+func Store(server string, s Session) (string, error) {
+	return New(DepsFromEnv()).Store(server, s)
 }
 
 // Lookup returns the stored credential for server, or ErrNotLoggedIn.
 // An entry past its issuer-reported expiry counts as not logged in.
 func Lookup(server string) (credentials.Credential, string, error) {
 	return New(DepsFromEnv()).Lookup(server)
+}
+
+// LookupSession is Lookup plus the account the login signed in as (zero when
+// unknown).
+func LookupSession(server string) (Session, string, error) {
+	return New(DepsFromEnv()).LookupSession(server)
 }
 
 // Remove forgets the stored credential for server.

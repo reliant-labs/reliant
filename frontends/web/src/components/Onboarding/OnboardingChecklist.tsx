@@ -168,7 +168,7 @@ function ChecklistItemRow({
             });
             executeItemAction(item, actionDeps);
           }}
-          className="shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+          className="shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary-ink hover:bg-primary/20 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
         >
           {item.actionLabel}
         </button>

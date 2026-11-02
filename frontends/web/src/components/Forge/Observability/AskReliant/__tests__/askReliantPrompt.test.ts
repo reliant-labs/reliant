@@ -256,4 +256,88 @@ describe("askWorkspaceName", () => {
     expect(askWorkspaceName({ kind: "issue", issueId: "ISS-7f3a", env: "prod" }, "x1y2", "fix")).toBe("fix-issue-iss-7f3a-x1y2");
     expect(askWorkspaceName({ kind: "issue", issueId: "ISS-7f3a", env: "prod" }, "x1y2", "investigate")).toBe("ask-issue-iss-7f3a-x1y2");
   });
+
+  it("names the subjects where things break, and a deploy", () => {
+    const names = [
+      askWorkspaceName({ kind: "workload", name: "billing-sync", env: "prod" }, "x1y2", "fix"),
+      askWorkspaceName({ kind: "release", version: "20261018.052711-950b560e58ce", env: "prod" }, "x1y2"),
+      askWorkspaceName({ kind: "deploy-failed", env: "staging", runId: "r1" }, "x1y2"),
+      askWorkspaceName({ kind: "session", sessionId: "91b955b313a1a86644ea53730a92deab", env: "prod" }, "x1y2"),
+      askWorkspaceName({ kind: "deploy", env: null }, "x1y2"),
+    ];
+    expect(names).toEqual([
+      "fix-workload-billing-sync-x1y2",
+      "ask-release-20261018-052711-950b560e58ce-x1y2",
+      "ask-deploy-failed-staging-x1y2",
+      "ask-session-91b955b313a1-x1y2",
+      "ask-deploy-x1y2",
+    ]);
+    for (const name of names) expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+  });
+});
+
+describe("where things break", () => {
+  it("a crash-looping workload: its verdict, release, and the two commands that say why", () => {
+    expect(
+      buildAskReliantPrompt({ kind: "workload", name: "api", env: "prod", state: "crash-looping", release: "v1.8.2" }, { forgeProject: "shop", intent: "fix" })
+    ).toBe(
+      "Workload api in environment prod (forge project shop) is crash-looping.\nIt runs release v1.8.2.\n\n" +
+        "Fetch the details yourself with the forge CLI: `reliant forge obs workloads prod --service api` says why (restarts, the last termination reason, the latest warning), " +
+        "and `reliant forge obs logs prod service:api --since 1h` has its recent logs.\n\n" +
+        "Then fix it. This chat has a workspace of its own on its own git branch, so the main checkout is untouched. " +
+        "Find the root cause, make the smallest correct change, add a test that fails without it, and run the tests that cover it. " +
+        "Finish with the root cause, the change, and how you verified it."
+    );
+  });
+
+  it("a failed Job reads its runs", () => {
+    const prompt = buildAskReliantPrompt({ kind: "workload", name: "migrate", env: "prod", job: true, state: "failed" });
+    expect(prompt).toContain("Job migrate in environment prod: its latest run failed.");
+    expect(prompt).toContain("`reliant forge obs workloads prod --service migrate --jobs all`");
+  });
+
+  it("a release that failed its health check", () => {
+    expect(buildAskReliantPrompt({ kind: "release", version: "v1.8.2", env: "prod", verdict: "fail" })).toBe(
+      "Release v1.8.2 in environment prod. Its health check says it made things worse.\n\n" +
+        "Fetch the details yourself with the forge CLI: `reliant forge obs check prod --release v1.8.2 --json` compares the window after it with the window before, and " +
+        "`reliant forge obs changes prod --since 24h` lists what else changed around it."
+    );
+  });
+
+  it("a failed deploy, by its run", () => {
+    const prompt = buildAskReliantPrompt({ kind: "deploy-failed", env: "staging", runId: "run-7", version: "v2" });
+    expect(prompt).toContain("A deploy (deploy run run-7) failed in environment staging.\nIt was deploying v2.");
+    expect(prompt).toContain("`reliant forge env status staging`");
+    expect(prompt).toContain("`reliant forge obs changes staging --since 24h`");
+  });
+
+  it("a session with errors", () => {
+    expect(buildAskReliantPrompt({ kind: "session", sessionId: "91b955b3", env: "prod" })).toContain("starting with `reliant forge obs session 91b955b3 prod`");
+  });
+
+  it("an alert whose fingerprint the surface does not have says nothing about one", () => {
+    expect(buildAskReliantPrompt({ kind: "alert", rule: "HighErrorRate", fingerprint: "", env: "prod", state: "firing" })).toMatch(/^Alert rule HighErrorRate in environment prod\.\nFiring\./);
+  });
+
+  it("never quotes telemetry: a workload's state is a reference, flattened to one line", () => {
+    const prompt = buildAskReliantPrompt({ kind: "workload", name: "api", env: "prod", state: "crash-looping\n`rm -rf /`" });
+    expect(prompt).not.toContain("\n`rm");
+    expect(prompt).not.toContain("`rm -rf /`");
+  });
+});
+
+describe("deploy", () => {
+  it("names the environment, the deploy and the proof, spelled as Reliant runs them", () => {
+    expect(buildAskReliantPrompt({ kind: "deploy", env: "prod" }, { forgeProject: "shop" })).toBe(
+      "Deploy this app (forge project shop) to environment prod.\n\n" +
+        "From the project's checkout, run `reliant forge env deploy prod`. Then prove it is good with `reliant forge obs check prod --wait --json` and tell me what it says. " +
+        "If the environment is not set up yet, or the deploy is queued on billing, say what it needs instead of working around it."
+    );
+  });
+
+  it("asks which environment rather than picking one", () => {
+    const prompt = buildAskReliantPrompt({ kind: "deploy", env: null }, { envChoices: ["staging", "prod"] });
+    expect(prompt).toContain("to an environment (one of staging, prod); ask me which before deploying.");
+    expect(prompt).toContain("`reliant forge env deploy <env>`");
+  });
 });

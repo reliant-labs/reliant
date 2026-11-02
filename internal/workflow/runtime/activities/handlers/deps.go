@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -61,6 +62,8 @@ type RunExecutorContextStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	// Installs is each machine's checkout of the project.
+	daemonplacement.Installs
 }
 
 // ToolResultRecoveryStore is what recoverPersistedToolResults reads.
@@ -151,6 +154,8 @@ type CallLLMStore interface {
 	DrainAgentMessagesStore
 	LLMHistoryStore
 	db.ToolCallStatusStore
+	// Installs is each machine's checkout of the project (resolveCallCheckout).
+	daemonplacement.Installs
 }
 
 // CleanupStore is what CleanupActivity reads and writes when it closes out a
@@ -207,6 +212,9 @@ type CreateWorktreeStore interface {
 	repopkg.AdoptStore
 	workspacecreate.Store
 	WorktreeOwnerReader
+	// Installs is each machine's checkout of the project: the owner's is
+	// the source of a workspace's repos.
+	daemonplacement.Installs
 }
 
 // DeleteWorktreeStore is what DeleteWorktreeActivity reads and writes.
@@ -216,6 +224,9 @@ type DeleteWorktreeStore interface {
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ArchiveWorktree(ctx context.Context, id string) error
+	// Installs is each machine's checkout of the project: the owner's is
+	// the source of a workspace's repos.
+	daemonplacement.Installs
 }
 
 // DrainAgentMessagesStore is what DrainAgentMessagesActivity reads and writes
@@ -276,6 +287,8 @@ type ExecuteToolsStore interface {
 	toolbindings.SettingsReader
 	ThreadWorktreeReader
 	db.ToolCallStatusStore
+	// Installs is each machine's checkout of the project (resolveCallCheckout).
+	daemonplacement.Installs
 }
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.

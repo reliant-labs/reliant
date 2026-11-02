@@ -8,7 +8,7 @@
  * needs it).
  */
 
-import { useState, type ReactElement } from "react";
+import { useState, type ComponentProps, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
@@ -58,6 +58,7 @@ export function renderOverview({
   hostedLoading = false,
   domains = { availability: "available", domains: FIXTURE_DOMAINS, detail: "" },
   rollback,
+  envsUnread,
 }: {
   env?: string;
   envs?: StripEnv[];
@@ -67,6 +68,7 @@ export function renderOverview({
   hostedLoading?: boolean;
   domains?: DomainsState;
   rollback?: OverviewRollback;
+  envsUnread?: ComponentProps<typeof OverviewHome>["envsUnread"];
 } = {}): Harness<OverviewSearch> & { navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
   const navigateTo = vi.fn();
@@ -78,6 +80,7 @@ export function renderOverview({
         env={env}
         envs={envs}
         envsLoading={false}
+        envsUnread={envsUnread}
         search={state}
         onSearch={(next) =>
           setState((prev) => {

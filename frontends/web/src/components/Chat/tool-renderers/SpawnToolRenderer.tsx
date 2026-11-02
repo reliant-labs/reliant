@@ -328,7 +328,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 text-2xs font-mono py-0.5",
-                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary",
+                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary-ink",
                       )}
                     >
                       {tc.failed ? (

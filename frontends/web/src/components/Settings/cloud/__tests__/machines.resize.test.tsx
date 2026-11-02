@@ -173,7 +173,7 @@ describe('machine detail — resize', () => {
     expect(within(dialog).getByTestId('resize-size-xl')).not.toHaveTextContent(/\$|hrs|GiB|suspended|included/i)
     // Plan includes 160 small hours; largest allowed size here is large (x4).
     expect(within(dialog).getByTestId('resize-pricing-note')).toHaveTextContent(
-      'Includes 40.0 hours a month. Extra hours and storage are billed separately.',
+      'Includes 40 hours a month. Extra hours and storage are billed separately.',
     )
     expect(dialog).not.toHaveTextContent(/×|uses included hours|burn/i)
     // Nothing is chosen until the user chooses.

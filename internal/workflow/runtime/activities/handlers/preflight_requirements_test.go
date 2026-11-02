@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,14 @@ func (requirementsStore) GetProject(_ context.Context, id string) (*db.Project, 
 }
 func (requirementsStore) GetWorktree(context.Context, string) (*db.Worktree, error) {
 	return nil, errors.New("no worktree")
+}
+
+// The machine's own checkout of the project, which the probe runs in.
+func (requirementsStore) ListProjectDaemonsForProject(context.Context, string) ([]*core.ProjectDaemon, error) {
+	return []*core.ProjectDaemon{{DaemonID: "d1", Path: "/home/workspace/projects/acme", InstallState: core.ProjectInstallInstalled}}, nil
+}
+func (requirementsStore) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	return &db.Daemon{ID: id, UserID: "u1"}, nil
 }
 
 // fakeProbeMachine is the run's machine: it answers the probe with out.

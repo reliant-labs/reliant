@@ -971,7 +971,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             <p className="text-sm text-muted-foreground whitespace-pre-line">{error}</p>
             <button
               onClick={() => void loadPreview()}
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-primary-ink hover:underline"
             >
               <RefreshCw className="w-3 h-3" />
               Try again

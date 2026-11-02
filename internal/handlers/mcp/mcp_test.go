@@ -133,6 +133,7 @@ func setupMCPServiceToggleTest(t *testing.T) (context.Context, *Service, *fakeMC
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	installOnTestDaemon(t, repo, projectID, projectPath)
 
 	return ctx, svc, manager, projectID
 }
@@ -275,6 +276,7 @@ func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *tes
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	installOnTestDaemon(t, repo, projectID, projectPath)
 
 	// Local filesystem says enabled=true.
 	mcpPath := filepath.Join(projectPath, ".reliant", config.MCPConfigFileName)
@@ -486,6 +488,7 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 		{ID: projectB, UserID: "test-user", Name: "B", Path: projectPathB, IsGitRepo: false, CreatedAt: now, UpdatedAt: now, LastActive: now},
 	} {
 		require.NoError(t, repo.CreateProject(ctx, project))
+		installOnTestDaemon(t, repo, project.ID, project.Path)
 	}
 
 	sharedGlobalEnabled := `{"user":"{\"mcpServers\":{\"shared-global\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
@@ -810,6 +813,15 @@ func (r *fakeMCPDaemonRouter) EnqueueDaemonCommand(_ context.Context, _ string, 
 	return 0, nil
 }
 
+// PlacementDaemonID places every named machine as itself
+// (daemonplacement.Machines).
+func (r *fakeMCPDaemonRouter) PlacementDaemonID(_ context.Context, _, daemonID string) (string, error) {
+	if daemonID == "" {
+		return mcpTestDaemon, nil
+	}
+	return daemonID, nil
+}
+
 func (r *fakeMCPDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string, error) {
 	return "test-daemon-id", nil
 }
@@ -937,4 +949,19 @@ func (r *fakeMCPDaemonRouter) OpenLocalModelHTTP(context.Context, string, string
 }
 func (r *fakeMCPDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
 	return nil, nil
+}
+
+// mcpTestDaemon is the machine the real-database tests check their projects
+// out on (installOnTestDaemon), and where fakeMCPDaemonRouter places them.
+const mcpTestDaemon = "mcp-test-daemon"
+
+// installOnTestDaemon records project projectID as checked out at path on
+// mcpTestDaemon, owned by test-user: the record projectcheckout.Resolve reads
+// to find the machine holding the checkout and its path there.
+func installOnTestDaemon(t *testing.T, repo *db.Repo, projectID, path string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: mcpTestDaemon, UserID: "test-user", CreatedAt: now, UpdatedAt: now}))
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, mcpTestDaemon, path, nil))
 }

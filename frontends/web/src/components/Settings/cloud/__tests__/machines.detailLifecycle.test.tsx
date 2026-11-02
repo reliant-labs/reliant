@@ -277,7 +277,7 @@ describe('machine detail — status presentation', () => {
 
     const header = await screen.findByTestId('machine-detail-header')
     expect(
-      within(header).getAllByText(/disconnected/i),
+      within(header).getAllByText(/^offline$/i),
     ).toHaveLength(1)
   })
 

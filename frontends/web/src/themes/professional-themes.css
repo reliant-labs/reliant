@@ -12,9 +12,15 @@
  * Every pair is held by tests: muted text AA on every surface
  * (mutedForegroundContrast), status inks AA on every page and card
  * (statusInkContrast), and the forge Button's labels AA and its focus
- * outline 3:1 on every surface (colorSchemeTokenContract). --primary-hover is
- * a real color, not an alpha step: lightening a fill under a white label
- * would lose the contrast the rest fought for.
+ * outline 3:1 on every surface (colorSchemeTokenContract), and accent text
+ * AA on every surface and on the primary tints (primaryInkContrast).
+ * --primary-hover is a real color, not an alpha step: lightening a fill under
+ * a white label would lose the contrast the rest fought for.
+ *
+ * --primary is a FILL; --primary-ink is the same hue as TEXT (links, active
+ * labels, accent copy; `text-primary-ink`). They are separate because a fill
+ * tuned for a white label can fail AA as text on a page: in light schemes
+ * the ink is the hover step, so it still reads on a `bg-primary/20` badge.
  *
  * Retired (2026-10-24): forest, vibrant-pink, energetic-orange, bold-red.
  * Their action colors collided with a status color (success green, warning
@@ -37,6 +43,7 @@
   --primary: 221 83% 50%;
   --primary-hover: 221 83% 44%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 221 83% 44%;
   --secondary: 220 14% 94%;
   --secondary-foreground: 220 10% 12%;
   --accent: 220 14% 95.5%;
@@ -82,6 +89,7 @@
   --primary: 215 92% 70%;
   --primary-hover: 215 92% 77%;
   --primary-foreground: 222 47% 9%;
+  --primary-ink: 215 92% 70%;
   --secondary: 220 12% 19%;
   --secondary-foreground: 220 10% 95%;
   --accent: 220 12% 18.5%;
@@ -128,6 +136,7 @@
   --primary: 25 16% 23%;
   --primary-hover: 25 16% 15%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 25 16% 23%;
   --secondary: 30 10% 94%;
   --secondary-foreground: 30 10% 12%;
   --accent: 30 10% 95.5%;
@@ -173,6 +182,7 @@
   --primary: 35 14% 88%;
   --primary-hover: 35 14% 94%;
   --primary-foreground: 25 16% 10%;
+  --primary-ink: 35 14% 88%;
   --secondary: 30 7% 19%;
   --secondary-foreground: 30 7% 95%;
   --accent: 30 7% 18.5%;
@@ -219,6 +229,7 @@
   --primary: 215 28% 30%;
   --primary-hover: 215 28% 23%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 215 28% 30%;
   --secondary: 215 18% 94%;
   --secondary-foreground: 215 10% 12%;
   --accent: 215 18% 95.5%;
@@ -264,6 +275,7 @@
   --primary: 213 80% 72%;
   --primary-hover: 213 80% 79%;
   --primary-foreground: 215 35% 9%;
+  --primary-ink: 213 80% 72%;
   --secondary: 215 14% 19%;
   --secondary-foreground: 215 10% 95%;
   --accent: 215 14% 18.5%;
@@ -310,6 +322,7 @@
   --primary: 178 82% 26%;
   --primary-hover: 178 82% 21%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 178 82% 21%;
   --secondary: 190 12% 94%;
   --secondary-foreground: 190 10% 12%;
   --accent: 190 12% 95.5%;
@@ -355,6 +368,7 @@
   --primary: 172 62% 50%;
   --primary-hover: 172 62% 58%;
   --primary-foreground: 180 45% 7%;
+  --primary-ink: 172 62% 50%;
   --secondary: 190 10% 19%;
   --secondary-foreground: 190 10% 95%;
   --accent: 190 10% 18.5%;
@@ -401,6 +415,7 @@
   --primary: 262 70% 55%;
   --primary-hover: 262 70% 48%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 262 70% 48%;
   --secondary: 260 12% 94%;
   --secondary-foreground: 260 10% 12%;
   --accent: 260 12% 95.5%;
@@ -446,6 +461,7 @@
   --primary: 262 88% 76%;
   --primary-hover: 262 88% 82%;
   --primary-foreground: 262 45% 10%;
+  --primary-ink: 262 88% 76%;
   --secondary: 260 12% 19%;
   --secondary-foreground: 260 10% 95%;
   --accent: 260 12% 18.5%;
@@ -492,6 +508,7 @@
   --primary: 0 0% 9%;
   --primary-hover: 0 0% 22%;
   --primary-foreground: 0 0% 100%;
+  --primary-ink: 0 0% 9%;
   --secondary: 0 0% 94%;
   --secondary-foreground: 0 0% 12%;
   --accent: 0 0% 95.5%;
@@ -537,6 +554,7 @@
   --primary: 0 0% 98%;
   --primary-hover: 0 0% 86%;
   --primary-foreground: 0 0% 4%;
+  --primary-ink: 0 0% 98%;
   --secondary: 0 0% 14%;
   --secondary-foreground: 0 0% 95%;
   --accent: 0 0% 14%;

@@ -7,9 +7,11 @@
 package controlplanev1
 
 import (
+	v1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -339,11 +341,654 @@ func (x *DatabaseRow) GetValues() []*structpb.Value {
 	return nil
 }
 
+type QueryDatabasePanelRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The control-plane environment id (deploy_environments.id).
+	EnvironmentId string `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	// Which database of the environment. Empty = the environment's only managed
+	// database.
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
+	// One read-only statement. It may reference $1 (from, timestamptz), $2 (to,
+	// timestamptz, exclusive) and $3 (step in seconds, int4), and no other
+	// parameter. SET, RESET and set_config are refused.
+	Sql string `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
+	// How the result is folded: "auto" (or empty), "line", "number", "table" or
+	// "bar". "line" needs time_column. Anything but "line" folds to rows; "auto"
+	// is a time series when the first column is a time.
+	Draw string `protobuf:"bytes,4,opt,name=draw,proto3" json:"draw,omitempty"`
+	// The result column holding each row's timestamp. Empty = the first column
+	// when it is a time (auto) .
+	TimeColumn string `protobuf:"bytes,5,opt,name=time_column,json=timeColumn,proto3" json:"time_column,omitempty"`
+	// The numeric result columns to plot. Empty = every numeric column that is
+	// not the time column or a group column.
+	ValueColumns []string `protobuf:"bytes,6,rep,name=value_columns,json=valueColumns,proto3" json:"value_columns,omitempty"`
+	// The result columns that split rows into separate series. Empty = every
+	// non-numeric column that is not the time column.
+	GroupColumns []string `protobuf:"bytes,7,rep,name=group_columns,json=groupColumns,proto3" json:"group_columns,omitempty"`
+	// The dashboard's time range: $1 = from (inclusive), $2 = to (exclusive).
+	// The server aligns both to step_seconds so one dashboard open in several
+	// tabs is one query. At most 400 days.
+	From *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=from,proto3" json:"from,omitempty"`
+	To   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=to,proto3" json:"to,omitempty"`
+	// $3, a bucket width in seconds. 0 = chosen from the range (about 120
+	// points).
+	StepSeconds int32 `protobuf:"varint,10,opt,name=step_seconds,json=stepSeconds,proto3" json:"step_seconds,omitempty"`
+	// The dashboard this panel belongs to and the panel itself, recorded in the
+	// audit row and the daily activity event.
+	// Identifiers, not free text: they are recorded in the audit row and shown in
+	// the activity feed. Letters, digits and . _ : / -, starting with a letter or
+	// digit.
+	DashboardRef  string `protobuf:"bytes,11,opt,name=dashboard_ref,json=dashboardRef,proto3" json:"dashboard_ref,omitempty"`
+	PanelId       string `protobuf:"bytes,12,opt,name=panel_id,json=panelId,proto3" json:"panel_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryDatabasePanelRequest) Reset() {
+	*x = QueryDatabasePanelRequest{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryDatabasePanelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryDatabasePanelRequest) ProtoMessage() {}
+
+func (x *QueryDatabasePanelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryDatabasePanelRequest.ProtoReflect.Descriptor instead.
+func (*QueryDatabasePanelRequest) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *QueryDatabasePanelRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetSql() string {
+	if x != nil {
+		return x.Sql
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetDraw() string {
+	if x != nil {
+		return x.Draw
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetTimeColumn() string {
+	if x != nil {
+		return x.TimeColumn
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetValueColumns() []string {
+	if x != nil {
+		return x.ValueColumns
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelRequest) GetGroupColumns() []string {
+	if x != nil {
+		return x.GroupColumns
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelRequest) GetStepSeconds() int32 {
+	if x != nil {
+		return x.StepSeconds
+	}
+	return 0
+}
+
+func (x *QueryDatabasePanelRequest) GetDashboardRef() string {
+	if x != nil {
+		return x.DashboardRef
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelRequest) GetPanelId() string {
+	if x != nil {
+		return x.PanelId
+	}
+	return ""
+}
+
+type QueryDatabasePanelResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the result was folded as: "line", "number", "table" or "bar".
+	Draw string `protobuf:"bytes,1,opt,name=draw,proto3" json:"draw,omitempty"`
+	// The result columns, in order, with how each is drawn.
+	SqlColumns []*v1.PanelResultColumn `protobuf:"bytes,2,rep,name=sql_columns,json=sqlColumns,proto3" json:"sql_columns,omitempty"`
+	// draw = "line": one entry per (numeric column x group), with points.
+	Series []*v1.PanelResultSeries `protobuf:"bytes,3,rep,name=series,proto3" json:"series,omitempty"`
+	// Otherwise: the numeric columns after the group columns, in result order,
+	// and one row per result row (group holds the other columns by name).
+	Columns []string             `protobuf:"bytes,4,rep,name=columns,proto3" json:"columns,omitempty"`
+	Rows    []*v1.PanelResultRow `protobuf:"bytes,5,rep,name=rows,proto3" json:"rows,omitempty"`
+	// A cap cut the result: truncated_by is "rows", "bytes", "series" or
+	// "points".
+	Truncated   bool   `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	TruncatedBy string `protobuf:"bytes,7,opt,name=truncated_by,json=truncatedBy,proto3" json:"truncated_by,omitempty"`
+	// The $3 that was bound.
+	StepSeconds int32 `protobuf:"varint,8,opt,name=step_seconds,json=stepSeconds,proto3" json:"step_seconds,omitempty"`
+	DurationMs  int64 `protobuf:"varint,9,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// Which server answered: "ro" (a read replica) or "rw" (the primary).
+	Replica string `protobuf:"bytes,10,opt,name=replica,proto3" json:"replica,omitempty"`
+	// When the rows were read. Up to 30 seconds old when served_from is "cache".
+	AsOf *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	// "db" or "cache".
+	ServedFrom string `protobuf:"bytes,12,opt,name=served_from,json=servedFrom,proto3" json:"served_from,omitempty"`
+	// The audit_log row that recorded this request.
+	AuditId   string `protobuf:"bytes,13,opt,name=audit_id,json=auditId,proto3" json:"audit_id,omitempty"`
+	SqlSha256 string `protobuf:"bytes,14,opt,name=sql_sha256,json=sqlSha256,proto3" json:"sql_sha256,omitempty"`
+	// The database that answered.
+	Database string `protobuf:"bytes,15,opt,name=database,proto3" json:"database,omitempty"`
+	// The range actually bound to $1 and $2, aligned to step_seconds.
+	From          *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryDatabasePanelResponse) Reset() {
+	*x = QueryDatabasePanelResponse{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryDatabasePanelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryDatabasePanelResponse) ProtoMessage() {}
+
+func (x *QueryDatabasePanelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryDatabasePanelResponse.ProtoReflect.Descriptor instead.
+func (*QueryDatabasePanelResponse) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *QueryDatabasePanelResponse) GetDraw() string {
+	if x != nil {
+		return x.Draw
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetSqlColumns() []*v1.PanelResultColumn {
+	if x != nil {
+		return x.SqlColumns
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetSeries() []*v1.PanelResultSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetColumns() []string {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetRows() []*v1.PanelResultRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *QueryDatabasePanelResponse) GetTruncatedBy() string {
+	if x != nil {
+		return x.TruncatedBy
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetStepSeconds() int32 {
+	if x != nil {
+		return x.StepSeconds
+	}
+	return 0
+}
+
+func (x *QueryDatabasePanelResponse) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *QueryDatabasePanelResponse) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOf
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetServedFrom() string {
+	if x != nil {
+		return x.ServedFrom
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetAuditId() string {
+	if x != nil {
+		return x.AuditId
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetSqlSha256() string {
+	if x != nil {
+		return x.SqlSha256
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *QueryDatabasePanelResponse) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *QueryDatabasePanelResponse) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+type ListDashboardDatabasesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnvironmentId string                 `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDashboardDatabasesRequest) Reset() {
+	*x = ListDashboardDatabasesRequest{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDashboardDatabasesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDashboardDatabasesRequest) ProtoMessage() {}
+
+func (x *ListDashboardDatabasesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDashboardDatabasesRequest.ProtoReflect.Descriptor instead.
+func (*ListDashboardDatabasesRequest) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListDashboardDatabasesRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+type ListDashboardDatabasesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Databases     []*DashboardDatabase   `protobuf:"bytes,1,rep,name=databases,proto3" json:"databases,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDashboardDatabasesResponse) Reset() {
+	*x = ListDashboardDatabasesResponse{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDashboardDatabasesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDashboardDatabasesResponse) ProtoMessage() {}
+
+func (x *ListDashboardDatabasesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDashboardDatabasesResponse.ProtoReflect.Descriptor instead.
+func (*ListDashboardDatabasesResponse) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListDashboardDatabasesResponse) GetDatabases() []*DashboardDatabase {
+	if x != nil {
+		return x.Databases
+	}
+	return nil
+}
+
+// DashboardDatabase is one database of the environment with dashboards enabled,
+// the limits its panels run under (from the recorded release shape), and what
+// the dashboard role may read.
+type DashboardDatabase struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	RowCap         int32                  `protobuf:"varint,2,opt,name=row_cap,json=rowCap,proto3" json:"row_cap,omitempty"`
+	TimeoutMs      int32                  `protobuf:"varint,3,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	MaxConcurrency int32                  `protobuf:"varint,4,opt,name=max_concurrency,json=maxConcurrency,proto3" json:"max_concurrency,omitempty"`
+	Tables         []*DashboardTable      `protobuf:"bytes,5,rep,name=tables,proto3" json:"tables,omitempty"`
+	// "ro" or "rw", as in QueryDatabasePanelResponse.
+	Replica string `protobuf:"bytes,6,opt,name=replica,proto3" json:"replica,omitempty"`
+	// Set when the tables could not be read (the dashboard role is not
+	// provisioned yet, the database is unreachable). The database is still
+	// listed: it is enabled.
+	TablesError   string `protobuf:"bytes,7,opt,name=tables_error,json=tablesError,proto3" json:"tables_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DashboardDatabase) Reset() {
+	*x = DashboardDatabase{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DashboardDatabase) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DashboardDatabase) ProtoMessage() {}
+
+func (x *DashboardDatabase) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DashboardDatabase.ProtoReflect.Descriptor instead.
+func (*DashboardDatabase) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DashboardDatabase) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DashboardDatabase) GetRowCap() int32 {
+	if x != nil {
+		return x.RowCap
+	}
+	return 0
+}
+
+func (x *DashboardDatabase) GetTimeoutMs() int32 {
+	if x != nil {
+		return x.TimeoutMs
+	}
+	return 0
+}
+
+func (x *DashboardDatabase) GetMaxConcurrency() int32 {
+	if x != nil {
+		return x.MaxConcurrency
+	}
+	return 0
+}
+
+func (x *DashboardDatabase) GetTables() []*DashboardTable {
+	if x != nil {
+		return x.Tables
+	}
+	return nil
+}
+
+func (x *DashboardDatabase) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *DashboardDatabase) GetTablesError() string {
+	if x != nil {
+		return x.TablesError
+	}
+	return ""
+}
+
+type DashboardTable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schema        string                 `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Columns       []*DashboardColumn     `protobuf:"bytes,3,rep,name=columns,proto3" json:"columns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DashboardTable) Reset() {
+	*x = DashboardTable{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DashboardTable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DashboardTable) ProtoMessage() {}
+
+func (x *DashboardTable) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DashboardTable.ProtoReflect.Descriptor instead.
+func (*DashboardTable) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DashboardTable) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *DashboardTable) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DashboardTable) GetColumns() []*DashboardColumn {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+type DashboardColumn struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The Postgres type, e.g. "bigint", "timestamp with time zone".
+	PgType        string `protobuf:"bytes,2,opt,name=pg_type,json=pgType,proto3" json:"pg_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DashboardColumn) Reset() {
+	*x = DashboardColumn{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DashboardColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DashboardColumn) ProtoMessage() {}
+
+func (x *DashboardColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DashboardColumn.ProtoReflect.Descriptor instead.
+func (*DashboardColumn) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DashboardColumn) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DashboardColumn) GetPgType() string {
+	if x != nil {
+		return x.PgType
+	}
+	return ""
+}
+
 var File_services_app_database_v1_app_database_proto protoreflect.FileDescriptor
 
 const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\n" +
-	"+services/app_database/v1/app_database.proto\x12\x0fcontrolplane.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x8b\x02\n" +
+	"+services/app_database/v1/app_database.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x02\n" +
 	"\x14QueryDatabaseRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
 	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x10\n" +
@@ -371,9 +1016,69 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
 	"\apg_type\x18\x02 \x01(\tR\x06pgType\"=\n" +
 	"\vDatabaseRow\x12.\n" +
-	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values2t\n" +
+	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values\"\xae\x03\n" +
+	"\x19QueryDatabasePanelRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x10\n" +
+	"\x03sql\x18\x03 \x01(\tR\x03sql\x12\x12\n" +
+	"\x04draw\x18\x04 \x01(\tR\x04draw\x12\x1f\n" +
+	"\vtime_column\x18\x05 \x01(\tR\n" +
+	"timeColumn\x12#\n" +
+	"\rvalue_columns\x18\x06 \x03(\tR\fvalueColumns\x12#\n" +
+	"\rgroup_columns\x18\a \x03(\tR\fgroupColumns\x12.\n" +
+	"\x04from\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12!\n" +
+	"\fstep_seconds\x18\n" +
+	" \x01(\x05R\vstepSeconds\x12#\n" +
+	"\rdashboard_ref\x18\v \x01(\tR\fdashboardRef\x12\x19\n" +
+	"\bpanel_id\x18\f \x01(\tR\apanelId\"\xa3\x05\n" +
+	"\x1aQueryDatabasePanelResponse\x12\x12\n" +
+	"\x04draw\x18\x01 \x01(\tR\x04draw\x12C\n" +
+	"\vsql_columns\x18\x02 \x03(\v2\".controlplane.v1.PanelResultColumnR\n" +
+	"sqlColumns\x12:\n" +
+	"\x06series\x18\x03 \x03(\v2\".controlplane.v1.PanelResultSeriesR\x06series\x12\x18\n" +
+	"\acolumns\x18\x04 \x03(\tR\acolumns\x123\n" +
+	"\x04rows\x18\x05 \x03(\v2\x1f.controlplane.v1.PanelResultRowR\x04rows\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12!\n" +
+	"\ftruncated_by\x18\a \x01(\tR\vtruncatedBy\x12!\n" +
+	"\fstep_seconds\x18\b \x01(\x05R\vstepSeconds\x12\x1f\n" +
+	"\vduration_ms\x18\t \x01(\x03R\n" +
+	"durationMs\x12\x18\n" +
+	"\areplica\x18\n" +
+	" \x01(\tR\areplica\x12/\n" +
+	"\x05as_of\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12\x1f\n" +
+	"\vserved_from\x18\f \x01(\tR\n" +
+	"servedFrom\x12\x19\n" +
+	"\baudit_id\x18\r \x01(\tR\aauditId\x12\x1d\n" +
+	"\n" +
+	"sql_sha256\x18\x0e \x01(\tR\tsqlSha256\x12\x1a\n" +
+	"\bdatabase\x18\x0f \x01(\tR\bdatabase\x12.\n" +
+	"\x04from\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"F\n" +
+	"\x1dListDashboardDatabasesRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"b\n" +
+	"\x1eListDashboardDatabasesResponse\x12@\n" +
+	"\tdatabases\x18\x01 \x03(\v2\".controlplane.v1.DashboardDatabaseR\tdatabases\"\xfe\x01\n" +
+	"\x11DashboardDatabase\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
+	"\arow_cap\x18\x02 \x01(\x05R\x06rowCap\x12\x1d\n" +
+	"\n" +
+	"timeout_ms\x18\x03 \x01(\x05R\ttimeoutMs\x12'\n" +
+	"\x0fmax_concurrency\x18\x04 \x01(\x05R\x0emaxConcurrency\x127\n" +
+	"\x06tables\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardTableR\x06tables\x12\x18\n" +
+	"\areplica\x18\x06 \x01(\tR\areplica\x12!\n" +
+	"\ftables_error\x18\a \x01(\tR\vtablesError\"x\n" +
+	"\x0eDashboardTable\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12:\n" +
+	"\acolumns\x18\x03 \x03(\v2 .controlplane.v1.DashboardColumnR\acolumns\">\n" +
+	"\x0fDashboardColumn\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
+	"\apg_type\x18\x02 \x01(\tR\x06pgType2\xde\x02\n" +
 	"\x12AppDatabaseService\x12^\n" +
-	"\rQueryDatabase\x12%.controlplane.v1.QueryDatabaseRequest\x1a&.controlplane.v1.QueryDatabaseResponseB\xde\x01\n" +
+	"\rQueryDatabase\x12%.controlplane.v1.QueryDatabaseRequest\x1a&.controlplane.v1.QueryDatabaseResponse\x12m\n" +
+	"\x12QueryDatabasePanel\x12*.controlplane.v1.QueryDatabasePanelRequest\x1a+.controlplane.v1.QueryDatabasePanelResponse\x12y\n" +
+	"\x16ListDashboardDatabases\x12..controlplane.v1.ListDashboardDatabasesRequest\x1a/.controlplane.v1.ListDashboardDatabasesResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AppDatabaseProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/app_database/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -388,25 +1093,51 @@ func file_services_app_database_v1_app_database_proto_rawDescGZIP() []byte {
 	return file_services_app_database_v1_app_database_proto_rawDescData
 }
 
-var file_services_app_database_v1_app_database_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_services_app_database_v1_app_database_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_services_app_database_v1_app_database_proto_goTypes = []any{
-	(*QueryDatabaseRequest)(nil),  // 0: controlplane.v1.QueryDatabaseRequest
-	(*QueryDatabaseResponse)(nil), // 1: controlplane.v1.QueryDatabaseResponse
-	(*DatabaseColumn)(nil),        // 2: controlplane.v1.DatabaseColumn
-	(*DatabaseRow)(nil),           // 3: controlplane.v1.DatabaseRow
-	(*structpb.Value)(nil),        // 4: google.protobuf.Value
+	(*QueryDatabaseRequest)(nil),           // 0: controlplane.v1.QueryDatabaseRequest
+	(*QueryDatabaseResponse)(nil),          // 1: controlplane.v1.QueryDatabaseResponse
+	(*DatabaseColumn)(nil),                 // 2: controlplane.v1.DatabaseColumn
+	(*DatabaseRow)(nil),                    // 3: controlplane.v1.DatabaseRow
+	(*QueryDatabasePanelRequest)(nil),      // 4: controlplane.v1.QueryDatabasePanelRequest
+	(*QueryDatabasePanelResponse)(nil),     // 5: controlplane.v1.QueryDatabasePanelResponse
+	(*ListDashboardDatabasesRequest)(nil),  // 6: controlplane.v1.ListDashboardDatabasesRequest
+	(*ListDashboardDatabasesResponse)(nil), // 7: controlplane.v1.ListDashboardDatabasesResponse
+	(*DashboardDatabase)(nil),              // 8: controlplane.v1.DashboardDatabase
+	(*DashboardTable)(nil),                 // 9: controlplane.v1.DashboardTable
+	(*DashboardColumn)(nil),                // 10: controlplane.v1.DashboardColumn
+	(*structpb.Value)(nil),                 // 11: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
+	(*v1.PanelResultColumn)(nil),           // 13: controlplane.v1.PanelResultColumn
+	(*v1.PanelResultSeries)(nil),           // 14: controlplane.v1.PanelResultSeries
+	(*v1.PanelResultRow)(nil),              // 15: controlplane.v1.PanelResultRow
 }
 var file_services_app_database_v1_app_database_proto_depIdxs = []int32{
-	2, // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
-	3, // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
-	4, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
-	0, // 3: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
-	1, // 4: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2,  // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
+	3,  // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
+	11, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
+	12, // 3: controlplane.v1.QueryDatabasePanelRequest.from:type_name -> google.protobuf.Timestamp
+	12, // 4: controlplane.v1.QueryDatabasePanelRequest.to:type_name -> google.protobuf.Timestamp
+	13, // 5: controlplane.v1.QueryDatabasePanelResponse.sql_columns:type_name -> controlplane.v1.PanelResultColumn
+	14, // 6: controlplane.v1.QueryDatabasePanelResponse.series:type_name -> controlplane.v1.PanelResultSeries
+	15, // 7: controlplane.v1.QueryDatabasePanelResponse.rows:type_name -> controlplane.v1.PanelResultRow
+	12, // 8: controlplane.v1.QueryDatabasePanelResponse.as_of:type_name -> google.protobuf.Timestamp
+	12, // 9: controlplane.v1.QueryDatabasePanelResponse.from:type_name -> google.protobuf.Timestamp
+	12, // 10: controlplane.v1.QueryDatabasePanelResponse.to:type_name -> google.protobuf.Timestamp
+	8,  // 11: controlplane.v1.ListDashboardDatabasesResponse.databases:type_name -> controlplane.v1.DashboardDatabase
+	9,  // 12: controlplane.v1.DashboardDatabase.tables:type_name -> controlplane.v1.DashboardTable
+	10, // 13: controlplane.v1.DashboardTable.columns:type_name -> controlplane.v1.DashboardColumn
+	0,  // 14: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
+	4,  // 15: controlplane.v1.AppDatabaseService.QueryDatabasePanel:input_type -> controlplane.v1.QueryDatabasePanelRequest
+	6,  // 16: controlplane.v1.AppDatabaseService.ListDashboardDatabases:input_type -> controlplane.v1.ListDashboardDatabasesRequest
+	1,  // 17: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
+	5,  // 18: controlplane.v1.AppDatabaseService.QueryDatabasePanel:output_type -> controlplane.v1.QueryDatabasePanelResponse
+	7,  // 19: controlplane.v1.AppDatabaseService.ListDashboardDatabases:output_type -> controlplane.v1.ListDashboardDatabasesResponse
+	17, // [17:20] is the sub-list for method output_type
+	14, // [14:17] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_services_app_database_v1_app_database_proto_init() }
@@ -421,7 +1152,7 @@ func file_services_app_database_v1_app_database_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_app_database_v1_app_database_proto_rawDesc), len(file_services_app_database_v1_app_database_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

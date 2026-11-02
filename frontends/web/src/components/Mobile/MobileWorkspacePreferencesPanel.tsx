@@ -144,7 +144,7 @@ export function MobileWorkspacePreferencesPanel() {
       />
 
       <div className="flex items-start gap-3 bg-muted/30 p-4">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
         <p className="text-xs text-muted-foreground">
           Archiving always keeps the workspace record so you can restore it later.
           Cleanup only controls whether local files or git branches are removed.

@@ -4,7 +4,22 @@ import { describe, expect, it } from "vitest";
 
 import type { TimelineEntry } from "@/services/controlPlane/observability/rumTypes";
 
-import { currentEntryIndex, filterTimeline, formatOffset, formatSessionWhen, isLive, LIVE_WINDOW_MS, rumSessionIdOf, sessionLink, sessionTitle } from "../sessionModel";
+import {
+  currentEntryIndex,
+  filterTimeline,
+  formatOffset,
+  formatSessionWhen,
+  isLive,
+  isReplayKnownUnplayable,
+  LIVE_WINDOW_MS,
+  noReplayReason,
+  noteReplayUnplayable,
+  recordingStart,
+  resetReplayVerdictsForTests,
+  rumSessionIdOf,
+  sessionLink,
+  sessionTitle,
+} from "../sessionModel";
 
 const at = (timeMs: number, kind: TimelineEntry["kind"]) => ({ timeMs, kind }) as TimelineEntry;
 
@@ -86,5 +101,33 @@ describe("a session's name", () => {
     expect(sessionTitle(undefined, Date.UTC(2025, 9, 25, 13, 32), utc)).toBe("Unknown app · Today 13:32");
     expect(sessionTitle("  ", 0, utc)).toBe("Unknown app · unknown time");
     expect(sessionTitle("shop-web", Number.NaN, utc)).toBe("shop-web · unknown time");
+  });
+});
+
+describe("replay playability", () => {
+  const ev = (type: number) => ({ type, timestamp: 0 });
+
+  it("starts a recording at the Meta before its first full snapshot, past a previous session's tail", () => {
+    // 3,3 = the last events of the session before, stored under this id at the boundary.
+    expect(recordingStart([ev(3), ev(3), ev(4), ev(3), ev(2), ev(3)])).toBe(2);
+    expect(recordingStart([ev(2), ev(3)])).toBe(0);
+    expect(recordingStart([ev(3), ev(2)])).toBe(1);
+    expect(recordingStart([ev(3)])).toBe(-1);
+    expect(recordingStart([])).toBe(-1);
+  });
+
+  it("says why a session has no replay when its summary can tell", () => {
+    expect(noReplayReason({ pageViews: 0, interactions: 0 })).toMatch(/no page view or interaction, only background requests/);
+    expect(noReplayReason({ pageViews: 3, interactions: 0 })).toMatch(/replay sample, replay is off/);
+  });
+
+  it("remembers, for the tab, a replay the player found unplayable", () => {
+    resetReplayVerdictsForTests();
+    expect(isReplayKnownUnplayable("s1")).toBe(false);
+    noteReplayUnplayable("s1");
+    expect(isReplayKnownUnplayable("s1")).toBe(true);
+    expect(JSON.parse(window.sessionStorage.getItem("obs.sessions.unplayable") ?? "[]")).toEqual(["s1"]);
+    resetReplayVerdictsForTests();
+    expect(isReplayKnownUnplayable("s1")).toBe(false);
   });
 });

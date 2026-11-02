@@ -35,7 +35,7 @@ func TestWorktreeToolForceResetsStaleBranchesAfterValidation(t *testing.T) {
 	require.NoError(t, repo.CreateProject(ctx, project))
 	chat := &db.Chat{ID: uuid.NewString(), ProjectID: project.ID, UserID: "test-user", CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateChat(ctx, chat))
-	rc := rctx.NewToolContext(ctx, chat.ID, chat.ID, project, nil)
+	rc := rctx.NewToolContext(ctx, chat.ID, chat.ID, &rctx.Project{ID: project.ID, Name: project.Name, Checkout: project.Path}, nil)
 	machine := &forceToolMachine{}
 	oldHeads := map[string]string{}
 	for _, name := range []string{"api", "web"} {

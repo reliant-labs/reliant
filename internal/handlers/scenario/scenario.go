@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
@@ -300,7 +301,7 @@ func (s *Service) RunScenario(
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 			}
-			if project == nil || project.Path == "" {
+			if project == nil {
 				return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project not found: %s", req.Msg.ProjectId))
 			}
 			projectID = project.ID
@@ -495,29 +496,34 @@ func (s *Service) UploadScenario(
 		return nil, svcerr.InvalidArgument("invalid scenario YAML: " + err.Error())
 	}
 
-	// Get the project path
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	if project == nil || project.Path == "" {
+	if project == nil {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project not found: %s", req.Msg.ProjectId))
 	}
-
-	// Where the locator (workflowref) reads it back from:
-	// .reliant/workflows/<slug>/scenarios/<filename>.yaml.
-	filePath := filepath.Join(project.Path, filepath.FromSlash(workflowref.Dir), filepath.FromSlash(workflowref.ScenarioPath(req.Msg.WorkflowSlug, filename)))
-
-	// Write the file via daemon (fs.write_file auto-creates parent directories)
 	if s.deps.Router == nil {
 		return nil, svcerr.Unavailable("no daemon router: this server cannot write to the project's machine")
 	}
 	userID = auth.MustGetUserID(ctx)
+	// The file is written into the project's checkout on the machine holding
+	// it, at its path there — never projects.path, the creating machine's.
+	checkout, err := projectcheckout.Resolve(ctx, s.deps.Repo, s.deps.Router, userID, project, "save a scenario into it")
+	if err != nil {
+		return nil, err
+	}
+
+	// Where the locator (workflowref) reads it back from:
+	// .reliant/workflows/<slug>/scenarios/<filename>.yaml.
+	filePath := checkout.Join(filepath.Join(filepath.FromSlash(workflowref.Dir), filepath.FromSlash(workflowref.ScenarioPath(req.Msg.WorkflowSlug, filename))))
+
+	// Write the file via daemon (fs.write_file auto-creates parent directories)
 	writePayload, _ := json.Marshal(map[string]interface{}{
 		"path":    filePath,
 		"content": req.Msg.YamlContent,
 	})
-	if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
+	if _, err := checkout.Send(ctx, s.deps.Router, userID, "fs.write_file", writePayload, 15000); err != nil {
 		return nil, daemonerr.Error("write the scenario file", err)
 	}
 

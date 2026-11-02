@@ -166,7 +166,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
                 value={copyName}
                 onChange={(e) => setCopyName(e.target.value)}
                 placeholder="New preset name"
-                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 onKeyDown={(e) => e.key === 'Enter' && handleCopy()}
               />
               <Button onClick={handleCopy} disabled={isCopying || !copyName.trim()}>

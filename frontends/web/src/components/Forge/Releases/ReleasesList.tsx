@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 import { formatPerDay, formatSpan } from "../Observability/deliveryScope";
 import { ENV_ALL } from "../Console/envScope";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import {
   Ago,
   ChecksMark,
@@ -146,7 +147,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           <button
             type="button"
             onClick={() => void data.releases.refetch()}
-            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {data.releases.isFetching ? "Retrying…" : "Try again"}
           </button>
@@ -164,20 +165,21 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           icon={<TagIcon className="h-4 w-4" />}
           title="No releases yet"
           about={`Releases lists every build of ${project} Reliant has recorded: the commit it came from, what it changed, which environments run it, and how each promotion went.`}
+          agent={<DeployWithAgentButton env={env === ENV_ALL || !scopedEnv ? null : env} forgeProject={project} />}
           steps={[
             {
               text: "Deploy from your checkout. It builds, cuts a release, deploys it, and the release appears here.",
-              command: `forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
+              command: `reliant forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
             },
             {
               text: "Promote that release to the next environment: exactly what staging runs, with nothing rebuilt.",
-              command: "forge env deploy prod --from staging",
+              command: "reliant forge env deploy prod --from staging",
             },
           ]}
           docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
         >
           <p>
-            A release is cut the first time {project} is deployed through Reliant. A local environment (forge env up) runs your working tree
+            A release is cut the first time {project} is deployed through Reliant. A local environment (reliant forge env up) runs your working tree
             and never has releases.
           </p>
         </GettingStarted>
@@ -203,7 +205,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2" data-testid="releases-toolbar">
-          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="sr-only">Filter releases</span>
             <input
@@ -527,7 +529,7 @@ function PipelineSkeleton() {
 // ── Toolbar chips ───────────────────────────────────────────────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 /** Solid border on the surface fill, as the mockup's chips; a set filter reads in ink with a stronger border. */
 const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 

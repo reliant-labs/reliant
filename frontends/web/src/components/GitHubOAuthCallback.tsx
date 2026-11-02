@@ -111,7 +111,7 @@ function TerminalView({ kind }: { kind: Terminal }) {
         <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8">
           <div className="flex flex-col items-center gap-4 text-center">
             <BrandMark className="h-8 w-8" />
-            <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
+            <CheckCircle2 className="h-6 w-6 text-primary-ink" aria-hidden="true" />
             <h2 className="text-lg font-medium">{copy.title}</h2>
             <p className="text-sm text-muted-foreground">{copy.body}</p>
           </div>

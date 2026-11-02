@@ -61,7 +61,7 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns }: Automation
         disabled={!onOpenRuns}
         className={cn(
           "inline-flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 text-2xs font-medium text-foreground",
-          "transition-colors hover:border-border hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          "transition-colors hover:border-border hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:cursor-default",
         )}
         aria-label={`${runningLabel}. Open live runs`}

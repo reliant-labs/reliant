@@ -23,8 +23,14 @@ func (t *Tree) limitNproc() {}
 // Kill kills nothing outside Linux; the caller kills the process group.
 func (t *Tree) Kill() bool { return false }
 
+// limitNote is "" outside Linux: no limit refuses a command anything.
+func (t *Tree) limitNote() string { return "" }
+
 // Populated is false outside Linux.
 func (t *Tree) Populated() bool { return false }
 
-// Release does nothing outside Linux.
-func (t *Tree) Release() {}
+// Release does nothing else outside Linux.
+func (t *Tree) Release() { t.forget() }
+
+// processIdentity is unknown outside Linux, so nothing enters the ledger.
+func processIdentity(int) (pgid int, start uint64, ok bool) { return 0, 0, false }

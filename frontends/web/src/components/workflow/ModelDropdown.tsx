@@ -146,7 +146,7 @@ export function ModelDropdown({
                       }}
                       className={cn(
                         'w-full px-3 py-1.5 text-left text-xs transition-colors',
-                        isSelected ? 'bg-primary/15 text-primary' : 'hover:bg-muted',
+                        isSelected ? 'bg-primary/15 text-primary-ink' : 'hover:bg-muted',
                       )}
                     >
                       <div className="flex items-center justify-between">
@@ -154,7 +154,7 @@ export function ModelDropdown({
                           <div className="font-medium">{model.name}</div>
                           <div className="text-xs text-muted-foreground">{model.id}</div>
                         </div>
-                        {isSelected && <Check className="w-4 h-4 shrink-0 text-primary" />}
+                        {isSelected && <Check className="w-4 h-4 shrink-0 text-primary-ink" />}
                       </div>
                     </button>
                   )

@@ -34,7 +34,7 @@ import (
 
 // DaemonAuthDeps is what resolves daemon credentials.
 type DaemonAuthDeps struct {
-	Tokens auth.AccessTokenIntrospector
+	Tokens auth.AccessTokenAccountIntrospector
 }
 
 // NewDaemonAuth authenticates daemons by their `rlat_` access token, checked

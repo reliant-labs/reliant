@@ -104,7 +104,7 @@ export function ParamsSettingsPage({
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
               <SlidersHorizontal className="h-3.5 w-3.5" />
             </div>
             <h3 className="text-sm font-semibold">Settings</h3>
@@ -128,7 +128,7 @@ export function ParamsSettingsPage({
           <ChevronLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
             <SlidersHorizontal className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0">
@@ -165,14 +165,14 @@ export function ParamsSettingsPage({
                     <ChevronRight className="h-3.5 w-3.5" />
                   )}
                   <span className="flex-1 truncate">{paramGroup.label}</span>
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary-ink">
                     {paramGroup.params.length}
                   </span>
                 </button>
               ) : (
                 <div className="mb-2 flex items-center justify-between px-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <span>{paramGroup.label}</span>
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs text-primary">
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs text-primary-ink">
                     {paramGroup.params.length}
                   </span>
                 </div>

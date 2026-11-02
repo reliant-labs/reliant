@@ -15,9 +15,11 @@ import (
 )
 
 // CheckProcessUse inspects same-owner Linux processes' cwd, executable, open
-// files and mapped files. Unreadable state is a hold, never absence. This is a
-// fresh observation, NOT an OS write freeze; callers still re-inventory under
-// daemon admission immediately before removal.
+// files and mapped files. Unreadable state is a hold, never absence, except for
+// an undumpable process the daemon accounts for or a known agent that never
+// holds a worktree (judgeUninspectable). This is a fresh observation, NOT an
+// OS write freeze; callers still re-inventory under daemon admission
+// immediately before removal.
 func CheckProcessUse(ctx context.Context, paths []string) error {
 	return checkProcessUseAt(ctx, "/proc", os.Geteuid(), paths)
 }
@@ -82,7 +84,10 @@ procs:
 				if processDone(base) {
 					continue procs
 				}
-				return fmt.Errorf("process %s %s unreadable: %w", entry.Name(), name, err)
+				if err := judgeUninspectable(ctx, base, entry.Name(), name, roots, err); err != nil {
+					return err
+				}
+				continue procs
 			}
 			if processPathUses(target, roots) {
 				return fmt.Errorf("workspace in use by process %s (%s)", entry.Name(), name)
@@ -96,7 +101,10 @@ procs:
 			if processDone(base) {
 				continue
 			}
-			return fmt.Errorf("process fd enumeration unavailable: %w", err)
+			if err := judgeUninspectable(ctx, base, entry.Name(), "fd", roots, err); err != nil {
+				return err
+			}
+			continue
 		}
 		if len(fds) > 65536 {
 			return errors.New("process fd budget exceeded")
@@ -121,7 +129,10 @@ procs:
 				if processDone(base) {
 					continue procs
 				}
-				return fmt.Errorf("process %s fd unreadable: %w", entry.Name(), err)
+				if err := judgeUninspectable(ctx, base, entry.Name(), "fd "+fd.Name(), roots, err); err != nil {
+					return err
+				}
+				continue procs
 			}
 			if processPathUses(target, roots) {
 				return fmt.Errorf("workspace open by process %s", entry.Name())
@@ -132,7 +143,10 @@ procs:
 			if processDone(base) {
 				continue
 			}
-			return fmt.Errorf("process mappings unavailable: %w", err)
+			if err := judgeUninspectable(ctx, base, entry.Name(), "maps", roots, err); err != nil {
+				return err
+			}
+			continue
 		}
 		scanner := bufio.NewScanner(maps)
 		scanner.Buffer(make([]byte, 4096), 1<<20)

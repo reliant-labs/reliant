@@ -56,7 +56,7 @@ export function OAuthButton({ provider, loading = false, disabled, ...props }: O
         'border rounded-lg shadow-sm text-sm font-medium',
         'transition-colors duration-200',
         'disabled:opacity-50 disabled:cursor-not-allowed',
-        'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+        'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
         config.bgColor,
         config.textColor,
         config.borderColor,

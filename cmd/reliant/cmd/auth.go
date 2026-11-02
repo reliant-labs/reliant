@@ -14,13 +14,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/reliant-labs/forge/pkg/credentials"
-
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/daemoninstance"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/forgecred"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 )
 
 func newAuthCmd() *cobra.Command {
@@ -138,6 +139,12 @@ which exchanges this login — or the daemon's credential — for one that holds
 only deploy/secret/domain authority, for at most an hour. This login never
 leaves this machine's Reliant files.
 
+ONE ACCOUNT PER MACHINE. The daemon on this machine has its own sign-in
+(~/.reliant/daemon.json, see 'reliant daemon start'). Logging in as one
+account removes a saved daemon sign-in of any other account for this server,
+says so, and names any daemon still running as it; the next 'reliant daemon
+start' pairs the machine as you.
+
 For CI, skip login and set RELIANT_TOKEN.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveServer(cmd)
@@ -163,7 +170,7 @@ For CI, skip login and set RELIANT_TOKEN.`,
 // runLogin gets the CLI's login token by flow. Both flows ask for the same
 // authority under the same name, so where it came from makes no difference
 // to the token.
-func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Credential, error) {
+func runLogin(cmd *cobra.Command, server string, flow loginFlow) (cliauth.Session, error) {
 	out := cmd.OutOrStdout()
 	// ONE LOGIN: the forge scopes ride along as a CEILING the control plane
 	// clips to your grants, so forge can later exchange this login for a
@@ -197,7 +204,7 @@ func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Cr
 			return cred, err
 		}
 		if flow.Remote != "" {
-			return credentials.Credential{}, fmt.Errorf("%s does not offer device-code sign-in, and a browser login cannot work here (%s).\n"+
+			return cliauth.Session{}, fmt.Errorf("%s does not offer device-code sign-in, and a browser login cannot work here (%s).\n"+
 				"Mint a token in the web app and set RELIANT_TOKEN, or pass --browser if a browser can reach this machine after all", server, flow.Remote)
 		}
 		fmt.Fprintf(out, "%s does not offer device-code sign-in; approving in your browser instead.\n", server)
@@ -212,12 +219,15 @@ func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Cr
 }
 
 // finishLogin stores a fresh login, retires what the previous one left behind
-// and reports it — the same for either flow.
-func finishLogin(cmd *cobra.Command, target *connection, cred credentials.Credential) error {
+// and reports it — the same for either flow. A saved daemon sign-in of another
+// account is part of what is retired: the machine is kept to one account
+// (account_in_step.go).
+func finishLogin(cmd *cobra.Command, target *connection, cred cliauth.Session) error {
 	path, err := cliauth.Store(target.ServerURL, cred)
 	if err != nil {
 		return fmt.Errorf("saving credentials: %w", err)
 	}
+	retired, retireErr := retireOtherAccountsDaemonSignIns(cmd.Context(), target, cred.Account)
 	// A fresh login means fresh exchanges: drop tokens cached from the
 	// previous one, and the copies older releases deposited into forge's file.
 	if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
@@ -226,11 +236,19 @@ func finishLogin(cmd *cobra.Command, target *connection, cred credentials.Creden
 	retireLegacyForgeDeposits()
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
+	if cred.Account.Known() {
+		fmt.Fprintf(out, "  Account:     %s\n", cred.Account)
+	}
 	fmt.Fprintf(out, "  Token:       %s… (%s)\n", cred.TokenPrefix, strings.Join(cred.Scopes, " "))
 	if cred.ExpiresAt != nil {
 		fmt.Fprintf(out, "  Expires:     %s\n", cred.ExpiresAt.Format(time.RFC3339))
 	}
 	fmt.Fprintf(out, "  Credentials: %s\n", path)
+	writeRetiredSignIns(out, retired, cred.Account)
+	if retireErr != nil {
+		daemonPath, _ := auth.DaemonCredentialsFilePath()
+		return fmt.Errorf("logged in, but could not remove another account's daemon sign-in for %s from %s: %w", target.ServerURL, daemonPath, retireErr)
+	}
 	return nil
 }
 
@@ -262,7 +280,7 @@ Purely local: no network call.`,
 				fmt.Fprintf(out, "Using the token in %s\n  Server: %s\n", envToken, target.describeServer())
 				return nil
 			}
-			cred, path, err := cliauth.Lookup(target.ServerURL)
+			cred, path, err := cliauth.LookupSession(target.ServerURL)
 			if err != nil {
 				info["logged_in"] = false
 				info["reason"] = err.Error()
@@ -276,6 +294,12 @@ Purely local: no network call.`,
 			}
 			info["logged_in"] = true
 			info["credential"] = path
+			if cred.Account.Known() {
+				info["account_id"] = cred.Account.ID
+				if cred.Account.Email != "" {
+					info["account_email"] = cred.Account.Email
+				}
+			}
 			info["token_prefix"] = cred.TokenPrefix
 			info["scopes"] = cred.Scopes
 			if cred.ExpiresAt != nil {
@@ -285,6 +309,11 @@ Purely local: no network call.`,
 				return writeJSON(out, info)
 			}
 			fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
+			if cred.Account.Known() {
+				fmt.Fprintf(out, "  Account:     %s\n", cred.Account)
+			} else {
+				fmt.Fprintf(out, "  Account:     not recorded (this login predates it; 'reliant auth login%s' records it)\n", target.serverFlagHint())
+			}
 			fmt.Fprintf(out, "  Token:       %s… (%s)\n", cred.TokenPrefix, strings.Join(cred.Scopes, " "))
 			if cred.ExpiresAt != nil {
 				fmt.Fprintf(out, "  Expires:     %s\n", cred.ExpiresAt.Format(time.RFC3339))
@@ -325,16 +354,28 @@ func writeJSON(w io.Writer, v any) error {
 func newAuthLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Forget the login for the resolved server",
-		Long: `Removes the resolved server's entry from the shared credentials file. Every
-other entry (other servers, and forge's logins) is untouched. The token stays
-valid server-side until it expires or you revoke it in the web app.`,
+		Short: "Sign this machine out of the resolved server",
+		Long: `Signs this machine out of the resolved server. It removes the CLI's login
+from the shared credentials file, and every daemon sign-in saved for that
+server in ~/.reliant/daemon.json, so the next 'reliant daemon start' pairs the
+machine again (it prints a code to approve in the Reliant app) instead of
+quietly connecting as whoever signed in last. Other servers' entries, and
+forge's own logins, are untouched.
+
+A daemon that is already running stays connected, as the account it started
+with, until it is stopped; logout names any it finds and how to stop them. The
+desktop app has its own sign-in: the next time it starts its daemon it saves a
+new daemon sign-in for whoever is signed in to the app. On a Reliant cloud
+machine the daemon's sign-in belongs to the platform and is left alone.
+
+The tokens stay valid server-side until they expire or you revoke them under
+Settings → Access Tokens in the app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-			existed, path, err := cliauth.Remove(target.ServerURL)
+			loggedIn, _, err := cliauth.Remove(target.ServerURL)
 			if err != nil {
 				return err
 			}
@@ -347,15 +388,109 @@ valid server-side until it expires or you revoke it in the web app.`,
 				logging.Warn("could not clear cached forge tokens", "error", err)
 			}
 			retireLegacyForgeDeposits()
-			if !existed {
-				fmt.Fprintf(cmd.OutOrStdout(), "Not logged in to %s (nothing in %s)\n", target.ServerURL, path)
+
+			out := cmd.OutOrStdout()
+			// A cloud machine's daemon credential is a Secret the workspace
+			// operator mounts read-only: it is the platform's, not this
+			// login's, and removing it would leave the machine unable to
+			// reconnect after its next restart.
+			if isManagedMachine() {
+				writeLogoutReport(out, target.ServerURL, loggedIn, 0, nil)
+				fmt.Fprintln(out, "  This is a Reliant cloud machine: its daemon keeps the sign-in Reliant manages for it.")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Logged out of %s\n", target.ServerURL)
-			fmt.Fprintln(cmd.OutOrStdout(), "Note: a running daemon uses its own credential and is unaffected")
+			removed, delErr := auth.DeleteDaemonCredentialsForServer(target.ServerURL)
+			writeLogoutReport(out, target.ServerURL, loggedIn, len(removed), runningDaemonsFor(target.ServerURL))
+			if delErr != nil {
+				path, _ := auth.DaemonCredentialsFilePath()
+				return fmt.Errorf("could not remove this machine's daemon sign-in for %s from %s: %w", target.ServerURL, path, delErr)
+			}
 			return nil
 		},
 	}
+}
+
+// runningDaemon is a live daemon `auth logout` found for the server it signed
+// out of.
+type runningDaemon struct {
+	// PID is 0 when the daemon has not published its runtime record yet.
+	PID     int
+	DataDir string
+	// slug is the instance key, "<origin>/<account>/<workspace>".
+	slug string
+}
+
+// runningDaemonsFor lists the daemons alive on this machine for serverURL's
+// origin, in any account or workspace. Liveness is the instance lock, exactly
+// as `daemon ls` reports it. Best-effort: a sign-out never fails because the
+// instances directory could not be read.
+func runningDaemonsFor(serverURL string) []runningDaemon {
+	origin := daemoninstance.OriginKey(serverURL)
+	if origin == "" {
+		return nil
+	}
+	instances, err := daemonstate.ListDefault()
+	if err != nil {
+		logging.Warn("could not list daemon instances", "error", err)
+		return nil
+	}
+	prefix := daemoninstance.Key{Origin: origin}.OriginSlug() + "/"
+	var running []runningDaemon
+	for _, instance := range instances {
+		if !instance.Locked || !strings.HasPrefix(instance.Slug, prefix) {
+			continue
+		}
+		d := runningDaemon{DataDir: instance.DataDir, slug: instance.Slug}
+		if instance.HasRecord {
+			d.PID = instance.Record.PID
+		}
+		running = append(running, d)
+	}
+	return running
+}
+
+// writeLogoutReport says what `auth logout` removed, and what it could not:
+// a daemon that is already connected keeps its stream. Each daemon is named
+// with a stop command that reaches it by its data directory, because a no-flag
+// `daemon stop` finds its instance through the very credential just removed.
+func writeLogoutReport(w io.Writer, server string, cliLogin bool, daemonSignIns int, running []runningDaemon) {
+	if !cliLogin && daemonSignIns == 0 {
+		fmt.Fprintf(w, "Not logged in to %s\n", server)
+	} else {
+		fmt.Fprintf(w, "Logged out of %s\n", server)
+		signIn := "this machine's daemon sign-in"
+		if daemonSignIns > 1 {
+			signIn = fmt.Sprintf("this machine's daemon sign-ins (%d accounts)", daemonSignIns)
+		}
+		switch {
+		case cliLogin && daemonSignIns > 0:
+			fmt.Fprintf(w, "  Removed the CLI login and %s.\n", signIn)
+		case cliLogin:
+			fmt.Fprintln(w, "  Removed the CLI login.")
+		default:
+			fmt.Fprintf(w, "  Removed %s.\n", signIn)
+		}
+		if daemonSignIns > 0 {
+			fmt.Fprintln(w, "  The next 'reliant daemon start' prints a pairing code to approve in Reliant.")
+		}
+	}
+	for _, d := range running {
+		pid := ""
+		if d.PID > 0 {
+			pid = fmt.Sprintf(" (PID %d)", d.PID)
+		}
+		fmt.Fprintf(w, "  A daemon is still running%s and stays connected as the signed-out account. Stop it with:\n", pid)
+		fmt.Fprintf(w, "    reliant daemon stop --data-dir %s\n", shellQuote(d.DataDir))
+	}
+}
+
+// shellQuote single-quotes s for a POSIX shell when it holds anything a shell
+// would split or expand, so a printed command can be pasted as is.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[]{}()<>|&;#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // credentialsPathForHelp renders the shared file's location for --help.

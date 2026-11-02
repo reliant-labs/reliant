@@ -54,7 +54,27 @@ export type AskSubject =
       /** When it entered that state. */
       sinceMs?: number | null;
     }
-  | { kind: "panel"; panel: Panel; dashboard?: string; window: RangePreset; env: AskEnv };
+  | { kind: "panel"; panel: Panel; dashboard?: string; window: RangePreset; env: AskEnv }
+  /** A workload that is crash-looping or degraded, or a Job whose latest run failed. */
+  | {
+      kind: "workload";
+      name: string;
+      env: AskEnv;
+      /** A Job (migration, backup), whose runs are read rather than its pods. */
+      job?: boolean;
+      /** The console's verdict, a reference: "crash-looping", "degraded", "failed". */
+      state?: string;
+      /** The release it runs (or the failed run ran). */
+      release?: string;
+    }
+  /** A release whose health check said it made things worse, or could not say. */
+  | { kind: "release"; version: string; env: AskEnv; verdict?: "fail" | "inconclusive" }
+  /** A deploy that failed (a deploy run, or its job). */
+  | { kind: "deploy-failed"; env: AskEnv; runId?: string; version?: string }
+  /** A browser session that hit errors. */
+  | { kind: "session"; sessionId: string; env: AskEnv }
+  /** Nothing is deployed here yet: get the app running. */
+  | { kind: "deploy"; env: AskEnv };
 
 /**
  * What the chat is for. "investigate": find the cause and explain it, change
@@ -131,9 +151,65 @@ function alertPrompt(subject: Extract<AskSubject, { kind: "alert" }>, ctx: AskCo
   const env = envArg(subject);
   const state = subject.state ? `\n${subject.state === "firing" ? "Firing" : "Pending"}${subject.sinceMs ? ` since ${new Date(subject.sinceMs).toISOString()}` : ""}.` : "";
   return (
-    `Alert rule ${rule} (fingerprint ${shellWord(subject.fingerprint)})${where(subject, ctx)}.${state}\n\n` +
+    `Alert rule ${rule}${subject.fingerprint ? ` (fingerprint ${shellWord(subject.fingerprint)})` : ""}${where(subject, ctx)}.${state}\n\n` +
     `${FETCH}: ${cmd("status", env, "--json", "--fields", "alerts")} lists what is firing, and ` +
     `${cmd("alerts", "check", "--env", env, "--rule", rule, "--sql")} prints the rule's expression.`
+  );
+}
+
+const forgeCmd = (...words: string[]) => `\`${["reliant", "forge", ...words].join(" ")}\``;
+
+function workloadPrompt(subject: Extract<AskSubject, { kind: "workload" }>, ctx: AskContext): string {
+  const name = shellWord(subject.name);
+  const env = envArg(subject);
+  const what = subject.job ? "Job" : "Workload";
+  const verdict = subject.state ? oneLine(subject.state, 60) : "";
+  const state = subject.job ? `: its latest run ${verdict || "needs attention"}` : verdict ? ` is ${verdict}` : " needs attention";
+  const release = subject.release ? `\nIt runs release ${oneLine(subject.release, 80)}.` : "";
+  const read = subject.job
+    ? `${cmd("workloads", env, "--service", name, "--jobs", "all")} lists its runs and why the last one failed`
+    : `${cmd("workloads", env, "--service", name)} says why (restarts, the last termination reason, the latest warning)`;
+  return `${what} ${name}${where(subject, ctx)}${state}.${release}\n\n${FETCH}: ${read}, and ${cmd("logs", env, shellWord(`service:${subject.name}`), "--since", "1h")} has its recent logs.`;
+}
+
+function releasePrompt(subject: Extract<AskSubject, { kind: "release" }>, ctx: AskContext): string {
+  const version = shellWord(subject.version);
+  const env = envArg(subject);
+  const verdict = subject.verdict === "fail" ? " Its health check says it made things worse." : subject.verdict === "inconclusive" ? " Its health check could not prove it good." : "";
+  return (
+    `Release ${version}${where(subject, ctx)}.${verdict}\n\n` +
+    `${FETCH}: ${cmd("check", env, "--release", version, "--json")} compares the window after it with the window before, and ` +
+    `${cmd("changes", env, "--since", "24h")} lists what else changed around it.`
+  );
+}
+
+function deployFailedPrompt(subject: Extract<AskSubject, { kind: "deploy-failed" }>, ctx: AskContext): string {
+  const env = envArg(subject);
+  const run = subject.runId ? ` (deploy run ${shellWord(subject.runId)})` : "";
+  const version = subject.version ? `\nIt was deploying ${oneLine(subject.version, 80)}.` : "";
+  return (
+    `A deploy${run} failed${where(subject, ctx)}.${version}\n\n` +
+    `${FETCH}: ${forgeCmd("env", "status", env)} shows the bound release, the rollout and its gates, and ` +
+    `${cmd("changes", env, "--since", "24h")} lists the failed deploy with what changed before it.`
+  );
+}
+
+function sessionPrompt(subject: Extract<AskSubject, { kind: "session" }>, ctx: AskContext): string {
+  const id = shellWord(subject.sessionId);
+  const env = envArg(subject);
+  return `Browser session ${id}${where(subject, ctx)} hit errors.\n\n${FETCH}, starting with ${cmd("session", id, env)}: its failed requests and errors carry trace ids for ${cmd("trace", "<id>", env)}.`;
+}
+
+function deployPrompt(subject: Extract<AskSubject, { kind: "deploy" }>, ctx: AskContext): string {
+  const env = envArg(subject);
+  const project = ctx.forgeProject ? ` (forge project ${oneLine(ctx.forgeProject, 80)})` : "";
+  const target = subject.env
+    ? `environment ${oneLine(subject.env, 80)}`
+    : `an environment${ctx.envChoices?.length ? ` (one of ${ctx.envChoices.map((name) => oneLine(name, 80)).join(", ")})` : ""}; ask me which before deploying`;
+  return (
+    `Deploy this app${project} to ${target}.\n\n` +
+    `From the project's checkout, run ${forgeCmd("env", "deploy", env)}. Then prove it is good with ${forgeCmd("obs", "check", env, "--wait", "--json")} and tell me what it says. ` +
+    `If the environment is not set up yet, or the deploy is queued on billing, say what it needs instead of working around it.`
   );
 }
 
@@ -245,6 +321,16 @@ function subjectPrompt(subject: AskSubject, ctx: AskContext): string {
       return alertPrompt(subject, ctx);
     case "panel":
       return panelPrompt(subject, ctx);
+    case "workload":
+      return workloadPrompt(subject, ctx);
+    case "release":
+      return releasePrompt(subject, ctx);
+    case "deploy-failed":
+      return deployFailedPrompt(subject, ctx);
+    case "session":
+      return sessionPrompt(subject, ctx);
+    case "deploy":
+      return deployPrompt(subject, ctx);
   }
 }
 
@@ -264,18 +350,34 @@ export function traceEnvName(
   return environments.find((env) => env.id === id)?.name ?? null;
 }
 
+/** What the workspace name says the chat is about, before it is slugged. */
+function workspaceSubject(subject: AskSubject): string {
+  switch (subject.kind) {
+    case "graph":
+      return subject.rpcId || subject.nodeId || subject.edgeId || "graph";
+    case "issue":
+      return subject.issueId;
+    case "trace":
+      return subject.traceId.slice(0, 12);
+    case "alert":
+      return subject.rule;
+    case "panel":
+      return subject.panel.title || subject.panel.id;
+    case "workload":
+      return subject.name;
+    case "release":
+      return subject.version;
+    case "session":
+      return subject.sessionId.slice(0, 12);
+    case "deploy":
+    case "deploy-failed":
+      return subject.env ?? "";
+  }
+}
+
 /** A workspace name for the chat: ask-<kind>-<what>-<nonce> (fix-… for a fix), a legal git branch. */
 export function askWorkspaceName(subject: AskSubject, nonce: string, intent?: AskIntent): string {
-  const what =
-    subject.kind === "graph" ? subject.rpcId || subject.nodeId || subject.edgeId || "graph" :
-    subject.kind === "issue"
-      ? subject.issueId
-      : subject.kind === "trace"
-        ? subject.traceId.slice(0, 12)
-        : subject.kind === "alert"
-          ? subject.rule
-          : subject.panel.title || subject.panel.id;
-  const slug = what
+  const slug = workspaceSubject(subject)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")

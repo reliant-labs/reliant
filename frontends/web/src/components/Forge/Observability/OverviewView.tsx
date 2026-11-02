@@ -180,7 +180,7 @@ function MetricCell({
   label,
   seriesLabel,
   unit,
-  tone = "primary",
+  tone,
 }: {
   value: string;
   valueClassName?: string;
@@ -189,7 +189,8 @@ function MetricCell({
   label: string;
   seriesLabel: string;
   unit?: "percent" | "ms" | "rate";
-  tone?: "primary" | "destructive" | "muted" | "secondary";
+  /** A status colour when the cell is one (errors); absent, the palette's first. */
+  tone?: "destructive" | "muted";
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -278,7 +279,7 @@ function ServiceDetail({
             series={
               compared
                 ? rows.map((row) => ({ label: label(row), values: aligned(row, row.rateSeries) }))
-                : [{ label: "Requests per second", values: aligned(health, health.rateSeries), tone: "primary" }]
+                : [{ label: "Requests per second", values: aligned(health, health.rateSeries) }]
             }
             unit="rate"
             label={`Request rate for ${health.name}`}

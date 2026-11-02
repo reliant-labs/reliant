@@ -275,6 +275,14 @@ func (o *ExecOutcome) NoteHeavyTimeout(heavy bool) {
 	}
 }
 
+// NoteThreadLimit appends what the command's process tree reports about
+// threads the kernel refused it at a thread limit (proctree.Tree.LimitNote),
+// whatever the exit status: a command that exits 0 after a child failed to
+// start a thread still has output the note explains.
+func (o *ExecOutcome) NoteThreadLimit(note string) {
+	o.Stderr = appendStderr(o.Stderr, note)
+}
+
 func appendStderr(stderr, msg string) string {
 	if msg == "" {
 		return stderr

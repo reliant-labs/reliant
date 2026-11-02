@@ -10,9 +10,9 @@
 
 import {
   TOPUP_PRESETS_CENTS,
-  formatCentsAsDollars,
 } from "@/components/Settings/cloud/billingUtils";
 import { cn } from "@/lib/utils";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 export function CreditAmountPicker({
   value,
@@ -36,7 +36,7 @@ export function CreditAmountPicker({
               : "border-border/50 bg-background text-muted-foreground hover:border-primary/40",
           )}
         >
-          {formatCentsAsDollars(cents)}
+          {formatPrice(cents)}
         </button>
       ))}
     </div>

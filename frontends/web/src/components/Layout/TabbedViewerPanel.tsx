@@ -235,7 +235,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       if (status === FileChangeStatus.MODIFIED) return "text-amber-500";
       return "text-green-500";
     }
-    return "text-primary";
+    return "text-primary-ink";
   };
 
   const getStatusBadge = () => {

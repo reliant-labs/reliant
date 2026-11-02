@@ -30,7 +30,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowMenuAct
             type="button"
             {...props}
             aria-label={label}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           </button>

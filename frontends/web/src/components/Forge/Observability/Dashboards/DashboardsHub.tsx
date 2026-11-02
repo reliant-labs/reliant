@@ -61,6 +61,8 @@ export interface DashboardsHubProps {
   /** The console scope: an environment name or "all". */
   env: string;
   environments: readonly ObsEnvironment[];
+  /** `environments` is empty because the list could not be read, not because nothing is deployed. */
+  environmentsUnread?: boolean;
   /** The index the list already read (filtered by app, never by search). */
   dashboards: readonly DashboardSummary[];
   hrefs: DashboardsHubHrefs & { dashboard: (ref: DashboardRef) => string };
@@ -74,7 +76,7 @@ export interface DashboardsHubProps {
 
 const ISSUE_FILTERS = { range: "7d" as const, statuses: [], sort: "last" as const, text: "" };
 
-export function DashboardsHub({ project, env, environments, dashboards, hrefs, onOpenGroup, onOpenAll, empty }: DashboardsHubProps) {
+export function DashboardsHub({ project, env, environments, environmentsUnread = false, dashboards, hrefs, onOpenGroup, onOpenAll, empty }: DashboardsHubProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const all = env === ENV_ALL;
@@ -108,7 +110,11 @@ export function DashboardsHub({ project, env, environments, dashboards, hrefs, o
 
   return (
     <div className="space-y-6" data-testid="dashboards-hub">
-      {!deployed ? (
+      {!deployed && environmentsUnread ? (
+        <Card className="text-sm text-ink-muted" data-testid="hub-health-unread">
+          Service health, failing jobs and releases appear here once {project}&apos;s environments load.
+        </Card>
+      ) : !deployed ? (
         <Card className="text-sm text-ink-muted" data-testid="hub-health-undeployed">
           Service health, failing jobs and releases appear here after the first deploy of {project}.
         </Card>
@@ -174,7 +180,7 @@ export function DashboardsHub({ project, env, environments, dashboards, hrefs, o
               <button
                 type="button"
                 onClick={onOpenAll}
-                className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="hub-open-all"
               >
                 <span className="text-sm font-medium text-ink">All dashboards</span>
@@ -383,7 +389,7 @@ function GroupCard({ group, members, href, onOpen }: { group: DashboardGroup; me
         <button
           type="button"
           onClick={onOpen}
-          className="flex items-center gap-1 border-t border-border px-4 py-2 text-left text-xs text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex items-center gap-1 border-t border-border px-4 py-2 text-left text-xs text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid={`hub-group-${group}-open`}
         >
           View all {count} in {GROUP_LABELS[group]}

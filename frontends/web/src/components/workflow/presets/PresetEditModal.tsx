@@ -178,7 +178,7 @@ function ParamField({
           checked={value}
           onChange={(e) => onChange(e.target.checked)}
           disabled={readOnly}
-          className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-ring/20"
+          className="h-4 w-4 rounded border-border bg-background text-primary-ink focus:ring-ring"
         />
       </div>
     )
@@ -203,7 +203,7 @@ function ParamField({
                             onChange(newItems)
                         }}
                         disabled={readOnly}
-                        className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                        className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                     />
                     {!readOnly && (
                         <button
@@ -260,7 +260,7 @@ function ParamField({
             onChange={(e) => onChange(e.target.value)}
             disabled={readOnly}
             rows={5}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring font-mono resize-y"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring font-mono resize-y"
         />
       ) : (
         <input
@@ -268,7 +268,7 @@ function ParamField({
             value={value}
             onChange={(e) => onChange(typeof value === 'number' ? Number(e.target.value) : e.target.value)}
             disabled={readOnly}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
         />
       )}
     </div>
@@ -517,7 +517,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!isEditable || isSaving}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
           />
           {!isEditable && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -534,7 +534,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             onChange={(e) => setDescription(e.target.value)}
             disabled={!isEditable || isSaving}
             rows={2}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed resize-none"
           />
         </div>
 
@@ -547,7 +547,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             onChange={(e) => setTag(e.target.value)}
             disabled={!isEditable || isSaving}
             placeholder="e.g. agent, orchestration"
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-muted-foreground mt-1">
             Presets are filtered by tag when configuring workflows. Matches workflow/group tags.
@@ -592,7 +592,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
                 <select
                   value={paramToAdd}
                   onChange={(e) => setParamToAdd(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select parameter to add...</option>
                   {availableParamsToAdd.map(key => (
@@ -623,7 +623,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
                 value={copyName}
                 onChange={(e) => setCopyName(e.target.value)}
                 placeholder="New preset name"
-                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 onKeyDown={(e) => e.key === 'Enter' && handleCopy()}
               />
               <Button onClick={handleCopy} disabled={isCopying || !copyName.trim()}>
