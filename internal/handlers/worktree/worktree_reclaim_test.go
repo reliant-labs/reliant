@@ -312,7 +312,10 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	e := newReclaimEnv(t)
 	wt, path := e.worktree(t, "imp")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
+	// Asked of the machine the directory is on (the one discovery ran on),
+	// which holds the project's checkout: unset, the import is placed on the
+	// default machine, which has none, and is refused for that instead.
+	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path, DaemonId: &e.daemon}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
