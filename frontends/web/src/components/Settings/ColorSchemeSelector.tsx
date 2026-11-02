@@ -134,22 +134,42 @@ export function ColorSchemeSelector() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold mb-1">Color Scheme</h3>
+        <h3 className="text-sm font-semibold mb-1">Color scheme</h3>
         <p className="text-xs text-muted-foreground">
           Choose the accent color for your interface
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {COLOR_SCHEMES.map((scheme) => {
+      {/* A radiogroup: one tab stop (the chosen scheme), arrows move and
+          select, and the choice is aria-checked rather than only a border. */}
+      <div role="radiogroup" aria-label="Color scheme" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {COLOR_SCHEMES.map((scheme, index) => {
           const isSelected = selectedScheme === scheme.id;
 
           return (
             <button
               key={scheme.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => setSelectedScheme(scheme.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = (index + step + COLOR_SCHEMES.length) % COLOR_SCHEMES.length;
+                setSelectedScheme(COLOR_SCHEMES[next].id);
+                const group = event.currentTarget.parentElement;
+                group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              }}
               className={cn(
-                "relative p-4 rounded-lg border-2 transition-all text-left",
+                "relative p-4 rounded-lg border-2 transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Options are insets in their panel: no shadow, the border
                 // and an accent wash say which is chosen.
                 isSelected
@@ -180,7 +200,7 @@ export function ColorSchemeSelector() {
                   {isSelected && (
                     <Check 
                       className="w-4 h-4 flex-shrink-0" 
-                      style={{ color: 'hsl(var(--primary))' }}
+                      style={{ color: 'hsl(var(--primary-ink))' }}
                     />
                   )}
                 </div>
@@ -205,7 +225,7 @@ export function ColorSchemeSelector() {
 
       <div className="mt-4 p-3 rounded-lg border border-border/60 bg-background">
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
-          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" aria-hidden />
+          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-ink" aria-hidden />
           <span><strong>Tip:</strong> The color scheme affects buttons, links, active states, and focus indicators throughout the app.</span>
         </p>
       </div>

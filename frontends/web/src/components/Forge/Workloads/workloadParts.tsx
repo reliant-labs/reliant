@@ -216,7 +216,7 @@ export function UsageMeter({ usage, format, what }: { usage: ResourceUsage | nul
 // ── Toolbar chips (the Releases list's, in the same shape) ─────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 
 export function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: () => void; children: ReactNode; title?: string; testId?: string }) {

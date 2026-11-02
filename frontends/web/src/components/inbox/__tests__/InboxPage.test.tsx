@@ -13,13 +13,14 @@ import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
   InboxApprovalSchema,
+  type HeldWorktreeSchema,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -45,6 +46,7 @@ import {
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
   cleanupStorage: vi.fn(),
+  forgetStorageWorktree: vi.fn(),
   clearMachineCaches: vi.fn(),
   dismissInboxItem: vi.fn(),
   restoreInboxItem: vi.fn(),
@@ -114,6 +116,7 @@ beforeEach(() => {
       // The Inbox is on InboxService's generated hooks.
       "InboxService.ListInbox": (req) => mocks.listInbox(req),
       "InboxService.CleanupStorage": (req) => mocks.cleanupStorage(req),
+      "InboxService.ForgetStorageWorktree": (req) => mocks.forgetStorageWorktree(req),
       "InboxService.DismissInboxItem": (req) => mocks.dismissInboxItem(req),
       "InboxService.RestoreInboxItem": (req) => mocks.restoreInboxItem(req),
       "ApprovalService.Approve": (req) => {
@@ -693,5 +696,57 @@ describe("InboxPage storage item", () => {
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+  });
+});
+
+// Archived workspaces whose machine was removed: no machine is on record, so
+// nothing can clean them up, and once no connected machine has the folder
+// they would sit here for good. Forget drops the record and deletes nothing.
+describe("InboxPage workspaces with no machine", () => {
+  const unowned = (held: MessageInitShape<typeof HeldWorktreeSchema>[], online = true) =>
+    storageItem({ itemId: "storage::kept" }, { daemonId: "", daemonName: "", diskLow: false, volumes: [], online, held });
+  const gone = {
+    worktreeId: "wt-gone",
+    name: "old-spike",
+    projectName: "reliant",
+    path: "/home/workspace/.reliant/worktrees/reliant/old-spike",
+    reason: "no-machine-on-record",
+    forgettable: true,
+  };
+  const unchecked = { ...gone, worktreeId: "wt-unchecked", name: "unchecked", forgettable: false };
+
+  it("Forget lists what will be forgotten, says nothing is deleted, and forgets only those", async () => {
+    mocks.forgetStorageWorktree.mockResolvedValue({});
+    respond([unowned([gone, unchecked])]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    expect(within(row).getByText("Workspaces with no machine")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Forget" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Nothing is\s+deleted from any disk/)).toBeInTheDocument();
+    const list = within(dialog).getByRole("list", { name: "Workspaces to forget" });
+    expect(within(list).getByText("old-spike")).toBeInTheDocument();
+    expect(within(list).queryByText("unchecked")).not.toBeInTheDocument();
+    const notYet = within(dialog).getByRole("list", { name: "Workspaces that cannot be forgotten yet" });
+    expect(within(notYet).getByText(/a connected machine has not been checked/)).toBeInTheDocument();
+    expect(mocks.forgetStorageWorktree).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Forget 1 workspace" }));
+    await waitFor(() => expect(mocks.forgetStorageWorktree).toHaveBeenCalledTimes(1));
+    expect(mocks.forgetStorageWorktree.mock.calls[0][0]).toMatchObject({ worktreeId: "wt-gone" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("with no machine connected nothing can be checked, so Forget is disabled and says why", async () => {
+    respond([unowned([unchecked], false)]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    const button = within(row).getByRole("button", { name: "Forget" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/connect a machine/i));
+    expect(within(row).getByText(/no machine connected to check/)).toBeInTheDocument();
+    expect(within(row).queryByText(/offline/)).not.toBeInTheDocument();
   });
 });

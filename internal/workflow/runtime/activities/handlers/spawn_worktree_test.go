@@ -223,11 +223,12 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	assert.Equal(t, "daemon-b", info.DaemonID)
 	assert.Contains(t, info.Path, "feature-x")
 
-	// The parent thread (no binding) stays on the project checkout.
+	// The parent thread (no binding) stays on the main checkout, which is
+	// resolved on the call's machine (buildToolRequest), never projects.path.
 	info, _, err = a.loadWorktreeInfo(ctx, chat, project, "main-thread")
 	require.NoError(t, err)
 	assert.Empty(t, info.ID)
-	assert.Equal(t, project.Path, info.Path)
+	assert.Empty(t, info.Path)
 
 	// A bound thread whose workspace was archived fails loudly instead of
 	// running in the project checkout.
@@ -278,6 +279,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	mainCheckout := "/home/u/projects/p"
 	parentSel := &types.DaemonSelector{ID: "daemon-parent"}
+	f.installOn(t, "daemon-parent", mainCheckout)
 
 	child := run(spawned.ThreadID, mainCheckout, parentSel)
 	assert.Equal(t, wt.Path, child.WorktreePath, "thread-bound worktree beats the inherited project_path")

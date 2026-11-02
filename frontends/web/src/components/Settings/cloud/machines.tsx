@@ -149,23 +149,32 @@ const statusFromEnum: Record<number, WsStatus> = {
   [DaemonStatus.DISCONNECTED]: "disconnected",
 };
 
+// Colour carries severity only. A deliberate suspend and a computer that is
+// simply offline are normal states, so they are neutral; red is kept for a
+// machine that actually failed, and green for one that is running.
 const statusBadge: Record<WsStatus, { label: string; variant: BadgeVariant }> = {
   active: { label: "Active", variant: "success" },
-  suspended: { label: "Suspended", variant: "warning" },
+  suspended: { label: "Suspended", variant: "neutral" },
   failed: { label: "Failed", variant: "error" },
   pending: { label: "Pending", variant: "neutral" },
-  disconnected: { label: "Disconnected", variant: "error" },
+  disconnected: { label: "Offline", variant: "neutral" },
   unknown: { label: "Status unknown", variant: "neutral" },
 };
 
 const statusDotVariant: Record<WsStatus, StatusDotVariant> = {
   active: "active",
-  suspended: "paused",
+  suspended: "neutral",
   failed: "error",
   pending: "pending",
-  disconnected: "error",
+  disconnected: "neutral",
   unknown: "pending",
 };
+
+/** The dot for a status as presented: a capacity wait is a wait, not progress. */
+function presentedDotVariant(status: WsStatus, presentation: { label?: string; waitingForCapacity?: boolean }): StatusDotVariant {
+  if (presentation.waitingForCapacity) return "warning";
+  return presentation.label ? "pending" : statusDotVariant[status];
+}
 
 function daemonStatus(d: Daemon): WsStatus {
   return statusFromEnum[d.status] ?? "unknown";
@@ -705,7 +714,7 @@ function ManagedMachinesTable({
         return (
           <>
             <StatusDot
-              variant={presentation.label ? "pending" : statusDotVariant[status]}
+              variant={presentedDotVariant(status, presentation)}
               label={presentation.label ?? statusBadge[status].label}
             />
             {presentation.progress && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>}
@@ -747,6 +756,21 @@ function ManagedMachinesTable({
         // control plane too; lifecycle and delete are the control plane's.
         if (!cloud) return <MakeDefaultButton daemon={d} />;
         const isSuspended = d.status === DaemonStatus.SUSPENDED;
+        // Queued for capacity: the two things a person can do about a wait
+        // are pick a size that is free (Resize, on the machine's page) or
+        // stop waiting. Suspend and Make default answer neither.
+        if (presentMachineStatus(daemonStatus(d), d.lastStatusMessage, waking.get(d.daemonId)).waitingForCapacity) {
+          return (
+            <div className="inline-flex items-center gap-1">
+              <Button variant="ghost" size="md" onClick={() => onOpenDetail(d.daemonId)}>
+                Choose a smaller size
+              </Button>
+              <Button variant="ghost" size="md" disabled={busy} onClick={() => onDelete(d)} aria-label={`Cancel ${daemonDisplayName(d)}`}>
+                Cancel
+              </Button>
+            </div>
+          );
+        }
         return (
           <div className="inline-flex items-center gap-1">
             <MakeDefaultButton daemon={d} />
@@ -1236,7 +1260,7 @@ function ResizeMachineModal({
       {someDisallowed && (
         <p className="mt-2 text-xs text-muted-foreground">
           Larger sizes need a bigger compute plan.{" "}
-          <button type="button" onClick={onSeePlans} className="font-medium text-primary hover:underline">
+          <button type="button" onClick={onSeePlans} className="font-medium text-primary-ink hover:underline">
             See plans
           </button>
         </p>
@@ -1529,9 +1553,11 @@ function EnvironmentDetail({
   useEffect(() => {
     if (presentation.wakeFinished) clearWaking(daemonId);
   }, [presentation.wakeFinished, daemonId]);
-  const badge = presentation.label
-    ? { label: presentation.label, variant: statusBadge.pending.variant }
-    : statusBadge[status];
+  const badge = presentation.waitingForCapacity
+    ? { label: presentation.label!, variant: "warning" as BadgeVariant }
+    : presentation.label
+      ? { label: presentation.label, variant: statusBadge.pending.variant }
+      : statusBadge[status];
   const connected = daemon?.status === DaemonStatus.ACTIVE;
   const busy =
     suspendMut.isPending ||
@@ -1656,6 +1682,28 @@ function EnvironmentDetail({
 
           {error && <ErrorNote message={error} />}
 
+          {/* A capacity wait, said as a wait, with what can be done about it. */}
+          {cloud && presentation.waitingForCapacity && (
+            <div
+              role="status"
+              data-testid="machine-capacity-wait"
+              className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="text-sm font-medium text-foreground">Waiting for capacity</p>
+                <p className="text-sm text-muted-foreground">{presentation.progress}</p>
+              </div>
+              <div className="flex flex-shrink-0 gap-2">
+                <Button variant="outline" disabled={busy} onClick={() => { setResizeError(""); setResizeOpen(true); }}>
+                  Choose a smaller size
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => setDeleteOpen(true)}>
+                  Cancel machine
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/*
             Why a machine is failed or stopped, at the top, not buried in a
             detail row. This used to render only as "Last status" three cards
@@ -1713,7 +1761,7 @@ function EnvironmentDetail({
                                   type="button"
                                   onClick={openGrow}
                                   disabled={busy}
-                                  className="font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="font-medium text-primary-ink hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Grow
                                 </button>
@@ -1920,7 +1968,7 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                     render: (_, { r }) => {
                       const url = workspaceBaseDomain ? workspaceBaseDomain.replace("{port}", String(r.port)) : "";
                       return url ? (
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary-ink hover:underline">
                           {url} <ExternalLink className="h-3 w-3" />
                         </a>
                       ) : (

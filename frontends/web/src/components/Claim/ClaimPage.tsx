@@ -129,7 +129,7 @@ function Notice({ tone, title, body, next, action, testId }: NoticeProps) {
         className={
           tone === "warning"
             ? "mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-warning/15 text-warning-ink"
-            : "mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"
+            : "mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary-ink"
         }
       >
         <Icon className="h-5 w-5" aria-hidden="true" />

@@ -6,11 +6,13 @@
 #   scripts/flake-report.sh --logs <dir> [--sha <sha>] [--run-url <url>] [--dry-run]
 #                                                           a local gate's log directory
 #   --list prints the failing tests it found and stops (no rerun, no issue).
+#   scripts/flake-report.sh --sweep [--dry-run]             close the stale ones (below)
 #
 # Run it from the root of the Go module at the run's commit.
 #
-# Owner policy (2026-10-30): a flaky test never keeps main red; it is fixed
-# within the day or removed with a `flake:removed` issue. New tests are kept
+# Owner policy (2026-11-01): flaky = delete immediately; rewrite as a new
+# deterministic test if it's worth having. A deleted test gets a
+# `flake:removed` issue. New tests are kept
 # out by the flake check (each added or edited test runs three times before it
 # merges). This script is the net for EXISTING tests: it turns "failed, then
 # passed on the same commit" into an issue somebody triages, instead of a red
@@ -32,17 +34,24 @@
 # filed as a flake for someone to delete. A test whose original failure was the
 # race detector's is a real failure and is never retried (scripts/test-flake-report.sh).
 #
+# ONE ISSUE PER TEST, closed when nothing keeps it alive. A test that flakes
+# again comments on its issue, reopening it if it was closed, so its history
+# stays in one thread. --sweep closes an open issue whose test no longer
+# exists in the checkout it runs from (run it from main), or that has not
+# flaked again for FLAKE_SWEEP_DAYS days (default 7).
+#
 # Environment: GH_TOKEN (actions:read, issues:write), GITHUB_REPOSITORY
 # (owner/name; defaults to the current repo), MAX_TESTS, FLAKE_RACE (the race
 # flag a retry passes; default -race, empty to drop it).
 
 set -uo pipefail
 
-run_id="" logs_dir="" sha="" run_url="" dry_run=0 list_only=0
+run_id="" logs_dir="" sha="" run_url="" dry_run=0 list_only=0 sweep=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) dry_run=1 ;;
     --list) list_only=1 ;;
+    --sweep) sweep=1 ;;
     --logs) logs_dir="${2:-}"; shift ;;
     --sha) sha="${2:-}"; shift ;;
     --run-url) run_url="${2:-}"; shift ;;
@@ -50,8 +59,8 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-if [[ -z "$run_id" && -z "$logs_dir" ]]; then
-  echo "usage: $0 <run-id> [--dry-run] | $0 --logs <dir> [--sha <sha>] [--run-url <url>] [--dry-run]" >&2
+if [[ -z "$run_id" && -z "$logs_dir" && "$sweep" -eq 0 ]]; then
+  echo "usage: $0 <run-id> [--dry-run] | $0 --logs <dir> [--sha <sha>] [--run-url <url>] [--dry-run] | $0 --sweep [--dry-run]" >&2
   exit 0
 fi
 max_tests="${MAX_TESTS:-15}"
@@ -64,6 +73,52 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 say() { echo "flake-report: $*"; }
+
+# --sweep: close each open flake:suspected issue whose test is gone from this
+# checkout, or whose last occurrence (the issue's creation, or the newest
+# "Failed then passed on retry again" comment below) is FLAKE_SWEEP_DAYS old.
+if [[ "$sweep" -eq 1 ]]; then
+  days="${FLAKE_SWEEP_DAYS:-7}"
+  now="${FLAKE_SWEEP_NOW:-$(date -u +%s)}"
+  module="$(awk '$1 == "module" { print $2; exit }' go.mod 2>/dev/null)"
+  if ! issues="$(gh issue list -R "$repo" --label "$label" --state open --limit 500 \
+      --json number,title,createdAt,comments 2>&1)"; then
+    say "--sweep: could not list the open $label issues: ${issues:0:300}"
+    exit 0
+  fi
+  title_re='^flake:suspected: (Test[A-Za-z0-9_]*) \((.+)\)$'
+  while IFS=$'\t' read -r num title last age; do
+    [[ -n "$num" ]] || continue
+    reason=""
+    # Only from a Go module's root: anywhere else every test would look gone.
+    if [[ -n "$module" && "$title" =~ $title_re ]]; then
+      t="${BASH_REMATCH[1]}" short="${BASH_REMATCH[2]}"
+      dir="./$short"
+      [[ "$short" == "$module" ]] && dir="."
+      if ! grep -q -E "^func ${t}\(" "$dir"/*_test.go 2>/dev/null; then
+        # shellcheck disable=SC2016 # the backticks are markdown, not command substitution
+        reason="$(printf '`%s` no longer exists in `%s` at `%s`' "$t" "$short" "$(git rev-parse --short=12 HEAD 2>/dev/null)")"
+      fi
+    fi
+    if [[ -z "$reason" && "$age" -ge "$days" ]]; then
+      reason="it has not flaked again for $age days (last seen $last)"
+    fi
+    [[ -n "$reason" ]] || continue
+    if [[ "$dry_run" -eq 1 ]]; then
+      say "--dry-run: would close #$num: $reason"
+      continue
+    fi
+    if gh issue close "$num" -R "$repo" --reason "not planned" \
+        --comment "Closed by \`scripts/flake-report.sh --sweep\`: $reason. A new flake of this test reopens it." >/dev/null; then
+      say "closed #$num: $reason"
+    else
+      say "could not close #$num"
+    fi
+  done < <(jq -r --argjson now "$now" '.[]
+    | ([.createdAt] + [.comments[]? | select(.body | startswith("Failed then passed on retry again")) | .createdAt] | max) as $last
+    | [.number, .title, $last, ((($now - ($last | fromdateiso8601)) / 86400) | floor)] | @tsv' <<<"$issues")
+  exit 0
+fi
 
 mkdir -p "$work/art"
 art_dir="$work/art"
@@ -221,10 +276,20 @@ for entry in "${passed[@]}"; do
   t="${entry#*	}"
   short="${pkg#"$module"/}"
   title="flake:suspected: $t ($short)"
-  existing="$(gh issue list -R "$repo" --label "$label" --state open --search "\"$t\" in:title" \
-    --json number,title -q ".[] | select(.title == \"$title\") | .number" 2>/dev/null | head -1)"
+  # The newest issue for this test in any state: a closed one (fixed, or swept
+  # as stale) is reopened, never duplicated.
+  existing="$(gh issue list -R "$repo" --label "$label" --state all --search "\"$t\" in:title" \
+    --json number,title,state -q ".[] | select(.title == \"$title\") | \"\(.number) \(.state)\"" 2>/dev/null | head -1)"
+  state="${existing#* }" existing="${existing%% *}"
   ex="$(excerpt "$t")"
   if [[ -n "$existing" ]]; then
+    if [[ "$state" == CLOSED ]]; then
+      if gh issue reopen "$existing" -R "$repo" >/dev/null; then
+        say "reopened #$existing ($t)"
+      else
+        say "could not reopen #$existing"
+      fi
+    fi
     # shellcheck disable=SC2016 # the backticks are markdown, not command substitution
     if gh issue comment "$existing" -R "$repo" --body "$(printf 'Failed then passed on retry again: %s (commit `%s`).\n\n```\n%s\n```\n' "$run_url" "${sha:0:12}" "$ex")" >/dev/null; then
       say "commented on #$existing ($t)"
@@ -234,7 +299,7 @@ for entry in "${passed[@]}"; do
     continue
   fi
   # shellcheck disable=SC2016 # the backticks are markdown, not command substitution
-  body="$(printf '`%s` in `%s` failed on main in %s (commit `%s`), then **passed** when rerun alone on the same commit (`go test -count=1 -run ^%s$`).\n\n### Failure\n\n```\n%s\n```\n\n### What to do\n\nOwner policy: a flaky test never keeps main red. Fix it within the day, or delete the test (or its flaky assertion) and open a `flake:removed` issue with its body, the failure signature and its frequency. If the failure is the host (inotify, fd or disk budget, a download), make the test skip with a message naming the missing resource.\n\nFiled by `scripts/flake-report.sh`; later occurrences are added as comments.\n' \
+  body="$(printf '`%s` in `%s` failed on main in %s (commit `%s`), then **passed** when rerun alone on the same commit (`go test -count=1 -run ^%s$`).\n\n### Failure\n\n```\n%s\n```\n\n### What to do\n\nOwner policy: flaky = delete immediately; rewrite as a new deterministic test if it is worth having. Delete the test (or its flaky assertion) and open a `flake:removed` issue with its body and the failure signature. If the failure is the host (inotify, fd or disk budget, a download), make the test skip with a message naming the missing resource.\n\nFiled by `scripts/flake-report.sh`; later occurrences are added as comments.\n' \
     "$t" "$pkg" "$run_url" "${sha:0:12}" "$t" "$ex")"
   if gh issue create -R "$repo" --title "$title" --label "$label" --body "$body" >/dev/null; then
     say "opened an issue for $t"

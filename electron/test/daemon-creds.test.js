@@ -974,6 +974,32 @@ test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async ()
     assert.equal(entry.server_url, 'https://reliantapi.com');
     assert.equal(entry.gateway_url, 'http://127.0.0.1:19190/reliant-dev');
     assert.equal(entry.sub, 'user-1');
+    // Who the PAT acts as, for the CLI to keep the machine to one account.
+    // No email in the session: none is written, rather than an empty one.
+    assert.equal(entry.account_id, 'user-1');
+    assert.equal(Object.prototype.hasOwnProperty.call(entry, 'account_email'), false);
+  });
+});
+
+test('ensureDaemonPATForOrigin: records the signed-in user as the account the PAT acts as', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = {
+      loadStoredAuth: () => ({
+        access_token: 'jwt-abc',
+        user: { id: 'user-1', email: 'user-1@example.test' },
+      }),
+    };
+    await withFetchStub(
+      // A placeholder of the rlat_ shape (32 characters after the prefix), not a credential.
+      async () => jsonResponse(200, { token: `rlat_${'fresh'.padEnd(32, '0')}`, info: { id: 'tok_1' } }),
+      async () => {
+        await ensureDaemonPATForOrigin({ authStorage, apiUrl: 'https://reliantapi.com' });
+      }
+    );
+    const store = JSON.parse(fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8'));
+    const entry = store.origins['https://reliantapi.com']['user-1'];
+    assert.equal(entry.account_id, 'user-1');
+    assert.equal(entry.account_email, 'user-1@example.test');
   });
 });
 

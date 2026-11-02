@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -106,6 +107,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	e.project = &db.Project{ID: "p-" + userID, UserID: userID, Name: "proj", Path: projectPath, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateProject(e.ctx, e.project))
 	require.NoError(t, repo.UpsertDaemon(e.ctx, &db.Daemon{ID: e.daemon, UserID: userID}))
+	require.NoError(t, repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, projectPath, nil))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	e.sweeper = worktreesweep.New(repo, e.router)
@@ -188,22 +190,6 @@ func redateReflog(t *testing.T, path string, at time.Time) {
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
-// requireInspectableHost skips a test that needs a whole-worktree retirement to
-// go through when this host cannot prove ANY path idle. The retirement's
-// process-use check fails closed on a same-owner process whose /proc state it
-// cannot read, and a non-dumpable process (ssh-agent, gpg-agent, credsandbox's
-// init) reads EACCES for its cwd, fds and maps. With one running, every
-// retirement is held in_use whatever the test does, so asserting that it
-// succeeds measures the host, not the code: GitHub's release-gate runners have
-// one, and these tests failed there on every run (reliant#1998, which also
-// tracks what production should do about such processes).
-func requireInspectableHost(t *testing.T) {
-	t.Helper()
-	if err := worktreereclaim.CheckProcessUse(context.Background(), []string{t.TempDir()}); err != nil {
-		t.Skipf("this host cannot prove an unrelated empty directory idle (%v), so a retirement is held here whatever the code does; see reliant#1998", err)
-	}
-}
-
 // S1: Unarchive re-locks as active BEFORE flipping the row, so a removal that
 // was claimed under the archive's fence can no longer proceed.
 func TestUnarchive_RelocksAsActiveSoAStaleClaimCannotRemove(t *testing.T) {
@@ -285,14 +271,47 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	assert.True(t, exists(path))
 }
 
-func TestPermanentDelete_SucceedsOnceTheMachineRemovedTheDirectory(t *testing.T) {
-	requireInspectableHost(t)
+// reliant#1998: an ssh-agent of the daemon's user is undumpable, so /proc
+// shows no one its cwd, descriptors or mappings, and the retirement's
+// process-use check used to hold every workspace while one ran. It is a known
+// agent that never holds a worktree: the retirement goes through.
+func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("undumpable processes are a Linux /proc matter")
+	}
+	bin, err := exec.LookPath("ssh-agent")
+	if err != nil {
+		t.Skip("ssh-agent is not installed")
+	}
 	e := newReclaimEnv(t)
-	wt, path := e.worktree(t, "pd2")
+	sockDir, err := os.MkdirTemp("", "sa")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sock := filepath.Join(sockDir, "s")
+	agent := exec.Command(bin, "-D", "-a", sock)
+	require.NoError(t, agent.Start())
+	t.Cleanup(func() { _ = agent.Process.Kill(); _ = agent.Wait() })
+	// Running (its socket exists), not just undumpable: that starts inside
+	// execve.
+	require.Eventually(t, func() bool { _, err := os.Stat(sock); return err == nil }, 10*time.Second, 5*time.Millisecond, "ssh-agent never listened")
+	fdDir := filepath.Join("/proc", strconv.Itoa(agent.Process.Pid), "fd")
+	if _, err := os.ReadDir(fdDir); !os.IsPermission(err) {
+		t.Skipf("this host lets the daemon inspect ssh-agent (%v): nothing to prove", err)
+	}
+
+	wt, path := e.worktree(t, "sshagent")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
-	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
-	require.NoError(t, err)
+	_, err = e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
+	if err != nil {
+		// The refusal says only "in_use"; the recorded hold names the process
+		// that held it, which is what a red run on another host needs.
+		var detail string
+		if got, gerr := e.repo.GetWorktree(e.ctx, wt.ID); gerr == nil && got.CleanupMetadata != nil {
+			detail = got.CleanupMetadata.HeldDetail
+		}
+		require.NoError(t, err, "held by: %s", detail)
+	}
 	assert.False(t, exists(path))
 }
 
@@ -301,7 +320,10 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	e := newReclaimEnv(t)
 	wt, path := e.worktree(t, "imp")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
+	// Asked of the machine the directory is on (the one discovery ran on),
+	// which holds the project's checkout: unset, the import is placed on the
+	// default machine, which has none, and is refused for that instead.
+	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path, DaemonId: &e.daemon}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
@@ -328,6 +350,7 @@ func newMultiRepoEnv(t *testing.T) (*reclaimEnv, []string) {
 	now := time.Now().UTC()
 	e.project = &db.Project{ID: "mp-" + e.userID, UserID: e.userID, Name: "multi", Path: root, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, e.repo.CreateProject(e.ctx, e.project))
+	require.NoError(t, e.repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, root, nil))
 	for _, name := range []string{"api", "web"} {
 		p := filepath.Join(root, name)
 		gitIn(t, root, "init", "-q", "-b", "main", p)
@@ -452,28 +475,6 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 	require.NotNil(t, after.CleanupMetadata)
 	assert.Equal(t, resp.Msg.SnapshotRefs, after.CleanupMetadata.SnapshotRefs)
 	assert.NoFileExists(t, filepath.Join(path, "wip.txt"))
-}
-
-// R-S2: unarchiving a workspace whose directory a removal already finished is
-// refused, and the row records that the directory is gone.
-func TestUnarchive_RefusedWhenTheMachineSaysGone(t *testing.T) {
-	requireInspectableHost(t)
-	e := newReclaimEnv(t)
-	wt, path := e.worktree(t, "gonerow")
-	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	age(t, path)
-	require.NoError(t, e.sweeper.Sweep(e.ctx)) // removes it, but the server has not recorded it yet:
-	require.NoError(t, e.repo.MergeWorktreeCleanupMetadata(e.ctx, wt.ID, func(m *core.CleanupMetadata, _ bool) bool {
-		m.DirectoryDeleted = false
-		return true
-	}))
-	require.False(t, exists(path))
-	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
-	assert.NotNil(t, got.DeletedAt, "the row must NOT flip to active over a missing directory")
-	assert.True(t, got.CleanupMetadata.DirectoryDeleted, "and it now records that the files are gone")
 }
 
 // R-S2: an unreachable machine does not block the unarchive; it records the

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
-import { getControlPlaneURL } from '@/lib/constants'
 import { logger } from '@/lib/logger'
+import { mintProxySessionCallbackUrl } from '@/lib/proxy-session'
 import { GradientBackground } from './GradientBackground'
 import Logo from '../assets/logo.svg'
 
@@ -15,6 +15,9 @@ import Logo from '../assets/logo.svg'
  * 3. If no session → redirect to /auth with return back here
  * 4. If session → POST to admin-server (control-plane) /api/proxy-session to mint a proxy token
  * 5. Redirect to {return_url_origin}/__proxy/callback?token={token}
+ *
+ * The embedded browser skips this bounce: lib/proxy-session mints the token
+ * before it opens a preview (see signedInPreviewUrl).
  */
 export function ProxyAuth() {
   const navigate = useNavigate()
@@ -54,43 +57,15 @@ export function ProxyAuth() {
         return
       }
 
-      // Session exists — mint a proxy session token via the admin-server.
-      // Important: this must hit admin-server (the control-plane API), NOT
-      // admin-web. In cloud-dev they are separate origins; in prod they
-      // typically share an origin but callers should still use the
-      // control-plane accessor so this stays correct everywhere.
-      const controlPlaneURL = getControlPlaneURL()
-      if (!controlPlaneURL) {
-        setError('Control plane API URL not configured.')
-        return
-      }
-
+      // Session exists — mint a proxy session token via the admin-server and
+      // redirect to the proxy callback on the workspace domain.
       try {
         logger.info('[ProxyAuth] Minting proxy session token')
-        const response = await fetch(`${controlPlaneURL}/api/proxy-session`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ return_url: returnURL }),
-        })
-
-        if (!response.ok) {
-          const text = await response.text()
-          logger.error('[ProxyAuth] Token mint failed', { status: response.status, body: text })
-          setError(`Failed to authenticate: ${text}`)
-          return
-        }
-
-        const { token } = await response.json()
-
-        // Redirect to the proxy callback on the workspace domain.
-        const callbackURL = `${parsedReturn.origin}/__proxy/callback?token=${encodeURIComponent(token)}`
+        const callbackURL = await mintProxySessionCallbackUrl(returnURL, session.access_token)
         logger.info('[ProxyAuth] Redirecting to proxy callback', { origin: parsedReturn.origin })
         window.location.href = callbackURL
       } catch (err) {
-        logger.error('[ProxyAuth] Unexpected error', err)
+        logger.error('[ProxyAuth] Proxy session failed', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')
       }
     }

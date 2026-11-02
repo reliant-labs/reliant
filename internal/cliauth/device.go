@@ -75,12 +75,15 @@ type tokenReply struct {
 	AccessToken      string `json:"access_token"`
 	ExpiresIn        int64  `json:"expires_in"`
 	Scope            string `json:"scope"`
+	AccountID        string `json:"account_id"`
+	AccountEmail     string `json:"account_email"`
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
 }
 
-// Run waits for the approval and returns the credential. Like Login.Run it does not
-// store it. ErrNoDeviceFlow when the authorization server does not offer it.
+// Run waits for the approval and returns the credential, naming the account
+// that approved it. Like Login.Run it does not store it. ErrNoDeviceFlow when the
+// authorization server does not offer it.
 func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 	client := l.HTTPClient
 	if client == nil {
@@ -257,10 +260,12 @@ func postForm(ctx context.Context, client oauth2.HTTPDoer, endpoint string, form
 func credentialFrom(reply tokenReply, issuer string) credentials.Credential {
 	now := time.Now().UTC()
 	c := credentials.Credential{
-		Token:     reply.AccessToken,
-		Scopes:    strings.Fields(reply.Scope),
-		CreatedAt: now,
-		Issuer:    issuer,
+		Token:        reply.AccessToken,
+		Scopes:       strings.Fields(reply.Scope),
+		CreatedAt:    now,
+		Issuer:       issuer,
+		AccountID:    reply.AccountID,
+		AccountEmail: reply.AccountEmail,
 	}
 	if len(reply.AccessToken) > 13 {
 		c.TokenPrefix = reply.AccessToken[:13]

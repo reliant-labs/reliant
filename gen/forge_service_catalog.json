@@ -14640,6 +14640,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.InboxService/ForgetStorageWorktree",
+          "name": "ForgetStorageWorktree",
+          "input": "reliant.v1.ForgetStorageWorktreeRequest",
+          "output": "reliant.v1.ForgetStorageWorktreeResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.InboxService/ListInbox",
           "name": "ListInbox",
           "input": "reliant.v1.ListInboxRequest",
@@ -14701,6 +14711,27 @@
               "Declared": true,
               "Verb": "cleanup_storage",
               "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ForgetStorageWorktree",
+            "InputType": "ForgetStorageWorktreeRequest",
+            "OutputType": "ForgetStorageWorktreeResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ForgetStorageWorktreeRequest",
+            "OutputTypeFQ": "reliant.v1.ForgetStorageWorktreeResponse",
+            "InputProtoFile": "reliant/v1/inbox.proto",
+            "OutputProtoFile": "reliant/v1/inbox.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "forget_storage",
+              "TargetKind": "worktree",
               "Writer": "INTERCEPTOR"
             }
           },
@@ -14774,6 +14805,14 @@
             }
           ],
           "DismissInboxItemResponse": null,
+          "ForgetStorageWorktreeRequest": [
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ForgetStorageWorktreeResponse": null,
           "ListInboxRequest": [
             {
               "Name": "limit",
@@ -14972,6 +15011,13 @@
             }
           ],
           "reliant.v1.DismissInboxItemResponse": [],
+          "reliant.v1.ForgetStorageWorktreeRequest": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ForgetStorageWorktreeResponse": [],
           "reliant.v1.HeldWorktree": [
             {
               "name": "worktree_id",
@@ -15007,6 +15053,10 @@
             },
             {
               "name": "cleaning",
+              "kind": "bool"
+            },
+            {
+              "name": "forgettable",
               "kind": "bool"
             }
           ],
@@ -15505,6 +15555,8 @@
           "reliant.v1.DiskVolume": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DismissInboxItemRequest": "reliant/v1/inbox.proto",
           "reliant.v1.DismissInboxItemResponse": "reliant/v1/inbox.proto",
+          "reliant.v1.ForgetStorageWorktreeRequest": "reliant/v1/inbox.proto",
+          "reliant.v1.ForgetStorageWorktreeResponse": "reliant/v1/inbox.proto",
           "reliant.v1.HeldWorktree": "reliant/v1/inbox.proto",
           "reliant.v1.InboxApproval": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationDefinitionBroken": "reliant/v1/inbox.proto",
@@ -33482,6 +33534,11 @@
               "Name": "user_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "account_email",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ]
         },
@@ -34501,6 +34558,10 @@
             {
               "name": "user_id",
               "kind": "string"
+            },
+            {
+              "name": "account_email",
+              "kind": "string"
             }
           ],
           "reliant.v1.ReportToolResultRequest": [
@@ -34890,6 +34951,10 @@
           "reliant.v1.WhoAmIResponse": [
             {
               "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_email",
               "kind": "string"
             }
           ]
@@ -43295,6 +43360,10 @@
             {
               "name": "stripped_bytes",
               "kind": "int64"
+            },
+            {
+              "name": "forgotten",
+              "kind": "bool"
             }
           ],
           "reliant.v1.CommitWorktreeRequest": [
@@ -46225,7 +46294,7 @@
     {
       "consumer": "DaemonAuth",
       "field": "Tokens",
-      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenIntrospector",
+      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenAccountIntrospector",
       "methods": [],
       "candidates": [
         "TokenAuthority"

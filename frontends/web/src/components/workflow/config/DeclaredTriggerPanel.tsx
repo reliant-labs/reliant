@@ -563,7 +563,7 @@ function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trig
               type="button"
               onClick={() => setShowInternal((open) => !open)}
               aria-expanded={showInternal}
-              className="self-start text-xs font-medium text-primary hover:underline"
+              className="self-start text-xs font-medium text-primary-ink hover:underline"
             >
               {showInternal ? "Hide internal inputs" : `Show ${internal.length} internal input${internal.length === 1 ? "" : "s"}`}
             </button>

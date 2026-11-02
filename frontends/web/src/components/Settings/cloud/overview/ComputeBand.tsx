@@ -168,7 +168,7 @@ export function ComputeBand({
               </div>
               {allowedSizesLabel && (
                 <p className="text-sm text-muted-foreground">
-                  Runs {allowedSizesLabel.toLowerCase()}
+                  Runs {allowedSizesLabel === "All sizes" ? "all sizes" : allowedSizesLabel}
                 </p>
               )}
             </div>

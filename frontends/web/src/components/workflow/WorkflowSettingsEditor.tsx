@@ -265,7 +265,7 @@ function OutputsEditor({
           <button
             type="button"
             onClick={() => setShowSuggestions(!showSuggestions)}
-            className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
+            className="flex items-center gap-2 text-sm text-primary-ink hover:text-primary-ink/80 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add from available outputs

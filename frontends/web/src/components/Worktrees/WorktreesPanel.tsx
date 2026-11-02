@@ -125,7 +125,7 @@ export function WorktreesPanel({
         <EmptyState
           icon={<FolderGit2 className="h-6 w-6" />}
           title="No project open"
-          description="Workspaces belong to a project. Open a project to see the workspaces its chats are using."
+          description="Branches belong to a project. Pick a project to see the branches its chats work in."
         />
       </div>
     );
@@ -136,8 +136,8 @@ export function WorktreesPanel({
       <div className={cn("forge-ui", paddingClass)}>
         <EmptyState
           icon={<AlertCircle className="h-6 w-6" />}
-          title="Workspaces need a git repository"
-          description={`Each workspace is a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
+          title="Branches need a git repository"
+          description={`Each branched chat works in a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
           actionLabel="Initialize git"
           onAction={() => setShowInitGitModal(true)}
         />
@@ -325,7 +325,7 @@ export function WorktreesPanel({
             <div className="flex justify-center border-t border-border p-2">
               <button
                 type="button"
-                className="text-xs text-primary hover:underline disabled:opacity-60"
+                className="text-xs text-primary-ink hover:underline disabled:opacity-60"
                 disabled={isLoadingMore}
                 onClick={loadMoreWorktrees}
                 data-testid="load-more-workspaces"
@@ -394,7 +394,7 @@ function LinkedChatCell({ chats, onOpen }: { chats: Chat[]; onOpen: (chat: Chat)
         type="button"
         onClick={() => onOpen(latest)}
         aria-label={`Open chat ${title}`}
-        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {title}
       </button>

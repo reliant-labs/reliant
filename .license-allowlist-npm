@@ -24,3 +24,11 @@
 # The scope is PRODUCTION dependencies (`npm ls --omit=dev`), so build tooling
 # does not need entries. lightningcss and axe-core are MPL-2.0 and are not
 # listed here precisely because they are dev-tree only.
+
+# Fonts. SIL OFL-1.1: free to bundle and embed in software, commercial
+# included; the only restrictions are not selling the font on its own and not
+# shipping a MODIFIED font under its reserved name. We ship the files
+# unmodified, with the package's LICENSE. Same license as the vendored Inter
+# and JetBrains Mono in frontends/web/public/fonts.
+@fontsource-variable/geist       # OFL-1.1 font, bundled unmodified (the app's UI face)
+@fontsource-variable/geist-mono  # OFL-1.1 font, bundled unmodified (the app's UI mono)

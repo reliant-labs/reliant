@@ -27,7 +27,7 @@ export function WorkflowPresetsSection({ projectId, workflowRef }: { projectId: 
           <button
             type="button"
             onClick={() => setConfiguring(true)}
-            className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Default presets…
           </button>

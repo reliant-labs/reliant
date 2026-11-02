@@ -370,8 +370,8 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
           return (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-primary" />
-                <span className="font-semibold text-sm text-primary">
+                <Terminal className="w-4 h-4 text-primary-ink" />
+                <span className="font-semibold text-sm text-primary-ink">
                   Execute command
                 </span>
               </div>
@@ -440,7 +440,7 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
             if (index === 0 || (index > 0 && parts[index - 1]?.match(/&&|\|\||;|\|/))) {
               if (trimmed && !trimmed.startsWith('-') && !trimmed.match(/^[<>|&;]/)) {
                 return (
-                  <span key={index} className="text-primary font-semibold">
+                  <span key={index} className="text-primary-ink font-semibold">
                     {part}
                   </span>
                 );
@@ -468,7 +468,7 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
             // Pipe and redirection operators
             if (trimmed.match(/^(\||>>?|<|2>&1|2>|1>)$/)) {
               return (
-                <span key={index} className="text-primary font-bold mx-1">
+                <span key={index} className="text-primary-ink font-bold mx-1">
                   {part}
                 </span>
               );

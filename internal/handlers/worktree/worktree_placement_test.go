@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
@@ -105,25 +106,70 @@ type placementFixture struct {
 	svc       *Service
 	userID    string
 	projectID string
-	ctx       context.Context
+	// projectPath is the project's checkout, at the same path on every
+	// machine installOn names.
+	projectPath string
+	ctx         context.Context
 }
 
+// placementMachines are the machines the placement tests name. The project
+// is checked out on each of them (installOn), as create, clone and the
+// connect-time reconcile record it: every worktree command resolves its repos
+// from that machine's own checkout.
+var placementMachines = []string{placementDefaultDaemon, "daemon-b", "daemon-c", "test-daemon-id"}
+
 func newPlacementFixture(t *testing.T) *placementFixture {
+	t.Helper()
+	f := newUninstalledPlacementFixture(t)
+	f.installOn(t, placementMachines...)
+	return f
+}
+
+// installOn records the project as checked out at its path on each machine,
+// each owned by the fixture's user.
+func (f *placementFixture) installOn(t testing.TB, daemonIDs ...string) {
+	t.Helper()
+	installProject(t, f.repo, f.projectID, f.userID, f.projectPath, daemonIDs...)
+}
+
+// testMachines are the machines the routers in these tests resolve to by
+// default (toolexectest.Stub, discoverRouter, placementRouter).
+var testMachines = []string{"test-daemon-id", placementDefaultDaemon}
+
+// installProject records projectID as checked out at path on each machine,
+// each owned by userID: the project_daemons rows create, clone and the
+// connect-time reconcile write, from which every worktree command resolves
+// the repos it names.
+func installProject(t testing.TB, repo *db.Repo, projectID, userID, path string, daemonIDs ...string) {
+	t.Helper()
+	ctx := context.Background()
+	for _, id := range daemonIDs {
+		if d, err := repo.GetDaemon(ctx, id); err != nil || d == nil {
+			require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: userID}))
+		}
+		require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, id, path, nil))
+	}
+}
+
+// newUninstalledPlacementFixture is newPlacementFixture with no machine
+// holding a checkout of the project.
+func newUninstalledPlacementFixture(t *testing.T) *placementFixture {
 	t.Helper()
 	repo := db.NewTestRepo(t)
 	router := &placementRouter{}
 	f := &placementFixture{
-		repo:      repo,
-		router:    router,
-		svc:       newWorktreeService(t, repo, router),
-		userID:    uuid.NewString(),
-		projectID: uuid.NewString(),
+		repo:        repo,
+		router:      router,
+		svc:         newWorktreeService(t, repo, router),
+		userID:      uuid.NewString(),
+		projectID:   uuid.NewString(),
+		projectPath: t.TempDir(),
 	}
 	f.ctx = context.WithValue(context.Background(), auth.UserIDContextKey, f.userID)
 
 	now := time.Now().UTC()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
-		ID: f.projectID, UserID: f.userID, Name: "Placement Project", Path: t.TempDir(),
+		ID: f.projectID, UserID: f.userID, Name: "Placement Project", Path: f.projectPath,
 		IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
@@ -285,7 +331,7 @@ func (r *placingRouter) PlacementDaemonID(_ context.Context, _ string, daemonID 
 func TestCreateWorktree_UnpinnedChatIsPlacedOnTheMachineWithTheProject(t *testing.T) {
 	t.Parallel()
 
-	f := newPlacementFixture(t)
+	f := newUninstalledPlacementFixture(t)
 	f.svc.deps.Router = &placingRouter{f.router}
 	require.NoError(t, f.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: "daemon-vm", UserID: f.userID}))
 	require.NoError(t, f.repo.UpsertProjectDaemon(context.Background(), f.projectID, "daemon-vm", "/work/project", nil))
@@ -298,18 +344,24 @@ func TestCreateWorktree_UnpinnedChatIsPlacedOnTheMachineWithTheProject(t *testin
 	assertPlacedOn(t, f.router, wt, "daemon-vm")
 }
 
-// With no install recorded for the project there is nothing to narrow to, so
-// the router's default answers, as before.
-func TestCreateWorktree_NoInstallsRecordedUsesTheRoutersDefault(t *testing.T) {
+// With no machine holding a checkout there is no repo to make a workspace
+// from: the create is refused before a row exists, with the way out, and
+// nothing reaches a machine.
+func TestCreateWorktree_NoInstallsRecordedIsRefusedWithTheWayOut(t *testing.T) {
 	t.Parallel()
 
-	f := newPlacementFixture(t)
+	f := newUninstalledPlacementFixture(t)
 	f.svc.deps.Router = &placingRouter{f.router}
 
-	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{})
+	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{})
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "create a workspace from it")
+	assert.True(t, projectcheckout.IsMissing(err))
+	assert.Empty(t, f.router.daemonsFor("worktree.create"))
+	rows, err := f.repo.ListWorktrees(context.Background(), db.WorktreeFilters{ProjectID: &f.projectID})
 	require.NoError(t, err)
-
-	assertPlacedOn(t, f.router, wt, "daemon-laptop")
+	assert.Empty(t, rows, "no row is recorded for a create that cannot run")
 }
 
 // TestCreateWorktree_RejectsAnotherUsersChat: chat_id now decides which

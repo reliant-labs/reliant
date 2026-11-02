@@ -98,7 +98,8 @@ vi.mock("../../../hooks/chat-queries", () => ({
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: ARCHIVED, isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -158,7 +159,7 @@ describe("Sidebar: which project a chat is in", () => {
     // Pinned while its chats scroll under it.
     expect(apiHeader).toHaveClass("sticky");
     // The open chat is in web.
-    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).toHaveClass("text-primary");
+    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).toHaveClass("text-primary-ink");
   });
 
   it("lists a main-only project's chats straight under the project, with no MAIN heading", () => {

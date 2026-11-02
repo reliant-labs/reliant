@@ -18,15 +18,22 @@ import (
 // to the user's tools daemon via daemon commands. This ensures
 // MCP servers run on the user's machine with their PATH, node, npx, etc.
 type daemonMCPProxy struct {
-	router Router
+	router commandSender
 	userID string
 	// onChange runs after every start, stop or restart this proxy sends,
 	// whatever its outcome: the server's status may have changed.
 	onChange func()
 }
 
+// commandSender is the one router capability the proxy needs. The handlers
+// hand it a projectcheckout.PinnedSender, so every MCP command goes to the
+// machine holding the project's checkout.
+type commandSender interface {
+	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+}
+
 // newDaemonMCPProxy creates a new daemon-proxying MCP manager.
-func newDaemonMCPProxy(router Router, userID string) *daemonMCPProxy {
+func newDaemonMCPProxy(router commandSender, userID string) *daemonMCPProxy {
 	return &daemonMCPProxy{router: router, userID: userID}
 }
 

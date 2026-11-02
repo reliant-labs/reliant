@@ -100,8 +100,8 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
         data-testid="permissions-popup"
       >
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-primary" />
-          <span className="font-medium text-primary">
+          <Shield className="w-5 h-5 text-primary-ink" />
+          <span className="font-medium text-primary-ink">
             {pendingApprovals.length} Pending
           </span>
         </div>

@@ -272,7 +272,7 @@ describe("ModelStep funding gate", () => {
 
     // $50.00 — a preset other than the default, so the assertion cannot pass
     // by accident.
-    fireEvent.click(screen.getByRole("button", { name: "$50.00" }));
+    fireEvent.click(screen.getByRole("button", { name: "$50" }));
 
     expect(updatePlan).toHaveBeenCalledWith({ aiCreditCents: 5000 });
   });

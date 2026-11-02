@@ -24,6 +24,7 @@
  */
 
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
 import type { CloudEnv, CloudEnvStatus, CloudPromotion } from "./cloudEnvs";
@@ -368,6 +369,10 @@ export type DaemonSide =
   | "ok"
   | "offline"
   | "disabled"
+  // The daemon answered, or would have: the project is not checked out on a
+  // machine that could. Not an outage, and no retry fixes it — the remedy is
+  // to clone it onto a machine (ProjectCheckoutMissing, CheckoutMissing.tsx).
+  | "no-checkout"
   | "not-forge-project"
   | "unsupported"
   | "malformed"
@@ -383,7 +388,8 @@ export function daemonSideOf(
   // No answer yet and no error is "still asking" — including the tick before
   // a project id resolves, when the query has not been enabled at all.
   if (!error) return "loading";
-  return isForgeAPIDisabled(error) ? "disabled" : "offline";
+  if (isForgeAPIDisabled(error)) return "disabled";
+  return projectCheckoutMissing(error) ? "no-checkout" : "offline";
 }
 
 /**

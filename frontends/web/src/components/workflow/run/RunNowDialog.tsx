@@ -284,7 +284,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }:
                   disabled={starting}
                   onClick={() => setReplaying(choice.replay)}
                   className={cn(
-                    "rounded px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                    "rounded px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     replaying === choice.replay ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
@@ -378,7 +378,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }:
               aria-expanded={payloadOpen || payloadInvalid}
               aria-controls={id("payload-panel")}
               onClick={() => setPayloadOpen((open) => !open)}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {payloadOpen || payloadInvalid ? "Hide the event payload" : "Edit the event payload"}
             </button>

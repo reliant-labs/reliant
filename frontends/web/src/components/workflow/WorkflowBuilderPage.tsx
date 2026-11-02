@@ -377,6 +377,8 @@ export function WorkflowBuilderPage({
           to: "/workflow/$workflowName",
           params: { workflowName: response.slug },
           search: (prev: Record<string, unknown>) => prev,
+          // Keep the history state: it records where Back returns to.
+          state: true,
           replace: true,
         } as never);
       }
@@ -560,8 +562,13 @@ export function WorkflowBuilderPage({
   }
 
   const handleBack = () => {
-    // Navigate to the logical parent of the current route (lib/routeParent).
-    // From /workflow/$name that's the Library (/workflows/library).
+    // The builder's own Back goes where the header's does: the route
+    // adapter's onClose returns to wherever the builder was opened from (a
+    // chat), else the logical parent of the route (lib/routeParent).
+    if (onClose) {
+      onClose();
+      return;
+    }
     navigate(getParentRouteNavigateOptions(pathname));
   };
 

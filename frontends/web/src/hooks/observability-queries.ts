@@ -51,6 +51,7 @@ import type {
   Severity,
   TimeWindow,
 } from "@/services/controlPlane/observability/types";
+import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
@@ -302,7 +303,8 @@ export interface PanelQueryOptions {
 
 /**
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
- * service filter rides as `services`; search panels are never run here.
+ * service filter rides as `services`; search and text panels, and a kind this
+ * console does not draw, are never run here (panelRunsQuery).
  *
  * Like every observability read it waits its turn in the page's read scheduler
  * (obsClient), and a refusal for the server's concurrent-read cap is retried
@@ -321,7 +323,7 @@ export function usePanelQuery(
 ) {
   const api = useObsReadApi();
   const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
-  const enabled = !!scope && panel.kind !== "search" && (options.enabled ?? true);
+  const enabled = !!scope && panelRunsQuery(panel.kind) && (options.enabled ?? true);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {

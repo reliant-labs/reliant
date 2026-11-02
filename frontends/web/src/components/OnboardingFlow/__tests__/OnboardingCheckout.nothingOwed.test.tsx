@@ -73,6 +73,13 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
   isCheckoutIdentityRequired: () => false,
 }));
 
+// Pricing consent is tested through real typed transport in
+// MachineSaleConsent.test; here it renders its children as accepted, as in
+// OnboardingCheckout.test.
+vi.mock("@/components/Billing/MachineSaleConsent", () => ({
+  MachineSaleConsent: ({ children }: { children: (price?: number) => React.ReactNode }) => <>{children()}</>,
+}));
+
 vi.mock("@/components/RedeemCouponForm", () => ({
   RedeemCouponForm: () => <div data-testid="redeem-coupon" />,
 }));

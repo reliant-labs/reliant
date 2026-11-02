@@ -50,6 +50,7 @@ import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/
 
 import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
+import { NoEnvironmentsState } from "../../Console/NoEnvironmentsState";
 import { CloudNotice } from "../../SourceNotices";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { ObsChartMarkersProvider } from "../charts/UPlotChart";
@@ -59,8 +60,9 @@ import { BUTTON_SMALL, Segmented } from "../Dashboards/parts";
 import { deliveryScopeOf } from "../deliveryScope";
 import { filterParam, filterTokensOf, scopeFiltersOf, type FilterToken } from "../obsFilters";
 import type { ObsEnvironment } from "../obsPlace";
+import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { ObsScopeBar } from "../ObsScopeBar";
-import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, ObsNoEnvironments, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
 import { useNothingArrived } from "../serviceSignals";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { Breakdown } from "./Breakdown";
@@ -93,10 +95,13 @@ export function MetricsExplorerPage() {
       }),
     [navigate]
   );
-  const environments = useMemo<ObsEnvironment[]>(
-    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : [])),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // A chart can become an alert rule, and the dialog names the rules each
+  // environment already declares.
+  const environments = useDeclaredEnvironments(recorded);
   const hrefs = useMemo<MetricsExplorerHrefs>(
     () => ({
       trace: (traceId) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
@@ -119,9 +124,7 @@ export function MetricsExplorerPage() {
       {scoped?.lifecycle === "local" ? (
         <LocalEnvNote env={env} />
       ) : environments.length === 0 ? (
-        <div data-testid="metrics-no-envs">
-          <ObsNoEnvironments topic="metrics" />
-        </div>
+        <NoEnvironmentsState topic="metrics" testId="metrics-no-envs" />
       ) : (
         <MetricsExplorer project={forgeProject} env={env} environments={environments} search={search} onSearch={onSearch} hrefs={hrefs} />
       )}
@@ -369,7 +372,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
           id="metrics-range"
           value={range}
           onChange={(event) => onSearch({ range: event.target.value === DEFAULT_RANGE ? undefined : event.target.value })}
-          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="metrics-range"
         >
           {RANGE_PRESETS.map((preset) => (
@@ -644,7 +647,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
           tabIndex={tab === t.id ? 0 : -1}
           onClick={() => onTab(t.id)}
           className={cn(
-            "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             tab === t.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
           )}
           data-testid={`metrics-tab-${t.id}`}

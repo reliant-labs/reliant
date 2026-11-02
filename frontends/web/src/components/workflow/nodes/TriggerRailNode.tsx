@@ -250,7 +250,7 @@ function DeclaredCard({ rail, line, compact }: { rail: TriggerRailContextValue; 
             aria-label={`Activate ${name}`}
             className={cn(
               nodeControlClass,
-              "absolute bottom-2 right-2.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
+              "absolute bottom-2 right-2.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs font-medium text-primary-ink transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
             )}
           >
             Activate
@@ -373,7 +373,7 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
           <button
             type="button"
             onClick={stop(() => void triggersQuery.refetch())}
-            className={cn(nodeControlClass, "font-medium text-primary hover:underline")}
+            className={cn(nodeControlClass, "font-medium text-primary-ink hover:underline")}
           >
             Retry
           </button>
@@ -389,7 +389,7 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
             aria-label="Add trigger"
             className={cn(
               nodeControlClass,
-              "flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
+              "flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-primary-ink transition-colors hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
             )}
           >
             <Plus className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />

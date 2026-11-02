@@ -163,7 +163,7 @@ function ProviderTile({
       data-provider={id}
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border border-border/60 bg-background p-3 text-left transition-colors",
-        "hover:border-border hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+        "hover:border-border hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
       )}
     >
       <ProviderMark provider={id} />

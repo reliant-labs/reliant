@@ -98,9 +98,12 @@ describe("ComputeStep — a coupon covers the coupon unit", () => {
     renderStep();
 
     expect(screen.getByTestId("compute-step-coverage-note")).toHaveTextContent(/covers the M machine/);
+    expect(screen.getByTestId("compute-step-coverage-note")).toHaveTextContent(/S1, S2 and the larger sizes need a monthly plan/);
+    // A coupon is not a monthly plan, so the picker does not promise one.
+    expect(screen.getByTestId("machine-pricing-line")).not.toHaveTextContent(/Includes \d+ hours a month/);
     // M carries no price; S1, which the coupon does not run, still does.
-    expect(screen.queryByText(/\$39\.00\/mo/)).toBeNull();
-    expect(screen.getByText(/\$25\.00\/mo/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$39\/mo/)).toBeNull();
+    expect(screen.getByText(/\$25\/mo/)).toBeInTheDocument();
   });
 
   it("defaults the selection to the covered M, not the cheaper S1", () => {

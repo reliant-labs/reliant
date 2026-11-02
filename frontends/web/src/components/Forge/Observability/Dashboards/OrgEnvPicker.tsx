@@ -42,7 +42,7 @@ export function OrgEnvPicker({ environments, selection, onChange }: { environmen
           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="dashboard-org-env-all"
         >
-          <Check className={cn("h-3.5 w-3.5", selection.names.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
+          <Check className={cn("h-3.5 w-3.5", selection.names.length === 0 ? "text-primary-ink" : "invisible")} aria-hidden="true" />
           Every environment
         </button>
         {environments.map((candidate) => (

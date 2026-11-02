@@ -11,6 +11,8 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
+
 import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
 import type { ObsPlace } from "../obsPlace";
@@ -119,9 +121,18 @@ describe("rules are code", () => {
     // The env place carries no declared shape: nothing in view declares a rule.
     renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" });
     const none = await screen.findByTestId("obs-rules-none");
-    expect(within(none).getByText("forge obs alerts check")).toBeInTheDocument();
+    expect(within(none).getByText("reliant forge obs alerts check")).toBeInTheDocument();
     expect(within(none).getByTestId("obs-rules-none-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability#alerts");
     expect(screen.getByTestId("obs-code-snippet")).toHaveTextContent("forge.AlertRule {");
+  });
+
+  it("waits for the declared shapes instead of saying no rule is declared", async () => {
+    // Each env's shape is fetched on its own (GetEnvironmentShape): until it
+    // arrives, "none declared" would be a guess.
+    const pending: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: FIXTURE_ENVS.map((env) => ({ ...env, declaredPending: true })) };
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" }, pending);
+    expect(await screen.findByTestId("obs-rules-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-rules-none")).not.toBeInTheDocument();
   });
 
   it("shows a forge default with how to turn it off and how to tune it", async () => {
@@ -131,6 +142,32 @@ describe("rules are code", () => {
     expect(snippets).toHaveLength(2);
     expect(snippets[0]).toHaveTextContent('"service-silent": forge.AlertDefault {enabled = False}');
     expect(snippets[1]).toHaveTextContent('"for" = "15m"');
+  });
+
+  it("shows a platform rule as raised from Reliant's records, never its marker as a query", async () => {
+    const prod = ENVIRONMENTS[2]!;
+    const newIssue: DeclaredAlertRule = {
+      alert: "NewIssue",
+      expr: "SELECT 1 AS value WHERE 0 /* reliant:platform new-issue env:{reliant_env_id:String} */",
+      for: "0s",
+      interval: "1m",
+      keepFiringFor: "",
+      labels: { severity: "warning" },
+      annotations: {},
+      source: "default",
+      defaultId: "new-issue",
+    };
+    const place: ObsPlace = {
+      kind: "project",
+      project: FIXTURE_PROJECT,
+      environments: ENVIRONMENTS.map((env) =>
+        env.id === prod.id ? { ...env, declared: { ...env.declared!, alerts: [...(env.declared?.alerts ?? []), newIssue] } } : env
+      ),
+    };
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules", rule: "prod/NewIssue" }, place);
+    const detail = await screen.findByTestId("obs-rule-detail");
+    expect(within(detail).getByTestId("obs-rule-platform")).toHaveTextContent("Reliant raises this alert from its own records (new-issue)");
+    expect(detail).not.toHaveTextContent("WHERE 0");
   });
 
   it("stays readable when alerting is not running: the rules come from the release shape", async () => {

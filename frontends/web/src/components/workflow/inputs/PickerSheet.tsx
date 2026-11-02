@@ -49,7 +49,7 @@ export function PickerSheet({ title, count, multi, onDone, children }: PickerShe
         <button
           type="button"
           onClick={onDone}
-          className="inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden /> Back
         </button>
@@ -57,7 +57,7 @@ export function PickerSheet({ title, count, multi, onDone, children }: PickerShe
         <button
           type="button"
           onClick={onDone}
-          className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {multi ? `Done · ${count}` : "Done"}
         </button>

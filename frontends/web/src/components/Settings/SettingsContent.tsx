@@ -2,6 +2,7 @@ import { AISettings } from "./AISettings";
 import { AboutSection } from "./AboutSection";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { ChatEditorSettings } from "./ChatEditorSettings";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { AccountSettings } from "./AccountSettings";
 import { PrivacySettings } from "./PrivacySettings";
@@ -12,6 +13,7 @@ import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, type ReactNode } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -72,6 +74,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <AboutSection />;
       case "appearance":
         return <AppearanceSettings />;
+      case "chat-editor":
+        return <ChatEditorSettings />;
       case "notifications":
         return <NotificationSettings />;
       case "privacy":
@@ -88,6 +92,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <MemberPermissions />;
       case "git-connections":
         return <GitConnectionsSettings />;
+      case "integrations":
+        return <IntegrationsSettings />;
       case "developer":
         return <DeveloperSettings />;
       case "projects":

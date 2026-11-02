@@ -43,6 +43,27 @@ service InboxService {
     };
   }
 
+  // ForgetStorageWorktree drops Reliant's record of the folder of an archived
+  // workspace that no machine is on record for, and deletes nothing on any
+  // disk. It is the way out for a workspace held "no-machine-on-record"
+  // (its machine was removed) that no connected machine has: such a hold
+  // otherwise never clears. Allowed only while HeldWorktree.forgettable: every
+  // connected machine was asked and none has the folder. Refused with
+  // FAILED_PRECONDITION otherwise, NOT_FOUND for a workspace that is not the
+  // caller's. The archived workspace stays in the archive; restoring it later
+  // makes a new folder.
+  rpc ForgetStorageWorktree(ForgetStorageWorktreeRequest) returns (ForgetStorageWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "forget_storage"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
+
   // DismissInboxItem hides items from the caller's inbox. Every kind can be
   // dismissed. Hiding an approval or a question does not resolve it: the run
   // still waits, and the chat still shows it. A newer failure of the same
@@ -311,7 +332,10 @@ message RestoreInboxItemResponse {}
 
 // InboxStorage describes one machine's disk and the archived worktrees it is
 // holding. The item exists while any of its volumes is under pressure or any
-// worktree is held.
+// worktree is held. An item with an empty daemon_id holds the archived
+// worktrees no machine is on record for (their machine was removed): it has
+// no disk and no Clean up, only ForgetStorageWorktree for the forgettable
+// ones.
 message InboxStorage {
   // disk_free_bytes / disk_total_bytes described only the volume holding the
   // worktree root — on a cloud machine the one volume that never fills. The
@@ -367,7 +391,17 @@ message HeldWorktree {
   bool removable = 8;
   // A clean-up of this worktree is running now.
   bool cleaning = 9;
+  // True when ForgetStorageWorktree may drop it: no machine is on record for
+  // it ("no-machine-on-record"), at least one machine is connected, and every
+  // connected machine answered that it does not have the folder.
+  bool forgettable = 10;
 }
+
+message ForgetStorageWorktreeRequest {
+  string worktree_id = 1;
+}
+
+message ForgetStorageWorktreeResponse {}
 
 message CleanupStorageRequest {
   // The machine whose item was shown.

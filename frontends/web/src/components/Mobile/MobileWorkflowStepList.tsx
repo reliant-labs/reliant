@@ -20,7 +20,7 @@ import { orderedWorkflowNodeIds } from "./workflowStepOrder";
 function StatusIcon({ status }: { status?: NodeExecutionStatus }) {
   switch (status) {
     case "running":
-      return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />;
+      return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary-ink" />;
     case "completed":
       return <CheckCircle2 className="h-4 w-4 shrink-0 text-success-ink" />;
     case "failed":

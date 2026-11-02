@@ -126,7 +126,7 @@ describe("RedeemCouponForm — reliant provider sync", () => {
 
     // The success message (redemption itself) must still be shown.
     await waitFor(() => {
-      expect(screen.getByText(/added \$20\.00 to your balance/i)).toBeInTheDocument();
+      expect(screen.getByText(/added \$20 to your balance/i)).toBeInTheDocument();
     });
     // But something actionable about the sync failure must appear too.
     await waitFor(() => {

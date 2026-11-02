@@ -99,6 +99,14 @@ type RuntimeContext struct {
 	ClearProviderPins bool     `json:"clear_provider_pins,omitempty"`
 	Descendant        bool     `json:"descendant,omitempty"`
 	PresetModelTags   []string `json:"preset_model_tags,omitempty"`
+	// ChatModel is the chat's own model selection (the root thread's model
+	// input) on a bound chat. A descendant whose own selector cannot run on
+	// ChatProvider runs on it instead of holding, unless the user chose the
+	// descendant's model themselves (ThreadModelChosen): a preset's, a spawn
+	// argument's or a workflow's model is a default, not a user choice, and a
+	// default that the chat's provider cannot serve must not park the thread.
+	ChatModel         *ModelChoice `json:"chat_model,omitempty"`
+	ThreadModelChosen bool         `json:"thread_model_chosen,omitempty"`
 
 	// Failover is what the run allows when a provider's accounts are all
 	// limited (see FailoverPolicy). Set on call_llm nodes only.
@@ -153,6 +161,14 @@ type RuntimeContext struct {
 	// in-memory JWT map and resolve the Reliant LLM driver. Token persists into
 	// workflow history; rely on its natural expiry as the security boundary.
 	UserJWT string `json:"user_jwt,omitempty"`
+}
+
+// ModelChoice is a model selector as a workflow input holds it: an exact id
+// ("<model>" or "<model>@<driver>"), semantic tags, and preferred providers.
+type ModelChoice struct {
+	ID        string   `json:"id,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+	Providers []string `json:"providers,omitempty"`
 }
 
 // DaemonSelector specifies criteria for selecting which daemon executes tools.

@@ -343,7 +343,7 @@ export function WorkflowInputGroup({
                       className={cn(
                         "px-2 py-1 text-xs rounded transition-colors",
                         newPresetName.trim() && !savingGroup
-                          ? "bg-primary/20 hover:bg-primary/30 text-primary"
+                          ? "bg-primary/20 hover:bg-primary/30 text-primary-ink"
                           : "bg-muted text-muted-foreground"
                       )}
                     >
@@ -387,7 +387,7 @@ export function WorkflowInputGroup({
                         disabled={savingGroup}
                         className={cn(
                           "flex items-center gap-1 px-2 py-1 rounded transition-colors",
-                          "bg-primary/10 hover:bg-primary/20 text-primary"
+                          "bg-primary/10 hover:bg-primary/20 text-primary-ink"
                         )}
                       >
                         {savingGroup ? (
@@ -513,7 +513,7 @@ export function WorkflowInputGroup({
                     className={cn(
                       "px-2 py-1 text-xs rounded transition-colors",
                       newPresetName.trim() && !savingGroup
-                        ? "bg-primary/20 hover:bg-primary/30 text-primary"
+                        ? "bg-primary/20 hover:bg-primary/30 text-primary-ink"
                         : "bg-muted text-muted-foreground"
                     )}
                   >
@@ -557,7 +557,7 @@ export function WorkflowInputGroup({
                       disabled={savingGroup}
                       className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded transition-colors",
-                        "bg-primary/10 hover:bg-primary/20 text-primary"
+                        "bg-primary/10 hover:bg-primary/20 text-primary-ink"
                       )}
                     >
                       {savingGroup ? (

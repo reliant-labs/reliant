@@ -145,7 +145,7 @@ export function OAuthHelperPanel({
 
   const loginButtonClass =
     buttonVariant === "subtle"
-      ? "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+      ? "border border-primary/40 bg-primary/10 text-primary-ink hover:bg-primary/20"
       : "bg-primary text-primary-foreground hover:bg-primary/90";
 
   const loginButton = (
@@ -227,7 +227,7 @@ export function OAuthHelperPanel({
               `Waiting for you to finish signing in to ${providerName} in your browser. If you closed the tab or want to start over, cancel and try again.`
             : available
               ? `Sign in with ${providerName} to connect your account.`
-              : "The local OAuth helper is not running. We need this to intercept your credentials:"}
+              : `Reliant's sign-in helper isn't running on this computer. It finishes connecting your account. To start it:`}
         </p>
         {!available && !loading && (
           <div className="space-y-3">

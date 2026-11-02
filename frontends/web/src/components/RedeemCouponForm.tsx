@@ -26,6 +26,7 @@ import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
+import { computeCouponRedeemedLine, formatPrice } from "@/components/Billing/priceFormat";
 
 export interface RedeemCouponFormProps {
   /**
@@ -113,8 +114,8 @@ export function RedeemCouponForm({
       onSuccess: (res) => {
         setRedeemed(
           res.kind === RedeemedCouponKind.COMPUTE_MINUTES
-            ? "Machine-time coupon redeemed. Your machine usage balance shows the hours it adds."
-            : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
+            ? computeCouponRedeemedLine(res.computeMinutes)
+            : `Added ${formatPrice(res.amountCents)} to your balance.`,
         );
         setCode("");
         onRedeemed?.(res);
@@ -173,7 +174,7 @@ export function RedeemCouponForm({
                 "inline-flex w-full items-center justify-center rounded-lg border border-transparent bg-primary font-semibold text-primary-foreground transition-colors hover:bg-primary/90",
                 small ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
               )
-            : "text-sm font-medium text-primary hover:underline",
+            : "text-sm font-medium text-primary-ink hover:underline",
           className,
         )}
       >
@@ -206,6 +207,8 @@ export function RedeemCouponForm({
           disabled={redeem.isPending}
           autoComplete="off"
           aria-label="Coupon code"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "coupon-code-error" : undefined}
           className={cn(
             "flex-1 rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring",
             small ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm",
@@ -226,12 +229,12 @@ export function RedeemCouponForm({
         </button>
       </div>
       {error && (
-        <p className={cn("text-destructive-ink", small ? "text-xs" : "text-sm")}>
+        <p id="coupon-code-error" role="alert" className={cn("text-destructive-ink", small ? "text-xs" : "text-sm")}>
           {error}
         </p>
       )}
       {redeemed && (
-        <p className={cn("text-success-ink", small ? "text-xs" : "text-sm")}>
+        <p role="status" className={cn("text-success-ink", small ? "text-xs" : "text-sm")}>
           {redeemed}
         </p>
       )}

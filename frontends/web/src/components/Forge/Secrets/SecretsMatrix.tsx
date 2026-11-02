@@ -5,7 +5,7 @@ import Card from "@/components/forge-ui/card";
 import { STACK } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import { cn } from "@/lib/utils";
-import { managedSecretsQueryOptions } from "@/hooks/forge-queries";
+import { managedSecretsQueryOptions, useEnvironmentShapes } from "@/hooks/forge-queries";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 import type { RosterEnv } from "@/services/forge/roster";
 import { availabilityExplanation, managedSecretState, normalizeEndpoint, type ManagedStoreTarget } from "@/services/forge/secretStore";
@@ -26,8 +26,12 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
         : { kind: "none", availability: "provider-unknown" };
     return managedSecretsQueryOptions(projectId, env.name, target);
   }) });
+  // Each environment's declared secrets come from its declared shape, fetched
+  // per environment: the roster row carries only whether one exists.
+  const shapes = useEnvironmentShapes(envs.map((env) => env.live?.id ?? ""));
+  const shapeOf = (env: RosterEnv) => (env.live ? shapes.get(env.live.id) : undefined);
   const names = [...new Set(envs.flatMap((env, i) => [
-    ...(env.live?.declaredShape?.secrets.map((secret) => secret.name) ?? []),
+    ...(shapeOf(env)?.shape?.secrets.map((secret) => secret.name) ?? []),
     ...(listings[i].data?.secrets.map((secret) => secret.name) ?? []),
   ]))].sort();
 
@@ -61,16 +65,17 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
                   // Cached names keep the comparison stable, but their old status
                   // and timestamp are not authoritative while a refresh is pending.
                   const summary = listing.isFetching ? undefined : listing.data?.secrets.find((secret) => secret.name === name);
-                  const declared = env.live?.declaredShape?.secrets.find((secret) => secret.name === name);
+                  const shape = shapeOf(env);
+                  const declared = shape?.shape?.secrets.find((secret) => secret.name === name);
                   const readable = listing.data?.availability === "available";
                   const provider = declared?.provider;
-                  const status = listing.isLoading ? "Loading…"
+                  const status = listing.isLoading || shape?.isLoading ? "Loading…"
                     : listing.isFetching ? "Refreshing…"
                     : declared && provider && provider !== "hosted" ? (provider === "file" || provider === "rendered" ? "Local file store" : "External store")
                     : summary ? ({ set: "Set", deleted: "Deleted", destroyed: "Destroyed", tombstoned: "No versions" }[managedSecretState(summary)])
                     : !readable ? "Unknown"
                     : declared ? "Not set"
-                    : env.live?.declaredShape ? "Not declared" : "Not in managed store";
+                    : shape?.shape ? "Not declared" : "Not in managed store";
                   return <td key={env.name} data-label={env.name} className={cn("px-4 py-3 text-xs text-ink-muted", STACK.cell, STACK.labelled)}>
                     <Link href={secretHref(env.name, name)} className="inline-flex flex-col gap-1 hover:text-ink hover:underline" aria-label={`${name} in ${env.name}: ${status}`}>
                       <span>{status}</span>

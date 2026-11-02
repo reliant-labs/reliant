@@ -47,6 +47,7 @@ import type { Span } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 
+import { chartColor } from "../charts/chartPalette";
 import { formatDuration } from "../format";
 import {
   buildTraceTree,
@@ -74,13 +75,12 @@ const COLUMNS_WIDE = "grid-cols-[minmax(12rem,2fr)_3fr]";
 const COLUMNS_NARROW = "grid-cols-1 grid-rows-[1.75rem_1fr]";
 
 /**
- * Service colours, as theme tokens. Red (`--destructive`) is NOT here: it
- * means "this span failed" and nothing else, as in HyperDX.
+ * Service colours: the shared categorical palette (charts/chartPalette.ts),
+ * one per service in order of appearance. Red (`--destructive`) is NOT in it:
+ * it means "this span failed" and nothing else, as in HyperDX.
  */
-const SERVICE_TOKENS = ["--primary", "--secondary", "--success", "--warning", "--muted-foreground", "--accent-foreground"];
-
 function serviceColor(slot: number | undefined): string {
-  return `hsl(var(${SERVICE_TOKENS[(slot ?? 0) % SERVICE_TOKENS.length]}))`;
+  return chartColor(slot ?? 0);
 }
 
 export function TraceWaterfall({

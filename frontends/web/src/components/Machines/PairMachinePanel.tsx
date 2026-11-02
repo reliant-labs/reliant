@@ -11,6 +11,7 @@ import { useEventBus } from "@/lib/event-context";
 import { getControlPlaneURL } from "@/lib/constants";
 import { machineDisplayName } from "@/lib/machineName";
 import {
+  authLogoutCommand,
   daemonStartCommand,
   daemonStartCommandNeedsEditing,
   GATEWAY_URL_PLACEHOLDER,
@@ -52,19 +53,28 @@ interface PairMachinePanelProps {
   initialCode?: string;
 }
 
-function StepHeading({ index, title, tone = "neutral" }: { index: number; title: string; tone?: "sky" | "neutral" }) {
+function StepHeading({ index, title, tone = "neutral" }: { index: number; title: string; tone?: "accent" | "neutral" }) {
   return (
     <div className="flex items-center gap-2">
       <span
         className={cn(
           "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-2xs font-semibold",
-          tone === "sky" ? "bg-sky-500/20 text-sky-700 dark:text-sky-300" : "bg-muted text-muted-foreground",
+          tone === "accent" ? "bg-primary/15 text-primary-ink" : "bg-muted text-muted-foreground",
         )}
       >
         {index}
       </span>
-      <span className="text-xs font-medium text-foreground">{title}</span>
+      <span className="text-sm font-medium text-foreground">{title}</span>
     </div>
+  );
+}
+
+/** A command to paste, selectable in one click (the same treatment as the start command). */
+function CommandLine({ command }: { command: string }) {
+  return (
+    <code className="block select-all break-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+      {command}
+    </code>
   );
 }
 
@@ -220,8 +230,8 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
 
   if (connected) {
     return (
-      <div className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4" role="status">
-        <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
+      <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/5 px-4 py-3" role="status">
+        <Check className="mt-0.5 h-4 w-4 text-success" />
         <div>
           <h3 className="text-sm font-medium text-foreground">{machineDisplayName(connected)} is connected</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">Your projects can run on it now.</p>
@@ -234,25 +244,28 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
 
   return (
     <div className="space-y-4">
-      <section className="space-y-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
-        <StepHeading index={1} title="Install Reliant on that machine" tone="sky" />
+      {/* Both steps are the same inset well (bg-background + border-border/60,
+          the web-styling elevation rule); step 1's number carries the accent
+          as "start here" rather than a tinted box competing with the selection
+          above it. */}
+      <section className="space-y-3 rounded-lg border border-border/60 bg-background p-4">
+        <StepHeading index={1} title="Install Reliant on that machine" tone="accent" />
         <p className="text-xs leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">Using the desktop app on this computer?</span> It already runs
-          Reliant here and connects on its own — no terminal needed.
+          Using the desktop app here? Skip this — it connects on its own.
         </p>
         <ReliantDownloadOptions defaultCollapsed={installLikelyDone} collapsedNote={installEvidenceNote} />
       </section>
 
-      <section className="space-y-4 rounded-xl border border-border/60 bg-background p-4">
-        <div className="space-y-1.5">
+      <section className="space-y-4 rounded-lg border border-border/60 bg-background p-4">
+        <div className="space-y-2">
           <StepHeading index={2} title={`Run this in ${terminal.name} on that machine`} />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {terminal.howToOpen} Then paste this in and press <span className="font-medium text-foreground">Enter</span>.
-            It prints a pairing code.
+            {terminal.howToOpen} Paste this and press <span className="font-medium text-foreground">Enter</span> — it
+            prints a pairing code.
           </p>
           {isElectron && cliInstalled === false && (
-            <div className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5">
-              <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+            <div className="space-y-2 rounded border border-warning/30 bg-warning/5 p-2.5">
+              <p className="flex items-start gap-2 text-xs text-warning-ink">
                 <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span>
                   The <code className="font-mono">reliant</code> command is not on your PATH yet.
@@ -265,20 +278,18 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
             </div>
           )}
           {isElectron && cliInstalled === true && cliPath && (
-            <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+            <p className="flex items-center gap-1.5 text-xs text-success-ink">
               <Check className="h-3 w-3" />
               <span>
                 <code className="font-mono">reliant</code> CLI installed at <code className="font-mono">{cliPath}</code>
               </span>
             </p>
           )}
-          <code className="block select-all break-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-            {daemonStartCommand()}
-          </code>
+          <CommandLine command={daemonStartCommand()} />
           {daemonStartCommandNeedsEditing() && (
-            <p className="text-xs text-yellow-600 dark:text-yellow-400">
-              Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address before running this. It is a separate
-              process from the API server, so the machine cannot infer it on localhost.
+            <p className="text-xs text-warning-ink">
+              Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address first — on localhost the machine cannot
+              infer it.
             </p>
           )}
         </div>
@@ -302,7 +313,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {[approval.machine.platform, `code ${approval.machine.userCode}`].filter(Boolean).join(" · ")}. It
-                    will run your projects as you. Only approve a machine you just started.
+                    will run your projects as you — only approve a machine you just started.
                   </p>
                 </div>
               </div>
@@ -367,6 +378,26 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
           {approval.kind === "declined" && (
             <p className="text-xs text-muted-foreground">Declined. That machine was not connected.</p>
           )}
+          {/* The silent case. A machine whose CLI is already signed in to
+              Reliant — as ANOTHER account — needs no pairing, so `daemon
+              start` connects it to that account and prints no code, while
+              this panel waits for a machine that never arrives here. Signing
+              out first makes the next start pair. Folded, because it is the
+              exception: most people never open it. */}
+          {getControlPlaneURL() && (approval.kind === "enter" || approval.kind === "looking") && (
+            <details className="text-xs text-muted-foreground" data-testid="pair-no-code-hint">
+              <summary className="w-fit cursor-pointer select-none hover:text-foreground">
+                Not seeing a code?
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                <p className="leading-relaxed">
+                  That machine may be signed in to another account. Sign it out there, then start it again:
+                </p>
+                <CommandLine command={authLogoutCommand()} />
+                <CommandLine command={daemonStartCommand()} />
+              </div>
+            </details>
+          )}
         </div>
       </section>
 
@@ -375,7 +406,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
       {mode !== "reference" && approval.kind !== "approved" && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          This screen moves on by itself once the machine connects.
+          This moves on by itself once the machine connects.
         </p>
       )}
     </div>

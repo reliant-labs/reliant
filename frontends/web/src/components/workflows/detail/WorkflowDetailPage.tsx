@@ -46,6 +46,7 @@ import { RunList } from "../../runs/RunList";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { descriptionHasMore, workflowSummary } from "@/lib/workflowSummary";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { DRAFT_NOT_RUNNABLE } from "../../workflow/workflowDraftStatus";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
@@ -154,7 +155,8 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
           subtitle={
             listing?.description || runBlockedReason ? (
               <>
-                {listing?.description && <span className="block max-w-3xl">{listing.description}</span>}
+                {/* One sentence; the whole description is About's "How it works". */}
+                {listing?.description && <span className="block max-w-3xl">{workflowSummary(listing.description)}</span>}
                 {/* The reason is text, not only a tooltip (§2.3). */}
                 {runBlockedReason && <span className="mt-1 block text-warning-ink">{runBlockedReason}</span>}
               </>
@@ -220,6 +222,14 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
                 <AboutRow label="Needs a machine" value={listing.needsMachine.length > 0 ? "Yes" : "No: it works through its integrations"} />
               )}
             </dl>
+            {descriptionHasMore(listing?.description) && (
+              <details className="mt-3 border-t border-border/60 pt-2" data-testid="workflow-detail-how-it-works">
+                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                  How it works
+                </summary>
+                <p className="mt-1.5 whitespace-pre-line text-xs text-muted-foreground">{listing?.description}</p>
+              </details>
+            )}
           </Card>
           <WorkflowPresetsSection projectId={projectId} workflowRef={workflowRef} />
           <UsedByCard workflowRef={workflowRef} workflows={library.data?.workflows ?? []} />
@@ -254,7 +264,7 @@ function UsedByCard({ workflowRef, workflows }: { workflowRef: string; workflows
                 <Link
                   to="/workflows/library/$workflowRef"
                   params={{ workflowRef: workflow.name }}
-                  className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {workflowDisplayName(workflow)}
                 </Link>
@@ -308,7 +318,7 @@ function RecentRunsCard({
           <Link
             to="/workflows/runs"
             search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
-            className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             View all
           </Link>
@@ -464,7 +474,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
             <Link
               to="/workflows/runs"
               search={{ workflow: [workflowRef], range: "all" }}
-              className="font-medium text-primary hover:underline"
+              className="font-medium text-primary-ink hover:underline"
             >
               Runs
             </Link>
@@ -474,7 +484,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
       </p>
       <Link
         to="/workflows/library"
-        className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         Back to workflows
       </Link>

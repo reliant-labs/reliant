@@ -1,0 +1,42 @@
+/*
+ * DATA-VIZ CATEGORICAL PALETTE: chart series, dashboard slices and bars,
+ * services in a trace waterfall. One copy, read by charts/chartPalette.ts.
+ *
+ * Its own block, apart from the colour-scheme and brand tokens, because it is
+ * not a theme: it is the same in every scheme on purpose, so a series keeps its
+ * colour when the reader switches scheme. Only light and dark differ.
+ *
+ *   --chart-1  brand blue (#0d8cff)        --chart-4  amber
+ *   --chart-2  brand violet (#6e39ff)      --chart-5  fuchsia
+ *   --chart-3  cyan                        --chart-6  slate (a neutral)
+ *
+ * No green and no red. Green means "healthy" and red means "failing" across the
+ * console (status dots, the waterfall's failed spans), so a series painted in
+ * either reads as a verdict it is not. Red stays for series that ARE errors:
+ * --destructive, and --chart-danger-alt for a second one.
+ *
+ * Every token is >= 3:1 (WCAG 1.4.11, graphical objects) against --card in
+ * every scheme, light and dark; __tests__/chartPalette.test.ts holds it there.
+ * Light uses the brand hues as they are; dark lifts violet and the rest so
+ * they clear 3:1 on the 7-12% dark cards.
+ */
+
+:root {
+  --chart-1: 208.5 100% 52.5%;
+  --chart-2: 256 100% 61.2%;
+  --chart-3: 193 82% 31%;
+  --chart-4: 26 90% 37%;
+  --chart-5: 295 72% 40%;
+  --chart-6: 215 19% 35%;
+  --chart-danger-alt: 0 65% 32%;
+}
+
+.dark {
+  --chart-1: 208.5 100% 52.5%;
+  --chart-2: 255 100% 71%;
+  --chart-3: 188 72% 47%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 292 91% 73%;
+  --chart-6: 215 20% 65%;
+  --chart-danger-alt: 0 85% 72%;
+}

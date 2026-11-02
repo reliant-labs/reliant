@@ -81,6 +81,7 @@ func newDiscoverTestFixture(t *testing.T, relPaths ...string) *discoverFixture {
 		ID: f.projectID, UserID: f.userID, Name: "My Project", Path: "/proj",
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
+	installProject(t, repo, f.projectID, f.userID, "/proj", testMachines...)
 	for i, rel := range relPaths {
 		id := uuid.NewString()
 		f.repoIDs = append(f.repoIDs, id)

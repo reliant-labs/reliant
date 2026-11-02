@@ -1104,7 +1104,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
           <p className="text-xs text-muted-foreground">
             This project&apos;s files live on a machine. Connect one to browse them here.
           </p>
-          <button onClick={() => loadFileTree()} className="text-xs text-primary hover:underline">
+          <button onClick={() => loadFileTree()} className="text-xs text-primary-ink hover:underline">
             Check again
           </button>
         </div>
@@ -1120,7 +1120,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
           <p className="text-sm text-destructive-ink">{error}</p>
           <button
             onClick={() => loadFileTree()}
-            className="text-xs text-primary hover:underline"
+            className="text-xs text-primary-ink hover:underline"
           >
             Try again
           </button>

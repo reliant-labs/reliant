@@ -35,7 +35,7 @@ export function pickerButton(
 ): string {
   return cn(
     "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
     "disabled:pointer-events-none disabled:opacity-50",
     VARIANTS[variant],
     SIZES[size],
@@ -47,7 +47,7 @@ export function pickerButton(
 export function pickerIconButton(tone: "neutral" | "danger" = "neutral", className?: string): string {
   return cn(
     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     tone === "danger"
       ? "hover:bg-danger-surface hover:text-danger"
       : "hover:bg-muted hover:text-ink",

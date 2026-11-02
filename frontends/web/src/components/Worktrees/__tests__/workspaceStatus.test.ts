@@ -106,6 +106,14 @@ describe("cleanupSummary", () => {
     ).toBe("Files removed, branch deleted");
   });
 
+  it("never says a forgotten folder was removed: nothing was deleted", () => {
+    expect(
+      cleanupSummary(
+        worktree({ cleanup_metadata: { directory_deleted: true, branch_deleted: false, forgotten: true } }),
+      ),
+    ).toBe("Files no longer tracked (forgotten; nothing was deleted)");
+  });
+
   it("says when rebuildable files were shed from kept files", () => {
     expect(
       cleanupSummary(

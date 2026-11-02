@@ -309,7 +309,7 @@ describe("variables, compare, refresh, share, full screen", () => {
     renderDashboard(ref("workspace", "checkout-latency"));
     const panel = await screen.findByTestId("dashboard-panel-latency-by-route");
     const legend = await within(panel).findByTestId("obs-panel-legend");
-    await user.click(within(legend).getAllByRole("button")[0]);
+    await user.click(within(legend).getByRole("button", { name: "Open orders.v1.OrdersService/CreateOrder in the explorer" }));
     const menu = await screen.findByTestId("dashboard-drill");
     expect(within(menu).getByTestId("drill-traces")).toHaveAttribute("href", expect.stringContaining("q=orders.v1.OrdersService%2FCreateOrder"));
     expect(within(menu).getByTestId("drill-logs")).toHaveAttribute("href", expect.stringContaining("range=1h"));

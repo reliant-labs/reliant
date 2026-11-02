@@ -324,7 +324,7 @@ export function ChatSettingsPopover({
                         className={cn(
                           "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize",
                           isSelected
-                            ? "border-primary bg-primary/15 text-primary"
+                            ? "border-primary bg-primary/15 text-primary-ink"
                             : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:text-foreground",
                         )}
                       >
