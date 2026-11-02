@@ -419,7 +419,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=1bbd7cfb5bd4c578a6675677d9fdf117932831da9833d3899e768900a7159355
+# forge:hash=b8887c4e8519ec46dbe7b910b009f6b92f017e865471828e45b6d22ffd1ce8d9
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -461,6 +461,8 @@ schema DaemonConfig:
     heavy_commands: str = "go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build"
     # CPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))
     heavy_share: int = 0
+    # Threads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)
+    command_threads: int = 0
     # Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)
     fetch_allow_private_network: bool = False
     # Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)
@@ -529,7 +531,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=edd418e350515b7d0f8c3fa8a7fdef6f5c38a8928e4ce89b5f755cc5ecbfd96f
+        # forge:hash=8f7bc9655cabc4b23e3322e0128a5d8e10712442fc3fa3b36b7db8a9448f9707
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -550,6 +552,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DISK_REFUSE_AT" = c.disk_refuse_at
         "RELIANT_HEAVY_COMMANDS" = c.heavy_commands
         "RELIANT_HEAVY_SHARE" = str(c.heavy_share)
+        "RELIANT_COMMAND_THREADS" = str(c.command_threads)
         "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK" = "true" if c.fetch_allow_private_network else "false"
         "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE" = str(c.egress_user_per_minute)
         "RELIANT_DAEMON_EGRESS_USER_BURST" = str(c.egress_user_burst)

@@ -170,6 +170,13 @@ type DaemonConfig struct {
 	// (internal/heavyjob). 0 (unset) derives it from the slot pool:
 	// max(2, 2*CPUs/slots), 8 on 32 CPUs and 8 slots.
 	HeavyShare int32 `protobuf:"varint,28,opt,name=heavy_share,json=heavyShare,proto3" json:"heavy_share,omitempty"`
+	// The threads (processes count as one each) each command the daemon runs
+	// may have at once, where Linux cgroups allow a limit per command
+	// (internal/proctree): a Go or Node process has about one thread per CPU.
+	// 0 (unset) derives it from the machine: 1024 + 64 per CPU, at most half
+	// the limit all commands share, 3008 on 31 CPUs. A command that reaches it
+	// is told so, naming this setting.
+	CommandThreads int32 `protobuf:"varint,29,opt,name=command_threads,json=commandThreads,proto3" json:"command_threads,omitempty"`
 	// Let the fetch tool reach this machine's own localhost and private network
 	// (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
 	// fetch is usually auto-approved and a fetched page can steer the next fetch,
@@ -370,6 +377,13 @@ func (x *DaemonConfig) GetHeavyCommands() []string {
 func (x *DaemonConfig) GetHeavyShare() int32 {
 	if x != nil {
 		return x.HeavyShare
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetCommandThreads() int32 {
+	if x != nil {
+		return x.CommandThreads
 	}
 	return 0
 }
@@ -601,7 +615,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xdc!\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x95#\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -651,7 +665,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xa8\x01\n" +
 	"\vheavy_share\x18\x1c \x01(\x05B\x86\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18{\n" +
 	"\x13RELIANT_HEAVY_SHARE*dCPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))R\n" +
-	"heavyShare\x12\xf3\x01\n" +
+	"heavyShare\x12\xb6\x01\n" +
+	"\x0fcommand_threads\x18\x1d \x01(\x05B\x8c\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x80\x01\n" +
+	"\x17RELIANT_COMMAND_THREADS*eThreads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)R\x0ecommandThreads\x12\xf3\x01\n" +
 	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
 	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork\x12\xc9\x01\n" +
 	"\x16egress_user_per_minute\x18\x18 \x01(\x05B\x93\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x87\x01\n" +

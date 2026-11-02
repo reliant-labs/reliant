@@ -247,8 +247,9 @@ type StartOptions struct {
 	OAuthHelperOrigins []string
 }
 
-// Guards is the daemon's policy for heavy commands (internal/heavyjob) and a
-// filling disk (internal/diskguard).
+// Guards is the daemon's policy for heavy commands (internal/heavyjob), a
+// filling disk (internal/diskguard) and each command's threads
+// (internal/proctree).
 type Guards struct {
 	// Disk is the disk guard's thresholds; zero fields take the defaults.
 	Disk diskguard.Config
@@ -258,6 +259,9 @@ type Guards struct {
 	// HeavyShare is the CPUs each slotted command may use; zero derives
 	// it from the slot pool (heavyjob.DefaultShare).
 	HeavyShare int
+	// CommandThreads is each command's thread limit; zero derives it from
+	// the machine (proctree.Size).
+	CommandThreads int
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -535,12 +539,12 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	}
 	SetHeavyGate(heavyGate)
 
-	// Every command an agent runs gets a process limit of its own where the
-	// machine allows (a delegated cgroup: pids.max per command), and every
-	// command's RLIMIT_NPROC leaves the daemon a reserve, so one runaway
-	// command fails alone instead of exhausting the user's process limit for
-	// every agent and the daemon (2026-10-30). See internal/proctree.
-	limiter := proctree.New(proctree.Config{})
+	// Every command an agent runs gets a thread limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command, sized to the
+	// CPU count), and all of them together leave the daemon a reserve of the
+	// user's limit, so one runaway command fails alone instead of exhausting
+	// it for every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{CommandThreads: guards.CommandThreads})
 	proctree.SetDefault(limiter)
 	logging.Info(logPrefix + " " + limiter.String())
 

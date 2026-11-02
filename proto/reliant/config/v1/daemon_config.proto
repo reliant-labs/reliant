@@ -233,6 +233,20 @@ message DaemonConfig {
     (buf.validate.field).int32 = {gte: 0}
   ];
 
+  // The threads (processes count as one each) each command the daemon runs
+  // may have at once, where Linux cgroups allow a limit per command
+  // (internal/proctree): a Go or Node process has about one thread per CPU.
+  // 0 (unset) derives it from the machine: 1024 + 64 per CPU, at most half
+  // the limit all commands share, 3008 on 31 CPUs. A command that reaches it
+  // is told so, naming this setting.
+  int32 command_threads = 29 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_COMMAND_THREADS"
+      description: "Threads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+
   // Let the fetch tool reach this machine's own localhost and private network
   // (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
   // fetch is usually auto-approved and a fetched page can steer the next fetch,
