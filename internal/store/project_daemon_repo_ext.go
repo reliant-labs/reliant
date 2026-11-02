@@ -98,7 +98,15 @@ func RecordProjectDaemonQueued(ctx context.Context, db orm.Context, projectID, d
 	_, err := db.Bun().NewInsert().Model(row).
 		Column(ProjectDaemonFieldProjectID, ProjectDaemonFieldDaemonID, ProjectDaemonFieldPath,
 			ProjectDaemonFieldDefaultBranch, ProjectDaemonFieldInstallState,
-			ProjectDaemonFieldInstallError, ProjectDaemonFieldInstallRequestID).
+			ProjectDaemonFieldInstallError, ProjectDaemonFieldInstallRequestID, ProjectDaemonFieldCloneStartedAt).
+		// The clone can start now only if its machine is connected now (a
+		// fresh lease); one queued to a sleeping machine starts when it next
+		// connects, and that connect's reconcile stamps it
+		// (StartQueuedProjectDaemonClones).
+		Value(ProjectDaemonFieldCloneStartedAt, `CASE WHEN EXISTS (
+			SELECT 1 FROM daemon_attachment a
+			WHERE a.daemon_id = ? AND a.last_stream_activity > now() - interval '90 seconds'
+		) THEN now() END`, daemonID).
 		On("CONFLICT (project_id, daemon_id) DO UPDATE").
 		Set("path = EXCLUDED.path").
 		Set("default_branch = EXCLUDED.default_branch").
@@ -106,9 +114,25 @@ func RecordProjectDaemonQueued(ctx context.Context, db orm.Context, projectID, d
 		Set("install_error = ''").
 		Set("install_request_id = EXCLUDED.install_request_id").
 		// An installing row's cloned_at is when its clone was queued (an
-		// insert's default, and re-stamped here for a re-clone), so the
-		// connect reconcile can tell a clone whose outcome was lost.
+		// insert's default, and re-stamped here for a re-clone); a re-clone
+		// starts its own clock too.
 		Set("cloned_at = NOW()").
+		Set("clone_started_at = EXCLUDED.clone_started_at").
+		Exec(ctx)
+	return err
+}
+
+// StartQueuedProjectDaemonClones stamps clone_started_at on the daemon's
+// installing rows that have none: clones queued while it was away, which can
+// run now that it has connected. The connect reconcile calls it before it
+// reads the rows, so a clone's stuck-clone timeout counts from the connect
+// that let it start, not from when it was queued.
+func StartQueuedProjectDaemonClones(ctx context.Context, db orm.Context, daemonID string) error {
+	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+		Set("clone_started_at = NOW()").
+		Where("daemon_id = ?", daemonID).
+		Where("install_state = ?", core.ProjectInstallInstalling).
+		Where("clone_started_at IS NULL").
 		Exec(ctx)
 	return err
 }
@@ -210,6 +234,7 @@ func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
 			InstallState:     row.InstallState,
 			InstallError:     row.InstallError,
 			InstallRequestID: row.InstallRequestID,
+			CloneStartedAt:   row.CloneStartedAt,
 		}
 	}
 	return out

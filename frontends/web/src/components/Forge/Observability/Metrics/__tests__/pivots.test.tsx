@@ -31,7 +31,7 @@ import type { ObsPlace } from "../../obsPlace";
 import type { ObsNavigate, ObsSearch } from "../../obsSearch";
 import { renderPanel } from "../../__tests__/obsTestUtils";
 import { stateFromSearch } from "../model/explorerState";
-import { alertPivot, alertRange, dashboardPivot, exploreHrefFor, labelFilter, rangeReaching, tracePivot, workloadPivot } from "../pivots";
+import { alertExploreHrefFor, alertPivot, alertRange, dashboardPivot, exploreHrefFor, labelFilter, platformAlertTarget, rangeReaching, tracePivot, workloadPivot } from "../pivots";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/obsMocks")).obsMocks.virtual());
@@ -175,6 +175,44 @@ describe("an alert", () => {
     expect(state.sqlPanel?.sql).toMatch(/quantile\(0\.95\)/);
     expect(filters).toBeUndefined();
     expect(range).toBeUndefined();
+  });
+});
+
+describe("an alert from a rule forge generated", () => {
+  const ERRORS = "/forge/p/shop/observability/errors";
+  const marker = (key: string, off = false) => `SELECT 1 AS value WHERE 0 /* reliant:platform ${key} env:{reliant_env_id:String}${off ? " off" : ""} */`;
+  const href = alertExploreHrefFor(EXPLORER, ERRORS, "staging");
+
+  it("never opens a platform rule's marker as a query: it returns no row, and names a parameter no panel binds", () => {
+    for (const key of ["new-issue", "issue-regressed", "issue-spike", "deploy-failed", "observability-quota:over_100", "release-regressed", "service-anomaly", "evaluation-failing"]) {
+      expect(alertPivot(marker(key))).toBeNull();
+      expect(alertPivot(marker(key), { service: "api" })).toBeNull();
+    }
+  });
+
+  it("opens an issue alert's issue on the Errors page, in the alert's env", () => {
+    const link = decode(href(marker("new-issue"), { issue_id: "issue-7", service: "web" }, { env: "prod", range: "6h" })!);
+    expect(link.path).toBe(ERRORS);
+    expect(link.env).toBe("prod");
+    expect(new URL(href(marker("new-issue"), { issue_id: "issue-7" }, { env: "prod" })!, "http://console.test").searchParams.get("issue")).toBe("issue-7");
+    // A declared rule with no instance: the env's issues.
+    expect(platformAlertTarget(marker("issue-regressed"))).toEqual({ view: "errors" });
+    expect(decode(href(marker("issue-spike"))!).env).toBe("staging");
+  });
+
+  it("offers nothing for a platform event with no page, or a platform rule the env disabled", () => {
+    expect(href(marker("deploy-failed"), { cluster: "c" }, { env: "prod" })).toBeNull();
+    expect(href(marker("observability-quota:over_150"))).toBeNull();
+    expect(href(marker("new-issue", true), { issue_id: "issue-7" })).toBeNull();
+    expect(platformAlertTarget("SELECT count() AS value FROM otel_logs")).toBeNull();
+  });
+
+  it("opens a metadata rule's query as written: the server binds {reliant_env_id} from the one env the link scopes to", () => {
+    const expr = "SELECT count() AS value FROM otel_metrics_sum WHERE ResourceAttributes['reliant.env.id'] = {reliant_env_id:String}";
+    const link = decode(href(expr, {}, { env: "prod" })!);
+    expect(link.path).toBe(EXPLORER);
+    expect(link.env).toBe("prod");
+    expect(link.state.sqlPanel?.sql).toBe(expr);
   });
 });
 

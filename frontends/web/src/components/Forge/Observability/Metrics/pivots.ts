@@ -10,6 +10,11 @@
  *              rpc.server.duration p95, B = rpc.server.calls rate.
  *   alert      the SQL tab on the rule's expr over [firing_at − 1h, now], the
  *              instance's labels as filters where the scope allowlists them.
+ *              Its {reliant_env_id} is bound by the server from the one env
+ *              the link scopes to. A platform rule has no query (its expr is a
+ *              marker the control plane answers from its own records), so it
+ *              opens the record instead when it has one: an issue alert, its
+ *              issue on the Errors page (platformAlertTarget).
  *   workload   one container metric (CPU or memory) of the workload, by
  *              container.
  *
@@ -25,6 +30,7 @@ import { DEFAULT_RANGE, RANGE_PRESETS, type RangePreset } from "@/services/contr
 import { useForgeConsole, type ForgeConsole } from "../../Console/consoleContext";
 import { consolePath, withSearch } from "../../Console/paths";
 import { attributeClass, ENV_KEY, isAttributeKeyShaped, SERVICE_KEY } from "../attributes";
+import { platformRule } from "../Dashboards/alertExpr";
 import { rangeMs, type CompareMode } from "../Dashboards/dashboardModel";
 import { formatFilterToken } from "../obsFilters";
 import { emptyPanel, explorerHref, sqlPanelOf, stateFromSearch, type ExplorerState } from "./model/explorerState";
@@ -112,15 +118,34 @@ export function labelFilter(key: string, value: string): string | null {
   return formatFilterToken({ key: attribute, op: "eq", value });
 }
 
-/** An alert rule's query on the SQL tab, filtered to the instance's labels. */
+/**
+ * An alert rule's query on the SQL tab, filtered to the instance's labels;
+ * null for a platform rule, whose expr is a marker that never returns a row.
+ */
 export function alertPivot(expr: string, labels: Record<string, string> = {}): Pivot | null {
   const sql = expr.trim();
-  if (!sql) return null;
+  if (!sql || platformRule(sql)) return null;
   const filters = Object.keys(labels)
     .sort()
     .map((key) => labelFilter(key, labels[key]!))
     .filter((token): token is string => token !== null);
   return { panel: emptyPanel(), extra: { sqlPanel: sqlPanelOf(sql, "Alert query") }, filters: filters.length ? filters : undefined };
+}
+
+/** The platform events whose alerts are about one issue of the issue registry (control-plane alerting/issues.go). */
+const ISSUE_EVENTS = new Set(["new-issue", "issue-regressed", "issue-spike"]);
+
+/**
+ * Where a platform rule's Explore goes, as Errors page search keys, or null
+ * when the rule is not a platform rule, is disabled, or names no record the
+ * console shows: an issue alert opens its issue (the instance's `issue_id`), a
+ * rule without an instance the env's issues. Any other platform event has no
+ * page to explore, so it offers no link at all rather than a dead query.
+ */
+export function platformAlertTarget(expr: string, labels: Record<string, string> = {}): { view: "errors"; issue?: string } | null {
+  const platform = platformRule(expr);
+  if (!platform || platform.off || !ISSUE_EVENTS.has(platform.key)) return null;
+  return labels.issue_id ? { view: "errors", issue: labels.issue_id } : { view: "errors" };
 }
 
 /** The range an alert's window [firing_at − 1h, now] needs; one hour when it has no firing time. */
@@ -183,6 +208,24 @@ export function exploreHrefFor(path: string, consoleEnv: string): ExploreHref {
   };
 }
 
+/** An alert's Explore href from its rule's expr and its labels, or null when there is nothing working to open. */
+export type AlertExploreHref = (expr: string, labels?: Record<string, string>, options?: ExploreOptions) => string | null;
+
+/**
+ * The alert Explore link: a platform rule's record (platformAlertTarget) on the
+ * page at `errorsPath`, or the rule's query in the explorer at `metricsPath`.
+ * A platform rule never reaches the explorer: its marker would run and return
+ * nothing.
+ */
+export function alertExploreHrefFor(metricsPath: string, errorsPath: string, consoleEnv: string): AlertExploreHref {
+  const explore = exploreHrefFor(metricsPath, consoleEnv);
+  return (expr, labels = {}, options = {}) => {
+    const target = platformAlertTarget(expr, labels);
+    if (target) return withSearch(errorsPath, { env: options.env ?? consoleEnv, issue: target.issue });
+    return explore(alertPivot(expr, labels), options);
+  };
+}
+
 /** The console's scope, or null outside the console (a preview, a bare test). */
 function useConsoleOrNull(): ForgeConsole | null {
   try {
@@ -198,4 +241,18 @@ export function useExploreHref(): ExploreHref | null {
   const project = console?.forgeProject;
   const env = console?.env;
   return useMemo(() => (project && env ? exploreHrefFor(consolePath(project, { kind: "obs-view", view: "metrics" }), env) : null), [project, env]);
+}
+
+/** The alert Explore link builder inside the forge console; null outside it, so no Explore is offered. */
+export function useAlertExploreHref(): AlertExploreHref | null {
+  const console = useConsoleOrNull();
+  const project = console?.forgeProject;
+  const env = console?.env;
+  return useMemo(
+    () =>
+      project && env
+        ? alertExploreHrefFor(consolePath(project, { kind: "obs-view", view: "metrics" }), consolePath(project, { kind: "obs-view", view: "errors" }), env)
+        : null,
+    [project, env]
+  );
 }

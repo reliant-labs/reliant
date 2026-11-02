@@ -45,7 +45,7 @@ func TestProjectDaemonsDropOrphans(t *testing.T) {
 	for _, r := range rows {
 		kept = append(kept, r.DaemonID)
 	}
-	assert.Equal(t, []string{live}, kept, "only the row of a live machine of the project's owner survives")
+	assert.Equal(t, []string{live}, kept, "only the row of a machine that exists and is the project's owner's survives")
 }
 
 // Removing a machine deletes its installs in the same transaction, so no

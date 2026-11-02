@@ -123,7 +123,8 @@ function SqlPanelEditor({ sqlPanel, scope, range, onOpenSql, onBack, subject }: 
           Back to the builder
         </button>
         <p className="text-xs text-ink-muted">
-          Bound from the scope: <span className="font-mono">{"{from} {to} {step} {env_ids} {envs} {services}"}</span>
+          Bound from the scope: <span className="font-mono">{"{from} {to} {step} {env_ids} {envs} {services}"}</span>, and{" "}
+          <span className="font-mono">{"{reliant_env_id}"}</span> when one environment is selected
         </p>
       </div>
       <label htmlFor={id} className="sr-only">

@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=93e8de2c5615c2275b203bf52cc22d80d14b57c8da0449e207ad4d557d046311
+// forge:hash=35290b3b000f719f6f05db5b09ddb70ef7cb0486905234b94714f362399aad20
 
 // MockService is a test mock for the Service interface.
 //
@@ -25,22 +25,21 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	LoginFunc                     func(context.Context, Login) (Session, error)
+	LoginFunc                     func(context.Context, Login) (credentials.Credential, error)
 	CredentialsPathFunc           func() (string, error)
-	StoreFunc                     func(string, Session) (string, error)
+	StoreFunc                     func(string, credentials.Credential) (string, error)
 	LookupFunc                    func(string) (credentials.Credential, string, error)
-	LookupSessionFunc             func(string) (Session, string, error)
 	RemoveFunc                    func(string) (bool, string, error)
 	RemoveLegacyForgeDepositsFunc func() (int, error)
 }
 
 // Login records the call and delegates to LoginFunc when set.
-func (m *MockService) Login(ctx context.Context, l Login) (Session, error) {
+func (m *MockService) Login(ctx context.Context, l Login) (credentials.Credential, error) {
 	m.Recorder.Record("Login", ctx, l)
 	if m.LoginFunc != nil {
 		return m.LoginFunc(ctx, l)
 	}
-	return Session{}, contractkit.MockNotSet("MockService", "Login")
+	return *new(credentials.Credential), contractkit.MockNotSet("MockService", "Login")
 }
 
 // CredentialsPath records the call and delegates to CredentialsPathFunc when set.
@@ -53,10 +52,10 @@ func (m *MockService) CredentialsPath() (string, error) {
 }
 
 // Store records the call and delegates to StoreFunc when set.
-func (m *MockService) Store(server string, s Session) (string, error) {
-	m.Recorder.Record("Store", server, s)
+func (m *MockService) Store(server string, c credentials.Credential) (string, error) {
+	m.Recorder.Record("Store", server, c)
 	if m.StoreFunc != nil {
-		return m.StoreFunc(server, s)
+		return m.StoreFunc(server, c)
 	}
 	return "", contractkit.MockNotSet("MockService", "Store")
 }
@@ -68,15 +67,6 @@ func (m *MockService) Lookup(server string) (credentials.Credential, string, err
 		return m.LookupFunc(server)
 	}
 	return *new(credentials.Credential), "", contractkit.MockNotSet("MockService", "Lookup")
-}
-
-// LookupSession records the call and delegates to LookupSessionFunc when set.
-func (m *MockService) LookupSession(server string) (Session, string, error) {
-	m.Recorder.Record("LookupSession", server)
-	if m.LookupSessionFunc != nil {
-		return m.LookupSessionFunc(server)
-	}
-	return Session{}, "", contractkit.MockNotSet("MockService", "LookupSession")
 }
 
 // Remove records the call and delegates to RemoveFunc when set.
