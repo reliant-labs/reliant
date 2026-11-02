@@ -3,7 +3,10 @@ package writeledger_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -261,4 +264,102 @@ func TestTheLedgerRecordsWhoTheWriteWasMadeAs(t *testing.T) {
 	}
 	assert.Equal(t, core.IntegrationActorOwner, byBody[provenance.BodyDigest("owner")])
 	assert.Equal(t, core.IntegrationActorApp, byBody[provenance.BodyDigest("app")])
+}
+
+type testScrubber struct{ secret string }
+
+func (s testScrubber) Mask(in string) string { return strings.ReplaceAll(in, s.secret, "***") }
+func (s testScrubber) MaskAny(v any) any {
+	switch x := v.(type) {
+	case string:
+		return s.Mask(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, item := range x {
+			out[s.Mask(k)] = s.MaskAny(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, item := range x {
+			out[i] = s.MaskAny(item)
+		}
+		return out
+	}
+	return v
+}
+
+type capturingStore struct {
+	mu      sync.Mutex
+	created []core.IntegrationWrite
+	done    []core.IntegrationWriteResult
+}
+
+func (c *capturingStore) CreateIntegrationWrite(_ context.Context, w *core.IntegrationWrite) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.created = append(c.created, *w)
+	return nil
+}
+
+func (c *capturingStore) CompleteIntegrationWrite(_ context.Context, _ string, res core.IntegrationWriteResult) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.done = append(c.done, res)
+	return true, nil
+}
+
+// A call carrying a step's resolved secrets is made with the params intact, but
+// nothing the ledger persists, before or after the call, can hold a value: the
+// scope, target and correlation are planned from masked params, and the error a
+// provider echoed back is masked.
+func TestSecretCarryingCallPersistsNoValue(t *testing.T) {
+	const secret = "stg_live/secret+value&k=1"
+	ctx := httpaction.WithSecretCall(context.Background(), testScrubber{secret})
+	store := &capturingStore{}
+
+	var sentOwner any
+	inner := recordingParams{
+		fakeRunner: &fakeRunner{result: &httpaction.Result{StatusCode: 401, IsError: true, Content: "bad credentials for " + secret}},
+		got:        &sentOwner,
+	}
+	rec := writeledger.New(writeledger.Deps{Store: store})
+	res, err := rec.Wrap(inner).RunAuthenticated(ctx, githubManifest(), action("issue.comment", true),
+		map[string]any{"owner": secret, "repo": "app", "issue_number": float64(7), "body": "hi " + secret}, nil,
+		httpaction.CallSite{RunID: "run-x", NodeID: "post"})
+	require.NoError(t, err)
+	require.True(t, res.IsError)
+	assert.Equal(t, secret, sentOwner, "the outbound request keeps the real value")
+
+	require.Len(t, store.created, 1)
+	require.Len(t, store.done, 1)
+	raw, err := json.Marshal(map[string]any{"intent": store.created[0], "result": store.done[0]})
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), secret)
+	assert.NotContains(t, string(raw), url.QueryEscape(secret))
+	assert.NotContains(t, string(raw), strings.ToLower(secret), "the lowercased scope must not carry it either")
+	assert.Equal(t, core.IntegrationWriteFailed, store.done[0].Status)
+	assert.Equal(t, "bad credentials for ***", store.done[0].Error)
+	assert.Contains(t, store.created[0].Scope, "***", "the scope was planned from masked params")
+}
+
+// Control: with no secrets in play the ledger records the real params, as before.
+func TestCallWithoutSecretsPersistsItsRealScope(t *testing.T) {
+	store := &capturingStore{}
+	rec := writeledger.New(writeledger.Deps{Store: store})
+	_, err := rec.Wrap(&fakeRunner{result: &httpaction.Result{StatusCode: 201}}).RunAuthenticated(context.Background(), githubManifest(), action("issue.comment", true),
+		map[string]any{"owner": "acme", "repo": "app", "issue_number": float64(7), "body": "hi"}, nil, httpaction.CallSite{})
+	require.NoError(t, err)
+	require.Len(t, store.created, 1)
+	assert.Equal(t, "github:acme/app", store.created[0].Scope)
+}
+
+type recordingParams struct {
+	*fakeRunner
+	got *any
+}
+
+func (r recordingParams) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, src httpaction.CredentialSource, site httpaction.CallSite) (*httpaction.Result, error) {
+	*r.got = params["owner"]
+	return r.fakeRunner.RunAuthenticated(ctx, m, a, params, src, site)
 }

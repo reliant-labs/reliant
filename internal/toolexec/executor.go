@@ -74,6 +74,14 @@ type ToolRequest struct {
 	// command instead of the model's 10-minute cap.
 	RunStep bool
 
+	// MaskValues are secret values the executing machine must mask out of the
+	// tool's result BEFORE the result is persisted (its on-disk result outbox)
+	// or sent anywhere. A run step's declared secrets travel in the command's
+	// environment; the daemon masks what the command echoed, so raw output never
+	// reaches disk. Like RunStep it rides the server-built context map
+	// (SecretMaskContextKey), never ToolInput.
+	MaskValues []string
+
 	// Repos lists every repo in the project. Tools with a `repo` param resolve
 	// it to workspaceRoot/repo.relative_path. Empty for legacy single-repo /
 	// projects.

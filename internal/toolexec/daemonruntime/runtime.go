@@ -45,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -2032,8 +2033,31 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		}
 	}
 
+	// Values the server marked secret are masked out of the result before
+	// sendToolResult holds it: the result outbox writes it to disk first.
+	maskToolResult(contextMap, result)
+
 	logToolFinished(req.ToolName, result, time.Since(toolStart))
 	d.sendToolResult(s, req.RequestId, result)
+}
+
+// maskToolResult masks the values the server listed under
+// toolexec.SecretMaskContextKey out of everything a result carries.
+func maskToolResult(contextMap map[string]interface{}, result *toolexec.ExecutionResult) {
+	raw, _ := contextMap[toolexec.SecretMaskContextKey].([]interface{})
+	if len(raw) == 0 || result == nil {
+		return
+	}
+	values := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			values = append(values, s)
+		}
+	}
+	m := stepsecrets.NewMasker(values...)
+	result.Content = m.Mask(result.Content)
+	result.Metadata = m.Mask(result.Metadata)
+	result.ErrorMessage = m.Mask(result.ErrorMessage)
 }
 
 // toolResponse is the wire reply to a tool request.

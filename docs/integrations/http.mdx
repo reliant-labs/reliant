@@ -90,6 +90,8 @@ A secret is a validation error everywhere else: prompts and messages for `call_l
 
 The value is fetched by the worker for one step attempt, held in memory, and never written to the run's state, the Temporal history, logs, spans, node outputs or the UI. The step receives the reference, not the value, until it runs. Everything the step returns is **masked** before it leaves the step: a request's response, a command's output, errors and the text the UI shows. The mask covers the value as it is, in base64, URL-escaped and JSON-escaped, and line by line for a multi-line value. It cannot hide a value the step transforms in other ways (hashing, splitting it across lines), so a `run` step is a place you trust with the secret.
 
+A request that carries a secret is held to the same transport rules as one that carries a saved connection: it is sent only over HTTPS, and redirects and pagination links are followed only within the host the request started at. A redirect to another host fails the step instead of being followed. For a `run` step, the machine that runs the command masks the secret values out of its output before the result is stored or sent anywhere, so the raw output is never written to the machine's result outbox. The write ledger and logs are built from masked text too.
+
 Text that reaches a step as data, such as a workflow input or the output of an earlier step, is never treated as a secret reference, even if it contains `{{ secrets.NAME }}`.
 
 ### Access

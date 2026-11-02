@@ -288,19 +288,29 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 	// A credential must never reach a host other than the one the call started
 	// at: custom auth headers (X-Api-Key) survive a redirect, so a redirect or a
 	// pagination link to another host would leak it.
+	//
+	// A call that carries a workflow step's resolved secrets (WithSecrets) is
+	// held to the same rule: its values sit in the URL, headers or body.
 	pinnedHost := ""
-	if cred != nil {
+	secretCall := SecretCall(ctx) != nil
+	onlyHTTPS := "a connection is only sent over https"
+	secondHost := "a credential is never sent to a second host"
+	if secretCall && cred == nil {
+		onlyHTTPS = "a request carrying a secret is only sent over https"
+		secondHost = "a request carrying a secret is never sent to a second host"
+	}
+	if cred != nil || secretCall {
 		pinnedHost = strings.ToLower(target.Host)
 		if target.Scheme != "https" {
-			return nil, fmt.Errorf("a connection is only sent over https")
+			return nil, errors.New(onlyHTTPS)
 		}
 	}
 	checkPinned := func(u *url.URL) error {
 		if pinnedHost != "" && strings.ToLower(u.Host) != pinnedHost {
-			return fmt.Errorf("host %q differs from %q: a credential is never sent to a second host", u.Host, pinnedHost)
+			return fmt.Errorf("host %q differs from %q: %s", u.Host, pinnedHost, secondHost)
 		}
 		if pinnedHost != "" && u.Scheme != "https" {
-			return fmt.Errorf("a connection is only sent over https")
+			return errors.New(onlyHTTPS)
 		}
 		return nil
 	}

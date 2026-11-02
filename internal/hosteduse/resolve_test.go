@@ -235,11 +235,17 @@ func TestRedeemAcceptsAnEmptyGrantAndStillRejectsAMismatch(t *testing.T) {
 	})
 }
 
+// neverExpires is a fixed expiry so the test does not depend on the wall clock:
+// Redeem compares a ticket's expiry with the real time, so a fixed instant in
+// the past would make every ticket expired, and "now plus a minute" would make
+// the outcome depend on when the test ran.
+var neverExpires = time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)
+
 func ticketFor(ctx context.Context, id, grant, digest string) core.HostedHTTPActionTicket {
 	info := activity.GetInfo(ctx)
 	return core.HostedHTTPActionTicket{
 		ID: id, WorkflowID: info.WorkflowExecution.ID, TemporalRunID: info.WorkflowExecution.RunID,
 		ActivityID: info.ActivityID + id, NodeID: "deploy", GrantID: grant, RequestSHA256: digest,
-		ExpiresAt: time.Now().Add(time.Minute),
+		ExpiresAt: neverExpires,
 	}
 }

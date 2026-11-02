@@ -150,7 +150,14 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
 		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation,
 	}
-	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
+	// A request carrying secrets is held to the transport rules a saved
+	// credential gets (https, redirects and pagination pinned to the first
+	// host), and the write ledger masks what it records with the same values.
+	callCtx := ctx
+	if len(secrets.values) > 0 {
+		callCtx = httpaction.WithSecretCall(ctx, secrets.masker)
+	}
+	result, runErr := a.runner.RunAuthenticated(callCtx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {
 		out.Content = runErr.Error()

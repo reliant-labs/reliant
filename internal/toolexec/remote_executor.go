@@ -384,8 +384,16 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
 	}
+	if len(req.MaskValues) > 0 {
+		contextMap[SecretMaskContextKey] = req.MaskValues
+	}
 	return contextMap
 }
+
+// SecretMaskContextKey is the context-map key carrying ToolRequest.MaskValues
+// to the machine that runs the tool. Built server-side only; a model's tool
+// input never reaches the context map.
+const SecretMaskContextKey = "secret_mask"
 
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,

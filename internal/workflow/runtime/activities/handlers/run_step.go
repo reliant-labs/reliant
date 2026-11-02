@@ -277,7 +277,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		wait = defaultMachineWait()
 	}
 	observe := a.observeMachine(execCtx)
-	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, command, workingDir, timeout, env)
+	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, command, workingDir, timeout, env, mask)
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
 		// the step fails saying which machine and for how long.
@@ -288,7 +288,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 				"step_id", input.StepID,
 				"daemon_id", unavailable.DaemonID,
 				"waited", unavailable.Waited,
-				"error", unavailable.Error(),
+				"error", mask(unavailable.Error()),
 			)
 			// No cause: the message already carries it, and a cause would be
 			// appended to it again wherever the error is printed.
@@ -301,6 +301,12 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		// as one. Not retryable either way — see runStepTransportFailure.
 		var transportErr *toolexec.TransportError
 		if errors.As(err, &transportErr) {
+			// The daemon's own words about a failure could echo the command's
+			// environment: the log line and the error are built from masked text.
+			masked := *transportErr
+			masked.Detail = mask(masked.Detail)
+			masked.Command = mask(stepsecrets.Unprotect(masked.Command))
+			transportErr = &masked
 			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
 				"chat_id", input.ChatID,
 				"step_id", input.StepID,
@@ -308,14 +314,6 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 				"never_ran", transportErr.NotDispatched,
 				"detail", transportErr.Detail,
 			)
-			if !secrets.masker.Empty() {
-				// The daemon's own words about a failure could echo the
-				// command's environment; the error is built from masked text.
-				masked := *transportErr
-				masked.Detail = mask(masked.Detail)
-				masked.Command = stepsecrets.Unprotect(masked.Command)
-				transportErr = &masked
-			}
 			return ExecuteRunStepOutput{}, runStepTransportFailure(transportErr)
 		}
 		return ExecuteRunStepOutput{}, secrets.masker.MaskError(fmt.Errorf("failed to execute command: %w", err))
@@ -609,7 +607,7 @@ func formatMachineWait(d time.Duration) string {
 // proves it never reached a machine, holds it for the machine and sends it
 // again (see machineWait). Every other outcome — a verdict, a failure that may
 // have followed a start — is returned as it came: it is sent once.
-func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int, env map[string]string) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int, env map[string]string, mask func(string) string) (stdout, stderr string, exitCode int, interrupted bool, err error) {
 	logger := activity.GetLogger(ctx)
 	// The wait's clock starts when the FIRST send starts, not when it fails:
 	// that send may itself have ridden out a disconnect for up to
@@ -633,10 +631,15 @@ func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *mach
 			waiting = true
 			logger.Warn("[RunStep] command never reached the machine; waiting for it to come back",
 				"daemon_id", transportErr.DaemonID, "code", transportErr.Code,
-				"budget", wait.budget, "detail", transportErr.Detail)
+				"budget", wait.budget, "detail", mask(transportErr.Detail))
 		}
 		unavailable := func(gone string) error {
-			return &machineUnavailableError{DaemonID: transportErr.DaemonID, Waited: wait.now().Sub(first), Gone: gone, Last: transportErr}
+			// The daemon's words are masked here, at the one place this error
+			// is built, so no later print of it can carry a value.
+			last := *transportErr
+			last.Detail = mask(last.Detail)
+			last.Command = mask(last.Command)
+			return &machineUnavailableError{DaemonID: transportErr.DaemonID, Waited: wait.now().Sub(first), Gone: gone, Last: &last}
 		}
 
 		// Hold until the machine reads attached, or cannot be observed.

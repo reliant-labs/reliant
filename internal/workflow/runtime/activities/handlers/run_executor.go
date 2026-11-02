@@ -132,6 +132,9 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		// timeoutMs (the node's declared timeout) bound it instead of the
 		// model's 10-minute foreground cap. Set here and nowhere else.
 		RunStep: true,
+		// The env is a run step's declared secrets: the machine masks what the
+		// command echoes before it persists or sends the result.
+		MaskValues: envValues(env),
 	}
 
 	// Execute through the daemon
@@ -265,4 +268,14 @@ func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, router to
 		execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: target.DaemonID}
 	}
 	return nil
+}
+
+func envValues(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for _, v := range env {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
