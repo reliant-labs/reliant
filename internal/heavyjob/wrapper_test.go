@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -77,18 +78,21 @@ type started struct {
 
 // start runs line through g the way a daemon exec path does: build the shell
 // command, let the gate rewrite it, and terminate (not kill) on cancel.
-func start(t *testing.T, g *Gate, line string, declared bool) *started {
+func start(t *testing.T, g *Gate, line string, declared bool, env ...string) *started {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	c := exec.CommandContext(ctx, "sh", "-c", line)
 	c.Cancel = func() error { return c.Process.Signal(syscall.SIGTERM) }
 	c.WaitDelay = 5 * time.Second
-	// The test's own environment may carry a slot from an outer lane.
+	// The test's own environment may carry a slot from an outer lane, or a
+	// share from the slot this test binary runs in.
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, hostslot.EnvHeld+"=") {
+		key, _, _ := strings.Cut(kv, "=")
+		if key != hostslot.EnvHeld && !slices.Contains(shareVars, key) && key != "GOFLAGS" {
 			c.Env = append(c.Env, kv)
 		}
 	}
+	c.Env = append(c.Env, env...)
 	s := &started{cmd: c, out: &syncBuf{}, done: make(chan struct{}), cancel: cancel}
 	c.Stdout, c.Stderr = s.out, s.out
 	heavy, err := g.Prepare(c, Job{Command: line, Declared: declared})

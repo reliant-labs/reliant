@@ -255,6 +255,9 @@ type Guards struct {
 	// HeavyCommands are the heavy-command patterns. Nil is
 	// heavyjob.DefaultCommands; empty declares nothing heavy by pattern.
 	HeavyCommands []string
+	// HeavyShare is the CPUs each slotted command may use; zero derives
+	// it from the slot pool (heavyjob.DefaultShare).
+	HeavyShare int
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -517,6 +520,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
+		Share:    guards.HeavyShare,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.

@@ -165,6 +165,11 @@ type DaemonConfig struct {
 	// heavyjob.DefaultCommands (a test pins the two equal); an empty list
 	// ("," in the env, or --config) declares nothing heavy by pattern.
 	HeavyCommands []string `protobuf:"bytes,22,rep,name=heavy_commands,json=heavyCommands,proto3" json:"heavy_commands,omitempty"`
+	// The CPUs each command run under a heavy slot may use, exported to it as
+	// GOMAXPROCS and UV_THREADPOOL_SIZE unless it sets its own
+	// (internal/heavyjob). 0 (unset) derives it from the slot pool:
+	// max(2, 2*CPUs/slots), 8 on 32 CPUs and 8 slots.
+	HeavyShare int32 `protobuf:"varint,28,opt,name=heavy_share,json=heavyShare,proto3" json:"heavy_share,omitempty"`
 	// Let the fetch tool reach this machine's own localhost and private network
 	// (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
 	// fetch is usually auto-approved and a fetched page can steer the next fetch,
@@ -360,6 +365,13 @@ func (x *DaemonConfig) GetHeavyCommands() []string {
 		return x.HeavyCommands
 	}
 	return nil
+}
+
+func (x *DaemonConfig) GetHeavyShare() int32 {
+	if x != nil {
+		return x.HeavyShare
+	}
+	return 0
 }
 
 func (x *DaemonConfig) GetFetchAllowPrivateNetwork() bool {
@@ -589,7 +601,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xb1 \n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xdc!\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -636,7 +648,10 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x0edisk_refuse_at\x18\x15 \x01(\tBr\x82\xce\x18n\n" +
 	"\x16RELIANT_DISK_REFUSE_AT*TDisk use (percent, or off) past which the daemon refuses heavy commands (default 95)R\fdiskRefuseAt\x12\xe4\x02\n" +
 	"\x0eheavy_commands\x18\x16 \x03(\tB\xbc\x02\x82\xce\x18\xb7\x02\n" +
-	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xf3\x01\n" +
+	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xa8\x01\n" +
+	"\vheavy_share\x18\x1c \x01(\x05B\x86\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18{\n" +
+	"\x13RELIANT_HEAVY_SHARE*dCPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))R\n" +
+	"heavyShare\x12\xf3\x01\n" +
 	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
 	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork\x12\xc9\x01\n" +
 	"\x16egress_user_per_minute\x18\x18 \x01(\x05B\x93\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x87\x01\n" +
