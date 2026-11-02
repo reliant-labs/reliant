@@ -26,6 +26,27 @@ type AccessTokenIntrospector interface {
 	Introspect(ctx context.Context, token string) (*fat.Principal, error)
 }
 
+// AccessTokenAccount is a live access token's principal and the email of the
+// account it acts as.
+type AccessTokenAccount struct {
+	Principal *fat.Principal
+	// Email is the acting user's email as the authority knows it at that
+	// moment, or "" when it names none — self-hosted, an older control plane,
+	// a token acting as no user. An empty email is never a reason to refuse
+	// the token.
+	Email string
+}
+
+// AccessTokenAccountIntrospector resolves a presented access token like
+// AccessTokenIntrospector, and also names the account's email.
+//
+// The daemon gateway resolves daemon credentials through it so a daemon can
+// tell the person running it which account it connected as. That email goes
+// only back to the credential's own holder.
+type AccessTokenAccountIntrospector interface {
+	IntrospectAccount(ctx context.Context, token string) (AccessTokenAccount, error)
+}
+
 // machineTokenKey marks a request authenticated by an access token rather than
 // an interactive session.
 type machineTokenKey struct{}

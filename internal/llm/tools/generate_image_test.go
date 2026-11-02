@@ -221,7 +221,7 @@ func TestGenerateImage_SaveToWritesBinaryToDaemon(t *testing.T) {
 
 	tool := &generateImageTool{repo: repo, resolve: resolverFor(okGenerator())}
 	ctx := generateImageCtx(t)
-	ctx.Project = &db.Project{Path: "/workspace"}
+	ctx.Project = &rctx.Project{Checkout: "/workspace"}
 	recorder := &recordingDaemon{}
 	ctx = ctx.WithDaemon(recorder)
 
@@ -255,7 +255,7 @@ func TestGenerateImage_SaveToFailureStillReturnsTheImage(t *testing.T) {
 
 	t.Run("no daemon connected", func(t *testing.T) {
 		ctx := generateImageCtx(t)
-		ctx.Project = &db.Project{Path: "/workspace"}
+		ctx.Project = &rctx.Project{Checkout: "/workspace"}
 
 		resp, err := tool.Execute(ctx, GenerateImageParams{Prompt: "x", SaveTo: "out.png"})
 		require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestGenerateImage_SaveToFailureStillReturnsTheImage(t *testing.T) {
 
 	t.Run("daemon rejects the write", func(t *testing.T) {
 		ctx := generateImageCtx(t)
-		ctx.Project = &db.Project{Path: "/workspace"}
+		ctx.Project = &rctx.Project{Checkout: "/workspace"}
 		ctx = ctx.WithDaemon(&recordingDaemon{err: fmt.Errorf("permission denied")})
 
 		resp, err := tool.Execute(ctx, GenerateImageParams{Prompt: "x", SaveTo: "out.png"})

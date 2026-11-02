@@ -1,10 +1,9 @@
 /**
- * Changing the tool-collapse preference must affect tool calls that are ALREADY
- * on screen, not just ones rendered afterwards.
- *
- * The components read the preference once in a useState initializer, so without
- * a broadcast from the settings page a change only appeared after a reload —
- * which reads to the user as "the setting does nothing".
+ * A tool GROUP's open state follows its work, not the per-kind collapse
+ * preference: open while a call runs, closed once all finished. The
+ * preference ("Execution tools start expanded") decides how each ROW inside
+ * an open group starts (ToolExecution); a finished group stays closed when it
+ * changes, and a running one stays open.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
@@ -45,28 +44,28 @@ function writePrefs(overrides: Partial<ToolCollapseDefaults>) {
   );
 }
 
-describe("tool collapse preference changes apply live", () => {
+describe("tool groups follow their work, not the per-kind preference", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("expands an on-screen group when execution tools switch to expanded", () => {
+  it("keeps a finished group closed when execution tools switch to expanded", () => {
     writePrefs({ execution: true });
     render(<ToolExecutionGroup executions={[mk("shell", "1"), mk("shell", "2")]} />);
     expect(screen.queryAllByTestId("tool-row")).toHaveLength(0);
 
-    // User flips "Execution Tools" to expanded in Settings.
     writePrefs({ execution: false });
     act(() => {
       window.dispatchEvent(new CustomEvent(TOOL_COLLAPSE_SETTINGS_EVENT));
     });
 
-    expect(screen.queryAllByTestId("tool-row")).toHaveLength(2);
+    expect(screen.queryAllByTestId("tool-row")).toHaveLength(0);
   });
 
-  it("collapses an on-screen group when execution tools switch to collapsed", () => {
+  it("keeps a running group open when execution tools switch to collapsed", () => {
     writePrefs({ execution: false });
-    render(<ToolExecutionGroup executions={[mk("shell", "1"), mk("shell", "2")]} />);
+    const live = (id: string) => ({ call: { id, name: "shell", input: {} }, status: "executing" as const });
+    render(<ToolExecutionGroup executions={[live("1"), live("2")]} />);
     expect(screen.queryAllByTestId("tool-row")).toHaveLength(2);
 
     writePrefs({ execution: true });
@@ -74,6 +73,6 @@ describe("tool collapse preference changes apply live", () => {
       window.dispatchEvent(new CustomEvent(TOOL_COLLAPSE_SETTINGS_EVENT));
     });
 
-    expect(screen.queryAllByTestId("tool-row")).toHaveLength(0);
+    expect(screen.queryAllByTestId("tool-row")).toHaveLength(2);
   });
 });

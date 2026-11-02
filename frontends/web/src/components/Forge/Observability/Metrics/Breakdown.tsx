@@ -24,7 +24,7 @@ import { formatCount, type ValueUnit } from "../format";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
 import { BREAKDOWN_TOP, breakdownPanel, topSeries } from "./model/explorerState";
 import { capNote, fieldLabel, seriesByValue } from "./seriesView";
-import { TONES } from "./ExplorerChart";
+import { chartToken } from "../charts/chartPalette";
 
 export interface BreakdownProps {
   /** The explorer's (debounced) query, as a line panel. */
@@ -90,7 +90,7 @@ export function Breakdown({ panel, field, scope, range, unit, onClose, onFilter,
                   <UPlotChart
                     height={88}
                     timestamps={timestamps}
-                    series={group.series.map((s, i) => ({ label: s.label, values: alignTo(timestamps, s), tone: TONES[i % TONES.length] }))}
+                    series={group.series.map((s, i) => ({ label: s.label, values: alignTo(timestamps, s), color: chartToken(i) }))}
                     unit={unit}
                     label={`${panel.title || "Metrics"} where ${key} is ${group.value || "unset"}`}
                     legend={false}

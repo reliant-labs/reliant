@@ -169,8 +169,10 @@ type ChatServiceClient interface {
 	// UpdateChat updates chat metadata (title, temperature, etc.)
 	// forge:custom — a partial update that resolves the worktree and emits title/config change events
 	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
-	// DeleteChat archives or permanently deletes a chat
-	// forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
+	// DeleteChat permanently deletes an archived chat. A chat that is not
+	// archived is refused (FailedPrecondition): archive it with UpdateChatState
+	// first, so a delete can never silently be an archive, or the reverse.
+	// forge:custom — refuses a chat that is not archived, and cancels its run before deleting
 	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
 	// SearchChats searches chats by title and message content
 	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)
@@ -767,8 +769,10 @@ type ChatServiceHandler interface {
 	// UpdateChat updates chat metadata (title, temperature, etc.)
 	// forge:custom — a partial update that resolves the worktree and emits title/config change events
 	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
-	// DeleteChat archives or permanently deletes a chat
-	// forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
+	// DeleteChat permanently deletes an archived chat. A chat that is not
+	// archived is refused (FailedPrecondition): archive it with UpdateChatState
+	// first, so a delete can never silently be an archive, or the reverse.
+	// forge:custom — refuses a chat that is not archived, and cancels its run before deleting
 	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
 	// SearchChats searches chats by title and message content
 	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)

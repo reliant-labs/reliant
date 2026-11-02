@@ -127,10 +127,10 @@ describe("MobileBillingScreen", () => {
     renderScreen();
 
     expect(
-      screen.getByRole("button", { name: /alpha.*\$23\.00/i }),
+      screen.getByRole("button", { name: /alpha.*\$23\/mo/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /beta.*\$47\.00/i }),
+      screen.getByRole("button", { name: /beta.*\$47\/mo/i }),
     ).toBeInTheDocument();
   });
 

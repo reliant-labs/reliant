@@ -35,6 +35,30 @@ func TestIsForeignDaemonIDError(t *testing.T) {
 	}
 }
 
+// The reserved-id refusal is its own condition: distinct from the foreign one
+// (different recovery wording) and never mistaken for a plain denial.
+func TestIsReservedDaemonIDError(t *testing.T) {
+	otherDenial := connect.NewError(connect.CodePermissionDenied, errors.New("token is bound to a non-daemon resource"))
+	cases := map[string]struct {
+		err  error
+		want bool
+	}{
+		"the gateway's refusal":              {NewReservedDaemonIDError(), true},
+		"wrapped, as the runtime returns it": {fmt.Errorf("daemon connection failed (not retrying): %w", NewReservedDaemonIDError()), true},
+		"the foreign-id refusal":             {NewForeignDaemonIDError(), false},
+		"any other permission denial":        {otherDenial, false},
+		"nil":                                {nil, false},
+	}
+	for name, tc := range cases {
+		if got := IsReservedDaemonIDError(tc.err); got != tc.want {
+			t.Errorf("%s: IsReservedDaemonIDError = %v, want %v", name, got, tc.want)
+		}
+	}
+	if IsForeignDaemonIDError(NewReservedDaemonIDError()) {
+		t.Error("a reserved-id refusal must not read as a foreign one")
+	}
+}
+
 func TestNewForeignDaemonIDErrorCarriesReasonNotOwner(t *testing.T) {
 	err := NewForeignDaemonIDError()
 	if err.Code() != connect.CodePermissionDenied {

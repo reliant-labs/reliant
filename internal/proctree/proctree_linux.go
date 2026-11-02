@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,26 +31,22 @@ const cmdPrefix = "cmd-"
 // prunes the list on each /proc scan.
 const trackLive = true
 
-// minPidsMax keeps the derived per-command limit usable on a small machine.
-const minPidsMax = 256
+// commandsName names the cgroup, in the delegated directory, that holds every
+// command cgroup and bounds them together.
+const commandsName = "commands"
 
-// New builds a limiter for this process: the user's process limit, and the
-// delegated cgroup subtree when there is one.
+// New builds a limiter for this process: thread limits sized to this machine
+// (Size), and the delegated cgroup subtree when there is one.
 func New(cfg Config) *Limiter {
-	l := &Limiter{pidsMax: cfg.PidsMax}
+	l := &Limiter{}
 	var rl unix.Rlimit
-	finite := unix.Getrlimit(unix.RLIMIT_NPROC, &rl) == nil && rl.Cur != unix.RLIM_INFINITY && os.Geteuid() != 0
-	if finite {
-		l.nproc = uint64(float64(rl.Cur) * ReserveFraction)
+	nproc := 0
+	// RLIMIT_NPROC does not apply to root.
+	if unix.Getrlimit(unix.RLIMIT_NPROC, &rl) == nil && rl.Cur != unix.RLIM_INFINITY && os.Geteuid() != 0 {
+		nproc = int(min(rl.Cur, 1<<31))
+		l.nproc = uint64(float64(rl.Cur) * CommandsShare)
 	}
-	if l.pidsMax <= 0 {
-		l.pidsMax = DefaultPidsMax
-		if finite {
-			if third := int(rl.Cur / 3); third < l.pidsMax {
-				l.pidsMax = max(third, minPidsMax)
-			}
-		}
-	}
+	l.size = Size(runtime.NumCPU(), threadBudget(nproc, threadsMax()), cfg.CommandThreads)
 	switch cfg.CgroupRoot {
 	case "-":
 		l.why = "per-command cgroups are switched off"
@@ -58,10 +55,59 @@ func New(cfg Config) *Limiter {
 	default:
 		l.root = cfg.CgroupRoot
 	}
-	if l.root != "" {
-		l.sweep(true)
+	if l.root == "" {
+		return l
 	}
+	// Leftovers of an earlier daemon, made before the commands cgroup
+	// existed or in it.
+	sweep(l.root, true)
+	commands, err := makeCommandsCgroup(l.root, commandsName, l.size.Shared)
+	if err != nil {
+		l.commands = l.root
+		l.why = fmt.Sprintf("no limit on all commands together: %v", err)
+		return l
+	}
+	l.commands = commands
+	sweep(l.commands, true)
 	return l
+}
+
+// threadsMax is kernel.threads-max, the machine's limit on threads of every
+// user; 0 when unreadable.
+func threadsMax() int {
+	data, err := os.ReadFile("/proc/sys/kernel/threads-max")
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// makeCommandsCgroup makes (or reuses) the cgroup name under root that holds
+// every command cgroup: the pids controller enabled for its children, and
+// pids.max shared (no limit when 0). It holds no process of its own, which
+// cgroup v2's no-internal-process rule requires of a cgroup whose children
+// have controllers. Creating it needs nothing beyond what creating a command
+// cgroup in root needs: it is the delegatee's own.
+func makeCommandsCgroup(root, name string, shared int) (string, error) {
+	dir := filepath.Join(root, name)
+	if err := os.Mkdir(dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", fmt.Errorf("cannot create %s: %w", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+pids"), 0); err != nil {
+		return "", fmt.Errorf("cannot enable the pids controller under %s: %w", dir, err)
+	}
+	limit := "max"
+	if shared > 0 {
+		limit = strconv.Itoa(shared)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pids.max"), []byte(limit), 0); err != nil {
+		return "", fmt.Errorf("cannot set %s/pids.max: %w", dir, err)
+	}
+	return dir, nil
 }
 
 // delegatedRoot is the cgroup directory command cgroups go in: the parent of
@@ -107,23 +153,26 @@ func delegatedRoot() (dir, why string) {
 
 func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	l := t.l
-	l.sweep(false)
+	sweep(l.commands, false)
 	// A command entering new namespaces (credsandbox) is left in the
 	// daemon's cgroup: clone3 into a cgroup together with CLONE_NEWUSER is
-	// not a combination worth risking on a command that must start. It keeps
-	// the RLIMIT_NPROC reserve.
+	// not a combination worth risking on a command that must start. It gets
+	// the RLIMIT_NPROC reserve instead.
 	if cmd.SysProcAttr != nil && cmd.SysProcAttr.Cloneflags != 0 {
 		return
 	}
-	dir := filepath.Join(l.root, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq))
+	dir := filepath.Join(l.commands, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq))
 	if err := os.Mkdir(dir, 0o755); err != nil {
-		logging.Warn("proctree: cannot create a command cgroup; the command runs unbounded", "dir", dir, "error", err)
+		logging.Warn("proctree: cannot create a command cgroup; the command runs bounded only by RLIMIT_NPROC", "dir", dir, "error", err)
 		return
 	}
-	if err := os.WriteFile(filepath.Join(dir, "pids.max"), []byte(strconv.Itoa(l.pidsMax)), 0); err != nil {
-		logging.Warn("proctree: cannot set pids.max; the command runs unbounded", "dir", dir, "error", err)
+	if err := os.WriteFile(filepath.Join(dir, "pids.max"), []byte(strconv.Itoa(l.size.PerCommand)), 0); err != nil {
+		logging.Warn("proctree: cannot set pids.max; the command runs bounded only by RLIMIT_NPROC", "dir", dir, "error", err)
 		_ = os.Remove(dir)
 		return
+	}
+	if l.commands != l.root {
+		t.sharedRefused, _ = refusals(l.commands)
 	}
 	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -192,7 +241,8 @@ func populated(dir string) bool {
 }
 
 // Release removes the tree's cgroup once it is empty. One the command left
-// processes in stays until they exit; the next Prepare sweeps it.
+// processes in stays until they exit; the next Prepare sweeps it. What
+// LimitNote reports is read first, while the cgroup is still there.
 func (t *Tree) Release() {
 	if t == nil {
 		return
@@ -202,28 +252,91 @@ func (t *Tree) Release() {
 	if t.dir == "" {
 		return
 	}
+	if !t.noted {
+		t.note, t.noted = t.limitNote(), true
+		if t.note != "" {
+			logging.Warn("proctree: a command was refused threads at a thread limit",
+				"chat_id", t.owner.ChatID, "command", t.owner.Command, "cgroup", t.dir,
+				"command_limit", t.l.size.PerCommand, "shared_limit", t.l.size.Shared)
+		}
+	}
 	if err := os.Remove(t.dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
 		logging.Debug("proctree: cannot remove a command cgroup", "dir", t.dir, "error", err)
 	}
 }
 
-// sweep removes this package's empty command cgroups. At start-up (all) it
-// takes those of earlier daemons too; afterwards only this daemon's, whose
-// commands may have left processes behind when they were released.
-func (l *Limiter) sweep(all bool) {
-	entries, err := os.ReadDir(l.root)
+// limitNote reads the refusals at the command's own limit and, made while it
+// ran, at the limit all commands share, and words them (limitMessage).
+func (t *Tree) limitNote() string {
+	if t.dir == "" || t.l == nil {
+		return ""
+	}
+	own, exact := refusals(t.dir)
+	if !exact {
+		// Before Linux 6.13 a cgroup counts every fork of its own that was
+		// refused, at its limit or an ancestor's: which one is not known.
+		return limitMessage(t.l.size, refused{either: own})
+	}
+	var shared uint64
+	if t.l.commands != t.l.root {
+		if now, _ := refusals(t.l.commands); now > t.sharedRefused {
+			shared = now - t.sharedRefused
+		}
+	}
+	return limitMessage(t.l.size, refused{own: own, shared: shared})
+}
+
+// refusals is how many forks (threads or processes) the kernel refused at
+// dir's own pids.max: pids.events.local's max (Linux 6.13+; pids.events then
+// counts the descendants' too). exact is false on an older kernel, which has
+// only pids.events, counting instead every fork of dir's own processes that
+// was refused at any limit. 0 when neither is readable.
+func refusals(dir string) (n uint64, exact bool) {
+	exact = true
+	data, err := os.ReadFile(filepath.Join(dir, "pids.events.local"))
+	if err != nil {
+		exact = false
+		if data, err = os.ReadFile(filepath.Join(dir, "pids.events")); err != nil {
+			return 0, false
+		}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "max "); ok {
+			n, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			return n, exact
+		}
+	}
+	return 0, exact
+}
+
+// sweep removes this package's empty command cgroups in dir. At start-up
+// (all) it takes those of earlier daemons too, though not those of a daemon
+// still running (a daemon an agent started for development makes its command
+// cgroups beside the ones of the daemon that runs the agent); afterwards only
+// this daemon's, whose commands may have left processes behind when they were
+// released.
+func sweep(dir string, all bool) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	own := fmt.Sprintf("%s%d-", cmdPrefix, os.Getpid())
+	self := os.Getpid()
 	for _, e := range entries {
 		name := e.Name()
-		if !e.IsDir() || !strings.HasPrefix(name, cmdPrefix) || (!all && !strings.HasPrefix(name, own)) {
+		rest, ok := strings.CutPrefix(name, cmdPrefix)
+		if !e.IsDir() || !ok {
 			continue
 		}
-		dir := filepath.Join(l.root, name)
-		if !populated(dir) {
-			_ = os.Remove(dir)
+		pidText, _, _ := strings.Cut(rest, "-")
+		pid, err := strconv.Atoi(pidText)
+		if err != nil {
+			continue
+		}
+		if pid != self && (!all || !errors.Is(unix.Kill(pid, 0), unix.ESRCH)) {
+			continue
+		}
+		if sub := filepath.Join(dir, name); !populated(sub) {
+			_ = os.Remove(sub)
 		}
 	}
 }

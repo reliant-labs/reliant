@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./styles/cursor-fixes.css";
 @import "./themes/professional-themes.css";
+@import "./themes/chart-palette.css";
 @config "../tailwind.config.js";
 
 /*
@@ -470,22 +471,7 @@
     --tooltip-bg: 0 0% 20%;              /* Dark neutral gray */
     --tooltip-foreground: 0 0% 98%;      /* White text */
 
-    /* DATA-VIZ CATEGORICAL PALETTE (dashboard series, slices, bars).
-       Eight hues ordered so neighbours differ most, none of them red: red is
-       --destructive, kept for series that ARE errors (the panel renderer's
-       seriesColors.ts), with --chart-danger-alt for a second error series.
-       Same in every colour scheme on purpose: a series keeps its colour when
-       the user switches scheme, and --secondary/--muted are near-background
-       greys that cannot carry a line. Light: >=3:1 against the card. */
-    --chart-1: 214 80% 48%;
-    --chart-2: 28 90% 48%;
-    --chart-3: 174 70% 32%;
-    --chart-4: 265 60% 55%;
-    --chart-5: 45 90% 38%;
-    --chart-6: 330 70% 48%;
-    --chart-7: 135 50% 36%;
-    --chart-8: 195 85% 38%;
-    --chart-danger-alt: 0 65% 32%;
+    /* The data-viz palette (--chart-*) is its own block: themes/chart-palette.css. */
   }
 
   .dark {
@@ -586,17 +572,6 @@
     /* Tooltip colors - neutral, not blue */
     --tooltip-bg: 0 0% 20%;              /* Dark neutral gray */
     --tooltip-foreground: 0 0% 98%;      /* White text */
-
-    /* The data-viz palette, brightened for dark surfaces (see :root). */
-    --chart-1: 214 90% 66%;
-    --chart-2: 28 95% 62%;
-    --chart-3: 174 60% 50%;
-    --chart-4: 265 80% 74%;
-    --chart-5: 45 90% 58%;
-    --chart-6: 330 80% 70%;
-    --chart-7: 135 50% 55%;
-    --chart-8: 195 80% 58%;
-    --chart-danger-alt: 0 85% 72%;
   }
 }
 

@@ -118,10 +118,14 @@ function forgeReport(report: Record<string, unknown>) {
 /** What Live holds. Mutated by Register, as the server would. */
 let liveEnvs: LiveEnv[] = [];
 
+/** The declaration Register recorded, served per environment (GetEnvironmentShape). */
+let declaredShapes: Record<string, unknown> = {};
+
 const getLiveView = vi.fn(() => Promise.resolve(liveEnvs));
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: () => getLiveView(),
+  getEnvironmentShape: (id: string) => Promise.resolve(declaredShapes[id] ?? null),
 }));
 
 /** EnsureEnvironment, as called straight from the browser. */
@@ -129,19 +133,22 @@ const ensureEnvironment = vi.fn((input: { spec: Record<string, unknown> }) => {
   const spec = input.spec as { project: string; name: string; kind: number };
   // The server's behaviour that matters to the UI: the row now exists, with
   // the declaration it was given, and no promotion.
+  declaredShapes = {
+    "cp-staging": {
+      kind: "self_managed",
+      workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
+      secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
+      domains: ["staging.example.com"],
+      clusters: ["prod-gke"],
+    },
+  };
   liveEnvs = [
     {
       id: "cp-staging",
       name: spec.name,
       project: spec.project,
       kind: "self_managed",
-      declaredShape: {
-        kind: "self_managed",
-        workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
-        secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
-        domains: ["staging.example.com"],
-        clusters: ["prod-gke"],
-      },
+      declared: true,
       declaredBy: {
         repo: "github.com/reliant-labs/hounders",
         commit: "def5678abc123",
@@ -245,6 +252,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   liveEnvs = [];
+  declaredShapes = {};
   routeState.env = "staging";
   routeState.tab = undefined;
   getTopology.mockImplementation(OFFLINE);

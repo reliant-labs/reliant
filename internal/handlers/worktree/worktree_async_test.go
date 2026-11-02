@@ -92,16 +92,18 @@ func seedWorktreeProject(t *testing.T, repo *db.Repo, userID string) string {
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
+	projectPath := t.TempDir()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
 		ID:         projectID,
 		UserID:     userID,
 		Name:       "Test Project",
-		Path:       t.TempDir(),
+		Path:       projectPath,
 		IsGitRepo:  true,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	installProject(t, repo, projectID, userID, projectPath, testMachines...)
 	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
 		ID:           uuid.New().String(),
 		ProjectID:    projectID,

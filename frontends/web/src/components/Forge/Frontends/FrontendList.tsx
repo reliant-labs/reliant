@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import type { Frontend } from "@/services/forge/frontends";
 
 import { DOCS, GettingStarted } from "../GettingStarted";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { VerdictChip } from "../HostedWorkloads";
 import { DomainStateBadge } from "../Domains/DomainStateBadge";
 import { shortVersion } from "../Releases/releaseModel";
@@ -194,9 +195,10 @@ export function FrontendsEmpty({ env }: { env?: string }) {
       icon={<Globe className="h-4 w-4" />}
       title="No frontend deployed here yet"
       about="A frontend is a website forge builds and Reliant hosts: it gets a live address on its first deploy, and you can add your own domain later."
+      agent={<DeployWithAgentButton env={env ?? null} />}
       steps={[
-        { text: "Add a frontend to your project (a landing page, a docs site, a web app).", command: "forge scaffold frontend web" },
-        { text: "Deploy the environment. The address appears here once it is live.", command: `forge env deploy ${env ?? "<env>"}` },
+        { text: "Add a frontend to your project (a landing page, a docs site, a web app).", command: "reliant forge scaffold frontend web" },
+        { text: "Deploy the environment. The address appears here once it is live.", command: `reliant forge env deploy ${env ?? "<env>"}` },
       ]}
       docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
     />

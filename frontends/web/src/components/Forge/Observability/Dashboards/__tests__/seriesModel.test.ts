@@ -45,9 +45,9 @@ describe("colours", () => {
     expect(colors[0]).toEqual({ token: CHART_PALETTE[0], repeat: false });
     expect(colors[1]).toEqual({ token: DANGER_PALETTE[0], repeat: false });
     expect(colors[2]).toEqual({ token: CHART_PALETTE[1], repeat: false });
-    // a, b, z0..z5 fill the eight; z6 comes round again, dotted.
-    expect(colors[labels.indexOf("z5")]).toEqual({ token: CHART_PALETTE[7], repeat: false });
-    expect(colors[labels.indexOf("z6")]).toEqual({ token: CHART_PALETTE[0], repeat: true });
+    // a, b, z0..z3 fill the six; z4 comes round again, dotted.
+    expect(colors[labels.indexOf("z3")]).toEqual({ token: CHART_PALETTE[5], repeat: false });
+    expect(colors[labels.indexOf("z4")]).toEqual({ token: CHART_PALETTE[0], repeat: true });
   });
 
   it("gives the largest series the distinct colours and keeps them whatever is drawn", () => {

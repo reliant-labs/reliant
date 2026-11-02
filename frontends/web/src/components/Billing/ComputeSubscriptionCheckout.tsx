@@ -65,7 +65,6 @@ import {
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
-import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
 import {
   isCheckoutIdentityRequired,
   useCreateComputeSubscriptionIntent,
@@ -87,6 +86,7 @@ const SETTLE_POLL_MS = 2_000;
 export type { ComputePlanOption };
 
 import { MachineSaleConsent } from "./MachineSaleConsent";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 export interface ComputeSubscriptionCheckoutProps {
   plans: ComputePlanOption[];
@@ -220,7 +220,7 @@ export function ComputeSubscriptionCheckout({
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">
-          Have a coupon? Redeem it here — it covers this in full, and no card is
+          Have a coupon? Redeem it here. If it covers the full amount, no card is
           needed.
         </p>
         <RedeemCouponForm
@@ -549,7 +549,7 @@ function ConfirmSubscriptionForm({
           ? "Confirming…"
           : phase.kind === "confirming"
             ? "Processing…"
-            : `Subscribe — ${formatCentsAsDollars(plan.monthlyPriceCents)}/mo`}
+            : `Subscribe — ${formatPrice(plan.monthlyPriceCents)}/mo`}
       </button>
     </form>
   );

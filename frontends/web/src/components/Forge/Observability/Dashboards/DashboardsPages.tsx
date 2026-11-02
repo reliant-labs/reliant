@@ -30,6 +30,7 @@ import { CloudNotice } from "../../SourceNotices";
 import { orgPlaceOf, type ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import type { ObsTopic } from "../ObsStates";
+import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
@@ -37,10 +38,13 @@ import { DashboardView, type DashboardHrefs } from "./DashboardView";
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
   const { roster } = useForgeConsole();
-  return useMemo(
-    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : [])),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // A panel can become an alert rule, and the dialog names the rules each
+  // environment already declares.
+  return useDeclaredEnvironments(recorded);
 }
 
 /** Every environment of the org as `project/env` (hooks/apps-queries.ts): what an org-scoped dashboard offers. */

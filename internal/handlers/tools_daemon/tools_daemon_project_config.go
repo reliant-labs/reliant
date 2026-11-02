@@ -136,7 +136,7 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 		// on its disk right now. Read the project's forge name here rather
 		// than waiting for someone to open the Forge tab with a daemon
 		// online — see forge_name_learn.go for why that wait was the bug.
-		s.learnForgeNameForProject(ctx, conn, project)
+		s.learnForgeNameForProject(ctx, conn, project, projectPath)
 	}
 
 	return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
@@ -155,7 +155,10 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 //
 // conn.done bounds the goroutine: a daemon that disconnects mid-read releases
 // it rather than leaving it parked on a response that can no longer arrive.
-func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConnection, project *db.Project) {
+//
+// path is where the daemon announced the checkout: its path ON THAT MACHINE,
+// which is the one to read forge.yaml at.
+func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConnection, project *db.Project, path string) {
 	if conn == nil || project == nil {
 		return
 	}
@@ -173,7 +176,7 @@ func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConn
 			}
 		}()
 		projectfacts.LearnForgeName(readCtx, connCommandSender{svc: s, conn: conn},
-			s.deps.Repo, conn.userID, conn.daemonID, project.ID, project.Path)
+			s.deps.Repo, conn.userID, conn.daemonID, project.ID, path)
 	}()
 }
 
@@ -447,6 +450,16 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 				return nil, fmt.Errorf("failed to create discovered project %s: %w", path, createErr)
 			}
 			return nil, err
+		}
+		// The machine that reported it holds it, at this path: its own
+		// project_daemons row, which every chat in the project resolves its
+		// directory from. Without it the project would have no checkout on
+		// record until the machine next connected.
+		if createErr == nil && strings.TrimSpace(conn.daemonID) != "" {
+			if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
+					"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
+			}
 		}
 	}
 

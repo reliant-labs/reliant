@@ -61,6 +61,31 @@ func TestIntrospect_DecodesAnActivePrincipal(t *testing.T) {
 	}
 }
 
+// IntrospectAccount decodes the acting user's email from the same response,
+// and an older control plane's response (no actingUserEmail) is still a live
+// principal with no email.
+func TestIntrospectAccount_DecodesTheActingUsersEmail(t *testing.T) {
+	for name, tc := range map[string]struct{ extra, want string }{
+		"named":         {extra: `,"actingUserEmail":"alice@example.com"`, want: "alice@example.com"},
+		"older control": {extra: ``, want: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := fakeCP(t, func(string, map[string]any) (int, string) {
+				return 200, `{"active":true,"tokenId":"tok-1","actingUserId":"user-1","scopes":["daemon:connect"]` + tc.extra + `}`
+			})
+			defer srv.Close()
+
+			a, err := New(Deps{BaseURL: srv.URL, Sign: sign}).IntrospectAccount(context.Background(), liveToken)
+			if err != nil {
+				t.Fatalf("IntrospectAccount: %v", err)
+			}
+			if a.Principal == nil || a.Principal.ActingUserID != "user-1" || a.Email != tc.want {
+				t.Fatalf("got principal %+v email %q, want user-1 / %q", a.Principal, a.Email, tc.want)
+			}
+		})
+	}
+}
+
 // A daemon credential holds every scope, and the control plane resolves that
 // against its OWN catalog, which may be newer than this binary's. A scope only
 // it knows is skipped, never a reason to refuse the daemon; an explicit list
