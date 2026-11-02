@@ -13,9 +13,11 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
@@ -122,15 +124,26 @@ func (s *Service) checkout(ctx context.Context, userID string, project *db.Proje
 // Only a daemon that ANSWERED "does not exist" is evidence. An unreachable
 // daemon is a different failure — onboarding races daemon provisioning by
 // ~10s — so a failed probe falls through rather than inventing a refusal.
-func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, projectID, path string) error {
+//
+// The path is the one the caller named, so it is asked of the machine the
+// request runs on (requestMachine), never of default resolution: a
+// --project-path run on machine A, whose user's default is machine B, was
+// told its directory did not exist because B was asked about A's path. When
+// no machine can be named, nothing is asked and nothing is refused.
+func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, projectID, path, daemonID string) error {
+	if daemonID == "" {
+		logging.InfoContext(ctx, "No machine records this project's checkout at the requested path; not verifying its directory",
+			"path", path, "projectID", projectID)
+		return nil
+	}
 	// Local struct rather than daemon.FileStat: the API tier does not import
 	// the daemon package, and only one field is needed.
 	var stat struct {
 		Exists bool `json:"exists"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
+	if err := s.sendToDaemon(ctx, userID, daemonID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
 		logging.WarnContext(ctx, "Could not verify project directory via daemon; proceeding",
-			"error", err, "path", path, "projectID", projectID)
+			"error", err, "path", path, "projectID", projectID, "daemonID", daemonID)
 		return nil
 	}
 	if stat.Exists {
@@ -140,6 +153,27 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 		"project %s is registered at %s but that directory does not exist; "+
 			"restore the directory or delete the project, then retry",
 		projectID, path))
+}
+
+// requestMachine is the machine a request about path runs on: the one its
+// credentials name (a daemon's own token), else the user's live machine whose
+// checkout of the project is recorded at exactly that path. "" when neither
+// says: the API never guesses which disk a path is on.
+func (s *Service) requestMachine(ctx context.Context, userID, projectID, path string) string {
+	if id := auth.GetDaemonIDFromContext(ctx); id != "" {
+		return id
+	}
+	rows, err := daemonplacement.UserCheckouts(ctx, s.deps.Repo, userID, projectID)
+	if err != nil {
+		return ""
+	}
+	want := ospath.Clean(path)
+	for _, row := range rows {
+		if ospath.Clean(row.Path) == want {
+			return row.DaemonID
+		}
+	}
+	return ""
 }
 
 // resolveProjectRepo resolves a per-RPC repo_id selector against the

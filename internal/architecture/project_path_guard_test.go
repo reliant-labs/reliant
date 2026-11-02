@@ -31,9 +31,10 @@ import (
 // This guard fails any read of a project's .Path — `project.Path`,
 // `proj.Path`, `x.project.Path` — in a function that is not on the reviewed
 // list below, and fails a listed function whose count changed, so the list
-// can only shrink by a deliberate edit. The match is syntactic (the receiver's
-// name), which is what keeps it cheap and cache-sound; a read through another
-// name is for review to catch.
+// can only shrink by a deliberate edit. A read is found by what the value is
+// (projectTypeIndex): a parameter or variable declared as a db.Project, the
+// result of any function or method that returns one, an element of a slice of
+// them, or a field of that type, as well as by the receiver's name.
 
 // projectPathReason is why a function may still read projects.path.
 type projectPathReason string
@@ -69,6 +70,7 @@ var projectPathAllowed = map[string]struct {
 }{
 	"internal/db/repository_impl.go:CreateProject":                                     {1, reasonProjectRow},
 	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
+	"internal/handlers/project/project.go:projectToProto":                              {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
 	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {5, reasonHeal},
 	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {4, reasonProbe},
@@ -103,56 +105,6 @@ var projectPathAllowed = map[string]struct {
 	"internal/workspacecreate/workspacecreate.go:Finish":                                            {5, reasonRuntimeDebt},
 }
 
-// projectReceiver reports whether a selector's receiver names a project:
-// `project`, `proj`, `prj`, or a field of that name (`tec.project`).
-func projectReceiver(x ast.Expr) bool {
-	var name string
-	switch x := x.(type) {
-	case *ast.Ident:
-		name = x.Name
-	case *ast.SelectorExpr:
-		name = x.Sel.Name
-	}
-	switch strings.ToLower(name) {
-	case "project", "proj", "prj":
-		return true
-	}
-	return false
-}
-
-// projectPathReads counts the reads of a project's .Path in each function of
-// file, keyed "<rel>:<func>".
-func projectPathReads(file *ast.File, rel string, into map[string]int) {
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		ast.Inspect(fn, func(n ast.Node) bool {
-			if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "Path" && projectReceiver(sel.X) {
-				into[rel+":"+fn.Name.Name]++
-			}
-			return true
-		})
-	}
-}
-
-func TestProjectPathReads(t *testing.T) {
-	src := `package x
-func a(project *P) { send(project.Path); _ = t.project.Path; _ = proj.Path }
-func b(p *P, wt *W) { _ = p.Path; _ = wt.Path; _ = project.Name }
-`
-	file, err := parser.ParseFile(token.NewFileSet(), "x.go", src, parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[string]int{}
-	projectPathReads(file, "x.go", got)
-	if len(got) != 1 || got["x.go:a"] != 3 {
-		t.Fatalf("reads = %v, want x.go:a three times and nothing in b", got)
-	}
-}
-
 func TestProjectPathNeverReachesADaemon(t *testing.T) {
 	t.Parallel()
 
@@ -161,10 +113,12 @@ func TestProjectPathNeverReachesADaemon(t *testing.T) {
 		".git": true, "node_modules": true, "testdata": true, "vendor": true,
 		"tmp": true, "data": true, "dist": true, ".reliant": true,
 		"gen": true, "web": true, "electron": true, "proto-vendor": true,
-		// The generated ORM projects every column, Path included.
-		"store": true,
 	}
-	reads := map[string]int{}
+	type parsed struct {
+		file *ast.File
+		rel  string
+	}
+	var files []parsed
 	fset := token.NewFileSet()
 	for _, top := range []string{"internal", "cmd", "pkg"} {
 		dir := filepath.Join(repo, top)
@@ -192,11 +146,25 @@ func TestProjectPathNeverReachesADaemon(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			projectPathReads(file, filepath.ToSlash(rel), reads)
+			files = append(files, parsed{file: file, rel: filepath.ToSlash(rel)})
 			return nil
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+
+	// Every file declares what a value is (the generated ORM's GetProject
+	// among them); every file but the ORM's is judged by it. The ORM projects
+	// every column, Path included.
+	ix := newProjectTypeIndex()
+	for _, f := range files {
+		ix.indexProjectTypes(f.file, f.rel)
+	}
+	reads := map[string]int{}
+	for _, f := range files {
+		if !strings.HasPrefix(f.rel, "internal/store/") {
+			ix.projectPathReads(f.file, f.rel, reads)
 		}
 	}
 

@@ -4,6 +4,7 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -67,6 +68,9 @@ func (*daemonDownError) Error() string { return "no daemon connected" }
 // returns its id. The router used here reports the directory as present.
 func seedProject(t *testing.T, repo *db.Repo, ctx context.Context, path string) string {
 	t.Helper()
+	// The machine the create ran on is the user's: its row records the
+	// checkout, and the find branch asks that machine about the path.
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: "daemon-stale-path", UserID: auth.MustGetUserID(ctx)}))
 	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
@@ -159,4 +163,59 @@ func TestCreateProject_UnreachableDaemonDoesNotRefuse(t *testing.T) {
 	if strings.Contains(err.Error(), "does not exist") {
 		t.Errorf("error = %q, must not claim the directory is missing when the daemon never answered", err)
 	}
+}
+
+// statByMachineRouter answers fs.stat per machine, and refuses default
+// resolution: the find branch must ask a named machine.
+type statByMachineRouter struct {
+	toolexectest.Stub
+	placesAsNamed
+	exists map[string]bool
+	asked  []string
+}
+
+func (r *statByMachineRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
+	return nil, fmt.Errorf("%s sent by default resolution: the path is the requesting machine's", commandType)
+}
+
+func (r *statByMachineRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, _ []byte, _ int32) ([]byte, error) {
+	if commandType == "fs.stat" {
+		r.asked = append(r.asked, daemonID)
+		return json.Marshal(map[string]any{"exists": r.exists[daemonID]})
+	}
+	return json.Marshal(map[string]any{})
+}
+
+// The find half of find-or-create asks about the caller's path on the
+// machine the request runs on. A user whose default machine is A, running
+// with --project-path on B (where the project's checkout is recorded), was
+// told the directory did not exist because A was asked.
+func TestCreateProject_FindAsksTheMachineTheRequestRunsOn(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	userID := "user-find-machine-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	projectPath := "/home/workspace/projects/find-" + uuid.NewString()
+	projectID := uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: userID, Name: "find", Path: projectPath}))
+	for _, id := range []string{"machine-a", "machine-b"} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id + userID, UserID: userID}))
+	}
+	a, b := "machine-a"+userID, "machine-b"+userID
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, b, projectPath, nil))
+
+	router := &statByMachineRouter{exists: map[string]bool{a: false, b: true}}
+	_, err := newProjectService(t, repo, router).CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err), "found on B, where its checkout is: err = %v", err)
+	assert.Equal(t, []string{b}, router.asked)
+
+	// A request on A's own credentials asks A, which says the path is gone.
+	router.asked = nil
+	onA := context.WithValue(ctx, auth.DaemonIDContextKey, a)
+	_, err = newProjectService(t, repo, router).CreateProject(onA, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, []string{a}, router.asked)
 }

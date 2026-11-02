@@ -147,7 +147,10 @@ func (s *Service) projectCheckout(ctx context.Context, projectID string, userID 
 		return projectcheckout.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	// A nil interface, not a typed nil, when there is no router: Resolve
-	// then names the oldest install, and the sends check for the router.
+	// then names the OLDEST INSTALL, which is not the placement machine (the
+	// one the project's chats are placed on). That is enough for the
+	// read-only config this answers with no router; the sends check for the
+	// router and refuse without one.
 	var machines daemonplacement.Machines
 	if s.deps.Router != nil {
 		machines = s.deps.Router

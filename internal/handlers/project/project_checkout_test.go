@@ -38,7 +38,7 @@ func (r *pinnedRecorder) SendDaemonCommandToDaemon(_ context.Context, _, daemonI
 	}
 	_ = json.Unmarshal(payload, &p)
 	r.daemons, r.paths, r.commands = append(r.daemons, daemonID), append(r.paths, p.Path), append(r.commands, commandType)
-	return []byte(`{"success":true}`), nil
+	return r.fakeDaemon(commandType, payload)
 }
 
 // Pull, remove and reclone act on ONE machine's clone, at its row's path. The
@@ -114,4 +114,34 @@ func TestGitCommandsGoToTheCheckoutsMachine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"daemon-1"}, router.daemons)
 	assert.Equal(t, []string{"/work"}, router.paths)
+}
+
+// The row is the only record of a checkout on that machine. It goes only once
+// the machine has removed the checkout: dropped after a failed or unreachable
+// remove, the clone stays on disk unrecorded and the machine is refused the
+// project it still holds.
+func TestRemoveProjectFromDaemon_KeepsTheRowUntilTheRemoveRan(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	for name, answer := range map[string]func(string, []byte) ([]byte, error){
+		"machine unreachable": func(string, []byte) ([]byte, error) {
+			return nil, svcerr.Unavailable("no daemon connected for user")
+		},
+		"remove failed": func(string, []byte) ([]byte, error) {
+			return []byte(`{"success":false,"error":"permission denied"}`), nil
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			deleted := 0
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { deleted++; return nil }
+			router := newPinnedRecorder()
+			router.fakeDaemon = answer
+			_, err := newService(t, store, router).RemoveProjectFromDaemon(ctx,
+				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+			require.Error(t, err)
+			assert.Zero(t, deleted, "the row outlives a remove that did not run")
+		})
+	}
 }

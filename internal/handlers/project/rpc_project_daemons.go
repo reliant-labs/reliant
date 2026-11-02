@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -201,7 +202,7 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// A plain folder that is already on another machine lives there: an
 		// empty twin here would read as a second checkout (the connect
 		// reconcile records it installed) and split the project's files.
-		if elsewhere, err := s.installedElsewhere(ctx, project.ID, daemonID); err != nil || elsewhere {
+		if elsewhere, err := s.installedElsewhere(ctx, userID, project.ID, daemonID); err != nil || elsewhere {
 			skippedElsewhere++
 			continue
 		}
@@ -225,16 +226,20 @@ func (s *Service) healProjectDir(ctx context.Context, userID, daemonID, path str
 	return s.sendToDaemon(ctx, userID, daemonID, "fs.mkdir", map[string]string{"path": path}, nil)
 }
 
-// installedElsewhere reports whether the project's checkout is recorded on a
-// machine other than daemonID. An error reads as "elsewhere": the heal is
-// best effort, and creating a directory is the irreversible direction.
-func (s *Service) installedElsewhere(ctx context.Context, projectID, daemonID string) (bool, error) {
-	rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID)
+// installedElsewhere reports whether the project's checkout is recorded on
+// another live machine of the user's (daemonplacement.UserCheckouts). A row
+// of a removed or replaced machine, or of another user's, is not "elsewhere":
+// nothing can run there, and counting it left a replaced machine's plain
+// folders (onboarding's my-project among them) never healed again. An error
+// reads as "elsewhere": the heal is best effort, and creating a directory is
+// the irreversible direction.
+func (s *Service) installedElsewhere(ctx context.Context, userID, projectID, daemonID string) (bool, error) {
+	rows, err := daemonplacement.UserCheckouts(ctx, s.deps.Repo, userID, projectID)
 	if err != nil {
 		return true, err
 	}
 	for _, row := range rows {
-		if row.DaemonID != daemonID && row.InstallState == core.ProjectInstallInstalled {
+		if row.DaemonID != daemonID {
 			return true, nil
 		}
 	}
@@ -544,10 +549,22 @@ func (s *Service) RemoveProjectFromDaemon(
 		Error   string `json:"error"`
 	}
 	payload := map[string]string{"path": pd.Path}
+	// The row goes only once the machine has removed the checkout. It is the
+	// only record of a checkout on that machine: dropped while the clone is
+	// still on disk (the machine was offline, the remove failed), the machine
+	// is refused the project while its files sit there unrecorded, and the
+	// user is told to clone what they already have. The remove is retried
+	// from here; a machine that is gone for good releases its rows when it
+	// is removed (db.Repo.RemoveDaemon).
 	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
-		// On-disk remove failure: still try to drop the DB row so the UI
-		// stops listing a ghost. Log so an operator can investigate.
-		logging.WarnContext(ctx, "RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
+		return nil, daemonerr.Error("remove the project from the machine", err)
+	}
+	if !removeResp.Success {
+		reason := strings.TrimSpace(removeResp.Error)
+		if reason == "" {
+			reason = "the machine did not report the checkout removed"
+		}
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("could not remove the project from the machine: %s", reason))
 	}
 	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))

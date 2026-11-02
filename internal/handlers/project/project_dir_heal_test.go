@@ -213,3 +213,40 @@ func TestProjectDirHeal_WithoutARouterReportsIt(t *testing.T) {
 		require.ErrorIs(t, err, errNoDaemonRouter, "daemonID %q", daemonID)
 	}
 }
+
+// Onboarding's default my-project is a plain folder with no remote. When the
+// cloud machine that held it is replaced, the old machine's row can outlive
+// it (rows written before removal released them, or a machine whose id
+// churned). That leftover row must not count as "the folder lives
+// elsewhere", or the replacement machine never gets the folder back and the
+// project has no remote to clone from.
+func TestProjectDirHeal_AReplacedMachinesLeftoverRowDoesNotBlockTheHeal(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	userID := "user-heal-" + uuid.NewString()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	myProject := &db.Project{
+		ID: uuid.NewString(), UserID: userID, Name: "my-project",
+		Path:      "/home/workspace/projects/my-project-" + uuid.NewString(),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}
+	require.NoError(t, repo.CreateProject(ctx, myProject))
+	// The old cloud machine's row, whose machine no longer exists.
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, myProject.ID, "old-cloud-"+uuid.NewString(), myProject.Path, nil))
+	// A row on a machine some other user owns is not this user's either.
+	foreign := &db.Daemon{ID: "foreign-" + uuid.NewString(), UserID: "someone-else", CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.UpsertDaemon(ctx, foreign))
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, myProject.ID, foreign.ID, myProject.Path, nil))
+	replacement := &db.Daemon{ID: "new-cloud-" + uuid.NewString(), UserID: userID, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.UpsertDaemon(ctx, replacement))
+
+	router := &mkdirRecordingRouter{}
+	newProjectService(t, repo, router).ensureProjectDirsOnDaemon(userID, replacement.ID)
+
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	require.Equal(t, []string{myProject.Path}, router.mkdired, "my-project is healed onto the replacement machine")
+	require.Equal(t, []string{replacement.ID}, router.targets)
+}
