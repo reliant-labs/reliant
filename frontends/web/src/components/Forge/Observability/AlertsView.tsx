@@ -575,6 +575,11 @@ function RulesTab({
 }) {
   const off = environments.filter(observabilityOff);
   const open = rules.find((r) => r.key === selected);
+  // The rules come from each environment's declared shape, fetched per
+  // environment: until they arrive, "none declared" would be a guess.
+  if (rules.length === 0 && environments.some((env) => env.declaredPending)) {
+    return <ObsLoadingRows testId="obs-rules-loading" />;
+  }
   if (rules.length === 0) {
     const env = environments[0]?.name ?? "<env>";
     return (
@@ -585,7 +590,7 @@ function RulesTab({
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
           </p>
           <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
-          <CommandLine command="forge obs alerts check" />
+          <CommandLine command="reliant forge obs alerts check" />
           <p>
             <a
               href={DOCS.alerts}

@@ -7,7 +7,7 @@
  * question), with the running dot hidden whenever input was needed.
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,6 +54,7 @@ const rows = {
   unread: { activity: ChatActivity.IDLE, workingThreads: 0, unread: true },
   running: { activity: ChatActivity.RUNNING, workingThreads: 1, unread: false },
   blocked: { activity: ChatActivity.AWAITING_INPUT, workingThreads: 0, unread: true },
+  failed: { activity: ChatActivity.ERROR, workingThreads: 0, unread: false },
 } as const;
 
 const chats: Array<Record<string, unknown>> = Object.entries(rows).map(([id, row]) => ({
@@ -75,13 +76,24 @@ const chats: Array<Record<string, unknown>> = Object.entries(rows).map(([id, row
 // sidebar's effects on every render.
 const NO_MAIN_WORKTREES: never[] = [];
 
+const LIST = { data: { chats, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES } };
+const listState = vi.hoisted(() => ({
+  mode: "loaded" as "loaded" | "pending" | "failed",
+  refetch: vi.fn(),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
-  useChatListWithWorkspaces: () => ({
-    data: { chats, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
-    isLoading: false,
-  }),
+  useChatListWithWorkspaces: () =>
+    listState.mode === "loaded"
+      ? { ...LIST, isPending: false, isError: false, refetch: listState.refetch }
+      : {
+          data: undefined,
+          isPending: listState.mode === "pending",
+          isError: listState.mode === "failed",
+          refetch: listState.refetch,
+        },
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -103,6 +115,7 @@ import { Sidebar } from "../Sidebar";
 
 describe("Sidebar activity indicators", () => {
   beforeEach(() => {
+    listState.mode = "loaded";
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
     useChatStore.setState({ activeChatId: null, selectChat: vi.fn() } as Partial<
       ReturnType<typeof useChatStore.getState>
@@ -172,5 +185,58 @@ describe("Sidebar activity indicators", () => {
     expect(within(needsInput).getByRole("img", { name: "Needs your input" })).toBeInTheDocument();
     expect(screen.queryByTestId("chat-needs-input-running-blocked")).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-unread-dot-blocked")).toBeInTheDocument();
+  });
+
+  it("labels a failed chat Failed, in a chip, and paints no row green", async () => {
+    renderSidebar();
+    const failed = await screen.findByTestId("chat-activity-dot-failed");
+    expect(within(failed).getByRole("img", { name: "Failed" })).toBeInTheDocument();
+    expect(failed).toHaveTextContent("Failed");
+    expect(screen.getByTestId("chat-activity-dot-running")).toHaveTextContent("Running");
+    // Green means success; no row, chip or dot here is one.
+    for (const id of Object.keys(rows)) {
+      const row = document.querySelector(`[data-chat-id="${id}"]`)!;
+      expect(row.outerHTML).not.toMatch(/success/);
+    }
+  });
+
+  it("makes each row a button, one tab stop, and moves between rows with the arrow keys", async () => {
+    renderSidebar();
+    await screen.findByTestId("chat-activity-dot-running");
+    const rowButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-chat-row]"));
+    expect(rowButtons.length).toBe(Object.keys(rows).length);
+    expect(rowButtons.every((b) => b.tagName === "BUTTON")).toBe(true);
+    expect(rowButtons.filter((b) => b.tabIndex === 0)).toHaveLength(1);
+
+    rowButtons[0].focus();
+    fireEvent.keyDown(rowButtons[0], { key: "ArrowDown" });
+    expect(rowButtons[1]).toHaveFocus();
+    fireEvent.keyDown(rowButtons[1], { key: "End" });
+    expect(rowButtons[rowButtons.length - 1]).toHaveFocus();
+    fireEvent.keyDown(rowButtons[rowButtons.length - 1], { key: "ArrowUp" });
+    expect(rowButtons[rowButtons.length - 2]).toHaveFocus();
+  });
+
+  it("names its hover controls", async () => {
+    renderSidebar();
+    await screen.findByTestId("chat-activity-dot-running");
+    expect(screen.getByRole("button", { name: "Archive Chat running" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More options for Chat running" })).toBeInTheDocument();
+  });
+
+  it("shows loading rows, not \"No active chats\", before the list answers", () => {
+    listState.mode = "pending";
+    renderSidebar();
+    expect(screen.getByTestId("chat-list-loading")).toBeInTheDocument();
+    expect(screen.queryByText("No active chats")).not.toBeInTheDocument();
+  });
+
+  it("says the list failed to load, with a Retry, rather than that there are no chats", () => {
+    listState.mode = "failed";
+    renderSidebar();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load your chats");
+    expect(screen.queryByText("No active chats")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(listState.refetch).toHaveBeenCalled();
   });
 });

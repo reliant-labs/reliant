@@ -52,7 +52,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "../format";
 import { ReplayFeed, type ReplayFeedState } from "./replayFeed";
 import { confineReplayDocument, FULL_SNAPSHOT_REBUILT } from "./replayConfinement";
-import { formatOffset, PARTIAL_GAP_MS } from "./sessionModel";
+import { formatOffset, noteReplayUnplayable, PARTIAL_GAP_MS, recordingStart } from "./sessionModel";
 
 /** The slice of rrweb's Replayer this player drives. */
 export interface ReplayerLike {
@@ -69,6 +69,18 @@ export interface ReplayerLike {
 }
 
 export type ReplayerCtor = new (events: RrwebEvent[], config: Record<string, unknown>) => ReplayerLike;
+
+/**
+ * The events playback starts from (recordingStart on), or null until they hold
+ * a full snapshot and at least one event after it.
+ */
+export function playableEvents(events: readonly RrwebEvent[]): RrwebEvent[] | null {
+  const start = recordingStart(events);
+  if (start < 0) return null;
+  const from = events.slice(start);
+  const snapshot = from.findIndex((e) => e.type === RRWEB_FULL_SNAPSHOT);
+  return from.length - snapshot >= 2 ? from : null;
+}
 
 /** The real Replayer and its stylesheet (mouse cursor, wrapper), as their own chunk. */
 export async function loadRrwebReplayer(): Promise<ReplayerCtor> {
@@ -197,12 +209,14 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 
     const create = () => {
       if (creating || replayerRef.current) return;
-      if (buffer.length < 2 || !buffer.some((e) => e.type === RRWEB_FULL_SNAPSHOT)) return;
+      const playable = playableEvents(buffer);
+      if (!playable) return;
       creating = true;
       loadReplayer().then(
         (Replayer) => {
           if (disposed || !mountRef.current) return;
-          const replayer = new Replayer(buffer, {
+          // From the recording's start: what precedes its first snapshot has no page to be drawn on.
+          const replayer = new Replayer(playableEvents(buffer) ?? playable, {
             root: mountRef.current,
             speed: speedRef.current,
             skipInactive: skipRef.current,
@@ -258,8 +272,8 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
         if (!replayer) {
           buffer.push(...events);
           create();
-          // No full snapshot yet: nothing can be drawn, so read on until one arrives.
-          if (!buffer.some((e) => e.type === RRWEB_FULL_SNAPSHOT)) feedInstance.setPlayhead(events[events.length - 1].timestamp);
+          // No full snapshot (or nothing after it) yet: nothing can be played, so read on until it can.
+          if (!playableEvents(buffer)) feedInstance.setPlayhead(events[events.length - 1].timestamp);
           return;
         }
         for (const event of events) replayer.addEvent(event);
@@ -288,6 +302,12 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
   useEffect(() => {
     if (quota.kind === "ok" && quotaOf(feedRef.current?.snapshot.error)) feedRef.current?.retry();
   }, [quota]);
+
+  // Every recorded event has arrived and they cannot be played: the list
+  // should stop offering this session as a replay.
+  useEffect(() => {
+    if (feed?.phase === "complete" && feed.playableEvents < 2) noteReplayUnplayable(session.sessionId);
+  }, [feed, session.sessionId]);
 
   // A seek past the buffer that the feed can no longer reach lands on the end.
   useEffect(() => {
@@ -551,7 +571,7 @@ function blockingState(feed: ReplayFeedState | null, loadError: unknown, session
       ),
     };
   }
-  if (!feed || feed.phase === "loading" || (feed.events >= 2 && feed.hasFullSnapshot && feed.phase !== "error")) {
+  if (!feed || feed.phase === "loading" || (feed.playableEvents >= 2 && feed.phase !== "error")) {
     return { id: "loading", node: () => <p className="text-sm text-ink-muted" data-testid="replay-loading">Loading the recording…</p> };
   }
   if (feed.phase === "error" && quotaOf(feed.error)) {
@@ -595,7 +615,9 @@ function blockingState(feed: ReplayFeedState | null, loadError: unknown, session
       id: "waiting-snapshot",
       node: () => (
         <StateNote icon={<Video className="h-4 w-4" />} title="Waiting for a full page snapshot" testId="replay-waiting-snapshot">
-          {feed.events} events have arrived, but none is a full snapshot of the page yet, which playback starts from.
+          {feed.hasFullSnapshot
+            ? "A full snapshot of the page has arrived, but nothing recorded after it yet."
+            : `${feed.events} events have arrived, but none is a full snapshot of the page yet, which playback starts from.`}
         </StateNote>
       ),
     };

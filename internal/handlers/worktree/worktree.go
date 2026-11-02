@@ -431,15 +431,18 @@ func (s *Service) wakeIfAsleep(ctx context.Context, userID string, target machin
 }
 
 // worktreeMachine adapts the service's daemon send (which wakes a sleeping
-// machine on failure) to workspacecreate.Machine, bound to one owner daemon.
+// machine on failure) to workspacecreate.Machine, bound to the placement the
+// worktree was made for. It carries the whole target, not just its daemon id:
+// a no-machine chat's workspace must never wake its machine, in the
+// background checkouts any more than in the request that placed them.
 type worktreeMachine struct {
-	s        *Service
-	userID   string
-	daemonID string
+	s      *Service
+	userID string
+	target machinewake.Target
 }
 
 func (m worktreeMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
-	return m.s.sendWorktreeDaemonCommandTimeout(ctx, m.userID, m.daemonID, commandType, payload, resp, timeoutMs)
+	return m.s.sendToMachine(ctx, m.userID, m.target, commandType, payload, resp, timeoutMs)
 }
 
 // emitWorktreeChanged tells connected clients a worktree's state settled.

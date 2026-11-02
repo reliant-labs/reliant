@@ -81,8 +81,8 @@ describe("states", () => {
     expect(screen.getByTestId("obs-panel-unsupported")).toHaveTextContent('unknown field "span.colour"');
     rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable) }} />);
     expect(screen.getByTestId("obs-panel-error")).toBeInTheDocument();
-    rerender(<PanelBody panel={{ ...line, kind: "heatmap" }} query={ready(answer(line))} />);
-    expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("heatmap");
+    rerender(<PanelBody panel={{ ...line, kind: "scatter" }} query={ready(answer(line))} />);
+    expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("scatter");
   });
 
   it("keeps the last panel result on quota exhaustion, and shows a neutral wait when none loaded", () => {
@@ -145,7 +145,7 @@ describe("states", () => {
     const onDrill = vi.fn();
     const grouped: Panel = { ...line, groupBy: ["span.name"] };
     const { rerender } = render(<PanelBody panel={grouped} query={ready(answer(grouped))} links={{ onDrill }} />);
-    await user.click(within(screen.getByTestId("obs-panel-legend")).getAllByRole("button")[0]);
+    await user.click(within(screen.getByTestId("obs-panel-legend")).getByRole("button", { name: "Open orders.v1.OrdersService/CreateOrder in the explorer" }));
     expect(onDrill).toHaveBeenLastCalledWith(expect.objectContaining({ group: { "span.name": "orders.v1.OrdersService/CreateOrder" } }), expect.anything());
     const table: Panel = { ...grouped, kind: "table" };
     rerender(<PanelBody panel={table} query={ready(answer(table))} links={{ onDrill }} />);

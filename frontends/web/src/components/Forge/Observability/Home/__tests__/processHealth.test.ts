@@ -18,7 +18,7 @@ describe("process health attention order", () => {
 
   it("puts crash-looping first, then signals, without inventing workload verdicts", () => {
     const rows = serviceRows(
-      [health("quiet", { requestCount: 0 }), health("ok"), health("noisy", { errorRate: 0.2 }), health("paged"), health("looping"), health("operator", { operatorData: true })],
+      [health("quiet", { requestCount: 0 }), health("ok"), health("noisy", { errorRate: 0.2 }), health("paged"), health("looping")],
       [workload("looping", "crash_looping", "restarted 5x, last exit OOMKilled")],
       [alert("paged")], () => "prod"
     ).sort(byAttention);
@@ -29,6 +29,13 @@ describe("process health attention order", () => {
     ]);
     expect(rows[1].reason).toBe("1 alert firing");
     expect(rows[0].reason).toBe("restarted 5x, last exit OOMKilled");
+  });
+
+  it("lists a platform-sourced process of the project's own environment (tenant zero's control-plane)", () => {
+    // Every control-plane process stamps reliant.source=platform, so the server marks it
+    // operator data; scoped to control-plane's environments, it is still one of its processes.
+    const rows = serviceRows([health("admin-server", { source: "platform", operatorData: true })], [], [], () => "prod");
+    expect(rows.map((r) => r.name)).toEqual(["admin-server"]);
   });
 
   it("takes the server workload verdict even when request errors are elevated", () => {

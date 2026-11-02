@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 import { formatPerDay, formatSpan } from "../Observability/deliveryScope";
 import { ENV_ALL } from "../Console/envScope";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import {
   Ago,
   ChecksMark,
@@ -164,20 +165,21 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           icon={<TagIcon className="h-4 w-4" />}
           title="No releases yet"
           about={`Releases lists every build of ${project} Reliant has recorded: the commit it came from, what it changed, which environments run it, and how each promotion went.`}
+          agent={<DeployWithAgentButton env={env === ENV_ALL || !scopedEnv ? null : env} forgeProject={project} />}
           steps={[
             {
               text: "Deploy from your checkout. It builds, cuts a release, deploys it, and the release appears here.",
-              command: `forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
+              command: `reliant forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
             },
             {
               text: "Promote that release to the next environment: exactly what staging runs, with nothing rebuilt.",
-              command: "forge env deploy prod --from staging",
+              command: "reliant forge env deploy prod --from staging",
             },
           ]}
           docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
         >
           <p>
-            A release is cut the first time {project} is deployed through Reliant. A local environment (forge env up) runs your working tree
+            A release is cut the first time {project} is deployed through Reliant. A local environment (reliant forge env up) runs your working tree
             and never has releases.
           </p>
         </GettingStarted>

@@ -146,7 +146,7 @@ func (s *Service) ImportWorktree(
 	if err != nil {
 		return nil, insertWorktreeError(err, name)
 	}
-	machine := worktreeMachine{s: s, userID: userID, daemonID: ownerDaemonID}
+	machine := worktreeMachine{s: s, userID: userID, target: placement}
 
 	if !moves {
 		var def struct {
@@ -202,7 +202,7 @@ func (s *Service) ImportWorktree(
 	pending := *worktree
 	go func() {
 		defer cancel()
-		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
+		s.finishWorktreeCreate(bgCtx, userID, placement, createReq, &pending)
 	}()
 	return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
 }

@@ -441,6 +441,28 @@ service BillingService {
     };
   }
 
+  // Quotes a change of the org's machine plan: an upgrade applies now and is
+  // charged the prorated difference today; a downgrade applies at the next
+  // billing period and charges or credits nothing; choosing the current plan
+  // while a downgrade is scheduled withdraws it. Changes nothing. The quote is
+  // binding for ten minutes through terms_sha256. A pure read: it reads the
+  // subscription, period, snapshot and pending/scheduled changes, and prices
+  // an upgrade with Stripe's invoice preview, which persists nothing.
+  rpc PreviewMachinePlanChange(PreviewMachinePlanChangeRequest) returns (PreviewMachinePlanChangeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Makes the change the caller confirmed, at exactly its quote: an upgrade
+  // is paid before it applies (a declined payment changes nothing), a
+  // downgrade is scheduled for the next period. Retrying the same confirmed
+  // quote never charges twice.
+  rpc ChangeMachinePlan(ChangeMachinePlanRequest) returns (ChangeMachinePlanResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "each attempt and its outcome are persisted in the machine_plan_changes ledger"}
+    };
+  }
+
   // Independent organization-wide hosted usage funding; never requires a machine plan.
   rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -663,6 +685,81 @@ message AcceptNextMachinePricingResponse {
   google.protobuf.Timestamp effective_period_start = 2;
   string pricing_version = 3;
   string activation_state = 4;
+}
+
+message PreviewMachinePlanChangeRequest {
+  // Active organization; resolved and authorized server-side. Empty selects primary org.
+  optional string org_id = 1;
+  // The compute plan to move to (plan_compute_*).
+  string plan_id = 2;
+}
+
+// A machine the target plan does not include; a downgrade waits for it to be
+// resized or deleted.
+message MachinePlanChangeBlocker {
+  string daemon_id = 1;
+  string name = 2;
+  string size = 3;
+}
+
+message PreviewMachinePlanChangeResponse {
+  string from_plan_id = 1;
+  string to_plan_id = 2;
+  string pricing_version = 3;
+  // "upgrade" (now), "downgrade" (at period_end) or "cancel_downgrade".
+  string direction = 4;
+  // The instant the change is priced at; ChangeMachinePlan must send it back.
+  google.protobuf.Timestamp proration_date = 5;
+  google.protobuf.Timestamp period_end = 6;
+  // Charged to the card today. Zero unless an upgrade.
+  int64 amount_due_today_cents = 7;
+  // Net proration for the rest of the period, charged today. Zero unless an
+  // upgrade.
+  int64 proration_cents = 8;
+  int64 current_monthly_price_cents = 9;
+  int64 new_monthly_price_cents = 10;
+  // Included hours an upgrade adds for the rest of this period, in hours of
+  // the new plan's own size, rounded to 0.1. "0" otherwise.
+  string included_hours_delta = 11;
+  // The new plan's own size and its monthly included hours from the next period.
+  string new_size = 12;
+  int64 new_included_hours = 13;
+  // Whether ChangeMachinePlan would accept this quote, and why not.
+  bool allowed = 14;
+  repeated string blocked_reasons = 15;
+  repeated MachinePlanChangeBlocker blocking_machines = 16;
+  // Binds every figure above; ChangeMachinePlan refuses any other digest.
+  string terms_sha256 = 17;
+  google.protobuf.Timestamp quote_expires_at = 18;
+  // When the new plan takes effect: proration_date for an upgrade,
+  // period_end for a downgrade.
+  google.protobuf.Timestamp effective_at = 19;
+  // The plan a scheduled downgrade will move to at period_end, if any.
+  string scheduled_plan_id = 20;
+}
+
+message ChangeMachinePlanRequest {
+  optional string org_id = 1;
+  string plan_id = 2;
+  string pricing_version = 3;
+  // proration_date and terms_sha256 exactly as PreviewMachinePlanChange returned them.
+  google.protobuf.Timestamp proration_date = 4;
+  string terms_sha256 = 5;
+}
+
+message ChangeMachinePlanResponse {
+  string change_id = 1;
+  // "applied": the upgrade is in effect, or the scheduled downgrade is
+  // withdrawn. "scheduled": the downgrade takes effect at effective_at.
+  // "confirming": Stripe's answer was lost in transit; the change settles
+  // automatically, and retrying the same request is safe.
+  string state = 2;
+  string plan_id = 3;
+  string direction = 4;
+  int64 amount_due_today_cents = 5;
+  int64 proration_cents = 6;
+  string stripe_invoice_id = 7;
+  google.protobuf.Timestamp effective_at = 8;
 }
 
 message GetCurrentUserUsageBillingRequest {

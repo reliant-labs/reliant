@@ -188,7 +188,14 @@ func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
 	resp, err := svc.WhoAmI(ctx, connect.NewRequest(&reliantv1.WhoAmIRequest{}))
 	require.NoError(t, err)
 	require.Equal(t, "user-B", resp.Msg.GetUserId())
+	require.Empty(t, resp.Msg.GetAccountEmail(), "an authority that named no email names none here")
 	require.Empty(t, repo.owners, "WhoAmI must not register or touch any daemon row")
+
+	// The email the token authority named for the credential's account.
+	resp, err = svc.WhoAmI(context.WithValue(ctx, auth.UserEmailContextKey, "b@example.com"),
+		connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	require.NoError(t, err)
+	require.Equal(t, "b@example.com", resp.Msg.GetAccountEmail())
 
 	_, err = svc.WhoAmI(context.Background(), connect.NewRequest(&reliantv1.WhoAmIRequest{}))
 	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err),
@@ -233,4 +240,81 @@ func TestConnectDaemonRejectsMalformedAssertedID(t *testing.T) {
 	t.Cleanup(svc.Close)
 	err := registerAs(t, svc, "user-B", "evil.>")
 	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+}
+
+// requireNotSuperseded fails if conn was closed (an outbound replace closes
+// the incumbent with closeDone, which records no reason) or no longer holds
+// its daemon id's slot.
+func requireNotSuperseded(t *testing.T, svc *Service, conn *daemonConnection) {
+	t.Helper()
+	select {
+	case <-conn.done:
+		t.Fatal("the incumbent connection must not be closed")
+	default:
+	}
+	require.NoError(t, conn.closedReason())
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
+	require.Same(t, conn, svc.connections[conn.daemonID], "the incumbent must keep its slot")
+}
+
+// The gateway's outbound (dial-in) path takes identity from the control-plane
+// snapshot rather than a daemon credential, but it writes the same row and
+// the same connection map, so it must refuse a daemon id owned by another
+// user exactly as ConnectDaemon does: no row change, no connection, no NATS
+// notification, and the stable foreign-id reason. No live incumbent here, so
+// the row check alone must refuse it (the next test pins the supersede check).
+func TestRegisterOutboundConnectionRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
+	daemonID := uuid.NewString()
+	repo := newOwnershipRepo(map[string]string{daemonID: "user-A"})
+	svc := newTestService(repo)
+	t.Cleanup(svc.Close)
+	listener := &recordingListener{}
+	svc.AddConnectionListener(listener)
+
+	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil)
+
+	require.Nil(t, out)
+	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	connectErr := svcerr.ToConnect(err)
+	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"))
+	require.NotContains(t, connectErr.Error(), "user-A", "the refusal must not name the owner")
+	require.Equal(t, "user-A", repo.ownerOf(daemonID), "row must still belong to A")
+	listener.mu.Lock()
+	require.Empty(t, listener.connected, "no NATS-side notification for a refused registration")
+	listener.mu.Unlock()
+	svc.mu.RLock()
+	require.Nil(t, svc.connections[daemonID], "a refused registration must not take the slot")
+	require.Empty(t, svc.userDaemons["user-B"])
+	svc.mu.RUnlock()
+}
+
+// Defense in depth on the outbound path: with no row to refuse it, a live
+// incumbent owned by another user must still not be replaced.
+func TestRegisterOutboundConnectionRefusesSupersedingAnotherUsersLiveConnection(t *testing.T) {
+	daemonID := uuid.NewString()
+	svc := newTestService(newOwnershipRepo(map[string]string{}))
+	t.Cleanup(svc.Close)
+	listener := &recordingListener{}
+	svc.AddConnectionListener(listener)
+
+	incumbent := newTestConn("user-A", daemonID, newParkedStream())
+	svc.mu.Lock()
+	svc.connections[daemonID] = incumbent
+	svc.userDaemons["user-A"] = []string{daemonID}
+	svc.mu.Unlock()
+
+	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil)
+
+	require.Nil(t, out)
+	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	requireNotSuperseded(t, svc, incumbent)
+	listener.mu.Lock()
+	require.Empty(t, listener.connected, "no NATS-side notification for a refused registration")
+	listener.mu.Unlock()
+	svc.mu.RLock()
+	require.Empty(t, svc.userDaemons["user-B"])
+	svc.mu.RUnlock()
 }

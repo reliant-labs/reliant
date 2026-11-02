@@ -166,8 +166,11 @@ export function PlanTileRow({
             : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
       )}
     >
+      {/* Onboarding's free row copies this geometry and type (name over
+          detail, price column) so it reads as one more row — keep them in
+          step. */}
       <span className="min-w-0">
-        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           {plan.label}
           {(selected || current) && (
             <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -182,15 +185,15 @@ export function PlanTileRow({
           </span>
         )}
       </span>
-      <span className="flex-shrink-0 text-sm font-semibold text-foreground">
+      <span className="flex-shrink-0 text-sm font-medium tabular-nums text-foreground">
         {current ? (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
             Current plan
           </span>
         ) : covered ? (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
-            Covered
-          </span>
+          // A price, not a badge: it sits in the price column beside
+          // "$40.00/mo" and onboarding's "Free", in the same type.
+          <>Covered</>
         ) : (
           <>{formatCentsAsDollars(plan.monthlyPriceCents)}/mo</>
         )}

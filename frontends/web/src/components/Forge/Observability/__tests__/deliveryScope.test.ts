@@ -83,7 +83,9 @@ const promotion = (patch: Partial<Promotion> = {}): Promotion => ({
 describe("release markers", () => {
   it("name the version, the environment when several are in view, and a rollback as one", () => {
     const [plain, rollback] = toChartMarkers([promotion(), promotion({ promotionId: "promo-2", kind: "rollback", version: "v1.8.2", envName: "staging" })], true);
-    expect(plain).toMatchObject({ timeSec: Date.UTC(2026, 9, 14, 12) / 1000, label: "prod v1.8.3", tone: "primary" });
+    // A promotion is drawn in the axis ink: a palette colour would read as one more series.
+    expect(plain).toMatchObject({ timeSec: Date.UTC(2026, 9, 14, 12) / 1000, label: "prod v1.8.3" });
+    expect(plain.tone).toBeUndefined();
     expect(plain.description).toBe("v1.8.3 (commit 3f2a9c1) promoted to prod by Ada Lovelace");
     expect(rollback).toMatchObject({ label: "staging ↩ v1.8.2", tone: "warning" });
     expect(rollback.description).toBe("staging rolled back to v1.8.2 (commit 3f2a9c1) by Ada Lovelace");

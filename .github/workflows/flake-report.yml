@@ -4,9 +4,9 @@
 # WHY THIS EXISTS
 # ===============
 #
-# Owner policy (2026-10-30): "I'd rather remove a test than have it be flaky."
-# A flaky test is fixed within the day or removed with a `flake:removed` issue;
-# it never keeps main red. NEW tests are kept out before they merge: `task
+# Owner policy (2026-11-01): flaky = delete immediately; rewrite as a new
+# deterministic test if it's worth having. A deleted test gets a
+# `flake:removed` issue; a flake never keeps main red. NEW tests are kept out before they merge: `task
 # test:flake` runs every added or edited test three times. EXISTING tests have
 # no such net, and the 2026-10-30 purge found the cost of that: a test failing
 # one main run in nine (rollout_test.go's lagging-replica check) read as "main
@@ -28,6 +28,14 @@
 # continue-on-error and the script always exits 0. It does not re-run CI jobs
 # (that is the "re-run until green" habit this replaces), and it skips a run
 # with more failing tests than MAX_TESTS — a broad break is not a flake.
+#
+# CLOSING THEM
+# ============
+#
+# Daily, `flake-sweep` closes each open `flake:suspected` issue whose test no
+# longer exists on main or has not flaked again for 7 days
+# (`scripts/flake-report.sh --sweep`). A later flake of the same test reopens
+# its issue rather than filing a second one.
 
 name: Flake report
 
@@ -36,6 +44,10 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+  schedule:
+    # Daily 06:00 UTC: the sweep alone.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -47,6 +59,7 @@ jobs:
     # A push or nightly run on main that failed. Pull request and merge-queue
     # runs are the author's to read; a cancelled run carries no verdict.
     if: >-
+      github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.event != 'pull_request' &&
       github.event.workflow_run.event != 'merge_group'
@@ -66,3 +79,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/flake-report.sh "${{ github.event.workflow_run.id }}"
+
+  flake-sweep:
+    name: Close stale flake:suspected issues
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # main's tree is what "the test no longer exists" is judged against.
+      - uses: actions/checkout@v6
+      - name: Close the issues whose test is gone or quiet for 7 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/flake-report.sh --sweep

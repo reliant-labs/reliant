@@ -896,6 +896,15 @@ func validateNodeTimeout(node *reliantv1.Node, nodePath []string, result *Result
 		result.AddError(CategoryStructure, nodePath, "timeout",
 			fmt.Sprintf("timeout cannot be negative: '%s'", timeoutStr))
 	}
+
+	// A run node's timeout is the limit on its command, up to a ceiling the
+	// runtime would otherwise cap it at silently, hours into the run.
+	if node.GetType() == model.NodeTypeRun {
+		if err := model.RunStepTimeoutError(duration); err != nil {
+			result.AddErrorWithSuggestion(CategoryStructure, nodePath, "timeout", err.Error(),
+				"run a command that takes longer in the background and poll for it in later steps")
+		}
+	}
 }
 
 // =============================================================================

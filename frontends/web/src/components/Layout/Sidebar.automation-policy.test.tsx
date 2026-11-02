@@ -66,7 +66,8 @@ vi.mock("../../hooks/chat-queries", () => ({
   }),
   useChat: (chatId?: string) => ({ data: fixtures.detail?.id === chatId ? fixtures.detail : undefined }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
 }));

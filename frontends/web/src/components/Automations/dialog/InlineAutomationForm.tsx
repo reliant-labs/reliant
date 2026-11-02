@@ -38,6 +38,7 @@ import Button from "../../forge-ui/button";
 import Modal from "../../forge-ui/modal";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { workflowSummary } from "@/lib/workflowSummary";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../../workflow/run/runFormStyles";
 import { countRunInputs, type RunWorkflowValue } from "../../workflow/run/runWorkflowValues";
@@ -161,6 +162,10 @@ export function InlineAutomationForm({
 
   const library = useWorkflowLibrary(projectId || undefined);
   const listed = useMemo(() => (library.data?.workflows ?? []).filter((w) => w.status !== "draft"), [library.data]);
+  // What the picker offers: not the hidden built-ins, which are steps inside
+  // other workflows (the Workflows list folds them into Building blocks). One
+  // already chosen still shows, as the current value.
+  const pickable = useMemo(() => listed.filter((w) => !(w.source === "builtin" && w.isHidden)), [listed]);
   const listing = listed.find((w) => triggerRunsWorkflow({ workflow: w.name }, workflow));
   const workflowName = workflow ? (listing ? workflowDisplayName(listing) : (workflowTitle ?? normalizeWorkflowRef(workflow))) : "";
   const noMachineBlocker = useMemo(() => noMachineBlockerFor(listed, workflow), [listed, workflow]);
@@ -520,10 +525,10 @@ export function InlineAutomationForm({
                 aria-describedby={fid("workflow-hint")}
               >
                 <option value="">Agent (your default)</option>
-                {workflow && !listed.some((w) => triggerRunsWorkflow({ workflow: w.name }, workflow)) && (
+                {workflow && !pickable.some((w) => triggerRunsWorkflow({ workflow: w.name }, workflow)) && (
                   <option value={workflow}>{workflowName}</option>
                 )}
-                {listed
+                {pickable
                   .slice()
                   .sort((a, b) => workflowDisplayName(a).localeCompare(workflowDisplayName(b)))
                   .map((w) => (
@@ -533,7 +538,7 @@ export function InlineAutomationForm({
                   ))}
               </select>
               <p id={fid("workflow-hint")} className={hintClass}>
-                {workflow ? (listing?.description ?? "Its steps run each time.") : "Your default agent and its tools. Pick a workflow for a fixed set of steps."}
+                {workflow ? (workflowSummary(listing?.description) || "Its steps run each time.") : "Your default agent and its tools. Pick a workflow for a fixed set of steps."}
               </p>
             </div>
           )}

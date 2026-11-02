@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
 // How long a project's MCP server status is served without asking the daemon
@@ -42,8 +43,9 @@ const (
 	mcpStatusMaxEntries = 512
 )
 
-// mcpStatusFetch asks the user's daemon for a project's MCP server status.
-type mcpStatusFetch func(ctx context.Context, userID, projectPath string) (*daemonMCPServerStatus, error)
+// mcpStatusFetch asks the machine holding a project's checkout for its MCP
+// server status.
+type mcpStatusFetch func(ctx context.Context, userID string, checkout projectcheckout.Target) (*daemonMCPServerStatus, error)
 
 // mcpStatusCache holds the last MCP server status each (user, project) got
 // from the daemon, and the one fetch in flight for it, LRU-bounded at
@@ -88,8 +90,10 @@ func newMCPStatusCache(fetch mcpStatusFetch) *mcpStatusCache {
 	}
 }
 
-func mcpStatusKey(userID, projectPath string) string {
-	return userID + "\x00" + projectPath
+// mcpStatusKey names one checkout on one machine: the same path on two
+// machines is two different sets of servers.
+func mcpStatusKey(userID string, checkout projectcheckout.Target) string {
+	return userID + "\x00" + checkout.DaemonID + "\x00" + checkout.Path
 }
 
 // get returns the project's MCP server status, or nil when it is not known:
@@ -103,8 +107,8 @@ func mcpStatusKey(userID, projectPath string) string {
 // failure is an answer too: a machine that is down or wedged costs a page
 // load at most refreshWait once it has been asked. A refresh outlives the
 // readers that stop waiting for it and fills the cache for the next one.
-func (c *mcpStatusCache) get(ctx context.Context, userID, projectPath string) *daemonMCPServerStatus {
-	key := mcpStatusKey(userID, projectPath)
+func (c *mcpStatusCache) get(ctx context.Context, userID string, checkout projectcheckout.Target) *daemonMCPServerStatus {
+	key := mcpStatusKey(userID, checkout)
 	c.mu.Lock()
 	now := c.now()
 	entry := c.entries[key]
@@ -123,7 +127,7 @@ func (c *mcpStatusCache) get(ctx context.Context, userID, projectPath string) *d
 		c.mu.Unlock()
 		return status
 	}
-	done := c.startFetchLocked(ctx, key, userID, projectPath, entry)
+	done := c.startFetchLocked(ctx, key, userID, checkout, entry)
 	fallback, budget := (*daemonMCPServerStatus)(nil), c.wait
 	if answered && age < c.staleFor {
 		fallback, budget = entry.status, c.refreshWait
@@ -155,7 +159,7 @@ func (c *mcpStatusCache) get(ctx context.Context, userID, projectPath string) *d
 // returns the channel that closes when the fetch finishes. The fetch is not
 // the request's: it outlives a caller that stops waiting, so the answer still
 // lands in the cache.
-func (c *mcpStatusCache) startFetchLocked(ctx context.Context, key, userID, projectPath string, entry *mcpStatusEntry) chan struct{} {
+func (c *mcpStatusCache) startFetchLocked(ctx context.Context, key, userID string, checkout projectcheckout.Target, entry *mcpStatusEntry) chan struct{} {
 	if entry.inflight != nil {
 		return entry.inflight
 	}
@@ -166,9 +170,9 @@ func (c *mcpStatusCache) startFetchLocked(ctx context.Context, key, userID, proj
 		defer close(done)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, c.fetchTimeout)
 		defer cancel()
-		status, err := c.fetch(fetchCtx, userID, projectPath)
+		status, err := c.fetch(fetchCtx, userID, checkout)
 		if err != nil {
-			logging.DebugContext(ctx, "MCP server status unavailable from daemon", "user_id", userID, "project_path", projectPath, "error", err)
+			logging.DebugContext(ctx, "MCP server status unavailable from daemon", "user_id", userID, "daemon_id", checkout.DaemonID, "project_path", checkout.Path, "error", err)
 			status = nil
 		}
 		c.mu.Lock()

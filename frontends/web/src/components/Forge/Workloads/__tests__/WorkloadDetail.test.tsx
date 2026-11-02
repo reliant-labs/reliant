@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -45,6 +45,19 @@ describe("a workload", () => {
     expect(headline).not.toHaveTextContent(/OOMKilled|OOMKilling/);
     // The breadcrumb leads back to the Overview.
     expect(within(page).getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/overview");
+  });
+
+  it("hands a crash-looping workload to an agent, and offers nothing of the kind for a healthy one", async () => {
+    renderWorkload("reliant-temporal-worker");
+    await ready();
+    const ask = screen.getByTestId("workload-ask");
+    expect(ask).toHaveTextContent("reliant-temporal-worker is crash-looping in prod.");
+    expect(within(ask).getByTestId("ask-reliant-investigate")).toBeInTheDocument();
+    expect(within(ask).getByTestId("ask-reliant-fix")).toHaveTextContent("Fix with agent");
+    cleanup();
+    renderWorkload("admin-server");
+    await ready();
+    expect(screen.queryByTestId("workload-ask")).toBeNull();
   });
 
   it("names the environment on Restart, confirms with a neutral primary button, and shows the environment the server echoed", async () => {
