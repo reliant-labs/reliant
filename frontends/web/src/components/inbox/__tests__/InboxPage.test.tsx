@@ -28,6 +28,7 @@ import {
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
+import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
 import {
@@ -51,6 +52,8 @@ const mocks = vi.hoisted(() => ({
   restoreInboxItem: vi.fn(),
   approve: vi.fn(),
   deny: vi.fn(),
+  batchApprove: vi.fn(),
+  batchDeny: vi.fn(),
   resolveQuestion: vi.fn(),
   resumeDaemon: vi.fn(),
   setEnabled: vi.fn(),
@@ -105,6 +108,8 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.deny.mockResolvedValue({ success: true, message: "" });
+  mocks.batchApprove.mockResolvedValue({ success: true, message: "" });
+  mocks.batchDeny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
   setTransport(
     mockTransport({
@@ -122,6 +127,8 @@ beforeEach(() => {
         const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
         return mocks.deny(requestId, denialReason, actionTaken);
       },
+      "ApprovalService.BatchApprove": (req) => mocks.batchApprove((req as { requestIds: string[] }).requestIds),
+      "ApprovalService.BatchDeny": (req) => mocks.batchDeny((req as { requestIds: string[] }).requestIds),
       // Free-up-space goes through the generated DaemonRegistryService write.
       "DaemonRegistryService.ClearMachineCaches": (req) => mocks.clearMachineCaches(req),
       "QuestionService.ResolveQuestion": (req) => {
@@ -281,6 +288,114 @@ describe("InboxPage item kinds", () => {
     expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
+  });
+
+  // One turn's activation cards (activation_card.go's layout), raised together.
+  const card = (what: string) =>
+    [
+      `Turn on ${what} for acme/shopfront: it will run on a schedule (0 3 * * *).`,
+      "Approval needed: A new activation is new standing power.",
+      `Repositories: acme/${what}`,
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+  const batched = (id: string, title: string, batchId = "wf/call-1") =>
+    approvalItem(
+      {
+        payload: {
+          case: "approval",
+          value: create(InboxApprovalSchema, { approvalId: id, approvalType: ApprovalType.TOOL_CALL, title, batchId }),
+        },
+      },
+      id,
+    );
+
+  it("approvals a run asked for together are one row, decided at once or one by one", async () => {
+    const solo = approvalItem({ chatId: "chat-2", chatTitle: "Other run" }, "solo");
+    respond([batched("a-1", card("nightly")), solo, batched("a-2", card("weekly")), batched("a-3", card("hourly"))]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText("3 approvals, asked together")).toBeInTheDocument();
+    // Each keeps its own row, open on its card, named after it.
+    const second = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(second).getByText(/^Turn on weekly for acme\/shopfront/)).toBeInTheDocument();
+    expect(within(second).getByText("acme/weekly")).toBeInTheDocument();
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+
+    // One of them on its own.
+    respond([batched("a-1", card("nightly")), solo, batched("a-3", card("hourly"))]);
+    await userEvent.click(within(second).getByRole("button", { name: /^Deny Turn on weekly/ }));
+    await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("a-2", undefined, undefined));
+    await waitFor(() => expect(within(batch).queryByTestId("inbox-item-approval:a-2")).toBeNull());
+
+    // The rest at once, after the confirmation shows what each grants.
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    expect(mocks.batchApprove).not.toHaveBeenCalled();
+    const confirm = await screen.findByTestId("approval-batch-confirm");
+    for (const what of ["nightly", "hourly"]) {
+      const grant = within(within(confirm).getByTestId(`batch-grant-a-${what === "nightly" ? 1 : 3}`));
+      expect(grant.getByText(new RegExp(`^Turn on ${what} for acme/shopfront`))).toBeInTheDocument();
+      expect(grant.getByText(`acme/${what}`)).toBeInTheDocument();
+    }
+    respond([solo]);
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+    await waitFor(() => expect(screen.queryByTestId("inbox-approval-batch-wf/call-1")).toBeNull());
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+  });
+
+  it("an old-format activation approval in a batch is decided on its own, and says why", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nMachine: laptop (id d_1)\nOperation: enable_trigger";
+    respond([batched("a-1", card("nightly")), batched("a-2", legacy), batched("a-3", "Run the migration?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText(/3 approvals, asked together · 1 decided on its own/)).toBeInTheDocument();
+    const old = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(old).getByText(/^Not in Approve all: this request was raised before approval cards said/)).toBeInTheDocument();
+
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    const confirm = within(await screen.findByTestId("approval-batch-confirm"));
+    expect(confirm.queryByTestId("batch-grant-a-2")).toBeNull();
+    expect(confirm.getByText("Run the migration?")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+  });
+
+  it("a routine batch is approved at once, without a confirmation", async () => {
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(screen.queryByTestId("approval-batch-confirm")).toBeNull();
+  });
+
+  it("a batch already decided elsewhere says so", async () => {
+    respond([batched("x-1", "x-1", "b"), batched("x-2", "x-2", "b")]);
+    mocks.batchDeny.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-b");
+    await userEvent.click(within(batch).getByRole("button", { name: "Deny all 2" }));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+  });
+
+  it("when the approvals it sent were already decided, an approval left out of the batch stays", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nOperation: enable_trigger";
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?"), batched("l-1", legacy)]);
+    mocks.batchApprove.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+    // Only what was sent is handled: the old-format activation is still waiting.
+    expect(within(batch).queryByTestId("inbox-item-approval:r-1")).toBeNull();
+    expect(within(batch).getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
+    respond([batched("l-1", legacy)]);
+    await waitFor(() => expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("inbox-item-approval:r-1")).toBeNull(), { timeout: 4000 });
+    expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
   });
 
   it("an approval already handled elsewhere says so instead of erroring", async () => {

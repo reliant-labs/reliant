@@ -121,11 +121,11 @@ SELECT * FROM (
         COALESCE(t.name, '')::text AS trigger_name,
         a.created_at::timestamptz AS waiting_since,
         a.title::text AS a_text,
-        ''::text AS b_text,
+        COALESCE(a.batch_id, '')::text AS b_text,
         a.approval_type::integer AS a_int
     FROM (
         -- Fenced by OFFSET 0: see listInboxPendingSQL's comment.
-        SELECT a.id, a.chat_id, a.status, a.created_at, a.title, a.approval_type FROM approvals a
+        SELECT a.id, a.chat_id, a.status, a.created_at, a.title, a.approval_type, a.batch_id FROM approvals a
         JOIN chats ch ON ch.id = a.chat_id
         WHERE a.status = 1 AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
         OFFSET 0

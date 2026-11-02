@@ -188,13 +188,20 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 // activationFailureMessage says why an activation change was not made. The
 // reason is the refusal's safe classification, or the client-safe message of
 // a classified service error (what the app itself shows for the same RPC);
-// an internal error keeps only the generic sentence, never its cause.
-func activationFailureMessage(err error) string {
+// an internal error keeps only the generic sentence, never its cause. A pause
+// never needs a card, so its failure never mentions approval.
+func activationFailureMessage(tool string, err error) string {
 	reason := ActivationRefusalReason(err)
 	if reason == "" && svcerr.IsUserError(err) {
 		if ce := svcerr.ToConnect(err); ce != nil {
 			reason = ce.Message()
 		}
+	}
+	if tool == ToolPauseTrigger {
+		if reason == "" || reason == svcerr.InternalMessage {
+			return "Pausing the activation could not be completed. Inspect its current state in the app before retrying."
+		}
+		return "Pausing the activation was not completed: " + strings.TrimSuffix(strings.TrimSpace(reason), ".") + ". Inspect its current state in the app before retrying."
 	}
 	if reason == "" || reason == svcerr.InternalMessage {
 		return "The activation change could not be completed. Inspect its current state and setup in the app before retrying; a change that widens the activation's power needs a new approval."
@@ -251,7 +258,7 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 		if strings.Contains(err.Error(), ApprovalRequiredMessage) {
 			return NewTextErrorResponse(ApprovalRequiredMessage), nil
 		}
-		return NewTextErrorResponse(activationFailureMessage(err)), nil
+		return NewTextErrorResponse(activationFailureMessage(o.name, err)), nil
 	}
 	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
 }

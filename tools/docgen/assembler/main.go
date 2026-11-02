@@ -382,7 +382,9 @@ activation. The owner's automation-approvals setting (Settings > Automations) de
 card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
 identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
 Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
-needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
+needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. To change several
+activations, call the tools together in ONE turn: every card the turn needs is raised at once as one batch, which the
+owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
 
