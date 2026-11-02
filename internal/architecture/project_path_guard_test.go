@@ -74,7 +74,7 @@ var projectPathAllowed = map[string]struct {
 	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
 	"internal/handlers/project/project.go:projectToProto":                              {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
-	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {6, reasonHeal},
+	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {7, reasonHeal},
 	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {6, reasonProbe},
 	"internal/projectcheckout/machine.go:Rebase":                                       {1, reasonRebaseRoot},
 	// The main worktree row mirrors projects.path for display; every runtime

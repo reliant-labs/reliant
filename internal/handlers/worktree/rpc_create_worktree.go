@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
 )
 
@@ -191,7 +192,7 @@ func (s *Service) CreateWorktree(
 	pending := *worktree
 	go func() {
 		defer cancel()
-		s.finishWorktreeCreate(bgCtx, userID, placement, createReq, &pending)
+		s.finishWorktreeCreate(bgCtx, userID, target.machine, createReq, &pending)
 	}()
 
 	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{

@@ -122,11 +122,11 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCom
 		return nil, fmt.Errorf("read repo.discover answer for %s: %w", checkout, err)
 	}
 	if resp.Truncated {
-		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", project.Path,
+		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", checkout,
 			"reason", resp.TruncatedReason, "found", len(resp.Discovered))
 		if len(resp.Discovered) == 0 {
 			// Not "there is no repository": the machine did not finish looking.
-			return nil, &SearchCutShortError{Path: project.Path, Reason: resp.TruncatedReason}
+			return nil, &SearchCutShortError{Path: checkout, Reason: resp.TruncatedReason}
 		}
 	}
 	if len(resp.Discovered) == 0 {
