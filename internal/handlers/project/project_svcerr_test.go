@@ -160,7 +160,10 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 			store := ownedProjectRepo(t)
 			store.GetProjectFunc = func(context.Context, string) (*db.Project, error) { return gitProject, nil }
 			router := &project.MockRouter{
-				SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) { return nil, tc.err },
+				SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
+					return nil, tc.err
+				},
+				PlacementDaemonIDFunc: func(_ context.Context, _, id string) (string, error) { return id, nil },
 			}
 			_, err := newService(t, store, router).GetProjectGitInfo(project.AuthedContext(t),
 				connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}))

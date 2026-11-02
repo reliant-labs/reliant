@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=c147c69bcdc3d3d56a6572212f9f05ac67013d8e61c0136803eb52e6e7738381
+// forge:hash=0d72098afd41c402a9f5d3d46d32164bf3d86b5d22fe66b5c2965dde1f957e5d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -27,13 +27,15 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetProjectWithUserCheckFunc func(context.Context, string, string) (*db.Project, error)
-	UpdateProjectFunc           func(context.Context, *db.Project, string) error
-	GetRepoFunc                 func(context.Context, string) (*core.Repo, error)
-	GetRepoByProjectAndPathFunc func(context.Context, string, string) (*core.Repo, error)
-	ListReposByProjectFunc      func(context.Context, string) ([]*core.Repo, error)
-	CreateRepoFunc              func(context.Context, *core.Repo) error
-	DeleteRepoFunc              func(context.Context, string) error
+	GetProjectWithUserCheckFunc      func(context.Context, string, string) (*db.Project, error)
+	UpdateProjectFunc                func(context.Context, *db.Project, string) error
+	GetRepoFunc                      func(context.Context, string) (*core.Repo, error)
+	GetRepoByProjectAndPathFunc      func(context.Context, string, string) (*core.Repo, error)
+	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
+	CreateRepoFunc                   func(context.Context, *core.Repo) error
+	DeleteRepoFunc                   func(context.Context, string) error
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
 
 // GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
@@ -99,11 +101,29 @@ func (m *MockRepository) DeleteRepo(ctx context.Context, id string) error {
 	return contractkit.MockNotSet("MockRepository", "DeleteRepo")
 }
 
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
+}
+
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockSender
-// forge:hash=e835adf93191f2be542aee0a3357918508f541491655ebc1abf24884ae2ee6df
+// forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241
 
 // MockSender is a test mock for the Sender interface.
 //
@@ -113,16 +133,26 @@ var _ Repository = (*MockRepository)(nil)
 // "MockSender.<Method>Func not set" error.
 type MockSender struct {
 	contractkit.Recorder
-	SendDaemonCommandFunc func(context.Context, string, string, []byte, int32) ([]byte, error)
+	SendDaemonCommandToDaemonFunc func(context.Context, string, string, string, []byte, int32) ([]byte, error)
+	PlacementDaemonIDFunc         func(context.Context, string, string) (string, error)
 }
 
-// SendDaemonCommand records the call and delegates to SendDaemonCommandFunc when set.
-func (m *MockSender) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	m.Recorder.Record("SendDaemonCommand", ctx, userID, commandType, payload, timeoutMs)
-	if m.SendDaemonCommandFunc != nil {
-		return m.SendDaemonCommandFunc(ctx, userID, commandType, payload, timeoutMs)
+// SendDaemonCommandToDaemon records the call and delegates to SendDaemonCommandToDaemonFunc when set.
+func (m *MockSender) SendDaemonCommandToDaemon(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	m.Recorder.Record("SendDaemonCommandToDaemon", ctx, userID, daemonID, commandType, payload, timeoutMs)
+	if m.SendDaemonCommandToDaemonFunc != nil {
+		return m.SendDaemonCommandToDaemonFunc(ctx, userID, daemonID, commandType, payload, timeoutMs)
 	}
-	return nil, contractkit.MockNotSet("MockSender", "SendDaemonCommand")
+	return nil, contractkit.MockNotSet("MockSender", "SendDaemonCommandToDaemon")
+}
+
+// PlacementDaemonID records the call and delegates to PlacementDaemonIDFunc when set.
+func (m *MockSender) PlacementDaemonID(ctx context.Context, userID string, daemonID string) (string, error) {
+	m.Recorder.Record("PlacementDaemonID", ctx, userID, daemonID)
+	if m.PlacementDaemonIDFunc != nil {
+		return m.PlacementDaemonIDFunc(ctx, userID, daemonID)
+	}
+	return "", contractkit.MockNotSet("MockSender", "PlacementDaemonID")
 }
 
 // Compile-time check.

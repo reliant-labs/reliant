@@ -26,6 +26,13 @@ func (f fakeDaemon) SendDaemonCommandToDaemon(_ context.Context, _, _, commandTy
 
 func (fakeDaemon) ResolveDaemonID(context.Context, string) (string, error) { return "daemon-1", nil }
 
+func (fakeDaemon) PlacementDaemonID(_ context.Context, _, daemonID string) (string, error) {
+	if daemonID == "" {
+		return "daemon-1", nil
+	}
+	return daemonID, nil
+}
+
 func (fakeDaemon) EnqueueDaemonCommand(context.Context, string, string, []byte, int32) (int, error) {
 	return 0, nil
 }
@@ -45,8 +52,14 @@ func answering(commandType, payload, response string) fakeDaemon {
 	}
 }
 
-// ownedProject is project p-1 at /work, a git repository on main with a
-// remote, owned by the harness caller (test-user).
+// creatorPath is projects.path in ownedProject: where the project was
+// created, on another machine. No daemon command may ever carry it — the
+// checkout this store records is /work on daemon-1 (ownedProjectRepo), so
+// every test asserting "/work" also proves the per-machine path is sent.
+const creatorPath = "/Users/creator/src/proj"
+
+// ownedProject is project p-1, a git repository on main with a remote, owned
+// by the harness caller (test-user), checked out at /work on daemon-1.
 func ownedProject() *db.Project {
 	branch := "main"
 	remote := "git@example.com:acme/proj.git"
@@ -54,7 +67,7 @@ func ownedProject() *db.Project {
 		ID:            "p-1",
 		UserID:        "test-user",
 		Name:          "proj",
-		Path:          "/work",
+		Path:          creatorPath,
 		IsGitRepo:     true,
 		DefaultBranch: &branch,
 		RemoteURL:     &remote,
@@ -80,6 +93,12 @@ func ownedProjectRepo(t *testing.T) *project.MockRepository {
 			return nil, svcerr.NotFound("project")
 		},
 		ListReposByProjectFunc: func(context.Context, string) ([]*core.Repo, error) { return nil, nil },
+		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: "daemon-1", Path: "/work", InstallState: core.ProjectInstallInstalled}}, nil
+		},
+		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+			return &db.Daemon{ID: id, UserID: "test-user"}, nil
+		},
 	}
 }
 

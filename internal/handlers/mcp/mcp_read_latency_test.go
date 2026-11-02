@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
 // mcpReadRepo is the repository the MCP read RPCs run against, in memory,
@@ -39,6 +40,16 @@ func (r *mcpReadRepo) GetProjectWithUserCheck(_ context.Context, id, userID stri
 		return nil, core.ErrProjectNotFound
 	}
 	return r.project, nil
+}
+
+// ListProjectDaemonsForProject records the project checked out at its own
+// path on mcpTestDaemon.
+func (r *mcpReadRepo) ListProjectDaemonsForProject(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: mcpTestDaemon, Path: r.project.Path, InstallState: core.ProjectInstallInstalled}}, nil
+}
+
+func (r *mcpReadRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	return &db.Daemon{ID: id, UserID: r.project.UserID}, nil
 }
 
 func (r *mcpReadRepo) GetProjectConfigRecord(_ context.Context, projectID string) (*db.ProjectConfigRecord, error) {
@@ -82,6 +93,13 @@ func (r *countingMCPRouter) SendDaemonCommand(ctx context.Context, userID, comma
 		return nil, ctx.Err()
 	}
 	return r.fakeMCPDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
+// SendDaemonCommandToDaemon counts too: every MCP command is pinned to the
+// machine holding the checkout, and the embedded router's own pinned send
+// would bypass the counter.
+func (r *countingMCPRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 func (r *countingMCPRouter) count(commandType string) int {
@@ -227,7 +245,7 @@ func TestMCPListServers_RefetchesAfterAServerChange(t *testing.T) {
 	servers := listMCPServers(t, ctx, svc, repo.project.ID)
 	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY, servers[0].GetStatus())
 
-	require.NoError(t, svc.mcpManagerForUser("mcp-read-user").RemoveProjectServer(repo.project.Path, "server-0"))
+	require.NoError(t, svc.mcpManagerFor("mcp-read-user", projectcheckout.Target{DaemonID: mcpTestDaemon, Path: repo.project.Path}).RemoveProjectServer(repo.project.Path, "server-0"))
 
 	servers = listMCPServers(t, ctx, svc, repo.project.ID)
 	assert.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED, servers[0].GetStatus(),
@@ -255,7 +273,7 @@ func TestMCPStatusCache_RefreshesBoundedByRefreshWait(t *testing.T) {
 	var fetches atomic.Int32
 	release := make(chan struct{})
 	hangSecond := atomic.Bool{}
-	cache := newMCPStatusCache(func(ctx context.Context, _, _ string) (*daemonMCPServerStatus, error) {
+	cache := newMCPStatusCache(func(ctx context.Context, _ string, _ projectcheckout.Target) (*daemonMCPServerStatus, error) {
 		n := fetches.Add(1)
 		if n == 3 && hangSecond.Load() {
 			<-release
@@ -268,7 +286,7 @@ func TestMCPStatusCache_RefreshesBoundedByRefreshWait(t *testing.T) {
 	cache.now = func() time.Time { nowMu.Lock(); defer nowMu.Unlock(); return now }
 	advance := func(d time.Duration) { nowMu.Lock(); now = now.Add(d); nowMu.Unlock() }
 	get := func() string {
-		s := cache.get(context.Background(), "u", "/p")
+		s := cache.get(context.Background(), "u", projectcheckout.Target{DaemonID: "d", Path: "/p"})
 		require.NotNil(t, s)
 		return s.Servers[0].Name
 	}

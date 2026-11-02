@@ -44,7 +44,7 @@ func (m *MockAutomationRetirer) RetireDeletedTriggers(ctx context.Context, delet
 var _ AutomationRetirer = (*MockAutomationRetirer)(nil)
 
 // forge:section MockRepository
-// forge:hash=64a4f4babc6b98fa6260a842bb25b7806fd346b8a1c4db2afc8cba616bdb857f
+// forge:hash=cf0d1010223a31f733040155e3ce8f954e4e6db8d93c3fdef9864916513faa31
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -54,26 +54,28 @@ var _ AutomationRetirer = (*MockAutomationRetirer)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetProjectFunc                func(context.Context, string) (*db.Project, error)
-	GetProjectWithUserCheckFunc   func(context.Context, string, string) (*db.Project, error)
-	GetWorkflowDraftFunc          func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc    func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc    func(context.Context, string, string) (*db.WorkflowDraft, error)
-	CreateWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) error
-	UpdateWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) error
-	UpsertWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) (*db.WorkflowDraft, error)
-	UpdateWorkflowForkedFromFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
-	SetWorkflowDraftHiddenFunc    func(context.Context, string, bool) (*db.WorkflowDraft, error)
-	SetWorkflowDraftStatusFunc    func(context.Context, string, db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
-	DeleteWorkflowDraftBySlugFunc func(context.Context, string, string) error
-	ListTriggersFunc              func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	DeleteTriggerFunc             func(context.Context, string) error
-	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	ListVisibilityOverridesFunc   func(context.Context, string, int32) (map[string]bool, error)
-	ListHiddenItemDefaultsFunc    func(context.Context, int32) ([]string, error)
-	ListWorkflowDraftsByUserFunc  func(context.Context, string) ([]*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlugFunc   func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSONFunc   func(context.Context, string) (*string, error)
+	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
+	GetProjectWithUserCheckFunc      func(context.Context, string, string) (*db.Project, error)
+	GetWorkflowDraftFunc             func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
+	CreateWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) error
+	UpdateWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) error
+	UpsertWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) (*db.WorkflowDraft, error)
+	UpdateWorkflowForkedFromFunc     func(context.Context, string, string) (*db.WorkflowDraft, error)
+	SetWorkflowDraftHiddenFunc       func(context.Context, string, bool) (*db.WorkflowDraft, error)
+	SetWorkflowDraftStatusFunc       func(context.Context, string, db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
+	DeleteWorkflowDraftBySlugFunc    func(context.Context, string, string) error
+	ListTriggersFunc                 func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
+	DeleteTriggerFunc                func(context.Context, string) error
+	RunTxFunc                        func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	ListVisibilityOverridesFunc      func(context.Context, string, int32) (map[string]bool, error)
+	ListHiddenItemDefaultsFunc       func(context.Context, int32) ([]string, error)
+	ListWorkflowDraftsByUserFunc     func(context.Context, string) ([]*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
 
 // GetProject records the call and delegates to GetProjectFunc when set.
@@ -256,11 +258,29 @@ func (m *MockRepository) GetProjectWorkflowsJSON(ctx context.Context, projectID 
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWorkflowsJSON")
 }
 
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
+}
+
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockSender
-// forge:hash=e835adf93191f2be542aee0a3357918508f541491655ebc1abf24884ae2ee6df
+// forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241
 
 // MockSender is a test mock for the Sender interface.
 //
@@ -270,16 +290,26 @@ var _ Repository = (*MockRepository)(nil)
 // "MockSender.<Method>Func not set" error.
 type MockSender struct {
 	contractkit.Recorder
-	SendDaemonCommandFunc func(context.Context, string, string, []byte, int32) ([]byte, error)
+	SendDaemonCommandToDaemonFunc func(context.Context, string, string, string, []byte, int32) ([]byte, error)
+	PlacementDaemonIDFunc         func(context.Context, string, string) (string, error)
 }
 
-// SendDaemonCommand records the call and delegates to SendDaemonCommandFunc when set.
-func (m *MockSender) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	m.Recorder.Record("SendDaemonCommand", ctx, userID, commandType, payload, timeoutMs)
-	if m.SendDaemonCommandFunc != nil {
-		return m.SendDaemonCommandFunc(ctx, userID, commandType, payload, timeoutMs)
+// SendDaemonCommandToDaemon records the call and delegates to SendDaemonCommandToDaemonFunc when set.
+func (m *MockSender) SendDaemonCommandToDaemon(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	m.Recorder.Record("SendDaemonCommandToDaemon", ctx, userID, daemonID, commandType, payload, timeoutMs)
+	if m.SendDaemonCommandToDaemonFunc != nil {
+		return m.SendDaemonCommandToDaemonFunc(ctx, userID, daemonID, commandType, payload, timeoutMs)
 	}
-	return nil, contractkit.MockNotSet("MockSender", "SendDaemonCommand")
+	return nil, contractkit.MockNotSet("MockSender", "SendDaemonCommandToDaemon")
+}
+
+// PlacementDaemonID records the call and delegates to PlacementDaemonIDFunc when set.
+func (m *MockSender) PlacementDaemonID(ctx context.Context, userID string, daemonID string) (string, error) {
+	m.Recorder.Record("PlacementDaemonID", ctx, userID, daemonID)
+	if m.PlacementDaemonIDFunc != nil {
+		return m.PlacementDaemonIDFunc(ctx, userID, daemonID)
+	}
+	return "", contractkit.MockNotSet("MockSender", "PlacementDaemonID")
 }
 
 // Compile-time check.
