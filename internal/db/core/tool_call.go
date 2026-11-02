@@ -162,4 +162,10 @@ type BackgroundedProcessCall struct {
 	BackgroundProcessID *string
 	DaemonID            *string
 	RequestedAt         time.Time
+	// ChatRunning: the chat has a run in progress (a pending or active
+	// workflow). WorkspaceArchived: the workspace the call ran in (its
+	// thread's, else its chat's) is archived. Both are handed to the daemon,
+	// whose idle reaper stops the process of a finished chat.
+	ChatRunning       bool
+	WorkspaceArchived bool
 }

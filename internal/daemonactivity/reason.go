@@ -201,6 +201,9 @@ var backgroundCommands = map[string]bool{
 	"exec.bg_list":   true,
 	"exec.bg_output": true,
 	"exec.bg_status": true,
+	// exec.bg_touch rides along with an agent's tool call, which is the
+	// activity; the touch itself says nothing more.
+	"exec.bg_touch": true,
 
 	"forge.deploy_plan":       true,
 	"forge.deploy_status":     true,

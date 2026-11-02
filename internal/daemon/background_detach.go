@@ -83,6 +83,11 @@ type DetachOptions struct {
 	// Tree is the command's process tree; on adoption the background manager
 	// takes it over (releases it, and kills all of it).
 	Tree *proctree.Tree
+	// ChatID, ThreadID and KeepAlive are the run request's; the adopted
+	// process is reaped like any agent's background command.
+	ChatID    string
+	ThreadID  string
+	KeepAlive bool
 }
 
 // PollForBackgroundDetach waits for the command to finish OR for the user to ask
@@ -134,6 +139,9 @@ func PollForBackgroundDetach(ctx context.Context, opts DetachOptions) (CommandRe
 				StderrBuf:  opts.StderrBuf,
 				WaitErrCh:  opts.WaitErrCh,
 				Tree:       opts.Tree,
+				ChatID:     opts.ChatID,
+				ThreadID:   opts.ThreadID,
+				KeepAlive:  opts.KeepAlive,
 			})
 			if adoptErr != nil {
 				// Adoption failed: the command is still running and still owned

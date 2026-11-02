@@ -3,9 +3,12 @@ package tools
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -45,6 +48,10 @@ WORKSPACE SCOPING:
 - Multiple chats in the same workspace share the same process list
 - This enables coordination: one chat can start a server, another can check its status
 - Use shell_output to view output and shell_kill to terminate any workspace process
+
+AUTOMATIC STOP:
+- A background process is stopped once it has been idle (no output, and no agent used it with shell_output, shell_wait, shell_list or shell_kill) for 4 hours by default and the chat that started it has no run in progress; one started with keep_alive: true is exempt
+- Each running process shows how long it has been idle and when it could be stopped. Listing a process counts as using it
 
 Usage notes:
 - By default, shows only running processes in the current workspace
@@ -89,12 +96,24 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list processes: %v", err)), nil
 	}
 
+	// The current workspace's processes only, as the description says. It
+	// matters beyond tidiness: listing a process is an agent using it, which
+	// resets its idle time, so an unscoped list in any chat on the machine
+	// would keep every other workspace's leftovers alive forever.
+	workspace, _ := GetWorkingDirectory(rctx)
+	now := time.Now()
+
 	// Filter out non-running processes if not showing all
 	var filteredProcesses []*filteredProcess
+	var touched []string
 	runningCount := 0
 	for _, p := range processes {
+		if !inWorkspace(workspace, p.WorkingDir) {
+			continue
+		}
 		if p.Status == "running" {
 			runningCount++
+			touched = append(touched, p.ID)
 		}
 		if params.All || p.Status == "running" {
 			filteredProcesses = append(filteredProcesses, &filteredProcess{
@@ -105,9 +124,11 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 				EndTime:     p.EndTime,
 				ExitCode:    p.ExitCode,
 				PreviewURLs: previewURLsForProcess(p),
+				AutoStop:    autoStopLines(p, now),
 			})
 		}
 	}
+	touchProcesses(rctx, touched...)
 
 	// Format the output
 	if len(filteredProcesses) == 0 {
@@ -138,6 +159,9 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 			// (0.0.0.0) listening port so the agent can post a reachable link
 			// instead of the daemon's unreachable loopback.
 			for _, line := range p.PreviewURLs {
+				fmt.Fprintf(&output, "%s\n", line)
+			}
+			for _, line := range p.AutoStop {
 				fmt.Fprintf(&output, "%s\n", line)
 			}
 		} else if p.EndTime != nil {
@@ -172,6 +196,58 @@ type filteredProcess struct {
 	// PreviewURLs holds one ready-to-post line per publicly-bound listening
 	// port (env-aware proxied URL), populated for running processes only.
 	PreviewURLs []string
+	// AutoStop says how idle a running process is and when the daemon's
+	// idle reaper would stop it (autoStopLines).
+	AutoStop []string
+}
+
+// autoStopLines describes how the daemon's idle reaper sees a running
+// process: how long it has been idle, and when it would be stopped. Nothing
+// for a finished process, or from a daemon too old to say.
+//
+// Listing it counts as using it, so the earliest stop is a full window from
+// now, not from when it last did anything.
+func autoStopLines(p *daemon.ProcessInfo, now time.Time) []string {
+	if p.Status != "running" || p.LastActive.IsZero() {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("Idle for: %s (no output and no agent use)", formatDuration(now.Sub(p.LastActive)))}
+	switch {
+	case p.StopsAfter != nil:
+		window := p.StopsAfter.Sub(p.LastActive)
+		line := fmt.Sprintf("Auto-stop: after %s idle once its chat has no run in progress; not before %s (this listing counts as use)",
+			formatDuration(window), now.Add(window).UTC().Format(time.RFC3339))
+		if p.ChatRunning != nil && *p.ChatRunning {
+			line += "; its chat is running now"
+		}
+		lines = append(lines, line)
+	case p.StopExempt != "":
+		lines = append(lines, "Auto-stop: never ("+p.StopExempt+")")
+	}
+	return lines
+}
+
+// inWorkspace reports whether a process running in dir belongs to the
+// workspace rooted at root. Unknown on either side (an older daemon that does
+// not report the directory) includes it.
+func inWorkspace(root, dir string) bool {
+	if root == "" || dir == "" {
+		return true
+	}
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(dir))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// touchProcesses tells the daemon an agent used these processes, resetting
+// their idle time. Best effort: a daemon too old to know the command, or one
+// that does not answer, costs the touch and nothing else.
+func touchProcesses(rctx *rctx.ToolContext, processIDs ...string) {
+	if rctx.Daemon == nil || len(processIDs) == 0 {
+		return
+	}
+	if err := rctx.Daemon.TouchProcesses(rctx.Context, processIDs); err != nil {
+		logging.DebugContext(rctx.Context, "Could not record background process use", "processes", processIDs, "error", err)
+	}
 }
 
 func formatDuration(d time.Duration) string {

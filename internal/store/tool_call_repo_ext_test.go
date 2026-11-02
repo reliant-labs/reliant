@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
 // tool_call_repo_ext.go and tool_call_result_repo_ext.go: writes alternate
@@ -383,5 +384,29 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 	procs, err := store.ListBackgroundedProcessToolCalls(ctx, o)
 	if err != nil || len(procs) != 1 || procs[0].ToolCallID != "bg-proc" || procs[0].UserID != "test-user" || *procs[0].DaemonID != "d-9" {
 		t.Fatalf("ListBackgroundedProcessToolCalls = %+v, %v", procs, err)
+	}
+
+	// What the daemon's idle reaper is told: the chat's root run is active,
+	// and its thread's workspace is live.
+	if !procs[0].ChatRunning || procs[0].WorkspaceArchived {
+		t.Fatalf("with an active run and no workspace: %+v", procs[0])
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := o.Bun().NewRaw(query, args...).Exec(ctx); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	// Every run of the chat stopped: no run in progress.
+	exec(`UPDATE workflows SET state = ?, stop_reason = ? WHERE chat_id = ? AND state <> ?`,
+		db.WorkflowStateStopped, db.StopReasonCompleted, f.chat, db.WorkflowStateStopped)
+	// The call's thread works in a workspace that is then archived.
+	exec(`INSERT INTO worktrees (id, name, path, branch, base_branch, project_id, created_at, updated_at, last_active)
+	      VALUES ('wt-bg', 'wt-bg', '/tmp/wt-bg', 'b', 'main', ?, now(), now(), now())`, storetest.SeedProjectID)
+	exec(`UPDATE threads SET worktree_id = 'wt-bg' WHERE id = ?`, f.main)
+	exec(`UPDATE worktrees SET deleted_at = now() WHERE id = 'wt-bg'`)
+	procs, err = store.ListBackgroundedProcessToolCalls(ctx, o)
+	if err != nil || len(procs) != 1 || procs[0].ChatRunning || !procs[0].WorkspaceArchived {
+		t.Fatalf("finished chat in an archived workspace: %+v, %v", procs, err)
 	}
 }

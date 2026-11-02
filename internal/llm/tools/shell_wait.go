@@ -182,6 +182,11 @@ func (b *shellWaitTool) Execute(rctx *rctx.ToolContext, params ShellWaitParams) 
 			"No process with ID %q. Use shell_list to see processes in this workspace.", params.ProcessID)), nil
 	}
 
+	// Waiting on a process is using it, at both ends of the wait: not idle,
+	// so not reaped.
+	touchProcesses(rctx, proc.ID)
+	defer touchProcesses(rctx, proc.ID)
+
 	start := time.Now()
 	deadline := start.Add(budget)
 

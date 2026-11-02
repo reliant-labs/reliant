@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,6 +94,11 @@ type BackgroundProcess struct {
 	PackageCommand bool   `json:"package_command,omitempty"`
 	SessionID      string `json:"session_id"`
 	ChatID         string `json:"chat_id,omitempty"`
+	// ThreadID is the agent thread of ChatID whose tool call started it.
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive exempts the process from the idle reaper: an intentional
+	// long-lived server (background_reaper.go).
+	KeepAlive bool `json:"keep_alive,omitempty"`
 	// GrantID records the connector grant that started this process, empty for
 	// first-party ones. The registry is process-global and keyed by id alone,
 	// so without this a connector holding a guessed id could read the output
@@ -120,6 +126,16 @@ type BackgroundProcess struct {
 	// tree bounds the command's processes and reaches all of them on a kill
 	// (internal/proctree). Nil for a process recovered from the database.
 	tree *proctree.Tree
+
+	// clock stamps lastActive: the manager's clock. Nil for a process
+	// recovered from the database, which the reaper never stops.
+	clock func() time.Time
+	// lastActive is when the process last wrote output or an agent touched
+	// it; chat is the server's latest word on the chat that started it,
+	// heard at chatAt. Guarded by outputMu. See background_reaper.go.
+	lastActive time.Time
+	chat       ChatVerdict
+	chatAt     time.Time
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -174,6 +190,15 @@ type BackgroundManager struct {
 
 	// Optional repo for DB-backed operations (e.g., killing recovered processes by PID)
 	repo ProcessStore
+
+	// clock is the time a process's activity is stamped with and the idle
+	// reaper judges by; nil is time.Now. A field so a test can move it.
+	clock func() time.Time
+	// idleReap is the idle window the reaper runs with (0: off), read by
+	// listings to say when a process would be stopped (background_reaper.go).
+	idleReap atomic.Int64
+	// reapKick wakes the reaper early: a workspace archived needs no wait.
+	reapKick chan struct{}
 }
 
 var (
@@ -186,6 +211,7 @@ func GetBackgroundManager() *BackgroundManager {
 	bgManagerOnce.Do(func() {
 		bgManager = &BackgroundManager{
 			processes: make(map[string]*BackgroundProcess),
+			reapKick:  make(chan struct{}, 1),
 		}
 		// Note: Process monitor is initialized separately to avoid circular dependencies
 	})
@@ -385,6 +411,9 @@ type StartProcessOptions struct {
 	// PackageCommand marks a Commands-panel process (see
 	// BackgroundProcess.PackageCommand).
 	PackageCommand bool
+	// ThreadID and KeepAlive: see BackgroundProcess.
+	ThreadID  string
+	KeepAlive bool
 }
 
 // StartProcessWithEnv starts a new background process with custom environment variables
@@ -466,7 +495,11 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		PackageCommand: opts.PackageCommand,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
+		ThreadID:       opts.ThreadID,
+		KeepAlive:      opts.KeepAlive,
 		GrantID:        opts.GrantID,
+		clock:          m.now,
+		lastActive:     m.now(),
 		cmd:            cmd,
 		stdout:         stdout,
 		stderr:         stderr,
@@ -614,6 +647,8 @@ func (w *outputLineWriter) emit(raw []byte) {
 	process.outputMu.Lock()
 	w.buffer.WriteString(line)
 	w.buffer.WriteByte('\n')
+	// Output is activity: a process still writing is not idle.
+	process.touchLocked()
 	process.outputSeq++
 	outputLine := OutputLineWithSeq{
 		Type:     w.outputType,
@@ -1412,6 +1447,8 @@ type AdoptRunningProcessOptions struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
+	ThreadID   string
+	KeepAlive  bool
 	StartTime  time.Time
 	StdoutBuf  *bytes.Buffer // Existing stdout buffer
 	StderrBuf  *bytes.Buffer // Existing stderr buffer
@@ -1473,6 +1510,10 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		WorktreeID:     opts.WorktreeID,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
+		ThreadID:       opts.ThreadID,
+		KeepAlive:      opts.KeepAlive,
+		clock:          m.now,
+		lastActive:     m.now(),
 		cmd:            opts.Cmd,
 		tree:           opts.Tree,
 		stdout:         stdout,

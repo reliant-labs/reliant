@@ -11,6 +11,7 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -177,6 +178,13 @@ type DaemonConfig struct {
 	// the limit all commands share, 3008 on 31 CPUs. A command that reaches it
 	// is told so, naming this setting.
 	CommandThreads int32 `protobuf:"varint,29,opt,name=command_threads,json=commandThreads,proto3" json:"command_threads,omitempty"`
+	// How long a background process an agent started may sit idle — no
+	// output, and no agent read, waited on, listed or killed it — once the
+	// chat that started it has no run in progress, before the daemon stops it
+	// (SIGTERM to its process group, SIGKILL after a grace period). A process
+	// started with keep_alive is exempt. Processes of an archived workspace
+	// are stopped whatever this says. 0 turns idle stopping off.
+	BackgroundIdleReap *durationpb.Duration `protobuf:"bytes,30,opt,name=background_idle_reap,json=backgroundIdleReap,proto3" json:"background_idle_reap,omitempty"`
 	// Let the fetch tool reach this machine's own localhost and private network
 	// (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
 	// fetch is usually auto-approved and a fetched page can steer the next fetch,
@@ -386,6 +394,13 @@ func (x *DaemonConfig) GetCommandThreads() int32 {
 		return x.CommandThreads
 	}
 	return 0
+}
+
+func (x *DaemonConfig) GetBackgroundIdleReap() *durationpb.Duration {
+	if x != nil {
+		return x.BackgroundIdleReap
+	}
+	return nil
 }
 
 func (x *DaemonConfig) GetFetchAllowPrivateNetwork() bool {
@@ -608,14 +623,14 @@ var File_reliant_config_v1_daemon_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xe5\x03\n" +
+	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe5\x03\n" +
 	"\x14DaemonInstanceConfig\x12\x8a\x01\n" +
 	"\bdata_dir\x18\x01 \x01(\tBo\x82\xce\x18k\n" +
 	"\x0fDAEMON_DATA_DIR\x12\bdata-dir*NData directory (default: this instance's directory under ~/.reliant/instances)R\adataDir\x12\x96\x01\n" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x95#\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf6$\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -667,7 +682,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x13RELIANT_HEAVY_SHARE*dCPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))R\n" +
 	"heavyShare\x12\xb6\x01\n" +
 	"\x0fcommand_threads\x18\x1d \x01(\x05B\x8c\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x80\x01\n" +
-	"\x17RELIANT_COMMAND_THREADS*eThreads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)R\x0ecommandThreads\x12\xf3\x01\n" +
+	"\x17RELIANT_COMMAND_THREADS*eThreads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)R\x0ecommandThreads\x12\xde\x01\n" +
+	"\x14background_idle_reap\x18\x1e \x01(\v2\x19.google.protobuf.DurationB\x90\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18\x83\x01\n" +
+	"\x1cRELIANT_BACKGROUND_IDLE_REAP\x1a\x024h*_How long a finished chat's background process may sit idle before the daemon stops it (0 = off)R\x12backgroundIdleReap\x12\xf3\x01\n" +
 	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
 	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork\x12\xc9\x01\n" +
 	"\x16egress_user_per_minute\x18\x18 \x01(\x05B\x93\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x87\x01\n" +
@@ -713,17 +730,19 @@ var file_reliant_config_v1_daemon_config_proto_goTypes = []any{
 	(*DaemonStopConfig)(nil),     // 3: reliant.config.v1.DaemonStopConfig
 	(*DaemonLogsConfig)(nil),     // 4: reliant.config.v1.DaemonLogsConfig
 	(*DaemonRegisterConfig)(nil), // 5: reliant.config.v1.DaemonRegisterConfig
+	(*durationpb.Duration)(nil),  // 6: google.protobuf.Duration
 }
 var file_reliant_config_v1_daemon_config_proto_depIdxs = []int32{
 	0, // 0: reliant.config.v1.DaemonConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 1: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 2: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 3: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 1: reliant.config.v1.DaemonConfig.background_idle_reap:type_name -> google.protobuf.Duration
+	0, // 2: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 3: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 4: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_daemon_config_proto_init() }

@@ -283,11 +283,26 @@ func ListStrandedBackgroundSpawnToolCalls(ctx context.Context, db orm.Context) (
 //
 // Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
 // once the sweep keeps status 6 honest.
+//
+// chat_running (a pending or active workflow of the chat, any thread; served
+// by idx_workflows_chat_state) and workspace_archived (the call's thread's
+// workspace, else its chat's, has deleted_at) are what the daemon's idle
+// reaper needs to stop a finished chat's process.
 const listBackgroundedProcessToolCallsSQL = `
 SELECT tc.id, tc.chat_id, tc.tool_name, tc.background_process_id, tc.daemon_id,
-       tc.requested_at, c.user_id
+       tc.requested_at, c.user_id,
+       EXISTS (
+         SELECT 1 FROM workflows w
+         WHERE w.chat_id = tc.chat_id AND w.state IN (1, 2)
+       ) AS chat_running,
+       EXISTS (
+         SELECT 1 FROM worktrees wt
+         WHERE wt.id = COALESCE(th.worktree_id, c.worktree_id)
+           AND wt.deleted_at IS NOT NULL
+       ) AS workspace_archived
 FROM tool_calls tc
 JOIN chats c ON c.id = tc.chat_id
+LEFT JOIN threads th ON th.id = tc.thread_id
 WHERE tc.status = 6
   AND tc.child_workflow_id IS NULL
 ORDER BY tc.requested_at ASC
@@ -304,6 +319,8 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 		DaemonID            *string   `bun:"daemon_id"`
 		RequestedAt         time.Time `bun:"requested_at"`
 		UserID              string    `bun:"user_id"`
+		ChatRunning         bool      `bun:"chat_running"`
+		WorkspaceArchived   bool      `bun:"workspace_archived"`
 	}
 	if err := db.Bun().NewRaw(listBackgroundedProcessToolCallsSQL).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)
@@ -318,6 +335,8 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 			BackgroundProcessID: row.BackgroundProcessID,
 			DaemonID:            row.DaemonID,
 			RequestedAt:         row.RequestedAt,
+			ChatRunning:         row.ChatRunning,
+			WorkspaceArchived:   row.WorkspaceArchived,
 		})
 	}
 	return calls, nil

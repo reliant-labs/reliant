@@ -4,6 +4,7 @@ package reliant.config.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
 
@@ -245,6 +246,21 @@ message DaemonConfig {
       description: "Threads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)"
     },
     (buf.validate.field).int32 = {gte: 0}
+  ];
+
+  // How long a background process an agent started may sit idle — no
+  // output, and no agent read, waited on, listed or killed it — once the
+  // chat that started it has no run in progress, before the daemon stops it
+  // (SIGTERM to its process group, SIGKILL after a grace period). A process
+  // started with keep_alive is exempt. Processes of an archived workspace
+  // are stopped whatever this says. 0 turns idle stopping off.
+  google.protobuf.Duration background_idle_reap = 30 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_BACKGROUND_IDLE_REAP"
+      default_value: "4h"
+      description: "How long a finished chat's background process may sit idle before the daemon stops it (0 = off)"
+    },
+    (buf.validate.field).duration.gte = {}
   ];
 
   // Let the fetch tool reach this machine's own localhost and private network

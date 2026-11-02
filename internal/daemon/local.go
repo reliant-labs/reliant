@@ -908,6 +908,9 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
 			Tree:       tree,
+			ChatID:     req.ChatID,
+			ThreadID:   req.ThreadID,
+			KeepAlive:  req.KeepAlive,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -963,11 +966,24 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		HeavyGate:   c.heavy,
 		Heavy:       req.Heavy,
 		AgentID:     req.ChatID,
+		// The chat that started it, so the idle reaper may stop it once
+		// that chat has finished (shell/background_reaper.go).
+		ChatID:         req.ChatID,
+		ThreadID:       req.ThreadID,
+		KeepAlive:      req.KeepAlive,
+		WorktreeID:     req.WorktreeID,
+		PackageCommand: req.PackageCommand,
 	})
 	if err != nil {
 		return "", fmt.Errorf("starting background process: %w", err)
 	}
 	return process.ID, nil
+}
+
+// TouchProcesses records an agent's use of background processes.
+func (c *LocalClient) TouchProcesses(_ context.Context, processIDs []string) error {
+	shell.GetBackgroundManager().Touch(processIDs...)
+	return nil
 }
 
 // GetProcessOutput retrieves output from a background process.
@@ -1077,17 +1093,34 @@ func (c *LocalClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
 	for _, p := range all {
 		// DaemonID stays empty: a LocalClient runs the process on the user's
 		// own machine, so its loopback is directly reachable and needs no proxy.
-		result = append(result, &ProcessInfo{
-			ID:        p.ID,
-			Command:   p.Command,
-			Status:    p.Status,
-			ExitCode:  p.ExitCode,
-			StartTime: p.StartTime,
-			EndTime:   p.EndTime,
-			Ports:     shellPortsToDaemon(p.Ports),
-		})
+		info := &ProcessInfo{
+			ID:             p.ID,
+			Command:        p.Command,
+			Status:         p.StatusSafe(),
+			ExitCode:       p.ExitCode,
+			StartTime:      p.StartTime,
+			EndTime:        p.EndTime,
+			Ports:          shellPortsToDaemon(p.Ports),
+			WorkingDir:     p.WorkingDir,
+			WorktreeID:     p.WorktreeID,
+			PackageCommand: p.PackageCommand,
+		}
+		StampReapOutlook(info, bgm, p)
+		result = append(result, info)
 	}
 	return result, nil
+}
+
+// StampReapOutlook fills info's chat and idle-reaper fields from p: who
+// started it, how long it has been idle, and when the reaper would stop it.
+func StampReapOutlook(info *ProcessInfo, bgm *shell.BackgroundManager, p *shell.BackgroundProcess) {
+	info.ChatID, info.ThreadID, info.KeepAlive = p.ChatID, p.ThreadID, p.KeepAlive
+	outlook := bgm.ReapOutlook(p)
+	info.LastActive = outlook.LastActive
+	info.ChatRunning = outlook.ChatRunning
+	if info.Status == "running" {
+		info.StopsAfter, info.StopExempt = outlook.StopsAfter, outlook.Exempt
+	}
 }
 
 // shellPortsToDaemon converts the shell package's PortInfo (internal process

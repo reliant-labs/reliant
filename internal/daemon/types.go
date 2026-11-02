@@ -248,6 +248,14 @@ type RunCommandRequest struct {
 	// machine near its process limit can say whose they are
 	// (internal/procguard). Informational only: it grants nothing.
 	ChatID string `json:"chat_id,omitempty"`
+	// ThreadID is the thread of ChatID whose tool call runs the command,
+	// recorded on a background process so a reap can name it.
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive exempts a background process from the idle reaper, which
+	// otherwise stops it once it has been idle for the reaper's window and
+	// its chat has no run in progress (shell.ReaperConfig). For an
+	// intentional long-lived server.
+	KeepAlive bool `json:"keep_alive,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.
@@ -370,12 +378,53 @@ type ProcessInfo struct {
 	// PackageCommand is RunCommandRequest.PackageCommand: a Commands-panel
 	// process, listed by the panel even with no workspace.
 	PackageCommand bool `json:"package_command,omitempty"`
+	// ChatID and ThreadID name the agent whose tool call started it; empty
+	// for a Commands-panel process.
+	ChatID   string `json:"chat_id,omitempty"`
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive is RunCommandRequest.KeepAlive.
+	KeepAlive bool `json:"keep_alive,omitempty"`
+	// LastActive is when it last wrote output or an agent touched it (read
+	// its output, waited on, listed or killed it). Zero from an older daemon.
+	LastActive time.Time `json:"last_active,omitzero"`
+	// StopsAfter is the earliest the daemon's idle reaper stops a running
+	// process if nothing touches it: LastActive plus the idle window, and
+	// only once its chat has no run in progress. Nil when the reaper never
+	// will; StopExempt then says why ("keep_alive", "not started by a chat",
+	// "idle reaping is off").
+	StopsAfter *time.Time `json:"stops_after,omitempty"`
+	StopExempt string     `json:"stop_exempt,omitempty"`
+	// ChatRunning is the server's latest word on whether its chat has a run
+	// in progress; nil when the daemon has none recent.
+	ChatRunning *bool `json:"chat_running,omitempty"`
+}
+
+// ProcessChatState is the server's word on the chat that started one
+// background process, carried on exec.bg_status (ProcessStatusRequest.Chats).
+// The daemon's idle reaper acts only on a recent one.
+type ProcessChatState struct {
+	ProcessID string `json:"process_id"`
+	// Running: the chat has a run in progress (pending or active).
+	Running bool `json:"running,omitempty"`
+	// WorkspaceArchived: the chat's (or its thread's) workspace is archived
+	// or deleted; the daemon stops the process at once.
+	WorkspaceArchived bool `json:"workspace_archived,omitempty"`
+}
+
+// TouchProcessesRequest is the payload of exec.bg_touch.
+type TouchProcessesRequest struct {
+	ProcessIDs []string `json:"process_ids"`
 }
 
 // ProcessStatusRequest is the payload of exec.bg_status: which background
 // processes the caller wants the outcome of.
 type ProcessStatusRequest struct {
 	ProcessIDs []string `json:"process_ids"`
+	// Chats is the server's word on the chat behind each of ProcessIDs: the
+	// daemon's idle reaper stops a process only while the server keeps
+	// saying its chat has no run in progress. Absent from a caller that
+	// does not know; a connector's (grant-scoped) is ignored.
+	Chats []ProcessChatState `json:"chats,omitempty"`
 }
 
 // ProcessStatusResponse answers exec.bg_status.
