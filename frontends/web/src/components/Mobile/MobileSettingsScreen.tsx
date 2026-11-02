@@ -13,8 +13,7 @@
  * route: a desktop link to a section lands on its screen
  * (lib/mobileRedirect.ts maps the ids), a refresh keeps it, and opening a
  * section pushes a history entry so the browser's Back returns to the list.
- * Each sub-screen's own "back" button goes to the list too. A URL is not
- * permission: deep links obey the same gates as list entries.
+ * Each sub-screen's own "back" button goes to the list too.
  *
  * Sections not listed here (MCP, Prompts, Keyboard shortcuts, Developer,
  * per-machine app access and port access rules) are desktop-only by design — see the
@@ -92,6 +91,12 @@ const SECTION_GROUPS: { id: SectionGroupId; label: string }[] = [
 interface SectionLink {
   id: SectionId;
   label: string;
+  description: string;
+  icon: typeof Bell;
+  group: SectionGroupId;
+  /** `settings*` capability gating this row. */
+  capability: keyof SurfaceCapabilities;
+  /** Extra gate beyond the capability flag (e.g. cloud-only sections). */
   hidden?: boolean;
 }
 
@@ -123,15 +128,11 @@ function SectionRow({
 export function MobileSettingsScreen() {
   const capabilities = useCapabilities();
   const navigate = useNavigate();
-  // The section lives in search so links, reloads and back/forward agree. A
-  // visit that arrived with somewhere to go back to (the claim page's
-  // "Subscribe to keep both") returns there, instead of dropping the person
-  // on the list with nothing to say where they were.
-  const { section: active, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
+  // A visit that arrived with somewhere to go back to (the claim page's
+  // "Subscribe to keep both") opens on that section and returns there, instead
+  // of dropping the person on the list with nothing to say where they were.
+  const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
   const comeBackTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
-  const setActive = (section: SectionId) => {
-    void navigate({ to: "/m/settings", search: { section } });
-  };
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
   // call time — can't get frozen into a stale constant, which matters both
@@ -141,7 +142,7 @@ export function MobileSettingsScreen() {
     {
       id: "account",
       label: "Account",
-      description: "Identity, theme, sign out",
+      description: "Identity and sign out",
       icon: User,
       group: "identity",
       capability: "mobileAccount",
@@ -190,8 +191,8 @@ export function MobileSettingsScreen() {
     },
     {
       id: "workspace",
-      label: "Workspace preferences",
-      description: "Archive, branch, and delete defaults",
+      label: "Branches",
+      description: "Cleanup defaults for branched chats",
       icon: FolderGit2,
       group: "preferences",
       capability: "settingsWorkspace",
@@ -225,13 +226,11 @@ export function MobileSettingsScreen() {
   const visible = sections.filter(
     (s) => !s.hidden && capabilities[s.capability],
   );
+  const active = visible.find((s) => s.id === section)?.id ?? null;
+  const openSection = (id: SectionId) => void navigate({ href: `/m/settings?${new URLSearchParams({ section: id })}` });
 
-  // A URL is not permission: deep links obey the same gates as list entries.
-  if (visible.some((section) => section.id === active)) {
-    const onBack = () => {
-      if (comeBackTo) void navigate({ href: comeBackTo });
-      else void navigate({ to: "/m/settings", search: {}, replace: true });
-    };
+  if (active) {
+    const onBack = () => void navigate({ href: comeBackTo ?? "/m/settings" });
     switch (active) {
       case "account":
         return <MobileAccountScreen onBack={onBack} />;
@@ -275,7 +274,7 @@ export function MobileSettingsScreen() {
                 <SectionRow
                   key={section.id}
                   section={section}
-                  onSelect={setActive}
+                  onSelect={openSection}
                 />
               ))}
             </MobileCardGroup>
@@ -288,9 +287,9 @@ export function MobileSettingsScreen() {
         <div className="flex gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Machines and GitHub are available from the main menu. MCP servers,
-            prompts, keyboard shortcuts, developer tools, app access, and port
-            access rules aren&apos;t available here. Manage those on desktop.
+            Machines are in the main menu. MCP servers, prompts, keyboard
+            shortcuts, developer tools, app access, and port access rules
+            aren&apos;t available here. Manage those on desktop.
           </p>
         </div>
       </MobileScreenBody>
