@@ -352,7 +352,7 @@ func (s *Service) resolveForkPoint(ctx context.Context, messageID, threadID *str
 		// Fork from specific message - extract thread and CW from message
 		msg, err := s.repo.GetMessage(ctx, *messageID)
 		if err != nil {
-			return nil, fmt.Errorf("fork message not found: %w", err)
+			return nil, lookupFailed(err, "fork message not found", "failed to load fork message")
 		}
 		return &forkOpts{
 			parentThreadID:        msg.ThreadID,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"go.temporal.io/sdk/temporal"
 )
@@ -125,6 +126,12 @@ func autoClassify(err error) error {
 		(strings.Contains(errStr, "unexpected end of json") ||
 			strings.Contains(errStr, "invalid character")) {
 		return err // Transient - Temporal will retry
+	}
+
+	// A database that did not answer is transient whatever its message says:
+	// a mislabelled lookup once called one "does not exist" (reliant#2100).
+	if dbconn.Unavailable(err) {
+		return err
 	}
 
 	// Terminal errors - validation, business logic, not found, etc.
