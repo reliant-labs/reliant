@@ -139,6 +139,48 @@ describe("ChatInput prefill", () => {
     expect(composer().value).toBe("keep me");
     expect(composer()).not.toBeDisabled();
   });
+  it("lets a mobile send omit an optional input and refuses one that omits a required input", async () => {
+    const stringInput = (base: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      ({ type: "string", config: { case: "stringInput", value: { base, ...extra } } });
+    // An optional input is one with a default (model.IsInputRequired).
+    definitionState.result = { data: { workflow: { inputs: { tone: stringInput({}, { default: "plain" }) } } }, isLoading: false };
+    const optionalSend = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput onSend={optionalSend} prefill={{ text: "go", id: 20 }} /></SurfaceProvider>);
+    await waitFor(() => expect(composer().value).toBe("go"));
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await waitFor(() => expect(optionalSend).toHaveBeenCalledTimes(1));
+    unmount();
+
+    definitionState.result = { data: { workflow: { inputs: { goal: stringInput({ required: true }) } } }, isLoading: false };
+    const requiredSend = vi.fn().mockResolvedValue(undefined);
+    renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput onSend={requiredSend} prefill={{ text: "go", id: 21 }} /></SurfaceProvider>);
+    await waitFor(() => expect(composer().value).toBe("go"));
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await act(async () => {});
+    expect(requiredSend).not.toHaveBeenCalled();
+    expect(composer().value).toBe("go");
+  });
+
+  it("clears only the submitted mobile draft when a deferred send settles after a project switch", async () => {
+    const OTHER = "p-prefill-other";
+    useWorkspaceStateStore.getState().setNewChatDraft(OTHER, "other project's draft");
+    let resolve!: () => void;
+    const onSend = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
+    renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput onSend={onSend} prefill={{ text: "submitted", id: 30 }} /></SurfaceProvider>);
+    await waitFor(() => expect(composer().value).toBe("submitted"));
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+
+    act(() => useProjectStore.setState({ currentProject: { id: OTHER } as never }));
+    await waitFor(() => expect(composer().value).toBe("other project's draft"));
+    await act(async () => resolve());
+
+    expect(composer().value).toBe("other project's draft");
+    expect(useWorkspaceStateStore.getState().getNewChatDraft(OTHER)).toBe("other project's draft");
+    expect(useWorkspaceStateStore.getState().getNewChatDraft(PROJECT_ID)).toBe("");
+    act(() => useWorkspaceStateStore.getState().clearNewChatDraft(OTHER));
+  });
+
   it("shows the prefill over the draft it seeds from, and saves it as the draft", async () => {
     useWorkspaceStateStore.getState().setNewChatDraft(PROJECT_ID, "Workflow `old-one`: ");
     renderWithQuery(<ChatInput onSend={vi.fn()} prefill={{ text: "Workflow `new-one`: ", id: 0 }} />);

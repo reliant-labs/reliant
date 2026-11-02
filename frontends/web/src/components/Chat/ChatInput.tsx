@@ -63,6 +63,7 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
   currentThinkingLevel,
@@ -316,6 +317,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       setSelectedWorkflow,
       isPendingChat,
       handleClearInput,
+      captureSubmittedDraft,
     } = useChatInputState({
       chatId,
       tabId: tabId ?? undefined,
@@ -844,11 +846,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return covered;
     }, [selectedPresets, presetTargets, presetsByTag]);
 
-    // Check if any non-hidden, non-message, non-attachments param is unset
-    // (no value in workflowParams, no meaningful default in schema, and not covered by a selected preset)
+    // Check if any required, non-hidden, non-message, non-attachments param is
+    // unset (no value in workflowParams, no meaningful default in schema, and
+    // not covered by a selected preset). "Required" is the server's rule
+    // (model.IsInputRequired, mirrored by isRequiredInput): marked required, or
+    // no default. An optional input is one with a default, so it is never unset.
     const hasUnsetParams = useMemo(() => {
       if (!workflowInputs) return false;
       for (const [name, schema] of Object.entries(workflowInputs)) {
+        if (!isRequiredInput(schema)) continue;
         if (getInputUI(schema) === "hidden") continue;
         if (schema.type === "message" || schema.type === "attachments") continue;
         if (schema.type === "tools" || schema.type === "preset" || schema.type === "thread") continue;
@@ -1353,6 +1359,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // "Not sent" with Retry (chatStore.markSendFailed), a new chat that
         // fails to start hands its text back (NewChatView), and either raises
         // its own toast.
+        // Mobile keeps the draft until the send succeeds, so its cleanup is
+        // bound now to the draft being submitted: by the time the send settles
+        // the user may be looking at another chat or project's draft.
+        const clearSubmittedDraft = mobile ? captureSubmittedDraft(input) : undefined;
         if (!mobile) {
           handleClearInput(); // Desktop failures are retained in the transcript.
           clearAttachments(attachmentSessionId);
@@ -1368,10 +1378,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             undefined, // targetThread
             Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
           );
-          if (mobile) {
-            handleClearInput();
+          if (clearSubmittedDraft) {
+            // attachmentSessionId is the submitted draft's bucket, captured
+            // with this send. The code-context chips are this composer's own
+            // state, so they go only while it still shows the submitted draft.
             clearAttachments(attachmentSessionId);
-            clearContexts();
+            if (clearSubmittedDraft()) clearContexts();
           }
         } catch (error) {
           // ChatContainer already reported this to the user before rethrowing.
