@@ -14,6 +14,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
@@ -21,6 +22,7 @@ import (
 type Service interface {
 	Issue(ctx context.Context, runID, nodeID, grantID string, req hostedhttp.Request) (string, error)
 	ExecuteAction(ctx context.Context, runID, nodeID, grantID string, req hostedhttp.Request) (*hostedhttp.Result, error)
+	ResolveSecrets(ctx context.Context, runID, nodeID string, refs []stepsecrets.Ref) (map[stepsecrets.Ref]string, error)
 }
 
 // Store persists ticket authority derived from active runs and atomically

@@ -71,6 +71,10 @@ nodes:
   - id: deploy
     type: run
     command: ./deploy.sh --key "{{ secrets.TRADER_KEY }}"   # or just use $TRADER_KEY
+
+edges:
+  - from: get_briefing
+    default: deploy
 ```
 
 ### Where a secret can be used

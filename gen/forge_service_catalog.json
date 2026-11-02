@@ -39955,6 +39955,12 @@
               "kind": "string"
             },
             {
+              "name": "secret_refs",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeSecretRef",
+              "repeated": true
+            },
+            {
               "name": "call_llm",
               "kind": "message",
               "type_name": "reliant.v1.CallLLMArgs",
@@ -40059,6 +40065,17 @@
             {
               "name": "description",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.NodeSecretRef": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "environment",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.NumberInputConfig": [
@@ -40560,6 +40577,13 @@
               "name": "catchup_window",
               "kind": "string",
               "optional": true
+            }
+          ],
+          "reliant.v1.SecretDeclaration": [
+            {
+              "name": "environment",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.SetWorkflowStatusRequest": [
@@ -41129,6 +41153,13 @@
               "name": "requires",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowRequirements"
+            },
+            {
+              "name": "secrets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "reliant.v1.SecretDeclaration"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -41416,6 +41447,7 @@
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ObjectInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Position": "reliant/v1/workflow_v2.proto",
@@ -41432,6 +41464,7 @@
           "reliant.v1.SaveWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.SaveWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
+          "reliant.v1.SecretDeclaration": "reliant/v1/workflow_v2.proto",
           "reliant.v1.SetWorkflowStatusRequest": "reliant/v1/workflow.proto",
           "reliant.v1.SetWorkflowStatusResponse": "reliant/v1/workflow.proto",
           "reliant.v1.SetWorkflowVisibilityRequest": "reliant/v1/workflow.proto",
