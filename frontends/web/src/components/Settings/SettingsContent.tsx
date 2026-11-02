@@ -2,6 +2,7 @@ import { AISettings } from "./AISettings";
 import { AboutSection } from "./AboutSection";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { ChatEditorSettings } from "./ChatEditorSettings";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { AccountSettings } from "./AccountSettings";
 import { PrivacySettings } from "./PrivacySettings";
@@ -72,6 +73,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <AboutSection />;
       case "appearance":
         return <AppearanceSettings />;
+      case "chat-editor":
+        return <ChatEditorSettings />;
       case "notifications":
         return <NotificationSettings />;
       case "privacy":

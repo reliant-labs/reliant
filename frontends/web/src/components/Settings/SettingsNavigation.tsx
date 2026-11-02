@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
@@ -25,12 +25,13 @@ interface SectionGroup {
 }
 
 /**
- * Four groups, each a real category rather than a priority ("Essentials") or a
+ * Five groups, each a real category rather than a priority ("Essentials") or a
  * backend ("Cloud"):
- *   Account  who you are and what you pay for;
- *   AI       what your agents run on and how they are set up;
- *   Work     the projects, branches and machines they work in;
- *   App      how this app looks and behaves.
+ *   Account          who you are and what you pay for;
+ *   AI               what your agents run on and the prompts and tools they get;
+ *   Workflows        how runs are set up and when they need your approval;
+ *   Machines & code  where agents work: machines, repositories and branches;
+ *   App              how this app looks and behaves.
  */
 const sectionGroups: SectionGroup[] = [
   {
@@ -53,32 +54,39 @@ const sectionGroups: SectionGroup[] = [
       { id: "ai", label: "AI providers", icon: Sparkles },
       { id: "mcp", label: "MCP servers", icon: McpIcon },
       { id: "prompts", label: "Prompts", icon: List },
-      { id: "presets", label: "Presets", icon: Layers },
-      { id: "browser", label: "Web browser", icon: Globe },
     ],
   },
   {
-    label: "Work",
+    label: "Workflows",
     items: [
-      { id: "projects", label: "Projects", icon: FolderOpen },
-      { id: "branches", label: "Branches", icon: GitBranch },
-      { id: "automations", label: "Automations", icon: Zap },
+      { id: "presets", label: "Presets", icon: Layers },
+      { id: "automations", label: "Automation approvals", icon: Zap },
+    ],
+  },
+  {
+    label: "Machines & code",
+    items: [
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
       { id: "machines", label: "Machines", icon: Server },
-      { id: "git-connections", label: "GitHub", icon: Github },
       // Tokens exist to let a self-hosted machine or headless daemon connect,
       // so they sit with Machines.
       { id: "tokens", label: "Access tokens", icon: KeyRound },
+      { id: "git-connections", label: "GitHub", icon: Github },
+      { id: "projects", label: "Projects", icon: FolderOpen },
+      { id: "branches", label: "Branches", icon: GitBranch },
     ],
   },
   {
     label: "App",
     items: [
       { id: "appearance", label: "Appearance", icon: Monitor },
-      { id: "shortcuts", label: "Keyboard shortcuts", icon: Keyboard },
+      { id: "chat-editor", label: "Chat & editor", icon: MessageSquare },
+      // Reliant's own browser is app behaviour, not something agents run on.
+      { id: "browser", label: "Built-in browser", icon: Globe },
       { id: "notifications", label: "Notifications", icon: Bell },
+      { id: "shortcuts", label: "Keyboard shortcuts", icon: Keyboard },
       { id: "privacy", label: "Privacy", icon: Lock },
       { id: "about", label: "About", icon: Info },
       { id: "developer", label: "Developer", icon: Code },
@@ -86,14 +94,21 @@ const sectionGroups: SectionGroup[] = [
   },
 ];
 
-function isDevBuild(): boolean {
-  const isElectron = window.RELIANT_CONFIG?.isElectron;
-  return isElectron ? Boolean(window.RELIANT_CONFIG?.isDev) : true;
+/**
+ * Developer settings (Restart Backend, the mock driver, experimental flags)
+ * are for people building Reliant: a Vite dev server, or a runtime config
+ * that says it is a dev build (an unpackaged Electron app sets isDev). A
+ * production web build is neither, so its users never see the section —
+ * SettingsViewerTab sends a deep link to /settings/developer to the first
+ * visible section instead.
+ */
+export function showDeveloperSettings(): boolean {
+  return import.meta.env.DEV || Boolean(window.RELIANT_CONFIG?.isDev);
 }
 
 /** True if the item should appear in the sidebar for the current build. */
 function isItemVisible(item: SectionItem): boolean {
-  if (item.id === "developer") return isDevBuild();
+  if (item.id === "developer") return showDeveloperSettings();
   return true;
 }
 

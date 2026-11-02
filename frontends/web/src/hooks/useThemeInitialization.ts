@@ -12,6 +12,7 @@ import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
 import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { applyThemeMode, followSystemTheme, parseThemeMode } from "../lib/themeMode";
 
 
 const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
@@ -46,16 +47,8 @@ export function useThemeInitialization() {
 
       logger.info("[Theme] Settings sync initialized, applying database settings (fallback)");
 
-      // Apply theme mode (light/dark)
-      const theme = settingsSync.getSetting(SETTINGS_KEYS.THEME, "");
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-        logger.debug("[Theme] Applied dark theme from database");
-      } else if (theme === "light") {
-        document.documentElement.classList.remove("dark");
-        logger.debug("[Theme] Applied light theme from database");
-      }
-      // If no theme saved, keep whatever index.html set (system preference or default)
+      // Apply theme mode: light, dark, or the system's (also when unset).
+      applyThemeMode(parseThemeMode(settingsSync.getSetting(SETTINGS_KEYS.THEME, "")));
       
       // Apply color scheme
       const colorScheme = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black");
@@ -91,4 +84,14 @@ export function useThemeInitialization() {
       cancelled = true;
     };
   }, []);
+
+  // "System" follows the OS while the app is open, not only at load.
+  useEffect(
+    () =>
+      followSystemTheme(
+        () => parseThemeMode(settingsSync.getSetting(SETTINGS_KEYS.THEME, "")),
+        () => window.dispatchEvent(new CustomEvent("theme-applied")),
+      ),
+    [],
+  );
 }

@@ -27,6 +27,22 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   reliantAvailable: false,
   wallet: undefined as undefined | { wallet: { balanceUsdNanos: bigint } },
+  // The URL's search params, as the mocked router serves them: AI's tab is `?tab=`.
+  search: {
+    value: {} as Record<string, unknown>,
+    listeners: new Set<() => void>(),
+    get(): Record<string, unknown> {
+      return mocks.search.value;
+    },
+    set(next: Record<string, unknown>) {
+      mocks.search.value = next;
+      mocks.search.listeners.forEach((l) => l());
+    },
+    subscribe(listener: () => void) {
+      mocks.search.listeners.add(listener);
+      return () => mocks.search.listeners.delete(listener);
+    },
+  },
 }));
 
 vi.mock("../../../../api/client", () => ({
@@ -41,7 +57,13 @@ vi.mock("../../../../store/globalDataStore", () => ({
   useModels: () => ({ models: [], loading: false, error: null }),
 }));
 vi.mock("../../../../lib/events", () => ({ getEventBus: () => ({ emit: vi.fn() }) }));
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
+vi.mock("@tanstack/react-router", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    useNavigate: () => mocks.navigate,
+    useSearch: () => useSyncExternalStore(mocks.search.subscribe, mocks.search.get),
+  };
+});
 vi.mock("../../../../hooks", () => {
   const flow = () => ({ start: vi.fn(), cancel: vi.fn(), reset: vi.fn() });
   return {
@@ -103,6 +125,13 @@ beforeEach(() => {
   for (const m of [mocks.listAccounts, mocks.addApiKey, mocks.validateProviderAPIKey, mocks.provisionManagedKey, mocks.navigate]) {
     m.mockReset();
   }
+  mocks.search.value = {};
+  // A same-page navigate updates the search the page reads, as the router would.
+  mocks.navigate.mockImplementation((opts: { to?: string; search?: unknown }) => {
+    if (opts.to === "." && typeof opts.search === "function") {
+      mocks.search.set((opts.search as (prev: Record<string, unknown>) => Record<string, unknown>)(mocks.search.value));
+    }
+  });
   mocks.reliantAvailable = false;
   mocks.wallet = undefined;
   useAuthStore.setState({ session: { access_token: "t" } as never });
@@ -138,6 +167,30 @@ describe("Settings → AI", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: "Local & custom" }));
     expect(screen.getByTestId("local-models")).toBeInTheDocument();
+    // The tab is the URL's, so a link or a refresh lands on it.
+    expect(mocks.search.value.tab).toBe("local");
+  });
+
+  it("opens the tab the URL names, and the arrow keys move between tabs", async () => {
+    mocks.listAccounts.mockResolvedValue([claudeAccount]);
+    mocks.search.value = { tab: "models" };
+    renderWithQuery(<AISettings />);
+
+    const models = screen.getByRole("tab", { name: "Models" });
+    expect(models).toHaveAttribute("aria-selected", "true");
+    expect(models).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", models.id);
+    expect(models).toHaveAttribute("aria-controls", screen.getByRole("tabpanel").id);
+
+    models.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Local & custom" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Local & custom" })).toHaveFocus();
+    await userEvent.keyboard("{Home}");
+    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute("aria-selected", "true");
+    // Providers is the default: it leaves no `?tab=` behind.
+    expect(mocks.search.value.tab).toBeUndefined();
   });
 
   it("lists connected providers as cards with a scoped 'Add another' in each header", async () => {
