@@ -708,7 +708,7 @@ func (d *daemonClient) persistDaemonID(daemonID string) {
 // names a daemon another account owns, and redialing cannot change that.
 func (d *daemonClient) setAsideRefusedDaemonID(err error) bool {
 	reserved := bootstrap.IsReservedDaemonIDError(err)
-	if d.foreignIDSetAside || !(reserved || bootstrap.IsForeignDaemonIDError(err)) {
+	if d.foreignIDSetAside || (!reserved && !bootstrap.IsForeignDaemonIDError(err)) {
 		return false
 	}
 	asserted := strings.TrimSpace(d.currentDaemonID())
