@@ -1,0 +1,184 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// STARTER CODE, NOT A DESIGN. Forge writes this file once and never edits it
+// for an entity. Rewriting it — restyling, regrouping, replacing the whole
+// component — is expected, not a deviation.
+//
+// The entity links come from ENTITY_ROUTES (src/lib/nav-routes_gen.ts, one
+// generated module per entity), so an entity added later is linked without
+// forge touching this file. Filter, reorder or replace that spread freely; a
+// route of your own is one more entry in ALL_ROUTES.
+//
+// Presentation lives in globals.css: this component reads the semantic theme
+// tokens (bg-surface, text-ink, border-border), so rebranding the whole app is
+// a one-file change there rather than an edit here.
+
+"use client";
+
+import { ChevronLeft, LayoutDashboard, Table2 } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+import { ENTITY_ROUTES, type NavRoute } from "@/lib/nav-routes_gen";
+import { useUiStore } from "@/stores/ui-store";
+
+/** One entry in the sidebar. Add, remove and reorder freely. */
+export type RouteSpec = NavRoute;
+
+// The dashboard, then every entity's list page. The dashboard imports this,
+// so pruning here prunes there too.
+export const ALL_ROUTES: RouteSpec[] = [
+  {
+    path: "/",
+    label: "Dashboard",
+    labelLower: "dashboard",
+    slug: "",
+    labelSingular: "Dashboard",
+    hasCreate: false,
+    icon: "dashboard",
+  },
+  ...ENTITY_ROUTES,
+];
+
+const navItems = ALL_ROUTES;
+
+/** Product name and its monogram, for the sidebar brand. Yours to replace with a logo. */
+const APP_NAME = "{{.ProjectName}}";
+const APP_MONOGRAM = APP_NAME.charAt(0).toUpperCase();
+
+function NavIcon({ type }: { type?: string }) {
+  if (type === "dashboard") {
+    return <LayoutDashboard aria-hidden className="h-4 w-4 shrink-0" strokeWidth={1.5} />;
+  }
+  return <Table2 aria-hidden className="h-4 w-4 shrink-0" strokeWidth={1.5} />;
+}
+
+function CollapseIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <ChevronLeft
+      aria-hidden
+      className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : ""}`}
+      strokeWidth={1.5}
+    />
+  );
+}
+
+export function Nav({ variant = "rail" }: { variant?: "rail" | "drawer" }) {
+  const pathname = usePathname();
+  const collapsedPref = useUiStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+
+  // Inside the mobile drawer the nav is never collapsed and never offers the
+  // collapse control: the drawer is already the "small" presentation, and a
+  // rail-within-a-sheet is two mechanisms doing one job.
+  const inDrawer = variant === "drawer";
+  const collapsed = inDrawer ? false : collapsedPref;
+
+  return (
+    <nav
+      className={`flex shrink-0 flex-col bg-surface ${
+        inDrawer
+          ? "h-full w-full"
+          : `hidden border-r border-border transition-[width] duration-200 md:flex ${
+              collapsed ? "w-16" : "w-60"
+            }`
+      }`}
+    >
+      {/*
+        Brand. The monogram stays visible when collapsed so the rail keeps an
+        anchor at the top instead of opening with dead space — and it doubles
+        as the home link, which is where a logo should go anyway.
+      */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 overflow-hidden rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          title={collapsed ? APP_NAME : undefined}
+        >
+          <span
+            aria-hidden
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-on-accent"
+          >
+            {APP_MONOGRAM}
+          </span>
+          {!collapsed && (
+            <span className="truncate text-sm font-semibold tracking-tight text-ink">
+              {APP_NAME}
+            </span>
+          )}
+        </Link>
+      </div>
+
+      {/* Navigation */}
+      <div className="flex-1 overflow-y-auto px-2 py-3">
+        {!collapsed && (
+          <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-ink-subtle">
+            Navigation
+          </p>
+        )}
+        <ul className="space-y-0.5">
+          {navItems.map((item) => {
+            const isActive =
+              pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path));
+            return (
+              <li key={item.path}>
+                <Link
+                  href={item.path}
+                  // aria-current is what a screen reader uses to announce
+                  // "you are here". The background alone conveys it to
+                  // sighted users only.
+                  aria-current={isActive ? "page" : undefined}
+                  title={collapsed ? item.label : undefined}
+                  className={`relative flex items-center rounded-md px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                    collapsed ? "justify-center" : "gap-2.5"
+                  } ${
+                    isActive
+                      ? "bg-accent-surface font-medium text-accent-ink"
+                      : "text-ink-muted hover:bg-surface-muted hover:text-ink"
+                  }`}
+                >
+                  {/*
+                    A 3px rail on the active item. The tinted background
+                    alone is a weak signal once the sidebar has any hover
+                    state — the bar is what reads instantly, and it is the
+                    only cue that survives the collapsed rail.
+                  */}
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-accent"
+                    />
+                  )}
+                  <NavIcon type={item.icon} />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/*
+        Collapse only. The session control and theme toggle live in the top
+        bar (src/components/app_header.tsx): identity belongs in the
+        top-right corner where people look for it, and a control mounted in
+        the sidebar footer disappears entirely when the rail collapses —
+        which is exactly when a user is most likely to be hunting for the
+        way out.
+      */}
+      {inDrawer ? null : (
+        <div className="border-t border-border px-3 py-3">
+          <button
+            onClick={toggleSidebar}
+            className={`flex w-full items-center rounded-md px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink ${
+              collapsed ? "justify-center" : "gap-2.5"
+            }`}
+          >
+            <CollapseIcon collapsed={collapsed} />
+            {!collapsed && "Collapse"}
+          </button>
+        </div>
+      )}
+    </nav>
+  );
+}
