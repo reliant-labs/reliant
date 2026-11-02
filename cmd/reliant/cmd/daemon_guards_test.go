@@ -86,7 +86,7 @@ func TestDaemonGuards_BackgroundIdleReap(t *testing.T) {
 //     (control-plane internal/operators/workspace/daemon_guard_env_test.go);
 //   - Electron spawns it with BackendManager.buildDaemonEnv, which sets none
 //     either and passes on a value the user exported — pinned by
-//     electron/test/backend-manager-daemon-env.test.js.
+//     electron/test/backend-manager-instance-identity.test.js ("The daemon's environment").
 //
 // The default is written three times (the proto, the KCL schema rendered
 // from it, and shell.DefaultIdleReap); this pins the rendered one to the
