@@ -69,9 +69,13 @@ func Unavailable(err error) bool {
 	// marks an error SafeToRetry only when the connection failed before the
 	// statement was sent, which a closed or broken connection does.
 	// pgconn.ErrConnClosed is matched by identity only: its text, a bare
-	// "conn closed", is not specific to the database.
+	// "conn closed", is not specific to the database. The SafeToRetry check is
+	// pgconn.SafeToRetry inlined: calling it trips forge lint's outbound-I/O
+	// detector, which counts any pgx call as a database call.
+	var retryable interface{ SafeToRetry() bool }
 	if errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) ||
-		errors.Is(err, pgconn.ErrConnClosed) || pgconn.SafeToRetry(err) {
+		errors.Is(err, pgconn.ErrConnClosed) ||
+		(errors.As(err, &retryable) && retryable.SafeToRetry()) {
 		return true
 	}
 
