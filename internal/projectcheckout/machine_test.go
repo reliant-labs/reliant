@@ -139,3 +139,18 @@ func TestRebase_TheCreationPathOfARunInFlightIsMovedOntoThisMachine(t *testing.T
 	assert.Equal(t, "/home/workspace/projects/cp/svc", cloud.Rebase(mac.Path+"/svc"))
 	assert.Equal(t, "/home/workspace/projects/cp", cloud.Rebase(mac.Path))
 }
+
+// A project opened at the home directory has every Reliant worktree under its
+// creation path. A branch worktree's path is never moved into the machine's
+// main checkout: the branch chat would then run on the main checkout.
+func TestRebase_NeverMovesABranchWorktreeUnderARecognisedRoot(t *testing.T) {
+	home := &db.Project{ID: "p-home", UserID: "u", Name: "home", Path: "/home/creator"}
+	f := fleet{rows: []*core.ProjectDaemon{installed("cloud", "/home/workspace/projects/home")}}
+	cloud, err := On(context.Background(), f, "u", home, "cloud", "use it")
+	require.NoError(t, err)
+
+	wt := "/home/creator/.reliant/worktrees/wt1"
+	assert.Equal(t, wt, cloud.Rebase(wt))
+	assert.Equal(t, wt+"/svc", cloud.Rebase(wt+"/svc"))
+	assert.Equal(t, "/home/workspace/projects/home/src", cloud.Rebase("/home/creator/src"), "the rest of the creation path still moves")
+}

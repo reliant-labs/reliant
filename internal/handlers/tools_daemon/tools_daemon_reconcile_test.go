@@ -172,6 +172,72 @@ func TestReconcileProjectDaemonsNeverOverwritesTheMachinesRecord(t *testing.T) {
 	require.Equal(t, fresh.Path, rowOf(fresh).Path)
 }
 
+// A clone whose outcome was lost (the machine suspended mid-clone) would hold
+// its row in "installing" for good, and every machine call on that machine
+// would be refused with "still being cloned". Past staleInstallAfter the
+// connect reconcile settles it from the row's OWN path: installed when the
+// checkout landed there, failed (so the refusal offers to clone again) when
+// nothing did. A clone queued recently — a re-clone included — is left to its
+// own outcome.
+func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const userID = "reconcile-stale-user"
+	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
+	now := time.Now().UTC()
+	project := func(name string) *db.Project {
+		p := &db.Project{ID: uuid.NewString(), UserID: userID, Name: name,
+			Path: "/home/workspace/projects/" + name + "-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
+		require.NoError(t, repo.CreateProject(ctx, p))
+		return p
+	}
+	landed, lost, requeued, recent := project("landed"), project("lost"), project("requeued"), project("recent")
+	// Each clone targets its own path on the machine, not the creation path.
+	clonePath := func(p *db.Project) string { return "/srv/clones/" + p.ID }
+	for _, p := range []*db.Project{landed, lost, requeued, recent} {
+		require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, daemonID, clonePath(p), nil, "clone:"+p.ID))
+	}
+	age := func(p *db.Project) {
+		_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours' WHERE project_id = ? AND daemon_id = ?`, p.ID, daemonID).Exec(ctx)
+		require.NoError(t, err)
+	}
+	age(landed)
+	age(lost)
+	age(requeued)
+	// A re-clone of a row queued long ago is a new clone: queued now.
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, requeued.ID, daemonID, clonePath(requeued), nil, "clone-again:"+requeued.ID))
+
+	var checked []string
+	onDisk := func(_ context.Context, path string) (projectPathState, error) {
+		checked = append(checked, path)
+		return projectPathState{Exists: path == clonePath(landed)}, nil
+	}
+	_, added, err := reconcileProjectDaemons(ctx, repo, daemonID, userID, onDisk)
+	require.NoError(t, err)
+	require.Equal(t, []string{clonePath(landed)}, added, "the settled checkout is watched from now")
+	require.NotContains(t, checked, landed.Path, "a clone is judged at its own path, never the creation path")
+
+	rowOf := func(p *db.Project) *core.ProjectDaemon {
+		rows, err := repo.ListProjectDaemonsForProject(ctx, p.ID)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		return rows[0]
+	}
+	require.Equal(t, core.ProjectInstallInstalled, rowOf(landed).InstallState)
+	require.Equal(t, clonePath(landed), rowOf(landed).Path)
+	require.Equal(t, core.ProjectInstallFailed, rowOf(lost).InstallState)
+	require.Equal(t, staleInstallReason, rowOf(lost).InstallError)
+	require.Equal(t, core.ProjectInstallInstalling, rowOf(requeued).InstallState, "a re-clone queued just now is not stale")
+	require.Equal(t, core.ProjectInstallInstalling, rowOf(recent).InstallState, "a clone queued just now settles through its own outcome")
+
+	// A late outcome still lands on the row settled as failed.
+	require.NoError(t, repo.ResolveQueuedProjectDaemon(ctx, "clone:"+lost.ID, ""))
+	require.Equal(t, core.ProjectInstallInstalled, rowOf(lost).InstallState)
+}
+
 // A checkout the connect reconcile records gets its project config (skills,
 // memory, MCP servers) loaded and watched this session. Registration asked
 // only for the checkouts the machine had on record before the pass, so

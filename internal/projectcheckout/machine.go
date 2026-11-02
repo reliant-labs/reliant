@@ -64,6 +64,11 @@ func ForMachine(ctx context.Context, r Reader, machines daemonplacement.Machines
 // run started before checkouts were resolved per machine carries it as its
 // path, and it is moved onto this machine's checkout like any other. It is
 // never the answer; the result is always under t.Path.
+//
+// A branch worktree is never rebased, even when it lies under a recognised
+// root: a project opened at the home directory has every Reliant worktree
+// (~/.reliant/worktrees/<id>) under its creation path, and moving one into
+// the main checkout would run a branch chat on the main checkout.
 func (t Target) Rebase(path string) string {
 	if path == "" {
 		return t.Path
@@ -90,10 +95,23 @@ func (t Target) Rebase(path string) string {
 		return path
 	}
 	rel, err := filepath.Rel(best, clean)
-	if err != nil {
+	if err != nil || inWorktreesDir(rel) {
 		return path
 	}
 	return t.Join(rel)
+}
+
+// inWorktreesDir reports whether rel, a path relative to a checkout root,
+// enters a .reliant/worktrees directory: where the daemon makes branch
+// worktrees (<HOME>/.reliant/worktrees/<id>), never part of a checkout.
+func inWorktreesDir(rel string) bool {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] == ".reliant" && parts[i+1] == "worktrees" {
+			return true
+		}
+	}
+	return false
 }
 
 // notOnMachine is NotOnError's cause: errors.Is(err, ErrNoCheckout) holds, so

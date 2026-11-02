@@ -43,6 +43,7 @@ const REASON_LABEL: Record<string, string> = {
   "files-outside-checkout": "Has files outside its repositories",
   "shared-with-live-workspace": "Used by an open workspace",
   "no-checkout-on-record": "Its machine has no checkout of the project",
+  "no-machine-on-record": "No machine on record",
   unmanaged: "Not managed by Reliant",
   quarantined: "Parked in quarantine",
 };

@@ -1103,6 +1103,15 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
+// FailProjectDaemonInstall settles a clone still installing as failed: one
+// whose outcome was lost.
+func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+}
+
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")

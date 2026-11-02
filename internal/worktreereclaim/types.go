@@ -172,6 +172,11 @@ const (
 	// the server, which never sends such a row to be removed: it never
 	// guesses a repository path (projects.path is another machine's).
 	ReasonNoCheckout HeldReason = "no-checkout-on-record"
+	// ReasonNoMachine: no machine is on record for the archived workspace (a
+	// legacy row, or its machine was removed). Decided by the server, which
+	// sends it only as a find; the connected machine that still has its
+	// folder claims it, and it is settled through that machine's checkout.
+	ReasonNoMachine HeldReason = "no-machine-on-record"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
 	// ReasonStale: the request's fence no longer matches the lock.

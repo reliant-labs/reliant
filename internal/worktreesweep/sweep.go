@@ -875,6 +875,20 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		// sweep never guesses one. An archived row is kept; a live one is
 		// only locked.
 		noCheckout := c.ProjectPath == ""
+		if noCheckout && state == worktreereclaim.StateArchived && ptrString(wt.DaemonID) == "" {
+			// No machine on record (a legacy row, or one whose machine was
+			// removed): kept, and asked only whether this machine has its
+			// folder, so the one that still does claims it (apply ->
+			// AdoptWorktreeDaemon) and the next pass settles it through that
+			// machine's checkout. Sent archived WITHOUT a fence: no daemon
+			// release removes, locks or probes an archived workspace whose
+			// request carries no fence (worktreereclaim: held unverified), so
+			// this is a find and never a removal.
+			holds = append(holds, sharedHold{cand: c, reason: worktreereclaim.ReasonNoMachine,
+				detail: "no machine is on record for it, so its repositories cannot be checked; it is cleaned up once a machine that still has its folder connects"})
+			req.Worktrees = append(req.Worktrees, worktreereclaim.Worktree{ID: wt.ID, Path: wt.Path, State: worktreereclaim.StateArchived, BaseBranch: wt.BaseBranch})
+			continue
+		}
 		if noCheckout && state == worktreereclaim.StateArchived {
 			logging.InfoContext(ctx, "[WorktreeSweep] no installed checkout of the project on the workspace's machine on record; keeping it",
 				"worktreeID", wt.ID, "projectID", wt.ProjectID, "daemonID", ptrString(wt.DaemonID))
@@ -1044,6 +1058,9 @@ func (s *Sweeper) send(ctx context.Context, t target, cmd string, timeoutMs int3
 // whatever metadata is stored NOW, so it never overwrites a concurrent update
 // and never records an outcome against a row that is no longer archived.
 func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core.Worktree, projectPath string, r worktreereclaim.Result, forced bool) {
+	// The find describe sends for an archived row with no machine on record,
+	// told apart before anything below can record an owner.
+	find := seen.DaemonID == nil && seen.DeletedAt != nil
 	switch r.Outcome {
 	case worktreereclaim.OutcomeForeign:
 		return
@@ -1082,6 +1099,21 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			// The persisted owner, which another resolver may have set first.
 			wt.DaemonID = &recorded
 		}
+	}
+	if find {
+		// Its answer is only whether this machine has the folder.
+		// Never recorded as the row's outcome. A row this machine just
+		// claimed is due again at once, to be settled through its checkout.
+		if wt.DaemonID != nil {
+			s.mergeMetaIf(ctx, wt, func(m *core.CleanupMetadata, archived bool) bool {
+				if !archived || m.HeldReason != string(worktreereclaim.ReasonNoMachine) {
+					return false
+				}
+				m.HeldReason, m.HeldDetail, m.CheckedAt, m.Rechecks, m.Transient = "", "", nil, 0, ""
+				return true
+			})
+		}
+		return
 	}
 	if wt.DeletedAt == nil {
 		if r.Outcome == worktreereclaim.OutcomeProbeInconclusive {

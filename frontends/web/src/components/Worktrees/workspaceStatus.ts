@@ -203,6 +203,7 @@ const HELD_LABEL: Record<string, string> = {
   "files-outside-checkout": "has files outside its repositories",
   "shared-with-live-workspace": "used by an open workspace",
   "no-checkout-on-record": "its machine has no checkout of the project",
+  "no-machine-on-record": "no machine on record",
   unmanaged: "not managed by Reliant",
   quarantined: "parked in quarantine",
 };

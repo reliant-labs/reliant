@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -92,6 +93,45 @@ func TestExecuteTools_AChatThatMovedMachinesRunsAtTheNewMachinesCheckout(t *test
 	assert.Equal(t, cloudDir, req.ProjectPath, "the project root a daemon-side tool sees is its own")
 	require.NotNil(t, req.DaemonSelector)
 	assert.Equal(t, "cloud-box", req.DaemonSelector.ID)
+}
+
+// A project opened at the home directory has its Reliant worktrees under its
+// creation path (~/.reliant/worktrees/<id>). A branch chat's run path is its
+// worktree, and it runs there on the worktree's owner — never rebased into the
+// owner's main checkout, which would run the branch chat on the main checkout.
+func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testing.T) {
+	f := newChatCheckoutFixture(t)
+	cloudDir := t.TempDir()
+	f.machine(t, "cloud-box", cloudDir)
+	ctx := context.Background()
+	owner := "cloud-box"
+	now := time.Now().UTC()
+	wt := &db.Worktree{
+		ID: "wt-" + uuid.NewString(), Name: "feature", Path: f.creationDir + "/.reliant/worktrees/wt1",
+		Branch: "feature", BaseBranch: "main", ProjectID: f.project, ChatID: &f.chat, DaemonID: &owner,
+		Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}
+	require.NoError(t, os.MkdirAll(wt.Path, 0o755))
+	require.NoError(t, f.h.Repo().CreateWorktree(ctx, wt))
+	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	require.NoError(t, err)
+	chat.WorktreeID = &wt.ID
+	require.NoError(t, f.h.Repo().UpdateChat(ctx, chat))
+
+	executor := &daemonLikeExecutor{}
+	var output ExecuteToolsOutput
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+		ChatID: f.chat, Thread: f.chat, ProjectPath: wt.Path,
+		ToolCalls: []message.ToolCall{bashCall("pwd")},
+	}, &output))
+
+	require.Len(t, output.ToolResults, 1)
+	require.False(t, output.ToolResults[0].GetIsError(), output.ToolResults[0].GetContent())
+	require.Len(t, executor.requests, 1)
+	req := executor.requests[0]
+	assert.Equal(t, wt.Path, req.WorktreePath, "the branch chat runs in its own worktree")
+	require.NotNil(t, req.DaemonSelector)
+	assert.Equal(t, "cloud-box", req.DaemonSelector.ID, "on the worktree's owner")
 }
 
 // A chat on a machine with no checkout is not a stuck run: each machine call
@@ -251,6 +291,21 @@ func TestResolveCallCheckout_NoMachineChosenPinsTheCallToTheCheckoutsMachine(t *
 	// the oldest install's machine.
 	byName := &toolexec.DaemonSelector{Name: "build-box"}
 	assert.Same(t, byName, resolveCallCheckout(context.Background(), rows, nil, project, byName, true).pin(byName))
+}
+
+// A run path in the call's branch worktree is never rebased, wherever the
+// worktree lives: under the creation path it is still the owner's directory.
+func TestCallCheckoutPath_NeverRebasesTheBranchWorktree(t *testing.T) {
+	t.Parallel()
+	rows := checkoutRows{{DaemonID: "cloud", Path: "/srv/p", InstallState: core.ProjectInstallInstalled}}
+	project := &db.Project{ID: "p", UserID: "u", Name: "p", Path: "/Users/creator"}
+	c := resolveCallCheckout(context.Background(), rows, nil, project, nil, false)
+	require.Equal(t, "/srv/p", c.main.Path)
+
+	wt := "/Users/creator/worktrees/feature"
+	assert.Equal(t, wt, c.path(wt, wt))
+	assert.Equal(t, wt+"/svc", c.path(wt+"/svc", wt))
+	assert.Equal(t, "/srv/p/src", c.path("/Users/creator/src", wt), "a path outside the worktree still moves")
 }
 
 // namedMachineRouter resolves a selector by name the way the real router does.

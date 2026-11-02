@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -94,9 +96,13 @@ func (c callCheckout) pin(selector *toolexec.DaemonSelector) *toolexec.DaemonSel
 
 // path is the directory a call runs in: the run's path rebased onto this
 // machine's checkout, else the branch worktree's, else the checkout itself.
-// A thread-bound worktree is the caller's to apply before this.
+// A thread-bound worktree is the caller's to apply before this. A run path in
+// the branch worktree is never rebased: that path is true on the worktree's
+// owner, wherever the project's checkouts are.
 func (c callCheckout) path(runPath, branchWorktreePath string) string {
 	switch {
+	case runPath != "" && branchWorktreePath != "" && pathWithin(branchWorktreePath, runPath):
+		return runPath
 	case runPath != "" && c.main.Path != "":
 		return c.main.Rebase(runPath)
 	case runPath != "":
@@ -116,4 +122,10 @@ func (c callCheckout) path(runPath, branchWorktreePath string) string {
 func missingRefusal(err error) string {
 	return svcerr.ToConnect(err).Message() + ". No machine tools ran. Retrying will not help: stop calling tools that need the machine, " +
 		"tell the user exactly this, and ask them to switch this chat's machine or clone the project; it works on the next turn once they have."
+}
+
+// pathWithin reports whether p is root or lies under it.
+func pathWithin(root, p string) bool {
+	root, p = filepath.Clean(root), filepath.Clean(p)
+	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
 }
