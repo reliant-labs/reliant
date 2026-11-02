@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -10,20 +10,14 @@ import { createPortal } from "react-dom";
  *   - Focus moves in on open — to an element that took `autoFocus`, else the
  *     body's first focusable, else the footer's, else the panel. Never the
  *     close button: Enter on a dialog that just opened must not dismiss it.
- *   - Tab and Shift+Tab cycle inside the dialog. The trap moves focus on every
- *     Tab, because Safari's default Tab order skips links and would carry focus
- *     out past a trailing one. It stands aside for a Tab something inside
- *     already handled (preventDefault) and for a non-forge dialog stacked above.
+ *   - Tab and Shift+Tab cycle inside the dialog.
  *   - Escape closes it, unless something inside already handled the key (an
  *     open menu calls preventDefault). Only the TOP dialog responds when
  *     dialogs stack; the one underneath keeps its focus trap off until the
  *     top one closes.
- *   - Closing returns focus to the control the user activated to open it,
- *     else to whatever had focus before the dialog opened (Safari never
- *     focuses a button on click, so focus alone would name <body> or the field
- *     the user was typing in). If that element is gone (the menu item that
- *     opened the dialog unmounted), `fallbackFocus` decides where focus goes
- *     instead.
+ *   - Closing returns focus to whatever had it before the dialog opened. If
+ *     that element is gone (the menu item that opened the dialog unmounted),
+ *     `fallbackFocus` decides where focus goes instead.
  *   - The page behind does not scroll. The lock is counted, so a nested
  *     dialog closing does not unlock the page under the one still open.
  *   - It portals to <body>, so a transformed or `overflow: hidden` ancestor
@@ -31,9 +25,9 @@ import { createPortal } from "react-dom";
  *     `portal={false}` renders it in place (a preview harness pinning it in a
  *     box).
  *
- * Layout: portalled panels fit the visible viewport minus safe-area gutters,
- * including when the keyboard opens or the user zooms/pans. The body scrolls,
- * so a long form's footer — its primary action — stays within that rectangle. `sheetOnMobile` (default on for lg and wider, whose forms are too
+ * Layout: the panel is at most 90% of the dynamic viewport tall and the body
+ * scrolls, so a long form's footer — its primary action — never scrolls out
+ * of reach. `sheetOnMobile` (default on for lg and wider, whose forms are too
  * tall for a floating card on a phone) makes it a full-screen sheet below
  * the `sm` breakpoint.
  */
@@ -78,45 +72,6 @@ const sizeStyles: Record<NonNullable<ModalProps["size"]>, string> = {
 const openStack: symbol[] = [];
 const isTop = (id: symbol) => openStack[openStack.length - 1] === id;
 
-// The control the user activated in the current task. Safari (macOS and iOS)
-// never focuses a button on click or tap, so document.activeElement cannot be
-// trusted to name the opener. The click is recorded in the capture phase,
-// ahead of whatever handler opens the dialog, and forgotten after the task:
-// a later programmatic open must not inherit a stale control.
-const ACTIVATABLE =
-  'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
-let activated: HTMLElement | null = null;
-let clearScheduled = false;
-let trackedDocument: Document | null = null;
-
-function trackActivation() {
-  if (typeof document === "undefined" || trackedDocument === document) return;
-  trackedDocument = document;
-  document.addEventListener(
-    "click",
-    (e) => {
-      activated = e.target instanceof Element ? e.target.closest<HTMLElement>(ACTIVATABLE) : null;
-      if (clearScheduled) return;
-      clearScheduled = true;
-      setTimeout(() => {
-        activated = null;
-        clearScheduled = false;
-      }, 0);
-    },
-    true,
-  );
-}
-trackActivation();
-
-function findOpener(): HTMLElement | null {
-  if (activated?.isConnected) return activated;
-  // <body> is not an opener: focus falls back to it when the focused
-  // element unmounts in the same render that opens the dialog (a menu
-  // item that closes its menu), so treat it as "the opener is gone".
-  const active = document.activeElement;
-  return active instanceof HTMLElement && active !== document.body ? active : null;
-}
-
 // The body scroll lock, counted across stacked dialogs.
 let lockCount = 0;
 let savedOverflow = "";
@@ -128,48 +83,6 @@ function lockScroll() {
 }
 function unlockScroll() {
   if (--lockCount === 0) document.body.style.overflow = savedOverflow;
-}
-
-// Fixed portal coordinates are CSS pixels in the layout viewport. Follow the
-// visible rectangle (keyboard, browser chrome and zoom/pan), never its scale:
-// counter-scaling would undo the user's accessibility zoom.
-function usePortalViewport(enabled: boolean): React.CSSProperties | undefined {
-  const [bounds, setBounds] = useState<React.CSSProperties>();
-  useLayoutEffect(() => {
-    if (!enabled) return;
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      setBounds(undefined); // CSS 100dvh remains the progressive fallback.
-      return;
-    }
-    let frame: number | undefined;
-    const measure = () => {
-      setBounds({
-        top: viewport.offsetTop,
-        left: viewport.offsetLeft,
-        right: "auto",
-        bottom: "auto",
-        width: viewport.width,
-        height: viewport.height,
-      });
-    };
-    const schedule = () => {
-      if (frame !== undefined) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = undefined;
-        measure();
-      });
-    };
-    measure();
-    viewport.addEventListener("resize", schedule);
-    viewport.addEventListener("scroll", schedule);
-    return () => {
-      viewport.removeEventListener("resize", schedule);
-      viewport.removeEventListener("scroll", schedule);
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
-    };
-  }, [enabled]);
-  return enabled ? bounds : undefined;
 }
 
 export default function Modal({
@@ -189,7 +102,6 @@ export default function Modal({
   portal = true,
 }: ModalProps) {
   const sheet = sheetOnMobile ?? (size === "lg" || size === "xl" || size === "full");
-  const viewportStyle = usePortalViewport(open && portal);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -200,25 +112,24 @@ export default function Modal({
   const descriptionId = useId();
   // Read through refs so a new onClose identity on every parent render does
   // not tear the effect down — which would unlock and relock the page (a
-  // visible flash) and re-run initial focus. The refs follow the props in a
-  // layout effect, not during render (a render may be thrown away, and React
-  // forbids touching refs there); layout effects run before the effect
-  // below and before any event the committed dialog can receive.
+  // visible flash) and re-run initial focus.
   const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const fallbackFocusRef = useRef(fallbackFocus);
-  useLayoutEffect(() => {
-    onCloseRef.current = onClose;
-    fallbackFocusRef.current = fallbackFocus;
-  });
+  fallbackFocusRef.current = fallbackFocus;
 
   useEffect(() => {
-    trackActivation();
     if (!open) return;
     const id = Symbol("modal");
     openStack.push(id);
     lockScroll();
 
-    const previouslyFocused = findOpener();
+    // <body> is not an opener: focus falls back to it when the focused
+    // element unmounts in the same render that opens the dialog (a menu
+    // item that closes its menu), so treat it as "the opener is gone".
+    const active = document.activeElement;
+    const previouslyFocused =
+      active instanceof HTMLElement && active !== document.body ? active : null;
     const panel = panelRef.current;
     if (panel && !panel.contains(document.activeElement)) {
       const initial =
@@ -236,29 +147,30 @@ export default function Modal({
         onCloseRef.current();
         return;
       }
-      // A control that uses Tab itself (an editor indenting) already said so.
-      if (e.key !== "Tab" || e.defaultPrevented) return;
+      if (e.key !== "Tab") return;
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       const active = document.activeElement;
       // A dialog stacked above this one that is not a forge Modal (an image
       // viewer, a command palette) owns its own Tab order.
       const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
       if (owner && owner !== panelRef.current) return;
-      e.preventDefault();
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
-      if (focusable.length === 0) {
-        panelRef.current.focus();
-        return;
+      const inside = panelRef.current.contains(active);
+      if (e.shiftKey && (!inside || active === first || active === panelRef.current)) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault();
+        first?.focus();
       }
-      const index = focusable.indexOf(active as HTMLElement);
-      const next =
-        index === -1
-          ? e.shiftKey
-            ? focusable.length - 1
-            : 0
-          : (index + (e.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
-      focusable[next]!.focus();
     }
     document.addEventListener("keydown", onKeyDown);
 
@@ -281,16 +193,14 @@ export default function Modal({
     // dismissal, which is the Escape handler above; without that handler a
     // backdrop-click-to-close modal would be a keyboard trap.
     //
-    // Safe-area padding is inside the measured border box. Panel percentages
-    // resolve against the remaining content height, not the layout viewport.
+    // h-[100dvh] alongside inset-0: a fixed inset-0 box resolves against the
+    // LARGEST mobile viewport, so centring in it alone puts the panel below
+    // the visible centre while browser chrome is showing.
     <div
       ref={overlayRef}
       role="presentation"
-      style={viewportStyle}
-      className={`fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-black/50 backdrop-blur-sm ${
-        portal
-          ? `box-border [--modal-gutter:1rem] sm:[--modal-gutter:1.5rem] pt-[max(var(--modal-gutter),env(safe-area-inset-top,0px))] pr-[max(var(--modal-gutter),env(safe-area-inset-right,0px))] pb-[max(var(--modal-gutter),env(safe-area-inset-bottom,0px))] pl-[max(var(--modal-gutter),env(safe-area-inset-left,0px))] ${sheet ? "max-sm:[--modal-gutter:0px]" : ""}`
-          : `p-4 sm:p-6 ${sheet ? "max-sm:p-0" : ""}`
+      className={`fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-black/50 p-4 backdrop-blur-sm sm:p-6 ${
+        sheet ? "max-sm:p-0" : ""
       }`}
       onClick={(e) => {
         if (closeOnOverlay && e.target === overlayRef.current) onCloseRef.current();
@@ -299,9 +209,9 @@ export default function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`flex ${portal ? "max-h-full" : "max-h-[90dvh]"} w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
+        className={`flex max-h-[90dvh] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
           sheet
-            ? `${portal ? "max-sm:h-full max-sm:max-h-full" : "max-sm:h-[100dvh] max-sm:max-h-[100dvh]"} max-sm:max-w-none max-sm:rounded-none`
+            ? "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none max-sm:rounded-none"
             : ""
         } ${className ?? ""}`}
         role="dialog"

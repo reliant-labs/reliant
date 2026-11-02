@@ -50,6 +50,11 @@ separately from authenticated backend journeys.
 Dialogs have an accessible name, initial focus, a contained tab sequence, Escape
  dismissal, and focus restoration. Controls must be centre-hit-testable and fully
 reachable, not merely present in the DOM. Native text selection remains available.
+`forge-ui/modal.tsx` stays a verbatim Forge install. Safari never focuses a button
+on tap, so a sheet's wrapper calls `focusDialogOpener()` (`src/lib/dialogOpener.ts`)
+in a layout effect, as `ComposerSheet` does, to make Forge's Modal restore focus to
+the control that opened it. A sheet whose last focusable is a link needs its own Tab
+trap like `MobileNavDrawer`'s, because WebKit's Tab order skips links.
 Rotation, resizing, keyboard opening and sheet dismissal must preserve drafts,
 uploads, selected workflow/parameters, pending question answers and chat identity.
 Failures retain user input and offer recovery; repeated submission must not create

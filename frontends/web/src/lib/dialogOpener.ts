@@ -44,3 +44,14 @@ export function dialogOpener(): HTMLElement | null {
   const active = document.activeElement;
   return active instanceof HTMLElement && active !== document.body ? active : null;
 }
+
+/**
+ * Put focus on the control that opened a dialog, so a Modal that records
+ * `document.activeElement` on open records the control rather than <body>.
+ * Call it in a layout effect of the dialog's wrapper: it runs before the
+ * Modal's own effect, in the same commit as the activating click.
+ */
+export function focusDialogOpener(): void {
+  const opener = dialogOpener();
+  if (opener && opener !== document.activeElement) opener.focus({ preventScroll: true });
+}
