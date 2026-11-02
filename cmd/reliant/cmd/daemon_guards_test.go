@@ -4,12 +4,14 @@ package cmd
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
@@ -19,7 +21,7 @@ import (
 // guard policy it hands the daemon runtime.
 func guardsFor(t *testing.T, env map[string]string) daemonruntime.Guards {
 	t.Helper()
-	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE", "RELIANT_COMMAND_THREADS"} {
+	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE", "RELIANT_COMMAND_THREADS", "RELIANT_BACKGROUND_IDLE_REAP"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range env {
@@ -56,6 +58,19 @@ func TestDaemonGuards_CommandThreads(t *testing.T) {
 	assert.Equal(t, 4096, g.CommandThreads)
 	assert.Contains(t, proctree.CommandThreadsSetting, "command_threads")
 	assert.Contains(t, proctree.CommandThreadsSetting, "RELIANT_COMMAND_THREADS")
+}
+
+// background_idle_reap, loaded the way `daemon start` loads it, reaches the
+// runtime's idle reaper: unset is the 4h default, a duration is that window,
+// and an explicit 0 turns idle reaping off rather than reading as "unset".
+func TestDaemonGuards_BackgroundIdleReap(t *testing.T) {
+	assert.Equal(t, shell.DefaultIdleReap, guardsFor(t, nil).IdleReapWindow())
+	assert.Equal(t, 4*time.Hour, shell.DefaultIdleReap, "the owner's window (2026-11-02)")
+	assert.Equal(t, 90*time.Minute, guardsFor(t, map[string]string{"RELIANT_BACKGROUND_IDLE_REAP": "90m"}).IdleReapWindow())
+	assert.Zero(t, guardsFor(t, map[string]string{"RELIANT_BACKGROUND_IDLE_REAP": "0"}).IdleReapWindow(), "0 is off")
+	// The runtime's own zero value (an entry point that sets no Guards) is
+	// the default, not off.
+	assert.Equal(t, shell.DefaultIdleReap, daemonruntime.Guards{}.IdleReapWindow())
 }
 
 func TestDaemonGuards_HeavyCommandsReplaceOrClearTheDefault(t *testing.T) {

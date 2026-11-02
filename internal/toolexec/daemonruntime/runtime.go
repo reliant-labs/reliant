@@ -269,8 +269,8 @@ type Guards struct {
 	BackgroundIdleReap time.Duration
 }
 
-// backgroundIdleReap is the idle reaper's window; zero is off.
-func (g Guards) backgroundIdleReap() time.Duration {
+// IdleReapWindow is the idle reaper's window; zero is off.
+func (g Guards) IdleReapWindow() time.Duration {
 	switch {
 	case g.BackgroundIdleReap < 0:
 		return 0
@@ -382,7 +382,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	go client.procGuard.Run(ctx)
 	// Stop the background processes finished chats left behind, once idle
 	// for the window (shell/background_reaper.go).
-	idleReap := opts.Guards.backgroundIdleReap()
+	idleReap := opts.Guards.IdleReapWindow()
 	logging.InfoContext(ctx, logPrefix+" Background process idle reaper", "idle_after", idleReap.String())
 	go shell.GetBackgroundManager().RunReaper(ctx, shell.ReaperConfig{IdleAfter: idleReap})
 
