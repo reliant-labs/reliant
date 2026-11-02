@@ -25,7 +25,7 @@ import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
-import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
+import { isLive, LEAVE_SESSIONS, noReplayReason, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionDetailProps {
@@ -165,9 +165,11 @@ function SessionBody({
             />
           </Card>
         ) : (
-          <p role="status" data-testid="session-no-replay" className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <VideoOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            No replay was recorded for this session.
+          <p role="status" data-testid="session-no-replay" className="flex items-start gap-1.5 text-xs text-ink-muted">
+            <VideoOff className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              <span className="text-ink">No replay was recorded for this session.</span> {noReplayReason(session)}
+            </span>
           </p>
         )}
         <Card padding="md" data-testid="session-timeline-card">
