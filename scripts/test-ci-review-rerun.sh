@@ -33,7 +33,9 @@ case "$*" in
     # A re-run still in flight (the caller's own run is in flight too, legitimately).
     busy=$(jq '[.runs[] | select(.status != "completed" and .run_attempt > 1)] | length' "$st")
     echo "rerun $id busy=$busy" >> "$FX/log"
-    save --argjson id "$id" --arg to "${RERUN_TO:-success}" '.runs |= map(if .id == $id then
+    to=${RERUN_TO:-success}
+    if [ -n "${RERUN_FIRST:-}" ] && [ ! -e "$FX/first" ]; then to=$RERUN_FIRST; touch "$FX/first"; fi
+    save --argjson id "$id" --arg to "$to" '.runs |= map(if .id == $id then
       .status = "in_progress" | .conclusion = null | .run_attempt += 1 | .ticks = 2 | .next = $to else . end)' ;;
   "api repos/acme/app/pulls/7"*) printf '%s\n' "$PR" | jq -r "$jqexpr" ;;
   *"repos/acme/app/pulls?state=open"*) printf '%s\n' "$PULLS" | jq -r "$jqexpr" ;;
@@ -61,6 +63,7 @@ setup() {
   local IFS=,
   echo "{\"runs\":[$*]}" > "$fx/state.json"
   : > "$fx/log"
+  rm -f "$fx/first"
 }
 reruns() { grep '^rerun' "$fx/log" | cut -d' ' -f2 | paste -sd' ' -; }
 conclusions() { jq -r '[.runs[] | "\(.id):\(.status)/\(.conclusion)"] | join(" ")' "$fx/state.json"; }
@@ -74,17 +77,20 @@ grep -q 'busy=[^0]' "$fx/log" && fail "a re-run started while another was in fli
   fail "every red verdict is green after the heal: $(conclusions)"
 echo "ok: the green run re-runs its head's red and cancelled runs one at a time"
 
-setup "$(run 1 completed failure)" "$(run 2 in_progress - 1 pull_request 99 failure)" "$(run 9 in_progress -)"
+setup "$(run 1 completed failure)" "$(run 2 in_progress - 1 pull_request 2 failure)" "$(run 9 in_progress -)" "$(run 10 in_progress - 1 pull_request 99)"
 heal pr 7 "$head" 9
-[ "$(reruns)" = 1 ] || fail "the green run re-runs only completed runs: got '$(reruns)'"
-grep -q '^get 2$' "$fx/log" && fail "the green run waited on a run still in flight, which may be waiting on it"
-echo "ok: the green run never waits on another run in flight"
+[ "$(reruns)" = "1 2" ] || fail "the green run waits for an earlier run in progress, then re-runs it when it ends red: got '$(reruns)'"
+grep -q '^get 10$' "$fx/log" && fail "the green run waited on a later run, which may be a green run waiting on it"
+[ "$(conclusions)" = "1:completed/success 2:completed/success 9:in_progress/null 10:in_progress/null" ] ||
+  fail "the earlier red runs are green: $(conclusions)"
+echo "ok: the green run waits only for runs created before it"
 
-setup "$(run 1 completed success)" "$(run 2 in_progress - 1 pull_request 3 failure)"
+setup "$(run 1 completed success)" "$(run 2 in_progress - 1 pull_request 3 failure)" "$(run 3 queued - 1 pull_request 99)"
 heal pr 7 "$head"
-[ "$(reruns)" = 2 ] || fail "the re-run workflow waits for a run in flight and re-runs it when it ends red: got '$(reruns)'"
-[ "$(conclusions)" = "1:completed/success 2:completed/success" ] || fail "the late red run is green: $(conclusions)"
-echo "ok: the re-run workflow waits for a run in flight that ends red, then re-runs it"
+[ "$(reruns)" = 2 ] || fail "the sweep waits for a run in progress and re-runs it when it ends red: got '$(reruns)'"
+grep -q '^get 3$' "$fx/log" && fail "the sweep waited on a queued run, which reads the gate when it starts"
+[ "$(conclusions)" = "1:completed/success 2:completed/success 3:queued/null" ] || fail "the late red run is green: $(conclusions)"
+echo "ok: the sweep waits for a run in progress that ends red, then re-runs it"
 
 setup "$(run 1 completed cancelled)" "$(run 2 completed success)"
 GATE_EXIT=1 heal pr 7 "$head"
@@ -105,6 +111,12 @@ setup "$(run 1 completed failure)" "$(run 2 completed cancelled)" "$(run 9 compl
 RERUN_TO=failure heal pr 7 "$head" 9
 [ "$(reruns)" = 1 ] || fail "a re-run that ends red stops the heal: got '$(reruns)'"
 echo "ok: a re-run that ends red again stops the heal"
+
+setup "$(run 1 completed failure)" "$(run 9 completed success)"
+RERUN_FIRST=cancelled heal pr 7 "$head" 9
+[ "$(reruns)" = "1 1" ] || fail "a re-run another healer cancelled is retried: got '$(reruns)'"
+[ "$(conclusions)" = "1:completed/success 9:completed/success" ] || fail "the retried run is green: $(conclusions)"
+echo "ok: a cancelled re-run is retried, not taken as a verdict"
 
 setup "$(run 1 completed failure 4)" "$(run 9 completed success)"
 heal pr 7 "$head" 9

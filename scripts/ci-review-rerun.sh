@@ -12,18 +12,21 @@
 #
 #   ci-review-rerun.sh pr <number> <sha> [<run_id>]
 #       With <run_id>, the caller is that green run of the check (its last
-#       step): the head is known to pass, and only COMPLETED red runs are
-#       re-run, never one still in flight, which may itself be a green run
-#       waiting on its own re-run. Without it (the re-run workflow,
-#       reliant-review-rerun.yml), the head must pass the gate now, and runs in
-#       flight are waited for first: one that started before the marker can end
-#       red after every green run has already looked.
+#       step), so the head is known to pass. Without it, the head must pass the
+#       gate now. Either way a run IN PROGRESS is waited for first, and re-run
+#       if it ends red: it may have read the gate before the marker existed,
+#       after every green run had already looked. (A queued run reads the gate
+#       when it starts, so it passes on its own.) A green run waits only for
+#       runs created BEFORE it, so two green runs never wait on each other, and
+#       a re-run (attempt > 1) heals nothing, so it waits on no one.
 #   ci-review-rerun.sh sweep
-#       every open pull request into main (the scheduled backstop).
+#       every open pull request into main (reliant-review-rerun.yml's
+#       schedule: heads whose runs use an older definition of the check).
 #
 # One re-run at a time per head: a run of the old definition shares the
 # concurrency group reliant-review-<pr>, so two in flight cancel each other.
-# A re-run that ends red again stops the heal: the head's verdict is red now.
+# A re-run that ends red again stops the heal: the head's verdict is red now
+# (a cancelled one is retried, up to RERUN_MAX_ATTEMPTS per run).
 # Merge-group runs are never touched. Exits 0 unless misused: healing is
 # best-effort, and the verdict itself is the gate's.
 set -euo pipefail
@@ -42,7 +45,14 @@ runs() { # <sha>: this head's pull-request runs of the check, oldest first: id s
     sort | cut -f2-
 }
 
-is_red='$3 == "failure" || $3 == "timed_out" || $3 == "cancelled" || $3 == "startup_failure"'
+inflight() { # <calling run id> < runs: the first run in progress created before the caller: id attempt
+  awk -F'\t' -v self="$1" '$1 == self { exit } $2 == "in_progress" { print $1 "\t" $4; exit }'
+}
+
+reds() { # <calling run id> < runs: the oldest completed red run but the caller: id conclusion attempt
+  awk -F'\t' -v self="$1" '$1 != self && $2 == "completed" &&
+    ($3 == "failure" || $3 == "timed_out" || $3 == "cancelled" || $3 == "startup_failure") { print $1 "\t" $3 "\t" $4; exit }'
+}
 
 wait_run() { # <id> <min attempt>: wait for that attempt to complete; prints its conclusion
   local deadline=$((SECONDS + wait_max)) st att concl
@@ -64,24 +74,22 @@ heal() { # <pr> <sha> [<calling run id>]
   [ "$head" = "$want" ] || { echo "#$n: its head moved from $want to $head: nothing to heal on the old one"; return 0; }
   [ "$hrepo" = "$repo" ] || { echo "#$n: a fork's head never passes: nothing to heal"; return 0; }
   list=$(runs "$head")
-  if [ -z "$(awk -F'\t' -v self="$self" '$1 != self && ($2 != "completed" || '"$is_red"')' <<<"$list")" ]; then
+  if [ -z "$(inflight "$self" <<<"$list")$(reds "$self" <<<"$list")" ]; then
     echo "#$n: no red verdict on $head"; return 0
   fi
   if [ -z "$self" ] && ! bash "$gate" pr "$n" > /dev/null 2>&1; then
     echo "#$n: pr-review has not passed $head: its red verdicts stand"; return 0
   fi
   while [ "$reruns" -lt "$max_reruns" ]; do
-    list=$(runs "$head" | awk -F'\t' -v self="$self" -v skip="$skip" '$1 != self && index(skip, " " $1 " ") == 0')
-    if [ -z "$self" ]; then
-      busy=$(awk -F'\t' '$2 != "completed" { print $1 "\t" $4; exit }' <<<"$list")
-      if [ -n "$busy" ]; then
-        IFS=$'\t' read -r id att <<<"$busy"
-        echo "#$n: waiting for run $id, still in flight"
-        if ! concl=$(wait_run "$id" "$att"); then skip+="$id "; fi
-        continue
-      fi
+    list=$(runs "$head" | awk -F'\t' -v skip="$skip" 'index(skip, " " $1 " ") == 0')
+    busy=$(inflight "$self" <<<"$list")
+    if [ -n "$busy" ]; then
+      IFS=$'\t' read -r id att <<<"$busy"
+      echo "#$n: waiting for run $id, in progress"
+      if ! concl=$(wait_run "$id" "$att"); then skip+="$id "; fi
+      continue
     fi
-    pick=$(awk -F'\t' '$2 == "completed" && ('"$is_red"') { print $1 "\t" $3 "\t" $4; exit }' <<<"$list")
+    pick=$(reds "$self" <<<"$list")
     [ -n "$pick" ] || { echo "#$n: no red verdict left on $head"; return 0; }
     IFS=$'\t' read -r id concl att <<<"$pick"
     if [ "$att" -ge "$max_attempts" ]; then
@@ -100,7 +108,10 @@ heal() { # <pr> <sha> [<calling run id>]
     fi
     if ! concl=$(wait_run "$id" $((att + 1))); then skip+="$id "; continue; fi
     case $concl in
-      failure | timed_out | cancelled | startup_failure)
+      # Cancelled is not a verdict: another healer's re-run of an old
+      # definition shares its concurrency group. Retry it (bounded above).
+      cancelled) echo "#$n: run $id's re-run was cancelled: retrying"; continue ;;
+      failure | timed_out | startup_failure)
         echo "#$n: run $id re-ran $concl: the head's verdict is red now, so the heal stops"
         return 0 ;;
     esac
