@@ -200,8 +200,10 @@ func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
 	for _, p := range []*db.Project{landed, lost, requeued, recent} {
 		require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, daemonID, clonePath(p), nil, "clone:"+p.ID))
 	}
+	// Queued two hours ago to a machine that was connected then, so the
+	// clone could start at once.
 	age := func(p *db.Project) {
-		_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours' WHERE project_id = ? AND daemon_id = ?`, p.ID, daemonID).Exec(ctx)
+		_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours', clone_started_at = NOW() - interval '2 hours' WHERE project_id = ? AND daemon_id = ?`, p.ID, daemonID).Exec(ctx)
 		require.NoError(t, err)
 	}
 	age(landed)
@@ -236,6 +238,72 @@ func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
 	// A late outcome still lands on the row settled as failed.
 	require.NoError(t, repo.ResolveQueuedProjectDaemon(ctx, "clone:"+lost.ID, ""))
 	require.Equal(t, core.ProjectInstallInstalled, rowOf(lost).InstallState)
+}
+
+// A clone queued to a sleeping machine starts only when the machine wakes, so
+// its stuck-clone timeout counts from that connect, not from the queue time.
+// It used to count from the queue: a machine asleep for more than the timeout
+// woke to the reconcile marking its just-starting clone failed ("did not
+// report back") until the clone's own outcome corrected it. A clone queued to
+// a machine that is connected can start at once, and its clock starts then.
+func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const userID = "reconcile-asleep-user"
+	asleep, awake := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{asleep, awake} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: userID}))
+	}
+	require.NoError(t, repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{DaemonID: awake, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
+	now := time.Now().UTC()
+	p := &db.Project{ID: uuid.NewString(), UserID: userID, Name: "queued",
+		Path: "/home/workspace/projects/queued-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
+	require.NoError(t, repo.CreateProject(ctx, p))
+	clonePath := "/srv/clones/" + p.ID
+	rowOn := func(daemonID string) *core.ProjectDaemon {
+		rows, err := repo.ListProjectDaemonsForDaemon(ctx, daemonID)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		return rows[0]
+	}
+
+	// Queued to the connected machine: it can start now.
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, awake, clonePath, nil, "clone:awake"))
+	require.NotNil(t, rowOn(awake).CloneStartedAt, "a clone queued to a connected machine can start at once")
+
+	// Queued two hours ago to the sleeping machine: it has not started.
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, asleep, clonePath, nil, "clone:asleep"))
+	require.Nil(t, rowOn(asleep).CloneStartedAt, "a clone queued to a sleeping machine waits for it")
+	_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours' WHERE daemon_id = ?`, asleep).Exec(ctx)
+	require.NoError(t, err)
+
+	nothingOnDisk := func(context.Context, string) (projectPathState, error) { return projectPathState{}, nil }
+
+	// The machine wakes. Its clone starts now, so it is not stuck, however
+	// long ago it was queued.
+	_, _, err = reconcileProjectDaemons(ctx, repo, asleep, userID, nothingOnDisk)
+	require.NoError(t, err)
+	woke := rowOn(asleep)
+	require.Equal(t, core.ProjectInstallInstalling, woke.InstallState, "the clone the wake just started is not settled")
+	require.NotNil(t, woke.CloneStartedAt, "the waking connect starts the clone's clock")
+	require.WithinDuration(t, time.Now(), *woke.CloneStartedAt, time.Minute)
+
+	// A later connect within the timeout keeps the clock it started.
+	_, _, err = reconcileProjectDaemons(ctx, repo, asleep, userID, nothingOnDisk)
+	require.NoError(t, err)
+	require.Equal(t, core.ProjectInstallInstalling, rowOn(asleep).InstallState)
+	require.True(t, woke.CloneStartedAt.Equal(*rowOn(asleep).CloneStartedAt), "a connect does not restart a clock already running")
+
+	// The machine suspends mid-clone and the outcome is lost. A connect
+	// more than the timeout after the clone started settles it.
+	_, err = repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET clone_started_at = NOW() - interval '31 minutes' WHERE daemon_id = ?`, asleep).Exec(ctx)
+	require.NoError(t, err)
+	_, _, err = reconcileProjectDaemons(ctx, repo, asleep, userID, nothingOnDisk)
+	require.NoError(t, err)
+	require.Equal(t, core.ProjectInstallFailed, rowOn(asleep).InstallState)
+	require.Equal(t, staleInstallReason, rowOn(asleep).InstallError)
 }
 
 // A checkout the connect reconcile records gets its project config (skills,
