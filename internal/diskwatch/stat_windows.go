@@ -47,5 +47,8 @@ func allocatedBytes(fi fs.FileInfo) uint64 {
 	return 0
 }
 
+// ownerUID is unknown on Windows.
+func ownerUID(fs.FileInfo) int { return -1 }
+
 // deviceOf is unknown on Windows; walks do not stop at mount points there.
 func deviceOf(fs.FileInfo) (uint64, bool) { return 0, false }
