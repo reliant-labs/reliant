@@ -77,6 +77,46 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 	return proto
 }
 
+// ReasonApprovalNotPending is the error reason for acting on an approval that
+// is no longer pending: someone decided it, its wait expired, or the run
+// waiting on it ended. Clients branch on it to drop the approval and show
+// the message, which says what happened.
+const ReasonApprovalNotPending = "approval_not_pending"
+
+// notActionable is the error for acting on a, which is no longer pending.
+func notActionable(a *db.Approval) error {
+	return svcerr.WithReason(svcerr.FailedPrecondition(resolvedMessage(a)), ReasonApprovalNotPending)
+}
+
+// resolvedMessage says, for the person, what already happened to a.
+func resolvedMessage(a *db.Approval) string {
+	reason := ""
+	if a.DenialReason != nil {
+		reason = *a.DenialReason
+	}
+	withReason := func(head string) string {
+		if reason == "" {
+			return head + "."
+		}
+		return head + ": " + reason
+	}
+	switch reliantv1.ApprovalStatus(a.Status) {
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED:
+		return "This request was already approved."
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED:
+		// Timed-out approvals were recorded as denied with action "timeout"
+		// before EXPIRED existed.
+		if a.ActionTaken != nil && *a.ActionTaken == "timeout" {
+			return "This request expired: no one answered before its time limit, so nothing was approved."
+		}
+		return withReason("This request was already denied")
+	case reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED:
+		return withReason("This request expired")
+	default:
+		return withReason("This request was already resolved")
+	}
+}
+
 // retiredToolApprovalType is the approval_type of a row recorded by the
 // removed integration action approval prompt: 1, the reserved
 // APPROVAL_TYPE_TOOL. Retire it with runtime's actionApprovalRemovedChangeID.
@@ -143,7 +183,7 @@ func (s *Service) Approve(
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, svcerr.FailedPrecondition("approval already processed")
+		return nil, notActionable(approval)
 	}
 
 	// Get action_taken from request
@@ -231,7 +271,7 @@ func (s *Service) Deny(
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, svcerr.FailedPrecondition("approval already processed")
+		return nil, notActionable(approval)
 	}
 
 	// Use default denial reason if not provided.
@@ -331,33 +371,13 @@ func (s *Service) BatchApprove(
 		actionTaken = req.Msg.ActionTaken
 	}
 
+	chatID, pending, skipped, err := s.batchApprovals(ctx, req.Msg.RequestIds)
+	if err != nil {
+		return nil, err
+	}
+
 	// Process each approval
-	var chatID string
-	for _, requestID := range req.Msg.RequestIds {
-		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
-		if err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
-		}
-		if approval == nil {
-			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID))
-		}
-
-		// Validate all approvals belong to the same chat, and that the chat is
-		// the caller's (checked once, on first resolution — the same-chat rule
-		// makes that check cover every id in the batch).
-		if chatID == "" {
-			chatID = approval.ChatID
-			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
-				return nil, err
-			}
-		} else if chatID != approval.ChatID {
-			return nil, svcerr.InvalidArgument("all approvals must belong to the same chat")
-		}
-
-		if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-			return nil, svcerr.FailedPrecondition(fmt.Sprintf("approval %s is not pending", requestID))
-		}
-
+	for _, approval := range pending {
 		// Dual-write: Update approval status AND create chat_update atomically
 		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			// Update approval status
@@ -411,10 +431,61 @@ func (s *Service) BatchApprove(
 
 	return connect.NewResponse(&reliantv1.BatchApproveResponse{
 		Success:  true,
-		Approved: int32(len(req.Msg.RequestIds)),
-		Message:  fmt.Sprintf("Approved %d requests", len(req.Msg.RequestIds)),
+		Approved: int32(len(pending)),
+		Message:  batchMessage("Approved", len(pending), skipped),
 		ChatId:   chatID,
 	}), nil
+}
+
+// batchApprovals reads a batch's approvals and checks it: every id exists,
+// all belong to one chat, and that chat is the caller's (checked once — the
+// same-chat rule makes it cover every id). It splits them into the pending
+// ones and the ones already resolved, which a batch skips: a panel acting on
+// "every pending approval" may hold one that expired or was decided
+// elsewhere, and that must not fail the rest. When none is pending the batch
+// fails with what happened to them.
+func (s *Service) batchApprovals(ctx context.Context, requestIDs []string) (chatID string, pending, skipped []*db.Approval, err error) {
+	for _, requestID := range requestIDs {
+		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
+		if err != nil {
+			return "", nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
+		}
+		if approval == nil {
+			return "", nil, nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID))
+		}
+		if chatID == "" {
+			chatID = approval.ChatID
+			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
+				return "", nil, nil, err
+			}
+		} else if chatID != approval.ChatID {
+			return "", nil, nil, svcerr.InvalidArgument("all approvals must belong to the same chat")
+		}
+		if approval.Status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+			pending = append(pending, approval)
+		} else {
+			skipped = append(skipped, approval)
+		}
+	}
+	if len(pending) == 0 {
+		if len(skipped) == 1 {
+			return "", nil, nil, notActionable(skipped[0])
+		}
+		return "", nil, nil, svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
+			"These %d requests were already resolved (decided, expired, or their run ended); nothing changed.", len(skipped))),
+			ReasonApprovalNotPending)
+	}
+	return chatID, pending, skipped, nil
+}
+
+// batchMessage is a batch response's message: what was done, and how many
+// were skipped as already resolved.
+func batchMessage(verb string, done int, skipped []*db.Approval) string {
+	msg := fmt.Sprintf("%s %d requests", verb, done)
+	if len(skipped) > 0 {
+		msg += fmt.Sprintf("; %d already resolved, skipped", len(skipped))
+	}
+	return msg
 }
 
 // BatchDeny denies multiple pending approval requests at once
@@ -439,34 +510,15 @@ func (s *Service) BatchDeny(
 		actionTaken = req.Msg.ActionTaken
 	}
 
+	chatID, pending, skipped, err := s.batchApprovals(ctx, req.Msg.RequestIds)
+	if err != nil {
+		return nil, err
+	}
+
 	// Process each approval
-	var chatID string
 	deniedStepApproval := false
-	for _, requestID := range req.Msg.RequestIds {
-		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
-		if err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
-		}
-		if approval == nil {
-			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID))
-		}
+	for _, approval := range pending {
 		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
-
-		// Validate all approvals belong to the same chat, and that the chat is
-		// the caller's (checked once, on first resolution — the same-chat rule
-		// makes that check cover every id in the batch).
-		if chatID == "" {
-			chatID = approval.ChatID
-			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
-				return nil, err
-			}
-		} else if chatID != approval.ChatID {
-			return nil, svcerr.InvalidArgument("all approvals must belong to the same chat")
-		}
-
-		if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-			return nil, svcerr.FailedPrecondition(fmt.Sprintf("approval %s is not pending", requestID))
-		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
 		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
@@ -532,8 +584,8 @@ func (s *Service) BatchDeny(
 
 	return connect.NewResponse(&reliantv1.BatchDenyResponse{
 		Success: true,
-		Denied:  int32(len(req.Msg.RequestIds)),
-		Message: fmt.Sprintf("Denied %d requests", len(req.Msg.RequestIds)),
+		Denied:  int32(len(pending)),
+		Message: batchMessage("Denied", len(pending), skipped),
 		ChatId:  chatID,
 	}), nil
 }

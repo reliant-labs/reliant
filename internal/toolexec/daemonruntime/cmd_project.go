@@ -49,19 +49,27 @@ func handleCheckGit(ctx context.Context, payload []byte) ([]byte, error) {
 	// is a bidirectional cache of this observation, so this answer must
 	// reflect the live filesystem in both directions.
 	//
-	// This uses the same nested-aware discovery as repo.discover rather than a
+	// This uses the same nested-aware rule as repo.discover rather than a
 	// bare root stat. A multi-repo project (root with no `.git`, children that
 	// have one) is a git project; answering false here would contradict
 	// CreateProject, which derives the same flag from repo.Discover, and the
 	// API would then persist that false over the correct value on every read.
-	found, err := repo.Discover(ctx, req.Path, 0)
+	// repo.ContainsRepo is that rule as a yes/no: it stops at the first
+	// `.git` and runs no git, where Discover walks everything and resolves
+	// each repository's remote.
+	isGit, err := repo.ContainsRepo(ctx, req.Path, 0)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			// Out of time is not an observation: report it, so the caller
+			// keeps its last-known value instead of persisting false.
+			return nil, ctxErr
+		}
 		// A path that can't be scanned (missing, not a dir) is not a git repo.
 		// Report false rather than failing: the caller keeps its last-known
 		// value on error, which would mask a genuinely removed `.git`.
 		return json.Marshal(checkGitResponse{IsGitRepo: false})
 	}
-	return json.Marshal(checkGitResponse{IsGitRepo: len(found) > 0})
+	return json.Marshal(checkGitResponse{IsGitRepo: isGit})
 }
 
 // --- project.init_files ---

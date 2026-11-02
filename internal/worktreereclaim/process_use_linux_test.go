@@ -114,6 +114,75 @@ func TestRecoveryProcessUseExitingProcessIsNotUse(t *testing.T) {
 			}
 		})
 	}
+	// Exit also tears down the descriptor table, so its fd links read EACCES
+	// (seen under load on git, postgres and gcc children). The same proof
+	// applies; a live process with an unreadable descriptor still holds.
+	for _, tc := range []struct {
+		name, flags string
+		holds       bool
+	}{
+		{"unreadable fd of an exiting single thread", "4194316", false},
+		{"unreadable fd of a live process", "4194312", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads a mode-0400 directory's links")
+			}
+			proc, base := procUseFixture(t)
+			root := t.TempDir()
+			stat := fmt.Sprintf("123 (git) R 1 1 1 0 -1 %s 0 0 0 0 0 0 0 0 20 0 1 0\n", tc.flags)
+			if err := os.WriteFile(filepath.Join(base, "stat"), []byte(stat), 0600); err != nil {
+				t.Fatal(err)
+			}
+			fd := filepath.Join(base, "fd")
+			if err := os.Symlink("/unrelated", filepath.Join(fd, "3")); err != nil {
+				t.Fatal(err)
+			}
+			// Listable, but its links cannot be read: readlink is EACCES.
+			if err := os.Chmod(fd, 0400); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(fd, 0700) })
+			err := checkProcessUseAt(context.Background(), proc, os.Geteuid(), []string{root})
+			if tc.holds && err == nil {
+				t.Fatal("an unreadable descriptor without proof of exit is not absence")
+			}
+			if !tc.holds && err != nil {
+				t.Fatalf("an exiting process cannot use the workspace: %v", err)
+			}
+		})
+	}
+	// Exit drops the mm while maps is being read: the read fails (ESRCH).
+	// A directory in its place fails the read the same way, after the open.
+	for _, tc := range []struct {
+		name, flags string
+		holds       bool
+	}{
+		{"maps read fails for an exiting single thread", "4194316", false},
+		{"maps read fails for a live process", "4194312", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proc, base := procUseFixture(t)
+			stat := fmt.Sprintf("123 (git) R 1 1 1 0 -1 %s 0 0 0 0 0 0 0 0 20 0 1 0\n", tc.flags)
+			if err := os.WriteFile(filepath.Join(base, "stat"), []byte(stat), 0600); err != nil {
+				t.Fatal(err)
+			}
+			maps := filepath.Join(base, "maps")
+			if err := os.Remove(maps); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(maps, 0700); err != nil {
+				t.Fatal(err)
+			}
+			err := checkProcessUseAt(context.Background(), proc, os.Geteuid(), []string{t.TempDir()})
+			if tc.holds && err == nil {
+				t.Fatal("unreadable mappings without proof of exit are not absence")
+			}
+			if !tc.holds && err != nil {
+				t.Fatalf("an exiting process cannot use the workspace: %v", err)
+			}
+		})
+	}
 	t.Run("short stat is not proof", func(t *testing.T) {
 		proc, base := procUseFixture(t)
 		os.Remove(filepath.Join(base, "exe"))

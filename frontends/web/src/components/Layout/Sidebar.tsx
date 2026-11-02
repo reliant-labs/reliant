@@ -397,7 +397,7 @@ const ChatItem = memo(function ChatItem({
         ) : (
           <div className="flex min-w-0 items-center gap-1.5">
             {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
-            <div className="truncate group-hover:text-foreground transition-colors duration-200">
+            <div className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>
               {chatTitle}
             </div>
           </div>
@@ -407,7 +407,9 @@ const ChatItem = memo(function ChatItem({
         )}
       </div>
 
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {/* Hover-only, and out of the layout until then (hidden, not
+          invisible): an invisible button still takes the title's width. */}
+      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
         <Tooltip content="More options" side="left" delay={300} type="label">
           <button
             type="button"
@@ -522,7 +524,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
       onClick={handleViewChat}
     >
       <div className="flex-1 min-w-0 transition-all duration-200">
-        <div className="truncate group-hover:text-foreground transition-colors duration-200">
+        <div className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>
           {chatTitle}
         </div>
         {(projectName || workspaceName) && (
@@ -530,7 +532,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({
         )}
       </div>
 
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
         <Tooltip content="Restore chat" side="left" delay={300}>
           <button
             onClick={(e) => {
@@ -597,6 +599,9 @@ interface WorktreeGroupComponentProps {
   hideHeader?: boolean;
 }
 
+/** A workspace header's hover-only action: no box at all until the header is hovered or focused. */
+const HEADER_HOVER_ACTION = "hidden group-hover/header:inline-flex group-focus-within/header:inline-flex";
+
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   id: _id,
   title,
@@ -657,6 +662,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
                   nested ? "font-medium" : "font-semibold uppercase tracking-wide",
                   hasActiveChat ? "text-primary" : "text-muted-foreground"
                 )}
+                title={title}
               >
                 {title}
               </div>
@@ -685,38 +691,41 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             </span>
           )}
 
-          {/* New Chat Button - shows on hover */}
+          {/* New Chat and Archive show on hover or focus, and take no width
+              until then (hidden, not opacity-0): at the default sidebar width
+              two invisible buttons left a workspace's name ~87px. */}
           {onNewChat && (
             <Tooltip
               content="New chat in this workspace"
               side="left"
               delay={300}
+              triggerClassName={HEADER_HOVER_ACTION}
             >
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onNewChat();
                 }}
-                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
+                className="flex-shrink-0 rounded p-1 hover:bg-muted/70"
               >
                 <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
             </Tooltip>
           )}
 
-          {/* Archive Workspace Button - shows on hover */}
           {onArchiveWorktree && (
             <Tooltip
               content="Archive this workspace"
               side="left"
               delay={300}
+              triggerClassName={HEADER_HOVER_ACTION}
             >
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onArchiveWorktree();
                 }}
-                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
+                className="flex-shrink-0 rounded p-1 hover:bg-muted/70"
               >
                 <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
@@ -1558,12 +1567,18 @@ function SidebarComponent({
               {group.chats.length}
             </span>
           )}
-          <Tooltip content="New chat in this project" side="left" delay={300}>
+          <Tooltip
+            content="New chat in this project"
+            side="left"
+            delay={300}
+            // Out of the layout until hover or focus, like a workspace's.
+            triggerClassName="hidden group-hover/project:inline-flex group-focus-within/project:inline-flex"
+          >
             <button
               type="button"
               aria-label={`New chat in ${group.projectName}`}
               onClick={() => void openNewChat({ projectId: group.projectId })}
-              className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 focus:opacity-100 group-hover/project:opacity-100"
+              className="flex-shrink-0 rounded p-1 hover:bg-muted/70"
             >
               <Plus className="h-3.5 w-3.5 text-muted-foreground" />
             </button>

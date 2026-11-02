@@ -25,7 +25,11 @@
 //     event was missed.
 //
 // Connects arrive on the DAEMON_EVENTS JetStream stream through one durable
-// consumer, so each is handled by one api-server replica. Delivery itself is
+// consumer, so each is handled by one api-server replica. The gateway
+// publishes a connect only once the machine's link has answered a probe, not
+// when it registers: a laptop waking from sleep registers a minute before it
+// can answer anything, and a delivery started at registration ran its first
+// tool calls into that silence. Delivery itself is
 // idempotent (ContinueQueued claims the message under the chat's run-control
 // lock), so a connect handled twice, or raced by the sweep, still delivers
 // once.

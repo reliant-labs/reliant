@@ -24,18 +24,18 @@ describe("runStateOf with a reported suspend reason", () => {
     expect(v).toMatchObject({ kind: "stopped", label: "Stopped by you" });
   });
 
-  it("no_compute_plan → billing label telling the user to subscribe", () => {
+  it("reports missing hosting billing without requiring a machine purchase", () => {
     const v = runStateOf(wl({ suspend_reason: "no_compute_plan" }));
     expect(v.kind).toBe("billing");
-    expect(v.label).toBe("Suspended — no compute plan");
-    expect(v.detail).toContain("Subscribe to a compute plan");
+    expect(v.label).toBe("Suspended — app hosting billing required");
+    expect(v.detail).toContain("Enable independent app hosting billing");
   });
 
   it("billing_lapsed → billing label telling the user to settle the invoice, with no error needed", () => {
     const v = runStateOf(wl({ suspend_reason: "billing_lapsed", last_error: "" }));
     expect(v.kind).toBe("billing");
     expect(v.detail).toContain("Settle the invoice in Billing");
-    expect(v.detail).not.toContain("Subscribe to a compute plan");
+    expect(v.detail).not.toContain("Enable independent app hosting billing");
   });
 
   it("appends the platform's own words when it gave any", () => {
@@ -76,8 +76,8 @@ describe("envHeadline with a reported suspend reason", () => {
 
   it("shows the exact billing fix as a problem", () => {
     const line = envHeadline(live, status([wl({ suspend_reason: "no_compute_plan" })]));
-    expect(line).toMatchObject({ tone: "problem", text: "Suspended — no compute plan" });
-    expect(line.detail).toContain("Subscribe to a compute plan");
+    expect(line).toMatchObject({ tone: "problem", text: "Suspended — app hosting billing required" });
+    expect(line.detail).toContain("Enable independent app hosting billing");
   });
 
   it("billing lapse beats a whole-environment owner stop", () => {

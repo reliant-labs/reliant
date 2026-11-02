@@ -21,7 +21,7 @@ import {
 } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useRouteProjectResolution } from "../../hooks/useRouteProjectResolution";
-import { getParentRouteNavigateOptions } from "../../lib/routeParent";
+import { getBuilderCloseNavigateOptions } from "../../lib/routeParent";
 import { WorkflowBuilderPage } from "./WorkflowBuilderPage";
 
 interface WorkflowPageProps {
@@ -30,7 +30,7 @@ interface WorkflowPageProps {
 
 export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, state: historyState } = useLocation();
   const params = useParams({ strict: false }) as { workflowName?: string };
   const search = useSearch({ strict: false }) as { drill?: string; tour?: string; chat?: string };
 
@@ -50,12 +50,14 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
     ? decodeURIComponent(params.workflowName)
     : undefined;
 
-  // Close navigates to the logical parent route (see lib/routeParent.ts).
-  // router.history.back() is a foot-gun on direct navs: it can leave the SPA
-  // entirely when the prior tab entry was an external page.
+  // Close returns to where the builder was opened from when that entry
+  // recorded it (a chat's workflow viewer), else to the logical parent route
+  // (see lib/routeParent.ts). router.history.back() is a foot-gun on direct
+  // navs: it can leave the SPA entirely when the prior tab entry was an
+  // external page.
   const onClose = useCallback(() => {
-    navigate(getParentRouteNavigateOptions(pathname));
-  }, [navigate, pathname]);
+    navigate(getBuilderCloseNavigateOptions(pathname, historyState));
+  }, [navigate, pathname, historyState]);
 
   const onNavigateToSettings = useCallback(() => {
     navigate({ to: "/settings" });
@@ -66,6 +68,8 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
       navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => ({ ...prev, chat }),
+        // Keep the history state: it records where Back returns to.
+        state: true,
         replace: true,
       } as never);
     },

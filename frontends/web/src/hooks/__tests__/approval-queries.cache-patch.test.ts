@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { ApprovalStatus, type ListApprovalsByChatResponse } from "../../gen/reliant/v1/approval_pb";
 import { queryClient } from "../../lib/query-client";
-import { patchApprovalsCache, upsertApprovalInCache, type ApprovalFields } from "../approval-queries";
+import { approvalStatusFromFeed, patchApprovalsCache, upsertApprovalInCache, type ApprovalFields } from "../approval-queries";
 import { approvalServiceKeys } from "../approval-service-hooks_gen";
 import { create } from "@bufbuild/protobuf";
 import { ApprovalSchema } from "../../gen/reliant/v1/approval_pb";
@@ -61,5 +61,18 @@ describe("approval cache patching", () => {
     upsertApprovalInCache("c2", approval({ id: "b1", chatId: "c2" }));
     expect(list("c1")).toHaveLength(1);
     expect(list("c2")).toHaveLength(1);
+  });
+});
+
+describe("approvalStatusFromFeed", () => {
+  it("reads only \"pending\" as pending", () => {
+    expect(approvalStatusFromFeed("pending")).toBe(ApprovalStatus.PENDING);
+    expect(approvalStatusFromFeed("approved")).toBe(ApprovalStatus.APPROVED);
+    expect(approvalStatusFromFeed("denied")).toBe(ApprovalStatus.DENIED);
+    expect(approvalStatusFromFeed("expired")).toBe(ApprovalStatus.EXPIRED);
+    // The run-end cleanup has always sent "cancelled"; it once read as pending.
+    expect(approvalStatusFromFeed("cancelled")).toBe(ApprovalStatus.CANCELLED);
+    expect(approvalStatusFromFeed("something-newer")).toBe(ApprovalStatus.CANCELLED);
+    expect(approvalStatusFromFeed(undefined)).toBe(ApprovalStatus.CANCELLED);
   });
 });

@@ -34,7 +34,7 @@ import (
 
 // DaemonAuthDeps is what resolves daemon credentials.
 type DaemonAuthDeps struct {
-	Tokens auth.AccessTokenIntrospector
+	Tokens auth.AccessTokenAccountIntrospector
 }
 
 // NewDaemonAuth authenticates daemons by their `rlat_` access token, checked
@@ -265,15 +265,20 @@ type daemonSource interface {
 
 // registerConnectionListeners builds and registers, in order:
 //
-//  1. the lifecycle publisher, for the in-cluster subscribers of daemon
-//     connect/disconnect;
-//  2. events, the DAEMON_EVENTS publisher;
-//  3. the pull-architecture status responder: subscribes per daemon to
+//  1. events, the DAEMON_EVENTS publisher: daemon.v1.events.<type> for every
+//     in-cluster subscriber of daemon connect/disconnect. It publishes
+//     "connected" when the daemon's link is ready, not at registration (see
+//     daemonevents.Publisher.OnDaemonConnected). It is the only publisher of
+//     those subjects: a second, core-NATS one published the same "connected"
+//     event at registration, which the stream captured too, so every
+//     consumer handled each connect twice and the first time ran into a
+//     link that had not answered yet;
+//  2. the pull-architecture status responder: subscribes per daemon to
 //     daemon.v1.query.<daemonID>.status when a connection is registered, and
 //     answers from in-memory state, so the control plane's request reaches
 //     whichever gateway holds the stream — no service registry, no DB column
 //     to keep in sync;
-//  4. the per-user any-live responder: subscribes to
+//  3. the per-user any-live responder: subscribes to
 //     daemon.v1.query.user.<userID>.any-live when a user's first daemon
 //     connects here and unsubscribes when their last one disconnects, giving
 //     daemonliveness.ReachableByUser the same NATS-first pull path.
@@ -283,7 +288,6 @@ func registerConnectionListeners(reg connectionRegistrar, nc *nats.Conn, src dae
 		reg.AddConnectionListener(l)
 		out.Registered = append(out.Registered, l)
 	}
-	add(toolexec.NewDaemonLifecyclePublisher(nc))
 	add(events)
 	logging.Info("Daemon lifecycle event publisher started",
 		"stream", daemonevents.StreamDaemonEvents,

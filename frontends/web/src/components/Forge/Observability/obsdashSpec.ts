@@ -24,6 +24,8 @@ export const SPEC_VERSION = "forge.dashboards/v1";
 export const DASHBOARDS_DIR = "deploy/observability/dashboards";
 
 export const PANEL_KINDS = ["line", "number", "table", "bar", "search", "funnel", "issues", "sessions"] as const;
+export { DRAWN_KINDS, panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
+
 /** The kinds read from the tenant's browser tables, not from series over a signal (C7). */
 export const BROWSER_KINDS = ["funnel", "issues", "sessions"] as const;
 

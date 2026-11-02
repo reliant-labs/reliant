@@ -375,7 +375,7 @@ describe("F2 — no walk of the UI reaches the app owing money", () => {
       plan: {
         compute: "cloud_paid",
         modelProvider: "reliant_credits",
-        computePlanId: "plan_compute_small",
+        computePlanId: "plan_compute_m",
         computeSettled: true,
       },
       facts: { ...NEW_USER, computeEligible: true },

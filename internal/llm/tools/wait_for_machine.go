@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/machinefailure"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -42,16 +43,6 @@ const (
 	// server-side, so this costs no model round-trips.
 	waitForMachinePollInterval = 2 * time.Second
 
-	// waitForMachineFailedSettle is how long a failed-to-start report must
-	// hold, the machine never connecting meanwhile, before the wait believes
-	// it. The control plane reports Failed for moments it recovers from by
-	// itself: on 2026-10-30 a resumed machine read Failed for 17s while its
-	// previous pod finished terminating, and a VM that crashed and was
-	// re-created read Failed for ~40s before its daemon reconnected. Every
-	// run waiting on those machines was told to stop, and the machine came
-	// back on its own seconds later.
-	waitForMachineFailedSettle = 2 * time.Minute
-
 	waitForMachineDescription = `Wait for this run's machine to reconnect, then return so you can retry.
 
 WHEN TO USE:
@@ -81,7 +72,7 @@ type waitForMachineTool struct {
 	// shrinks them; timeoutUnit is what one timeout_seconds is worth.
 	pollInterval time.Duration
 	timeoutUnit  time.Duration
-	// failedSettle is waitForMachineFailedSettle unless a test shrinks it.
+	// failedSettle is machinefailure.Settle unless a test shrinks it.
 	failedSettle time.Duration
 }
 
@@ -96,7 +87,7 @@ func newWaitForMachineTool(observer MachineObserver) *waitForMachineTool {
 		observer:     observer,
 		pollInterval: waitForMachinePollInterval,
 		timeoutUnit:  time.Second,
-		failedSettle: waitForMachineFailedSettle,
+		failedSettle: machinefailure.Settle,
 	}
 }
 
@@ -146,8 +137,8 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 		if err == nil {
 			last = stateOf(status)
 			lastMessage = status.StatusMessage
-			failedSince = failedRunStart(failedSince, status)
-			if resp, done := t.terminalResponse(status, time.Since(start), sinceOrZero(failedSince)); done {
+			failedSince = machinefailure.RunStart(failedSince, status.Failed, time.Now())
+			if resp, done := t.terminalResponse(status, time.Since(start), failedSince); done {
 				return resp, nil
 			}
 		}
@@ -164,31 +155,12 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 	}
 }
 
-// failedRunStart carries the start of an unbroken run of Failed looks across
-// one more look: kept while the machine still reports Failed, set on the first
-// Failed look, cleared by anything else.
-func failedRunStart(since time.Time, status MachineStatus) time.Time {
-	switch {
-	case !status.Failed:
-		return time.Time{}
-	case since.IsZero():
-		return time.Now()
-	}
-	return since
-}
-
-func sinceOrZero(t time.Time) time.Duration {
-	if t.IsZero() {
-		return 0
-	}
-	return time.Since(t)
-}
-
 // terminalResponse answers when the look settles the wait: the machine is
-// back, or it is gone for good. A Failed report settles it only once it has
-// held for failedSettle (failedFor), since the control plane reports Failed
-// for moments it recovers from by itself.
-func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited, failedFor time.Duration) (ToolResponse, bool) {
+// back, or it is gone for good. A Failed report settles it only once the run
+// of Failed looks that began at failedSince has held for failedSettle
+// (machinefailure), since the control plane reports Failed for moments it
+// recovers from by itself.
+func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited time.Duration, failedSince time.Time) (ToolResponse, bool) {
 	switch {
 	case status.Connected:
 		return waitResponse(fmt.Sprintf(
@@ -201,7 +173,7 @@ func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited, fail
 				"Tell the user the machine was removed and that they need to connect a machine to continue; then stop.",
 			status.StatusMessage),
 			WaitForMachineResponseMetadata{State: "removed", WaitedMs: waited.Milliseconds()}), true
-	case status.Failed && failedFor >= t.failedSettle:
+	case status.Failed && machinefailure.Believed(failedSince, time.Now(), t.failedSettle):
 		return waitResponse(withReason(
 			"This run's machine failed to start, so waiting will not bring it back. "+
 				"Tell the user the machine failed to start and that they need to restart it or connect another; then stop.",
@@ -229,8 +201,8 @@ func (t *waitForMachineTool) stoppedEarly(rc *rctx.ToolContext, userID, last, la
 	if status, err := t.observer.MachineStatus(checkCtx, userID); err == nil {
 		last = stateOf(status)
 		lastMessage = status.StatusMessage
-		failedSince = failedRunStart(failedSince, status)
-		if resp, done := t.terminalResponse(status, waited, sinceOrZero(failedSince)); done {
+		failedSince = machinefailure.RunStart(failedSince, status.Failed, time.Now())
+		if resp, done := t.terminalResponse(status, waited, failedSince); done {
 			return resp
 		}
 	}

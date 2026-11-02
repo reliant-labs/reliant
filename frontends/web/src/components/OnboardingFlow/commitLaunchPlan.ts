@@ -84,12 +84,15 @@ const DAEMON_TYPE_MANAGED = 1;
  * cheapest plan that runs it — so the plan id the user recorded is the size
  * they chose, and this is the map back.
  */
-const DAEMON_SIZE_SMALL = 1;
+const DAEMON_SIZE_M = 8;
 const DAEMON_SIZE_BY_NAME: Record<string, number> = {
-  small: DAEMON_SIZE_SMALL,
-  medium: 2,
-  large: 3,
-  xl: 4,
+  s1: 6,
+  s2: 7,
+  m: DAEMON_SIZE_M,
+  l: 9,
+  xl: 10,
+  "2xl": 11,
+  "3xl": 12,
 };
 
 /**
@@ -99,23 +102,23 @@ const DAEMON_SIZE_BY_NAME: Record<string, number> = {
  *
  * The size was HARDCODED to SMALL here. A user who picked "XL — $160.00/mo"
  * on the compute step was shown that price, charged that price at checkout,
- * and provisioned a 1-CPU machine: the tile moved the money and nothing else.
+ * and provisioned the smallest machine: the tile moved the money and nothing else.
  *
  * Reading it back out of the plan id keeps ONE field in the URL describing the
  * purchase. Carrying a second `daemonSize` field beside it would let the two
- * disagree — a plan id for XL next to a size of small is a state with no
+ * disagree — a plan id for XL next to a size of M is a state with no
  * correct interpretation, and the URL is user-editable.
  *
- * Unknown or absent falls back to SMALL: every compute plan allows it, so the
- * user still gets a working machine rather than a failed commit.
+ * Unknown or absent falls back to M, the coupon unit and the default size, so
+ * the user still gets a working machine rather than a failed commit.
  */
 export function daemonSizeForPlan(computePlanId: string | undefined): number {
-  if (!computePlanId) return DAEMON_SIZE_SMALL;
+  if (!computePlanId) return DAEMON_SIZE_M;
   // Plan ids are `plan_compute_<size>` in the catalog; match on the suffix
   // rather than the whole string so a renamed prefix does not silently
   // downgrade every machine.
   const suffix = computePlanId.split("_").pop()?.toLowerCase() ?? "";
-  return DAEMON_SIZE_BY_NAME[suffix] ?? DAEMON_SIZE_SMALL;
+  return DAEMON_SIZE_BY_NAME[suffix] ?? DAEMON_SIZE_M;
 }
 
 /**

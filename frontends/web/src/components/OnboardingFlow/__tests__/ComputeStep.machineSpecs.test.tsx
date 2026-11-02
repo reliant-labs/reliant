@@ -7,7 +7,7 @@
  * > "compute sizes on the page should describe what they're getting in terms
  * > of cpu/mem"
  *
- * The tiles said "Small", "Medium", "Large", "XL" and a price. Those are names
+ * The tiles said "M", "L", "XL", "2XL" and a price. Those are names
  * for machines, not descriptions of them, so the only way to choose was to
  * guess — and the consequence of guessing low is an OOM-killed build after
  * you have paid, which is the failure this screen is positioned to prevent.
@@ -74,52 +74,52 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
     data: {
       plans: [
         {
-          id: "plan_compute_small",
-          name: "Small",
+          id: "plan_compute_m",
+          name: "M",
           displayOrder: 1,
           priceCents: 2000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small"],
-            includedSmallDaemonHours: 17n,
+            allowedDaemonSizes: ["m"],
+            machineIncludedHours: 17n,
           },
         },
         {
-          id: "plan_compute_medium",
-          name: "Medium",
+          id: "plan_compute_l",
+          name: "L",
           displayOrder: 2,
           priceCents: 4000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small", "medium"],
-            includedSmallDaemonHours: 68n,
-          },
-        },
-        {
-          id: "plan_compute_large",
-          name: "Large",
-          displayOrder: 3,
-          priceCents: 8000n,
-          structuredLimits: {
-            allowedDaemonSizes: ["small", "medium", "large"],
-            includedSmallDaemonHours: 272n,
+            allowedDaemonSizes: ["m", "l"],
+            machineIncludedHours: 34n,
           },
         },
         {
           id: "plan_compute_xl",
           name: "XL",
+          displayOrder: 3,
+          priceCents: 8000n,
+          structuredLimits: {
+            allowedDaemonSizes: ["m", "l", "xl"],
+            machineIncludedHours: 68n,
+          },
+        },
+        {
+          id: "plan_compute_2xl",
+          name: "2XL",
           displayOrder: 4,
           priceCents: 16000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small", "medium", "large", "xl"],
-            includedSmallDaemonHours: 1088n,
+            allowedDaemonSizes: ["m", "l", "xl", "2xl"],
+            machineIncludedHours: 136n,
           },
         },
       ],
       daemonPricing: {
         sizes: [
-          { size: "small", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
-          { size: "medium", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
-          { size: "large", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
-          { size: "xl", multiplier: 8n, hourlyPriceCents: "104", storageGib: 200n },
+          { size: "m", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
+          { size: "l", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
+          { size: "xl", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
+          { size: "2xl", multiplier: 8n, hourlyPriceCents: "104", storageGib: 200n },
         ],
         storageCentsPerGibMonth: "25",
         placeholder: false,
@@ -201,10 +201,10 @@ beforeEach(() => {
 describe("ComputeStep — every size says what it gives you", () => {
   // THE REPORT. A size name with a price and no specification.
   it.each([
-    ["Small", "2 GB RAM", "0.5 CPU"],
-    ["Medium", "4 GB RAM", "1 CPU"],
-    ["Large", "8 GB RAM", "2 CPU"],
-    ["XL", "16 GB RAM", "4 CPU"],
+    ["M", "4 GB RAM", "2 CPU"],
+    ["L", "8 GB RAM", "4 CPU"],
+    ["XL", "16 GB RAM", "8 CPU"],
+    ["2XL", "32 GB RAM", "15 CPU"],
   ])("labels %s with its memory and CPU", (size, memory, cpu) => {
     renderStep();
 
@@ -225,9 +225,10 @@ describe("ComputeStep — every size says what it gives you", () => {
   it("shows what a machine reserves, never what it can burst to", () => {
     renderStep();
 
-    const small = screen.getByRole("button", { name: /^Small / });
-    expect(small).toHaveTextContent("2 GB RAM");
-    expect(small).not.toHaveTextContent("4 GB RAM");
+    const small = screen.getByRole("button", { name: /^M / });
+    expect(small).toHaveTextContent("4 GB RAM");
+    expect(small).toHaveTextContent("2 CPU");
+    expect(small).not.toHaveTextContent("0.5 CPU");
   });
 
   /**
@@ -242,15 +243,12 @@ describe("ComputeStep — every size says what it gives you", () => {
    * on the whole way up. One number here would overstate memory headroom by
    * double, on the axis a build actually dies on.
    */
-  it("states both burst multiples exactly once, below the sizes", () => {
+  it("does not advertise bursting above Guaranteed requests", () => {
     renderStep();
 
-    const note = screen.getByTestId("compute-step-burst-note");
-    expect(note).toHaveTextContent(/4× the CPU/);
-    expect(note).toHaveTextContent(/2× the memory/);
-    expect(note).toHaveTextContent(/reserve/i);
+    expect(screen.queryByTestId("compute-step-burst-note")).not.toBeInTheDocument();
 
-    for (const size of ["Small", "Medium", "Large", "XL"]) {
+    for (const size of ["M", "L", "XL", "2XL"]) {
       const tile = screen.getByRole("button", {
         name: new RegExp(`^${size} `),
       });
@@ -278,7 +276,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     const note = screen.getByTestId("compute-step-coverage-note");
-    expect(note).toHaveTextContent(/covers the Small machine/i);
+    expect(note).toHaveTextContent(/covers the M machine/i);
     expect(note).not.toHaveTextContent(/GB RAM/);
   });
 
@@ -286,18 +284,17 @@ describe("ComputeStep — every size says what it gives you", () => {
    * The free option answers the same question, honestly.
    *
    * It cannot promise a figure — the machine is the user's and we do not
-   * provision it — but a blank spec column beside four filled ones reads as an
+   * provision it — but a blank detail line beside four filled ones reads as an
    * option with nothing to offer, which is the demotion the owner asked to
-   * remove. Naming the trade-off is both truthful and more useful than
-   * silence.
+   * remove. Saying what machine it is, in a few words, fills the slot.
    */
-  it("describes the free option's compute in the user's own terms", () => {
+  it("describes the free option's machine in the user's own terms", () => {
     renderStep();
 
     const local = screen.getByRole("button", {
       name: /use your own computer/i,
     });
-    expect(local).toHaveTextContent(/CPU and memory it already has/i);
+    expect(local).toHaveTextContent(/your laptop or server/i);
     // Still on the same price axis as the paid rows — the property the
     // one-list layout exists to preserve.
     expect(within(local).getByText(/free/i)).toBeInTheDocument();
@@ -310,7 +307,7 @@ describe("ComputeStep — every size says what it gives you", () => {
   it("puts nothing but name, spec and monthly price on a row", () => {
     renderStep();
 
-    for (const size of ["Small", "Medium", "Large", "XL"]) {
+    for (const size of ["M", "L", "XL", "2XL"]) {
       const row = screen.getByRole("button", { name: new RegExp(`^${size} `) });
       expect(row).not.toHaveTextContent(/hrs|hours|\/hr|GiB|suspended|included|shared|small-daemon/i);
     }
@@ -337,20 +334,17 @@ describe("ComputeStep — every size says what it gives you", () => {
    *
    * That makes this a structural assertion, not a styling one. The free row
    * and the priced rows must be SIBLINGS in one list that the heading
-   * introduces. Asserted by walking from the heading to the element it labels
-   * and requiring both rows inside it, so restyling is free but re-dividing
-   * the list is not.
+   * labels. Asserted by finding the group the heading names and requiring
+   * both rows inside it, so restyling is free but re-dividing the list is not.
    */
   it("makes the free option a row in the machine list, under the heading", () => {
     renderStep();
 
-    const heading = screen.getByText(/choose your machine/i);
-    const list = heading.nextElementSibling as HTMLElement | null;
-    expect(list).not.toBeNull();
+    const list = screen.getByRole("group", { name: /choose your machine/i });
 
-    const rows = within(list as HTMLElement);
+    const rows = within(list);
     const local = rows.getByRole("button", { name: /use your own computer/i });
-    const small = rows.getByRole("button", { name: /^Small / });
+    const small = rows.getByRole("button", { name: /^M / });
 
     // Siblings in the same list — not one nested inside a block that holds
     // the other, which is what every "move it closer" version produced.
@@ -374,6 +368,9 @@ describe("ComputeStep — every size says what it gives you", () => {
 
     expect(screen.queryByText(/in the cloud/i)).toBeNull();
     expect(screen.queryByText(/^or use a machine we host$/i)).toBeNull();
+    // ...and the step itself asks its question once. It used to stack a page
+    // heading over a micro-heading saying the same thing at another size.
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
   });
 
   /**
@@ -396,7 +393,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     expect(
       screen.getByRole("button", { name: /use your own computer/i }),
     ).toHaveAttribute("aria-pressed", "true");
-    for (const size of ["Small", "Medium", "Large", "XL"]) {
+    for (const size of ["M", "L", "XL", "2XL"]) {
       expect(
         screen.getByRole("button", { name: new RegExp(`^${size} `) }),
       ).toHaveAttribute("aria-pressed", "false");
@@ -435,8 +432,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     // Last thing on the step: after the machine list, and outside the box
     // that holds the options — it is the consequence of choosing, not one of
     // the choices.
-    const heading = screen.getByText(/choose your machine/i);
-    const list = heading.nextElementSibling as HTMLElement;
+    const list = screen.getByRole("group", { name: /choose your machine/i });
     expect(
       list.compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -484,7 +480,7 @@ describe("ComputeStep — every size says what it gives you", () => {
       screen.getByRole("button", { name: /use your own computer/i }),
     );
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
-    fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
+    fireEvent.click(screen.getByRole("button", { name: /^L / }));
 
     expect(
       screen.getByRole("button", { name: /^continue with /i }),
@@ -525,7 +521,7 @@ describe("ComputeStep — every size says what it gives you", () => {
       screen.getByRole("button", { name: /use your own computer/i }),
     );
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
-    fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
+    fireEvent.click(screen.getByRole("button", { name: /^L / }));
 
     expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();
   });
@@ -548,10 +544,8 @@ describe("machineSpecs mirrors control-plane's ladder", () => {
    */
   it("keeps each axis uniform, at its own multiple", () => {
     for (const [size, spec] of Object.entries(MACHINE_SPECS)) {
-      expect(spec.cpuBurst / spec.cpuReserved, `${size} cpu`).toBe(4);
-      expect(spec.memoryBurstGb / spec.memoryReservedGb, `${size} memory`).toBe(
-        2,
-      );
+      expect(spec.cpuBurst / spec.cpuReserved, `${size} cpu`).toBe(1);
+      expect(spec.memoryBurstGb / spec.memoryReservedGb, `${size} memory`).toBe(1);
     }
   });
 });

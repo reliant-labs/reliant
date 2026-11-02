@@ -61,6 +61,12 @@ export interface ReplayFeedState {
   lastMs: number | null;
   /** Whether a full snapshot has arrived — without one, nothing can be drawn. */
   hasFullSnapshot: boolean;
+  /**
+   * Events from the first full snapshot on, that snapshot included: what
+   * playback can use. A recording plays once it holds the snapshot and at
+   * least one event after it; events before the snapshot are drawn on nothing.
+   */
+  playableEvents: number;
   /** A page request is in flight. */
   fetching: boolean;
   /** More pages are available now (next_page_token). */
@@ -108,6 +114,7 @@ export class ReplayFeed {
     firstMs: null,
     lastMs: null,
     hasFullSnapshot: false,
+    playableEvents: 0,
     fetching: false,
     hasMore: false,
     error: null,
@@ -229,6 +236,8 @@ export class ReplayFeed {
     if (page.resumeToken) this.resumeToken = page.resumeToken;
     this.nextToken = page.nextPageToken || undefined;
 
+    const firstSnapshot = this.state.hasFullSnapshot ? 0 : events.findIndex((e) => e.type === RRWEB_FULL_SNAPSHOT);
+    const playable = firstSnapshot < 0 ? 0 : events.length - firstSnapshot;
     const following = this.opts.live && this.emptyPolls < this.opts.idlePolls;
     const phase: ReplayFeedPhase = this.nextToken ? "streaming" : following ? "live" : "complete";
     this.emit({
@@ -239,7 +248,8 @@ export class ReplayFeed {
       unreadable: this.state.unreadable + page.unreadable,
       firstMs: this.state.firstMs ?? (events.length ? events[0].timestamp : null),
       lastMs: events.length ? events[events.length - 1].timestamp : this.state.lastMs,
-      hasFullSnapshot: this.state.hasFullSnapshot || events.some((e) => e.type === RRWEB_FULL_SNAPSHOT),
+      hasFullSnapshot: this.state.hasFullSnapshot || firstSnapshot >= 0,
+      playableEvents: this.state.playableEvents + playable,
     });
 
     if (this.nextToken) this.pump();

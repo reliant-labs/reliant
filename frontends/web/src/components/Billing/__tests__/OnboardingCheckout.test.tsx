@@ -18,6 +18,10 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Pricing consent is tested through real typed transport in MachineSaleConsent.test;
+// this suite isolates the already-authorized two-leg payment mechanics.
+vi.mock("../MachineSaleConsent", () => ({ MachineSaleConsent: ({ children }: { children: (price?: number) => React.ReactNode }) => <>{children()}</> }));
+
 // ── Stripe.js, stubbed ───────────────────────────────────────────────────
 
 /** Queued results for successive `confirmPayment` calls. */
@@ -126,7 +130,7 @@ function renderCheckout(lines: CheckoutLine[], overrides: Partial<{
       lines={lines}
       computePlanId={
         owedCompute
-          ? (overrides.computePlanId ?? "plan_compute_small")
+          ? (overrides.computePlanId ?? "plan_compute_m")
           : undefined
       }
       creditCents={owedCredit ? (overrides.creditCents ?? 2500) : undefined}

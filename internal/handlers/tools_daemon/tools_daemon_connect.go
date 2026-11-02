@@ -148,6 +148,15 @@ func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID stri
 	return bootstrap.NewForeignDaemonIDError()
 }
 
+// accountEmail is the email of the account the daemon credential acts as, as
+// the token authority named it when the daemon auth interceptor resolved the
+// credential — "" when it named none. It is told only to that credential's
+// own holder, so a daemon can say which account it is signed in as.
+func accountEmail(ctx context.Context) string {
+	email, _ := auth.GetUserEmailFromContext(ctx)
+	return strings.TrimSpace(email)
+}
+
 // WhoAmI names the account the presented daemon credential acts as. The daemon
 // auth interceptor has already resolved the credential; this reads the result
 // and touches nothing else — no daemon row, no connection, no NATS.
@@ -162,7 +171,7 @@ func (s *Service) WhoAmI(
 	if !ok || strings.TrimSpace(userID) == "" {
 		return nil, svcerr.Unauthenticated("a daemon credential is required")
 	}
-	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
+	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID, AccountEmail: accountEmail(ctx)}), nil
 }
 
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
@@ -305,6 +314,7 @@ func (s *Service) ConnectDaemon(
 		movesOnDrain:        reg.GetMovesOnDrain(),
 		build:               daemonBuildFromRegister(reg),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
+		link:                newLinkState(now2),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
 		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
@@ -341,7 +351,7 @@ func (s *Service) ConnectDaemon(
 	s.supersedeIncumbent(oldConn)
 
 	// Notify listeners outside the mutex.
-	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
+	s.notifyConnected(userID, daemonID)
 	if s.deps.StatePublisher != nil {
 		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
@@ -361,6 +371,7 @@ func (s *Service) ConnectDaemon(
 				RequestedProjectPaths: requestedProjectPaths,
 				DaemonId:              daemonID,
 				UserId:                userID,
+				AccountEmail:          accountEmail(ctx),
 			},
 		},
 	}
@@ -378,21 +389,23 @@ func (s *Service) ConnectDaemon(
 	// Start heartbeat goroutine
 	go s.runHeartbeat(conn)
 
-	// Reconcile project_daemons rows against what actually exists on this
-	// daemon's disk. Runs off the hot connect path so it never blocks
-	// registration; self-heals legacy rows, daemon-id churn, and the
-	// create-while-daemon-pending case. See reconcileProjectDaemonsOnConnect.
-	go s.reconcileProjectDaemonsOnConnect(conn)
-
-	for _, projectPath := range requestedProjectPaths {
-		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, projectPath, true); err != nil {
-			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to request initial project config load/watch",
-				"error", err,
-				"daemonID", conn.daemonID,
-				"projectPath", projectPath,
-			)
-		}
-	}
+	// Prove the link, then run the connect-time work: the link-ready
+	// listeners and the reconcile of project_daemons rows against what
+	// actually exists on this daemon's disk (which self-heals legacy rows,
+	// daemon-id churn, and the create-while-daemon-pending case). Off the
+	// hot connect path, so it never blocks registration. See
+	// link_liveness.go.
+	//
+	// The project configs are NOT requested here. The registration_ack
+	// above names every project path (RequestedProjectPaths), and the
+	// daemon loads and watches each on that alone. Sending
+	// LoadProjectConfigs + WatchProjectConfigs for every path as well — as
+	// this did until 2026-10-31 — made the daemon build each full snapshot
+	// twice more (one goroutine per path, at once) and restart every
+	// watcher, right after it woke: that CPU and those snapshot messages,
+	// queued ahead of every command reply on its one send stream, were part
+	// of the 5-8s transit a waking laptop showed.
+	go s.runConnectWork(conn, true)
 
 	// When the listener drains, tell this daemon to move.
 	defer s.handOverOnDrain(ctx, conn)()
@@ -476,6 +489,7 @@ func (s *Service) RegisterOutboundConnection(
 		podIP:               &podIP,
 		podPort:             &podPort,
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
+		link:                newLinkState(now),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
 		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
@@ -501,7 +515,7 @@ func (s *Service) RegisterOutboundConnection(
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
 	}
 
-	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
+	s.notifyConnected(userID, daemonID)
 	if s.deps.StatePublisher != nil {
 		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
@@ -511,6 +525,10 @@ func (s *Service) RegisterOutboundConnection(
 	// Start sender and heartbeat goroutines.
 	s.startSender(conn)
 	go s.runHeartbeat(conn)
+	// Prove the link before the link-ready listeners run (link_liveness.go).
+	// A workspace pod's disk is reconciled by its own checkout flow, so no
+	// reconcile pass here.
+	go s.runConnectWork(conn, false)
 
 	return &OutboundConn{service: s, conn: conn}, nil
 }

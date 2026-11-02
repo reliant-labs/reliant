@@ -18,7 +18,7 @@ import (
 // guard policy it hands the daemon runtime.
 func guardsFor(t *testing.T, env map[string]string) daemonruntime.Guards {
 	t.Helper()
-	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS"} {
+	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range env {
@@ -39,6 +39,12 @@ func TestDaemonGuards_DefaultHeavyCommandsAreTheGatesDefault(t *testing.T) {
 	g := guardsFor(t, nil)
 	assert.Equal(t, heavyjob.DefaultCommands, g.HeavyCommands)
 	assert.Equal(t, diskguard.Config{}, g.Disk, "unset thresholds keep the guard's defaults")
+	assert.Zero(t, g.HeavyShare, "an unset share is derived from the slot pool")
+}
+
+func TestDaemonGuards_HeavyShare(t *testing.T) {
+	g := guardsFor(t, map[string]string{"RELIANT_HEAVY_SHARE": "6"})
+	assert.Equal(t, 6, g.HeavyShare)
 }
 
 func TestDaemonGuards_HeavyCommandsReplaceOrClearTheDefault(t *testing.T) {

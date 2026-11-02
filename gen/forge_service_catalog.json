@@ -1277,7 +1277,9 @@
             "APPROVAL_STATUS_UNSPECIFIED",
             "APPROVAL_STATUS_PENDING",
             "APPROVAL_STATUS_APPROVED",
-            "APPROVAL_STATUS_DENIED"
+            "APPROVAL_STATUS_DENIED",
+            "APPROVAL_STATUS_EXPIRED",
+            "APPROVAL_STATUS_CANCELLED"
           ],
           "reliant.v1.ApprovalType": [
             "APPROVAL_TYPE_UNSPECIFIED",
@@ -1289,7 +1291,9 @@
             0,
             1,
             2,
-            3
+            3,
+            4,
+            5
           ],
           "reliant.v1.ApprovalType": [
             0,
@@ -23597,6 +23601,16 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Repo"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "truncated_reason",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "GetRepoGitInfoRequest": [
@@ -23728,6 +23742,14 @@
               "kind": "message",
               "type_name": "reliant.v1.Repo",
               "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            },
+            {
+              "name": "truncated_reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.GetRepoGitInfoRequest": [
@@ -33447,6 +33469,11 @@
               "Name": "user_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "account_email",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ]
         },
@@ -34466,6 +34493,10 @@
             {
               "name": "user_id",
               "kind": "string"
+            },
+            {
+              "name": "account_email",
+              "kind": "string"
             }
           ],
           "reliant.v1.ReportToolResultRequest": [
@@ -34855,6 +34886,10 @@
           "reliant.v1.WhoAmIResponse": [
             {
               "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_email",
               "kind": "string"
             }
           ]
@@ -46190,7 +46225,7 @@
     {
       "consumer": "DaemonAuth",
       "field": "Tokens",
-      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenIntrospector",
+      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenAccountIntrospector",
       "methods": [],
       "candidates": [
         "TokenAuthority"

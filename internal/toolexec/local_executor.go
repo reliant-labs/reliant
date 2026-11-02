@@ -164,6 +164,9 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Create tool context with worktree info
 	toolContext := rctx.NewToolContext(ctx, chatID, thread, project, worktreeInfo)
+	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
+	// from the context map only — never from toolInput, which a model writes.
+	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.

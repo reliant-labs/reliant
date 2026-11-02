@@ -171,11 +171,13 @@ func wireGlobalGitCredentialHelper(ctx context.Context, argv []string) error {
 // x-access-token lines of ~/.git-credentials. It returns counts only; values
 // are never logged. Best-effort.
 func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (remotes, lines int) {
-	found, err := repo.Discover(ctx, projectsDir, 0)
+	found, err := repo.Discover(ctx, projectsDir, repo.Options{})
 	if err != nil {
 		logging.WarnContext(ctx, logPrefix+" git token heal: could not scan projects", "error", err)
+	} else if found.Truncated {
+		logging.WarnContext(ctx, logPrefix+" git token heal: scanned part of the projects", "reason", found.TruncatedReason)
 	}
-	for _, f := range found {
+	for _, f := range found.Repos {
 		dir := filepath.Join(projectsDir, f.RelativePath)
 		remotes += healRemoteURLs(ctx, dir)
 	}

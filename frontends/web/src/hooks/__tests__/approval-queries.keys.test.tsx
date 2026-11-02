@@ -36,9 +36,15 @@ type Row = { id: string; chatId: string; status: ApprovalStatus; title: string }
 let server: Row[];
 let listCalls: number;
 let failWrites: boolean;
+let notPending: boolean;
+
+const expiredMessage = "This request expired: No one answered before the request's time limit; nothing was approved.";
 
 function resolveOnServer(ids: string[], status: ApprovalStatus) {
   if (failWrites) throw new ConnectError("nope", Code.FailedPrecondition);
+  if (notPending) {
+    throw new ConnectError(expiredMessage, Code.FailedPrecondition, { "x-forge-error-reason": "approval_not_pending" });
+  }
   server = server.map((a) => (ids.includes(a.id) ? { ...a, status } : a));
 }
 
@@ -49,6 +55,7 @@ beforeEach(() => {
   ];
   listCalls = 0;
   failWrites = false;
+  notPending = false;
   setTransport(
     mockTransport({
       "ApprovalService.ListApprovalsByChat": () => {
@@ -112,6 +119,35 @@ describe("ApprovalService keys", () => {
       ["a1", ApprovalStatus.PENDING],
       ["a2", ApprovalStatus.PENDING],
     ]);
+  });
+
+  it("a write that lost to the approval's own end drops it instead of rolling back", async () => {
+    const pending = renderHook(() => usePendingApprovals("c1"), { wrapper });
+    await waitFor(() => expect(pending.result.current.data?.approvals).toHaveLength(2));
+
+    // a1 expired on the server while its Approve button was on screen.
+    server = server.map((a) => (a.id === "a1" ? { ...a, status: ApprovalStatus.EXPIRED } : a));
+    notPending = true;
+    const approve = renderHook(() => useApproveToolRequest("c1"), { wrapper });
+    await act(async () => {
+      await approve.result.current.mutateAsync({ requestId: "a1" }).catch(() => undefined);
+    });
+
+    await waitFor(() => expect(pending.result.current.data?.approvals.map((a) => a.id)).toEqual(["a2"]));
+    // ...and the server's list, re-read, agrees.
+    await waitFor(() => expect(listCalls).toBe(2));
+    expect(pending.result.current.data?.approvals.map((a) => a.id)).toEqual(["a2"]);
+  });
+
+  it("approve-all that finds nothing still pending drops the stale approvals", async () => {
+    const pending = renderHook(() => usePendingApprovals("c1"), { wrapper });
+    await waitFor(() => expect(pending.result.current.data?.approvals).toHaveLength(2));
+
+    server = server.map((a) => ({ ...a, status: ApprovalStatus.CANCELLED }));
+    notPending = true;
+    await approveAllPendingApprovals("c1"); // resolves: not an error to surface raw
+
+    await waitFor(() => expect(pending.result.current.data?.approvals).toEqual([]));
   });
 
   it("the keyboard shortcut's approve-all refetches too", async () => {

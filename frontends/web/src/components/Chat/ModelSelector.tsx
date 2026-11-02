@@ -3,6 +3,57 @@ import { Sparkles } from "lucide-react";
 import Combobox, { type ComboboxOption } from "../forge-ui/combobox";
 import { useModels } from "../../store/globalDataStore";
 
+// Get color based on driver ID (the actual API being used)
+function getDriverColor(driverId: string): string {
+  const colors: Record<string, string> = {
+    codex: "#10b981", // emerald-500 (ChatGPT Codex)
+    anthropic: "#f97316", // orange-500
+    claude: "#fb923c", // orange-400 (Claude subscription)
+    openai: "#22c55e", // green-500
+    gemini: "#3b82f6", // blue-500
+    "google ai": "#3b82f6", // blue-500
+    mistral: "#a855f7", // purple-500
+    meta: "#06b6d4", // cyan-500
+    deepseek: "#ef4444", // red-500
+    groq: "#facc15", // yellow-500
+    reliant: "#2563eb", // blue-600 (Reliant brand blue)
+    openrouter: "#8b5cf6", // violet-500
+    azure: "#0ea5e9", // sky-500
+    bedrock: "#f59e0b", // amber-500
+    vertexai: "#10b981", // emerald-500
+    "vertex ai": "#10b981", // emerald-500
+    copilot: "#1f2937", // gray-800
+    "github copilot": "#1f2937", // gray-800
+    local: "#d946ef", // fuchsia-500
+  };
+  return colors[driverId.toLowerCase()] || "#6b7280";
+}
+
+/**
+ * One model as a picker option: its name, a dot in its driver's color, under
+ * its provider (the human-readable API name, like "Anthropic" or
+ * "OpenRouter"). Shared by every model picker so they list models alike.
+ */
+export function modelComboboxOption(model: {
+  id: string;
+  name: string;
+  provider: string;
+  driverId?: string;
+}): ComboboxOption {
+  return {
+    value: model.id,
+    label: model.name,
+    // Use driverId for icon color (falls back to provider if driverId not set)
+    icon: (
+      <div
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: getDriverColor(model.driverId || model.provider) }}
+      />
+    ),
+    group: model.provider,
+  };
+}
+
 interface ModelSelectorProps {
   onSelect: (modelId: string | null) => void;
   defaultModel?: string | null;
@@ -48,32 +99,6 @@ function ModelSelectorComponent({
 
   // Removed loadModels() - models are now loaded from global store on app startup
 
-  // Get color based on driver ID (the actual API being used)
-  const getDriverColor = (driverId: string) => {
-    const colors: Record<string, string> = {
-      codex: "#10b981", // emerald-500 (ChatGPT Codex)
-      anthropic: "#f97316", // orange-500
-      claude: "#fb923c", // orange-400 (Claude subscription)
-      openai: "#22c55e", // green-500
-      gemini: "#3b82f6", // blue-500
-      "google ai": "#3b82f6", // blue-500
-      mistral: "#a855f7", // purple-500
-      meta: "#06b6d4", // cyan-500
-      deepseek: "#ef4444", // red-500
-      groq: "#facc15", // yellow-500
-      reliant: "#2563eb", // blue-600 (Reliant brand blue)
-      openrouter: "#8b5cf6", // violet-500
-      azure: "#0ea5e9", // sky-500
-      bedrock: "#f59e0b", // amber-500
-      vertexai: "#10b981", // emerald-500
-      "vertex ai": "#10b981", // emerald-500
-      copilot: "#1f2937", // gray-800
-      "github copilot": "#1f2937", // gray-800
-      local: "#d946ef", // fuchsia-500
-    };
-    return colors[driverId.toLowerCase()] || "#6b7280";
-  };
-
   const handleSelect = (modelId: string | null) => {
     setSelectedModel(modelId);
     onSelect(modelId);
@@ -85,14 +110,6 @@ function ModelSelectorComponent({
   // Convert models to dropdown options (useMemo ensures React detects when description changes)
   // Now grouped by provider (the human-readable API name from backend like "Anthropic", "OpenRouter")
   const dropdownOptions = useMemo<ComboboxOption[]>(() => {
-    const driverIcon = (driverId: string) => {
-      return (
-        <div
-          className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: getDriverColor(driverId) }}
-        />
-      );
-    };
     return [
       // Default option
       {
@@ -103,17 +120,7 @@ function ModelSelectorComponent({
         group: "System",
       },
       // Model options grouped by provider/API
-      // The provider field now contains human-readable names like "Anthropic", "OpenRouter"
-      ...models.map(
-        (model): ComboboxOption => ({
-          value: model.id,
-          label: model.name,
-          // Use driverId for icon color (falls back to provider if driverId not set)
-          icon: driverIcon(model.driverId || model.provider),
-          // Group by provider (the human-readable API name)
-          group: model.provider,
-        })
-      ),
+      ...models.map(modelComboboxOption),
     ];
   }, [autoDescription, models]);
 

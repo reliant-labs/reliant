@@ -922,7 +922,7 @@ func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Appro
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
 func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
 	var resolvedAt *time.Time
-	if status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED) || status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED) {
+	if status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
 		now := time.Now()
 		resolvedAt = &now
 	}

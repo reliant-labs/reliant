@@ -165,6 +165,10 @@ type Reconciler struct {
 	// allow); shared with the PauseService resume path via SetResetGuard so both
 	// resetters count against a single per-workflow bound.
 	resetGuard *v2workflow.ResetAttemptGuard
+
+	// approvalFeedRepaired is set once announceApprovalResolutions has run to
+	// completion in this process (see it).
+	approvalFeedRepaired atomic.Bool
 }
 
 // SetResetGuard installs the shared reset-attempt guard (see
@@ -267,6 +271,13 @@ const (
 	// anomalyStrandedStartRepaired is the same PENDING root, but Temporal has
 	// its run: the launch's mark-active was lost. Moved to ACTIVE.
 	anomalyStrandedStartRepaired = "stranded_start_repaired"
+	// anomalyStaleApprovalClosed is a pending approval whose wait was already
+	// over (its run finished or was cancelled, its chat archived or gone),
+	// closed as CANCELLED. See resolveStaleApprovals.
+	anomalyStaleApprovalClosed = "stale_approval_closed"
+	// anomalyApprovalResolutionAnnounced is a closed approval whose chat feed
+	// still said pending, announced now. See announceApprovalResolutions.
+	anomalyApprovalResolutionAnnounced = "approval_resolution_announced"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -2893,6 +2904,14 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// what strands its mailbox, so resolving here catches the rows this very
 	// pass orphaned rather than leaving them until the next one.
 	if _, repairErr := r.resolveOrphanedAgentMessages(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// After the reaps too: a run they just ended leaves its approvals with
+	// nothing waiting on them.
+	if _, repairErr := r.resolveStaleApprovals(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	if repairErr := r.announceApprovalResolutions(ctx, stats); repairErr != nil {
 		errors = append(errors, repairErr)
 	}
 	// Backgrounded processes are independent of every workflow repair above:

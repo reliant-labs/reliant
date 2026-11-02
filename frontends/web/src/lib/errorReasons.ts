@@ -40,6 +40,8 @@ export const ERROR_REASONS = [
   "daemon_waking",
   /** The machine's daemon is not on NATS: closed or restarting (errDaemonNotConnected). */
   "daemon_not_connected",
+  /** The machine re-registered but has not answered yet; the request was never sent (ErrDaemonReconnecting). */
+  "daemon_reconnecting",
   /** No machine exists for the request at all (ErrNoDaemon). Nothing to wait for. */
   "no_daemon",
   // ── reliant: handlers ──
@@ -49,6 +51,8 @@ export const ERROR_REASONS = [
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */
   "process_not_running",
+  /** Approve/Deny on an approval no longer pending: decided, expired, or its run ended (handlers/approval). */
+  "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
   /** A protected environment wants a fresh step-up (control-plane secret_store). */

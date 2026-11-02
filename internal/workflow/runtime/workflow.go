@@ -5979,7 +5979,7 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 	if waiting, _ := result["waiting"].(bool); !waiting {
 		return nil
 	}
-	return waitForMachine(ctx, actCtx, preflightInput, waitStart)
+	return waitForMachine(ctx, actCtx, preflightInput, waitStart, result["failed_since"])
 }
 
 // waitForMachine is the rest of a run's wait for a machine that is still
@@ -5989,11 +5989,19 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 // without it) or the timer comes due, then checks once.
 //
 // It ends when the check finds the machine attached (nil), when the check
-// itself ends the wait — the machine failed to start or was removed, or the
+// itself ends the wait — the machine was removed, or its failure to start has
+// held (machinefailure), or the
 // final check past preflightMachineWaitCap still finds it down; the activity
 // queues the message for the machine and returns the reason — or when the
 // user gives up on the machine, which ends the run cancelled.
-func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]interface{}, waitStart time.Time) error {
+//
+// failedSince is the start of the machine's run of Failed reports as the last
+// check returned it (nil: none), handed to the next check unread: a Failed
+// report ends the wait only once it has held for machinefailure.Settle, which
+// is longer than any one check, so the run of reports lives here, in the
+// workflow, between them. It is an activity result read back from history,
+// so replay sees the same value.
+func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]interface{}, waitStart time.Time, failedSince interface{}) error {
 	signals := workflow.GetSignalChannel(ctx, machinewait.SignalName)
 	recheck := machineRecheckFirst
 	for {
@@ -6015,6 +6023,9 @@ func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]inte
 			slice = preflightWaitSlice
 		}
 		in := preflightSliceInput(preflightInput, slice, preflightMachineWaitCap, final)
+		if failedSince != nil {
+			in["failed_since"] = failedSince
+		}
 		var result map[string]interface{}
 		if err := workflow.ExecuteActivity(actCtx, "PreflightDaemonCheck", in).Get(ctx, &result); err != nil {
 			return err
@@ -6022,6 +6033,7 @@ func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]inte
 		if waiting, _ := result["waiting"].(bool); !waiting {
 			return nil
 		}
+		failedSince = result["failed_since"]
 		// A connect that was not this run's machine (another of the user's)
 		// is no reason to look less often; only a quiet interval backs off.
 		if !signaled {
