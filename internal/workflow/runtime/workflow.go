@@ -265,6 +265,10 @@ type ChildWorkflowTracker struct {
 	// is not a descendant's.
 	chatProvider string
 	rootThread   string
+	// rootInputs is the run's own input map, which global updates (the
+	// chat's model picks) write. Its "model" is the chat's model: what a
+	// descendant falls back to on a bound chat (chatModel).
+	rootInputs map[string]interface{}
 	// providerUpdates, userResumes, durableResumes and lateCandidateChecks
 	// number the observations providerVersion asks about; providerVersions
 	// caches each category's first new-code answer.
@@ -1388,6 +1392,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
 	childTracker.chatProvider, _ = input.Inputs[InputKeyProviderSwitch].(string)
 	childTracker.rootThread = thread
+	childTracker.rootInputs = input.Inputs
 	// A user's message (or a thread-scoped model edit on a bound chat)
 	// resumes the whole unfinished chat: every usage-limit wait and
 	// provider-switch hold retries now, a capacity self-pause is released, and
