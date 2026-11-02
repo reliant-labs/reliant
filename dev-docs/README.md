@@ -10,4 +10,5 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `incidents/` — incident write-ups, referenced by path from code comments.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
+- `dashboard-grants.md` — the forge_dash column allowlist, who owns its login and admission, and the post-merge verification plan.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
