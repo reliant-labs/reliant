@@ -48,8 +48,10 @@ type Deps struct {
 
 // RedeemRequest names the exact authority the controller intends to consume.
 type RedeemRequest struct {
-	TicketID      string `json:"ticket_id"`
-	GrantID       string `json:"grant_id"`
+	TicketID string `json:"ticket_id"`
+	// GrantID is empty on the access-list path. A ticket redeems only with the
+	// grant id it was issued with, so the two paths cannot be confused.
+	GrantID       string `json:"grant_id,omitempty"`
 	RequestSHA256 string `json:"request_sha256"`
 }
 

@@ -288,6 +288,10 @@ func parseNodeBaseFromProto() []NodeBaseField {
 			continue
 		}
 
+		if meta, ok := proto.GetExtension(fd.Options(), reliantv1.E_Reliant).(*reliantv1.FieldMeta); ok && meta.GetHidden() {
+			continue
+		}
+
 		name := string(fd.Name())
 		fieldType := protoFieldTypeDisplay(fd)
 		description := getFieldDescription(fd)

@@ -1036,6 +1036,13 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs["log_file"] = logFile
 	}
 
+	// The declared secrets this command receives as environment variables:
+	// names and the environments they live in, never a value. The activity
+	// resolves them itself, so nothing secret enters workflow history.
+	if refs := runSecretRefs(evalResult); len(refs) > 0 {
+		runInputs["secret_refs"] = refs
+	}
+
 	// V2_ExecuteRunStep expects a flat map with runtime fields
 	runInputs["workflow_id"] = e.workflowID
 	runInputs["chat_id"] = e.chatID
@@ -1540,4 +1547,21 @@ func saveMessageExpressions(config *reliantv1.SaveMessageConfig) ([]string, erro
 		exprs = append(exprs, cond)
 	}
 	return exprs, nil
+}
+
+// runSecretRef is one entry of a run step's secret_refs input; it mirrors
+// handlers.StepSecretRef (the runtime cannot import the handlers package).
+type runSecretRef struct {
+	Name        string `json:"name"`
+	Environment string `json:"environment"`
+}
+
+// runSecretRefs reads a resolved run node's secret refs. The environment was
+// evaluated with the node's other templates.
+func runSecretRefs(resolved *reliantv1.Node) []runSecretRef {
+	refs := make([]runSecretRef, 0, len(resolved.GetSecretRefs()))
+	for _, r := range resolved.GetSecretRefs() {
+		refs = append(refs, runSecretRef{Name: r.GetName(), Environment: model.CelStringValue(r.GetEnvironment())})
+	}
+	return refs
 }

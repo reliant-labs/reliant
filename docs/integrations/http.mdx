@@ -45,6 +45,57 @@ nodes:
 
 To authenticate, save an API-key or basic-auth connection for the `http` integration and name it with `connection:`. The credential is sent only to the host the request started at, so a redirect to another site does not carry it along. An API-key connection picks its header from a fixed list, because this integration does not know any particular API.
 
+## Secrets
+
+A workflow can use a stored secret, such as an API key, without a model ever seeing it. Declare the secrets at the top of the workflow, then name one with `{{ secrets.NAME }}` in any step that does not hand its text to a model:
+
+```yaml
+name: trader-bot
+
+secrets:
+  TRADER_KEY:
+    environment: trader/staging        # "<forge project>/<env name>", or an environment id
+    # environment: "{{ inputs.trader_env }}"   # may also be an expression over inputs
+
+nodes:
+  - id: get_briefing
+    type: action
+    uses: http/request@1
+    with:
+      url: "{{ inputs.trader_base_url }}/trader.v1.TradingService/GetBriefing"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ secrets.TRADER_KEY }}"
+      body: { account: "main" }
+
+  - id: deploy
+    type: run
+    command: ./deploy.sh --key "{{ secrets.TRADER_KEY }}"   # or just use $TRADER_KEY
+```
+
+### Where a secret can be used
+
+| Step | Where | How the value is delivered |
+|---|---|---|
+| `action` | any value under `with:` (for `http/request@1`: `url`, `headers`, `body`) | substituted into the request inside the step |
+| `run` | the `command` | every declared secret is exported to the command as an environment variable of the same name; `{{ secrets.NAME }}` in the command text becomes `"${NAME}"`, so the value is never in the command line |
+
+A secret is a validation error everywhere else: prompts and messages for `call_llm`, `router`, agents and sub-agents, `save_message`, tool configs and response tools, `invoke_tool` (every tool a workflow can name hands its parameters to a model or a chat), conditions, `compute`, `while`, `key`, `items`, edges and workflow `outputs`. Once a value is in a prompt it has gone to the model provider and cannot be recalled. Only a whole `{{ secrets.NAME }}` is a secret reference; `secrets['NAME']`, `secrets.NAME.upperAscii()` and concatenations are refused. The name must be declared, and a name cannot be one a `run` step needs for itself (`PATH`, `HOME`, `GITHUB_TOKEN`, anything starting `RELIANT_`, and similar).
+
+### What Reliant keeps
+
+The value is fetched by the worker for one step attempt, held in memory, and never written to the run's state, the Temporal history, logs, spans, node outputs or the UI. The step receives the reference, not the value, until it runs. Everything the step returns is **masked** before it leaves the step: a request's response, a command's output, errors and the text the UI shows. The mask covers the value as it is, in base64, URL-escaped and JSON-escaped, and line by line for a multi-line value. It cannot hide a value the step transforms in other ways (hashing, splitting it across lines), so a `run` step is a place you trust with the secret.
+
+Text that reaches a step as data, such as a workflow input or the output of an earlier step, is never treated as a secret reference, even if it contains `{{ secrets.NAME }}`.
+
+### Access
+
+A secret's *access list* decides which workflows may use it. An org owner or admin allows a workflow with `forge secret allow TRADER_KEY --env staging --workflow trader-bot`. A workflow that is not on the list fails the step with a message that names that command. The activation and trigger approval list each secret a workflow uses (name and environment), so adding one is a change the owner approves.
+
+### Loops and sub-workflows
+
+Any number of steps may use a secret, including steps inside loops and parallel loops, with nothing to configure per step. An inline `loop` or `workflow` body uses the root workflow's declarations. A workflow loaded by `ref` is a separate workflow and declares its own secrets; the parent's are not passed down, and its access list is checked against the child's own name.
+
 ## Calling in rather than out
 
 HTTP only makes outgoing requests. To start a run from an incoming request, use a [webhook](/automations/webhooks).

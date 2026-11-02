@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -44,6 +45,12 @@ type ExecuteRunStepInput struct {
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
+	// SecretRefs are the workflow's declared secrets and where each lives. They
+	// are names and environments only: the activity resolves the values itself,
+	// exports each as an environment variable of the same name, and masks them
+	// in everything it returns. Command carries secret placeholders as markers
+	// (stepsecrets.Marker), never values.
+	SecretRefs []StepSecretRef `json:"secret_refs,omitempty"`
 }
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity
@@ -77,6 +84,16 @@ type ExecuteRunStepActivity struct {
 	// machineWait overrides defaultMachineWait; tests shrink it or give it a
 	// fake clock.
 	machineWait *machineWait
+	// secrets resolves the workflow's declared secrets for the command.
+	secrets SecretResolver
+}
+
+// WithSecretResolver lets a run step export the workflow's declared secrets to
+// its command. A nil resolver makes a step that declares any fail rather than
+// run without them.
+func (a *ExecuteRunStepActivity) WithSecretResolver(r SecretResolver) *ExecuteRunStepActivity {
+	a.secrets = r
+	return a
 }
 
 // MachineObserver reports the state of the machine a run's commands execute
@@ -199,6 +216,26 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	}
 	execCtx.Credentials = credentials
 
+	// Declared secrets: resolved here, inside the attempt, and exported to the
+	// command as environment variables of the same name. The command text keeps
+	// no value (a placeholder becomes a ${NAME} reference), so a value is not in
+	// a command line, a process listing or any stored copy of the command.
+	// Everything this step returns is masked before it leaves the activity.
+	secrets, secretErr := resolveStepSecrets(ctx, a.secrets, input.WorkflowID, input.StepID, input.SecretRefs)
+	if secretErr != nil {
+		message, _ := secretFailure(secretErr)
+		msg := "Error: " + message
+		return ExecuteRunStepOutput{Stderr: msg, Output: msg, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
+	}
+	display := stepsecrets.Unprotect(input.Command)
+	command := stepsecrets.ShellRefs(input.Command)
+	var env map[string]string
+	if len(secrets.values) > 0 {
+		env = secrets.values.Env()
+	}
+	mask := secrets.masker.Mask
+
 	// Determine working directory
 	workingDir := execCtx.ProjectPath
 	worktreeID := execCtx.WorktreeID
@@ -221,7 +258,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		wait = defaultMachineWait()
 	}
 	observe := a.observeMachine(execCtx)
-	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, input.Command, workingDir, timeout)
+	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, command, workingDir, timeout, env)
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
 		// the step fails saying which machine and for how long.
@@ -252,10 +289,22 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 				"never_ran", transportErr.NotDispatched,
 				"detail", transportErr.Detail,
 			)
+			if !secrets.masker.Empty() {
+				// The daemon's own words about a failure could echo the
+				// command's environment; the error is built from masked text.
+				masked := *transportErr
+				masked.Detail = mask(masked.Detail)
+				masked.Command = stepsecrets.Unprotect(masked.Command)
+				transportErr = &masked
+			}
 			return ExecuteRunStepOutput{}, runStepTransportFailure(transportErr)
 		}
-		return ExecuteRunStepOutput{}, fmt.Errorf("failed to execute command: %w", err)
+		return ExecuteRunStepOutput{}, secrets.masker.MaskError(fmt.Errorf("failed to execute command: %w", err))
 	}
+
+	// What leaves the activity is masked first: the output, the log file and
+	// the chat update are all built from these.
+	stdout, stderr = mask(stdout), mask(stderr)
 
 	// Combine stdout and stderr for output field
 	var outputBuilder strings.Builder
@@ -286,7 +335,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		logData := map[string]interface{}{
 			"exit_code":   exitCode,
 			"working_dir": workingDir,
-			"command":     input.Command,
+			"command":     display,
 			"duration_ms": time.Since(startTime).Milliseconds(),
 			"stdout":      stdout,
 			"stderr":      stderr,
@@ -353,7 +402,7 @@ func (a *ExecuteRunStepActivity) writeRunOutput(ctx context.Context, input Execu
 		"update_type":        "run_output",
 		"id":                 runOutputID,
 		"step_id":            input.StepID,
-		"command":            input.Command,
+		"command":            stepsecrets.Unprotect(input.Command),
 		"stdout":             output.Stdout,
 		"stderr":             output.Stderr,
 		"output":             output.Output,
@@ -541,7 +590,7 @@ func formatMachineWait(d time.Duration) string {
 // proves it never reached a machine, holds it for the machine and sends it
 // again (see machineWait). Every other outcome — a verdict, a failure that may
 // have followed a start — is returned as it came: it is sent once.
-func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int, env map[string]string) (stdout, stderr string, exitCode int, interrupted bool, err error) {
 	logger := activity.GetLogger(ctx)
 	// The wait's clock starts when the FIRST send starts, not when it fails:
 	// that send may itself have ridden out a disconnect for up to
@@ -552,7 +601,7 @@ func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *mach
 	waiting := false
 	resend := wait.firstResend
 	for {
-		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
+		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, env)
 		var transportErr *toolexec.TransportError
 		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched {
 			if waiting && err == nil {

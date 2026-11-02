@@ -279,6 +279,14 @@ message Node {
   }];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
+  // SecretRefs are the declared secrets this node's activity resolves, written by
+  // the parser from the workflow's `secrets:` block and never authored. An action
+  // node lists the secrets its `with` names; a run node lists every declared
+  // secret (each is exported to the command as an environment variable). The
+  // environment is an expression over inputs, evaluated with the node's other
+  // templates. Names and environments only: a value is never part of a node.
+  repeated NodeSecretRef secret_refs = 40 [(reliant) = {hidden: true}];
+
   oneof args {
     CallLLMArgs call_llm = 10;
     ExecuteToolsArgs execute_tools = 11;
@@ -2157,6 +2165,28 @@ message Workflow {
   // machine is up and before its first node (preflight), and fails at once,
   // with every missing item named, instead of an hour in.
   WorkflowRequirements requires = 21;
+  // Secrets declares the secrets this workflow uses, by name. A name may appear
+  // as {{ secrets.NAME }} in any step that does not hand its text to a model
+  // (an action's url, headers, body or inputs, a run command, a non-agent
+  // tool's parameters); in a run step every declared secret is also exported as
+  // an environment variable of the same name. The placeholder stays literal in
+  // workflow state and Temporal history: it is resolved inside the step's
+  // activity, through the control plane, and every resolved value is masked in
+  // what the step returns. A child workflow (a ref) declares its own secrets.
+  map<string, SecretDeclaration> secrets = 22;
+}
+
+// SecretDeclaration says where a secret lives.
+message SecretDeclaration {
+  // Environment is "<forge project>/<env name>" or an environment id, in the
+  // run owner's organization. It may be an expression over inputs.
+  CelString environment = 1;
+}
+
+// NodeSecretRef binds one declared secret to the environment it lives in.
+message NodeSecretRef {
+  string name = 1;
+  CelString environment = 2;
 }
 
 // WorkflowRequirements is what a run checks before its first node.

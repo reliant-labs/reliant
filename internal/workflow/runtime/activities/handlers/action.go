@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -13,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -36,6 +38,16 @@ type ActionActivity struct {
 	runner      writeledger.Runner
 	credentials httpaction.CredentialSource
 	hosted      HostedActionExecutor
+	secrets     SecretResolver
+}
+
+// WithSecretResolver lets an action's inputs use the workflow's declared
+// secrets ({{ secrets.NAME }}). A nil resolver makes such an action fail rather
+// than send the placeholder.
+func (a *ActionActivity) WithSecretResolver(r SecretResolver) *ActionActivity {
+	clone := *a
+	clone.secrets = r
+	return &clone
 }
 
 // HostedActionExecutor is used only by fixed action nodes, never by the
@@ -123,6 +135,17 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		return a.executeHosted(ctx, uses, grant, params, rtx), nil
 	}
 
+	// Declared secrets are resolved here, inside the activity: the node reached
+	// it with markers, never values. They are substituted into the request and
+	// every byte the step returns is masked.
+	secrets, failure := a.resolveActionSecrets(ctx, input, params)
+	if failure != nil {
+		return failure, nil
+	}
+	if len(secrets.values) > 0 {
+		params = secrets.values.SubstituteAny(params).(map[string]any)
+	}
+
 	site := httpaction.CallSite{
 		RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
 		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation,
@@ -137,19 +160,83 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 			out.ErrorCode = credErr.Code
 			out.Content = credErr.Message
 		}
+		out.Content = secrets.masker.Mask(out.Content)
 	} else {
 		out.ConnectionId = result.ConnectionID
-		out.Content = result.Content
+		out.Content = secrets.masker.Mask(result.Content)
 		out.IsError = result.IsError
 		out.Retryable = result.Retryable
 		out.StatusCode = int32(result.StatusCode)
 		if result.Data != nil {
 			if data, convErr := structpb.NewStruct(result.Data); convErr == nil {
-				out.Data = data
+				out.Data = secrets.masker.MaskStruct(data)
 			}
 		}
 	}
 	activity.GetLogger(ctx).Debug("[Action] Completed", "stepID", rtx.StepID, "uses", uses,
 		"isError", out.IsError, "status", out.StatusCode)
 	return out, nil
+}
+
+// resolveActionSecrets resolves the secrets an action's inputs name. The output
+// is nil-safe: with no secrets in play the masker masks nothing.
+func (a *ActionActivity) resolveActionSecrets(ctx context.Context, input ActivityInput, params map[string]any) (*stepSecrets, *reliantv1.ActionOutput) {
+	rtx := input.Runtime
+	names := namesInAny(params)
+	if len(names) == 0 {
+		return &stepSecrets{values: stepsecrets.Values{}, masker: stepsecrets.NewMasker()}, nil
+	}
+	uses := strings.TrimSpace(model.CelStringRaw(input.Node.GetAction().GetUses()))
+	fail := func(code, message string) *reliantv1.ActionOutput { return failedAction(uses, code, message) }
+	want, err := nodeSecretRefs(input.Node, names)
+	if err != nil {
+		return nil, fail("invalid_argument", err.Error())
+	}
+	if rtx.WorkflowID == "" || rtx.StepID == "" {
+		return nil, fail("failed_precondition", "secrets require a fixed workflow step")
+	}
+	got, err := resolveStepSecrets(ctx, a.secrets, rtx.WorkflowID, rtx.StepID, want)
+	if err != nil {
+		message, denied := secretFailure(err)
+		code := "failed_precondition"
+		if denied {
+			code = "permission_denied"
+		}
+		return nil, fail(code, message)
+	}
+	return got, nil
+}
+
+func failedAction(uses, code, message string) *reliantv1.ActionOutput {
+	return &reliantv1.ActionOutput{Uses: uses, IsError: true, ErrorCode: code, Content: message}
+}
+
+// namesInAny returns the distinct secret markers anywhere in decoded JSON.
+func namesInAny(in any) []string {
+	set := map[string]bool{}
+	var walk func(any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case string:
+			for _, n := range stepsecrets.Names(x) {
+				set[n] = true
+			}
+		case map[string]any:
+			for k, item := range x {
+				walk(k)
+				walk(item)
+			}
+		case []any:
+			for _, item := range x {
+				walk(item)
+			}
+		}
+	}
+	walk(in)
+	out := make([]string, 0, len(set))
+	for n := range set {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
