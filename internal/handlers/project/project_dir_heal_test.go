@@ -148,3 +148,13 @@ func TestProjectDirHeal_NeverCreatesARepositoryProjectsDirectory(t *testing.T) {
 	require.Contains(t, router.mkdired, plain.Path,
 		"a plain project's directory is still healed — that is what the heal exists for")
 }
+
+// Deps.Router is optional. Without one, a heal aimed at a named daemon reports
+// errNoDaemonRouter, as the default-machine path does, instead of panicking.
+func TestProjectDirHeal_WithoutARouterReportsIt(t *testing.T) {
+	svc := &Service{}
+	for _, daemonID := range []string{"", "cloud-daemon"} {
+		err := svc.healProjectDir(context.Background(), "user-1", daemonID, "/home/workspace/projects/p")
+		require.ErrorIs(t, err, errNoDaemonRouter, "daemonID %q", daemonID)
+	}
+}
