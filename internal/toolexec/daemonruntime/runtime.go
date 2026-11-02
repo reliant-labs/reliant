@@ -167,8 +167,9 @@ type daemonClient struct {
 	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
 
 	// foreignIDSetAside records that this process already moved a saved
-	// daemon id aside because the gateway said another user owns it. The
-	// recovery runs at most once per process; see setAsideForeignDaemonID.
+	// daemon id aside because the gateway refused it (another user owns it,
+	// or it is reserved for daemon-bound credentials). The recovery runs at
+	// most once per process; see setAsideRefusedDaemonID.
 	foreignIDSetAside bool
 
 	// Log policy state: see log_policy.go. Zero values are ready to use, so a
@@ -679,25 +680,31 @@ func (d *daemonClient) persistDaemonID(daemonID string) {
 		"daemonID", daemonID, "dataDir", dataDir, "serverURL", d.serverURL)
 }
 
-// setAsideForeignDaemonID recovers from the one refusal a daemon can fix by
-// itself: the gateway saying the id it asserted belongs to another user. It
-// reports whether it did, in which case the caller redials.
+// setAsideRefusedDaemonID recovers from the two refusals a daemon can fix by
+// itself, both of the id it asserted rather than of its credential: the id
+// belongs to another user (bootstrap.IsForeignDaemonIDError), or it is
+// reserved for daemon-bound credentials and this daemon presented a login
+// token (bootstrap.IsReservedDaemonIDError). It reports whether it recovered,
+// in which case the caller redials.
 //
-// The usual cause is one laptop serving two accounts. The instance directory
-// still held the id the gateway minted for the FIRST account, and this
-// daemon, running as the second, asserted it — so every start was refused,
-// forever, until someone found the file by hand. The server mints ids and
-// never gives one to two owners, so the fix is to stop asserting this one:
-// move the file aside (renamed, never deleted — it is the other account's
-// machine identity) and register with no id, which the gateway answers with
-// this account's own. The other owner's record is untouched.
+// The usual foreign cause is one laptop serving two accounts. The instance
+// directory still held the id the gateway minted for the FIRST account, and
+// this daemon, running as the second, asserted it — so every start was
+// refused, forever, until someone found the file by hand. The reserved cause
+// is an instance that once ran with a daemon token (or holds a managed
+// machine's id) now running with a login token. Either way the server mints
+// ids, so the fix is to stop asserting this one: move the file aside
+// (renamed, never deleted — it is another machine's identity) and register
+// with no id, which the gateway answers with an id of this credential's own.
+// The machine the id belongs to is untouched.
 //
 // Only an id read from this instance's daemon-id file is moved: one a launcher
 // passed in explicitly is not this daemon's to rewrite. And only once per
 // process: if registering with no id is refused too, the credential itself
 // names a daemon another account owns, and redialing cannot change that.
-func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
-	if d.foreignIDSetAside || !bootstrap.IsForeignDaemonIDError(err) {
+func (d *daemonClient) setAsideRefusedDaemonID(err error) bool {
+	reserved := bootstrap.IsReservedDaemonIDError(err)
+	if d.foreignIDSetAside || !(reserved || bootstrap.IsForeignDaemonIDError(err)) {
 		return false
 	}
 	asserted := strings.TrimSpace(d.currentDaemonID())
@@ -706,9 +713,19 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 		return false
 	}
 
-	setAsideTo, mvErr := bootstrap.SetAsideDaemonID(dataDir)
+	why, notice := "belongs to another account",
+		"  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
+			"    Moved it aside (%s) and registering this machine with your account.\n"
+	setAside := bootstrap.SetAsideDaemonID
+	if reserved {
+		why, notice = "is reserved for a daemon token and this daemon signed in with a login",
+			"  ! The machine identity saved for this workspace can only be used with its own daemon token,\n"+
+				"    and this daemon is signed in with your login. Moved it aside (%s) and registering this machine as new.\n"
+		setAside = bootstrap.SetAsideReservedDaemonID
+	}
+	setAsideTo, mvErr := setAside(dataDir)
 	if mvErr != nil {
-		logging.Error(logPrefix+" Saved daemon id belongs to another account, and moving it aside failed",
+		logging.Error(logPrefix+" Saved daemon id "+why+", and moving it aside failed",
 			"error", mvErr, "daemonID", asserted, "dataDir", dataDir)
 		return false
 	}
@@ -720,17 +737,29 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 	SetDaemonIdentity("")
 	logging.SetDaemonID("")
 
-	logging.Warn(logPrefix+" Saved daemon id belongs to another account — set it aside; registering as a new machine",
+	logging.Warn(logPrefix+" Saved daemon id "+why+" — set it aside; registering as a new machine",
 		"daemonID", asserted, "setAsideTo", setAsideTo, "dataDir", dataDir)
 	if !d.bootCfg.Verbose {
-		fmt.Fprintf(logging.Notices(), "  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
-			"    Moved it aside (%s) and registering this machine with your account.\n", setAsideTo)
+		fmt.Fprintf(logging.Notices(), notice, setAsideTo)
 	}
 	return true
 }
 
+// reservedDaemonIDFailure is the error a daemon stops with when the gateway
+// refuses its id as reserved for daemon-bound credentials and
+// setAsideRefusedDaemonID could not help: the id was not read from this
+// instance's file. It never calls this a credential problem: the credential
+// was accepted.
+func (d *daemonClient) reservedDaemonIDFailure(err error) error {
+	return fmt.Errorf("the gateway refused this daemon's id because it is reserved for that machine's own daemon "+
+		"token (a managed cloud machine, or a daemon that connected with a daemon token), and a login token cannot "+
+		"connect as it; the id was not read from %s, so it was left in place — start the daemon with that "+
+		"machine's daemon token, or without that id to register a new machine: %w",
+		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
+}
+
 // foreignDaemonIDFailure is the error a daemon stops with when the gateway
-// refuses its id as another user's and setAsideForeignDaemonID could not help.
+// refuses its id as another user's and setAsideRefusedDaemonID could not help.
 // It never calls this a credential problem: the credential was accepted.
 func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 	if d.foreignIDSetAside {
@@ -912,7 +941,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
-			if d.setAsideForeignDaemonID(err) {
+			if d.setAsideRefusedDaemonID(err) {
 				// Redial at once: nothing on the gateway has to change, this
 				// daemon just stops asserting an id that is not its own.
 				continue
@@ -927,6 +956,9 @@ func (d *daemonClient) run(ctx context.Context) error {
 				d.stopAllStreams()
 				if bootstrap.IsForeignDaemonIDError(err) {
 					return d.foreignDaemonIDFailure(err)
+				}
+				if bootstrap.IsReservedDaemonIDError(err) {
+					return d.reservedDaemonIDFailure(err)
 				}
 				if connect.CodeOf(err) == connect.CodeAborted {
 					// Name the condition rather than calling it a connection
