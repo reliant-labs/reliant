@@ -60,6 +60,7 @@ import { BUTTON_SMALL, Segmented } from "../Dashboards/parts";
 import { deliveryScopeOf } from "../deliveryScope";
 import { filterParam, filterTokensOf, scopeFiltersOf, type FilterToken } from "../obsFilters";
 import type { ObsEnvironment } from "../obsPlace";
+import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { ObsScopeBar } from "../ObsScopeBar";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
 import { useNothingArrived } from "../serviceSignals";
@@ -94,10 +95,13 @@ export function MetricsExplorerPage() {
       }),
     [navigate]
   );
-  const environments = useMemo<ObsEnvironment[]>(
-    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : [])),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // A chart can become an alert rule, and the dialog names the rules each
+  // environment already declares.
+  const environments = useDeclaredEnvironments(recorded);
   const hrefs = useMemo<MetricsExplorerHrefs>(
     () => ({
       trace: (traceId) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),

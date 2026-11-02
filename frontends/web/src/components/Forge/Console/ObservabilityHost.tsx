@@ -27,6 +27,7 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
+import { useDeclaredEnvironments } from "../Observability/useDeclaredEnvironments";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL } from "./envScope";
@@ -55,13 +56,13 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
 
-  const environments = useMemo(
-    () =>
-      roster.envs.flatMap((candidate) =>
-        candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : []
-      ),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // Only the Alerts view reads what each environment declares; every other
+  // view leaves the per-environment shapes unfetched.
+  const environments = useDeclaredEnvironments(recorded, { enabled: view === "alerts" });
 
   const obsSearch = useMemo<ObsSearch>(
     () => ({ ...(carriedObsSearch(search) as ObsSearch), view, envs: env === ENV_ALL ? undefined : [env] }),
