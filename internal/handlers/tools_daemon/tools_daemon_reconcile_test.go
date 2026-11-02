@@ -273,7 +273,9 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, awake, clonePath, nil, "clone:awake"))
 	require.NotNil(t, rowOn(awake).CloneStartedAt, "a clone queued to a connected machine can start at once")
 
-	// Queued two hours ago to the sleeping machine: it has not started.
+	// Queued two hours ago to the sleeping machine: it has not started. This
+	// is also the state the clone_started_at migration leaves a clone that was
+	// already in flight (it does not backfill), so the steps below cover it.
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, asleep, clonePath, nil, "clone:asleep"))
 	require.Nil(t, rowOn(asleep).CloneStartedAt, "a clone queued to a sleeping machine waits for it")
 	_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours' WHERE daemon_id = ?`, asleep).Exec(ctx)
@@ -304,6 +306,15 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, core.ProjectInstallFailed, rowOn(asleep).InstallState)
 	require.Equal(t, staleInstallReason, rowOn(asleep).InstallError)
+
+	// The previous release re-clones during a rollout: its upsert re-stamps
+	// cloned_at and install_state but does not know clone_started_at, so the
+	// settled clone's stale start stays. The fresh re-clone is not stuck.
+	_, err = repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET install_state = 'installing', install_error = '', cloned_at = NOW() WHERE daemon_id = ?`, asleep).Exec(ctx)
+	require.NoError(t, err)
+	_, _, err = reconcileProjectDaemons(ctx, repo, asleep, userID, nothingOnDisk)
+	require.NoError(t, err)
+	require.Equal(t, core.ProjectInstallInstalling, rowOn(asleep).InstallState, "a re-clone the previous release just queued is not settled")
 }
 
 // A checkout the connect reconcile records gets its project config (skills,

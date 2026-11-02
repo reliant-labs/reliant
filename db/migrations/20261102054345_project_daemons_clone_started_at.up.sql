@@ -13,10 +13,14 @@
 -- machine was connected then, otherwise the machine's next connect (stamped by
 -- that connect's reconcile). NULL while the clone waits for a machine that has
 -- not connected since. The stuck-clone timeout counts from here.
+--
+-- No backfill: a clone already installing when this lands reads NULL, the
+-- same as one queued while its machine was away, and its machine's next
+-- connect starts its clock (StartQueuedProjectDaemonClones). So the migration
+-- is a catalog-only ADD COLUMN and holds its lock for no table scan. A clone
+-- whose outcome was lost then settles 30 minutes after that connect instead
+-- of at it, which the timeout already allows for any clone.
 ALTER TABLE project_daemons ADD COLUMN clone_started_at timestamp with time zone;
 
 COMMENT ON COLUMN project_daemons.clone_started_at IS
     'When an installing clone could first run: queued to a connected machine, or the machine''s next connect. NULL while it waits for a machine. The stuck-clone timeout counts from here.';
-
--- Clones already in flight keep the clock they had.
-UPDATE project_daemons SET clone_started_at = cloned_at WHERE install_state = 'installing';

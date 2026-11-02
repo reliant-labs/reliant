@@ -271,9 +271,16 @@ const staleInstallAfter = 30 * time.Minute
 // queue time, a machine asleep for longer than the timeout woke to its
 // just-starting clone marked failed. A clone with no start yet is not stuck:
 // its machine has not connected since it was queued.
+//
+// The queue time (ClonedAt) must be past the timeout too. A clone never
+// starts before it is queued, so this changes nothing for rows this release
+// writes; it covers a re-clone queued by the previous release during a
+// rollout, which re-stamps cloned_at but leaves an earlier clone's
+// clone_started_at in place.
 func stuckInstall(row *core.ProjectDaemon) bool {
 	return row != nil && row.InstallState == core.ProjectInstallInstalling &&
-		row.CloneStartedAt != nil && time.Since(*row.CloneStartedAt) >= staleInstallAfter
+		row.CloneStartedAt != nil && time.Since(*row.CloneStartedAt) >= staleInstallAfter &&
+		time.Since(row.ClonedAt) >= staleInstallAfter
 }
 
 // staleInstallReason is the clone error a lost clone settles with: the
