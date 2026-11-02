@@ -90,14 +90,29 @@ vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
 // EnsureEnvironment is the row-creating call. It must not fire from a secrets
 // write in ANY state: in state 1 the row exists, and in state 3 creating it
 // would mean guessing the environment's immutable kind (#353).
+//
+// GetEnvironmentShape serves the env's declared names (the roster row carries
+// only that a declaration exists), in the Struct's snake_case JSON.
 vi.mock("@/services/controlPlane/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/controlPlane/client")>()),
-  getControlPlaneClient: () => ({ ensureEnvironment }),
+  getControlPlaneClient: () => ({
+    ensureEnvironment,
+    getEnvironmentShape: () =>
+      Promise.resolve({
+        declaredShape: {
+          kind: "persistent",
+          workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
+          secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declared_by: ["api"] }],
+          domains: [],
+          clusters: [],
+        },
+      }),
+  }),
 }));
 
 import { LiveSecretsSection, notBuiltRemedy } from "../LiveSecretsSection";
 
-/** A built environment: §10 state 1. Its kind and declared names are on the row. */
+/** A built environment: §10 state 1. Its kind is on the row; its declared names are one read away. */
 const BUILT: LiveEnv = {
   id: "cp-prod",
   name: "prod",
@@ -114,13 +129,7 @@ const BUILT: LiveEnv = {
   observed: { state: "not-reported" },
   drift: { state: "not-reported" },
   driftDetail: "",
-  declaredShape: {
-    kind: "persistent",
-    workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
-    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: [],
-  },
+  declared: true,
 };
 
 function renderSection(props: Partial<React.ComponentProps<typeof LiveSecretsSection>> = {}) {

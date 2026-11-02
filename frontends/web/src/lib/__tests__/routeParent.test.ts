@@ -1,5 +1,37 @@
 import { describe, it, expect } from "vitest";
-import { getParentRouteNavigateOptions } from "../routeParent";
+import {
+  builderReturnState,
+  getBuilderCloseNavigateOptions,
+  getParentRouteNavigateOptions,
+} from "../routeParent";
+
+describe("getBuilderCloseNavigateOptions", () => {
+  // Opened from a chat's workflow viewer, the builder's Back returns to the
+  // chat, not to the workflow's page the user never visited (#624).
+  it("returns to the location the entry recorded", () => {
+    const state = builderReturnState("/project/p1?chat=c1");
+    expect(getBuilderCloseNavigateOptions("/workflow/my-flow", state)).toEqual({
+      href: "/project/p1?chat=c1",
+    });
+  });
+
+  it("falls back to the logical parent when nothing was recorded", () => {
+    expect(getBuilderCloseNavigateOptions("/workflow/my-flow", undefined)).toEqual({
+      to: "/workflows/library/my-flow",
+    });
+    expect(getBuilderCloseNavigateOptions("/workflow/my-flow", { key: "abc" })).toEqual({
+      to: "/workflows/library/my-flow",
+    });
+  });
+
+  it("ignores a recorded origin that is not an in-app path", () => {
+    for (const returnTo of ["https://evil.example", "//evil.example/x", "chat", "/workflow/other", ""]) {
+      expect(
+        getBuilderCloseNavigateOptions("/workflow/new", { builderReturnTo: returnTo }),
+      ).toEqual({ to: "/workflows/library" });
+    }
+  });
+});
 
 describe("getParentRouteNavigateOptions", () => {
   // The builder steps back to the workflow's page, where Edit opened it; a

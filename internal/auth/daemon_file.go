@@ -322,6 +322,35 @@ func DeleteDaemonCredentials(serverURL, sub string) error {
 	return writeStore(store)
 }
 
+// DeleteDaemonCredentialsForServer removes every account's credentials at the
+// origin derived from serverURL and returns what it removed, in
+// ListDaemonCredentials order. Returns nil, nil when the origin holds none, and
+// then writes nothing.
+//
+// This is what signing a machine out of a server means. Deleting only the
+// default account would leave another account's PAT behind, and the next
+// no-flag `daemon start` would resolve to it and connect as that account
+// without a word — the same silent wrong-account connection logout is meant to
+// end.
+func DeleteDaemonCredentialsForServer(serverURL string) ([]*DaemonCredentials, error) {
+	store, err := readStore()
+	if err != nil {
+		return nil, err
+	}
+
+	origin := endpointKey(serverURL)
+	if origin == "" || len(store.Origins[origin]) == 0 {
+		return nil, nil
+	}
+	removed := store.originCredentials(origin)
+	delete(store.Origins, origin)
+	delete(store.DefaultAccounts, origin)
+	if err := writeStore(store); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
 // ListDaemonCredentials returns every stored daemon credential, in a stable
 // order: origins sorted, and within an origin the account a no-account lookup
 // resolves to first, then the rest sorted. Callers that must choose one
@@ -343,25 +372,34 @@ func ListDaemonCredentials() ([]*DaemonCredentials, error) {
 
 	var out []*DaemonCredentials
 	for _, origin := range origins {
-		accounts := make([]string, 0, len(store.Origins[origin]))
-		for account := range store.Origins[origin] {
-			accounts = append(accounts, account)
-		}
-		def := store.resolveAccount(origin, "")
-		sort.Slice(accounts, func(i, j int) bool {
-			if (accounts[i] == def) != (accounts[j] == def) {
-				return accounts[i] == def
-			}
-			return accounts[i] < accounts[j]
-		})
-		for _, account := range accounts {
-			creds := *store.Origins[origin][account]
-			if creds.ServerURL == "" {
-				creds.ServerURL = origin
-			}
-			creds.Sub = account
-			out = append(out, &creds)
-		}
+		out = append(out, store.originCredentials(origin)...)
 	}
 	return out, nil
+}
+
+// originCredentials returns copies of one origin's entries, the account a
+// no-account lookup resolves to first and the rest sorted. Each copy's Sub is
+// its store account and its ServerURL is never empty.
+func (s daemonCredentialsStore) originCredentials(origin string) []*DaemonCredentials {
+	accounts := make([]string, 0, len(s.Origins[origin]))
+	for account := range s.Origins[origin] {
+		accounts = append(accounts, account)
+	}
+	def := s.resolveAccount(origin, "")
+	sort.Slice(accounts, func(i, j int) bool {
+		if (accounts[i] == def) != (accounts[j] == def) {
+			return accounts[i] == def
+		}
+		return accounts[i] < accounts[j]
+	})
+	out := make([]*DaemonCredentials, 0, len(accounts))
+	for _, account := range accounts {
+		creds := *s.Origins[origin][account]
+		if creds.ServerURL == "" {
+			creds.ServerURL = origin
+		}
+		creds.Sub = account
+		out = append(out, &creds)
+	}
+	return out
 }

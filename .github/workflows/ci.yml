@@ -55,15 +55,17 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-# A PR: a new push obsoletes the run in progress. Main: every commit gets its
-# OWN group, so no run of main is ever cancelled, in progress or pending; runs
-# pipeline (owner, 2026-10-29: "prefer to pipeline releases than cancel"). A
-# shared group keeps only ONE pending run, so each push silently cancelled the
-# queued verdict of the commit before it, and the release tags the newest
-# commit with a green record (release-tag.sh --commit). A dispatch groups by
-# its ref.
+# A PR: a new push obsoletes the run in progress. Main: the run in progress
+# always finishes, and a newer push SUPERSEDES the pending one (owner,
+# 2026-11-01). Every push to main shares one group with cancel-in-progress
+# false, and GitHub keeps at most one pending run per group, cancelling the
+# older one when a newer one queues; so a burst of merges costs the run in
+# progress plus one run of the newest commit. The release tags the newest
+# commit with a green record (release-tag.sh --commit), and gate-health passes
+# over a superseded (cancelled) run. The event is part of the group, so the
+# daily schedule and a dispatch never supersede a push run, nor it them.
 concurrency:
-  group: ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && format('main-{0}', github.sha) || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

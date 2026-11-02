@@ -32,7 +32,7 @@ function env(name: string, args: { queued?: boolean; observed?: LiveConvergenceS
     name,
     project: "hounders",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: args.release ?? "v13",
     releaseProvenance: null,

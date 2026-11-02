@@ -2331,6 +2331,512 @@ func (x *AcceptNextMachinePricingResponse) GetActivationState() string {
 	return ""
 }
 
+type PreviewMachinePlanChangeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active organization; resolved and authorized server-side. Empty selects primary org.
+	OrgId *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// The compute plan to move to (plan_compute_*).
+	PlanId        string `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewMachinePlanChangeRequest) Reset() {
+	*x = PreviewMachinePlanChangeRequest{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewMachinePlanChangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewMachinePlanChangeRequest) ProtoMessage() {}
+
+func (x *PreviewMachinePlanChangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewMachinePlanChangeRequest.ProtoReflect.Descriptor instead.
+func (*PreviewMachinePlanChangeRequest) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PreviewMachinePlanChangeRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeRequest) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+// A machine the target plan does not include; a downgrade waits for it to be
+// resized or deleted.
+type MachinePlanChangeBlocker struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Size          string                 `protobuf:"bytes,3,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MachinePlanChangeBlocker) Reset() {
+	*x = MachinePlanChangeBlocker{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MachinePlanChangeBlocker) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MachinePlanChangeBlocker) ProtoMessage() {}
+
+func (x *MachinePlanChangeBlocker) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MachinePlanChangeBlocker.ProtoReflect.Descriptor instead.
+func (*MachinePlanChangeBlocker) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *MachinePlanChangeBlocker) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *MachinePlanChangeBlocker) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MachinePlanChangeBlocker) GetSize() string {
+	if x != nil {
+		return x.Size
+	}
+	return ""
+}
+
+type PreviewMachinePlanChangeResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	FromPlanId     string                 `protobuf:"bytes,1,opt,name=from_plan_id,json=fromPlanId,proto3" json:"from_plan_id,omitempty"`
+	ToPlanId       string                 `protobuf:"bytes,2,opt,name=to_plan_id,json=toPlanId,proto3" json:"to_plan_id,omitempty"`
+	PricingVersion string                 `protobuf:"bytes,3,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	// "upgrade" (now), "downgrade" (at period_end) or "cancel_downgrade".
+	Direction string `protobuf:"bytes,4,opt,name=direction,proto3" json:"direction,omitempty"`
+	// The instant the change is priced at; ChangeMachinePlan must send it back.
+	ProrationDate *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=proration_date,json=prorationDate,proto3" json:"proration_date,omitempty"`
+	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// Charged to the card today. Zero unless an upgrade.
+	AmountDueTodayCents int64 `protobuf:"varint,7,opt,name=amount_due_today_cents,json=amountDueTodayCents,proto3" json:"amount_due_today_cents,omitempty"`
+	// Net proration for the rest of the period, charged today. Zero unless an
+	// upgrade.
+	ProrationCents           int64 `protobuf:"varint,8,opt,name=proration_cents,json=prorationCents,proto3" json:"proration_cents,omitempty"`
+	CurrentMonthlyPriceCents int64 `protobuf:"varint,9,opt,name=current_monthly_price_cents,json=currentMonthlyPriceCents,proto3" json:"current_monthly_price_cents,omitempty"`
+	NewMonthlyPriceCents     int64 `protobuf:"varint,10,opt,name=new_monthly_price_cents,json=newMonthlyPriceCents,proto3" json:"new_monthly_price_cents,omitempty"`
+	// Included hours an upgrade adds for the rest of this period, in hours of
+	// the new plan's own size, rounded to 0.1. "0" otherwise.
+	IncludedHoursDelta string `protobuf:"bytes,11,opt,name=included_hours_delta,json=includedHoursDelta,proto3" json:"included_hours_delta,omitempty"`
+	// The new plan's own size and its monthly included hours from the next period.
+	NewSize          string `protobuf:"bytes,12,opt,name=new_size,json=newSize,proto3" json:"new_size,omitempty"`
+	NewIncludedHours int64  `protobuf:"varint,13,opt,name=new_included_hours,json=newIncludedHours,proto3" json:"new_included_hours,omitempty"`
+	// Whether ChangeMachinePlan would accept this quote, and why not.
+	Allowed          bool                        `protobuf:"varint,14,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	BlockedReasons   []string                    `protobuf:"bytes,15,rep,name=blocked_reasons,json=blockedReasons,proto3" json:"blocked_reasons,omitempty"`
+	BlockingMachines []*MachinePlanChangeBlocker `protobuf:"bytes,16,rep,name=blocking_machines,json=blockingMachines,proto3" json:"blocking_machines,omitempty"`
+	// Binds every figure above; ChangeMachinePlan refuses any other digest.
+	TermsSha256    string                 `protobuf:"bytes,17,opt,name=terms_sha256,json=termsSha256,proto3" json:"terms_sha256,omitempty"`
+	QuoteExpiresAt *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=quote_expires_at,json=quoteExpiresAt,proto3" json:"quote_expires_at,omitempty"`
+	// When the new plan takes effect: proration_date for an upgrade,
+	// period_end for a downgrade.
+	EffectiveAt *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=effective_at,json=effectiveAt,proto3" json:"effective_at,omitempty"`
+	// The plan a scheduled downgrade will move to at period_end, if any.
+	ScheduledPlanId string `protobuf:"bytes,20,opt,name=scheduled_plan_id,json=scheduledPlanId,proto3" json:"scheduled_plan_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PreviewMachinePlanChangeResponse) Reset() {
+	*x = PreviewMachinePlanChangeResponse{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewMachinePlanChangeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewMachinePlanChangeResponse) ProtoMessage() {}
+
+func (x *PreviewMachinePlanChangeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewMachinePlanChangeResponse.ProtoReflect.Descriptor instead.
+func (*PreviewMachinePlanChangeResponse) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetFromPlanId() string {
+	if x != nil {
+		return x.FromPlanId
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetToPlanId() string {
+	if x != nil {
+		return x.ToPlanId
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetProrationDate() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ProrationDate
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetAmountDueTodayCents() int64 {
+	if x != nil {
+		return x.AmountDueTodayCents
+	}
+	return 0
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetProrationCents() int64 {
+	if x != nil {
+		return x.ProrationCents
+	}
+	return 0
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetCurrentMonthlyPriceCents() int64 {
+	if x != nil {
+		return x.CurrentMonthlyPriceCents
+	}
+	return 0
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetNewMonthlyPriceCents() int64 {
+	if x != nil {
+		return x.NewMonthlyPriceCents
+	}
+	return 0
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetIncludedHoursDelta() string {
+	if x != nil {
+		return x.IncludedHoursDelta
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetNewSize() string {
+	if x != nil {
+		return x.NewSize
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetNewIncludedHours() int64 {
+	if x != nil {
+		return x.NewIncludedHours
+	}
+	return 0
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetBlockedReasons() []string {
+	if x != nil {
+		return x.BlockedReasons
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetBlockingMachines() []*MachinePlanChangeBlocker {
+	if x != nil {
+		return x.BlockingMachines
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetTermsSha256() string {
+	if x != nil {
+		return x.TermsSha256
+	}
+	return ""
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetQuoteExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.QuoteExpiresAt
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetEffectiveAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveAt
+	}
+	return nil
+}
+
+func (x *PreviewMachinePlanChangeResponse) GetScheduledPlanId() string {
+	if x != nil {
+		return x.ScheduledPlanId
+	}
+	return ""
+}
+
+type ChangeMachinePlanRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	OrgId          *string                `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	PlanId         string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	PricingVersion string                 `protobuf:"bytes,3,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	// proration_date and terms_sha256 exactly as PreviewMachinePlanChange returned them.
+	ProrationDate *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=proration_date,json=prorationDate,proto3" json:"proration_date,omitempty"`
+	TermsSha256   string                 `protobuf:"bytes,5,opt,name=terms_sha256,json=termsSha256,proto3" json:"terms_sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeMachinePlanRequest) Reset() {
+	*x = ChangeMachinePlanRequest{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeMachinePlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeMachinePlanRequest) ProtoMessage() {}
+
+func (x *ChangeMachinePlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeMachinePlanRequest.ProtoReflect.Descriptor instead.
+func (*ChangeMachinePlanRequest) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ChangeMachinePlanRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanRequest) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanRequest) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanRequest) GetProrationDate() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ProrationDate
+	}
+	return nil
+}
+
+func (x *ChangeMachinePlanRequest) GetTermsSha256() string {
+	if x != nil {
+		return x.TermsSha256
+	}
+	return ""
+}
+
+type ChangeMachinePlanResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	// "applied": the upgrade is in effect, or the scheduled downgrade is
+	// withdrawn. "scheduled": the downgrade takes effect at effective_at.
+	// "confirming": Stripe's answer was lost in transit; the change settles
+	// automatically, and retrying the same request is safe.
+	State               string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	PlanId              string                 `protobuf:"bytes,3,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	Direction           string                 `protobuf:"bytes,4,opt,name=direction,proto3" json:"direction,omitempty"`
+	AmountDueTodayCents int64                  `protobuf:"varint,5,opt,name=amount_due_today_cents,json=amountDueTodayCents,proto3" json:"amount_due_today_cents,omitempty"`
+	ProrationCents      int64                  `protobuf:"varint,6,opt,name=proration_cents,json=prorationCents,proto3" json:"proration_cents,omitempty"`
+	StripeInvoiceId     string                 `protobuf:"bytes,7,opt,name=stripe_invoice_id,json=stripeInvoiceId,proto3" json:"stripe_invoice_id,omitempty"`
+	EffectiveAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=effective_at,json=effectiveAt,proto3" json:"effective_at,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ChangeMachinePlanResponse) Reset() {
+	*x = ChangeMachinePlanResponse{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeMachinePlanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeMachinePlanResponse) ProtoMessage() {}
+
+func (x *ChangeMachinePlanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeMachinePlanResponse.ProtoReflect.Descriptor instead.
+func (*ChangeMachinePlanResponse) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ChangeMachinePlanResponse) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanResponse) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanResponse) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanResponse) GetAmountDueTodayCents() int64 {
+	if x != nil {
+		return x.AmountDueTodayCents
+	}
+	return 0
+}
+
+func (x *ChangeMachinePlanResponse) GetProrationCents() int64 {
+	if x != nil {
+		return x.ProrationCents
+	}
+	return 0
+}
+
+func (x *ChangeMachinePlanResponse) GetStripeInvoiceId() string {
+	if x != nil {
+		return x.StripeInvoiceId
+	}
+	return ""
+}
+
+func (x *ChangeMachinePlanResponse) GetEffectiveAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveAt
+	}
+	return nil
+}
+
 type GetCurrentUserUsageBillingRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Active organization; resolved and authorized server-side. Empty selects primary org.
@@ -2341,7 +2847,7 @@ type GetCurrentUserUsageBillingRequest struct {
 
 func (x *GetCurrentUserUsageBillingRequest) Reset() {
 	*x = GetCurrentUserUsageBillingRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[26]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2353,7 +2859,7 @@ func (x *GetCurrentUserUsageBillingRequest) String() string {
 func (*GetCurrentUserUsageBillingRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserUsageBillingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[26]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2366,7 +2872,7 @@ func (x *GetCurrentUserUsageBillingRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserUsageBillingRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserUsageBillingRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{26}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetCurrentUserUsageBillingRequest) GetOrgId() string {
@@ -2391,7 +2897,7 @@ type UsageBillingAgreement struct {
 
 func (x *UsageBillingAgreement) Reset() {
 	*x = UsageBillingAgreement{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[27]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2403,7 +2909,7 @@ func (x *UsageBillingAgreement) String() string {
 func (*UsageBillingAgreement) ProtoMessage() {}
 
 func (x *UsageBillingAgreement) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[27]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2416,7 +2922,7 @@ func (x *UsageBillingAgreement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageBillingAgreement.ProtoReflect.Descriptor instead.
 func (*UsageBillingAgreement) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{27}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *UsageBillingAgreement) GetId() string {
@@ -2467,7 +2973,7 @@ type HostedUsageRate struct {
 
 func (x *HostedUsageRate) Reset() {
 	*x = HostedUsageRate{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[28]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2479,7 +2985,7 @@ func (x *HostedUsageRate) String() string {
 func (*HostedUsageRate) ProtoMessage() {}
 
 func (x *HostedUsageRate) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[28]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2492,7 +2998,7 @@ func (x *HostedUsageRate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostedUsageRate.ProtoReflect.Descriptor instead.
 func (*HostedUsageRate) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{28}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *HostedUsageRate) GetResourceKind() string {
@@ -2536,7 +3042,7 @@ type GetCurrentUserUsageBillingResponse struct {
 
 func (x *GetCurrentUserUsageBillingResponse) Reset() {
 	*x = GetCurrentUserUsageBillingResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[29]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2548,7 +3054,7 @@ func (x *GetCurrentUserUsageBillingResponse) String() string {
 func (*GetCurrentUserUsageBillingResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserUsageBillingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[29]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2561,7 +3067,7 @@ func (x *GetCurrentUserUsageBillingResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserUsageBillingResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserUsageBillingResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{29}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetCurrentUserUsageBillingResponse) GetEnabled() bool {
@@ -2606,7 +3112,7 @@ type CreateCurrentUserUsageBillingCheckoutRequest struct {
 
 func (x *CreateCurrentUserUsageBillingCheckoutRequest) Reset() {
 	*x = CreateCurrentUserUsageBillingCheckoutRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[30]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2618,7 +3124,7 @@ func (x *CreateCurrentUserUsageBillingCheckoutRequest) String() string {
 func (*CreateCurrentUserUsageBillingCheckoutRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserUsageBillingCheckoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[30]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2631,7 +3137,7 @@ func (x *CreateCurrentUserUsageBillingCheckoutRequest) ProtoReflect() protorefle
 
 // Deprecated: Use CreateCurrentUserUsageBillingCheckoutRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserUsageBillingCheckoutRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{30}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CreateCurrentUserUsageBillingCheckoutRequest) GetPolicyVersion() string {
@@ -2678,7 +3184,7 @@ type CreateCurrentUserUsageBillingCheckoutResponse struct {
 
 func (x *CreateCurrentUserUsageBillingCheckoutResponse) Reset() {
 	*x = CreateCurrentUserUsageBillingCheckoutResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[31]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2690,7 +3196,7 @@ func (x *CreateCurrentUserUsageBillingCheckoutResponse) String() string {
 func (*CreateCurrentUserUsageBillingCheckoutResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserUsageBillingCheckoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[31]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2703,7 +3209,7 @@ func (x *CreateCurrentUserUsageBillingCheckoutResponse) ProtoReflect() protorefl
 
 // Deprecated: Use CreateCurrentUserUsageBillingCheckoutResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserUsageBillingCheckoutResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{31}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CreateCurrentUserUsageBillingCheckoutResponse) GetCheckoutUrl() string {
@@ -2721,7 +3227,7 @@ type GetCurrentUserComputeSubscriptionRequest struct {
 
 func (x *GetCurrentUserComputeSubscriptionRequest) Reset() {
 	*x = GetCurrentUserComputeSubscriptionRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[32]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2733,7 +3239,7 @@ func (x *GetCurrentUserComputeSubscriptionRequest) String() string {
 func (*GetCurrentUserComputeSubscriptionRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[32]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2746,7 +3252,7 @@ func (x *GetCurrentUserComputeSubscriptionRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetCurrentUserComputeSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{32}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{37}
 }
 
 type GetCurrentUserComputeSubscriptionResponse struct {
@@ -2758,7 +3264,7 @@ type GetCurrentUserComputeSubscriptionResponse struct {
 
 func (x *GetCurrentUserComputeSubscriptionResponse) Reset() {
 	*x = GetCurrentUserComputeSubscriptionResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[33]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2770,7 +3276,7 @@ func (x *GetCurrentUserComputeSubscriptionResponse) String() string {
 func (*GetCurrentUserComputeSubscriptionResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[33]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2783,7 +3289,7 @@ func (x *GetCurrentUserComputeSubscriptionResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use GetCurrentUserComputeSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{33}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetCurrentUserComputeSubscriptionResponse) GetSubscription() *v1.Subscription {
@@ -2806,7 +3312,7 @@ type CreateCurrentUserComputeSubscriptionIntentRequest struct {
 
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) Reset() {
 	*x = CreateCurrentUserComputeSubscriptionIntentRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[34]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2818,7 +3324,7 @@ func (x *CreateCurrentUserComputeSubscriptionIntentRequest) String() string {
 func (*CreateCurrentUserComputeSubscriptionIntentRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[34]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2831,7 +3337,7 @@ func (x *CreateCurrentUserComputeSubscriptionIntentRequest) ProtoReflect() proto
 
 // Deprecated: Use CreateCurrentUserComputeSubscriptionIntentRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserComputeSubscriptionIntentRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{34}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetPlanId() string {
@@ -2885,7 +3391,7 @@ type CreateCurrentUserComputeSubscriptionIntentResponse struct {
 
 func (x *CreateCurrentUserComputeSubscriptionIntentResponse) Reset() {
 	*x = CreateCurrentUserComputeSubscriptionIntentResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[35]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2897,7 +3403,7 @@ func (x *CreateCurrentUserComputeSubscriptionIntentResponse) String() string {
 func (*CreateCurrentUserComputeSubscriptionIntentResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserComputeSubscriptionIntentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[35]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2910,7 +3416,7 @@ func (x *CreateCurrentUserComputeSubscriptionIntentResponse) ProtoReflect() prot
 
 // Deprecated: Use CreateCurrentUserComputeSubscriptionIntentResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserComputeSubscriptionIntentResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{35}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CreateCurrentUserComputeSubscriptionIntentResponse) GetSubscriptionId() string {
@@ -2959,7 +3465,7 @@ type CreateCurrentUserWalletTopupSessionRequest struct {
 
 func (x *CreateCurrentUserWalletTopupSessionRequest) Reset() {
 	*x = CreateCurrentUserWalletTopupSessionRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[36]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2971,7 +3477,7 @@ func (x *CreateCurrentUserWalletTopupSessionRequest) String() string {
 func (*CreateCurrentUserWalletTopupSessionRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletTopupSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[36]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2984,7 +3490,7 @@ func (x *CreateCurrentUserWalletTopupSessionRequest) ProtoReflect() protoreflect
 
 // Deprecated: Use CreateCurrentUserWalletTopupSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletTopupSessionRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{36}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CreateCurrentUserWalletTopupSessionRequest) GetAmountCents() int64 {
@@ -3044,7 +3550,7 @@ type CreateCurrentUserWalletTopupSessionResponse struct {
 
 func (x *CreateCurrentUserWalletTopupSessionResponse) Reset() {
 	*x = CreateCurrentUserWalletTopupSessionResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[37]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3056,7 +3562,7 @@ func (x *CreateCurrentUserWalletTopupSessionResponse) String() string {
 func (*CreateCurrentUserWalletTopupSessionResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletTopupSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[37]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3069,7 +3575,7 @@ func (x *CreateCurrentUserWalletTopupSessionResponse) ProtoReflect() protoreflec
 
 // Deprecated: Use CreateCurrentUserWalletTopupSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletTopupSessionResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{37}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CreateCurrentUserWalletTopupSessionResponse) GetTopup() *v1.WalletTopup {
@@ -3120,7 +3626,7 @@ type CreateCurrentUserWalletTopupPaymentIntentRequest struct {
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) Reset() {
 	*x = CreateCurrentUserWalletTopupPaymentIntentRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[38]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3132,7 +3638,7 @@ func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) String() string {
 func (*CreateCurrentUserWalletTopupPaymentIntentRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[38]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3145,7 +3651,7 @@ func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) ProtoReflect() protor
 
 // Deprecated: Use CreateCurrentUserWalletTopupPaymentIntentRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletTopupPaymentIntentRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{38}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) GetAmountCents() int64 {
@@ -3177,7 +3683,7 @@ type CreateCurrentUserWalletTopupPaymentIntentResponse struct {
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentResponse) Reset() {
 	*x = CreateCurrentUserWalletTopupPaymentIntentResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[39]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3189,7 +3695,7 @@ func (x *CreateCurrentUserWalletTopupPaymentIntentResponse) String() string {
 func (*CreateCurrentUserWalletTopupPaymentIntentResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[39]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3202,7 +3708,7 @@ func (x *CreateCurrentUserWalletTopupPaymentIntentResponse) ProtoReflect() proto
 
 // Deprecated: Use CreateCurrentUserWalletTopupPaymentIntentResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletTopupPaymentIntentResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{39}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CreateCurrentUserWalletTopupPaymentIntentResponse) GetTopup() *v1.WalletTopup {
@@ -3237,7 +3743,7 @@ type GetCurrentUserWalletTopupQuoteRequest struct {
 
 func (x *GetCurrentUserWalletTopupQuoteRequest) Reset() {
 	*x = GetCurrentUserWalletTopupQuoteRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[40]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3249,7 +3755,7 @@ func (x *GetCurrentUserWalletTopupQuoteRequest) String() string {
 func (*GetCurrentUserWalletTopupQuoteRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserWalletTopupQuoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[40]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3262,7 +3768,7 @@ func (x *GetCurrentUserWalletTopupQuoteRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use GetCurrentUserWalletTopupQuoteRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserWalletTopupQuoteRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{40}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetCurrentUserWalletTopupQuoteRequest) GetCreditCents() int64 {
@@ -3295,7 +3801,7 @@ type GetCurrentUserWalletTopupQuoteResponse struct {
 
 func (x *GetCurrentUserWalletTopupQuoteResponse) Reset() {
 	*x = GetCurrentUserWalletTopupQuoteResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[41]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3307,7 +3813,7 @@ func (x *GetCurrentUserWalletTopupQuoteResponse) String() string {
 func (*GetCurrentUserWalletTopupQuoteResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserWalletTopupQuoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[41]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3320,7 +3826,7 @@ func (x *GetCurrentUserWalletTopupQuoteResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use GetCurrentUserWalletTopupQuoteResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserWalletTopupQuoteResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{41}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetCurrentUserWalletTopupQuoteResponse) GetCreditCents() int64 {
@@ -3366,7 +3872,7 @@ type RedeemCouponRequest struct {
 
 func (x *RedeemCouponRequest) Reset() {
 	*x = RedeemCouponRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[42]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3378,7 +3884,7 @@ func (x *RedeemCouponRequest) String() string {
 func (*RedeemCouponRequest) ProtoMessage() {}
 
 func (x *RedeemCouponRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[42]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3391,7 +3897,7 @@ func (x *RedeemCouponRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedeemCouponRequest.ProtoReflect.Descriptor instead.
 func (*RedeemCouponRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{42}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RedeemCouponRequest) GetCode() string {
@@ -3433,7 +3939,7 @@ type RedeemCouponResponse struct {
 
 func (x *RedeemCouponResponse) Reset() {
 	*x = RedeemCouponResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[43]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3445,7 +3951,7 @@ func (x *RedeemCouponResponse) String() string {
 func (*RedeemCouponResponse) ProtoMessage() {}
 
 func (x *RedeemCouponResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[43]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3458,7 +3964,7 @@ func (x *RedeemCouponResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedeemCouponResponse.ProtoReflect.Descriptor instead.
 func (*RedeemCouponResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{43}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *RedeemCouponResponse) GetAmountCents() int64 {
@@ -3516,7 +4022,7 @@ type CreateCurrentUserBillingPortalSessionRequest struct {
 
 func (x *CreateCurrentUserBillingPortalSessionRequest) Reset() {
 	*x = CreateCurrentUserBillingPortalSessionRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[44]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3528,7 +4034,7 @@ func (x *CreateCurrentUserBillingPortalSessionRequest) String() string {
 func (*CreateCurrentUserBillingPortalSessionRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserBillingPortalSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[44]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3541,7 +4047,7 @@ func (x *CreateCurrentUserBillingPortalSessionRequest) ProtoReflect() protorefle
 
 // Deprecated: Use CreateCurrentUserBillingPortalSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserBillingPortalSessionRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{44}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CreateCurrentUserBillingPortalSessionRequest) GetReturnUrl() string {
@@ -3567,7 +4073,7 @@ type CreateCurrentUserBillingPortalSessionResponse struct {
 
 func (x *CreateCurrentUserBillingPortalSessionResponse) Reset() {
 	*x = CreateCurrentUserBillingPortalSessionResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[45]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3579,7 +4085,7 @@ func (x *CreateCurrentUserBillingPortalSessionResponse) String() string {
 func (*CreateCurrentUserBillingPortalSessionResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserBillingPortalSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[45]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3592,7 +4098,7 @@ func (x *CreateCurrentUserBillingPortalSessionResponse) ProtoReflect() protorefl
 
 // Deprecated: Use CreateCurrentUserBillingPortalSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserBillingPortalSessionResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{45}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *CreateCurrentUserBillingPortalSessionResponse) GetPortalUrl() string {
@@ -3617,7 +4123,7 @@ type ListOrgLimitChangesRequest struct {
 
 func (x *ListOrgLimitChangesRequest) Reset() {
 	*x = ListOrgLimitChangesRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[46]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3629,7 +4135,7 @@ func (x *ListOrgLimitChangesRequest) String() string {
 func (*ListOrgLimitChangesRequest) ProtoMessage() {}
 
 func (x *ListOrgLimitChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[46]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3642,7 +4148,7 @@ func (x *ListOrgLimitChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgLimitChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListOrgLimitChangesRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{46}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListOrgLimitChangesRequest) GetOrgId() string {
@@ -3692,7 +4198,7 @@ type OrgLimitChange struct {
 
 func (x *OrgLimitChange) Reset() {
 	*x = OrgLimitChange{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[47]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3704,7 +4210,7 @@ func (x *OrgLimitChange) String() string {
 func (*OrgLimitChange) ProtoMessage() {}
 
 func (x *OrgLimitChange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[47]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3717,7 +4223,7 @@ func (x *OrgLimitChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgLimitChange.ProtoReflect.Descriptor instead.
 func (*OrgLimitChange) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{47}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *OrgLimitChange) GetId() string {
@@ -3780,7 +4286,7 @@ type ListOrgLimitChangesResponse struct {
 
 func (x *ListOrgLimitChangesResponse) Reset() {
 	*x = ListOrgLimitChangesResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[48]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3792,7 +4298,7 @@ func (x *ListOrgLimitChangesResponse) String() string {
 func (*ListOrgLimitChangesResponse) ProtoMessage() {}
 
 func (x *ListOrgLimitChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[48]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3805,7 +4311,7 @@ func (x *ListOrgLimitChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgLimitChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListOrgLimitChangesResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{48}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListOrgLimitChangesResponse) GetChanges() []*OrgLimitChange {
@@ -3834,7 +4340,7 @@ type ListCurrentUserInvoicesRequest struct {
 
 func (x *ListCurrentUserInvoicesRequest) Reset() {
 	*x = ListCurrentUserInvoicesRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[49]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3846,7 +4352,7 @@ func (x *ListCurrentUserInvoicesRequest) String() string {
 func (*ListCurrentUserInvoicesRequest) ProtoMessage() {}
 
 func (x *ListCurrentUserInvoicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[49]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3859,7 +4365,7 @@ func (x *ListCurrentUserInvoicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCurrentUserInvoicesRequest.ProtoReflect.Descriptor instead.
 func (*ListCurrentUserInvoicesRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{49}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListCurrentUserInvoicesRequest) GetOrgId() string {
@@ -3878,7 +4384,7 @@ type ListCurrentUserInvoicesResponse struct {
 
 func (x *ListCurrentUserInvoicesResponse) Reset() {
 	*x = ListCurrentUserInvoicesResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[50]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3890,7 +4396,7 @@ func (x *ListCurrentUserInvoicesResponse) String() string {
 func (*ListCurrentUserInvoicesResponse) ProtoMessage() {}
 
 func (x *ListCurrentUserInvoicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[50]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3903,7 +4409,7 @@ func (x *ListCurrentUserInvoicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCurrentUserInvoicesResponse.ProtoReflect.Descriptor instead.
 func (*ListCurrentUserInvoicesResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{50}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListCurrentUserInvoicesResponse) GetInvoices() []*v1.Invoice {
@@ -3922,7 +4428,7 @@ type GetUsageSummaryRequest struct {
 
 func (x *GetUsageSummaryRequest) Reset() {
 	*x = GetUsageSummaryRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[51]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3934,7 +4440,7 @@ func (x *GetUsageSummaryRequest) String() string {
 func (*GetUsageSummaryRequest) ProtoMessage() {}
 
 func (x *GetUsageSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[51]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3947,7 +4453,7 @@ func (x *GetUsageSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetUsageSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{51}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetUsageSummaryRequest) GetOrgId() string {
@@ -3966,7 +4472,7 @@ type GetUsageSummaryResponse struct {
 
 func (x *GetUsageSummaryResponse) Reset() {
 	*x = GetUsageSummaryResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[52]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3978,7 +4484,7 @@ func (x *GetUsageSummaryResponse) String() string {
 func (*GetUsageSummaryResponse) ProtoMessage() {}
 
 func (x *GetUsageSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[52]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3991,7 +4497,7 @@ func (x *GetUsageSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetUsageSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{52}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GetUsageSummaryResponse) GetSummaries() []*v1.UsageSummary {
@@ -4013,7 +4519,7 @@ type GetCurrentUserReliantStateRequest struct {
 
 func (x *GetCurrentUserReliantStateRequest) Reset() {
 	*x = GetCurrentUserReliantStateRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[53]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4025,7 +4531,7 @@ func (x *GetCurrentUserReliantStateRequest) String() string {
 func (*GetCurrentUserReliantStateRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[53]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4038,7 +4544,7 @@ func (x *GetCurrentUserReliantStateRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserReliantStateRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantStateRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{53}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *GetCurrentUserReliantStateRequest) GetOrgId() string {
@@ -4058,7 +4564,7 @@ type GetCurrentUserReliantStateResponse struct {
 
 func (x *GetCurrentUserReliantStateResponse) Reset() {
 	*x = GetCurrentUserReliantStateResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[54]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4070,7 +4576,7 @@ func (x *GetCurrentUserReliantStateResponse) String() string {
 func (*GetCurrentUserReliantStateResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[54]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4083,7 +4589,7 @@ func (x *GetCurrentUserReliantStateResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserReliantStateResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantStateResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{54}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *GetCurrentUserReliantStateResponse) GetEntitlement() *v1.ReliantEntitlement {
@@ -4112,7 +4618,7 @@ type RepairCurrentUserReliantAccessRequest struct {
 
 func (x *RepairCurrentUserReliantAccessRequest) Reset() {
 	*x = RepairCurrentUserReliantAccessRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[55]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4124,7 +4630,7 @@ func (x *RepairCurrentUserReliantAccessRequest) String() string {
 func (*RepairCurrentUserReliantAccessRequest) ProtoMessage() {}
 
 func (x *RepairCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[55]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4137,7 +4643,7 @@ func (x *RepairCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RepairCurrentUserReliantAccessRequest.ProtoReflect.Descriptor instead.
 func (*RepairCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{55}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *RepairCurrentUserReliantAccessRequest) GetOrgId() string {
@@ -4158,7 +4664,7 @@ type RepairCurrentUserReliantAccessResponse struct {
 
 func (x *RepairCurrentUserReliantAccessResponse) Reset() {
 	*x = RepairCurrentUserReliantAccessResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[56]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4170,7 +4676,7 @@ func (x *RepairCurrentUserReliantAccessResponse) String() string {
 func (*RepairCurrentUserReliantAccessResponse) ProtoMessage() {}
 
 func (x *RepairCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[56]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4183,7 +4689,7 @@ func (x *RepairCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RepairCurrentUserReliantAccessResponse.ProtoReflect.Descriptor instead.
 func (*RepairCurrentUserReliantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{56}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *RepairCurrentUserReliantAccessResponse) GetEntitlement() *v1.ReliantEntitlement {
@@ -4220,7 +4726,7 @@ type RotateCurrentUserReliantAccessRequest struct {
 
 func (x *RotateCurrentUserReliantAccessRequest) Reset() {
 	*x = RotateCurrentUserReliantAccessRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[57]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4232,7 +4738,7 @@ func (x *RotateCurrentUserReliantAccessRequest) String() string {
 func (*RotateCurrentUserReliantAccessRequest) ProtoMessage() {}
 
 func (x *RotateCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[57]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4245,7 +4751,7 @@ func (x *RotateCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RotateCurrentUserReliantAccessRequest.ProtoReflect.Descriptor instead.
 func (*RotateCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{57}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *RotateCurrentUserReliantAccessRequest) GetGracePeriod() string {
@@ -4274,7 +4780,7 @@ type RotateCurrentUserReliantAccessResponse struct {
 
 func (x *RotateCurrentUserReliantAccessResponse) Reset() {
 	*x = RotateCurrentUserReliantAccessResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[58]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4286,7 +4792,7 @@ func (x *RotateCurrentUserReliantAccessResponse) String() string {
 func (*RotateCurrentUserReliantAccessResponse) ProtoMessage() {}
 
 func (x *RotateCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[58]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4299,7 +4805,7 @@ func (x *RotateCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RotateCurrentUserReliantAccessResponse.ProtoReflect.Descriptor instead.
 func (*RotateCurrentUserReliantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{58}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *RotateCurrentUserReliantAccessResponse) GetEntitlement() *v1.ReliantEntitlement {
@@ -4342,7 +4848,7 @@ type GetCurrentUserReliantOverviewRequest struct {
 
 func (x *GetCurrentUserReliantOverviewRequest) Reset() {
 	*x = GetCurrentUserReliantOverviewRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[59]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4354,7 +4860,7 @@ func (x *GetCurrentUserReliantOverviewRequest) String() string {
 func (*GetCurrentUserReliantOverviewRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantOverviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[59]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4367,7 +4873,7 @@ func (x *GetCurrentUserReliantOverviewRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetCurrentUserReliantOverviewRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantOverviewRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{59}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *GetCurrentUserReliantOverviewRequest) GetOrgId() string {
@@ -4386,7 +4892,7 @@ type GetCurrentUserReliantOverviewResponse struct {
 
 func (x *GetCurrentUserReliantOverviewResponse) Reset() {
 	*x = GetCurrentUserReliantOverviewResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[60]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4398,7 +4904,7 @@ func (x *GetCurrentUserReliantOverviewResponse) String() string {
 func (*GetCurrentUserReliantOverviewResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantOverviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[60]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4411,7 +4917,7 @@ func (x *GetCurrentUserReliantOverviewResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use GetCurrentUserReliantOverviewResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantOverviewResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{60}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *GetCurrentUserReliantOverviewResponse) GetOverview() *v1.ReliantOverview {
@@ -4434,7 +4940,7 @@ type SetCurrentUserReliantEnabledRequest struct {
 
 func (x *SetCurrentUserReliantEnabledRequest) Reset() {
 	*x = SetCurrentUserReliantEnabledRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[61]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +4952,7 @@ func (x *SetCurrentUserReliantEnabledRequest) String() string {
 func (*SetCurrentUserReliantEnabledRequest) ProtoMessage() {}
 
 func (x *SetCurrentUserReliantEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[61]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +4965,7 @@ func (x *SetCurrentUserReliantEnabledRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SetCurrentUserReliantEnabledRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserReliantEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{61}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *SetCurrentUserReliantEnabledRequest) GetEnabled() bool {
@@ -4485,7 +4991,7 @@ type SetCurrentUserReliantEnabledResponse struct {
 
 func (x *SetCurrentUserReliantEnabledResponse) Reset() {
 	*x = SetCurrentUserReliantEnabledResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[62]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4497,7 +5003,7 @@ func (x *SetCurrentUserReliantEnabledResponse) String() string {
 func (*SetCurrentUserReliantEnabledResponse) ProtoMessage() {}
 
 func (x *SetCurrentUserReliantEnabledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[62]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4510,7 +5016,7 @@ func (x *SetCurrentUserReliantEnabledResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use SetCurrentUserReliantEnabledResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserReliantEnabledResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{62}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *SetCurrentUserReliantEnabledResponse) GetEntitlement() *v1.ReliantEntitlement {
@@ -4540,7 +5046,7 @@ type SetCurrentUserComputeOverageRequest struct {
 
 func (x *SetCurrentUserComputeOverageRequest) Reset() {
 	*x = SetCurrentUserComputeOverageRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4552,7 +5058,7 @@ func (x *SetCurrentUserComputeOverageRequest) String() string {
 func (*SetCurrentUserComputeOverageRequest) ProtoMessage() {}
 
 func (x *SetCurrentUserComputeOverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4565,7 +5071,7 @@ func (x *SetCurrentUserComputeOverageRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SetCurrentUserComputeOverageRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserComputeOverageRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{63}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *SetCurrentUserComputeOverageRequest) GetEnabled() bool {
@@ -4591,7 +5097,7 @@ type SetCurrentUserComputeOverageResponse struct {
 
 func (x *SetCurrentUserComputeOverageResponse) Reset() {
 	*x = SetCurrentUserComputeOverageResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[64]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4603,7 +5109,7 @@ func (x *SetCurrentUserComputeOverageResponse) String() string {
 func (*SetCurrentUserComputeOverageResponse) ProtoMessage() {}
 
 func (x *SetCurrentUserComputeOverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[64]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4616,7 +5122,7 @@ func (x *SetCurrentUserComputeOverageResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use SetCurrentUserComputeOverageResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserComputeOverageResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{64}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *SetCurrentUserComputeOverageResponse) GetSubscription() *v1.Subscription {
@@ -4658,7 +5164,7 @@ type SetCurrentUserInfraOverageRequest struct {
 
 func (x *SetCurrentUserInfraOverageRequest) Reset() {
 	*x = SetCurrentUserInfraOverageRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[65]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4670,7 +5176,7 @@ func (x *SetCurrentUserInfraOverageRequest) String() string {
 func (*SetCurrentUserInfraOverageRequest) ProtoMessage() {}
 
 func (x *SetCurrentUserInfraOverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[65]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4683,7 +5189,7 @@ func (x *SetCurrentUserInfraOverageRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SetCurrentUserInfraOverageRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserInfraOverageRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{65}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *SetCurrentUserInfraOverageRequest) GetBudgetCents() int64 {
@@ -4702,7 +5208,7 @@ type SetCurrentUserInfraOverageResponse struct {
 
 func (x *SetCurrentUserInfraOverageResponse) Reset() {
 	*x = SetCurrentUserInfraOverageResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[66]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4714,7 +5220,7 @@ func (x *SetCurrentUserInfraOverageResponse) String() string {
 func (*SetCurrentUserInfraOverageResponse) ProtoMessage() {}
 
 func (x *SetCurrentUserInfraOverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[66]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4727,7 +5233,7 @@ func (x *SetCurrentUserInfraOverageResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use SetCurrentUserInfraOverageResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserInfraOverageResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{66}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *SetCurrentUserInfraOverageResponse) GetSubscription() *v1.Subscription {
@@ -4760,7 +5266,7 @@ type GetCurrentUserInfraOverageRequest struct {
 
 func (x *GetCurrentUserInfraOverageRequest) Reset() {
 	*x = GetCurrentUserInfraOverageRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[67]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4772,7 +5278,7 @@ func (x *GetCurrentUserInfraOverageRequest) String() string {
 func (*GetCurrentUserInfraOverageRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserInfraOverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[67]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4785,7 +5291,7 @@ func (x *GetCurrentUserInfraOverageRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserInfraOverageRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserInfraOverageRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{67}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GetCurrentUserInfraOverageRequest) GetOrgId() string {
@@ -4829,7 +5335,7 @@ type GetCurrentUserInfraOverageResponse struct {
 
 func (x *GetCurrentUserInfraOverageResponse) Reset() {
 	*x = GetCurrentUserInfraOverageResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[68]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4841,7 +5347,7 @@ func (x *GetCurrentUserInfraOverageResponse) String() string {
 func (*GetCurrentUserInfraOverageResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserInfraOverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[68]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4854,7 +5360,7 @@ func (x *GetCurrentUserInfraOverageResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserInfraOverageResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserInfraOverageResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{68}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GetCurrentUserInfraOverageResponse) GetDimensions() []*InfraDimensionUsage {
@@ -4948,7 +5454,7 @@ type InfraDimensionUsage struct {
 
 func (x *InfraDimensionUsage) Reset() {
 	*x = InfraDimensionUsage{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[69]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4960,7 +5466,7 @@ func (x *InfraDimensionUsage) String() string {
 func (*InfraDimensionUsage) ProtoMessage() {}
 
 func (x *InfraDimensionUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[69]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4973,7 +5479,7 @@ func (x *InfraDimensionUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InfraDimensionUsage.ProtoReflect.Descriptor instead.
 func (*InfraDimensionUsage) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{69}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *InfraDimensionUsage) GetDimensionId() string {
@@ -5069,7 +5575,7 @@ type WalletAutoRecharge struct {
 
 func (x *WalletAutoRecharge) Reset() {
 	*x = WalletAutoRecharge{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[70]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5081,7 +5587,7 @@ func (x *WalletAutoRecharge) String() string {
 func (*WalletAutoRecharge) ProtoMessage() {}
 
 func (x *WalletAutoRecharge) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[70]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5094,7 +5600,7 @@ func (x *WalletAutoRecharge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WalletAutoRecharge.ProtoReflect.Descriptor instead.
 func (*WalletAutoRecharge) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{70}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *WalletAutoRecharge) GetEnabled() bool {
@@ -5170,7 +5676,7 @@ type SavedPaymentMethod struct {
 
 func (x *SavedPaymentMethod) Reset() {
 	*x = SavedPaymentMethod{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[71]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5182,7 +5688,7 @@ func (x *SavedPaymentMethod) String() string {
 func (*SavedPaymentMethod) ProtoMessage() {}
 
 func (x *SavedPaymentMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[71]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5195,7 +5701,7 @@ func (x *SavedPaymentMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedPaymentMethod.ProtoReflect.Descriptor instead.
 func (*SavedPaymentMethod) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{71}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *SavedPaymentMethod) GetBrand() string {
@@ -5238,7 +5744,7 @@ type GetCurrentUserWalletAutoRechargeRequest struct {
 
 func (x *GetCurrentUserWalletAutoRechargeRequest) Reset() {
 	*x = GetCurrentUserWalletAutoRechargeRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[72]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5250,7 +5756,7 @@ func (x *GetCurrentUserWalletAutoRechargeRequest) String() string {
 func (*GetCurrentUserWalletAutoRechargeRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserWalletAutoRechargeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[72]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5263,7 +5769,7 @@ func (x *GetCurrentUserWalletAutoRechargeRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetCurrentUserWalletAutoRechargeRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserWalletAutoRechargeRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{72}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetCurrentUserWalletAutoRechargeRequest) GetOrgId() string {
@@ -5286,7 +5792,7 @@ type GetCurrentUserWalletAutoRechargeResponse struct {
 
 func (x *GetCurrentUserWalletAutoRechargeResponse) Reset() {
 	*x = GetCurrentUserWalletAutoRechargeResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[73]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5298,7 +5804,7 @@ func (x *GetCurrentUserWalletAutoRechargeResponse) String() string {
 func (*GetCurrentUserWalletAutoRechargeResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserWalletAutoRechargeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[73]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5311,7 +5817,7 @@ func (x *GetCurrentUserWalletAutoRechargeResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetCurrentUserWalletAutoRechargeResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserWalletAutoRechargeResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{73}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *GetCurrentUserWalletAutoRechargeResponse) GetAutoRecharge() *WalletAutoRecharge {
@@ -5350,7 +5856,7 @@ type SetCurrentUserWalletAutoRechargeRequest struct {
 
 func (x *SetCurrentUserWalletAutoRechargeRequest) Reset() {
 	*x = SetCurrentUserWalletAutoRechargeRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[74]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5362,7 +5868,7 @@ func (x *SetCurrentUserWalletAutoRechargeRequest) String() string {
 func (*SetCurrentUserWalletAutoRechargeRequest) ProtoMessage() {}
 
 func (x *SetCurrentUserWalletAutoRechargeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[74]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5375,7 +5881,7 @@ func (x *SetCurrentUserWalletAutoRechargeRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use SetCurrentUserWalletAutoRechargeRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserWalletAutoRechargeRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{74}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *SetCurrentUserWalletAutoRechargeRequest) GetEnabled() bool {
@@ -5422,7 +5928,7 @@ type SetCurrentUserWalletAutoRechargeResponse struct {
 
 func (x *SetCurrentUserWalletAutoRechargeResponse) Reset() {
 	*x = SetCurrentUserWalletAutoRechargeResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[75]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5434,7 +5940,7 @@ func (x *SetCurrentUserWalletAutoRechargeResponse) String() string {
 func (*SetCurrentUserWalletAutoRechargeResponse) ProtoMessage() {}
 
 func (x *SetCurrentUserWalletAutoRechargeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[75]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5447,7 +5953,7 @@ func (x *SetCurrentUserWalletAutoRechargeResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use SetCurrentUserWalletAutoRechargeResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentUserWalletAutoRechargeResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{75}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *SetCurrentUserWalletAutoRechargeResponse) GetAutoRecharge() *WalletAutoRecharge {
@@ -5469,7 +5975,7 @@ type CreateCurrentUserWalletPaymentMethodSetupRequest struct {
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) Reset() {
 	*x = CreateCurrentUserWalletPaymentMethodSetupRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[76]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5481,7 +5987,7 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) String() string {
 func (*CreateCurrentUserWalletPaymentMethodSetupRequest) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[76]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5494,7 +6000,7 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) ProtoReflect() protor
 
 // Deprecated: Use CreateCurrentUserWalletPaymentMethodSetupRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletPaymentMethodSetupRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{76}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) GetOrgId() string {
@@ -5518,7 +6024,7 @@ type CreateCurrentUserWalletPaymentMethodSetupResponse struct {
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) Reset() {
 	*x = CreateCurrentUserWalletPaymentMethodSetupResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[77]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5530,7 +6036,7 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) String() string {
 func (*CreateCurrentUserWalletPaymentMethodSetupResponse) ProtoMessage() {}
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[77]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5543,7 +6049,7 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) ProtoReflect() proto
 
 // Deprecated: Use CreateCurrentUserWalletPaymentMethodSetupResponse.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletPaymentMethodSetupResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{77}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) GetPaymentMethod() *SavedPaymentMethod {
@@ -5573,7 +6079,7 @@ type ConfirmCurrentUserWalletPaymentMethodRequest struct {
 
 func (x *ConfirmCurrentUserWalletPaymentMethodRequest) Reset() {
 	*x = ConfirmCurrentUserWalletPaymentMethodRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[78]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5585,7 +6091,7 @@ func (x *ConfirmCurrentUserWalletPaymentMethodRequest) String() string {
 func (*ConfirmCurrentUserWalletPaymentMethodRequest) ProtoMessage() {}
 
 func (x *ConfirmCurrentUserWalletPaymentMethodRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[78]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5598,7 +6104,7 @@ func (x *ConfirmCurrentUserWalletPaymentMethodRequest) ProtoReflect() protorefle
 
 // Deprecated: Use ConfirmCurrentUserWalletPaymentMethodRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmCurrentUserWalletPaymentMethodRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{78}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *ConfirmCurrentUserWalletPaymentMethodRequest) GetPaymentMethodId() string {
@@ -5624,7 +6130,7 @@ type ConfirmCurrentUserWalletPaymentMethodResponse struct {
 
 func (x *ConfirmCurrentUserWalletPaymentMethodResponse) Reset() {
 	*x = ConfirmCurrentUserWalletPaymentMethodResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[79]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5636,7 +6142,7 @@ func (x *ConfirmCurrentUserWalletPaymentMethodResponse) String() string {
 func (*ConfirmCurrentUserWalletPaymentMethodResponse) ProtoMessage() {}
 
 func (x *ConfirmCurrentUserWalletPaymentMethodResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[79]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5649,7 +6155,7 @@ func (x *ConfirmCurrentUserWalletPaymentMethodResponse) ProtoReflect() protorefl
 
 // Deprecated: Use ConfirmCurrentUserWalletPaymentMethodResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmCurrentUserWalletPaymentMethodResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{79}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ConfirmCurrentUserWalletPaymentMethodResponse) GetPaymentMethod() *SavedPaymentMethod {
@@ -5672,7 +6178,7 @@ type GetCurrentUserComputeUsageRequest struct {
 
 func (x *GetCurrentUserComputeUsageRequest) Reset() {
 	*x = GetCurrentUserComputeUsageRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[80]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5684,7 +6190,7 @@ func (x *GetCurrentUserComputeUsageRequest) String() string {
 func (*GetCurrentUserComputeUsageRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[80]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5697,7 +6203,7 @@ func (x *GetCurrentUserComputeUsageRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserComputeUsageRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeUsageRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{80}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *GetCurrentUserComputeUsageRequest) GetPeriod() string {
@@ -5799,7 +6305,7 @@ type GetCurrentUserComputeUsageResponse struct {
 
 func (x *GetCurrentUserComputeUsageResponse) Reset() {
 	*x = GetCurrentUserComputeUsageResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[81]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5811,7 +6317,7 @@ func (x *GetCurrentUserComputeUsageResponse) String() string {
 func (*GetCurrentUserComputeUsageResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[81]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5824,7 +6330,7 @@ func (x *GetCurrentUserComputeUsageResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserComputeUsageResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeUsageResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{81}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *GetCurrentUserComputeUsageResponse) GetEstimatedOverageCostCents() float64 {
@@ -6021,7 +6527,7 @@ type SizeUsage struct {
 
 func (x *SizeUsage) Reset() {
 	*x = SizeUsage{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[82]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6033,7 +6539,7 @@ func (x *SizeUsage) String() string {
 func (*SizeUsage) ProtoMessage() {}
 
 func (x *SizeUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[82]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6046,7 +6552,7 @@ func (x *SizeUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SizeUsage.ProtoReflect.Descriptor instead.
 func (*SizeUsage) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{82}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *SizeUsage) GetSize() string {
@@ -6159,7 +6665,7 @@ type StorageUsage struct {
 
 func (x *StorageUsage) Reset() {
 	*x = StorageUsage{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[83]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6171,7 +6677,7 @@ func (x *StorageUsage) String() string {
 func (*StorageUsage) ProtoMessage() {}
 
 func (x *StorageUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[83]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6184,7 +6690,7 @@ func (x *StorageUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageUsage.ProtoReflect.Descriptor instead.
 func (*StorageUsage) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{83}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *StorageUsage) GetProvisionedGib() int64 {
@@ -6256,7 +6762,7 @@ type GetCurrentUserComputeEligibilityRequest struct {
 
 func (x *GetCurrentUserComputeEligibilityRequest) Reset() {
 	*x = GetCurrentUserComputeEligibilityRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[84]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6268,7 +6774,7 @@ func (x *GetCurrentUserComputeEligibilityRequest) String() string {
 func (*GetCurrentUserComputeEligibilityRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeEligibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[84]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6281,7 +6787,7 @@ func (x *GetCurrentUserComputeEligibilityRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetCurrentUserComputeEligibilityRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeEligibilityRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{84}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *GetCurrentUserComputeEligibilityRequest) GetOrgId() string {
@@ -6335,7 +6841,7 @@ type GetCurrentUserComputeEligibilityResponse struct {
 
 func (x *GetCurrentUserComputeEligibilityResponse) Reset() {
 	*x = GetCurrentUserComputeEligibilityResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[85]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6347,7 +6853,7 @@ func (x *GetCurrentUserComputeEligibilityResponse) String() string {
 func (*GetCurrentUserComputeEligibilityResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserComputeEligibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[85]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6360,7 +6866,7 @@ func (x *GetCurrentUserComputeEligibilityResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetCurrentUserComputeEligibilityResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeEligibilityResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{85}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetCurrentUserComputeEligibilityResponse) GetEligible() bool {
@@ -6422,7 +6928,7 @@ type GetInvoicePreviewRequest struct {
 
 func (x *GetInvoicePreviewRequest) Reset() {
 	*x = GetInvoicePreviewRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[86]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6434,7 +6940,7 @@ func (x *GetInvoicePreviewRequest) String() string {
 func (*GetInvoicePreviewRequest) ProtoMessage() {}
 
 func (x *GetInvoicePreviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[86]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6447,7 +6953,7 @@ func (x *GetInvoicePreviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvoicePreviewRequest.ProtoReflect.Descriptor instead.
 func (*GetInvoicePreviewRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{86}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *GetInvoicePreviewRequest) GetSize() string {
@@ -6474,7 +6980,7 @@ type GetInvoicePreviewResponse struct {
 
 func (x *GetInvoicePreviewResponse) Reset() {
 	*x = GetInvoicePreviewResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[87]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6486,7 +6992,7 @@ func (x *GetInvoicePreviewResponse) String() string {
 func (*GetInvoicePreviewResponse) ProtoMessage() {}
 
 func (x *GetInvoicePreviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[87]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6499,7 +7005,7 @@ func (x *GetInvoicePreviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvoicePreviewResponse.ProtoReflect.Descriptor instead.
 func (*GetInvoicePreviewResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{87}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *GetInvoicePreviewResponse) GetProrationCents() int32 {
@@ -6524,7 +7030,7 @@ type GetCurrentUserBillingEmailRequest struct {
 
 func (x *GetCurrentUserBillingEmailRequest) Reset() {
 	*x = GetCurrentUserBillingEmailRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[88]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6536,7 +7042,7 @@ func (x *GetCurrentUserBillingEmailRequest) String() string {
 func (*GetCurrentUserBillingEmailRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserBillingEmailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[88]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6549,7 +7055,7 @@ func (x *GetCurrentUserBillingEmailRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserBillingEmailRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserBillingEmailRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{88}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{93}
 }
 
 type GetCurrentUserBillingEmailResponse struct {
@@ -6566,7 +7072,7 @@ type GetCurrentUserBillingEmailResponse struct {
 
 func (x *GetCurrentUserBillingEmailResponse) Reset() {
 	*x = GetCurrentUserBillingEmailResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[89]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6578,7 +7084,7 @@ func (x *GetCurrentUserBillingEmailResponse) String() string {
 func (*GetCurrentUserBillingEmailResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserBillingEmailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[89]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6591,7 +7097,7 @@ func (x *GetCurrentUserBillingEmailResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserBillingEmailResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserBillingEmailResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{89}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *GetCurrentUserBillingEmailResponse) GetBillingEmail() string {
@@ -6620,7 +7126,7 @@ type UpdateBillingEmailRequest struct {
 
 func (x *UpdateBillingEmailRequest) Reset() {
 	*x = UpdateBillingEmailRequest{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[90]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6632,7 +7138,7 @@ func (x *UpdateBillingEmailRequest) String() string {
 func (*UpdateBillingEmailRequest) ProtoMessage() {}
 
 func (x *UpdateBillingEmailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[90]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6645,7 +7151,7 @@ func (x *UpdateBillingEmailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBillingEmailRequest.ProtoReflect.Descriptor instead.
 func (*UpdateBillingEmailRequest) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{90}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *UpdateBillingEmailRequest) GetEmail() string {
@@ -6663,7 +7169,7 @@ type UpdateBillingEmailResponse struct {
 
 func (x *UpdateBillingEmailResponse) Reset() {
 	*x = UpdateBillingEmailResponse{}
-	mi := &file_services_billing_v1_billing_proto_msgTypes[91]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6675,7 +7181,7 @@ func (x *UpdateBillingEmailResponse) String() string {
 func (*UpdateBillingEmailResponse) ProtoMessage() {}
 
 func (x *UpdateBillingEmailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_billing_v1_billing_proto_msgTypes[91]
+	mi := &file_services_billing_v1_billing_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6688,7 +7194,7 @@ func (x *UpdateBillingEmailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBillingEmailResponse.ProtoReflect.Descriptor instead.
 func (*UpdateBillingEmailResponse) Descriptor() ([]byte, []int) {
-	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{91}
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{96}
 }
 
 var File_services_billing_v1_billing_proto protoreflect.FileDescriptor
@@ -6878,7 +7384,56 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\racceptance_id\x18\x01 \x01(\tR\facceptanceId\x12P\n" +
 	"\x16effective_period_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x14effectivePeriodStart\x12'\n" +
 	"\x0fpricing_version\x18\x03 \x01(\tR\x0epricingVersion\x12)\n" +
-	"\x10activation_state\x18\x04 \x01(\tR\x0factivationState\"J\n" +
+	"\x10activation_state\x18\x04 \x01(\tR\x0factivationState\"a\n" +
+	"\x1fPreviewMachinePlanChangeRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planIdB\t\n" +
+	"\a_org_id\"_\n" +
+	"\x18MachinePlanChangeBlocker\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\tR\x04size\"\xe5\a\n" +
+	" PreviewMachinePlanChangeResponse\x12 \n" +
+	"\ffrom_plan_id\x18\x01 \x01(\tR\n" +
+	"fromPlanId\x12\x1c\n" +
+	"\n" +
+	"to_plan_id\x18\x02 \x01(\tR\btoPlanId\x12'\n" +
+	"\x0fpricing_version\x18\x03 \x01(\tR\x0epricingVersion\x12\x1c\n" +
+	"\tdirection\x18\x04 \x01(\tR\tdirection\x12A\n" +
+	"\x0eproration_date\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rprorationDate\x129\n" +
+	"\n" +
+	"period_end\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x123\n" +
+	"\x16amount_due_today_cents\x18\a \x01(\x03R\x13amountDueTodayCents\x12'\n" +
+	"\x0fproration_cents\x18\b \x01(\x03R\x0eprorationCents\x12=\n" +
+	"\x1bcurrent_monthly_price_cents\x18\t \x01(\x03R\x18currentMonthlyPriceCents\x125\n" +
+	"\x17new_monthly_price_cents\x18\n" +
+	" \x01(\x03R\x14newMonthlyPriceCents\x120\n" +
+	"\x14included_hours_delta\x18\v \x01(\tR\x12includedHoursDelta\x12\x19\n" +
+	"\bnew_size\x18\f \x01(\tR\anewSize\x12,\n" +
+	"\x12new_included_hours\x18\r \x01(\x03R\x10newIncludedHours\x12\x18\n" +
+	"\aallowed\x18\x0e \x01(\bR\aallowed\x12'\n" +
+	"\x0fblocked_reasons\x18\x0f \x03(\tR\x0eblockedReasons\x12V\n" +
+	"\x11blocking_machines\x18\x10 \x03(\v2).controlplane.v1.MachinePlanChangeBlockerR\x10blockingMachines\x12!\n" +
+	"\fterms_sha256\x18\x11 \x01(\tR\vtermsSha256\x12D\n" +
+	"\x10quote_expires_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x0equoteExpiresAt\x12=\n" +
+	"\feffective_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\veffectiveAt\x12*\n" +
+	"\x11scheduled_plan_id\x18\x14 \x01(\tR\x0fscheduledPlanId\"\xe9\x01\n" +
+	"\x18ChangeMachinePlanRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12'\n" +
+	"\x0fpricing_version\x18\x03 \x01(\tR\x0epricingVersion\x12A\n" +
+	"\x0eproration_date\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rprorationDate\x12!\n" +
+	"\fterms_sha256\x18\x05 \x01(\tR\vtermsSha256B\t\n" +
+	"\a_org_id\"\xce\x02\n" +
+	"\x19ChangeMachinePlanResponse\x12\x1b\n" +
+	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x17\n" +
+	"\aplan_id\x18\x03 \x01(\tR\x06planId\x12\x1c\n" +
+	"\tdirection\x18\x04 \x01(\tR\tdirection\x123\n" +
+	"\x16amount_due_today_cents\x18\x05 \x01(\x03R\x13amountDueTodayCents\x12'\n" +
+	"\x0fproration_cents\x18\x06 \x01(\x03R\x0eprorationCents\x12*\n" +
+	"\x11stripe_invoice_id\x18\a \x01(\tR\x0fstripeInvoiceId\x12=\n" +
+	"\feffective_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\veffectiveAt\"J\n" +
 	"!GetCurrentUserUsageBillingRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"\xda\x01\n" +
@@ -7225,7 +7780,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"%COMPUTE_INELIGIBLE_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12-\n" +
 	")COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION\x10\x03\x12-\n" +
-	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xbd)\n" +
+	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xaa+\n" +
 	"\x0eBillingService\x12\x85\x01\n" +
 	"\x1aGetOrganizationCostSummary\x122.controlplane.v1.GetOrganizationCostSummaryRequest\x1a3.controlplane.v1.GetOrganizationCostSummaryResponse\x12v\n" +
 	"\x15ListOrganizationUsage\x12-.controlplane.v1.ListOrganizationUsageRequest\x1a..controlplane.v1.ListOrganizationUsageResponse\x12R\n" +
@@ -7252,7 +7807,9 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x1aGetCurrentUserInfraOverage\x122.controlplane.v1.GetCurrentUserInfraOverageRequest\x1a3.controlplane.v1.GetCurrentUserInfraOverageResponse\x12\xb5\x01\n" +
 	"*CreateCurrentUserComputeSubscriptionIntent\x12B.controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest\x1aC.controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse\x12\x85\x01\n" +
 	"\x1aGetMachinePricingReadiness\x122.controlplane.v1.GetMachinePricingReadinessRequest\x1a3.controlplane.v1.GetMachinePricingReadinessResponse\x12\x7f\n" +
-	"\x18AcceptNextMachinePricing\x120.controlplane.v1.AcceptNextMachinePricingRequest\x1a1.controlplane.v1.AcceptNextMachinePricingResponse\x12\x85\x01\n" +
+	"\x18AcceptNextMachinePricing\x120.controlplane.v1.AcceptNextMachinePricingRequest\x1a1.controlplane.v1.AcceptNextMachinePricingResponse\x12\x7f\n" +
+	"\x18PreviewMachinePlanChange\x120.controlplane.v1.PreviewMachinePlanChangeRequest\x1a1.controlplane.v1.PreviewMachinePlanChangeResponse\x12j\n" +
+	"\x11ChangeMachinePlan\x12).controlplane.v1.ChangeMachinePlanRequest\x1a*.controlplane.v1.ChangeMachinePlanResponse\x12\x85\x01\n" +
 	"\x1aGetCurrentUserUsageBilling\x122.controlplane.v1.GetCurrentUserUsageBillingRequest\x1a3.controlplane.v1.GetCurrentUserUsageBillingResponse\x12\xa6\x01\n" +
 	"%CreateCurrentUserUsageBillingCheckout\x12=.controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest\x1a>.controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse\x12\x97\x01\n" +
 	" GetCurrentUserWalletAutoRecharge\x128.controlplane.v1.GetCurrentUserWalletAutoRechargeRequest\x1a9.controlplane.v1.GetCurrentUserWalletAutoRechargeResponse\x12\x97\x01\n" +
@@ -7280,7 +7837,7 @@ func file_services_billing_v1_billing_proto_rawDescGZIP() []byte {
 }
 
 var file_services_billing_v1_billing_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_services_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
+var file_services_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 97)
 var file_services_billing_v1_billing_proto_goTypes = []any{
 	(OrganizationUsageGranularity)(0),                          // 0: controlplane.v1.OrganizationUsageGranularity
 	(OrganizationUsageGroupBy)(0),                              // 1: controlplane.v1.OrganizationUsageGroupBy
@@ -7313,242 +7870,258 @@ var file_services_billing_v1_billing_proto_goTypes = []any{
 	(*GetMachinePricingReadinessResponse)(nil),                 // 28: controlplane.v1.GetMachinePricingReadinessResponse
 	(*AcceptNextMachinePricingRequest)(nil),                    // 29: controlplane.v1.AcceptNextMachinePricingRequest
 	(*AcceptNextMachinePricingResponse)(nil),                   // 30: controlplane.v1.AcceptNextMachinePricingResponse
-	(*GetCurrentUserUsageBillingRequest)(nil),                  // 31: controlplane.v1.GetCurrentUserUsageBillingRequest
-	(*UsageBillingAgreement)(nil),                              // 32: controlplane.v1.UsageBillingAgreement
-	(*HostedUsageRate)(nil),                                    // 33: controlplane.v1.HostedUsageRate
-	(*GetCurrentUserUsageBillingResponse)(nil),                 // 34: controlplane.v1.GetCurrentUserUsageBillingResponse
-	(*CreateCurrentUserUsageBillingCheckoutRequest)(nil),       // 35: controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
-	(*CreateCurrentUserUsageBillingCheckoutResponse)(nil),      // 36: controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
-	(*GetCurrentUserComputeSubscriptionRequest)(nil),           // 37: controlplane.v1.GetCurrentUserComputeSubscriptionRequest
-	(*GetCurrentUserComputeSubscriptionResponse)(nil),          // 38: controlplane.v1.GetCurrentUserComputeSubscriptionResponse
-	(*CreateCurrentUserComputeSubscriptionIntentRequest)(nil),  // 39: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
-	(*CreateCurrentUserComputeSubscriptionIntentResponse)(nil), // 40: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
-	(*CreateCurrentUserWalletTopupSessionRequest)(nil),         // 41: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
-	(*CreateCurrentUserWalletTopupSessionResponse)(nil),        // 42: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
-	(*CreateCurrentUserWalletTopupPaymentIntentRequest)(nil),   // 43: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
-	(*CreateCurrentUserWalletTopupPaymentIntentResponse)(nil),  // 44: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
-	(*GetCurrentUserWalletTopupQuoteRequest)(nil),              // 45: controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
-	(*GetCurrentUserWalletTopupQuoteResponse)(nil),             // 46: controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
-	(*RedeemCouponRequest)(nil),                                // 47: controlplane.v1.RedeemCouponRequest
-	(*RedeemCouponResponse)(nil),                               // 48: controlplane.v1.RedeemCouponResponse
-	(*CreateCurrentUserBillingPortalSessionRequest)(nil),       // 49: controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
-	(*CreateCurrentUserBillingPortalSessionResponse)(nil),      // 50: controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
-	(*ListOrgLimitChangesRequest)(nil),                         // 51: controlplane.v1.ListOrgLimitChangesRequest
-	(*OrgLimitChange)(nil),                                     // 52: controlplane.v1.OrgLimitChange
-	(*ListOrgLimitChangesResponse)(nil),                        // 53: controlplane.v1.ListOrgLimitChangesResponse
-	(*ListCurrentUserInvoicesRequest)(nil),                     // 54: controlplane.v1.ListCurrentUserInvoicesRequest
-	(*ListCurrentUserInvoicesResponse)(nil),                    // 55: controlplane.v1.ListCurrentUserInvoicesResponse
-	(*GetUsageSummaryRequest)(nil),                             // 56: controlplane.v1.GetUsageSummaryRequest
-	(*GetUsageSummaryResponse)(nil),                            // 57: controlplane.v1.GetUsageSummaryResponse
-	(*GetCurrentUserReliantStateRequest)(nil),                  // 58: controlplane.v1.GetCurrentUserReliantStateRequest
-	(*GetCurrentUserReliantStateResponse)(nil),                 // 59: controlplane.v1.GetCurrentUserReliantStateResponse
-	(*RepairCurrentUserReliantAccessRequest)(nil),              // 60: controlplane.v1.RepairCurrentUserReliantAccessRequest
-	(*RepairCurrentUserReliantAccessResponse)(nil),             // 61: controlplane.v1.RepairCurrentUserReliantAccessResponse
-	(*RotateCurrentUserReliantAccessRequest)(nil),              // 62: controlplane.v1.RotateCurrentUserReliantAccessRequest
-	(*RotateCurrentUserReliantAccessResponse)(nil),             // 63: controlplane.v1.RotateCurrentUserReliantAccessResponse
-	(*GetCurrentUserReliantOverviewRequest)(nil),               // 64: controlplane.v1.GetCurrentUserReliantOverviewRequest
-	(*GetCurrentUserReliantOverviewResponse)(nil),              // 65: controlplane.v1.GetCurrentUserReliantOverviewResponse
-	(*SetCurrentUserReliantEnabledRequest)(nil),                // 66: controlplane.v1.SetCurrentUserReliantEnabledRequest
-	(*SetCurrentUserReliantEnabledResponse)(nil),               // 67: controlplane.v1.SetCurrentUserReliantEnabledResponse
-	(*SetCurrentUserComputeOverageRequest)(nil),                // 68: controlplane.v1.SetCurrentUserComputeOverageRequest
-	(*SetCurrentUserComputeOverageResponse)(nil),               // 69: controlplane.v1.SetCurrentUserComputeOverageResponse
-	(*SetCurrentUserInfraOverageRequest)(nil),                  // 70: controlplane.v1.SetCurrentUserInfraOverageRequest
-	(*SetCurrentUserInfraOverageResponse)(nil),                 // 71: controlplane.v1.SetCurrentUserInfraOverageResponse
-	(*GetCurrentUserInfraOverageRequest)(nil),                  // 72: controlplane.v1.GetCurrentUserInfraOverageRequest
-	(*GetCurrentUserInfraOverageResponse)(nil),                 // 73: controlplane.v1.GetCurrentUserInfraOverageResponse
-	(*InfraDimensionUsage)(nil),                                // 74: controlplane.v1.InfraDimensionUsage
-	(*WalletAutoRecharge)(nil),                                 // 75: controlplane.v1.WalletAutoRecharge
-	(*SavedPaymentMethod)(nil),                                 // 76: controlplane.v1.SavedPaymentMethod
-	(*GetCurrentUserWalletAutoRechargeRequest)(nil),            // 77: controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
-	(*GetCurrentUserWalletAutoRechargeResponse)(nil),           // 78: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
-	(*SetCurrentUserWalletAutoRechargeRequest)(nil),            // 79: controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
-	(*SetCurrentUserWalletAutoRechargeResponse)(nil),           // 80: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
-	(*CreateCurrentUserWalletPaymentMethodSetupRequest)(nil),   // 81: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
-	(*CreateCurrentUserWalletPaymentMethodSetupResponse)(nil),  // 82: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
-	(*ConfirmCurrentUserWalletPaymentMethodRequest)(nil),       // 83: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
-	(*ConfirmCurrentUserWalletPaymentMethodResponse)(nil),      // 84: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
-	(*GetCurrentUserComputeUsageRequest)(nil),                  // 85: controlplane.v1.GetCurrentUserComputeUsageRequest
-	(*GetCurrentUserComputeUsageResponse)(nil),                 // 86: controlplane.v1.GetCurrentUserComputeUsageResponse
-	(*SizeUsage)(nil),                                          // 87: controlplane.v1.SizeUsage
-	(*StorageUsage)(nil),                                       // 88: controlplane.v1.StorageUsage
-	(*GetCurrentUserComputeEligibilityRequest)(nil),            // 89: controlplane.v1.GetCurrentUserComputeEligibilityRequest
-	(*GetCurrentUserComputeEligibilityResponse)(nil),           // 90: controlplane.v1.GetCurrentUserComputeEligibilityResponse
-	(*GetInvoicePreviewRequest)(nil),                           // 91: controlplane.v1.GetInvoicePreviewRequest
-	(*GetInvoicePreviewResponse)(nil),                          // 92: controlplane.v1.GetInvoicePreviewResponse
-	(*GetCurrentUserBillingEmailRequest)(nil),                  // 93: controlplane.v1.GetCurrentUserBillingEmailRequest
-	(*GetCurrentUserBillingEmailResponse)(nil),                 // 94: controlplane.v1.GetCurrentUserBillingEmailResponse
-	(*UpdateBillingEmailRequest)(nil),                          // 95: controlplane.v1.UpdateBillingEmailRequest
-	(*UpdateBillingEmailResponse)(nil),                         // 96: controlplane.v1.UpdateBillingEmailResponse
-	(*timestamppb.Timestamp)(nil),                              // 97: google.protobuf.Timestamp
-	(*v1.Plan)(nil),                                            // 98: controlplane.v1.Plan
-	(*v1.DaemonPricing)(nil),                                   // 99: controlplane.v1.DaemonPricing
-	(*v1.Subscription)(nil),                                    // 100: controlplane.v1.Subscription
-	(*v1.WalletOverview)(nil),                                  // 101: controlplane.v1.WalletOverview
-	(*v1.WalletTopup)(nil),                                     // 102: controlplane.v1.WalletTopup
-	(*v1.Invoice)(nil),                                         // 103: controlplane.v1.Invoice
-	(*v1.UsageSummary)(nil),                                    // 104: controlplane.v1.UsageSummary
-	(*v1.ReliantEntitlement)(nil),                              // 105: controlplane.v1.ReliantEntitlement
-	(*v1.ManagedReliantAccess)(nil),                            // 106: controlplane.v1.ManagedReliantAccess
-	(*v1.ReliantOverview)(nil),                                 // 107: controlplane.v1.ReliantOverview
+	(*PreviewMachinePlanChangeRequest)(nil),                    // 31: controlplane.v1.PreviewMachinePlanChangeRequest
+	(*MachinePlanChangeBlocker)(nil),                           // 32: controlplane.v1.MachinePlanChangeBlocker
+	(*PreviewMachinePlanChangeResponse)(nil),                   // 33: controlplane.v1.PreviewMachinePlanChangeResponse
+	(*ChangeMachinePlanRequest)(nil),                           // 34: controlplane.v1.ChangeMachinePlanRequest
+	(*ChangeMachinePlanResponse)(nil),                          // 35: controlplane.v1.ChangeMachinePlanResponse
+	(*GetCurrentUserUsageBillingRequest)(nil),                  // 36: controlplane.v1.GetCurrentUserUsageBillingRequest
+	(*UsageBillingAgreement)(nil),                              // 37: controlplane.v1.UsageBillingAgreement
+	(*HostedUsageRate)(nil),                                    // 38: controlplane.v1.HostedUsageRate
+	(*GetCurrentUserUsageBillingResponse)(nil),                 // 39: controlplane.v1.GetCurrentUserUsageBillingResponse
+	(*CreateCurrentUserUsageBillingCheckoutRequest)(nil),       // 40: controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
+	(*CreateCurrentUserUsageBillingCheckoutResponse)(nil),      // 41: controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
+	(*GetCurrentUserComputeSubscriptionRequest)(nil),           // 42: controlplane.v1.GetCurrentUserComputeSubscriptionRequest
+	(*GetCurrentUserComputeSubscriptionResponse)(nil),          // 43: controlplane.v1.GetCurrentUserComputeSubscriptionResponse
+	(*CreateCurrentUserComputeSubscriptionIntentRequest)(nil),  // 44: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
+	(*CreateCurrentUserComputeSubscriptionIntentResponse)(nil), // 45: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
+	(*CreateCurrentUserWalletTopupSessionRequest)(nil),         // 46: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
+	(*CreateCurrentUserWalletTopupSessionResponse)(nil),        // 47: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
+	(*CreateCurrentUserWalletTopupPaymentIntentRequest)(nil),   // 48: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
+	(*CreateCurrentUserWalletTopupPaymentIntentResponse)(nil),  // 49: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
+	(*GetCurrentUserWalletTopupQuoteRequest)(nil),              // 50: controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
+	(*GetCurrentUserWalletTopupQuoteResponse)(nil),             // 51: controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
+	(*RedeemCouponRequest)(nil),                                // 52: controlplane.v1.RedeemCouponRequest
+	(*RedeemCouponResponse)(nil),                               // 53: controlplane.v1.RedeemCouponResponse
+	(*CreateCurrentUserBillingPortalSessionRequest)(nil),       // 54: controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
+	(*CreateCurrentUserBillingPortalSessionResponse)(nil),      // 55: controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
+	(*ListOrgLimitChangesRequest)(nil),                         // 56: controlplane.v1.ListOrgLimitChangesRequest
+	(*OrgLimitChange)(nil),                                     // 57: controlplane.v1.OrgLimitChange
+	(*ListOrgLimitChangesResponse)(nil),                        // 58: controlplane.v1.ListOrgLimitChangesResponse
+	(*ListCurrentUserInvoicesRequest)(nil),                     // 59: controlplane.v1.ListCurrentUserInvoicesRequest
+	(*ListCurrentUserInvoicesResponse)(nil),                    // 60: controlplane.v1.ListCurrentUserInvoicesResponse
+	(*GetUsageSummaryRequest)(nil),                             // 61: controlplane.v1.GetUsageSummaryRequest
+	(*GetUsageSummaryResponse)(nil),                            // 62: controlplane.v1.GetUsageSummaryResponse
+	(*GetCurrentUserReliantStateRequest)(nil),                  // 63: controlplane.v1.GetCurrentUserReliantStateRequest
+	(*GetCurrentUserReliantStateResponse)(nil),                 // 64: controlplane.v1.GetCurrentUserReliantStateResponse
+	(*RepairCurrentUserReliantAccessRequest)(nil),              // 65: controlplane.v1.RepairCurrentUserReliantAccessRequest
+	(*RepairCurrentUserReliantAccessResponse)(nil),             // 66: controlplane.v1.RepairCurrentUserReliantAccessResponse
+	(*RotateCurrentUserReliantAccessRequest)(nil),              // 67: controlplane.v1.RotateCurrentUserReliantAccessRequest
+	(*RotateCurrentUserReliantAccessResponse)(nil),             // 68: controlplane.v1.RotateCurrentUserReliantAccessResponse
+	(*GetCurrentUserReliantOverviewRequest)(nil),               // 69: controlplane.v1.GetCurrentUserReliantOverviewRequest
+	(*GetCurrentUserReliantOverviewResponse)(nil),              // 70: controlplane.v1.GetCurrentUserReliantOverviewResponse
+	(*SetCurrentUserReliantEnabledRequest)(nil),                // 71: controlplane.v1.SetCurrentUserReliantEnabledRequest
+	(*SetCurrentUserReliantEnabledResponse)(nil),               // 72: controlplane.v1.SetCurrentUserReliantEnabledResponse
+	(*SetCurrentUserComputeOverageRequest)(nil),                // 73: controlplane.v1.SetCurrentUserComputeOverageRequest
+	(*SetCurrentUserComputeOverageResponse)(nil),               // 74: controlplane.v1.SetCurrentUserComputeOverageResponse
+	(*SetCurrentUserInfraOverageRequest)(nil),                  // 75: controlplane.v1.SetCurrentUserInfraOverageRequest
+	(*SetCurrentUserInfraOverageResponse)(nil),                 // 76: controlplane.v1.SetCurrentUserInfraOverageResponse
+	(*GetCurrentUserInfraOverageRequest)(nil),                  // 77: controlplane.v1.GetCurrentUserInfraOverageRequest
+	(*GetCurrentUserInfraOverageResponse)(nil),                 // 78: controlplane.v1.GetCurrentUserInfraOverageResponse
+	(*InfraDimensionUsage)(nil),                                // 79: controlplane.v1.InfraDimensionUsage
+	(*WalletAutoRecharge)(nil),                                 // 80: controlplane.v1.WalletAutoRecharge
+	(*SavedPaymentMethod)(nil),                                 // 81: controlplane.v1.SavedPaymentMethod
+	(*GetCurrentUserWalletAutoRechargeRequest)(nil),            // 82: controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
+	(*GetCurrentUserWalletAutoRechargeResponse)(nil),           // 83: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
+	(*SetCurrentUserWalletAutoRechargeRequest)(nil),            // 84: controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
+	(*SetCurrentUserWalletAutoRechargeResponse)(nil),           // 85: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
+	(*CreateCurrentUserWalletPaymentMethodSetupRequest)(nil),   // 86: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
+	(*CreateCurrentUserWalletPaymentMethodSetupResponse)(nil),  // 87: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
+	(*ConfirmCurrentUserWalletPaymentMethodRequest)(nil),       // 88: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
+	(*ConfirmCurrentUserWalletPaymentMethodResponse)(nil),      // 89: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
+	(*GetCurrentUserComputeUsageRequest)(nil),                  // 90: controlplane.v1.GetCurrentUserComputeUsageRequest
+	(*GetCurrentUserComputeUsageResponse)(nil),                 // 91: controlplane.v1.GetCurrentUserComputeUsageResponse
+	(*SizeUsage)(nil),                                          // 92: controlplane.v1.SizeUsage
+	(*StorageUsage)(nil),                                       // 93: controlplane.v1.StorageUsage
+	(*GetCurrentUserComputeEligibilityRequest)(nil),            // 94: controlplane.v1.GetCurrentUserComputeEligibilityRequest
+	(*GetCurrentUserComputeEligibilityResponse)(nil),           // 95: controlplane.v1.GetCurrentUserComputeEligibilityResponse
+	(*GetInvoicePreviewRequest)(nil),                           // 96: controlplane.v1.GetInvoicePreviewRequest
+	(*GetInvoicePreviewResponse)(nil),                          // 97: controlplane.v1.GetInvoicePreviewResponse
+	(*GetCurrentUserBillingEmailRequest)(nil),                  // 98: controlplane.v1.GetCurrentUserBillingEmailRequest
+	(*GetCurrentUserBillingEmailResponse)(nil),                 // 99: controlplane.v1.GetCurrentUserBillingEmailResponse
+	(*UpdateBillingEmailRequest)(nil),                          // 100: controlplane.v1.UpdateBillingEmailRequest
+	(*UpdateBillingEmailResponse)(nil),                         // 101: controlplane.v1.UpdateBillingEmailResponse
+	(*timestamppb.Timestamp)(nil),                              // 102: google.protobuf.Timestamp
+	(*v1.Plan)(nil),                                            // 103: controlplane.v1.Plan
+	(*v1.DaemonPricing)(nil),                                   // 104: controlplane.v1.DaemonPricing
+	(*v1.Subscription)(nil),                                    // 105: controlplane.v1.Subscription
+	(*v1.WalletOverview)(nil),                                  // 106: controlplane.v1.WalletOverview
+	(*v1.WalletTopup)(nil),                                     // 107: controlplane.v1.WalletTopup
+	(*v1.Invoice)(nil),                                         // 108: controlplane.v1.Invoice
+	(*v1.UsageSummary)(nil),                                    // 109: controlplane.v1.UsageSummary
+	(*v1.ReliantEntitlement)(nil),                              // 110: controlplane.v1.ReliantEntitlement
+	(*v1.ManagedReliantAccess)(nil),                            // 111: controlplane.v1.ManagedReliantAccess
+	(*v1.ReliantOverview)(nil),                                 // 112: controlplane.v1.ReliantOverview
 }
 var file_services_billing_v1_billing_proto_depIdxs = []int32{
-	97,  // 0: controlplane.v1.GetOrganizationCostSummaryResponse.generated_at:type_name -> google.protobuf.Timestamp
+	102, // 0: controlplane.v1.GetOrganizationCostSummaryResponse.generated_at:type_name -> google.protobuf.Timestamp
 	7,   // 1: controlplane.v1.GetOrganizationCostSummaryResponse.periods:type_name -> controlplane.v1.OrganizationCostPeriod
 	9,   // 2: controlplane.v1.GetOrganizationCostSummaryResponse.sources:type_name -> controlplane.v1.OrganizationCostSource
-	97,  // 3: controlplane.v1.OrganizationCostPeriod.start:type_name -> google.protobuf.Timestamp
-	97,  // 4: controlplane.v1.OrganizationCostPeriod.end:type_name -> google.protobuf.Timestamp
+	102, // 3: controlplane.v1.OrganizationCostPeriod.start:type_name -> google.protobuf.Timestamp
+	102, // 4: controlplane.v1.OrganizationCostPeriod.end:type_name -> google.protobuf.Timestamp
 	8,   // 5: controlplane.v1.OrganizationCostSource.allowances:type_name -> controlplane.v1.OrganizationCostAllowance
-	97,  // 6: controlplane.v1.OrganizationCostSource.coverage_start:type_name -> google.protobuf.Timestamp
-	97,  // 7: controlplane.v1.OrganizationCostSource.coverage_end:type_name -> google.protobuf.Timestamp
-	97,  // 8: controlplane.v1.OrganizationCostSource.measured_through:type_name -> google.protobuf.Timestamp
-	97,  // 9: controlplane.v1.ListOrganizationUsageRequest.start:type_name -> google.protobuf.Timestamp
-	97,  // 10: controlplane.v1.ListOrganizationUsageRequest.end:type_name -> google.protobuf.Timestamp
+	102, // 6: controlplane.v1.OrganizationCostSource.coverage_start:type_name -> google.protobuf.Timestamp
+	102, // 7: controlplane.v1.OrganizationCostSource.coverage_end:type_name -> google.protobuf.Timestamp
+	102, // 8: controlplane.v1.OrganizationCostSource.measured_through:type_name -> google.protobuf.Timestamp
+	102, // 9: controlplane.v1.ListOrganizationUsageRequest.start:type_name -> google.protobuf.Timestamp
+	102, // 10: controlplane.v1.ListOrganizationUsageRequest.end:type_name -> google.protobuf.Timestamp
 	0,   // 11: controlplane.v1.ListOrganizationUsageRequest.granularity:type_name -> controlplane.v1.OrganizationUsageGranularity
 	1,   // 12: controlplane.v1.ListOrganizationUsageRequest.group_by:type_name -> controlplane.v1.OrganizationUsageGroupBy
-	97,  // 13: controlplane.v1.ListOrganizationUsageResponse.generated_at:type_name -> google.protobuf.Timestamp
-	97,  // 14: controlplane.v1.ListOrganizationUsageResponse.start:type_name -> google.protobuf.Timestamp
-	97,  // 15: controlplane.v1.ListOrganizationUsageResponse.end:type_name -> google.protobuf.Timestamp
+	102, // 13: controlplane.v1.ListOrganizationUsageResponse.generated_at:type_name -> google.protobuf.Timestamp
+	102, // 14: controlplane.v1.ListOrganizationUsageResponse.start:type_name -> google.protobuf.Timestamp
+	102, // 15: controlplane.v1.ListOrganizationUsageResponse.end:type_name -> google.protobuf.Timestamp
 	0,   // 16: controlplane.v1.ListOrganizationUsageResponse.granularity:type_name -> controlplane.v1.OrganizationUsageGranularity
 	1,   // 17: controlplane.v1.ListOrganizationUsageResponse.group_by:type_name -> controlplane.v1.OrganizationUsageGroupBy
 	12,  // 18: controlplane.v1.ListOrganizationUsageResponse.points:type_name -> controlplane.v1.OrganizationUsagePoint
 	14,  // 19: controlplane.v1.ListOrganizationUsageResponse.coverage:type_name -> controlplane.v1.OrganizationUsageCoverage
 	15,  // 20: controlplane.v1.ListOrganizationUsageResponse.spend_rates:type_name -> controlplane.v1.OrganizationUsageRate
 	16,  // 21: controlplane.v1.ListOrganizationUsageResponse.inventory:type_name -> controlplane.v1.OrganizationUsageInventoryItem
-	97,  // 22: controlplane.v1.OrganizationUsagePoint.bucket_start:type_name -> google.protobuf.Timestamp
+	102, // 22: controlplane.v1.OrganizationUsagePoint.bucket_start:type_name -> google.protobuf.Timestamp
 	13,  // 23: controlplane.v1.OrganizationUsagePoint.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
-	97,  // 24: controlplane.v1.OrganizationUsageCoverage.coverage_start:type_name -> google.protobuf.Timestamp
-	97,  // 25: controlplane.v1.OrganizationUsageCoverage.coverage_end:type_name -> google.protobuf.Timestamp
-	97,  // 26: controlplane.v1.OrganizationUsageCoverage.measured_through:type_name -> google.protobuf.Timestamp
-	98,  // 27: controlplane.v1.ListPlansResponse.plans:type_name -> controlplane.v1.Plan
-	99,  // 28: controlplane.v1.ListPlansResponse.daemon_pricing:type_name -> controlplane.v1.DaemonPricing
-	98,  // 29: controlplane.v1.GetPlanResponse.plan:type_name -> controlplane.v1.Plan
-	100, // 30: controlplane.v1.GetCurrentUserSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
+	102, // 24: controlplane.v1.OrganizationUsageCoverage.coverage_start:type_name -> google.protobuf.Timestamp
+	102, // 25: controlplane.v1.OrganizationUsageCoverage.coverage_end:type_name -> google.protobuf.Timestamp
+	102, // 26: controlplane.v1.OrganizationUsageCoverage.measured_through:type_name -> google.protobuf.Timestamp
+	103, // 27: controlplane.v1.ListPlansResponse.plans:type_name -> controlplane.v1.Plan
+	104, // 28: controlplane.v1.ListPlansResponse.daemon_pricing:type_name -> controlplane.v1.DaemonPricing
+	103, // 29: controlplane.v1.GetPlanResponse.plan:type_name -> controlplane.v1.Plan
+	105, // 30: controlplane.v1.GetCurrentUserSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
 	2,   // 31: controlplane.v1.CreateCurrentUserCheckoutSessionRequest.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
 	2,   // 32: controlplane.v1.CreateCurrentUserCheckoutSessionResponse.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	101, // 33: controlplane.v1.GetCurrentUserWalletOverviewResponse.overview:type_name -> controlplane.v1.WalletOverview
-	97,  // 34: controlplane.v1.GetMachinePricingReadinessResponse.effective_period_start:type_name -> google.protobuf.Timestamp
-	97,  // 35: controlplane.v1.AcceptNextMachinePricingResponse.effective_period_start:type_name -> google.protobuf.Timestamp
-	97,  // 36: controlplane.v1.UsageBillingAgreement.billing_start_at:type_name -> google.protobuf.Timestamp
-	32,  // 37: controlplane.v1.GetCurrentUserUsageBillingResponse.agreement:type_name -> controlplane.v1.UsageBillingAgreement
-	33,  // 38: controlplane.v1.GetCurrentUserUsageBillingResponse.rates:type_name -> controlplane.v1.HostedUsageRate
-	100, // 39: controlplane.v1.GetCurrentUserComputeSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
-	2,   // 40: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	102, // 41: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.topup:type_name -> controlplane.v1.WalletTopup
-	2,   // 42: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	102, // 43: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse.topup:type_name -> controlplane.v1.WalletTopup
-	3,   // 44: controlplane.v1.RedeemCouponResponse.kind:type_name -> controlplane.v1.RedeemedCouponKind
-	97,  // 45: controlplane.v1.OrgLimitChange.at:type_name -> google.protobuf.Timestamp
-	52,  // 46: controlplane.v1.ListOrgLimitChangesResponse.changes:type_name -> controlplane.v1.OrgLimitChange
-	103, // 47: controlplane.v1.ListCurrentUserInvoicesResponse.invoices:type_name -> controlplane.v1.Invoice
-	104, // 48: controlplane.v1.GetUsageSummaryResponse.summaries:type_name -> controlplane.v1.UsageSummary
-	105, // 49: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	106, // 50: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	105, // 51: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	106, // 52: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	105, // 53: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	106, // 54: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	107, // 55: controlplane.v1.GetCurrentUserReliantOverviewResponse.overview:type_name -> controlplane.v1.ReliantOverview
-	105, // 56: controlplane.v1.SetCurrentUserReliantEnabledResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	100, // 57: controlplane.v1.SetCurrentUserComputeOverageResponse.subscription:type_name -> controlplane.v1.Subscription
-	100, // 58: controlplane.v1.SetCurrentUserInfraOverageResponse.subscription:type_name -> controlplane.v1.Subscription
-	74,  // 59: controlplane.v1.GetCurrentUserInfraOverageResponse.dimensions:type_name -> controlplane.v1.InfraDimensionUsage
-	97,  // 60: controlplane.v1.GetCurrentUserInfraOverageResponse.period_start:type_name -> google.protobuf.Timestamp
-	97,  // 61: controlplane.v1.GetCurrentUserInfraOverageResponse.period_end:type_name -> google.protobuf.Timestamp
-	97,  // 62: controlplane.v1.InfraDimensionUsage.over_since:type_name -> google.protobuf.Timestamp
-	75,  // 63: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
-	76,  // 64: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	75,  // 65: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
-	76,  // 66: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	76,  // 67: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	97,  // 68: controlplane.v1.GetCurrentUserComputeUsageResponse.period_start:type_name -> google.protobuf.Timestamp
-	97,  // 69: controlplane.v1.GetCurrentUserComputeUsageResponse.period_end:type_name -> google.protobuf.Timestamp
-	97,  // 70: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_from:type_name -> google.protobuf.Timestamp
-	97,  // 71: controlplane.v1.GetCurrentUserComputeUsageResponse.exhausts_at:type_name -> google.protobuf.Timestamp
-	87,  // 72: controlplane.v1.GetCurrentUserComputeUsageResponse.by_size:type_name -> controlplane.v1.SizeUsage
-	97,  // 73: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
-	88,  // 74: controlplane.v1.GetCurrentUserComputeUsageResponse.storage:type_name -> controlplane.v1.StorageUsage
-	4,   // 75: controlplane.v1.GetCurrentUserComputeEligibilityResponse.reason:type_name -> controlplane.v1.ComputeIneligibleReason
-	5,   // 76: controlplane.v1.BillingService.GetOrganizationCostSummary:input_type -> controlplane.v1.GetOrganizationCostSummaryRequest
-	10,  // 77: controlplane.v1.BillingService.ListOrganizationUsage:input_type -> controlplane.v1.ListOrganizationUsageRequest
-	17,  // 78: controlplane.v1.BillingService.ListPlans:input_type -> controlplane.v1.ListPlansRequest
-	19,  // 79: controlplane.v1.BillingService.GetPlan:input_type -> controlplane.v1.GetPlanRequest
-	21,  // 80: controlplane.v1.BillingService.GetCurrentUserSubscription:input_type -> controlplane.v1.GetCurrentUserSubscriptionRequest
-	23,  // 81: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:input_type -> controlplane.v1.CreateCurrentUserCheckoutSessionRequest
-	49,  // 82: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:input_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
-	54,  // 83: controlplane.v1.BillingService.ListCurrentUserInvoices:input_type -> controlplane.v1.ListCurrentUserInvoicesRequest
-	51,  // 84: controlplane.v1.BillingService.ListOrgLimitChanges:input_type -> controlplane.v1.ListOrgLimitChangesRequest
-	25,  // 85: controlplane.v1.BillingService.GetCurrentUserWalletOverview:input_type -> controlplane.v1.GetCurrentUserWalletOverviewRequest
-	41,  // 86: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:input_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
-	43,  // 87: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:input_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
-	45,  // 88: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:input_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
-	47,  // 89: controlplane.v1.BillingService.RedeemCoupon:input_type -> controlplane.v1.RedeemCouponRequest
-	58,  // 90: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
-	60,  // 91: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
-	62,  // 92: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
-	64,  // 93: controlplane.v1.BillingService.GetCurrentUserReliantOverview:input_type -> controlplane.v1.GetCurrentUserReliantOverviewRequest
-	66,  // 94: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:input_type -> controlplane.v1.SetCurrentUserReliantEnabledRequest
-	37,  // 95: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:input_type -> controlplane.v1.GetCurrentUserComputeSubscriptionRequest
-	68,  // 96: controlplane.v1.BillingService.SetCurrentUserComputeOverage:input_type -> controlplane.v1.SetCurrentUserComputeOverageRequest
-	70,  // 97: controlplane.v1.BillingService.SetCurrentUserInfraOverage:input_type -> controlplane.v1.SetCurrentUserInfraOverageRequest
-	72,  // 98: controlplane.v1.BillingService.GetCurrentUserInfraOverage:input_type -> controlplane.v1.GetCurrentUserInfraOverageRequest
-	39,  // 99: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:input_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
-	27,  // 100: controlplane.v1.BillingService.GetMachinePricingReadiness:input_type -> controlplane.v1.GetMachinePricingReadinessRequest
-	29,  // 101: controlplane.v1.BillingService.AcceptNextMachinePricing:input_type -> controlplane.v1.AcceptNextMachinePricingRequest
-	31,  // 102: controlplane.v1.BillingService.GetCurrentUserUsageBilling:input_type -> controlplane.v1.GetCurrentUserUsageBillingRequest
-	35,  // 103: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:input_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
-	77,  // 104: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
-	79,  // 105: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
-	81,  // 106: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:input_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
-	83,  // 107: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:input_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
-	85,  // 108: controlplane.v1.BillingService.GetCurrentUserComputeUsage:input_type -> controlplane.v1.GetCurrentUserComputeUsageRequest
-	89,  // 109: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:input_type -> controlplane.v1.GetCurrentUserComputeEligibilityRequest
-	56,  // 110: controlplane.v1.BillingService.GetUsageSummary:input_type -> controlplane.v1.GetUsageSummaryRequest
-	91,  // 111: controlplane.v1.BillingService.GetInvoicePreview:input_type -> controlplane.v1.GetInvoicePreviewRequest
-	93,  // 112: controlplane.v1.BillingService.GetCurrentUserBillingEmail:input_type -> controlplane.v1.GetCurrentUserBillingEmailRequest
-	95,  // 113: controlplane.v1.BillingService.UpdateBillingEmail:input_type -> controlplane.v1.UpdateBillingEmailRequest
-	6,   // 114: controlplane.v1.BillingService.GetOrganizationCostSummary:output_type -> controlplane.v1.GetOrganizationCostSummaryResponse
-	11,  // 115: controlplane.v1.BillingService.ListOrganizationUsage:output_type -> controlplane.v1.ListOrganizationUsageResponse
-	18,  // 116: controlplane.v1.BillingService.ListPlans:output_type -> controlplane.v1.ListPlansResponse
-	20,  // 117: controlplane.v1.BillingService.GetPlan:output_type -> controlplane.v1.GetPlanResponse
-	22,  // 118: controlplane.v1.BillingService.GetCurrentUserSubscription:output_type -> controlplane.v1.GetCurrentUserSubscriptionResponse
-	24,  // 119: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:output_type -> controlplane.v1.CreateCurrentUserCheckoutSessionResponse
-	50,  // 120: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:output_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
-	55,  // 121: controlplane.v1.BillingService.ListCurrentUserInvoices:output_type -> controlplane.v1.ListCurrentUserInvoicesResponse
-	53,  // 122: controlplane.v1.BillingService.ListOrgLimitChanges:output_type -> controlplane.v1.ListOrgLimitChangesResponse
-	26,  // 123: controlplane.v1.BillingService.GetCurrentUserWalletOverview:output_type -> controlplane.v1.GetCurrentUserWalletOverviewResponse
-	42,  // 124: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:output_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
-	44,  // 125: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:output_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
-	46,  // 126: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:output_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
-	48,  // 127: controlplane.v1.BillingService.RedeemCoupon:output_type -> controlplane.v1.RedeemCouponResponse
-	59,  // 128: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
-	61,  // 129: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
-	63,  // 130: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
-	65,  // 131: controlplane.v1.BillingService.GetCurrentUserReliantOverview:output_type -> controlplane.v1.GetCurrentUserReliantOverviewResponse
-	67,  // 132: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:output_type -> controlplane.v1.SetCurrentUserReliantEnabledResponse
-	38,  // 133: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:output_type -> controlplane.v1.GetCurrentUserComputeSubscriptionResponse
-	69,  // 134: controlplane.v1.BillingService.SetCurrentUserComputeOverage:output_type -> controlplane.v1.SetCurrentUserComputeOverageResponse
-	71,  // 135: controlplane.v1.BillingService.SetCurrentUserInfraOverage:output_type -> controlplane.v1.SetCurrentUserInfraOverageResponse
-	73,  // 136: controlplane.v1.BillingService.GetCurrentUserInfraOverage:output_type -> controlplane.v1.GetCurrentUserInfraOverageResponse
-	40,  // 137: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:output_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
-	28,  // 138: controlplane.v1.BillingService.GetMachinePricingReadiness:output_type -> controlplane.v1.GetMachinePricingReadinessResponse
-	30,  // 139: controlplane.v1.BillingService.AcceptNextMachinePricing:output_type -> controlplane.v1.AcceptNextMachinePricingResponse
-	34,  // 140: controlplane.v1.BillingService.GetCurrentUserUsageBilling:output_type -> controlplane.v1.GetCurrentUserUsageBillingResponse
-	36,  // 141: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:output_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
-	78,  // 142: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
-	80,  // 143: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
-	82,  // 144: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:output_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
-	84,  // 145: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:output_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
-	86,  // 146: controlplane.v1.BillingService.GetCurrentUserComputeUsage:output_type -> controlplane.v1.GetCurrentUserComputeUsageResponse
-	90,  // 147: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:output_type -> controlplane.v1.GetCurrentUserComputeEligibilityResponse
-	57,  // 148: controlplane.v1.BillingService.GetUsageSummary:output_type -> controlplane.v1.GetUsageSummaryResponse
-	92,  // 149: controlplane.v1.BillingService.GetInvoicePreview:output_type -> controlplane.v1.GetInvoicePreviewResponse
-	94,  // 150: controlplane.v1.BillingService.GetCurrentUserBillingEmail:output_type -> controlplane.v1.GetCurrentUserBillingEmailResponse
-	96,  // 151: controlplane.v1.BillingService.UpdateBillingEmail:output_type -> controlplane.v1.UpdateBillingEmailResponse
-	114, // [114:152] is the sub-list for method output_type
-	76,  // [76:114] is the sub-list for method input_type
-	76,  // [76:76] is the sub-list for extension type_name
-	76,  // [76:76] is the sub-list for extension extendee
-	0,   // [0:76] is the sub-list for field type_name
+	106, // 33: controlplane.v1.GetCurrentUserWalletOverviewResponse.overview:type_name -> controlplane.v1.WalletOverview
+	102, // 34: controlplane.v1.GetMachinePricingReadinessResponse.effective_period_start:type_name -> google.protobuf.Timestamp
+	102, // 35: controlplane.v1.AcceptNextMachinePricingResponse.effective_period_start:type_name -> google.protobuf.Timestamp
+	102, // 36: controlplane.v1.PreviewMachinePlanChangeResponse.proration_date:type_name -> google.protobuf.Timestamp
+	102, // 37: controlplane.v1.PreviewMachinePlanChangeResponse.period_end:type_name -> google.protobuf.Timestamp
+	32,  // 38: controlplane.v1.PreviewMachinePlanChangeResponse.blocking_machines:type_name -> controlplane.v1.MachinePlanChangeBlocker
+	102, // 39: controlplane.v1.PreviewMachinePlanChangeResponse.quote_expires_at:type_name -> google.protobuf.Timestamp
+	102, // 40: controlplane.v1.PreviewMachinePlanChangeResponse.effective_at:type_name -> google.protobuf.Timestamp
+	102, // 41: controlplane.v1.ChangeMachinePlanRequest.proration_date:type_name -> google.protobuf.Timestamp
+	102, // 42: controlplane.v1.ChangeMachinePlanResponse.effective_at:type_name -> google.protobuf.Timestamp
+	102, // 43: controlplane.v1.UsageBillingAgreement.billing_start_at:type_name -> google.protobuf.Timestamp
+	37,  // 44: controlplane.v1.GetCurrentUserUsageBillingResponse.agreement:type_name -> controlplane.v1.UsageBillingAgreement
+	38,  // 45: controlplane.v1.GetCurrentUserUsageBillingResponse.rates:type_name -> controlplane.v1.HostedUsageRate
+	105, // 46: controlplane.v1.GetCurrentUserComputeSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
+	2,   // 47: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
+	107, // 48: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.topup:type_name -> controlplane.v1.WalletTopup
+	2,   // 49: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
+	107, // 50: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse.topup:type_name -> controlplane.v1.WalletTopup
+	3,   // 51: controlplane.v1.RedeemCouponResponse.kind:type_name -> controlplane.v1.RedeemedCouponKind
+	102, // 52: controlplane.v1.OrgLimitChange.at:type_name -> google.protobuf.Timestamp
+	57,  // 53: controlplane.v1.ListOrgLimitChangesResponse.changes:type_name -> controlplane.v1.OrgLimitChange
+	108, // 54: controlplane.v1.ListCurrentUserInvoicesResponse.invoices:type_name -> controlplane.v1.Invoice
+	109, // 55: controlplane.v1.GetUsageSummaryResponse.summaries:type_name -> controlplane.v1.UsageSummary
+	110, // 56: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	111, // 57: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	110, // 58: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	111, // 59: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	110, // 60: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	111, // 61: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	112, // 62: controlplane.v1.GetCurrentUserReliantOverviewResponse.overview:type_name -> controlplane.v1.ReliantOverview
+	110, // 63: controlplane.v1.SetCurrentUserReliantEnabledResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	105, // 64: controlplane.v1.SetCurrentUserComputeOverageResponse.subscription:type_name -> controlplane.v1.Subscription
+	105, // 65: controlplane.v1.SetCurrentUserInfraOverageResponse.subscription:type_name -> controlplane.v1.Subscription
+	79,  // 66: controlplane.v1.GetCurrentUserInfraOverageResponse.dimensions:type_name -> controlplane.v1.InfraDimensionUsage
+	102, // 67: controlplane.v1.GetCurrentUserInfraOverageResponse.period_start:type_name -> google.protobuf.Timestamp
+	102, // 68: controlplane.v1.GetCurrentUserInfraOverageResponse.period_end:type_name -> google.protobuf.Timestamp
+	102, // 69: controlplane.v1.InfraDimensionUsage.over_since:type_name -> google.protobuf.Timestamp
+	80,  // 70: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
+	81,  // 71: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	80,  // 72: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
+	81,  // 73: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	81,  // 74: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	102, // 75: controlplane.v1.GetCurrentUserComputeUsageResponse.period_start:type_name -> google.protobuf.Timestamp
+	102, // 76: controlplane.v1.GetCurrentUserComputeUsageResponse.period_end:type_name -> google.protobuf.Timestamp
+	102, // 77: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_from:type_name -> google.protobuf.Timestamp
+	102, // 78: controlplane.v1.GetCurrentUserComputeUsageResponse.exhausts_at:type_name -> google.protobuf.Timestamp
+	92,  // 79: controlplane.v1.GetCurrentUserComputeUsageResponse.by_size:type_name -> controlplane.v1.SizeUsage
+	102, // 80: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	93,  // 81: controlplane.v1.GetCurrentUserComputeUsageResponse.storage:type_name -> controlplane.v1.StorageUsage
+	4,   // 82: controlplane.v1.GetCurrentUserComputeEligibilityResponse.reason:type_name -> controlplane.v1.ComputeIneligibleReason
+	5,   // 83: controlplane.v1.BillingService.GetOrganizationCostSummary:input_type -> controlplane.v1.GetOrganizationCostSummaryRequest
+	10,  // 84: controlplane.v1.BillingService.ListOrganizationUsage:input_type -> controlplane.v1.ListOrganizationUsageRequest
+	17,  // 85: controlplane.v1.BillingService.ListPlans:input_type -> controlplane.v1.ListPlansRequest
+	19,  // 86: controlplane.v1.BillingService.GetPlan:input_type -> controlplane.v1.GetPlanRequest
+	21,  // 87: controlplane.v1.BillingService.GetCurrentUserSubscription:input_type -> controlplane.v1.GetCurrentUserSubscriptionRequest
+	23,  // 88: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:input_type -> controlplane.v1.CreateCurrentUserCheckoutSessionRequest
+	54,  // 89: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:input_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
+	59,  // 90: controlplane.v1.BillingService.ListCurrentUserInvoices:input_type -> controlplane.v1.ListCurrentUserInvoicesRequest
+	56,  // 91: controlplane.v1.BillingService.ListOrgLimitChanges:input_type -> controlplane.v1.ListOrgLimitChangesRequest
+	25,  // 92: controlplane.v1.BillingService.GetCurrentUserWalletOverview:input_type -> controlplane.v1.GetCurrentUserWalletOverviewRequest
+	46,  // 93: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:input_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
+	48,  // 94: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:input_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
+	50,  // 95: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:input_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
+	52,  // 96: controlplane.v1.BillingService.RedeemCoupon:input_type -> controlplane.v1.RedeemCouponRequest
+	63,  // 97: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
+	65,  // 98: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
+	67,  // 99: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
+	69,  // 100: controlplane.v1.BillingService.GetCurrentUserReliantOverview:input_type -> controlplane.v1.GetCurrentUserReliantOverviewRequest
+	71,  // 101: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:input_type -> controlplane.v1.SetCurrentUserReliantEnabledRequest
+	42,  // 102: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:input_type -> controlplane.v1.GetCurrentUserComputeSubscriptionRequest
+	73,  // 103: controlplane.v1.BillingService.SetCurrentUserComputeOverage:input_type -> controlplane.v1.SetCurrentUserComputeOverageRequest
+	75,  // 104: controlplane.v1.BillingService.SetCurrentUserInfraOverage:input_type -> controlplane.v1.SetCurrentUserInfraOverageRequest
+	77,  // 105: controlplane.v1.BillingService.GetCurrentUserInfraOverage:input_type -> controlplane.v1.GetCurrentUserInfraOverageRequest
+	44,  // 106: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:input_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
+	27,  // 107: controlplane.v1.BillingService.GetMachinePricingReadiness:input_type -> controlplane.v1.GetMachinePricingReadinessRequest
+	29,  // 108: controlplane.v1.BillingService.AcceptNextMachinePricing:input_type -> controlplane.v1.AcceptNextMachinePricingRequest
+	31,  // 109: controlplane.v1.BillingService.PreviewMachinePlanChange:input_type -> controlplane.v1.PreviewMachinePlanChangeRequest
+	34,  // 110: controlplane.v1.BillingService.ChangeMachinePlan:input_type -> controlplane.v1.ChangeMachinePlanRequest
+	36,  // 111: controlplane.v1.BillingService.GetCurrentUserUsageBilling:input_type -> controlplane.v1.GetCurrentUserUsageBillingRequest
+	40,  // 112: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:input_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
+	82,  // 113: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
+	84,  // 114: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
+	86,  // 115: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:input_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
+	88,  // 116: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:input_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
+	90,  // 117: controlplane.v1.BillingService.GetCurrentUserComputeUsage:input_type -> controlplane.v1.GetCurrentUserComputeUsageRequest
+	94,  // 118: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:input_type -> controlplane.v1.GetCurrentUserComputeEligibilityRequest
+	61,  // 119: controlplane.v1.BillingService.GetUsageSummary:input_type -> controlplane.v1.GetUsageSummaryRequest
+	96,  // 120: controlplane.v1.BillingService.GetInvoicePreview:input_type -> controlplane.v1.GetInvoicePreviewRequest
+	98,  // 121: controlplane.v1.BillingService.GetCurrentUserBillingEmail:input_type -> controlplane.v1.GetCurrentUserBillingEmailRequest
+	100, // 122: controlplane.v1.BillingService.UpdateBillingEmail:input_type -> controlplane.v1.UpdateBillingEmailRequest
+	6,   // 123: controlplane.v1.BillingService.GetOrganizationCostSummary:output_type -> controlplane.v1.GetOrganizationCostSummaryResponse
+	11,  // 124: controlplane.v1.BillingService.ListOrganizationUsage:output_type -> controlplane.v1.ListOrganizationUsageResponse
+	18,  // 125: controlplane.v1.BillingService.ListPlans:output_type -> controlplane.v1.ListPlansResponse
+	20,  // 126: controlplane.v1.BillingService.GetPlan:output_type -> controlplane.v1.GetPlanResponse
+	22,  // 127: controlplane.v1.BillingService.GetCurrentUserSubscription:output_type -> controlplane.v1.GetCurrentUserSubscriptionResponse
+	24,  // 128: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:output_type -> controlplane.v1.CreateCurrentUserCheckoutSessionResponse
+	55,  // 129: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:output_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
+	60,  // 130: controlplane.v1.BillingService.ListCurrentUserInvoices:output_type -> controlplane.v1.ListCurrentUserInvoicesResponse
+	58,  // 131: controlplane.v1.BillingService.ListOrgLimitChanges:output_type -> controlplane.v1.ListOrgLimitChangesResponse
+	26,  // 132: controlplane.v1.BillingService.GetCurrentUserWalletOverview:output_type -> controlplane.v1.GetCurrentUserWalletOverviewResponse
+	47,  // 133: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:output_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
+	49,  // 134: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:output_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
+	51,  // 135: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:output_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
+	53,  // 136: controlplane.v1.BillingService.RedeemCoupon:output_type -> controlplane.v1.RedeemCouponResponse
+	64,  // 137: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
+	66,  // 138: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
+	68,  // 139: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
+	70,  // 140: controlplane.v1.BillingService.GetCurrentUserReliantOverview:output_type -> controlplane.v1.GetCurrentUserReliantOverviewResponse
+	72,  // 141: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:output_type -> controlplane.v1.SetCurrentUserReliantEnabledResponse
+	43,  // 142: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:output_type -> controlplane.v1.GetCurrentUserComputeSubscriptionResponse
+	74,  // 143: controlplane.v1.BillingService.SetCurrentUserComputeOverage:output_type -> controlplane.v1.SetCurrentUserComputeOverageResponse
+	76,  // 144: controlplane.v1.BillingService.SetCurrentUserInfraOverage:output_type -> controlplane.v1.SetCurrentUserInfraOverageResponse
+	78,  // 145: controlplane.v1.BillingService.GetCurrentUserInfraOverage:output_type -> controlplane.v1.GetCurrentUserInfraOverageResponse
+	45,  // 146: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:output_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
+	28,  // 147: controlplane.v1.BillingService.GetMachinePricingReadiness:output_type -> controlplane.v1.GetMachinePricingReadinessResponse
+	30,  // 148: controlplane.v1.BillingService.AcceptNextMachinePricing:output_type -> controlplane.v1.AcceptNextMachinePricingResponse
+	33,  // 149: controlplane.v1.BillingService.PreviewMachinePlanChange:output_type -> controlplane.v1.PreviewMachinePlanChangeResponse
+	35,  // 150: controlplane.v1.BillingService.ChangeMachinePlan:output_type -> controlplane.v1.ChangeMachinePlanResponse
+	39,  // 151: controlplane.v1.BillingService.GetCurrentUserUsageBilling:output_type -> controlplane.v1.GetCurrentUserUsageBillingResponse
+	41,  // 152: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:output_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
+	83,  // 153: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
+	85,  // 154: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
+	87,  // 155: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:output_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
+	89,  // 156: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:output_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
+	91,  // 157: controlplane.v1.BillingService.GetCurrentUserComputeUsage:output_type -> controlplane.v1.GetCurrentUserComputeUsageResponse
+	95,  // 158: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:output_type -> controlplane.v1.GetCurrentUserComputeEligibilityResponse
+	62,  // 159: controlplane.v1.BillingService.GetUsageSummary:output_type -> controlplane.v1.GetUsageSummaryResponse
+	97,  // 160: controlplane.v1.BillingService.GetInvoicePreview:output_type -> controlplane.v1.GetInvoicePreviewResponse
+	99,  // 161: controlplane.v1.BillingService.GetCurrentUserBillingEmail:output_type -> controlplane.v1.GetCurrentUserBillingEmailResponse
+	101, // 162: controlplane.v1.BillingService.UpdateBillingEmail:output_type -> controlplane.v1.UpdateBillingEmailResponse
+	123, // [123:163] is the sub-list for method output_type
+	83,  // [83:123] is the sub-list for method input_type
+	83,  // [83:83] is the sub-list for extension type_name
+	83,  // [83:83] is the sub-list for extension extendee
+	0,   // [0:83] is the sub-list for field type_name
 }
 
 func init() { file_services_billing_v1_billing_proto_init() }
@@ -7568,37 +8141,39 @@ func file_services_billing_v1_billing_proto_init() {
 	file_services_billing_v1_billing_proto_msgTypes[22].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[24].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[26].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[30].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[34].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[36].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[38].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[42].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[44].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[29].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[31].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[35].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[39].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[41].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[43].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[47].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[49].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[53].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[55].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[57].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[59].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[61].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[63].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[65].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[67].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[54].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[58].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[60].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[62].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[64].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[66].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[68].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[70].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[72].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[73].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[74].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[76].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[77].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[78].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[80].OneofWrappers = []any{}
-	file_services_billing_v1_billing_proto_msgTypes[84].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[79].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[81].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[82].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[83].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[85].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[89].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_billing_v1_billing_proto_rawDesc), len(file_services_billing_v1_billing_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   92,
+			NumMessages:   97,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

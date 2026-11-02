@@ -23,12 +23,14 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useOrgEnvironments } from "@/hooks/apps-queries";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { useForgeConsole } from "../../Console/consoleContext";
+import { rosterReadFailed, useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
+import { NoEnvironmentsState } from "../../Console/NoEnvironmentsState";
 import { CloudNotice } from "../../SourceNotices";
 import { orgPlaceOf, type ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
-import { ObsNoEnvironments, type ObsTopic } from "../ObsStates";
+import type { ObsTopic } from "../ObsStates";
+import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
@@ -36,10 +38,13 @@ import { DashboardView, type DashboardHrefs } from "./DashboardView";
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
   const { roster } = useForgeConsole();
-  return useMemo(
-    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : [])),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // A panel can become an alert rule, and the dialog names the rules each
+  // environment already declares.
+  return useDeclaredEnvironments(recorded);
 }
 
 /** Every environment of the org as `project/env` (hooks/apps-queries.ts): what an org-scoped dashboard offers. */
@@ -120,13 +125,7 @@ function RosterGate({ testId, topic, children }: { testId: string; topic: ObsTop
   return (
     <div className="space-y-4" data-testid={testId}>
       <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
-      {environments.length === 0 ? (
-        <div data-testid="observability-no-envs">
-          <ObsNoEnvironments topic={topic} />
-        </div>
-      ) : (
-        children
-      )}
+      {environments.length === 0 ? <NoEnvironmentsState topic={topic} /> : children}
     </div>
   );
 }
@@ -137,7 +136,7 @@ function useNavigateTo() {
 }
 
 export function DashboardsPage() {
-  const { forgeProject, env } = useForgeConsole();
+  const { forgeProject, env, roster } = useForgeConsole();
   const search = useSearch({ strict: false }) as DashboardsSearch;
   const onSearch = useSearchUpdater<DashboardsSearch>();
   const environments = useRecordedEnvs();
@@ -161,17 +160,17 @@ export function DashboardsPage() {
   return (
     // Not behind RosterGate: organization costs are a builtin dashboard that
     // needs no deployed environment, so the list stays reachable and the
-    // getting-started guidance sits above it instead of replacing it.
+    // getting-started guidance sits above it instead of replacing it — once the
+    // roster has answered: while it loads, or when it failed, "no environments"
+    // would be a claim nobody checked.
     <div className="space-y-4" data-testid="console-dashboards">
-      {environments.length === 0 && (
-        <div data-testid="observability-no-envs">
-          <ObsNoEnvironments topic="dashboards" />
-        </div>
-      )}
+      <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
+      {environments.length === 0 && !roster.isLoading && !roster.resolvingName && <NoEnvironmentsState topic="dashboards" />}
       <DashboardsList
         project={forgeProject}
         env={env}
         environments={environments}
+        environmentsUnread={rosterReadFailed(roster)}
         search={{ view: search.view, q: search.q, group: search.group, source: search.source, owner: search.owner }}
         onSearch={onSearch}
         hrefs={listHrefs}

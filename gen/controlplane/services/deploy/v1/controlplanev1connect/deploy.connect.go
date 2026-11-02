@@ -158,6 +158,9 @@ const (
 	// DeployServiceGetLiveViewProcedure is the fully-qualified name of the DeployService's GetLiveView
 	// RPC.
 	DeployServiceGetLiveViewProcedure = "/controlplane.v1.DeployService/GetLiveView"
+	// DeployServiceGetEnvironmentShapeProcedure is the fully-qualified name of the DeployService's
+	// GetEnvironmentShape RPC.
+	DeployServiceGetEnvironmentShapeProcedure = "/controlplane.v1.DeployService/GetEnvironmentShape"
 	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
 	// RPC.
 	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
@@ -448,16 +451,37 @@ type DeployServiceClient interface {
 	// forge:custom — returns the log and report beside the attempt, and derives
 	// its state.
 	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
-	// GetLiveView returns every environment of one forge project with its
-	// declaration, promotion, release, bundle, latest apply and sessions — the
-	// whole Live screen in ONE round trip.
+	// GetLiveView returns every environment of one forge project as a ROSTER:
+	// each row's identity, release binding, bundle identity, phase, drift,
+	// holds and tree-health counts — the environment list every console page
+	// draws, in ONE round trip.
 	//
-	// Folded for GetTenant's reason: the page cannot render until it has all of
-	// it, and N environments × six reads is both a slow page and a page assembled
-	// from six different instants. An environment list that comes back empty is
-	// an empty list, never an error: a project nobody has deployed yet is a
-	// normal state, not a failure.
+	// Folded for GetTenant's reason: N environments × several reads is both a
+	// slow page and a page assembled from different instants. Bounded per row
+	// (see DeployLiveEnvironment): the documents that grow with an environment
+	// — its declared shape, its bundle, its release — are fetched for one
+	// environment at a time. An environment list that comes back empty is an
+	// empty list, never an error: a project nobody has deployed yet is a normal
+	// state, not a failure.
 	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// GetEnvironmentShape returns one environment's DECLARATION: the
+	// release.Shape its last render recorded (workloads, secrets by name and
+	// provider, domains, clusters, resolved alert rules and routes, a hash per
+	// object), with where and when it was declared.
+	//
+	// SPLIT FROM THE ROSTER because it is a document, not a field: hundreds of
+	// KB for a real environment, read only by the pages that show one
+	// environment's secrets, workloads, alerts or dashboards. It used to ride
+	// on every DeployEnvironment, which made every environment list a megabyte.
+	//
+	// MEMBER, the same scoping as GetLiveView: an environment of another org is
+	// NotFound, indistinguishable from an absent one. It names no secret VALUE —
+	// a shape's secrets are names and providers only (F-13, enforced when the
+	// shape is written).
+	//
+	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
+	// with no shape, which is the "never built" state, never an empty shape.
+	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -799,6 +823,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
 			connect.WithClientOptions(opts...),
 		),
+		getEnvironmentShape: connect.NewClient[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse](
+			httpClient,
+			baseURL+DeployServiceGetEnvironmentShapeProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
+			connect.WithClientOptions(opts...),
+		),
 		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
 			httpClient,
 			baseURL+DeployServicePlanDeployProcedure,
@@ -877,6 +907,7 @@ type deployServiceClient struct {
 	listDeployAttempts      *connect.Client[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse]
 	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
 	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	getEnvironmentShape     *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
@@ -1097,6 +1128,11 @@ func (c *deployServiceClient) GetDeployAttempt(ctx context.Context, req *connect
 // GetLiveView calls controlplane.v1.DeployService.GetLiveView.
 func (c *deployServiceClient) GetLiveView(ctx context.Context, req *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
 	return c.getLiveView.CallUnary(ctx, req)
+}
+
+// GetEnvironmentShape calls controlplane.v1.DeployService.GetEnvironmentShape.
+func (c *deployServiceClient) GetEnvironmentShape(ctx context.Context, req *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error) {
+	return c.getEnvironmentShape.CallUnary(ctx, req)
 }
 
 // PlanDeploy calls controlplane.v1.DeployService.PlanDeploy.
@@ -1398,16 +1434,37 @@ type DeployServiceHandler interface {
 	// forge:custom — returns the log and report beside the attempt, and derives
 	// its state.
 	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
-	// GetLiveView returns every environment of one forge project with its
-	// declaration, promotion, release, bundle, latest apply and sessions — the
-	// whole Live screen in ONE round trip.
+	// GetLiveView returns every environment of one forge project as a ROSTER:
+	// each row's identity, release binding, bundle identity, phase, drift,
+	// holds and tree-health counts — the environment list every console page
+	// draws, in ONE round trip.
 	//
-	// Folded for GetTenant's reason: the page cannot render until it has all of
-	// it, and N environments × six reads is both a slow page and a page assembled
-	// from six different instants. An environment list that comes back empty is
-	// an empty list, never an error: a project nobody has deployed yet is a
-	// normal state, not a failure.
+	// Folded for GetTenant's reason: N environments × several reads is both a
+	// slow page and a page assembled from different instants. Bounded per row
+	// (see DeployLiveEnvironment): the documents that grow with an environment
+	// — its declared shape, its bundle, its release — are fetched for one
+	// environment at a time. An environment list that comes back empty is an
+	// empty list, never an error: a project nobody has deployed yet is a normal
+	// state, not a failure.
 	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// GetEnvironmentShape returns one environment's DECLARATION: the
+	// release.Shape its last render recorded (workloads, secrets by name and
+	// provider, domains, clusters, resolved alert rules and routes, a hash per
+	// object), with where and when it was declared.
+	//
+	// SPLIT FROM THE ROSTER because it is a document, not a field: hundreds of
+	// KB for a real environment, read only by the pages that show one
+	// environment's secrets, workloads, alerts or dashboards. It used to ride
+	// on every DeployEnvironment, which made every environment list a megabyte.
+	//
+	// MEMBER, the same scoping as GetLiveView: an environment of another org is
+	// NotFound, indistinguishable from an absent one. It names no secret VALUE —
+	// a shape's secrets are names and providers only (F-13, enforced when the
+	// shape is written).
+	//
+	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
+	// with no shape, which is the "never built" state, never an empty shape.
+	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -1745,6 +1802,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetEnvironmentShapeHandler := connect.NewUnaryHandler(
+		DeployServiceGetEnvironmentShapeProcedure,
+		svc.GetEnvironmentShape,
+		connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServicePlanDeployHandler := connect.NewUnaryHandler(
 		DeployServicePlanDeployProcedure,
 		svc.PlanDeploy,
@@ -1863,6 +1926,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetDeployAttemptHandler.ServeHTTP(w, r)
 		case DeployServiceGetLiveViewProcedure:
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
+		case DeployServiceGetEnvironmentShapeProcedure:
+			deployServiceGetEnvironmentShapeHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
 			deployServicePlanDeployHandler.ServeHTTP(w, r)
 		case DeployServiceCheckDeployCapacityProcedure:
@@ -2052,6 +2117,10 @@ func (UnimplementedDeployServiceHandler) GetDeployAttempt(context.Context, *conn
 
 func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetLiveView is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetEnvironmentShape is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {

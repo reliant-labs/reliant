@@ -880,7 +880,9 @@ function VariablesBar({
 }) {
   const overview = useServiceOverview(scope, range);
   const names = useMemo(() => {
-    const known = (overview.data?.services ?? []).filter((s) => !s.operatorData).map((s) => s.name);
+    // Operator-sourced processes stay: the scope is the project's environments, so
+    // they are the project's own (homeModel.serviceRows says why).
+    const known = (overview.data?.services ?? []).map((s) => s.name);
     if (service && !known.includes(service)) known.unshift(service);
     return [...new Set(known)];
   }, [overview.data, service]);

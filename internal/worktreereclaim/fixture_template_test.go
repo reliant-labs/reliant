@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 )
 
 // newFixture's repos are built once per test binary and copied per test.
@@ -53,6 +55,10 @@ func heavyUnderShort(t *testing.T, why string) {
 var templateRoot string
 
 func TestMain(m *testing.M) {
+	// This binary also stands in for the reliant binary as credsandbox's init,
+	// and for an undumpable process (process_uninspectable_linux_test.go).
+	credsandbox.Dispatch()
+	runTestHelper()
 	code := m.Run()
 	if templateRoot != "" {
 		_ = os.RemoveAll(templateRoot)
