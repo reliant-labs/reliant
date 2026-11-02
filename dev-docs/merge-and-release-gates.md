@@ -390,6 +390,14 @@ that.
    tag lands on exactly the commit the gate judged, so what ships is what was
    gated.
 
+The RC train (control-plane `scripts/rc/rc.sh`) gates the set's reliant commit
+on its own machine (owner, 2026-11-02): `scripts/rc/rl-gate.sh` runs this
+gate's parts (`release-gate.sh run --part`) and ci.yml's Playwright and
+electron lanes in parallel, assembles the record and publishes it as the
+commit's note. `release-tag.sh --rc` accepts that green record, and otherwise
+the commit's `Release gate` job on Actions (the train's fallback, ci.yml
+dispatched at the RC branch, which publishes no note off main).
+
 The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
 `Release Electron App` (publishing to the alpha channel, a GitHub Release
 and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
