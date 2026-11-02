@@ -60,15 +60,23 @@ one-hour token scoped to that repository from `reliant github token --as app
 (`reliant-01`): its ruleset bypass is the owner's alone. Fall back to the user
 only where the bot cannot act at all, and say so.
 
-**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included.** Label
-the PR `merge:queue` and stop. The `pr-review` workflow reviews the exact head;
-on `review:passed` it enqueues it (`gh pr merge --auto --match-head-commit`).
-`CI result` is green on a PR within a minute, so auto-merge armed before the
-review puts the unreviewed head straight into the queue, where the review
-marker check (`scripts/ci-review-marker.sh`) fails it and every group behind
-it. `review:changes` means fix, push, and re-add `merge:queue`. Design:
-control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
-script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
+**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included, and no
+queue label.** Open the PR **non-draft** when it is ready (a draft is never
+reviewed), report its URL and stop. The `pr-review` workflow reviews the exact
+head; on a pass it adds `review:passed` + `merge:queue` and enqueues it
+(`gh pr merge --auto --match-head-commit`). `CI result` is green on a PR within
+a minute, so auto-merge armed before the review puts the unreviewed head
+straight into the queue, where the review marker check
+(`scripts/ci-review-marker.sh`) fails it and every group behind it. On
+`review:changes` or `merge:failed`, fix and push: every push is reviewed again
+(pr-fix takes over a PR nobody is fixing). `hold` keeps a PR out of both
+queues. Design: control-plane `docs/pr-pipeline.md`. There is no waiver and no
+local merge script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are
+retired).
+
+**Releases are control-plane's `rc-train` workflow's, never a chat's.** It cuts
+a release candidate when a main moved and 2h passed, or right after a PR
+labelled **`release:asap`** merges: add that label to ship sooner.
 
 ## Load these skills before touching their area
 
