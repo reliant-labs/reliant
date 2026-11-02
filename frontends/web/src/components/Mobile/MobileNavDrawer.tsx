@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { dialogOpener } from "../../lib/dialogOpener";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
@@ -34,6 +35,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -121,9 +123,9 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const currentProject = useProjectStore((s) => s.currentProject);
   const panelRef = useRef<HTMLDivElement>(null);
-  // The element focused right before the drawer opened, so closing it (by
-  // Escape, scrim tap, or nav) puts focus back where the user's attention
-  // actually was — usually the hamburger button that opened it.
+  // The control that opened the drawer (usually the hamburger button; see
+  // `dialogOpener` for why not simply the focused element), so closing it (by
+  // Escape, scrim tap, or nav) puts focus back where the user's attention was.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(false);
   const previousPathnameRef = useRef(pathname);
@@ -132,7 +134,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   // snapping to its open position on first paint.
   useEffect(() => {
     if (!isOpen) return;
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    restoreFocusRef.current = dialogOpener();
     const raf = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(raf);
   }, [isOpen]);
@@ -155,20 +157,22 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
         onClose();
         return;
       }
-      if (e.key !== "Tab" || !panel) return;
+      if (e.key !== "Tab" || e.defaultPrevented || !panel) return;
 
+      // The trap moves focus itself on every Tab rather than only wrapping at
+      // the ends: Safari's default Tab order skips links, so letting the
+      // browser advance from the second-to-last control would carry focus
+      // past a trailing link and out of the drawer.
       const elements = focusableElements(panel);
       if (elements.length === 0) return;
-      const first = elements[0]!;
-      const last = elements[elements.length - 1]!;
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      e.preventDefault();
+      const current = elements.indexOf(document.activeElement as HTMLElement);
+      const step = e.shiftKey ? -1 : 1;
+      const next =
+        current === -1
+          ? e.shiftKey ? elements.length - 1 : 0
+          : (current + step + elements.length) % elements.length;
+      elements[next]!.focus();
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -285,6 +289,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               </Link>
             );
           })}
+          <MobileInstallMenuItem />
         </nav>
       </div>
     </div>,

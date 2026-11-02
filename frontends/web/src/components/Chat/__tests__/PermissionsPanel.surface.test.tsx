@@ -41,7 +41,7 @@ describe("PermissionsPanel approvals", () => {
         </SurfaceProvider>,
       );
 
-      expect(screen.getByText("2 routine requests")).toBeInTheDocument();
+      expect(screen.getByText("2 requests")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Approve: Run the migration?" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /approve all 2/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /deny all 2/i })).toBeInTheDocument();

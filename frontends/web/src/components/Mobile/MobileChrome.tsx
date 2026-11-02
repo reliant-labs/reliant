@@ -234,17 +234,21 @@ export function MobileEmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
-      <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary-ink">
-        <Icon className="h-7 w-7" />
-      </span>
-      <p className="text-base font-semibold text-foreground">{title}</p>
-      {description && (
-        <p className="mt-1.5 max-w-[17rem] text-sm text-muted-foreground">
-          {description}
-        </p>
-      )}
-      {action && <div className="mt-6">{action}</div>}
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-12 text-center">
+      {/* Auto margins center when space permits, but never hide the top of
+          overflowing content above the scroll origin on short viewports. */}
+      <div className="my-auto flex shrink-0 flex-col items-center">
+        <span className="mb-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-ink">
+          <Icon className="h-7 w-7" />
+        </span>
+        <p className="text-base font-semibold text-foreground">{title}</p>
+        {description && (
+          <p className="mt-1.5 max-w-[17rem] text-sm text-muted-foreground">
+            {description}
+          </p>
+        )}
+        {action && <div className="mt-6">{action}</div>}
+      </div>
     </div>
   );
 }

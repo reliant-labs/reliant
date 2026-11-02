@@ -33,7 +33,7 @@ func (s *Service) ResolveMessages(ctx context.Context, opts ResolveMessagesOpts)
 	if opts.ContextWindowID != nil {
 		startingCW, err = s.repo.GetContextWindow(ctx, *opts.ContextWindowID)
 		if err != nil {
-			return nil, fmt.Errorf("context window not found: %w", err)
+			return nil, lookupFailed(err, "context window not found", "failed to load context window")
 		}
 	} else {
 		startingCW, err = s.repo.GetLatestContextWindow(ctx, opts.ThreadID)
@@ -219,7 +219,7 @@ func (s *Service) ResolveMessagesFromCW(ctx context.Context, contextWindowID str
 	// Get the context window
 	cw, err := s.repo.GetContextWindow(ctx, contextWindowID)
 	if err != nil {
-		return nil, fmt.Errorf("context window not found: %w", err)
+		return nil, lookupFailed(err, "context window not found", "failed to load context window")
 	}
 
 	// Use the recursive CW chain resolution with cycle detection

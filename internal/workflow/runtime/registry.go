@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -132,6 +133,20 @@ func classifyError(err error) error {
 		delay, retry := scheduled.RetryAfter()
 		return temporal.NewApplicationErrorWithOptions(err.Error(), scheduled.TemporalErrorType(),
 			temporal.ApplicationErrorOptions{NonRetryable: !retry, NextRetryDelay: delay, Cause: err})
+	}
+
+	// A database that did not answer is always retryable, and is decided
+	// before every text rule below: its message carries whatever the layers
+	// above wrapped the driver error in, and on 2026-11-02 one of them called
+	// PgBouncer's server_login_retry "thread … does not exist", which the
+	// "does not exist" rule made terminal (reliant#2100). An attempt the
+	// wrapper already held for the database arrives typed.
+	if errors.As(err, &app) && app.Type() == DatabaseUnavailableErrType {
+		return err
+	}
+	if dbconn.Unavailable(err) {
+		return temporal.NewApplicationErrorWithOptions("database unavailable", DatabaseUnavailableErrType,
+			temporal.ApplicationErrorOptions{Cause: err})
 	}
 
 	// A provider usage window (Anthropic's 5-hour / 7-day subscription limit)
@@ -294,6 +309,13 @@ func categorizeError(err error) string {
 
 	if errors.Is(err, drivererrors.ErrEmptyInput) {
 		return "validation"
+	}
+
+	// Before "not found": a database outage is what a mislabelled lookup
+	// used to call a missing row (reliant#2100).
+	var app *temporal.ApplicationError
+	if (errors.As(err, &app) && app.Type() == DatabaseUnavailableErrType) || dbconn.Unavailable(err) {
+		return "database_unavailable"
 	}
 
 	errStr := strings.ToLower(err.Error())
@@ -553,6 +575,9 @@ type ActivityWrapper[I any, O any] struct {
 	messageWriter func() MessageWriter
 	// messageWriteRetry is how that writer's failed writes are retried.
 	messageWriteRetry messageWriteRetry
+	// dbOutage is how long, and how often, this wrapper waits for a database
+	// that stopped answering (db_outage.go).
+	dbOutage dbOutagePolicy
 	// outlivesHeartbeatRPCFailure runs the activity under
 	// shieldFromSpuriousHeartbeatCancel, so a heartbeat RPC that merely timed
 	// out does not cancel its work. Set from heartbeatRPCFailureSurvivor.
@@ -599,6 +624,7 @@ func NewActivityWrapper[I any, O any](
 		activity:          activity,
 		repo:              repo,
 		messageWriteRetry: defaultMessageWriteRetry(),
+		dbOutage:          defaultDBOutagePolicy(),
 	}
 }
 
@@ -973,6 +999,17 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			"WorkerShutdown",
 			execErr,
 		)
+	}
+
+	// The database did not answer: hold this attempt until it does, so one
+	// outage costs one attempt of the step's ladder however long it lasts,
+	// and the retry runs as soon as the database is back (db_outage.go). Not
+	// for a local activity, which would hold its workflow task with it, nor
+	// once the activity's own context has ended.
+	if execErr != nil && ctx.Err() == nil && !info.IsLocalActivity && dbconn.Unavailable(execErr) {
+		execErr = w.awaitDatabase(ctx, workflowID, activityType, activityID, execErr)
+		endTime = time.Now()
+		durationMs = endTime.Sub(startTime).Milliseconds()
 	}
 
 	if execErr != nil {
@@ -1999,6 +2036,9 @@ type ActivityRegistry struct {
 	// messageWriteRetry is the retry policy for messageWriter's writes,
 	// copied into each wrapper at registration. Tests shrink it per registry.
 	messageWriteRetry messageWriteRetry
+	// dbOutage is the database-outage ride-out every wrapper applies, copied
+	// into each at registration. Tests give theirs a virtual clock.
+	dbOutage dbOutagePolicy
 	// directHeartbeat is how an engaged heartbeat shield heartbeats and a
 	// stop nudge probes, copied into each wrapper at registration. Tests
 	// replace it per registry.
@@ -2015,6 +2055,7 @@ func NewActivityRegistry(repo ActivityStore) *ActivityRegistry {
 		activities:        make(map[string]interface{}),
 		outputTypes:       make(map[string]reflect.Type),
 		messageWriteRetry: defaultMessageWriteRetry(),
+		dbOutage:          defaultDBOutagePolicy(),
 		directHeartbeat:   clientHeartbeat,
 	}
 }
@@ -2107,6 +2148,7 @@ func wrapActivity[TInput any, TOutput any](
 	wrapper.stopNudges = func() stopNudgeSource { return registry.stopNudges }
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
 	wrapper.messageWriteRetry = registry.messageWriteRetry
+	wrapper.dbOutage = registry.dbOutage
 
 	// Wrap with error classification middleware
 	// The function signature matches what Temporal expects for typed activities

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { responsiveViewports } from './e2e/helpers/responsive';
 
 // Default baseURL - can be overridden via BASE_URL env var
 // Note: vite dev serves on 5173, vite preview serves on 4173
@@ -41,6 +42,17 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // A bounded representative matrix, not every spec × every device.
+    // The existing Chromium project also runs these journeys with mouse input.
+    ...[
+      { name: 'responsive-chromium-touch', browserName: 'chromium' as const, viewport: responsiveViewports.phone },
+      { name: 'responsive-webkit-phone', browserName: 'webkit' as const, viewport: responsiveViewports.phone },
+      { name: 'responsive-webkit-tablet', browserName: 'webkit' as const, viewport: responsiveViewports.tablet },
+    ].map(({ name, browserName, viewport }) => ({
+      name,
+      testMatch: '**/mobile-responsive.spec.ts',
+      use: { browserName, viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
+    })),
     {
       name: 'memory-tests',
       testMatch: '**/memory*.spec.ts',

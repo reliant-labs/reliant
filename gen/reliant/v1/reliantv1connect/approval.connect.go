@@ -58,9 +58,13 @@ type ApprovalServiceClient interface {
 	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
 	// Deny denies a pending approval request (cancels workflow)
 	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)
-	// BatchApprove approves multiple pending approval requests at once
+	// BatchApprove approves several approvals of one chat at once: every
+	// listed approval that is still pending. One already decided (on another
+	// surface) is skipped and not counted; FAILED_PRECONDITION only when none
+	// of them was pending.
 	BatchApprove(context.Context, *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error)
-	// BatchDeny denies multiple pending approval requests at once
+	// BatchDeny denies several approvals of one chat at once, with
+	// BatchApprove's rules for approvals already decided.
 	BatchDeny(context.Context, *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error)
 }
 
@@ -150,9 +154,13 @@ type ApprovalServiceHandler interface {
 	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
 	// Deny denies a pending approval request (cancels workflow)
 	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)
-	// BatchApprove approves multiple pending approval requests at once
+	// BatchApprove approves several approvals of one chat at once: every
+	// listed approval that is still pending. One already decided (on another
+	// surface) is skipped and not counted; FAILED_PRECONDITION only when none
+	// of them was pending.
 	BatchApprove(context.Context, *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error)
-	// BatchDeny denies multiple pending approval requests at once
+	// BatchDeny denies several approvals of one chat at once, with
+	// BatchApprove's rules for approvals already decided.
 	BatchDeny(context.Context, *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error)
 }
 

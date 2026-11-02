@@ -139,7 +139,9 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 	// Get context window for thread - thread must already exist
 	cw, err := s.GetLatestContextWindow(ctx, opts.Thread)
 	if err != nil {
-		return nil, fmt.Errorf("thread %s does not exist - must be created before saving messages: %w", opts.Thread, err)
+		return nil, lookupFailed(err,
+			fmt.Sprintf("thread %s does not exist - must be created before saving messages", opts.Thread),
+			fmt.Sprintf("reading thread %s's latest context window", opts.Thread))
 	}
 
 	// Handle new context sequence (for compaction)

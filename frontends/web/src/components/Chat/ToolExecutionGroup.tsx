@@ -195,7 +195,8 @@ function ToolExecutionGroupComponent({
       <button
         type="button"
         className={cn(
-          "flex w-full items-center justify-between text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
+          "flex w-full items-center justify-between gap-2 text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
+          surface === "mobile" && "min-h-[44px]",
           density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
         onClick={toggle}
@@ -246,10 +247,10 @@ function ToolExecutionGroupComponent({
       {/* Show all tool calls when expanded */}
       {expanded && (
         <div id={panelId} className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
-          {executions.map((execution, index) => {
+          {executions.map((execution) => {
             return (
               <ToolExecution
-                key={`${messageId || "msg"}-group-exec-${index}-${execution.call.id}`}
+                key={`${messageId || "msg"}-group-exec-${execution.call.id}`}
                 toolCall={execution.call}
                 toolResult={execution.result}
                 status={execution.status}

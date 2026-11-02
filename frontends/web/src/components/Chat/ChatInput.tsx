@@ -9,7 +9,11 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, ChevronDown } from "lucide-react";
+import { Settings2, ChevronDown, Plus } from "lucide-react";
+import { useCapability, useSurface } from "../../lib/surfaceContext";
+import { ComposerOptions } from "./ComposerOptions";
+import { ComposerWorkflowPicker } from "./ComposerWorkflowPicker";
+import { useComposerUploads } from "./useComposerUploads";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -25,7 +29,7 @@ import { useThinkingCapability } from "../../hooks/useThinkingCapability";
 import { getMessagesFromCache } from "../../hooks/message-queries";
 import { formatTranscript } from "../../lib/transcript";
 import { toast } from "../../lib/toast-manager";
-import { ChatActionButtons } from "./ChatActionButtons";
+import { ButtonLayout } from "./ChatActionButtons";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
 import { DragDropOverlay } from "./DragDropOverlay";
@@ -59,6 +63,7 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
   currentThinkingLevel,
@@ -177,6 +182,8 @@ interface ChatInputProps {
   selectedThreadId?: string | null;  // Currently selected thread (null = main/all)
   workflowExecution?: WorkflowExecution;  // Root workflow execution tree
   prefill?: ComposerPrefill;
+  /** Explicit attachment bucket for hosts creating a chat without changing active selection. */
+  attachmentDraftId?: string;
 }
 
 const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -193,9 +200,17 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       selectedThreadId,
       workflowExecution,
       prefill,
+      attachmentDraftId,
     },
     ref
   ) {
+    const mobile = useSurface() === "mobile";
+    const WorkflowPicker = mobile ? ComposerWorkflowPicker : WorkflowSelector;
+    const canAttach = useCapability("chatAttachments");
+    const canConfigure = useCapability("chatWorkflowParams");
+    const [mobileOptionsOpen, setMobileOptionsOpen] = useState(false);
+    const sendingRef = useRef(false);
+    const [sending, setSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -258,11 +273,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
         // Don't clear viewer - just ensure chat is active
         // Only activate in normal mode (not command center)
-        if (activeChatId && !paneId) {
+        if (activeChatId && !paneId && !attachmentDraftId) {
           useChatNavigationStore.getState().navigateToChat(activeChatId);
         }
       },
-      [activeChatId, paneId]
+      [activeChatId, paneId, attachmentDraftId]
     );
 
     useEffect(() => {
@@ -302,6 +317,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       setSelectedWorkflow,
       isPendingChat,
       handleClearInput,
+      captureSubmittedDraft,
     } = useChatInputState({
       chatId,
       tabId: tabId ?? undefined,
@@ -830,11 +846,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return covered;
     }, [selectedPresets, presetTargets, presetsByTag]);
 
-    // Check if any non-hidden, non-message, non-attachments param is unset
-    // (no value in workflowParams, no meaningful default in schema, and not covered by a selected preset)
+    // Check if any required, non-hidden, non-message, non-attachments param is
+    // unset (no value in workflowParams, no meaningful default in schema, and
+    // not covered by a selected preset). "Required" is the server's rule
+    // (model.IsInputRequired, mirrored by isRequiredInput): marked required, or
+    // no default. An optional input is one with a default, so it is never unset.
     const hasUnsetParams = useMemo(() => {
       if (!workflowInputs) return false;
       for (const [name, schema] of Object.entries(workflowInputs)) {
+        if (!isRequiredInput(schema)) continue;
         if (getInputUI(schema) === "hidden") continue;
         if (schema.type === "message" || schema.type === "attachments") continue;
         if (schema.type === "tools" || schema.type === "preset" || schema.type === "thread") continue;
@@ -857,13 +877,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           !(schema.type === "model" && isEmptyModelValue(schemaDefault));
 
         if (name.includes(".")) {
-          const hasValue = workflowParams[name] !== undefined &&
+          const hasValue = workflowParams[name] !== undefined && workflowParams[name] !== null && workflowParams[name] !== "" &&
             !(schema.type === "model" && isEmptyModelValue(workflowParams[name]));
           const coveredByPreset = paramsFromSelectedPresets.has(name);
           if (!hasValue && !hasDefault && !coveredByPreset) return true;
           continue;
         }
-        const hasValue = workflowParams[name] !== undefined &&
+        const hasValue = workflowParams[name] !== undefined && workflowParams[name] !== null && workflowParams[name] !== "" &&
           !(schema.type === "model" && isEmptyModelValue(workflowParams[name]));
         const coveredByPreset = paramsFromSelectedPresets.has(name);
         if (!hasValue && !hasDefault && !coveredByPreset) return true;
@@ -1123,7 +1143,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     // Use tabId to isolate attachments per tab when no chatId exists
     // Subscribe directly to attachments Map for reactivity
-    const attachmentSessionId = chatId || tabId || "temp";
+    const attachmentSessionId = attachmentDraftId ?? (chatId || tabId || "temp");
     const attachmentsMap = useAttachmentStore((state) => state.attachments);
     const attachments = useMemo(
       () => attachmentsMap.get(attachmentSessionId) || [],
@@ -1177,16 +1197,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       });
     }, [isStreaming, effectiveStreaming, isChatBusy, chatId]);
 
+    const uploadQueue = useComposerUploads(attachFile, removeAttachment, attachmentSessionId);
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {
-      for (const file of files) {
-        try {
-          await attachFile(attachmentSessionId, file);
-        } catch (error) {
-          console.error("Upload failed:", error);
-          // Error is already shown as toast by attachFile
-        }
-      }
+      if (!canAttach || disabled || sendingRef.current) return;
+      await uploadQueue.add(attachmentSessionId, files);
     };
 
     const { isDragging, isValidDrag, handlers, handlePaste } = useDragAndDrop({
@@ -1232,6 +1247,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
+      if (disabled || sendingRef.current || uploading || uploadQueue.hasPending()) return;
+      if (mobile && hasUnsetParams) {
+        setMobileOptionsOpen(true);
+        toast.error("Complete the required workflow parameters before sending");
+        return;
+      }
       const hasContent = input.trim().length > 0;
       const hasAttachments = attachments.length > 0;
 
@@ -1247,6 +1268,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         hasSomethingToSend && !effectiveStreaming && isMessagingAllowed;
 
       if (willSend) {
+        sendingRef.current = true;
+        setSending(true);
         // Markers never appear in the body now — the chips hold them, and the
         // referenced content is appended below as code blocks.
         const messageText = fromText.text.trim();
@@ -1336,9 +1359,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // "Not sent" with Retry (chatStore.markSendFailed), a new chat that
         // fails to start hands its text back (NewChatView), and either raises
         // its own toast.
-        handleClearInput(); // This will clear both input and auto-draft
-        clearAttachments(attachmentSessionId);
-        clearContexts();
+        // Mobile keeps the draft until the send succeeds, so its cleanup is
+        // bound now to the draft being submitted: by the time the send settles
+        // the user may be looking at another chat or project's draft.
+        const clearSubmittedDraft = mobile ? captureSubmittedDraft(input) : undefined;
+        if (!mobile) {
+          handleClearInput(); // Desktop failures are retained in the transcript.
+          clearAttachments(attachmentSessionId);
+          clearContexts();
+        }
 
         try {
           await onSend(
@@ -1349,12 +1378,22 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             undefined, // targetThread
             Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
           );
+          if (clearSubmittedDraft) {
+            // attachmentSessionId is the submitted draft's bucket, captured
+            // with this send. The code-context chips are this composer's own
+            // state, so they go only while it still shows the submitted draft.
+            clearAttachments(attachmentSessionId);
+            if (clearSubmittedDraft()) clearContexts();
+          }
         } catch (error) {
           // ChatContainer already reported this to the user before rethrowing.
           // Swallow it here so an Enter keypress — which cannot await this
           // handler — doesn't surface as an unhandled rejection.
           logger.error("[ChatInput] Send failed", { error, chatId });
           return;
+        } finally {
+          sendingRef.current = false;
+          setSending(false);
         }
 
         // Don't restore params from chatParamsStore after sending - keep current state
@@ -1406,7 +1445,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQueue = useCallback(async () => {
       const message = input.trim();
-      if (!message || queueingRef.current) return;
+      if (!message || queueingRef.current || disabled || uploading || uploadQueue.hasPending()) return;
       if (!chatId || !targetThreadId) {
         toast.error("Can't queue a message: this chat has no running agent yet.");
         return;
@@ -1476,6 +1515,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       replaceInput,
       clearAttachments,
       refreshQueuedMessages,
+      disabled,
+      uploading,
+      uploadQueue,
     ]);
 
     const handleAttachClick = () => {
@@ -1632,13 +1674,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const files = event.target.files;
       if (!files) return;
 
-      for (const file of Array.from(files)) {
-        try {
-          await attachFile(attachmentSessionId, file);
-        } catch (error) {
-          console.error("Upload failed:", error);
-        }
-      }
+      await handleFileDrop(Array.from(files));
       event.target.value = "";
     };
 
@@ -1702,12 +1738,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       : handleWorkflowParamsChange;
 
     const renderSettingsPopover = (initialPage: 'main' | 'model' | 'preset' | 'params') => {
-      if (!popoverInputs) return null;
+      if (!popoverInputs || !canConfigure) return null;
       return (
         <ChatSettingsPopover
           isOpen={true}
           onClose={() => setSettingsPage(null)}
           initialPage={initialPage}
+          mobile={mobile}
+          disabled={disabled || !isMessagingAllowed}
           inputs={popoverInputs}
           values={popoverValues}
           onChange={popoverOnChange}
@@ -1798,6 +1836,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
                   {/* Normal input UI - hidden when question prompt is shown */}
                   {!showAskOnly && (<>
+                  {uploadQueue.uploads.map((upload) => <div key={upload.id} className="flex min-w-0 items-center gap-2 text-sm" role="status">
+                    <span className="min-w-0 flex-1 truncate">{upload.file.name} · {upload.status === "failed" ? "Upload failed" : "Uploading…"}</span>
+                    {upload.status === "failed" && <button type="button" className="min-h-[44px] px-2" onClick={() => void uploadQueue.retry(upload.id)}>Retry</button>}
+                    <button type="button" className="min-h-[44px] px-2" onClick={() => uploadQueue.cancel(upload.id)}>Cancel</button>
+                  </div>)}
                   {/* Attachments */}
                     <div className="pt-3 px-2">
                       <AttachmentPreview
@@ -1815,7 +1858,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         onSend={handleSend}
                         onStop={handleStop}
                         onQueue={handleQueue}
-                        disabled={disabled || !isMessagingAllowed}
+                        disabled={disabled || (mobile && sending) || !isMessagingAllowed}
                         isStreaming={effectiveStreaming}
                         chatId={chatId}
                         placeholder={placeholder}
@@ -1841,10 +1884,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Single Bottom Row: All Controls */}
                   {<div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
                     {/* Left side: Workflow selector + inline required params + expand button */}
-                    <div className="flex items-center gap-1 flex-wrap" data-onboarding="chat-controls">
+                    <div className={cn("flex min-w-0 items-center gap-1", !mobile && "flex-wrap")} data-onboarding="chat-controls">
+                      {mobile && <button type="button" aria-label="Add" onClick={() => setMobileOptionsOpen(true)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full hover:bg-muted"><Plus className="h-5 w-5" /></button>}
+                      <ComposerOptions mobile={mobile} open={mobileOptionsOpen} onClose={() => setMobileOptionsOpen(false)}>
+                      {mobile && canAttach && <button type="button" disabled={uploading || disabled} onClick={handleAttachClick} className="min-h-[44px] w-full rounded-lg border border-border px-3 text-left">{uploading ? "Uploading…" : "Attach files"}</button>}
                       {/* Workflow Selector - disabled once chat has started (not pending) */}
                       <div>
-                        <WorkflowSelector
+                        <WorkflowPicker
                           isOpen={workflowSelectorOpen}
                           onOpenChange={setWorkflowSelectorOpen}
                           value={selectedWorkflow}
@@ -1894,11 +1940,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
                       {/* Inline Preset Pickers - one per target (workflow or group with tag) */}
                       {/* Note: Presets and params are ALWAYS editable, even while streaming */}
-                      {presetTargets.length > 0 && (
+                      {canConfigure && presetTargets.length > 0 && (
                         <div className="flex items-center gap-1">
                           {presetTargets.map((target) => (
                             <InlinePresetPicker
                               key={`preset-${target.name || "workflow"}`}
+                              mobile={mobile}
                               presets={presetsByTag.get(target.tag) || []}
                               value={selectedPresets[target.name]}
                               onChange={(preset) =>
@@ -1914,7 +1961,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       )}
 
                       {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
-                      {toolbarParams.length > 0 && (
+                      {!mobile && canConfigure && toolbarParams.length > 0 && (
                         <div className="flex items-center gap-1">
                           {toolbarParams.map(([paramName, schema]) => (
                             <InlineParamInput
@@ -1935,8 +1982,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         </div>
                       )}
 
+                      {mobile && canConfigure && <>
+                        {workflowDefinition.isLoading ? <p role="status">Loading workflow settings…</p> : workflowDefinition.error ? <div role="alert"><p>Could not load workflow settings.</p><button type="button" className="min-h-[44px] px-3" onClick={() => void workflowDefinition.refetch()}>Retry settings</button></div> : !popoverInputs || Object.keys(popoverInputs).length === 0 ? <p className="text-sm text-muted-foreground">This workflow has no configurable settings.</p> : <button type="button" disabled={disabled || !isMessagingAllowed} className="min-h-[44px] w-full rounded-lg border border-border px-3 text-left" onClick={() => { setMobileOptionsOpen(false); setSettingsPage('main'); }}>All settings{hasUnsetParams ? ' · Required inputs missing' : ''}</button>}
+                      </>}
+                      {mobile && <AccountUsageChip chatId={chatId} />}
+                      </ComposerOptions>
+                      {mobile && settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
                       {/* Model pill - opens settings popover directly to model page */}
-                      {hasConfigurableParams && (() => {
+                      {canConfigure && hasConfigurableParams && (() => {
                         const modelValue = workflowParams?.model as Record<string, unknown> | undefined
                           ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
                         const currentModelTag = (modelValue?.tags as string[])?.[0];
@@ -1967,6 +2020,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                   ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
                               )}
+                              disabled={disabled || !isMessagingAllowed}
                               onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
                               <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
                               <ComposerModelName name={resolvedModel?.name} pinnedId={currentModelId} />
@@ -1978,10 +2032,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         );
                       })()}
 
-                      <AccountUsageChip chatId={chatId} />
+                      {!mobile && <AccountUsageChip chatId={chatId} />}
 
                       {/* Settings Button - opens settings popover */}
-                      {(hasConfigurableParams || isViewingThreadParams) && (
+                      {!mobile && canConfigure && (hasConfigurableParams || isViewingThreadParams) && (
                         <div className="relative">
                           <Tooltip
                             content={
@@ -2023,7 +2077,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     {/* Right side: Action buttons + Scroll to bottom */}
                     <div className="flex items-center gap-2">
                       {/* Action buttons */}
-                      <ChatActionButtons
+                      <ButtonLayout
+                        layout={mobile || !canAttach ? ["sendStop"] : ["attach", "sendStop"]}
                         onSend={handleSend}
                         onStop={handleStop}
                         onQueue={handleQueue}
@@ -2032,7 +2087,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           attachments.length > 0
                         }
                         isStreaming={effectiveStreaming}
-                        disabled={disabled || !isMessagingAllowed}
+                        disabled={disabled || sending || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed}
 
                         onAttach={handleAttachClick}
                         uploading={uploading}

@@ -22,8 +22,10 @@ export interface ToolApprovalUpdate {
   update_type: "approval";
   id: string;
   chat_id: string;
-  approval_type: "workflow_step";
+  approval_type: "workflow_step" | "tool_call";
   entity_id: string;
+  /** Shared by the approvals one run step raised together (ApprovalCreate only). */
+  batch_id?: string;
   title: string;
   description?: string;
   content_block_id?: string;

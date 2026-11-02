@@ -1,11 +1,8 @@
 /**
  * `/m/new` — start a chat.
  *
- * Deliberately the narrow slice of `NewChatView`: a project header, a
- * workflow picker, where the chat runs, which workspace it runs in, one
- * message box. Attachments, workflow params, presets and branching are all
- * `false` for this surface, and the point of that list is that none of them
- * appear here.
+ * Shares ChatInput's upload, draft and workflow configuration mechanisms.
+ * Machine/workspace choices stay on this route; branching stays unavailable.
  *
  * Where it runs (research/NO_MACHINE_CHATS.md §2.5): one of the user's
  * machines, or No machine — preselected when none of their machines is awake,
@@ -42,9 +39,12 @@
  * new pattern for this one screen.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChatInput } from "../Chat/ChatInput";
+import { NewChatDraftBoundary, newChatAttachmentDraftId } from "../Chat/NewChatDraftBoundary";
+import { useChatParamsStore } from "../../store/chatParamsStore";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
+import { ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
@@ -57,7 +57,6 @@ import {
 } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { trackEvent } from "../../lib/analytics";
-import { cn } from "../../lib/utils";
 import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
@@ -122,15 +121,22 @@ export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
 }
 
 export function MobileNewChat() {
+  const projectId = useProjectStore((s) => s.currentProject?.id);
+  if (!projectId) return <MobileScreenHeader title="New chat" subtitle="No project" />;
+  return <NewChatDraftBoundary key={projectId} projectId={projectId}><MobileNewChatDraft /></NewChatDraftBoundary>;
+}
+
+function MobileNewChatDraft() {
   const navigate = useNavigate();
   // `strict: false` — nested under `_authenticated` → `_mobile`, same as
   // every other param/search read on this surface.
   const { worktreeId: requestedWorktreeId } = useSearch({ strict: false }) as {
     worktreeId?: string;
   };
-  const [message, setMessage] = useState("");
+  const creatingRef = useRef(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
+  const [createdChatId, setCreatedChatId] = useState<string>();
 
   const currentProject = useProjectStore((s) => s.currentProject);
   const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
@@ -142,7 +148,13 @@ export function MobileNewChat() {
 
   // null means "whatever the user's default is" — resolved at send time so a
   // preferences load that lands after mount is still respected.
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const selectedWorkflow = useChatParamsStore((s) => s.tempNewChatWorkflow);
+  const setSelectedWorkflow = (workflow: string) => {
+    const store = useChatParamsStore.getState();
+    store.setTempNewChatParams({});
+    store.setTempNewChatPresets({});
+    store.setTempNewChatWorkflow(workflow);
+  };
 
   // The user's pick on this screen wins over the one the URL arrived with.
   const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);
@@ -272,12 +284,12 @@ export function MobileNewChat() {
       setSettingUp(false);
     }
   };
-  const canSend = message.trim().length > 0 && !isCreating && !!currentProject && !placementBlock;
-
-  const handleSend = async () => {
-    const content = message.trim();
-    if (!content || isCreating || !currentProject || placementBlock) return;
-
+  const handleSend = async (content: string, attachmentIds?: string[], workflow?: string | null, params?: Record<string, unknown>, _thread?: string | null, presets?: Record<string, string | null>) => {
+    // ChatInput keeps the draft when this throws, so a blocked or duplicate
+    // send never loses the prompt.
+    if (creatingRef.current || !currentProject) throw new Error("Chat creation is unavailable");
+    if (placementBlock) throw new Error(placementBlock);
+    creatingRef.current = true;
     setIsCreating(true);
     setError("");
     try {
@@ -290,15 +302,15 @@ export function MobileNewChat() {
         .startChat(
           worktreeId,
           content,
-          undefined,
-          undefined,
-          effectiveWorkflow,
-          undefined,
+          attachmentIds,
+          params,
+          workflow ?? effectiveWorkflow,
+          presets ? Object.fromEntries(Object.entries(presets).filter((entry): entry is [string, string] => entry[1] !== null)) : undefined,
           daemonId || startNoMachine ? { daemonId, noMachine: startNoMachine } : undefined,
         );
 
       trackEvent("chat_created", {
-        has_attachments: false,
+        has_attachments: !!attachmentIds?.length,
         workflow: effectiveWorkflow,
         surface: "mobile",
         no_machine: noMachine,
@@ -308,7 +320,12 @@ export function MobileNewChat() {
       // reads activeChatId for its subscriptions.
       useChatStore.getState().selectChat(chat);
 
-      await navigate({ to: "/m/chats/$chatId", params: { chatId: chat.id } });
+      setCreatedChatId(chat.id);
+      try {
+        await navigate({ to: "/m/chats/$chatId", params: { chatId: chat.id } });
+      } catch {
+        setError("Chat created. Open it to continue.");
+      }
     } catch (err) {
       // Stay on the screen with the text intact — retyping a prompt on a
       // phone is the worst possible recovery.
@@ -316,6 +333,8 @@ export function MobileNewChat() {
         err instanceof Error ? err.message : "Could not start the chat",
       );
       setIsCreating(false);
+      creatingRef.current = false;
+      throw err;
     }
   };
 
@@ -338,7 +357,7 @@ export function MobileNewChat() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-4 py-4">
         {workflowsLoading && visibleWorkflows.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -347,7 +366,7 @@ export function MobileNewChat() {
           <MobileCardGroup label="Start with">
             <MobileSelectRow
               label="Workflow"
-              value={effectiveWorkflow}
+              value={visibleWorkflows.find((workflow) => sameWorkflow(workflow.name, effectiveWorkflow))?.name ?? effectiveWorkflow}
               sheetTitle="Choose a workflow"
               options={visibleWorkflows.map((workflow) => ({
                 value: workflow.name,
@@ -422,9 +441,8 @@ export function MobileNewChat() {
         )}
       </div>
 
-      {error && (
-        <p className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>
-      )}
+      {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>}
+      {createdChatId && <Link to="/m/chats/$chatId" params={{ chatId: createdChatId }} className="min-h-[44px] px-4 py-3 text-primary-ink">Open created chat</Link>}
 
       {/* Composer pins to the bottom. This screen has no tab bar, so it
           absorbs the home-indicator inset itself — MobileLayout leaves the
@@ -433,32 +451,9 @@ export function MobileNewChat() {
         className="flex shrink-0 items-end gap-2 border-t border-border px-3 py-3"
         style={{ paddingBottom: "calc(0.75rem + var(--mobile-safe-bottom, env(safe-area-inset-bottom)))" }}
       >
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="What do you want to do?"
-          rows={2}
-          aria-label="Message"
-          disabled={isCreating}
-          className={cn(
-            "max-h-40 min-h-14 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground",
-            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
-            "disabled:opacity-60",
-          )}
-        />
-        <button
-          type="button"
-          onClick={() => void handleSend()}
-          disabled={!canSend}
-          aria-label="Send"
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground active:opacity-80 disabled:opacity-40"
-        >
-          {isCreating ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <ArrowUp className="h-5 w-5" />
-          )}
-        </button>
+        <div className="mx-auto w-full max-w-3xl min-w-0">
+          <ChatInput attachmentDraftId={newChatAttachmentDraftId(currentProject!.id)} onSend={handleSend} disabled={isCreating || !currentProject || !!placementBlock} placeholder="What do you want to do?" />
+        </div>
       </div>
 
       {creatingWorkspace && currentProject && (
