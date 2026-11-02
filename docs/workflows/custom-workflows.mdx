@@ -261,7 +261,13 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
 - id: run_tests
   type: run
   command: npm test
+  timeout: 20m
 ```
+
+A run node's `timeout:` is the limit on its command: 5 minutes when none is declared, and at most
+12 hours (a longer literal fails validation). The 10-minute cap on an agent's own shell calls does
+not apply, so a gate or build that takes hours declares hours. A command still running at its
+timeout is stopped, and the step fails with exit code 124 and a `stderr` line naming the timeout.
 
 **Compute nodes** turn CEL into named values inside the workflow: no model, no shell, no worker.
 Use one for deterministic logic (a label check, a size bucket, a lease expiry, parsing the JSON a

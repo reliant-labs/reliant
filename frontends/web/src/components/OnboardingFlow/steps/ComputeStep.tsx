@@ -13,7 +13,6 @@ import {
 } from "@/components/Billing/PlanTiles";
 import { machinePricingFootnote } from "@/components/Billing/daemonUsage";
 import {
-  formatCentsAsDollars,
   formatSizeLabel,
   isPurchasableComputePlan,
   sortPlansForDisplay,
@@ -42,6 +41,8 @@ import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
 import { StepFooterAction } from "../StepFooter";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
+import { formatPrice } from "@/components/Billing/priceFormat";
+import { formatMachineSeconds } from "@/lib/formatMachineMinutes";
 
 const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 
@@ -134,6 +135,8 @@ export function ComputeStep({
     isLoading: cloudLoading,
     refetch: refetchCloudEligibility,
     allowedDaemonSizes,
+    hasActiveSubscription: hasSubscription,
+    grantedSmallDaemonSecondsRemaining: grantedSecondsRemaining = 0,
   } = useCloudEligibility();
 
   const eligible =
@@ -584,7 +587,7 @@ export function ComputeStep({
                 <span className="block text-sm font-medium text-foreground">
                   Reliant Cloud machines
                   {cheapestMonthlyCents !== null &&
-                    ` · from ${formatCentsAsDollars(cheapestMonthlyCents)}/mo`}
+                    ` · from ${formatPrice(cheapestMonthlyCents)}/mo`}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   Hosted, nothing to install
@@ -621,13 +624,17 @@ export function ComputeStep({
 
             - The coverage line says what a redeemed code did, where the price
               used to be (it is why one row now reads "Covered"), and names the
-              LIMIT the server enforces: a compute grant buys time on the
-              smallest machine, not a bigger one, and a user who picks Large on
-              the strength of a coupon is refused at provisioning.
+              LIMIT the server enforces: a compute grant buys machine time on
+              the M machine only, and a user who picks another size on the
+              strength of a coupon is refused at provisioning. S1 and S2 are
+              smaller and still not covered, so the sentence says "other
+              sizes", never "larger".
             - The burst headroom and the hours rule hold at every size, so they
               are said once here rather than on each row. The rows print what a
               machine reserves; the burst sentence is absent entirely if the
-              ladder stops being uniform (see machineBurst). */}
+              ladder stops being uniform (see machineBurst). A coupon-only user
+              has no monthly plan, so "Includes 160 hours a month" would
+              promise them something they did not get. */}
         {showCloudRows &&
           !plansQ.isLoading &&
           (planOptions.length > 0 ? (
@@ -637,8 +644,12 @@ export function ComputeStep({
                   className="text-xs leading-relaxed text-foreground"
                   data-testid="compute-step-coverage-note"
                 >
-                  Your code covers the {coveredSizeLabel} machine. Larger
-                  machines need a monthly plan.
+                  {grantedSecondsRemaining >= 60
+                    ? `Your code covers ${formatMachineSeconds(grantedSecondsRemaining)}, one-time — no charge today.`
+                    : `Your code covers the ${coveredSizeLabel} machine — no charge today.`}{" "}
+                  {coveredSize === "m"
+                    ? "S1, S2 and the larger sizes need a monthly plan."
+                    : "Other sizes need a monthly plan."}
                 </p>
               )}
               <p className="text-xs leading-relaxed text-muted-foreground">
@@ -651,7 +662,11 @@ export function ComputeStep({
                   </>
                 )}
                 <span data-testid="machine-pricing-line">
-                  {machinePricingFootnote(commonPlanHours(planOptions))}
+                  {machinePricingFootnote(
+                    machineCovered && !hasSubscription
+                      ? null
+                      : commonPlanHours(planOptions),
+                  )}
                 </span>
               </p>
             </div>

@@ -60,6 +60,7 @@ import type { Stripe, StripeElements } from "@stripe/stripe-js";
 
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
+import { formatPrice } from "./priceFormat";
 import {
   isCheckoutIdentityRequired,
   useCreateComputeSubscriptionIntent,
@@ -129,11 +130,13 @@ export interface OnboardingCheckoutProps {
   /** A coupon cleared a leg; the caller re-reads the facts. */
   onRedeemed: () => void;
   renderIdentityRequired?: (message: string) => React.ReactNode;
+  /** Offered when machine checkout cannot proceed; see MachineSaleConsent. */
+  onUseOwnComputer?: () => void;
   className?: string;
 }
 
 export function OnboardingCheckout(props: OnboardingCheckoutProps) {
-  if (props.computePlanId && props.lines.some(line => line.kind === "compute" && !line.covered)) return <div className="space-y-4"><MachineSaleConsent planId={props.computePlanId}>{monthlyPriceCents => <OnboardingCheckoutBody {...props} omitCoupon lines={monthlyPriceCents === undefined ? props.lines : props.lines.map(line => line.kind === "compute" && !line.covered ? { ...line, amountCents: monthlyPriceCents, detail: "Versioned monthly price shown in the accepted machine terms" } : line)} />}</MachineSaleConsent><RedeemCouponForm variant="open" size="sm" onRedeemed={() => props.onRedeemed()} /></div>;
+  if (props.computePlanId && props.lines.some(line => line.kind === "compute" && !line.covered)) return <div className="space-y-4"><MachineSaleConsent planId={props.computePlanId} onUseOwnComputer={props.onUseOwnComputer}>{monthlyPriceCents => <OnboardingCheckoutBody {...props} omitCoupon lines={monthlyPriceCents === undefined ? props.lines : props.lines.map(line => line.kind === "compute" && !line.covered ? { ...line, amountCents: monthlyPriceCents } : line)} />}</MachineSaleConsent><RedeemCouponForm variant="open" size="sm" onRedeemed={() => props.onRedeemed()} /></div>;
   return <OnboardingCheckoutBody {...props} />;
 }
 
@@ -373,11 +376,11 @@ function OrderSummary({
             <span className="shrink-0 text-sm font-semibold text-foreground">
               {line.covered ? (
                 <span className="text-muted-foreground line-through">
-                  {formatCentsAsDollars(line.amountCents)}
+                  {formatPrice(line.amountCents)}
                 </span>
               ) : (
                 <>
-                  {formatCentsAsDollars(line.amountCents)}
+                  {formatPrice(line.amountCents)}
                   {line.recurring && (
                     <span className="text-xs font-normal text-muted-foreground">
                       /mo

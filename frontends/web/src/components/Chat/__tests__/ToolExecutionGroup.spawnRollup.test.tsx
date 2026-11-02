@@ -53,7 +53,13 @@ const spawnCall = (id: string, childWorkflowId: string) => ({
 // distinguishes which bucket a count landed in, since both render "1".
 function pillText(container: HTMLElement, colorClass: string): string | undefined {
   const el = container.querySelector(`span.${colorClass}`);
-  return el ? el.textContent?.trim() : undefined;
+  if (!el) return undefined;
+  // The count, without the screen-reader word beside it ("running").
+  return Array.from(el.childNodes)
+    .filter((node) => !(node instanceof Element && node.classList.contains("sr-only")))
+    .map((node) => node.textContent ?? "")
+    .join("")
+    .trim();
 }
 
 describe("ToolExecutionGroup rollup counts a spawn by its child workflow's status", () => {

@@ -32,7 +32,7 @@ import {
   type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 
-import type { DaemonPricingLike } from "./daemonUsage";
+import { hourlyPriceShort, type DaemonPricingLike } from "./daemonUsage";
 import { formatMachineSpec } from "./machineSpecs";
 import type { ComputePlanOption } from "./PlanTiles";
 
@@ -56,13 +56,13 @@ export type MachineCatalogPlan = Pick<
  *
  * A size whose cheapest plan arrived unpriced is dropped too. It is the same
  * rule `COMPUTE_PLAN_UNPRICED` exists for: a machine we cannot price must not
- * appear beside a pay button, because the only alternatives are showing "$0.00"
- * for something that costs $79 or showing a blank where a price belongs.
+ * appear beside a pay button, because the only alternatives are showing "$0"
+ * for something that costs $69 or showing a blank where a price belongs.
  */
 export function deriveMachineOptions<T extends MachineCatalogPlan>(
   plans: T[],
-  /** ListPlans' daemon_pricing: each size's multiplier. */
-  _pricing?: DaemonPricingLike,
+  /** ListPlans' daemon_pricing: each size's disk and hourly overage price. */
+  pricing?: DaemonPricingLike,
 ): ComputePlanOption[] {
   const options: ComputePlanOption[] = [];
   for (const size of offeredDaemonSizes(plans)) {
@@ -80,7 +80,13 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       // into the label. "L" describes nothing on its own, and the caller
       // that needs the bare name back (the coupon coverage sentence) would
       // otherwise have to unpick the string it just built.
-      detail: formatMachineSpec(size),
+      detail: formatMachineSpec(size, pricing?.sizes.find((row) => row.size === size)?.storageGib),
+      // The price of an hour past the plan's included hours, beside the
+      // monthly price it qualifies — the landing page's "After included".
+      overage: (() => {
+        const hourly = hourlyPriceShort(pricing, size);
+        return hourly ? `${hourly} after included hours` : undefined;
+      })(),
       size,
       monthlyPriceCents: display.monthlyPriceCents,
       includedHours: plan.structuredLimits?.machineIncludedHours && plan.structuredLimits.machineIncludedHours > 0n

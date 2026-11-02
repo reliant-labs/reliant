@@ -311,6 +311,9 @@ export const SETTINGS_SECTION_IDS = [
   // workflow's own presets live on its detail page in the Workflows area.
   "presets",
   "git-connections",
+  // Every integration connection (ConnectionService): rename, test, make
+  // default, revoke, and which automations name it.
+  "integrations",
   "developer",
   // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces.
   // Billing also holds Reliant AI's managed keys and spend (`?tab=ai`).

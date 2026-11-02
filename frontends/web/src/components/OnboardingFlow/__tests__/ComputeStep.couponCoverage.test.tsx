@@ -189,12 +189,12 @@ describe("ComputeStep — a coupon covered the machine", () => {
     renderStep();
 
     // Small is covered: no price on it.
-    expect(screen.queryByText(/\$20\.00\/mo/)).toBeNull();
+    expect(screen.queryByText(/\$20\/mo/)).toBeNull();
     expect(screen.getAllByText(/covered/i).length).toBeGreaterThan(0);
 
     // Medium is NOT, and still shows what it costs — so choosing it reads as
     // the purchase it is.
-    expect(screen.getByText(/\$40\.00\/mo/)).toBeInTheDocument();
+    expect(screen.getByText(/\$40\/mo/)).toBeInTheDocument();
   });
 
   // And it must say so in words, including the limit. "We start one for you"
@@ -205,8 +205,11 @@ describe("ComputeStep — a coupon covered the machine", () => {
     renderStep();
 
     const note = screen.getByTestId("compute-step-coverage-note");
-    expect(note).toHaveTextContent(/covers/i);
-    expect(note).toHaveTextContent(/larger machines need a monthly plan/i);
+    // How much the code bought, in the unit it is spent in, and that it is one-time.
+    expect(note).toHaveTextContent(/covers 100 hours on an M machine, one-time/i);
+    expect(note).toHaveTextContent(/need a monthly plan/i);
+    // S1 and S2 are smaller than M and still not covered: never "larger machines".
+    expect(note).not.toHaveTextContent(/larger machines need/i);
   });
 
   // An entitled user still records a size, so the machine that gets
@@ -231,7 +234,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
   it("still prices the machines for a user with no coupon", () => {
     renderStep();
 
-    expect(screen.getByText(/\$20\.00\/mo/)).toBeInTheDocument();
+    expect(screen.getByText(/\$20\/mo/)).toBeInTheDocument();
     expect(screen.queryByTestId("compute-step-coverage-note")).toBeNull();
   });
 });

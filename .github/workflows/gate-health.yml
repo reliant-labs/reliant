@@ -47,7 +47,8 @@
 # place those can fail at all. A red push run notifies only whoever merged; a
 # red scheduled run, only whoever last edited its cron. So `main-health` runs
 # after every CI run on main and keeps ONE issue, labelled `ci:main-red`, open
-# for exactly as long as main's newest verdict is red. It also fails when
+# for exactly as long as main's newest verdict is red; the next red reopens
+# it (`.github/scripts/main-red-issue.sh`). It also fails when
 # main's run has no green "Release gate" job: the release tier stopping on
 # main is the two tiers silently merging into one, and must not read as green.
 #
@@ -145,31 +146,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/check-main-health.mjs --report "${RUNNER_TEMP}/main-health.md"
 
-      - name: Open, update or close the ci:main-red issue
+      # One rolling issue: a red after a green reopens the last one rather
+      # than filing another (see the script's header).
+      - name: Open, reopen, update or close the ci:main-red issue
         if: steps.audit.outputs.verdict == 'red' || steps.audit.outputs.verdict == 'green'
         env:
           GH_TOKEN: ${{ github.token }}
           VERDICT: ${{ steps.audit.outputs.verdict }}
           RUN_URL: ${{ steps.audit.outputs.run_url }}
           SHA: ${{ steps.audit.outputs.sha }}
-        run: |
-          set -euo pipefail
-          label="ci:main-red"
-          gh label create "${label}" --force --color B60205 \
-            --description "CI is red on main; opened and closed by gate-health.yml" >/dev/null
-          open="$(gh issue list --label "${label}" --state open --limit 1 --json number --jq '.[0].number // empty')"
-          report="${RUNNER_TEMP}/main-health.md"
-
-          if [ "${VERDICT}" = "red" ]; then
-            if [ -z "${open}" ]; then
-              gh issue create --title "main is red: CI" --label "${label}" --body-file "${report}"
-            # The weekly backstop re-audits a run already reported: say it once.
-            elif ! gh issue view "${open}" --json comments,body --jq '[.body, .comments[].body] | join("\n")' | grep -qF "${RUN_URL}"; then
-              gh issue comment "${open}" --body-file "${report}"
-            fi
-          elif [ -n "${open}" ]; then
-            gh issue close "${open}" --comment "main is green again at \`${SHA}\`: ${RUN_URL}"
-          fi
+        run: REPORT="${RUNNER_TEMP}/main-health.md" .github/scripts/main-red-issue.sh
 
       - name: Fail if main is red or the audit could not decide
         if: steps.audit.outputs.verdict != 'green'

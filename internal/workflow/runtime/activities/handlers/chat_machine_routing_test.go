@@ -43,6 +43,8 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 		}))
 	}
 	register(original, time.Now().Add(-time.Minute))
+	// The project is checked out on the chat's machine only.
+	require.NoError(t, h.Repo().UpsertProjectDaemon(ctx, project, original, dir, nil))
 	router := toolexec.NewNATSDaemonRouter(nil, toolexec.WithDatabase(h.Repo()))
 	executor := &daemonLikeExecutor{}
 	run := func() {

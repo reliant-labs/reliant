@@ -28,7 +28,9 @@
  * tab's list is a real hub with its own actions, so a detail page — a
  * workflow, a run, an automation — steps back into its tab's list, and the
  * list exits to the app. The builder steps back to the workflow's page, where
- * it is usually opened from (Edit); a new, unsaved one to the list.
+ * it is usually opened from (Edit); a new, unsaved one to the list. An entry
+ * from elsewhere (a chat) records where it came from, and the builder's Back
+ * returns there instead (getBuilderCloseNavigateOptions).
  *
  * Settings is deliberately flat. Unlike the Workflows area, /settings and
  * /settings/$section render the same SettingsPage — the bare path just falls
@@ -39,6 +41,7 @@
  * The function is pure and takes a pathname string so it can be unit tested
  * without a router. Callers spread the result into `useNavigate()({...})`.
  */
+import type { HistoryState } from "@tanstack/react-router";
 import {
   WORKFLOWS_LIBRARY_PATH,
   WORKFLOWS_TABS,
@@ -68,4 +71,46 @@ export function getParentRouteNavigateOptions(
     if (tab) return { to: tab.path };
   }
   return { to: "/", search: {} };
+}
+
+/**
+ * Where the builder was opened from, carried in history state.
+ *
+ * The workflow's page is only one way into the builder. A chat's workflow
+ * viewer opens it too (its Edit pencil), and stepping "back" from there to the
+ * workflow's page dropped the user somewhere they had never been. So an entry
+ * that is not the workflow's own page records its location here, and the
+ * builder's Back returns to it. History state, not the URL: it is the tab's own
+ * navigation record, so a pasted builder link carries no stale origin, while a
+ * reload (or the builder's own replace-navigations, which keep it) still does.
+ */
+export interface BuilderReturnState {
+  builderReturnTo?: string;
+}
+
+/** The history state an entry into the builder passes to record `href` as its origin. */
+export function builderReturnState(href: string): HistoryState & BuilderReturnState {
+  return { builderReturnTo: href };
+}
+
+/**
+ * The builder's Back: the in-app location it was opened from when an entry
+ * recorded one (builderReturnState), else its logical parent. Anything that is
+ * not a same-origin app path — a protocol-relative URL, an absolute URL, the
+ * builder itself — is ignored rather than followed.
+ */
+export function getBuilderCloseNavigateOptions(
+  pathname: string,
+  state: unknown,
+): { href: string } | RouteParentNavigateOptions {
+  const returnTo = (state as BuilderReturnState | null | undefined)?.builderReturnTo;
+  if (
+    typeof returnTo === "string" &&
+    returnTo.startsWith("/") &&
+    !returnTo.startsWith("//") &&
+    !isWorkflowBuilderPath(returnTo)
+  ) {
+    return { href: returnTo };
+  }
+  return getParentRouteNavigateOptions(pathname);
 }

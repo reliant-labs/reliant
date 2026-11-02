@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { COMPOSER_CONTROL } from "../Chat/composerControl";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
@@ -112,7 +113,8 @@ export function InlinePresetPicker({
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+            COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",

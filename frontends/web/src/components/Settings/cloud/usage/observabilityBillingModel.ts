@@ -9,7 +9,7 @@ export const day = (time?: Timestamp) => time ? timestampDate(time).toISOString(
 export const monthNow = () => new Date().toISOString().slice(0, 7);
 export function usageStateSentence(u: GetObservabilityUsageResponse) {
   if (u.spendCapReached) return `${u.capReachedAt ? `Since ${at(u.capReachedAt)}, we` : "We"} keep only errors and metrics: you reached your ${dollars(u.spendCapCents)} cap. Nothing above the cap is charged.`;
-  if (u.state === 2 || u.state === 3) return "Debug logs and routine traces are dropped; errors and metrics are kept. A Stripe subscription is required for overage.";
+  if (u.state === 2 || u.state === 3) return "Debug logs and routine traces are dropped; errors and metrics are kept. Add a payment method to allow overage.";
   if (u.state === 1) return "Everything you send is being kept.";
   return "Collection state is unavailable.";
 }

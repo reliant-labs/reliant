@@ -59,16 +59,19 @@ const (
 )
 
 type daemonClient struct {
-	// identityMu guards daemonID and userID: a registration ack on a new
-	// stream writes them while calls still running from a draining stream
-	// read them (gateway_session.go).
+	// identityMu guards daemonID, userID and accountEmail: a registration
+	// ack on a new stream writes them while calls still running from a
+	// draining stream read them (gateway_session.go).
 	identityMu sync.RWMutex
 	daemonID   string
 	daemonName string
 	userID     string
-	hostname   string
-	platform   string
-	cwd        string
+	// accountEmail is userID's email as the gateway last named it
+	// (RegistrationAck.account_email); "" when it named none.
+	accountEmail string
+	hostname     string
+	platform     string
+	cwd          string
 	// serverURL is the API server origin these credentials belong to. Used
 	// as the per-origin key into ~/.reliant/daemon.json when persisting the
 	// server-assigned daemonID after registration. Empty in server mode.
@@ -164,8 +167,9 @@ type daemonClient struct {
 	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
 
 	// foreignIDSetAside records that this process already moved a saved
-	// daemon id aside because the gateway said another user owns it. The
-	// recovery runs at most once per process; see setAsideForeignDaemonID.
+	// daemon id aside because the gateway refused it (another user owns it,
+	// or it is reserved for daemon-bound credentials). The recovery runs at
+	// most once per process; see setAsideRefusedDaemonID.
 	foreignIDSetAside bool
 
 	// Log policy state: see log_policy.go. Zero values are ready to use, so a
@@ -192,6 +196,29 @@ func (d *daemonClient) currentUserID() string {
 	d.identityMu.RLock()
 	defer d.identityMu.RUnlock()
 	return d.userID
+}
+
+// recordAccount takes the account a registration ack names. The email is
+// replaced along with the id, never kept from an earlier ack: a stale email
+// beside a new account would name the wrong person. An ack naming no account
+// changes nothing.
+func (d *daemonClient) recordAccount(ack *reliantv1.RegistrationAck) {
+	if ack.GetUserId() == "" {
+		return
+	}
+	d.identityMu.Lock()
+	d.userID = ack.GetUserId()
+	d.accountEmail = strings.TrimSpace(ack.GetAccountEmail())
+	d.identityMu.Unlock()
+}
+
+// currentAccount is the account the gateway last said this daemon serves, as
+// the connected banner names it: its email when the gateway named one, else
+// its user id.
+func (d *daemonClient) currentAccount() (userID, email string) {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.userID, d.accountEmail
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
@@ -221,14 +248,21 @@ type StartOptions struct {
 	OAuthHelperOrigins []string
 }
 
-// Guards is the daemon's policy for heavy commands (internal/heavyjob) and a
-// filling disk (internal/diskguard).
+// Guards is the daemon's policy for heavy commands (internal/heavyjob), a
+// filling disk (internal/diskguard) and each command's threads
+// (internal/proctree).
 type Guards struct {
 	// Disk is the disk guard's thresholds; zero fields take the defaults.
 	Disk diskguard.Config
 	// HeavyCommands are the heavy-command patterns. Nil is
 	// heavyjob.DefaultCommands; empty declares nothing heavy by pattern.
 	HeavyCommands []string
+	// HeavyShare is the CPUs each slotted command may use; zero derives
+	// it from the slot pool (heavyjob.DefaultShare).
+	HeavyShare int
+	// CommandThreads is each command's thread limit; zero derives it from
+	// the machine (proctree.Size).
+	CommandThreads int
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -491,6 +525,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
+		Share:    guards.HeavyShare,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.
@@ -505,12 +540,12 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	}
 	SetHeavyGate(heavyGate)
 
-	// Every command an agent runs gets a process limit of its own where the
-	// machine allows (a delegated cgroup: pids.max per command), and every
-	// command's RLIMIT_NPROC leaves the daemon a reserve, so one runaway
-	// command fails alone instead of exhausting the user's process limit for
-	// every agent and the daemon (2026-10-30). See internal/proctree.
-	limiter := proctree.New(proctree.Config{})
+	// Every command an agent runs gets a thread limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command, sized to the
+	// CPU count), and all of them together leave the daemon a reserve of the
+	// user's limit, so one runaway command fails alone instead of exhausting
+	// it for every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{CommandThreads: guards.CommandThreads})
 	proctree.SetDefault(limiter)
 	logging.Info(logPrefix + " " + limiter.String())
 
@@ -649,25 +684,31 @@ func (d *daemonClient) persistDaemonID(daemonID string) {
 		"daemonID", daemonID, "dataDir", dataDir, "serverURL", d.serverURL)
 }
 
-// setAsideForeignDaemonID recovers from the one refusal a daemon can fix by
-// itself: the gateway saying the id it asserted belongs to another user. It
-// reports whether it did, in which case the caller redials.
+// setAsideRefusedDaemonID recovers from the two refusals a daemon can fix by
+// itself, both of the id it asserted rather than of its credential: the id
+// belongs to another user (bootstrap.IsForeignDaemonIDError), or it is
+// reserved for daemon-bound credentials and this daemon presented a login
+// token (bootstrap.IsReservedDaemonIDError). It reports whether it recovered,
+// in which case the caller redials.
 //
-// The usual cause is one laptop serving two accounts. The instance directory
-// still held the id the gateway minted for the FIRST account, and this
-// daemon, running as the second, asserted it — so every start was refused,
-// forever, until someone found the file by hand. The server mints ids and
-// never gives one to two owners, so the fix is to stop asserting this one:
-// move the file aside (renamed, never deleted — it is the other account's
-// machine identity) and register with no id, which the gateway answers with
-// this account's own. The other owner's record is untouched.
+// The usual foreign cause is one laptop serving two accounts. The instance
+// directory still held the id the gateway minted for the FIRST account, and
+// this daemon, running as the second, asserted it — so every start was
+// refused, forever, until someone found the file by hand. The reserved cause
+// is an instance that once ran with a daemon token (or holds a managed
+// machine's id) now running with a login token. Either way the server mints
+// ids, so the fix is to stop asserting this one: move the file aside
+// (renamed, never deleted — it is another machine's identity) and register
+// with no id, which the gateway answers with an id of this credential's own.
+// The machine the id belongs to is untouched.
 //
 // Only an id read from this instance's daemon-id file is moved: one a launcher
 // passed in explicitly is not this daemon's to rewrite. And only once per
 // process: if registering with no id is refused too, the credential itself
 // names a daemon another account owns, and redialing cannot change that.
-func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
-	if d.foreignIDSetAside || !bootstrap.IsForeignDaemonIDError(err) {
+func (d *daemonClient) setAsideRefusedDaemonID(err error) bool {
+	reserved := bootstrap.IsReservedDaemonIDError(err)
+	if d.foreignIDSetAside || !(reserved || bootstrap.IsForeignDaemonIDError(err)) {
 		return false
 	}
 	asserted := strings.TrimSpace(d.currentDaemonID())
@@ -676,9 +717,19 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 		return false
 	}
 
-	setAsideTo, mvErr := bootstrap.SetAsideDaemonID(dataDir)
+	why, notice := "belongs to another account",
+		"  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
+			"    Moved it aside (%s) and registering this machine with your account.\n"
+	setAside := bootstrap.SetAsideDaemonID
+	if reserved {
+		why, notice = "is reserved for a daemon token and this daemon signed in with a login",
+			"  ! The machine identity saved for this workspace can only be used with its own daemon token,\n"+
+				"    and this daemon is signed in with your login. Moved it aside (%s) and registering this machine as new.\n"
+		setAside = bootstrap.SetAsideReservedDaemonID
+	}
+	setAsideTo, mvErr := setAside(dataDir)
 	if mvErr != nil {
-		logging.Error(logPrefix+" Saved daemon id belongs to another account, and moving it aside failed",
+		logging.Error(logPrefix+" Saved daemon id "+why+", and moving it aside failed",
 			"error", mvErr, "daemonID", asserted, "dataDir", dataDir)
 		return false
 	}
@@ -690,17 +741,29 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 	SetDaemonIdentity("")
 	logging.SetDaemonID("")
 
-	logging.Warn(logPrefix+" Saved daemon id belongs to another account — set it aside; registering as a new machine",
+	logging.Warn(logPrefix+" Saved daemon id "+why+" — set it aside; registering as a new machine",
 		"daemonID", asserted, "setAsideTo", setAsideTo, "dataDir", dataDir)
 	if !d.bootCfg.Verbose {
-		fmt.Fprintf(logging.Notices(), "  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
-			"    Moved it aside (%s) and registering this machine with your account.\n", setAsideTo)
+		fmt.Fprintf(logging.Notices(), notice, setAsideTo)
 	}
 	return true
 }
 
+// reservedDaemonIDFailure is the error a daemon stops with when the gateway
+// refuses its id as reserved for daemon-bound credentials and
+// setAsideRefusedDaemonID could not help: the id was not read from this
+// instance's file. It never calls this a credential problem: the credential
+// was accepted.
+func (d *daemonClient) reservedDaemonIDFailure(err error) error {
+	return fmt.Errorf("the gateway refused this daemon's id because it is reserved for that machine's own daemon "+
+		"token (a managed cloud machine, or a daemon that connected with a daemon token), and a login token cannot "+
+		"connect as it; the id was not read from %s, so it was left in place — start the daemon with that "+
+		"machine's daemon token, or without that id to register a new machine: %w",
+		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
+}
+
 // foreignDaemonIDFailure is the error a daemon stops with when the gateway
-// refuses its id as another user's and setAsideForeignDaemonID could not help.
+// refuses its id as another user's and setAsideRefusedDaemonID could not help.
 // It never calls this a credential problem: the credential was accepted.
 func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 	if d.foreignIDSetAside {
@@ -796,7 +859,7 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Fprint(logging.Notices(), connectedNotice(d.currentUserID()))
+		fmt.Fprint(logging.Notices(), connectedNotice(d.currentAccount()))
 	case daemonstate.StreamAwaitingCredentials:
 		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
@@ -817,14 +880,19 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 }
 
 // connectedNotice is the connected banner. It names the account the gateway
-// says the credential acts as (RegistrationAck.user_id) — the account's id,
-// the only identity the gateway has for an access token — so a daemon that
-// connected as someone other than the person at the keyboard does not look
-// like a success for them. No account named, no account claimed.
-func connectedNotice(account string) string {
+// says the credential acts as, so a daemon that connected as someone other
+// than the person at the keyboard does not look like a success for them: by
+// email (RegistrationAck.account_email, which the gateway reads from the token
+// authority at connect) when the gateway named one, else by user id
+// (RegistrationAck.user_id; a self-hosted gateway or an older control plane
+// names no email). No account named, no account claimed.
+func connectedNotice(userID, email string) string {
 	headline := "Daemon connected — you can head back to Reliant and start working."
-	if account != "" {
-		headline = "Connected as account " + account + " — head back to Reliant to start working."
+	switch {
+	case email != "":
+		headline = "Connected as " + email + " — head back to Reliant to start working."
+	case userID != "":
+		headline = "Connected as account " + userID + " — head back to Reliant to start working."
 	}
 	return "\n  ✓ " + headline + "\n\n    Press Ctrl+C to disconnect.\n\n"
 }
@@ -877,7 +945,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
-			if d.setAsideForeignDaemonID(err) {
+			if d.setAsideRefusedDaemonID(err) {
 				// Redial at once: nothing on the gateway has to change, this
 				// daemon just stops asserting an id that is not its own.
 				continue
@@ -892,6 +960,9 @@ func (d *daemonClient) run(ctx context.Context) error {
 				d.stopAllStreams()
 				if bootstrap.IsForeignDaemonIDError(err) {
 					return d.foreignDaemonIDFailure(err)
+				}
+				if bootstrap.IsReservedDaemonIDError(err) {
+					return d.reservedDaemonIDFailure(err)
 				}
 				if connect.CodeOf(err) == connect.CodeAborted {
 					// Name the condition rather than calling it a connection
@@ -1256,11 +1327,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			}
 			// The account first: the connected notice names it, so a daemon
 			// running on another person's saved credential says so.
-			if m.RegistrationAck.UserId != "" {
-				d.identityMu.Lock()
-				d.userID = m.RegistrationAck.UserId
-				d.identityMu.Unlock()
-			}
+			d.recordAccount(m.RegistrationAck)
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {

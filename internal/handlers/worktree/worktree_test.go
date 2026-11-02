@@ -180,16 +180,18 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
+	projectPath := t.TempDir()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
 		ID:         projectID,
 		UserID:     userID,
 		Name:       "Test Project",
-		Path:       t.TempDir(),
+		Path:       projectPath,
 		IsGitRepo:  true,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	installProject(t, repo, projectID, userID, projectPath, testMachines...)
 	// CreateWorktree requires the project to have at least one nested repo.
 	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
 		ID:           uuid.New().String(),
@@ -231,16 +233,18 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
+	projectPath := t.TempDir()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
 		ID:         projectID,
 		UserID:     userID,
 		Name:       "Test Project",
-		Path:       t.TempDir(),
+		Path:       projectPath,
 		IsGitRepo:  true,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
+	installProject(t, repo, projectID, userID, projectPath, testMachines...)
 	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
 		ID:           uuid.New().String(),
 		ProjectID:    projectID,
@@ -291,6 +295,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*Service, string, string) 
 		LastActive:    now,
 	})
 	require.NoError(t, err)
+	installProject(t, repo, projectID, userID, repoDir, testMachines...)
 
 	err = repo.CreateWorktree(context.Background(), &db.Worktree{
 		ID:         worktreeID,

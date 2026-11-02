@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -77,18 +78,21 @@ type started struct {
 
 // start runs line through g the way a daemon exec path does: build the shell
 // command, let the gate rewrite it, and terminate (not kill) on cancel.
-func start(t *testing.T, g *Gate, line string, declared bool) *started {
+func start(t *testing.T, g *Gate, line string, declared bool, env ...string) *started {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	c := exec.CommandContext(ctx, "sh", "-c", line)
 	c.Cancel = func() error { return c.Process.Signal(syscall.SIGTERM) }
 	c.WaitDelay = 5 * time.Second
-	// The test's own environment may carry a slot from an outer lane.
+	// The test's own environment may carry a slot from an outer lane, or a
+	// share from the slot this test binary runs in.
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, hostslot.EnvHeld+"=") {
+		key, _, _ := strings.Cut(kv, "=")
+		if key != hostslot.EnvHeld && !slices.Contains(shareVars, key) && key != "GOFLAGS" {
 			c.Env = append(c.Env, kv)
 		}
 	}
+	c.Env = append(c.Env, env...)
 	s := &started{cmd: c, out: &syncBuf{}, done: make(chan struct{}), cancel: cancel}
 	c.Stdout, c.Stderr = s.out, s.out
 	heavy, err := g.Prepare(c, Job{Command: line, Declared: declared})
@@ -135,6 +139,40 @@ func holder(t *testing.T, g *Gate) (release func(), s *started) {
 	s = start(t, g, fmt.Sprintf("echo holding; while [ ! -f %s ]; do sleep 0.02; done", flag), true)
 	eventually(t, "the holder to start", func() bool { return strings.Contains(s.out.String(), "holding") })
 	return func() { _ = os.WriteFile(flag, nil, 0o644) }, s
+}
+
+// writeLog records each Write it receives as its own entry.
+type writeLog struct{ writes []string }
+
+func (w *writeLog) Write(p []byte) (int, error) {
+	w.writes = append(w.writes, string(p))
+	return len(p), nil
+}
+
+// The waiting header and hostslot's first line, which names the holders, go
+// out in one write: a reader that sees WaitedFor's marker also sees who holds
+// the slot. Written separately, a reader polling the output (an agent reading
+// a tool's streamed output) could catch the header alone.
+func TestWaitNoticeWritesHeaderWithTheFirstLine(t *testing.T) {
+	log := &writeLog{}
+	n := &waitNotice{w: log, label: "make test"}
+	first := "⏳ forge: waiting for a heavy slot (0s) — 1 of 1 held: pid 1 (make build) 3s.\n"
+	if got, err := n.Write([]byte(first)); err != nil || got != len(first) {
+		t.Fatalf("Write = %d, %v; want %d, nil", got, err, len(first))
+	}
+	later := "⏳ forge: waiting for a heavy slot (30s) — 1 of 1 held: pid 1 (make build) 33s.\n"
+	if got, err := n.Write([]byte(later)); err != nil || got != len(later) {
+		t.Fatalf("Write = %d, %v; want %d, nil", got, err, len(later))
+	}
+	if len(log.writes) != 2 {
+		t.Fatalf("got %d writes, want 2 (header+first line, then the later line): %q", len(log.writes), log.writes)
+	}
+	if !WaitedFor(log.writes[0]) || !strings.Contains(log.writes[0], "`make test`") || !strings.HasSuffix(log.writes[0], first) {
+		t.Fatalf("first write must carry the header and the first line together: %q", log.writes[0])
+	}
+	if log.writes[1] != later {
+		t.Fatalf("later lines are written as they are: %q", log.writes[1])
+	}
 }
 
 func TestCancelWhileWaitingLeavesNoTicket(t *testing.T) {

@@ -108,8 +108,12 @@ on:
 permissions:
   contents: read
 
+# A PR: a new push cancels the run in progress. Main: the run in progress
+# finishes and a newer push supersedes the pending one (ci.yml says why). The
+# event is part of the group, so a scheduled run never supersedes a push run,
+# nor it them.
 concurrency:
-  group: pin-drift-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: pin-drift-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

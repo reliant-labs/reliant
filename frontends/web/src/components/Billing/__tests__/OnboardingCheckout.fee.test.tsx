@@ -108,7 +108,7 @@ describe("the service fee is disclosed before payment, as its own line", () => {
 
     // The credit line still shows what the user actually receives. Folding the
     // fee into it would misstate the credit.
-    expect(screen.getByTestId("checkout-line-credit")).toHaveTextContent("$25.00");
+    expect(screen.getByTestId("checkout-line-credit")).toHaveTextContent("$25");
 
     // And the total is what the card will be charged.
     expect(screen.getByTestId("checkout-total")).toHaveTextContent("$26.25");

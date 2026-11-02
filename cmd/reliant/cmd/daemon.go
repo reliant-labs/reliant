@@ -681,9 +681,11 @@ After registering, run 'reliant daemon start' to connect.`,
 // excluded: the credential was accepted and only the asserted identity was
 // refused. Treating it as a credential failure is what told a user with two
 // accounts on one laptop to re-mint a token that was fine, and — without
-// --token — deleted their good credential and opened a browser login.
+// --token — deleted their good credential and opened a browser login. A
+// daemon id reserved for daemon-bound credentials is excluded for the same
+// reason: the login token was accepted, only the id it asserted was refused.
 func daemonCredentialRefused(err error) bool {
-	if bootstrap.IsForeignDaemonIDError(err) {
+	if bootstrap.IsForeignDaemonIDError(err) || bootstrap.IsReservedDaemonIDError(err) {
 		return false
 	}
 	code := connect.CodeOf(err)
@@ -699,7 +701,7 @@ func daemonCredentialRefused(err error) bool {
 // credential is re-minted (reRegister). Everything else is reported as is.
 func daemonStartFailure(err error, useToken bool, conn *connection) (failure error, reRegister bool) {
 	switch {
-	case bootstrap.IsForeignDaemonIDError(err):
+	case bootstrap.IsForeignDaemonIDError(err), bootstrap.IsReservedDaemonIDError(err):
 		return fmt.Errorf("tools-daemon stopped: %w", err), false
 	case !daemonCredentialRefused(err):
 		return fmt.Errorf("tools-daemon exited with error: %w", err), false

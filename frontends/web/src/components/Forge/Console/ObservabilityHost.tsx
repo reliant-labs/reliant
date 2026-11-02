@@ -27,10 +27,11 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
-import { ObsNoEnvironments } from "../Observability/ObsStates";
+import { useDeclaredEnvironments } from "../Observability/useDeclaredEnvironments";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL } from "./envScope";
+import { NoEnvironmentsState } from "./NoEnvironmentsState";
 import { carriedObsSearch, consolePath, envScopeOfEnvs, pageOfObsView, withSearch } from "./paths";
 
 // Its own chunk: uPlot and the views load only on a page that shows them.
@@ -55,13 +56,13 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
 
-  const environments = useMemo(
-    () =>
-      roster.envs.flatMap((candidate) =>
-        candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : []
-      ),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // Only the Alerts view reads what each environment declares; every other
+  // view leaves the per-environment shapes unfetched.
+  const environments = useDeclaredEnvironments(recorded, { enabled: view === "alerts" });
 
   const obsSearch = useMemo<ObsSearch>(
     () => ({ ...(carriedObsSearch(search) as ObsSearch), view, envs: env === ENV_ALL ? undefined : [env] }),
@@ -113,9 +114,7 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
           it. Once it is deployed through Reliant, its logs, traces and metrics appear here.
         </p>
       ) : needsEnvironments && environments.length === 0 ? (
-        <div data-testid="forge-observability-no-envs">
-          <ObsNoEnvironments topic={view} />
-        </div>
+        <NoEnvironmentsState topic={view} testId="forge-observability-no-envs" />
       ) : (
         <Suspense fallback={loading}>
           <ObservabilityPanel

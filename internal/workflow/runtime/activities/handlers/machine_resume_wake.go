@@ -32,6 +32,11 @@ type MachineResumeWakeInput struct {
 	// Final marks the workflow's last slice: the chat's waiting marker is
 	// cleared even if the machine is still not up, because the step runs now.
 	Final bool `json:"final,omitempty"`
+	// FailedSince is the start of the machine's unbroken run of Failed
+	// reports that earlier slices saw (the previous slice's output); nil when
+	// the last one saw none. As in preflight, a Failed report is believed
+	// only once it has held for machinefailure.Settle, longer than a slice.
+	FailedSince *time.Time `json:"failed_since,omitempty"`
 }
 
 // MachineResumeWakeOutput says how the slice ended.
@@ -45,6 +50,9 @@ type MachineResumeWakeOutput struct {
 	// NotComing: the machine will not attach by waiting (removed, failed to
 	// start, or the wake was refused). The step runs anyway and reports it.
 	NotComing string `json:"not_coming,omitempty"`
+	// FailedSince, on a Waiting slice, is the start of the machine's current
+	// run of Failed reports, for the workflow to pass to the next slice.
+	FailedSince *time.Time `json:"failed_since,omitempty"`
 }
 
 // MachineResumeWakeActivity wakes a run's machine before its first machine
@@ -67,6 +75,9 @@ type MachineResumeWakeActivity struct {
 	// pollInterval is how often a slice re-checks the machine; zero means
 	// preflightPollInterval. Tests shrink it.
 	pollInterval time.Duration
+	// failedSettle is how long a Failed report must hold before the wake
+	// believes it; zero means machinefailure.Settle. Tests shrink it.
+	failedSettle time.Duration
 }
 
 // NewMachineResumeWakeActivity creates a MachineResumeWakeActivity.
@@ -120,7 +131,9 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	}
 
 	out := MachineResumeWakeOutput{}
-	if notComing := machineNotComing(ctx, router, userID, selector); notComing != nil {
+	settle := settleOrDefault(a.failedSettle)
+	failedSince, notComing := machineNotComing(ctx, router, userID, selector, timeOrZero(input.FailedSince), settle)
+	if notComing != nil {
 		return MachineResumeWakeOutput{Ready: true, NotComing: notComing.Error()}, nil
 	}
 	if waker, ok := router.(toolexec.RunWaker); ok {
@@ -158,9 +171,11 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		case <-ctx.Done():
 			a.setBlocked(exitCtx, input.ChatID, false)
 			out.Waiting = true
+			out.FailedSince = timeOrNil(failedSince)
 			return out, nil
 		case <-deadline.C:
-			if notComing := machineNotComing(ctx, router, userID, selector); notComing != nil {
+			failedSince, notComing = machineNotComing(ctx, router, userID, selector, failedSince, settle)
+			if notComing != nil {
 				a.setBlocked(exitCtx, input.ChatID, false)
 				return MachineResumeWakeOutput{Ready: true, Woke: out.Woke, NotComing: notComing.Error()}, nil
 			}
@@ -168,6 +183,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 				a.setBlocked(exitCtx, input.ChatID, false)
 			}
 			out.Waiting = true
+			out.FailedSince = timeOrNil(failedSince)
 			return out, nil
 		case <-ticker.C:
 		}
