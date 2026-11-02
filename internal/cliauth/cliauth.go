@@ -160,7 +160,11 @@ func (a *adapter) Store(server string, c credentials.Credential) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return path, credentials.Store(path, server, ClientID, c)
+	if err := credentials.Store(path, server, ClientID, c); err != nil {
+		return path, err
+	}
+	_ = dropLegacyAccount(path, server) // it described the login just replaced
+	return path, nil
 }
 
 func (a *adapter) Lookup(server string) (credentials.Credential, string, error) {
@@ -178,7 +182,7 @@ func (a *adapter) Lookup(server string) (credentials.Credential, string, error) 
 	if c.Expired(a.deps.Now()) {
 		return credentials.Credential{}, path, fmt.Errorf("%w: the stored login expired at %s", ErrNotLoggedIn, c.ExpiresAt.Format(time.RFC3339))
 	}
-	return c, path, nil
+	return adoptLegacyAccount(path, server, c), path, nil
 }
 
 func (a *adapter) Remove(server string) (bool, string, error) {
@@ -187,7 +191,11 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 		return false, "", err
 	}
 	existed, err := credentials.Remove(path, server, ClientID)
-	return existed, path, err
+	if err != nil {
+		return existed, path, err
+	}
+	_ = dropLegacyAccount(path, server)
+	return existed, path, nil
 }
 
 // The CLI's entry points: the adapter over the environment's credentials

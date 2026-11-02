@@ -54,7 +54,9 @@ type Service interface {
 	// An entry past its issuer-reported expiry counts as not logged in.
 	// AccountOf names the account it signed in as — zero when the login
 	// does not say (saved before this machine recorded it, or by a control
-	// plane that does not name accounts).
+	// plane that does not name accounts). A login an earlier release
+	// recorded in reliant-accounts.json keeps that account: a record whose
+	// token hash matches is moved onto the credential (legacy_account.go).
 	Lookup(server string) (credentials.Credential, string, error)
 	// Remove forgets the stored credential for server.
 	Remove(server string) (bool, string, error)
