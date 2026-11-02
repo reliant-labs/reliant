@@ -90,6 +90,23 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
 }
 
 /**
+ * Desktop settings sections that have a screen in /m/settings, by the id of
+ * that screen (`/m/settings?section=<id>`). A section with no phone screen
+ * lands on the list.
+ */
+export const MOBILE_SETTINGS_SECTION_FOR: Readonly<Record<string, string>> = {
+  account: "account",
+  billing: "billing",
+  "git-connections": "github",
+  ai: "ai",
+  appearance: "appearance",
+  notifications: "notifications",
+  branches: "workspace",
+  privacy: "privacy",
+  about: "about",
+};
+
+/**
  * Where a redirected desktop path lands on the mobile surface.
  *
  * A redirect that always went to the chat list threw away what the link was
@@ -124,7 +141,9 @@ export function mobilePathFor(pathname: string, search = ""): string {
       return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
     }
   }
-  if (path === "/settings/ai") return "/m/settings?section=ai";
+  const section = /^\/settings\/([^/]+)$/.exec(path)?.[1];
+  const mobileSection = section ? MOBILE_SETTINGS_SECTION_FOR[section] : undefined;
+  if (mobileSection) return `/m/settings?${new URLSearchParams({ section: mobileSection })}`;
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
 
   return "/m/chats";

@@ -1,98 +1,115 @@
+import { ExternalLink } from "lucide-react";
 import { usePrivacyConsent, useUpdatePrivacySettings } from "../../hooks/privacy-queries";
-import { AlertTriangle } from "lucide-react";
+import { hasControlPlane } from "../../services/controlPlane/config";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { PRIVACY_DOCS_URL, PRIVACY_POLICY_URL } from "./privacyLinks";
 
+
+/**
+ * Where a user's data lives, in four plain sentences, and the two switches
+ * that are actually theirs to flip.
+ *
+ * The page used to say code and chats are "always stored locally". That is
+ * false for the cloud product: the servers run the agent loop and keep every
+ * chat, and a cloud machine holds the whole repository. These sentences
+ * follow docs/help/privacy (the flow diagram and the "What goes where"
+ * table there), so they stay true with a local daemon, a cloud machine and a
+ * self-hosted server alike.
+ *
+ * Turning a switch off is a choice, not a fault, so nothing here warns about
+ * it; the switch's own state says what is on.
+ */
 export function PrivacySettings() {
   const { crashReportingEnabled, analyticsEnabled } = usePrivacyConsent();
   const { setCrashReporting, setAnalytics } = useUpdatePrivacySettings();
+  const servers = hasControlPlane ? "Reliant's servers" : "your Reliant server";
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Privacy"
-        description="Choose what diagnostic and usage data Reliant sends to us. Both options are optional and can be turned off at any time."
+        description="Choose whether Reliant sends us crash reports and usage analytics. Both are on until you turn them off, and a change applies immediately."
       />
 
       <div className="space-y-4">
-        {/* Crash Reporting Setting */}
         <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
           <div className="flex-1 pr-4">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-medium">Crash and Error Reporting</h3>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">
-              Automatically send crash reports and error logs to help us
-              identify and fix issues. This includes stack traces and diagnostic
-              information.
+            <h3 className="mb-1 text-sm font-semibold">Crash and error reporting</h3>
+            <p className="text-xs text-muted-foreground">
+              Send crash reports and error logs, including stack traces, so we can find and fix problems. You are
+              identified by an internal ID, not your name or email.
             </p>
           </div>
           <ToggleSwitch
             checked={crashReportingEnabled}
             onChange={setCrashReporting}
-            ariaLabel={`${crashReportingEnabled ? "Disable" : "Enable"} crash reporting`}
+            ariaLabel="Crash and error reporting"
             size="lg"
             className="forge-ui"
           />
         </div>
 
-        {/* Analytics Setting */}
         <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
           <div className="flex-1 pr-4">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-medium">Analytics and Usage Data</h3>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">
-              Send product usage events, tied to your account, so we can see
-              which features are used and improve them. Events record what you
-              did, not what you wrote.
+            <h3 className="mb-1 text-sm font-semibold">Analytics and usage data</h3>
+            <p className="text-xs text-muted-foreground">
+              Send product usage events, tied to your account, so we can see which features are used and improve them.
+              Events record what you did, not what you wrote.
             </p>
           </div>
           <ToggleSwitch
             checked={analyticsEnabled}
             onChange={setAnalytics}
-            ariaLabel={`${analyticsEnabled ? "Disable" : "Enable"} analytics`}
+            ariaLabel="Analytics and usage data"
             size="lg"
             className="forge-ui"
           />
         </div>
 
-        {/* Privacy mode notice - shown when analytics/crash reporting is disabled */}
-        {(!crashReportingEnabled || !analyticsEnabled) && (
-          <div className="flex items-start gap-3 p-4 border border-warning/40 bg-warning/10 rounded-lg">
-            <AlertTriangle className="w-5 h-5 text-warning-ink flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-foreground font-medium mb-1">
-                Privacy Mode Active
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {!crashReportingEnabled && !analyticsEnabled
-                  ? "Crash reporting and analytics are currently disabled."
-                  : !crashReportingEnabled
-                  ? "Crash reporting is currently disabled."
-                  : "Analytics is currently disabled."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Information notice */}
-        <div className="border-t border-border/30 pt-5 mt-5"></div>
-        <div className="p-4 rounded-lg border border-border/60 bg-background">
-          <p className="text-xs text-muted-foreground mb-2">
-            <strong className="text-foreground">Note:</strong> These settings control telemetry and crash
-            reporting. Your code, conversations, and project data are always
-            stored locally and never automatically shared unless you explicitly
-            share them.
+        <section
+          aria-labelledby="privacy-where"
+          className="space-y-3 rounded-lg border border-border/60 bg-background p-4 text-xs text-muted-foreground"
+        >
+          <h3 id="privacy-where" className="text-sm font-semibold text-foreground">
+            Where your data lives
+          </h3>
+          <p>
+            <strong className="text-foreground">Chats are stored on {servers}, which run your agents.</strong> Your
+            prompts, the model's replies, and anything an agent reads or a command prints are saved with the chat and
+            sent to your model provider.
           </p>
-          <p className="text-xs text-muted-foreground mb-2">
-            <strong className="text-foreground">Changes take effect immediately</strong> - no restart required.
+          <p>
+            <strong className="text-foreground">Your code stays on the machine it runs on.</strong> On your own
+            computer, files an agent never opens stay there. A Reliant cloud machine keeps the whole repository on its
+            disk in our cloud.
           </p>
-          <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Default behavior:</strong> Data collection is enabled by default (opt-out model). 
-            You can disable it at any time.
+          <p>
+            <strong className="text-foreground">These switches don't change any of that.</strong> They only control
+            crash reports and usage analytics. Server logs and model usage records (token counts, never content) are
+            kept either way.
           </p>
-        </div>
+          <p className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+            <a
+              href={PRIVACY_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-primary-ink hover:underline"
+            >
+              What is stored where
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            </a>
+            <a
+              href={PRIVACY_POLICY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-primary-ink hover:underline"
+            >
+              Privacy policy
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            </a>
+          </p>
+        </section>
       </div>
     </div>
   );

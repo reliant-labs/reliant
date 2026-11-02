@@ -34,6 +34,10 @@ const state = vi.hoisted(() => ({
   alerts: [] as { state: string }[],
   panelProps: [] as { place: unknown; search: unknown }[],
   panelNavigate: undefined as undefined | ((next: Record<string, unknown>) => void),
+  explorerProps: [] as {
+    project?: string;
+    org: { apps: string[]; selectedApps: string[]; envIds: string[]; empty: boolean; pickerEnvironments: { project?: string }[] };
+  }[],
 }));
 
 // Org-switcher behavior is exercised in components/Orgs; this fixture has one org.
@@ -57,7 +61,13 @@ vi.mock("../../Observability/ObservabilityPanel", () => ({
     return <div data-testid="panel-stub" />;
   },
 }));
-vi.mock("../OrgDashboards", () => ({ OrgDashboards: () => <div data-testid="org-dashboards-stub" /> }));
+vi.mock("../OrgDashboards", () => ({ OrgDashboards: () => <div data-testid="org-dashboards-stub" />, orgDashboardHref: () => "" }));
+vi.mock("../../Observability/Metrics/MetricsExplorerPage", () => ({
+  MetricsExplorer: (props: (typeof state.explorerProps)[number]) => {
+    state.explorerProps.push(props);
+    return <div data-testid="explorer-stub" />;
+  },
+}));
 
 import { OrgConsoleLayout } from "../OrgConsoleLayout";
 import { OrgObservabilityPage } from "../OrgObservabilityPage";
@@ -98,6 +108,7 @@ beforeEach(() => {
   state.alerts = [];
   state.panelProps = [];
   state.panelNavigate = undefined;
+  state.explorerProps = [];
   window.localStorage.clear();
 });
 
@@ -201,12 +212,27 @@ describe("OrgObservabilityPage", () => {
     expect(screen.queryByTestId("panel-stub")).not.toBeInTheDocument();
   });
 
-  it("points Metrics at Dashboards, keeping the filters", async () => {
+  it("mounts the metrics explorer org-wide, narrowed by the URL's apps", async () => {
     available(APPS);
     await mount("/forge/observability/metrics?apps=%5B%22shop%22%5D");
-    const note = await screen.findByTestId("org-metrics");
-    const href = note.querySelector("a")!.getAttribute("href")!;
-    expect(href.startsWith("/forge/observability/dashboards?apps=")).toBe(true);
+    await screen.findByTestId("explorer-stub");
+    const props = state.explorerProps.at(-1)!;
+    const shopIds = APPS.find((a) => a.project === "shop")!.envs.map((env) => env.id);
+    expect(props.project).toBe("shop");
+    expect(props.org.selectedApps).toEqual(["shop"]);
+    expect([...props.org.envIds].sort()).toEqual([...shopIds].sort());
+    expect(props.org.empty).toBe(false);
+    expect(props.org.pickerEnvironments.every((env) => env.project === "shop")).toBe(true);
+  });
+
+  it("reads every app's metrics when no app is picked", async () => {
+    available(APPS);
+    await mount("/forge/observability/metrics");
+    await screen.findByTestId("explorer-stub");
+    const props = state.explorerProps.at(-1)!;
+    expect(props.project).toBeUndefined();
+    expect(props.org.envIds).toEqual([]);
+    expect(props.org.apps).toEqual([...APPS.map((a) => a.project)].sort());
   });
 
   it("navigates to the page hosting a view the panel switches to, carrying the filters", async () => {

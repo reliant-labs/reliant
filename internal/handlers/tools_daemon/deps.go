@@ -63,6 +63,9 @@ type ProjectReconcileStore interface {
 	// ListProjectDaemonsForDaemon is what the machine already has on record,
 	// which a creation-path probe never overrules.
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+	// clones queued while the machine was away: they run from this connect.
+	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
 	// whose outcome was lost, from the row's own path; the first also

@@ -9,10 +9,12 @@
  * standalone screens, each gated by its own capability so a section that
  * regresses shows up as a one-line diff rather than a silent removal.
  *
- * The section lives in search (`/m/settings?section=ai`) so links, reloads,
- * and browser back/forward all select the same existing sub-screen. A
- * sub-screen's own back button replaces the selection with the settings list,
- * including when this URL was opened directly without a previous entry.
+ * The open section is the URL's `?section=<id>` on the one flat `/m/settings`
+ * route: a desktop link to a section lands on its screen
+ * (lib/mobileRedirect.ts maps the ids), a refresh keeps it, and opening a
+ * section pushes a history entry so the browser's Back returns to the list.
+ * Each sub-screen's own "back" button goes to the list too. A URL is not
+ * permission: deep links obey the same gates as list entries.
  *
  * Sections not listed here (MCP, Prompts, Keyboard shortcuts, Developer,
  * per-machine app access and port access rules) are desktop-only by design — see the
@@ -90,12 +92,6 @@ const SECTION_GROUPS: { id: SectionGroupId; label: string }[] = [
 interface SectionLink {
   id: SectionId;
   label: string;
-  description: string;
-  icon: typeof Bell;
-  group: SectionGroupId;
-  /** `settings*` capability gating this row. */
-  capability: keyof SurfaceCapabilities;
-  /** Extra gate beyond the capability flag (e.g. cloud-only sections). */
   hidden?: boolean;
 }
 

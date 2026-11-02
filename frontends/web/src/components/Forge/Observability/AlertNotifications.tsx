@@ -42,7 +42,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
       onOpenChange={setOpen}
       testId="obs-notifications"
       triggerLabel={unread ? `Alert notifications, ${unread} unread` : "Alert notifications"}
-      triggerClassName="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      triggerClassName="relative inline-flex h-8 min-h-[32px] w-8 min-w-[32px] touch:h-11 touch:w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       panelClassName="right-0 w-96 max-w-[calc(100vw-2rem)]"
       trigger={
         <>

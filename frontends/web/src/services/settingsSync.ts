@@ -11,7 +11,8 @@ import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
-import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { COLOR_SCHEME_ATTR, DEFAULT_COLOR_SCHEME, DEFAULT_COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { applyThemeMode, parseThemeMode } from "../lib/themeMode";
 
 // Setting key prefixes for organization
 export const SETTINGS_KEYS = {
@@ -384,22 +385,14 @@ export class SettingsSyncService {
 
     const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
 
-    // Apply theme mode (light/dark)
+    // Apply theme mode: light, dark, or the system's (also when unset).
     const theme = this.getSetting(SETTINGS_KEYS.THEME, "");
-    logger.info(`[SettingsSync] Applying theme: "${theme}" (from localStorage)`);
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-      logger.debug('[SettingsSync] Added dark class');
-    } else if (theme === "light") {
-      document.documentElement.classList.remove("dark");
-      logger.debug('[SettingsSync] Removed dark class');
-    } else {
-      logger.warn(`[SettingsSync] No theme found, keeping current state`);
-    }
+    logger.info(`[SettingsSync] Applying theme: "${theme || "system"}" (from localStorage)`);
+    applyThemeMode(parseThemeMode(theme));
 
     // Apply color scheme
-    const colorScheme = this.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black");
-    const colorSchemeAttr = COLOR_SCHEME_MAP[colorScheme] || "pure-black";
+    const colorScheme = this.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME);
+    const colorSchemeAttr = COLOR_SCHEME_MAP[colorScheme] || DEFAULT_COLOR_SCHEME_ATTR;
     logger.info(`[SettingsSync] Applying color scheme: "${colorScheme}" -> "${colorSchemeAttr}"`);
     document.documentElement.setAttribute("data-color-scheme", colorSchemeAttr);
 

@@ -50,21 +50,26 @@
             }
           }
           
-          // Load and apply color scheme from localStorage
-          var savedScheme = localStorage.getItem('appearance.colorScheme') || 'black';
+          // Load and apply color scheme from localStorage. A copy of
+          // COLOR_SCHEME_ATTR and DEFAULT_COLOR_SCHEME (src/lib/forgeTokens.ts),
+          // which this bootstrap cannot import; reliantSchemeDefault.test.ts
+          // holds the copies equal. Retired ids map to their replacement.
+          var savedScheme = localStorage.getItem('appearance.colorScheme') || 'reliant';
           var schemeMap = {
+            'reliant': 'reliant',
             'blue': 'professional-blue',
             'neutral': 'refined-neutral',
-            'teal': 'modern-teal',
             'slate': 'slate',
-            'forest': 'forest',
+            'teal': 'modern-teal',
             'purple': 'purple-classic',
-            'pink': 'vibrant-pink',
-            'orange': 'energetic-orange',
-            'red': 'bold-red',
-            'black': 'pure-black'
+            'pure-black': 'pure-black',
+            'black': 'reliant',
+            'forest': 'modern-teal',
+            'pink': 'purple-classic',
+            'orange': 'refined-neutral',
+            'red': 'professional-blue'
           };
-          document.documentElement.setAttribute('data-color-scheme', schemeMap[savedScheme] || 'pure-black');
+          document.documentElement.setAttribute('data-color-scheme', schemeMap[savedScheme] || 'reliant');
           
           // Load and apply font settings
           var font = localStorage.getItem('appearance.font') || 'default';
@@ -103,7 +108,7 @@
         }catch(e){
           console.error('Failed to apply initial theme:', e);
           // Fallback to defaults
-          document.documentElement.setAttribute('data-color-scheme', 'pure-black');
+          document.documentElement.setAttribute('data-color-scheme', 'reliant');
         }
       })();
     </script>

@@ -54,6 +54,12 @@ var uninspectableAgents = []uninspectableAgent{
 	{name: "dbus-broker"},
 	// The per-user service manager; PID 1's systemd is not the user's.
 	{name: "systemd", arg: "--user"},
+	// The user manager's PAM session holder: PID 1's systemd forks it for
+	// user@.service, drops to the user without an exec (so it is undumpable)
+	// and renames it — comm, Name and argv[0] — to "(sd-pam)". It sits in /
+	// until the session ends. Every host with a systemd user session has one,
+	// CI runners included.
+	{name: "(sd-pam)"},
 }
 
 // taskCommLen is the kernel's TASK_COMM_LEN less its NUL: a longer program

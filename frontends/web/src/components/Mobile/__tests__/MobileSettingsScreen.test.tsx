@@ -1,8 +1,9 @@
 /**
  * MobileSettingsScreen is the section list for `/m/settings`. Pins that
  * sections respect their capability gate, billing is hidden without
- * control-plane, drill-in is URL-backed, and each
- * section's own back button returns to the list.
+ * control-plane, the open section is the URL's `?section=` (so a deep link
+ * lands on it and Back returns to the list), and each section's own back
+ * button returns to the list.
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -137,7 +138,7 @@ describe("MobileSettingsScreen", () => {
       screen.getByText(/Machines and GitHub are available from the main menu/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/MCP servers, prompts, keyboard shortcuts/i),
+      screen.getByText(/prompts, keyboard shortcuts, developer/i),
     ).toBeInTheDocument();
   });
 
@@ -189,19 +190,31 @@ describe("MobileSettingsScreen", () => {
 
   it("drills into a section on tap using search", async () => {
     const user = userEvent.setup();
-    await renderMobile();
+    const router = await renderMobile();
     await user.click(screen.getByText("AI providers"));
+    expect(router.state.location.search).toEqual({ section: "ai" });
     expect(screen.getByText("ai-section")).toBeInTheDocument();
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
   });
 
+  it("opens the section a deep link names", async () => {
+    await renderMobile("/m/settings?section=notifications");
+    expect(screen.getByText("notifications-section")).toBeInTheDocument();
+  });
+
+  it("shows the list for a section it does not have", async () => {
+    await renderMobile("/m/settings?section=mcp");
+    expect(screen.getByText("Account")).toBeInTheDocument();
+  });
+
   it("returns to the list from a section's own back button", async () => {
     const user = userEvent.setup();
-    await renderMobile();
+    const router = await renderMobile();
     await user.click(screen.getByText("Account"));
     expect(screen.getByText("account-section")).toBeInTheDocument();
 
     await user.click(screen.getByText("back-from-account"));
+    expect(router.state.location.search).toEqual({});
     expect(screen.getByText("Account")).toBeInTheDocument();
     expect(screen.queryByText("account-section")).not.toBeInTheDocument();
   });

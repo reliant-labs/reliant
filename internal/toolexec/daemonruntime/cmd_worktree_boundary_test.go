@@ -61,6 +61,7 @@ func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 	}
 	req := workspacecreate.Request{
 		Project:       &db.Project{ID: "p1", Name: "reliant", Path: repo},
+		Checkout:      repo,
 		Repos:         []*core.Repo{{ID: "r1", Name: "reliant", RelativePath: ""}},
 		Name:          "telemetry",
 		Branch:        "feat/telemetry-delivery-c3",

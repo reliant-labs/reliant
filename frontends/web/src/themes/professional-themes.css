@@ -26,8 +26,125 @@
  * Their action colors collided with a status color (success green, warning
  * orange, destructive red) or could not carry a legible label without
  * turning muddy. settingsSync maps a stored retired choice to its nearest
- * scheme (RETIRED_COLOR_SCHEMES).
+ * scheme (RETIRED_COLOR_SCHEMES). Retired (2026-11-02): the `black` id, so
+ * everyone on the old default (Pure Black) lands on Reliant; Pure Black stays
+ * selectable under the id `pure-black`.
  */
+
+/*
+ * Reliant — the brand, and the DEFAULT for everyone (index.html,
+ * settingsSync, useThemeInitialization). Mapped from the site's tokens
+ * (landing-page tailwind.config.js), so the app and the site read as one
+ * product:
+ *
+ *   canvas #0a0a0f  panel #111118  panel.raised #18181f  (dark ramp)
+ *   hairline rgb(220 224 255 / .1), composited onto a panel: the tokens are
+ *     HSL triplets with <alpha-value>, so an alpha hairline cannot be
+ *     expressed and the border is its opaque equivalent
+ *   fg #f4f4f5  fg.muted #9d9da6
+ *   blue: fill #0a70e0 (white label 4.8:1), hover #0961c4, ring #0d8cff,
+ *     ink #5cb0ff (8.1:1 on a panel); violet is the label hue, --brand-violet
+ *     in index.css, never interactive. Green stays success-only.
+ *
+ * Dark keeps the elevation rule: page 4.9% < card 8% < popover 10.8% <
+ * muted 14% (muted is hover/selected only, never structure). The site's
+ * `inset` (#06060a, below the canvas) is NOT imported: an inset is
+ * bg-background. The site is dark-only, so light is derived: the shared
+ * light ramp, tinted to hue 240, with the same blue.
+ */
+:root[data-color-scheme="reliant"] {
+  --background: 240 14% 98%;
+  --foreground: 240 10% 12%;
+  --card: 240 0% 100%;
+  --card-foreground: 240 10% 12%;
+  --popover: 240 0% 100%;
+  --popover-foreground: 240 10% 12%;
+  --surface-modal: 240 0% 100%;
+  --muted: 240 14% 95.5%;
+  --muted-foreground: 240 8% 41%;
+  --primary: 211 92% 46%;
+  --primary-foreground: 0 0% 100%;
+  --primary-ink: 212 91% 36%;
+  --primary-hover: 212 91% 40%;
+  --secondary: 240 14% 94%;
+  --secondary-foreground: 240 10% 12%;
+  --accent: 240 14% 95.5%;
+  --accent-foreground: 240 10% 12%;
+  --ring: 211 92% 46%;
+  --border: 240 14% 89.5%;
+  --config-input-bg: 240 14% 97%;
+  --config-input-border: 240 14% 83.5%;
+  --tab-active: 211 92% 46%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 212 91% 40%;
+  --info: 212 91% 36%;
+
+  --chat-input-bg: hsl(240 0% 99.5%);
+  --chat-input-text: hsl(240 10% 12%);
+  --chat-input-placeholder: hsl(240 8% 41%);
+  --chat-button-bg: hsl(240 14% 95%);
+  --chat-button-text: hsl(240 10% 12%);
+  --chat-button-hover: hsl(240 14% 92%);
+  --chat-border: hsl(240 14% 82%);
+  --transparent-button-hover: rgba(28, 28, 36, 0.06);
+  --chat-button-bg-streaming: rgba(10, 112, 224, 0.12);
+  --chat-button-text-streaming: hsl(240 10% 12%);
+  --chat-button-hover-streaming: rgba(10, 112, 224, 0.18);
+  --chat-border-streaming: rgba(10, 112, 224, 0.4);
+  --chat-dropdown-bg: hsl(240 14% 97.5%);
+  --chat-dropdown-search-bg: hsl(240 14% 98.5%);
+  --chat-dropdown-input-bg: hsl(240 0% 100%);
+  --chat-dropdown-group-bg: hsl(240 14% 96%);
+  --chat-dropdown-item-hover: hsl(240 14% 93%);
+  --chat-dropdown-item-selected: hsl(240 14% 94%);
+}
+
+.dark[data-color-scheme="reliant"] {
+  --background: 240 20% 4.9%;
+  --foreground: 240 5% 96%;
+  --card: 240 17% 8%;
+  --card-foreground: 240 5% 96%;
+  --popover: 240 13% 10.8%;
+  --popover-foreground: 240 5% 96%;
+  --surface-modal: 240 13% 10.8%;
+  --muted: 240 11% 14%;
+  --muted-foreground: 240 5% 63%;
+  --primary: 211 92% 46%;
+  --primary-foreground: 0 0% 100%;
+  --primary-ink: 209 100% 68%;
+  --primary-hover: 212 91% 40%;
+  --secondary: 240 11% 14%;
+  --secondary-foreground: 240 5% 96%;
+  --accent: 240 11% 14%;
+  --accent-foreground: 240 5% 96%;
+  --ring: 208.5 100% 52.5%;
+  --border: 234 12% 16.5%;
+  --config-input-bg: 240 18% 6.5%;
+  --config-input-border: 234 9% 21%;
+  --tab-active: 211 92% 46%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 212 91% 40%;
+  --info: 209 100% 68%;
+
+  --chat-input-bg: hsl(240 18% 6.5%);
+  --chat-input-text: hsl(240 5% 96%);
+  --chat-input-placeholder: hsl(240 5% 63%);
+  --chat-button-bg: hsl(240 13% 10.8%);
+  --chat-button-text: hsl(240 5% 96%);
+  --chat-button-hover: hsl(240 11% 15%);
+  --chat-border: hsl(234 9% 24%);
+  --transparent-button-hover: rgba(255, 255, 255, 0.06);
+  --chat-button-bg-streaming: rgba(13, 140, 255, 0.12);
+  --chat-button-text-streaming: hsl(240 5% 96%);
+  --chat-button-hover-streaming: rgba(13, 140, 255, 0.18);
+  --chat-border-streaming: rgba(13, 140, 255, 0.4);
+  --chat-dropdown-bg: hsl(240 13% 10.8%);
+  --chat-dropdown-search-bg: hsl(240 12% 13%);
+  --chat-dropdown-input-bg: hsl(240 11% 14%);
+  --chat-dropdown-group-bg: hsl(240 13% 11.5%);
+  --chat-dropdown-item-hover: hsl(240 11% 17%);
+  --chat-dropdown-item-selected: hsl(240 11% 15%);
+}
 
 /* Professional Blue — Crisp blue on cool neutrals. Inspired by Linear, Stripe and Vercel. */
 :root[data-color-scheme="professional-blue"] {
