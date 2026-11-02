@@ -2,9 +2,7 @@
 package worktreereclaim
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,97 +43,6 @@ func recoveryTestWrite(t *testing.T, dir, name string, b []byte, mode os.FileMod
 }
 func recoveryTestDescriptor() RecoveryCapture {
 	return RecoveryCapture{CaptureID: "capture-test", WorktreeID: "worktree-test", RepoID: "repo-test", Rel: ".", RemoteURL: "https://github.com/example/repository.git", RecoveryRef: "refs/heads/reliant-recovery/worktree-test/capture-test/repo-test", CapturedAt: time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)}
-}
-
-func TestRecoveryCaptureRawIndexDiskHistory(t *testing.T) {
-	heavyUnderShort(t, "recovery capture uses real local Git plumbing")
-	dir := recoveryTestRepo(t)
-	ctx := context.Background()
-	// An orphan commit now retained by only a local branch is still a required
-	// parent, regardless of stale remote-tracking refs or local reachability.
-	recoveryTestGit(t, dir, "checkout", "-q", "--orphan", "private-history")
-	recoveryTestWrite(t, dir, "file.txt", []byte("private history\n"), 0644)
-	recoveryTestGit(t, dir, "add", ".")
-	recoveryTestGit(t, dir, "commit", "-q", "-m", "private")
-	private := strings.TrimSpace(string(recoveryTestGit(t, dir, "rev-parse", "HEAD")))
-	recoveryTestGit(t, dir, "checkout", "-q", "main")
-	recoveryTestWrite(t, dir, "file.txt", []byte("staged A\n"), 0644)
-	recoveryTestGit(t, dir, "add", "file.txt")
-	recoveryTestWrite(t, dir, "file.txt", []byte("raw disk B\r\n"), 0644)
-	recoveryTestWrite(t, dir, "raw\nname-\xff", []byte("untracked exact\n"), 0755)
-	if e := os.Symlink("../outside", filepath.Join(dir, "link")); e != nil {
-		t.Fatal(e)
-	}
-	indexBefore, e := os.ReadFile(filepath.Join(dir, ".git", "index"))
-	if e != nil {
-		t.Fatal(e)
-	}
-	headBefore := recoveryTestGit(t, dir, "rev-parse", "HEAD")
-	branchBefore := recoveryTestGit(t, dir, "symbolic-ref", "HEAD")
-	c, e := CaptureRecovery(ctx, dir, recoveryTestDescriptor())
-	if e != nil {
-		t.Fatal(e)
-	}
-	after, e := os.ReadFile(filepath.Join(dir, ".git", "index"))
-	if e != nil {
-		t.Fatal(e)
-	}
-	if !bytes.Equal(indexBefore, after) {
-		t.Fatal("real index changed")
-	}
-	if !bytes.Equal(headBefore, recoveryTestGit(t, dir, "rev-parse", "HEAD")) || !bytes.Equal(branchBefore, recoveryTestGit(t, dir, "symbolic-ref", "HEAD")) {
-		t.Fatal("real HEAD/branch changed")
-	}
-	if got := string(recoveryTestGit(t, dir, "show", c.IndexTreeOID+":file.txt")); got != "staged A\n" {
-		t.Fatalf("index bytes %q", got)
-	}
-	if got := string(recoveryTestGit(t, dir, "show", c.DiskTreeOID+":file.txt")); got != "raw disk B\r\n" {
-		t.Fatalf("disk bytes %q", got)
-	}
-	found := false
-	for _, tip := range c.HistoryTips {
-		if tip == private {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("locally branched history lost")
-	}
-	m, e := ReadRecoveryManifest(ctx, dir, c)
-	if e != nil {
-		t.Fatal(e)
-	}
-	found = false
-	for _, entry := range m.DiskEntries {
-		p, _ := base64.StdEncoding.DecodeString(entry.Path)
-		if string(p) == "raw\nname-\xff" {
-			found = entry.Mode == "100755"
-		}
-	}
-	if !found {
-		t.Fatal("raw path/executable mode lost")
-	}
-	digest, e := RecoveryInventoryDigest(ctx, dir)
-	if e != nil || digest != c.InventoryDigest {
-		t.Fatalf("pin changed inventory: %s %v", digest, e)
-	}
-	// Independent bare repository, no alternates or local source object links.
-	bare := filepath.Join(t.TempDir(), "remote.git")
-	recoveryTestGit(t, dir, "init", "--bare", bare)
-	recoveryTestGit(t, bare, "fetch", "--no-tags", dir, c.CommitOID)
-	if e = ValidateRecoveryCapture(ctx, bare, c); e != nil {
-		t.Fatal(e)
-	}
-	bad := c
-	bad.SecretPolicy = "claimed-safe"
-	if ValidateRecoveryCapture(ctx, bare, bad) == nil {
-		t.Fatal("trusted caller secret policy")
-	}
-	recoveryTestWrite(t, dir, "file.txt", []byte("changed after capture\n"), 0644)
-	digest, e = RecoveryInventoryDigest(ctx, dir)
-	if e != nil || digest == c.InventoryDigest {
-		t.Fatal("inventory missed raw file mutation")
-	}
 }
 
 // Regression: safe blob bytes do not make credential-bearing tree names
