@@ -23,6 +23,7 @@ import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudE
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { deployStatusUnread } from "../Console/DeployStatusUnread";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
 import { DeployRunsBanner } from "../Deploy/DeployRuns";
@@ -184,6 +185,7 @@ export function OverviewPage() {
         env={env}
         envs={envs}
         envsLoading={loading}
+        envsUnread={deployStatusUnread(roster.live)}
         search={search}
         onSearch={onSearch}
         hrefs={hrefs}

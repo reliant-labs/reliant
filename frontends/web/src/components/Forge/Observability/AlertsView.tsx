@@ -590,7 +590,7 @@ function RulesTab({
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
           </p>
           <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
-          <CommandLine command="forge obs alerts check" />
+          <CommandLine command="reliant forge obs alerts check" />
           <p>
             <a
               href={DOCS.alerts}

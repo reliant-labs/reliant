@@ -26,6 +26,10 @@ const goToBilling = vi.fn()
 vi.mock('@/hooks/useGoToBilling', () => ({ useGoToBilling: (from: string) => () => goToBilling(from) }))
 
 vi.mock('../startBuilding', () => ({ useStartBuildingApp: () => vi.fn() }))
+vi.mock('@/hooks/observability-queries', () => ({
+  useObservabilityOrg: () => ({ orgId: null, isLoading: false, error: null }),
+  useAlerts: () => ({ data: [] }),
+}))
 vi.mock('../../Layout/AreaShell', () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 
 import { AppsPage } from '../AppsPage'
