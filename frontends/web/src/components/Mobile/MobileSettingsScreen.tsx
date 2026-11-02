@@ -9,17 +9,16 @@
  * standalone screens, each gated by its own capability so a section that
  * regresses shows up as a one-line diff rather than a silent removal.
  *
- * Navigation is internal component state, not nested routes: `/m/settings`
- * is a single flat route (see `routes.tsx`, owned by another agent), so a
- * section click swaps which sub-screen renders rather than pushing a new
- * URL. Each sub-screen's own "back" button clears the selection.
+ * The section lives in search (`/m/settings?section=ai`) so links, reloads,
+ * and browser back/forward all select the same existing sub-screen. A
+ * sub-screen's own back button replaces the selection with the settings list,
+ * including when this URL was opened directly without a previous entry.
  *
  * Sections not listed here (MCP, Prompts, Keyboard shortcuts, Developer,
  * per-machine app access and port access rules) are desktop-only by design — see the
  * "Manage on desktop" note at the bottom of the list.
  */
 
-import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Activity,
@@ -128,12 +127,15 @@ function SectionRow({
 export function MobileSettingsScreen() {
   const capabilities = useCapabilities();
   const navigate = useNavigate();
-  // A visit that arrived with somewhere to go back to (the claim page's
-  // "Subscribe to keep both") opens on that section and returns there, instead
-  // of dropping the person on the list with nothing to say where they were.
-  const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
+  // The section lives in search so links, reloads and back/forward agree. A
+  // visit that arrived with somewhere to go back to (the claim page's
+  // "Subscribe to keep both") returns there, instead of dropping the person
+  // on the list with nothing to say where they were.
+  const { section: active, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
   const comeBackTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
-  const [active, setActive] = useState<SectionId | null>(section === "billing" ? "billing" : null);
+  const setActive = (section: SectionId) => {
+    void navigate({ to: "/m/settings", search: { section } });
+  };
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
   // call time — can't get frozen into a stale constant, which matters both
@@ -228,8 +230,12 @@ export function MobileSettingsScreen() {
     (s) => !s.hidden && capabilities[s.capability],
   );
 
-  if (active) {
-    const onBack = () => (comeBackTo ? void navigate({ href: comeBackTo }) : setActive(null));
+  // A URL is not permission: deep links obey the same gates as list entries.
+  if (visible.some((section) => section.id === active)) {
+    const onBack = () => {
+      if (comeBackTo) void navigate({ href: comeBackTo });
+      else void navigate({ to: "/m/settings", search: {}, replace: true });
+    };
     switch (active) {
       case "account":
         return <MobileAccountScreen onBack={onBack} />;

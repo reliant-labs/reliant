@@ -146,9 +146,11 @@ describe("AccountUsageChip", () => {
     const chip = await screen.findByTestId("account-usage-chip");
     expect(chip).toHaveTextContent("82% of 5h");
     expect(chip).not.toHaveTextContent("alice@");
+    expect(chip).toHaveClass("min-h-[44px]");
 
     fireEvent.click(chip);
     expect(await screen.findByTestId("account-usage-popover")).toHaveTextContent("82% used");
+    expect(screen.getByRole("dialog", { name: "alice@acme.com usage" })).toHaveAttribute("aria-modal", "true");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByTestId("account-usage-popover")).toBeNull();
   });

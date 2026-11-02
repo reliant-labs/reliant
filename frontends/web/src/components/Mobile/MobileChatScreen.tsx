@@ -141,7 +141,7 @@ export function MobileChatScreen() {
           the shared chat composer is the element at the screen edge and would
           otherwise sit under the home indicator. */}
       <div
-        className="min-h-0 flex-1"
+        className="mx-auto min-h-0 w-full max-w-3xl flex-1"
         style={{ paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" }}
       >
         {/* The screen header above already shows the title; ChatHeader's own

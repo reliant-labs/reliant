@@ -558,16 +558,18 @@ tasks:
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
     # packages (CI does; it needs sudo).
-    desc: Run the Playwright suite against the built renderer (chromium)
+    desc: Run desktop Chromium and representative touch Chromium/WebKit against the built renderer
     cmds:
       - |
         set -euo pipefail
-        doc="$(mktemp -d)/config.js"
+        config_dir="$(mktemp -d)"
+        trap 'rm -rf "$config_dir"' EXIT
+        doc="$config_dir/config.js"
         printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
         cd frontends/web
         npm run build:alpha
-        npx playwright install chromium {{.PLAYWRIGHT_DEPS}}
-        FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- --project=chromium {{.CLI_ARGS}}
+        npx playwright install chromium webkit {{.PLAYWRIGHT_DEPS}}
+        CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet {{.CLI_ARGS}}
 
   build:electron:smoke:
     # dist:pr runs with-release-config -> build:config -> build:web:alpha ->

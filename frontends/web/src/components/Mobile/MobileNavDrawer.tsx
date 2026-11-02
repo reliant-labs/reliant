@@ -34,6 +34,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -285,6 +286,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               </Link>
             );
           })}
+          <MobileInstallMenuItem />
         </nav>
       </div>
     </div>,

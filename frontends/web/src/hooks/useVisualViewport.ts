@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { measureVisualViewport } from "../lib/responsiveGeometry";
 
 export interface VisualViewportMetrics {
   /** Height of the area the user can actually see (shrinks when the keyboard opens). */
@@ -9,19 +10,8 @@ export interface VisualViewportMetrics {
   keyboardOpen: boolean;
 }
 
-/**
- * The URL bar collapsing moves the visual viewport by up to ~110px and `dvh`
- * already follows that; no on-screen keyboard is shorter than this. Pinch-zoom
- * shrinks the visual viewport too, which the `scale` check rules out.
- */
-const KEYBOARD_MIN_PX = 150;
-
 function read(vv: VisualViewport): VisualViewportMetrics {
-  return {
-    height: Math.round(vv.height),
-    offsetTop: Math.round(vv.offsetTop),
-    keyboardOpen: vv.scale <= 1.01 && window.innerHeight - vv.height > KEYBOARD_MIN_PX,
-  };
+  return measureVisualViewport(vv, window.innerHeight);
 }
 
 /**
@@ -57,9 +47,13 @@ export function useVisualViewport(enabled = true): VisualViewportMetrics | null 
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
+    // Rotation/split-view can update innerHeight after the visual viewport
+    // event. Re-read both instead of retaining a stale keyboard classification.
+    window.addEventListener("resize", update);
     return () => {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
     };
   }, [enabled]);
 

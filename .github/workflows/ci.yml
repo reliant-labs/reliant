@@ -497,7 +497,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
-      - name: task test:web:e2e
+      # Includes required production-route responsive assertions in Chromium
+      # touch and WebKit phone/tablet; installs both engines and Linux deps.
+      - name: Desktop and responsive browser guardrails
         run: task test:web:e2e PLAYWRIGHT_DEPS=--with-deps
       - name: Save Playwright browsers (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}

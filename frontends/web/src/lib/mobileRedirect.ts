@@ -124,6 +124,7 @@ export function mobilePathFor(pathname: string, search = ""): string {
       return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
     }
   }
+  if (path === "/settings/ai") return "/m/settings?section=ai";
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
 
   return "/m/chats";

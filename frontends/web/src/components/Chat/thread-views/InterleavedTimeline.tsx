@@ -16,6 +16,8 @@ import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "
 import { ContentBlockType, MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
 import { acknowledgeScrollToMessage } from "../../../lib/scrollToMessage";
 import { useTimelineVirtualizer } from "./useTimelineVirtualizer";
+import { useSurface } from "../../../lib/surfaceContext";
+import { transcriptDateLabels } from "./transcriptPresentation";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import Tooltip from "../../forge-ui/tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
@@ -1354,6 +1356,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // to the virtualizer to measure. The ref is called for every rendered row;
   // the virtualizer watches it with a ResizeObserver from then on.
   const measureRow = virtualizer.measureElement;
+  const isMobile = useSurface() === "mobile";
+  const dateLabels = useMemo(() => isMobile
+    ? transcriptDateLabels(timelineItems.flatMap((item) => item.type === "message" ? [item.message] : []))
+    : new Map<string, string>(), [isMobile, timelineItems]);
+
   const renderRow = useCallback((index: number, item: TimelineItem) => {
     // After a search jump, briefly ring the target so the eye can find it —
     // landing mid-conversation with no cue makes the jump feel like it failed.
@@ -1395,11 +1402,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
           )}
         >
+          {item.type === "message" && dateLabels.has(item.message.id) && (
+            <div className="flex items-center gap-3 py-3 text-xs text-muted-foreground">
+              <span aria-hidden="true" className="h-px flex-1 bg-border" />
+              <time dateTime={item.message.createdAt}>{dateLabels.get(item.message.id)}</time>
+              <span aria-hidden="true" className="h-px flex-1 bg-border" />
+            </div>
+          )}
           {renderItem(index, item, toolRowSpacing.compact)}
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
+  }, [contentMaxWidthClass, dateLabels, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
 
   if (timelineItems.length === 0) {
     return (

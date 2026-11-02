@@ -1,7 +1,7 @@
 /**
  * MobileSettingsScreen is the section list for `/m/settings`. Pins that
  * sections respect their capability gate, billing is hidden without
- * control-plane, drill-in swaps to the section (not a route push), and each
+ * control-plane, drill-in is URL-backed, and each
  * section's own back button returns to the list.
  */
 
@@ -9,13 +9,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
-
-let routeSearch: Record<string, string> = {};
-const navigate = vi.fn();
-vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => navigate,
-  useSearch: () => routeSearch,
-}));
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import { act } from "@testing-library/react";
+import { mobilePathFor } from "../../../lib/mobileRedirect";
 
 let hasControlPlane = true;
 vi.mock("../../../services/controlPlane/config", () => ({
@@ -72,23 +68,36 @@ vi.mock("../MobileDiagnosticsScreen", () => ({
 
 const { MobileSettingsScreen } = await import("../MobileSettingsScreen");
 
-function renderMobile() {
-  return render(
-    <SurfaceProvider surface="mobile">
-      <MobileSettingsScreen />
-    </SurfaceProvider>,
-  );
+async function renderMobile(initialEntry = "/m/settings", surface: "mobile" | "embed" = "mobile") {
+  const root = createRootRoute();
+  const settings = createRoute({
+    getParentRoute: () => root,
+    path: "/m/settings",
+    validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string } => ({
+      section: typeof search.section === "string" ? search.section : undefined,
+      returnTo: typeof search.returnTo === "string" ? search.returnTo : undefined,
+    }),
+    component: () => <SurfaceProvider surface={surface}><MobileSettingsScreen /></SurfaceProvider>,
+  });
+  const claim = createRoute({ getParentRoute: () => root, path: "/claim", component: () => <div>claim-page</div> });
+  const router = createRouter({
+    routeTree: root.addChildren([settings, claim]),
+    history: createMemoryHistory({ initialEntries: [initialEntry] }),
+  });
+  await act(async () => {
+    await router.load();
+    render(<RouterProvider router={router} />);
+  });
+  return router;
 }
 
 beforeEach(() => {
-  routeSearch = {};
-  navigate.mockReset();
   hasControlPlane = true;
 });
 
 describe("MobileSettingsScreen", () => {
-  it("lists every mobile settings section", () => {
-    renderMobile();
+  it("lists every mobile settings section", async () => {
+    await renderMobile();
     expect(screen.getByText("Account")).toBeInTheDocument();
     expect(screen.getByText("AI providers")).toBeInTheDocument();
     expect(screen.getByText("Billing")).toBeInTheDocument();
@@ -103,27 +112,27 @@ describe("MobileSettingsScreen", () => {
 
   it("opens Diagnostics, the phone's way to see what went wrong", async () => {
     const user = userEvent.setup();
-    renderMobile();
+    await renderMobile();
     await user.click(screen.getByText("Diagnostics"));
     expect(screen.getByText("diagnostics-section")).toBeInTheDocument();
   });
 
-  it("hides Billing when there is no control-plane backend", () => {
+  it("hides Billing when there is no control-plane backend", async () => {
     hasControlPlane = false;
-    renderMobile();
+    await renderMobile();
     expect(screen.queryByText("Billing")).not.toBeInTheDocument();
   });
 
-  it("hides GitHub when there is no control-plane backend", () => {
+  it("hides GitHub when there is no control-plane backend", async () => {
     // Same gate as Billing: git credential storage and CloneRepo are both
     // control-plane RPCs (see GitConnectionsSettings's cloud-only branch).
     hasControlPlane = false;
-    renderMobile();
+    await renderMobile();
     expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
   });
 
-  it("notes top-level mobile management and what remains desktop-only", () => {
-    renderMobile();
+  it("notes top-level mobile management and what remains desktop-only", async () => {
+    await renderMobile();
     expect(
       screen.getByText(/Machines and GitHub are available from the main menu/i),
     ).toBeInTheDocument();
@@ -132,12 +141,12 @@ describe("MobileSettingsScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not render the full desktop settings tree as its own row", () => {
+  it("does not render the full desktop settings tree as its own row", async () => {
     // `settings` stays false for this surface — the list here is a fixed,
     // narrower set. This is the concrete regression that flags someone
     // adding an MCP/Prompts/Connectors row as a section button (the footer
     // note mentioning them by name in prose is expected and stays).
-    renderMobile();
+    await renderMobile();
     expect(
       screen.queryByRole("button", { name: /mcp/i }),
     ).not.toBeInTheDocument();
@@ -149,9 +158,38 @@ describe("MobileSettingsScreen", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("drills into a section on tap without a route push", async () => {
+  it("opens the existing AI screen via the desktop redirect href and returns to settings", async () => {
+    const router = await renderMobile();
+    await act(async () => { await router.navigate({ href: mobilePathFor("/settings/ai"), replace: true }); });
+    expect(router.state.location.pathname).toBe("/m/settings");
+    expect(router.state.location.search).toEqual({ section: "ai" });
+    expect(screen.getByText("ai-section")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("back-from-ai"));
+    expect(router.state.location.search).toEqual({});
+    expect(screen.getByText("AI providers")).toBeInTheDocument();
+  });
+
+  it("restores a bookmarked section and responds to browser back/forward", async () => {
+    const router = await renderMobile("/m/settings?section=ai");
+    expect(screen.getByText("ai-section")).toBeInTheDocument();
+    await act(async () => { await router.navigate({ to: "/m/settings", search: {} }); });
+    expect(screen.getByText("AI providers")).toBeInTheDocument();
+    await act(async () => { router.history.back(); });
+    expect(await screen.findByText("ai-section")).toBeInTheDocument();
+    await act(async () => { router.history.forward(); });
+    expect(await screen.findByText("AI providers")).toBeInTheDocument();
+  });
+
+  it.each(["unknown", "billing", "github"])("falls back to the list for unavailable section %s", async (section) => {
+    hasControlPlane = false;
+    await renderMobile(`/m/settings?section=${section}`);
+    expect(screen.getByText("AI providers")).toBeInTheDocument();
+    expect(screen.queryByText(`${section}-section`)).not.toBeInTheDocument();
+  });
+
+  it("drills into a section on tap using search", async () => {
     const user = userEvent.setup();
-    renderMobile();
+    await renderMobile();
     await user.click(screen.getByText("AI providers"));
     expect(screen.getByText("ai-section")).toBeInTheDocument();
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
@@ -159,7 +197,7 @@ describe("MobileSettingsScreen", () => {
 
   it("returns to the list from a section's own back button", async () => {
     const user = userEvent.setup();
-    renderMobile();
+    await renderMobile();
     await user.click(screen.getByText("Account"));
     expect(screen.getByText("account-section")).toBeInTheDocument();
 
@@ -168,12 +206,9 @@ describe("MobileSettingsScreen", () => {
     expect(screen.queryByText("account-section")).not.toBeInTheDocument();
   });
 
-  it("hides every settings section on the embed surface", () => {
-    render(
-      <SurfaceProvider surface="embed">
-        <MobileSettingsScreen />
-      </SurfaceProvider>,
-    );
+  it("hides every settings section on the embed surface", async () => {
+    await renderMobile("/m/settings?section=ai", "embed");
+    expect(screen.queryByText("ai-section")).not.toBeInTheDocument();
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
     expect(screen.queryByText("AI providers")).not.toBeInTheDocument();
   });
@@ -181,17 +216,18 @@ describe("MobileSettingsScreen", () => {
 
 describe("MobileSettingsScreen opened with a way back (the claim page's Subscribe)", () => {
   it("opens on billing and its back control returns to where the person came from", async () => {
-    routeSearch = { section: "billing", returnTo: "/claim" };
-    renderMobile();
+    const router = await renderMobile(`/m/settings?${new URLSearchParams({ section: "billing", returnTo: "/claim" })}`);
     expect(screen.getByText("billing-section")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Back to your claim" }));
-    expect(navigate).toHaveBeenCalledWith({ href: "/claim" });
+    expect(router.state.location.pathname).toBe("/claim");
+    expect(await screen.findByText("claim-page")).toBeInTheDocument();
   });
 
   it("ignores a way back that leaves the app, and falls back to the list", async () => {
-    routeSearch = { section: "billing", returnTo: "//evil.example/x" };
-    renderMobile();
+    const router = await renderMobile(`/m/settings?${new URLSearchParams({ section: "billing", returnTo: "//evil.example/x" })}`);
     await userEvent.click(screen.getByRole("button", { name: "back-from-billing" }));
-    expect(navigate).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/m/settings");
+    expect(router.state.location.search).toEqual({});
+    expect(screen.getByText("AI providers")).toBeInTheDocument();
   });
 });

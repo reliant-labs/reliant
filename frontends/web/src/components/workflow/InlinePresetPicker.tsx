@@ -8,8 +8,16 @@ import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
 import type { Preset } from "../../hooks/preset-queries";
 import { isCelTemplate } from "../../lib/celTemplate";
+import { ComposerSheet } from "../Chat/ComposerSheet";
+import type { ReactNode } from "react";
+
+function PresetPanel({ mobile, title, onClose, children }: { mobile: boolean; title: string; onClose: () => void; children: ReactNode }) {
+  if (mobile) return <ComposerSheet title={title} onClose={onClose}>{children}</ComposerSheet>;
+  return <div className="absolute bottom-full left-0 mb-1 min-w-48 rounded-lg border border-border bg-[var(--chat-dropdown-bg)] shadow-lg z-[1000] max-h-64 overflow-y-auto">{children}</div>;
+}
 
 interface InlinePresetPickerProps {
+  mobile?: boolean;
   // Available presets (filtered for the current workflow)
   presets: Preset[];
   
@@ -49,6 +57,7 @@ export function InlinePresetPicker({
   disabled = false,
   isStreaming = false,
   className = "",
+  mobile = false,
 }: InlinePresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   // Escape closes the list, and only the list (useEscapeLayer).
@@ -66,11 +75,11 @@ export function InlinePresetPicker({
       }
     };
 
-    if (isOpen) {
+    if (isOpen && !mobile) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [isOpen]);
+  }, [isOpen, mobile]);
 
   // Find the selected preset
   const selectedPreset = presets.find(p => p.name === value);
@@ -115,6 +124,8 @@ export function InlinePresetPicker({
           className={cn(
             "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
             COMPOSER_CONTROL,
+            "touch:min-h-[44px]",
+            mobile && "min-h-[44px] w-full",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -153,10 +164,9 @@ export function InlinePresetPicker({
       </Tooltip>
 
       {/* Replace confirmation for expression values */}
-      {showReplaceConfirm && (
-        <div
-          className="absolute bottom-full left-0 mb-1 z-[1001] rounded-md border border-border bg-[var(--chat-dropdown-bg)] shadow-lg p-3 w-64"
-        >
+      {showReplaceConfirm && canInteract && (
+        <PresetPanel mobile={mobile} title="Replace expression?" onClose={() => setShowReplaceConfirm(false)}>
+          <div className="p-3">
           <div className="text-xs font-medium text-foreground mb-1">
             Replace expression?
           </div>
@@ -186,19 +196,14 @@ export function InlinePresetPicker({
               Replace
             </button>
           </div>
-        </div>
+          </div>
+        </PresetPanel>
       )}
 
       {/* Dropdown */}
       {isOpen && canInteract && (
-        <div
-          {...escapeLayer}
-          className={cn(
-            "absolute bottom-full left-0 mb-1 min-w-48 rounded-lg border border-border bg-[var(--chat-dropdown-bg)] shadow-lg z-[1000]",
-            "max-h-64 overflow-y-auto"
-          )}
-        >
-          <div className="py-1">
+        <PresetPanel mobile={mobile} title={groupLabel ? `${groupLabel} preset` : "Preset"} onClose={() => setIsOpen(false)}>
+          <div {...(!mobile ? escapeLayer : {})} className="py-1">
             {/* Header showing which group this preset applies to */}
             {groupLabel && (
               <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b border-border/50">
@@ -211,7 +216,7 @@ export function InlinePresetPicker({
               type="button"
               onClick={() => handleSelect(null)}
               className={cn(
-                "w-full px-3 py-1.5 text-left text-xs transition-colors",
+                "w-full px-3 py-1.5 text-left text-xs transition-colors touch:min-h-[44px]",
                 !value ? "bg-accent font-medium" : "hover:bg-accent/50"
               )}
             >
@@ -272,7 +277,7 @@ export function InlinePresetPicker({
               </>
             )}
           </div>
-        </div>
+        </PresetPanel>
       )}
     </div>
   );
@@ -290,7 +295,7 @@ function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
       type="button"
       onClick={() => onSelect(preset)}
       className={cn(
-        "w-full px-3 py-1.5 text-left text-xs transition-colors",
+        "w-full px-3 py-1.5 text-left text-xs transition-colors touch:min-h-[44px]",
         isSelected ? "bg-accent font-medium" : "hover:bg-accent/50"
       )}
     >

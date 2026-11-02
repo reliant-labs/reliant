@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -25,9 +25,9 @@ import { createPortal } from "react-dom";
  *     `portal={false}` renders it in place (a preview harness pinning it in a
  *     box).
  *
- * Layout: the panel is at most 90% of the dynamic viewport tall and the body
- * scrolls, so a long form's footer — its primary action — never scrolls out
- * of reach. `sheetOnMobile` (default on for lg and wider, whose forms are too
+ * Layout: portalled panels fit the visible viewport minus safe-area gutters,
+ * including when the keyboard opens or the user zooms/pans. The body scrolls,
+ * so a long form's footer — its primary action — stays within that rectangle. `sheetOnMobile` (default on for lg and wider, whose forms are too
  * tall for a floating card on a phone) makes it a full-screen sheet below
  * the `sm` breakpoint.
  */
@@ -85,6 +85,48 @@ function unlockScroll() {
   if (--lockCount === 0) document.body.style.overflow = savedOverflow;
 }
 
+// Fixed portal coordinates are CSS pixels in the layout viewport. Follow the
+// visible rectangle (keyboard, browser chrome and zoom/pan), never its scale:
+// counter-scaling would undo the user's accessibility zoom.
+function usePortalViewport(enabled: boolean): React.CSSProperties | undefined {
+  const [bounds, setBounds] = useState<React.CSSProperties>();
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setBounds(undefined); // CSS 100dvh remains the progressive fallback.
+      return;
+    }
+    let frame: number | undefined;
+    const measure = () => {
+      setBounds({
+        top: viewport.offsetTop,
+        left: viewport.offsetLeft,
+        right: "auto",
+        bottom: "auto",
+        width: viewport.width,
+        height: viewport.height,
+      });
+    };
+    const schedule = () => {
+      if (frame !== undefined) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+    };
+    measure();
+    viewport.addEventListener("resize", schedule);
+    viewport.addEventListener("scroll", schedule);
+    return () => {
+      viewport.removeEventListener("resize", schedule);
+      viewport.removeEventListener("scroll", schedule);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, [enabled]);
+  return enabled ? bounds : undefined;
+}
+
 export default function Modal({
   open,
   onClose,
@@ -102,6 +144,7 @@ export default function Modal({
   portal = true,
 }: ModalProps) {
   const sheet = sheetOnMobile ?? (size === "lg" || size === "xl" || size === "full");
+  const viewportStyle = usePortalViewport(open && portal);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -112,11 +155,16 @@ export default function Modal({
   const descriptionId = useId();
   // Read through refs so a new onClose identity on every parent render does
   // not tear the effect down — which would unlock and relock the page (a
-  // visible flash) and re-run initial focus.
+  // visible flash) and re-run initial focus. The refs follow the props in a
+  // layout effect, not during render (a render may be thrown away, and React
+  // forbids touching refs there); layout effects run before the effect
+  // below and before any event the committed dialog can receive.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
   const fallbackFocusRef = useRef(fallbackFocus);
-  fallbackFocusRef.current = fallbackFocus;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+    fallbackFocusRef.current = fallbackFocus;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -193,14 +241,16 @@ export default function Modal({
     // dismissal, which is the Escape handler above; without that handler a
     // backdrop-click-to-close modal would be a keyboard trap.
     //
-    // h-[100dvh] alongside inset-0: a fixed inset-0 box resolves against the
-    // LARGEST mobile viewport, so centring in it alone puts the panel below
-    // the visible centre while browser chrome is showing.
+    // Safe-area padding is inside the measured border box. Panel percentages
+    // resolve against the remaining content height, not the layout viewport.
     <div
       ref={overlayRef}
       role="presentation"
-      className={`fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-black/50 p-4 backdrop-blur-sm sm:p-6 ${
-        sheet ? "max-sm:p-0" : ""
+      style={viewportStyle}
+      className={`fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-black/50 backdrop-blur-sm ${
+        portal
+          ? `box-border [--modal-gutter:1rem] sm:[--modal-gutter:1.5rem] pt-[max(var(--modal-gutter),env(safe-area-inset-top,0px))] pr-[max(var(--modal-gutter),env(safe-area-inset-right,0px))] pb-[max(var(--modal-gutter),env(safe-area-inset-bottom,0px))] pl-[max(var(--modal-gutter),env(safe-area-inset-left,0px))] ${sheet ? "max-sm:[--modal-gutter:0px]" : ""}`
+          : `p-4 sm:p-6 ${sheet ? "max-sm:p-0" : ""}`
       }`}
       onClick={(e) => {
         if (closeOnOverlay && e.target === overlayRef.current) onCloseRef.current();
@@ -209,9 +259,9 @@ export default function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`flex max-h-[90dvh] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
+        className={`flex ${portal ? "max-h-full" : "max-h-[90dvh]"} w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
           sheet
-            ? "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none max-sm:rounded-none"
+            ? `${portal ? "max-sm:h-full max-sm:max-h-full" : "max-sm:h-[100dvh] max-sm:max-h-[100dvh]"} max-sm:max-w-none max-sm:rounded-none`
             : ""
         } ${className ?? ""}`}
         role="dialog"

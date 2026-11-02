@@ -15,6 +15,7 @@ import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../..
 import { driverDisplayName } from "../../../hooks/catalog-models";
 import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
 import { OnLimitRow } from "./OnLimitRow";
+import { useSurface } from "../../../lib/surfaceContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +114,7 @@ export function ModelSettingsPage({
   chatId,
 }: ModelSettingsPageProps) {
   const navigate = useNavigate();
+  const mobile = useSurface() === "mobile";
   const parsed = parseModelValue(value);
 
   // Determine initial tab from current value
@@ -120,7 +122,7 @@ export function ModelSettingsPage({
   const [activeTab, setActiveTab] = useState<ModelTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { models, tiers } = useModels();
+  const { models, tiers, loading, error } = useModels();
 
   // Current overrides extracted from value
   const currentThinking = parsed.thinking_level ?? "";
@@ -312,7 +314,8 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            navigate({ to: '/settings/$section', params: { section: 'ai' } });
+            if (mobile) void navigate({ to: '/m/settings', search: { section: 'ai' } });
+            else void navigate({ to: '/settings/$section', params: { section: 'ai' } });
           }}
           title="Model preferences"
           aria-label="Model preferences"
@@ -329,12 +332,16 @@ export function ModelSettingsPage({
         </button>
       </div>
 
+      {loading && <p role="status" className="px-4 py-3 text-sm text-muted-foreground">Loading models…</p>}
+      {error && <p role="alert" className="px-4 py-3 text-sm text-destructive">Could not load models. Check model preferences and try again.</p>}
+      {!loading && !error && models.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No models available. Connect a provider in model preferences.</p>}
+
       {/* Tab bar */}
       <div className="flex border-b border-border/50 px-3">
         <button
           onClick={() => setActiveTab("tag")}
           className={cn(
-            "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
+            "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent touch:min-h-[44px]",
             activeTab === "tag"
               ? "text-primary-ink border-primary"
               : "text-muted-foreground border-transparent hover:text-foreground",
@@ -345,7 +352,7 @@ export function ModelSettingsPage({
         <button
           onClick={() => setActiveTab("explicit")}
           className={cn(
-            "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
+            "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent touch:min-h-[44px]",
             activeTab === "explicit"
               ? "text-primary-ink border-primary"
               : "text-muted-foreground border-transparent hover:text-foreground",
@@ -436,7 +443,7 @@ export function ModelSettingsPage({
                       disabled={offline}
                       onClick={() => handleSelectModel(model.id, local?.daemonId)}
                       className={cn(
-                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded text-left transition-colors mx-0.5",
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded text-left transition-colors touch:min-h-[44px]",
                         isSelected
                           ? "bg-primary/15"
                           : "hover:bg-muted/50",
@@ -541,7 +548,7 @@ export function ModelSettingsPage({
             onChange={(e) =>
               handleOverrideChange("thinking_level", e.target.value || undefined)
             }
-            className="px-2 py-1 bg-muted border border-border rounded text-foreground text-xs cursor-pointer outline-none hover:border-border/80"
+            className="px-2 py-1 bg-muted border border-border rounded text-foreground text-xs cursor-pointer outline-none hover:border-border/80 touch:min-h-[44px]"
           >
             {availableThinkingLevels.map((level) => (
               <option key={level.value} value={level.value}>
@@ -609,7 +616,7 @@ export function ModelSettingsPage({
               handleOverrideChange("compaction_threshold", val);
             }}
             step={5000}
-            className="w-[70px] px-2 py-1 bg-muted border border-border rounded text-foreground text-xs outline-none text-right focus:border-border/80"
+            className="w-[70px] px-2 py-1 bg-muted border border-border rounded text-foreground text-xs outline-none text-right focus:border-border/80 touch:min-h-[44px]"
           />
         </div>
         {compactionCapped && maxCompaction !== undefined && (

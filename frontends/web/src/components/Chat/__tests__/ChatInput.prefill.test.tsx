@@ -26,7 +26,7 @@ vi.mock("../../../lib/toast-manager", () => ({
 }));
 vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries");
-  return { ...actual, useChat: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
+  return { ...actual, useChat: () => ({ data: undefined, isLoading: false }), useChatSelection: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
 });
 vi.mock("../../../hooks/question-queries", () => ({
   usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
@@ -40,14 +40,16 @@ vi.mock("../../../store/globalDataStore", () => ({
 }));
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => NO_SLASH_COMMANDS }));
+const definitionState = vi.hoisted(() => ({ result: undefined as unknown }));
 // The selected workflow has no inputs. One stable result, as React Query
 // returns one: a fresh object per render re-derives the params every render.
 vi.mock("../../../hooks/workflow-queries", async (importActual) => {
   const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
   return {
     ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    useWorkflows: () => ({ workflows: [], loading: false, error: null }),
     fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
-    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+    useWorkflowDefinitionQuery: () => definitionState.result ?? NO_DEFINITION,
   };
 });
 vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
@@ -55,20 +57,88 @@ vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   usePresetsForWorkflow: () => NO_PRESETS,
   fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
-vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
+vi.mock("../settings", () => ({ ChatSettingsPopover: (props: { mobile: boolean; initialPage: string; disabled: boolean }) => <div data-testid="shared-settings" data-mobile={props.mobile} data-page={props.initialPage} data-disabled={props.disabled} /> }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
+import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { useAttachmentStore } from "../../../store/attachmentStore";
+import { useChatParamsStore } from "../../../store/chatParamsStore";
+import { NewChatDraftBoundary, newChatAttachmentDraftId } from "../NewChatDraftBoundary";
+vi.mock("../../../store/chatStoreHooks", () => ({ useActiveChatId: () => "existing-a" }));
 
 const PROJECT_ID = "p-prefill";
 const composer = () => screen.getByTestId("chat-input") as HTMLTextAreaElement;
 
 beforeEach(() => {
+  definitionState.result = undefined;
   useProjectStore.setState({ currentProject: { id: PROJECT_ID } as never });
   useWorkspaceStateStore.getState().clearNewChatDraft(PROJECT_ID);
 });
 
 describe("ChatInput prefill", () => {
+  it("opens authoritative all-settings from mobile options, including while streaming", async () => {
+    definitionState.result = { data: { workflow: { inputs: { goal: { type: "string", config: { case: "stringInput", value: { base: { required: true } } } } } } }, isLoading: false };
+    renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput isStreaming onSend={vi.fn()} /></SurfaceProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: /All settings/ }));
+    expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-mobile", "true");
+    expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-page", "main");
+    expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-disabled", "false");
+  });
+
+  it("explains mobile settings loading and failure and offers a retry", async () => {
+    const refetch = vi.fn();
+    definitionState.result = { isLoading: true, refetch };
+    const ui = <SurfaceProvider surface="mobile"><ChatInput onSend={vi.fn()} /></SurfaceProvider>;
+    const { rerender } = renderWithQuery(ui);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("Loading workflow settings…")).toBeInTheDocument();
+    definitionState.result = { isLoading: false, error: new Error("Offline"), refetch };
+    rerender(<SurfaceProvider surface="mobile"><ChatInput onSend={vi.fn()} /></SurfaceProvider>);
+    expect(screen.getByText("Could not load workflow settings.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry settings" }));
+    expect(refetch).toHaveBeenCalled();
+  });
+  it("keeps existing-chat attachments separate from project new-chat drafts and clears only the submitted bucket", async () => {
+    const a = { id: "existing-file", filename: "existing.txt", mime_type: "text/plain", size: 1 };
+    const b = { ...a, id: "new-file", filename: "new.txt" };
+    const c = { ...a, id: "other-project", filename: "other.txt" };
+    const draft = newChatAttachmentDraftId(PROJECT_ID);
+    const otherDraft = newChatAttachmentDraftId("other-project");
+    useAttachmentStore.setState({ attachments: new Map([["existing-a", [a]], [draft, [b]], [otherDraft, [c]]]) as never });
+    const send = vi.fn().mockResolvedValue(undefined);
+    const renderComposer = (project: string) => <SurfaceProvider surface="mobile"><NewChatDraftBoundary key={project} projectId={project}><ChatInput attachmentDraftId={newChatAttachmentDraftId(project)} onSend={send} prefill={{ text: "send", id: 1 }} /></NewChatDraftBoundary></SurfaceProvider>;
+    const { rerender } = renderWithQuery(<ChatInput chatId="existing-a" onSend={send} />);
+    rerender(renderComposer(PROJECT_ID));
+    await waitFor(() => expect(composer().value).toBe("send"));
+    act(() => { useChatParamsStore.getState().setTempNewChatParams({ secret: "project-a" }); useChatParamsStore.getState().setTempNewChatWorkflow("project-a-workflow"); });
+    act(() => useProjectStore.setState({ currentProject: { id: "other-project" } as never }));
+    rerender(renderComposer("other-project"));
+    await waitFor(() => expect(composer().value).toBe("send"));
+    expect(useChatParamsStore.getState().tempNewChatParams).toEqual({});
+    expect(useChatParamsStore.getState().tempNewChatWorkflow).toBeNull();
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    expect(send.mock.calls[0][1]).toEqual(["other-project"]);
+    expect(useAttachmentStore.getState().getAttachments("existing-a")).toEqual([a]);
+    expect(useAttachmentStore.getState().getAttachments(draft)).toEqual([b]);
+    expect(useAttachmentStore.getState().getAttachments(otherDraft)).toEqual([]);
+    act(() => useAttachmentStore.getState().reset());
+  });
+  it("retains a mobile draft on failure and blocks duplicate sends and edits in flight", async () => {
+    let reject!: (reason: Error) => void;
+    const onSend = vi.fn(() => new Promise<void>((_, r) => { reject = r; }));
+    renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput onSend={onSend} prefill={{ text: "keep me", id: 10 }} /></SurfaceProvider>);
+    await waitFor(() => expect(composer().value).toBe("keep me"));
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(composer()).toBeDisabled();
+    await act(async () => reject(new Error("offline")));
+    expect(composer().value).toBe("keep me");
+    expect(composer()).not.toBeDisabled();
+  });
   it("shows the prefill over the draft it seeds from, and saves it as the draft", async () => {
     useWorkspaceStateStore.getState().setNewChatDraft(PROJECT_ID, "Workflow `old-one`: ");
     renderWithQuery(<ChatInput onSend={vi.fn()} prefill={{ text: "Workflow `new-one`: ", id: 0 }} />);

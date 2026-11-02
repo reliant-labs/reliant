@@ -38,7 +38,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
 
   return (
     <>
-      <div className={`flex flex-wrap gap-2 ${className}`}>
+      <div className={`flex min-w-0 max-w-full flex-wrap gap-2 ${className}`}>
         {attachments.map((attachment) => {
           const isImage = isImageMimeType(attachment.mime_type);
           const blobUrl = getBlobUrl(attachment.id);
@@ -69,7 +69,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                   onRemove(attachment.id);
                 }}
                 className={`absolute top-0.5 right-0.5 p-1.5 rounded-full bg-black/60 hover:bg-black/80 transition-colors duration-100 ${
-                  isTouchDevice ? 'opacity-90' : 'opacity-0 group-hover:opacity-100'
+                  isTouchDevice ? 'opacity-90 min-h-[44px] min-w-[44px] flex items-center justify-center' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
                 }`}
                 style={{
                   pointerEvents: 'auto',
@@ -83,7 +83,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
           ) : (
             <div
               key={attachment.id}
-              className="flex items-center gap-2 px-2 py-1 rounded text-xs transition-all duration-200 w-fit"
+              className="flex min-w-0 max-w-full items-center gap-2 px-2 py-1 rounded text-xs transition-all duration-200 w-fit"
               style={{
                 backgroundColor: 'var(--chat-button-bg)',
                 border: '1px solid var(--chat-border)',
@@ -99,7 +99,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
               }}
             >
               <span className="flex-shrink-0"><FileIcon mimeType={attachment.mime_type} /></span>
-              <span className="whitespace-nowrap">{attachment.filename}</span>
+              <span className="min-w-0 truncate" title={attachment.filename}>{attachment.filename}</span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -107,7 +107,8 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                   e.preventDefault();
                   onRemove(attachment.id);
                 }}
-                className="flex-shrink-0 transition-opacity duration-200 hover:opacity-100"
+                aria-label={`Remove ${attachment.filename}`}
+                className={`flex-shrink-0 transition-opacity duration-200 hover:opacity-100 ${isTouchDevice ? 'min-h-[44px] min-w-[44px] flex items-center justify-center' : ''}`}
                 style={{
                   color: 'var(--chat-input-placeholder)',
                   opacity: 0.8,
