@@ -97,10 +97,23 @@ describe('Reliant dark is the site palette', () => {
     got.forEach((channel, i) => expect(Math.abs(channel - want[i]!), `${token} channel ${i}`).toBeLessThanOrEqual(2))
   })
 
-  it('puts a white label on the blue fill at AA, at rest and on hover', () => {
-    const label = theme.rgb('primary-foreground')!
-    expect(contrast(label, theme.rgb('primary')!)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(label, theme.rgb('primary-hover')!)).toBeGreaterThanOrEqual(4.5)
+})
+
+describe('Reliant fills carry their labels at AA', () => {
+  // Light is derived, not imported from the site, so it is held to the same
+  // bar as dark: every fill that carries a label, at rest and on hover.
+  it.each(['light', 'dark'] as const)('%s: white label on the blue fill, at rest, on hover and on the active tab', (mode) => {
+    const theme = themeAt('reliant', mode)
+    const low: string[] = []
+    for (const [label, fill] of [
+      ['primary-foreground', 'primary'],
+      ['primary-foreground', 'primary-hover'],
+      ['tab-active-foreground', 'tab-active'],
+    ] as const) {
+      const ratio = contrast(theme.rgb(label)!, theme.rgb(fill)!)
+      if (ratio < 4.5) low.push(`${label} on ${fill}: ${ratio.toFixed(2)}:1`)
+    }
+    expect(low).toEqual([])
   })
 })
 
