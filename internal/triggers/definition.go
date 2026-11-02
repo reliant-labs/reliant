@@ -65,7 +65,7 @@ func (w LaunchWorkflows) FiringDefinition(ctx context.Context, t *core.Trigger) 
 	}
 	pin := w.CatalogPin
 	if pinner, ok := w.Repo.(catalogPinner); ok && pin == "" && t.ProjectID != "" {
-		p, err := pinner.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: t.DaemonID, UserID: t.UserID})
+		p, err := pinner.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: catalogMachine(t), UserID: t.UserID})
 		if err != nil {
 			return nil, &workflowsource.StoreError{Err: fmt.Errorf("pin the workflow catalog trigger %s fires against: %w", t.ID, err)}
 		}
@@ -95,7 +95,7 @@ func (c *CachedWorkflows) TriggerDefinition(ctx context.Context, t *core.Trigger
 	if t == nil {
 		return nil, nil
 	}
-	key := [4]string{t.UserID, t.Workflow, t.ProjectID, t.DaemonID}
+	key := [4]string{t.UserID, t.Workflow, t.ProjectID, catalogMachine(t)}
 	if hit, ok := c.defs[key]; ok {
 		return hit.def, hit.err
 	}
@@ -173,6 +173,16 @@ func firingDefinition(ctx context.Context, workflows WorkflowResolver, t *core.T
 	return DefinitionOf(ctx, workflows, t)
 }
 
+// catalogMachine is the machine whose catalog t's runs read: its own
+// machine, or for a pool-bound trigger the member bindPoolCatalog chose as
+// holding the pool's agreed catalog; "" for the union.
+func catalogMachine(t *core.Trigger) string {
+	if t.DaemonID != "" {
+		return t.DaemonID
+	}
+	return t.CatalogDaemonID
+}
+
 // RefusalDetail is the recorded outcome of a firing refused because its
 // definition is broken: which version of which file, from where, and why.
 func RefusalDetail(def *core.TriggerEventDefinition) string {
@@ -191,7 +201,7 @@ func describeDefinition(ctx context.Context, store launch.WorkflowResolver, vali
 		return nil, nil
 	}
 	def := &core.TriggerEventDefinition{Workflow: t.Workflow, CatalogPin: pin}
-	scope := launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID)
+	scope := launch.AutomationScope(t.UserID, t.ProjectID, catalogMachine(t))
 	scope.CatalogPin = pin
 	desc, err := launch.DescribeRunWorkflow(ctx, store, scope, t.Workflow)
 	if err != nil {
@@ -251,7 +261,8 @@ func attributeMachine(ctx context.Context, store any, t *core.Trigger, def *core
 		return
 	}
 	provenance, ok := store.(workflowProvenanceStore)
-	if !ok || t.ProjectID == "" || t.DaemonID == "" {
+	machine := catalogMachine(t)
+	if !ok || t.ProjectID == "" || machine == "" {
 		return
 	}
 	copies, err := provenance.ProjectWorkflowProvenance(ctx, t.ProjectID)
@@ -262,7 +273,7 @@ func attributeMachine(ctx context.Context, store any, t *core.Trigger, def *core
 	}
 	for i := range copies {
 		c := &copies[i]
-		if c.DaemonID != t.DaemonID || c.RelativePath != def.Path || c.ContentHash != def.ContentHash {
+		if c.DaemonID != machine || c.RelativePath != def.Path || c.ContentHash != def.ContentHash {
 			continue
 		}
 		def.DaemonID, def.Machine = c.DaemonID, c.Machine

@@ -226,7 +226,7 @@ export function ComputeStep({
    */
   const allowedSizes = new Set((allowedDaemonSizes ?? []).map((size) => size.toLowerCase()));
   const coveredOption = machineCovered
-    ? (planOptions.find((option) => allowedSizes.has(option.size)) ??
+    ? (planOptions.find((option) => option.size !== undefined && allowedSizes.has(option.size)) ??
       (allowedSizes.size === 0 ? planOptions[0] : undefined))
     : undefined;
   const coveredPlanId = coveredOption?.planId;

@@ -7,7 +7,9 @@
 # commit_id is the head), posted by the pipeline's reviewer. pr-disarm reacts to
 # a push after the fact; this is checked by the merge itself, so a head pushed
 # after a pass cannot ride an armed auto-merge in. A later blocker on the same
-# sha wins.
+# sha wins. A pull request whose head is in a fork (or whose fork was deleted)
+# never passes, whatever marker it carries: the repository is public, and the
+# pipeline merges only its own branches (control-plane security finding CPI-1).
 #
 #   ci-review-marker.sh pr <number>                 one pull request
 #   ci-review-marker.sh group <head_ref> <head_sha> every pull request in a merge group
@@ -43,7 +45,11 @@ esac
 
 bad=0
 for n in $prs; do
-  head=$(gh api "repos/$repo/pulls/$n" --jq .head.sha)
+  read -r head hrepo < <(gh api "repos/$repo/pulls/$n" --jq '[.head.sha, (.head.repo.full_name // "-")] | join(" ")')
+  if [ "$hrepo" != "$repo" ]; then
+    echo "::error::#$n: its head is not a branch of $repo (head repository: $hrepo); a fork's pull request never merges here: push its commits to a branch of $repo and open a pull request from there"
+    bad=1; continue
+  fi
   v=$(verdict "$n" "$head")
   if [ "$v" = review-passed ]; then echo "#$n: pr-review passed its head $head"
   else echo "::error::#$n: its head $head has no pr-review pass marker (latest: $v); pr-review must pass this exact head"; bad=1; fi

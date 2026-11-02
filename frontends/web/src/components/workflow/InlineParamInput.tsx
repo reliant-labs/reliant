@@ -1,10 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { formatValueForDisplay } from "../../lib/paramUtils";
 import Tooltip from "../forge-ui/tooltip";
+import Combobox from "../forge-ui/combobox";
+import { modelComboboxOption } from "../Chat/ModelSelector";
+import { extractModelId, type ModelValue } from "./ModelDropdown";
+import { useModels } from "../../store/globalDataStore";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDescription, getInputDefault, getInputEnumValues, getInputMulti, getInputMin, getInputMax } from "../../lib/inputHelpers";
 import type { LucideIcon } from "lucide-react";
@@ -109,6 +113,19 @@ export function InlineParamInput({
           displayName={displayName}
           schema={schema}
           value={value as number}
+          onChange={onChange}
+          disabled={disabled}
+          isStreaming={isStreaming}
+          className={className}
+        />
+      );
+
+    case "model":
+      return (
+        <InlineModelInput
+          displayName={displayName}
+          schema={schema}
+          value={value}
           onChange={onChange}
           disabled={disabled}
           isStreaming={isStreaming}
@@ -690,6 +707,97 @@ function InlineNumberInput({
         </span>
       </button>
     </Tooltip>
+  );
+}
+
+// ============================================
+// Inline Model Input (searchable model picker)
+// ============================================
+
+interface InlineModelInputProps {
+  displayName: string;
+  schema: InputDef;
+  /** A model selector: `{ id }`, `{ tags }`, or a bare model id. */
+  value: unknown;
+  /** Called with a model selector, `{ id }`. */
+  onChange: (value: { id: string }) => void;
+  disabled?: boolean;
+  isStreaming?: boolean;
+  className?: string;
+}
+
+/** A tag selector's first tag (`{ tags: ["fast"] }` → "fast"), shown when no model id is set. */
+function modelTag(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || !("tags" in value)) return undefined;
+  const tags = (value as { tags?: unknown }).tags;
+  return Array.isArray(tags) && typeof tags[0] === "string" ? tags[0] : undefined;
+}
+
+function InlineModelInput({
+  displayName,
+  schema,
+  value,
+  onChange,
+  disabled = false,
+  isStreaming = false,
+  className = "",
+}: InlineModelInputProps) {
+  const { models, loading } = useModels();
+  const options = useMemo(() => models.map(modelComboboxOption), [models]);
+  const current = value ?? getInputDefault(schema);
+  const currentId = extractModelId(current as ModelValue);
+  // The catalog lists "modelId@driverId"; a selector may name the bare model id.
+  const selectedValue =
+    options.find((o) => o.value === currentId)?.value ??
+    options.find((o) => o.value.split("@")[0] === currentId)?.value ??
+    null;
+  const shown =
+    options.find((o) => o.value === selectedValue)?.label ||
+    currentId ||
+    (modelTag(current) ? `Tier: ${modelTag(current)}` : "");
+  const canInteract = !isStreaming && !disabled;
+
+  return (
+    <div className={className}>
+      <Combobox
+        aria-label={displayName}
+        options={options}
+        value={selectedValue}
+        onChange={(next) => {
+          if (next) onChange({ id: next });
+        }}
+        loading={loading}
+        disabled={!canInteract}
+        side="top"
+        searchPlaceholder="Search models"
+        emptyMessage="No models found"
+        trigger={({ selected: _selected, open, ...triggerProps }) => (
+          <button
+            type="button"
+            {...triggerProps}
+            title={getInputDescription(schema) || `${displayName}: ${shown || "(none)"}`}
+            className={cn(
+              "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+              canInteract
+                ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
+                : "cursor-default opacity-60",
+              open
+                ? "bg-primary/20 text-primary"
+                : isStreaming
+                ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
+                : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
+              !shown && "border border-dashed border-warning/50"
+            )}
+          >
+            <span className="text-muted-foreground">{displayName}:</span>
+            <span className={cn("truncate max-w-32", !shown && "text-warning-ink")}>
+              {shown || "required"}
+            </span>
+            <ChevronDown className="w-2.5 h-2.5 opacity-50 flex-shrink-0" />
+          </button>
+        )}
+      />
+    </div>
   );
 }
 

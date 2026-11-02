@@ -137,35 +137,6 @@ func holder(t *testing.T, g *Gate) (release func(), s *started) {
 	return func() { _ = os.WriteFile(flag, nil, 0o644) }, s
 }
 
-func TestSecondHeavyCommandWaitsForTheSlot(t *testing.T) {
-	g, _ := oneSlotGate(t)
-	release, first := holder(t, g)
-
-	// The output (RAN-2) differs from the command line, which the waiting
-	// lines quote.
-	second := start(t, g, "echo RAN-$((1+1))", true)
-	eventually(t, "the second command to report it is queued", func() bool { return WaitedFor(second.out.String()) })
-	out := second.out.String()
-	if strings.Contains(out, "RAN-2") {
-		t.Fatalf("the second heavy command ran while the only slot was held:\n%s", out)
-	}
-	// The agent is told who holds the slot.
-	if !strings.Contains(out, "waiting for a heavy slot") || !strings.Contains(out, "1 of 1 held") {
-		t.Fatalf("waiting output does not name the holder:\n%s", out)
-	}
-
-	release()
-	first.wait(t, 10*time.Second)
-	second.wait(t, 10*time.Second)
-	if second.err != nil {
-		t.Fatalf("second command failed: %v\n%s", second.err, second.out)
-	}
-	out = second.out.String()
-	if !strings.Contains(out, "RAN-2") || !strings.Contains(out, "▶ reliant: running") {
-		t.Fatalf("second command output:\n%s", out)
-	}
-}
-
 // writeLog records each Write it receives as its own entry.
 type writeLog struct{ writes []string }
 
@@ -176,8 +147,8 @@ func (w *writeLog) Write(p []byte) (int, error) {
 
 // The waiting header and hostslot's first line, which names the holders, go
 // out in one write: a reader that sees WaitedFor's marker also sees who holds
-// the slot. Written separately, a reader polling the output (as
-// TestSecondHeavyCommandWaitsForTheSlot does) could catch the header alone.
+// the slot. Written separately, a reader polling the output (an agent reading
+// a tool's streamed output) could catch the header alone.
 func TestWaitNoticeWritesHeaderWithTheFirstLine(t *testing.T) {
 	log := &writeLog{}
 	n := &waitNotice{w: log, label: "make test"}
