@@ -827,6 +827,24 @@ func (p *BackgroundProcess) StatusSafe() string {
 	return p.Status
 }
 
+// LiveState is a consistent copy of a process's mutable fields (Status,
+// ExitCode, EndTime and Ports), read under the lock that guards them.
+type LiveState struct {
+	Status   string
+	ExitCode *int
+	EndTime  *time.Time
+	Ports    []PortInfo
+}
+
+// Live returns the process's mutable fields under outputMu. A lister that
+// read p.Status or p.Ports bare raced refreshPorts' write of Ports (a
+// shell_wait polling ListProcesses while a kill refreshed the same process).
+func (p *BackgroundProcess) Live() LiveState {
+	p.outputMu.RLock()
+	defer p.outputMu.RUnlock()
+	return LiveState{Status: p.Status, ExitCode: p.ExitCode, EndTime: p.EndTime, Ports: append([]PortInfo(nil), p.Ports...)}
+}
+
 // refreshPorts re-reads the OS port list for a running process.
 //
 // Status, Ports and cmd are guarded by the process's own outputMu — NOT by the
