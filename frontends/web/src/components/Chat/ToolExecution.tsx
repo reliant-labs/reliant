@@ -37,6 +37,7 @@ import {
 } from "../../hooks/approval-queries";
 import { FileLink } from "./FileLink";
 import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool, isShellTool } from "../../lib/toolFormatters";
+import { formatToolDuration, toolActionVerb, toolDurationMs } from "../../lib/toolAction";
 import { DeployedAppCard, deployOfShellCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
@@ -255,6 +256,9 @@ interface ToolExecutionProps {
     content_block_id?: string;
     /** Durable status from the tool_calls table, as of the last message load. */
     durableStatus?: ToolCallStatus;
+    /** When the server recorded the call starting and finishing (its row in tool_calls). */
+    durableStartedAt?: string;
+    durableCompletedAt?: string;
     /**
      * For a spawn call, the workflow it started (tool_calls.child_workflow_id).
      * A spawned sub-agent's thread id equals its workflow id, so this IS the
@@ -450,6 +454,17 @@ function ToolExecutionComponent({
   // result.
   const isCompleted = currentStatus === "completed" || (!spawnChildWorkflowId && !!toolResult);
   const hasFailed = currentStatus === "failed" || (!spawnChildWorkflowId && (toolResult?.is_error ?? false));
+  // A permission block is an error result, but it is a policy stop, not a
+  // failure of the call: it keeps the warning treatment.
+  const isBlocked = !!toolResult?.is_error && !!toolResult.content?.includes("blocked");
+  // How long a finished call took, from the times the server recorded. A
+  // spawn's own call is only its dispatch, so it shows none.
+  const durationMs =
+    (isCompleted || hasFailed || isCancelled) && !spawnChildWorkflowId
+      ? toolDurationMs(toolCall.durableStartedAt, toolCall.durableCompletedAt)
+      : null;
+  const durationLabel = durationMs !== null ? formatToolDuration(durationMs) : null;
+  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live");
   // A shell call that deployed a forge app links to what it deployed (Apps/DeployedAppCard).
   const shellDeploy = useMemo(
     () => (isShellTool(toolNameLower) ? deployOfShellCall(toolCall.input, toolResult) : null),
@@ -608,6 +623,12 @@ function ToolExecutionComponent({
     const name = rawName.startsWith('mcp__')
       ? rawName.split('__').pop() || rawName
       : rawName;
+    // A tool with a plain-words verb reads as an action ("Edited totals.ts"),
+    // not a function call; the name is in the tooltip and the inspector.
+    const verb = actionVerb;
+    const open = verb ? null : <span className="text-muted-foreground">(</span>;
+    const close = verb ? null : <span className="text-muted-foreground">)</span>;
+    const lead = <span className="text-foreground font-medium" title={verb ? name : undefined}>{verb ?? name}</span>;
 
     // Task tools show task title
     if (isTaskToolFlag && taskTitle) {
@@ -620,7 +641,7 @@ function ToolExecutionComponent({
     if (input === undefined) {
       return (
         <span className="inline-flex items-center gap-1">
-          <span className="text-foreground font-medium">{name}</span>
+          {lead}
           <span className="text-muted-foreground italic">preparing…</span>
         </span>
       );
@@ -634,19 +655,19 @@ function ToolExecutionComponent({
         if (isViewOnlyToolFlag && filePaths.length === 1) {
           return (
             <span className="inline-flex items-center gap-1">
-              <span className="text-foreground font-medium">{name}</span>
-              <span className="text-muted-foreground">(</span>
+              {lead}
+              {open}
               <FileLink path={filePaths[0]} inline showIcon={false} worktreeId={chatWorktreeId}>
                 {formatted.summary}
               </FileLink>
-              <span className="text-muted-foreground">)</span>
+              {close}
             </span>
           );
         }
         return (
           <span className="inline-flex items-center gap-1 flex-wrap">
-            <span className="text-foreground font-medium">{name}</span>
-            <span className="text-muted-foreground">(</span>
+            {lead}
+            {open}
             {filePaths.slice(0, 3).map((fp, idx) => (
               <span key={`${fp}-${idx}`} className="inline-flex items-center">
                 <FileLink path={fp} inline showIcon={false} worktreeId={chatWorktreeId} />
@@ -656,22 +677,32 @@ function ToolExecutionComponent({
             {filePaths.length > 3 && (
               <span className="text-muted-foreground">+{filePaths.length - 3} more</span>
             )}
-            <span className="text-muted-foreground">)</span>
+            {close}
           </span>
         );
       }
       return (
-        <span className="inline-flex items-center">
-          <span className="text-foreground font-medium">{name}</span>
-          <span className="text-muted-foreground">({formatted.summary})</span>
+        // A shell call's model-written description is already an action
+        // ("Run cart tests"): it leads on its own, without a second verb.
+        verb && typeof formatted.structured?.description === "string" ? (
+          <span className="text-foreground font-medium" title={name}>{formatted.summary}</span>
+        ) : (
+        <span className="inline-flex items-center gap-1">
+          {lead}
+          {verb ? (
+            formatted.summary && <span className="text-muted-foreground">{formatted.summary}</span>
+          ) : (
+            <span className="text-muted-foreground">({formatted.summary})</span>
+          )}
         </span>
+        )
       );
     }
 
     return (
       <span className="inline-flex items-center">
-        <span className="text-foreground font-medium">{name}</span>
-        <span className="text-muted-foreground">()</span>
+        {lead}
+        {!verb && <span className="text-muted-foreground">()</span>}
       </span>
     );
   };
@@ -683,7 +714,11 @@ function ToolExecutionComponent({
     }
     if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
     if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning-ink animate-pulse" />;
-    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />;
+    if (hasFailed) {
+      return spawnChildWorkflowId
+        ? <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
+        : <XCircle className="w-3.5 h-3.5 text-destructive" />;
+    }
     if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -711,11 +746,13 @@ function ToolExecutionComponent({
     if (isCancelling) return "Cancelling...";
     if (toolResult?.is_error) {
       if (toolResult.content?.includes("blocked")) return "Blocked";
-      return "Warning";
+      // An error result is a failure (a test run that failed, a command that
+      // exited non-zero), not a warning.
+      return "Failed";
     }
     // A spawned agent whose run failed stopped on an error: a message to it
     // resumes it where it stopped, so it is not shown as a dead end.
-    if (hasFailed) return spawnChildWorkflowId ? "Stopped" : "Warning";
+    if (hasFailed) return spawnChildWorkflowId ? "Stopped" : "Failed";
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -744,8 +781,10 @@ function ToolExecutionComponent({
   // Warnings and in-flight work keep full strength.
   const leftBorderColor = isCancelled
     ? "border-l-2 border-l-muted-foreground/40"
-    : hasFailed || toolResult?.is_error
+    : isBlocked || (hasFailed && spawnChildWorkflowId)
     ? "border-l-2 border-l-warning"
+    : hasFailed || toolResult?.is_error
+    ? "border-l-2 border-l-destructive"
     : isCompleted || toolResult
     ? "border-l-2 border-l-success/30"
     : isExecuting
@@ -916,18 +955,30 @@ function ToolExecutionComponent({
             <span className="min-w-0 text-xs truncate">
               {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
             </span>
-            <span className={cn(
-              "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
-              toolResult?.is_error ? "bg-warning/10 text-warning-ink"
-                : hasFailed ? "bg-warning/10 text-warning-ink"
-                : isCancelled ? "bg-muted text-muted-foreground"
-                : isCompleted ? "bg-success/5 text-success-ink/70"
-                : needsApproval ? "bg-warning/10 text-warning-ink"
-                : isExecuting ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground"
-            )}>
-              {getStatusText()}
-            </span>
+            {/* Success needs no word — the check carries it — so a long run
+                is not a column of identical "Completed" pills. Every other
+                state is named, and a finished call says how long it took. */}
+            {isCompleted && !hasFailed && !isTaskToolFlag ? (
+              <span className="sr-only">{getStatusText()}</span>
+            ) : (
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
+                isBlocked || (hasFailed && spawnChildWorkflowId) ? "bg-warning/10 text-warning-ink"
+                  : hasFailed ? "bg-destructive/10 text-destructive-ink"
+                  : isCancelled ? "bg-muted text-muted-foreground"
+                  : isCompleted ? "bg-muted text-muted-foreground"
+                  : needsApproval ? "bg-warning/10 text-warning-ink"
+                  : isExecuting ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
+              )}>
+                {getStatusText()}
+              </span>
+            )}
+            {durationLabel && (
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={`Took ${durationLabel}`}>
+                {durationLabel}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
