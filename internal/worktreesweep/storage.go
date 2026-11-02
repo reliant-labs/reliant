@@ -343,7 +343,7 @@ func (s *Sweeper) cleanBatch(ctx context.Context, t target, batch []*core.Reclai
 	}
 	for _, h := range shared {
 		delete(byID, h.cand.Worktree.ID)
-		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
+		s.recordHold(ctx, h.cand.Worktree, h.reason, h.detail, 0, nil)
 		*out = append(*out, CleanupResult{WorktreeID: h.cand.Worktree.ID, Outcome: CleanupSkipped, Message: "left in place: " + h.detail})
 	}
 	if len(req.Worktrees) == 0 {

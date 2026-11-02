@@ -65,4 +65,49 @@ out="$(run '--- FAIL: TestRacy (0.00s)\nFAIL\texample.com/fx/racy\t0.01s\n')"
 grep -q 'TestRacy failed again' <<<"$out" || fail "the retry runs under -race and fails again: $out"
 ! grep -q 'PASSED on retry' <<<"$out" || fail "a race-only failure passed a non-race retry: $out"
 
+# The issues, against a fake gh that applies -q like the real one and logs
+# every call: one issue per test, reopened rather than duplicated, and closed
+# by --sweep once its test is gone or quiet for FLAKE_SWEEP_DAYS.
+cat >>"$mod/flaky/flaky_test.go" <<'GO'
+
+// Exists, but has not flaked for twelve days in the sweep's fixture.
+func TestQuiet(t *testing.T) {}
+GO
+bin="$fx/bin"
+mkdir -p "$bin"
+cat >"$bin/gh" <<'SH'
+#!/usr/bin/env bash
+echo "$*" >>"$GH_LOG"
+[[ "$1 $2" == "issue list" ]] || exit 0
+q="" prev=""
+for a in "$@"; do [[ "$prev" == -q ]] && q="$a"; prev="$a"; done
+if [[ -n "$q" ]]; then jq -r "$q" "$GH_ISSUES"; else cat "$GH_ISSUES"; fi
+SH
+chmod +x "$bin/gh"
+gh_run() { # <issues json> <args...> -> the script's output; calls in $fx/gh.log
+  printf '%s' "$1" >"$fx/issues.json"
+  shift
+  : >"$fx/gh.log"
+  (cd "$mod" && PATH="$bin:$PATH" GH_LOG="$fx/gh.log" GH_ISSUES="$fx/issues.json" GITHUB_REPOSITORY=fx/fx GOFLAGS='' \
+    FLAKE_SWEEP_NOW=1793491200 bash "$src" "$@" 2>&1) # now = 2026-11-01T00:00:00Z
+}
+
+printf '%b' '--- FAIL: TestSometimes (0.00s)\nFAIL\texample.com/fx/flaky\t0.01s\n' >"$logs/test.log"
+out="$(gh_run '[{"number":7,"title":"flake:suspected: TestSometimes (flaky)","state":"CLOSED"}]' --logs "$logs" --sha deadbeef)"
+grep -q '^issue reopen 7 ' "$fx/gh.log" || fail "a closed issue for the same test is reopened: $out $(cat "$fx/gh.log")"
+grep -q '^issue comment 7 ' "$fx/gh.log" || fail "the new occurrence is commented on the reopened issue: $(cat "$fx/gh.log")"
+! grep -q '^issue create' "$fx/gh.log" || fail "a second issue was created for one test: $(cat "$fx/gh.log")"
+
+out="$(gh_run '[
+  {"number":1,"title":"flake:suspected: TestSometimes (flaky)","createdAt":"2026-10-01T00:00:00Z",
+   "comments":[{"body":"Failed then passed on retry again: run 9","createdAt":"2026-10-30T00:00:00Z"}]},
+  {"number":2,"title":"flake:suspected: TestGone (flaky)","createdAt":"2026-10-31T00:00:00Z","comments":[]},
+  {"number":3,"title":"flake:suspected: TestQuiet (flaky)","createdAt":"2026-10-20T00:00:00Z",
+   "comments":[{"body":"Looking into it","createdAt":"2026-10-31T00:00:00Z"}]},
+  {"number":4,"title":"flake:suspected: TestRacy (racy)","createdAt":"2026-10-30T00:00:00Z","comments":[]}
+]' --sweep)"
+grep -q '^issue close 2 .*TestGone. no longer exists in .flaky' "$fx/gh.log" || fail "a deleted test's issue is closed: $out"
+grep -q '^issue close 3 .*not flaked again for 12 days' "$fx/gh.log" || fail "a test quiet for 12 days is closed (a human comment is no occurrence): $out"
+[[ "$(grep -c '^issue close' "$fx/gh.log")" -eq 2 ]] || fail "only #2 and #3 are closed: $(cat "$fx/gh.log")"
+
 echo "flake-report self-test: ok"

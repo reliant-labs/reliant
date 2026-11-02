@@ -134,7 +134,10 @@ func (s *fakeStore) UpdateWorktree(_ context.Context, w *db.Worktree) error {
 
 func twoRepoReq() Request {
 	return Request{
-		Project: &db.Project{ID: "p1", Name: "demo", Path: "/proj"},
+		// The project was created on another machine; the owner's checkout
+		// is /proj, and every repo path must come from it.
+		Project:  &db.Project{ID: "p1", Name: "demo", Path: "/Users/creator/demo"},
+		Checkout: "/proj",
 		Repos: []*core.Repo{
 			{ID: "r1", Name: "a", RelativePath: "a"},
 			{ID: "r2", Name: "b", RelativePath: "b"},
@@ -249,4 +252,26 @@ func TestFinishRecordFailureRollsBack(t *testing.T) {
 	err := Finish(context.Background(), st, m, req, wt)
 	require.Error(t, err)
 	assert.Len(t, m.cmds("worktree.delete_directory"), 3)
+}
+
+// Without the owner's checkout there is no repo to make a checkout from:
+// the row settles FAILED with the reason instead of staying CREATING, and no
+// command reaches the machine.
+func TestFinishWithoutTheOwnersCheckoutFailsTheRow(t *testing.T) {
+	st, m := &fakeStore{}, &fakeMachine{root: "/home/.reliant/worktrees/demo/feat-1234abcd"}
+	req := twoRepoReq()
+	req.Checkout = ""
+	wt, err := Insert(context.Background(), st, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Finish(context.Background(), st, m, req, wt); err == nil {
+		t.Fatal("Finish succeeded without a checkout")
+	}
+	if got := st.rows[wt.ID].Status; got != int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED) {
+		t.Fatalf("status = %d, want FAILED", got)
+	}
+	if n := len(m.cmds("worktree.create")); n != 0 {
+		t.Fatalf("%d worktree.create commands sent without a checkout", n)
+	}
 }

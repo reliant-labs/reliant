@@ -42,11 +42,11 @@ func (t *MetadataWriterTool) RequiresPermission(params MetadataWriterParams) (bo
 
 func (t *MetadataWriterTool) Execute(rctx *rctx.ToolContext, params MetadataWriterParams) (interface{}, error) {
 	// Require project path from context
-	if rctx.Project == nil || rctx.Project.Path == "" {
+	if rctx.Project == nil || rctx.Project.Checkout == "" {
 		return nil, fmt.Errorf("no project context available")
 	}
 
-	path := filepath.Join(rctx.Project.Path, ".reliant", "project-meta.yaml")
+	path := filepath.Join(rctx.Project.Checkout, ".reliant", "project-meta.yaml")
 
 	switch params.Action {
 	case "write":

@@ -11,30 +11,18 @@ Electron app releases are built and published by the [control-plane](https://git
 
 To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
 
-## Who cuts a release: the release train
+## Who cuts a release: rc-train
 
-**Nobody cuts reliant by hand.** The `release` workflow in control-plane
-(`.reliant/workflows/release-reliant.yaml`, on every merge to main: after 10 merges
-since the last tag, or at once for a PR labelled `release:asap`) does both steps
-below:
+**Nobody cuts reliant by hand.** control-plane's `rc-train` workflow
+(`.reliant/workflows/rc-train.yaml`) cuts a release candidate of forge, reliant and
+control-plane together when a main moved and 2h passed, or right after a PR labelled
+`release:asap` merges. It gates the candidate's exact commits, tags reliant's with
+`./scripts/release-tag.sh --commit <sha> --rc`, and promotes the set. Design and
+where to look: control-plane `docs/pr-pipeline.md`, "Release chain: rc-train".
 
-1. When main still declares a version that is already tagged, a script step
-   (`control-plane/scripts/release-chain/reliant-bump.sh`, no model) opens the bump
-   PR from a private clone of `origin/main`:
-   `task generate:docs:changelog:draft VERSION=vX.Y.Z SINCE_TAG=<last tag>` writes
-   `docs/data/releases/vX.Y.Z.yaml` from the PR titles merged since the last tag
-   (feat → Added, fix → Fixed, anything else → Changed, `!` or `BREAKING CHANGE:` →
-   Breaking changes), then `./scripts/release.sh patch`. The PR is labelled
-   `merge:queue` and `release:asap`. An open bump PR is never duplicated. Edit its
-   notes in the PR if you want better prose.
-2. When that bump has merged (its `release:asap` starts the next run), the release
-   captain tags the newest green-recorded main commit that contains it with
-   `./scripts/release-tag.sh --commit …` and verifies the published artifacts.
-
-**To get a change released sooner, label its PR `release:asap`.** There is no release
-lock: the tag push decides a race (the remote refuses a second push of the same tag).
-The commands below are what the train runs, documented for whoever
-fixes it or cuts by hand in a prod incident (and says so to the owner).
+**To get a change released sooner, label its PR `release:asap`.** The commands below
+are documented for whoever fixes the train, or cuts by hand in a prod incident (and
+says so to the owner).
 
 ## Quick Release Commands
 

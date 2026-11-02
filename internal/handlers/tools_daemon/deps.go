@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
@@ -38,7 +39,6 @@ type Repository interface {
 	// the staleness check needs, never the whole (large) record.
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
-	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
@@ -60,7 +60,15 @@ type Repository interface {
 // (user_id, remote_url) unique index.
 type ProjectReconcileStore interface {
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
+	// ListProjectDaemonsForDaemon is what the machine already has on record,
+	// which a creation-path probe never overrules.
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
+	// whose outcome was lost, from the row's own path; the first also
+	// settles one from the machine's filesystem announcement.
+	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
+	FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
 	projectfacts.ProjectUpdater

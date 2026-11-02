@@ -6,32 +6,93 @@ import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { exactCentsLabel, parseRational } from "@/lib/exact-rational";
 import Button from "@/components/forge-ui/button";
+import { formatSizeLabel } from "@/components/Settings/cloud/billingUtils";
+import { ConsentCheckbox } from "./ConsentCheckbox";
+import { friendlyCheckoutHolds } from "./holdReasons";
+import { formatPrice } from "./priceFormat";
+
+interface MachineSaleConsentProps {
+  planId: string;
+  children: (monthlyPriceCents?: number) => ReactNode;
+  /**
+   * The free way forward when machine checkout cannot proceed (pricing
+   * unreachable, held, or the organization unverified): onboarding passes
+   * "use your own computer instead". Without it the screen offers only a retry.
+   */
+  onUseOwnComputer?: () => void;
+}
 
 /** New paid checkout only. Existing subscriptions use separate next-period consent. */
-export function MachineSaleConsent({ planId, children }: { planId: string; children: (monthlyPriceCents?: number) => ReactNode }) {
+export function MachineSaleConsent({ planId, children, onUseOwnComputer }: MachineSaleConsentProps) {
   const org = useActiveOrg();
-  if (!org.active) return <p role="status">Machine checkout is unavailable until your organization is verified. Your own computer remains available.</p>;
-  return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)}>{children}</OrgMachineSale>;
+  if (!org.active) return <CheckoutUnavailable message="Cloud machines can be bought once your organization is verified." onUseOwnComputer={onUseOwnComputer} />;
+  return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)} onUseOwnComputer={onUseOwnComputer}>{children}</OrgMachineSale>;
 }
-function OrgMachineSale({ orgId, planId, canManage, children }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode }) {
+function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode; onUseOwnComputer?: () => void }) {
   const readiness = useQuery({ queryKey: ["machine-pricing-readiness", orgId, planId], queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }), retry: false, staleTime: 0 });
-  if (readiness.error) return <div role="alert"><p>Machine pricing is unavailable on this server. No new paid checkout is authorized.</p><Button variant="outline" onClick={() => void readiness.refetch()}>Check pricing</Button></div>;
-  if (readiness.isPending) return <p role="status">Verifying machine checkout terms…</p>;
+  const retry = () => void readiness.refetch();
+  if (readiness.error) return <CheckoutUnavailable role="alert" message="We couldn't load machine pricing just now." onRetry={retry} onUseOwnComputer={onUseOwnComputer} />;
+  if (readiness.isPending) return <p role="status" className="text-sm text-muted-foreground">Loading machine pricing…</p>;
   const terms = readiness.data;
   // A verified existing-period boundary is scoped to this org. The legacy
   // subscription read has no org_id and must not decide another org's phase.
-  if (terms?.effectivePeriodStart && terms.effectivePeriodStart.seconds > 0n) return <p role="status">This organization has an existing machine period. Proposed changes require the separate next-period terms acceptance in Billing; this is not a new-subscription checkout.</p>;
-  if (!terms) return <p>Machine pricing is unavailable.</p>;
-  return <NewSale key={`${terms.pricingVersion}:${terms.termsSha256}`} orgId={orgId} planId={planId} canManage={canManage} terms={terms}>{children}</NewSale>;
+  if (terms?.effectivePeriodStart && terms.effectivePeriodStart.seconds > 0n) return <ExistingPlanChange />;
+  if (!terms) return <CheckoutUnavailable message="Machine pricing is unavailable right now." onRetry={retry} onUseOwnComputer={onUseOwnComputer} />;
+  return <NewSale key={`${terms.pricingVersion}:${terms.termsSha256}`} orgId={orgId} planId={planId} canManage={canManage} terms={terms} onRetry={retry} onUseOwnComputer={onUseOwnComputer}>{children}</NewSale>;
 }
-function NewSale({ orgId, planId, canManage, terms, children }: { orgId: string; planId: string; canManage: boolean; terms: GetMachinePricingReadinessResponse; children: (monthlyPriceCents?: number) => ReactNode }) {
+
+/**
+ * SEAM — changing an existing machine plan.
+ *
+ * The readiness answer carries `effectivePeriodStart` for an organization that
+ * already has a machine subscription; this new-subscription checkout must not
+ * sell it a second one. The plan-change flow (an upgrade or next-period
+ * switch, and its backend) is owned separately and replaces this component.
+ * Until it lands this only says, plainly, that the switch isn't available here.
+ */
+function ExistingPlanChange() {
+  return <p role="status" className="text-sm text-muted-foreground">You already have a machine plan. Switching to a different plan isn't available here yet.</p>;
+}
+
+function CheckoutUnavailable({ message, role = "status", onRetry, onUseOwnComputer }: { message: string; role?: "status" | "alert"; onRetry?: () => void; onUseOwnComputer?: () => void }) {
+  return <div role={role} className="space-y-3">
+    {message && <p className="text-sm text-foreground">{message}</p>}
+    {(onUseOwnComputer || onRetry) && <div className="flex flex-wrap gap-2">
+      {onUseOwnComputer && <Button onClick={onUseOwnComputer}>Use your own computer instead (free)</Button>}
+      {onRetry && <Button variant="outline" onClick={onRetry}>Try again</Button>}
+    </div>}
+  </div>;
+}
+
+/** Every figure the summary and the consent state; any missing one means no sale. */
+function completeTerms(terms: GetMachinePricingReadinessResponse): boolean {
+  return !!terms.pricingVersion && !!terms.termsSha256 && !!terms.routeId && !!terms.size && terms.monthlyPriceCents > 0n && terms.monthlyPriceCents <= BigInt(Number.MAX_SAFE_INTEGER) && terms.includedOwnSizeHours > 0n && terms.includedDiskGib > 0n && (parseRational(terms.exactHourlyRateCents)?.numerator ?? 0n) > 0n && (parseRational(terms.exactCostWeight)?.numerator ?? 0n) > 0n;
+}
+
+function NewSale({ orgId, planId, canManage, terms, children, onRetry, onUseOwnComputer }: { orgId: string; planId: string; canManage: boolean; terms: GetMachinePricingReadinessResponse; children: (monthlyPriceCents?: number) => ReactNode; onRetry: () => void; onUseOwnComputer?: () => void }) {
   const [accepted, setAccepted] = useState(false);
-  const ready = terms.activationReady && terms.activationState === "ready_for_explicit_signup_checkout" && !terms.effectivePeriodStart && terms.holdReasons.length === 0 && !!terms.pricingVersion && !!terms.termsSha256 && !!terms.routeId && terms.monthlyPriceCents > 0n && terms.monthlyPriceCents <= BigInt(Number.MAX_SAFE_INTEGER) && terms.includedOwnSizeHours > 0n && terms.includedDiskGib > 0n && (parseRational(terms.exactHourlyRateCents)?.numerator ?? 0n) > 0n && (parseRational(terms.exactCostWeight)?.numerator ?? 0n) > 0n;
+  const complete = completeTerms(terms);
+  const holds = terms.holdReasons ?? [];
+  const ready = complete && terms.activationReady && terms.activationState === "ready_for_explicit_signup_checkout" && !terms.effectivePeriodStart && holds.length === 0;
+  // Never a sentence built from absent figures (": $0.00/month, 0 hours").
+  if (!complete && holds.length === 0) return <CheckoutUnavailable message="Machine pricing is unavailable right now." onRetry={onRetry} onUseOwnComputer={onUseOwnComputer} />;
+  if (!ready) return <div className="space-y-3">
+    <h3 className="text-sm font-semibold">Machine checkout is paused</h3>
+    <ul className="list-inside list-disc text-sm text-muted-foreground">{friendlyCheckoutHolds(holds).map(message => <li key={message}>{message}</li>)}</ul>
+    <CheckoutUnavailable message={onUseOwnComputer ? "You can still finish setup and run Reliant on your own computer." : ""} onRetry={onRetry} onUseOwnComputer={onUseOwnComputer} />
+  </div>;
+  const size = formatSizeLabel(terms.size);
+  const price = formatPrice(terms.monthlyPriceCents);
+  const hours = String(terms.includedOwnSizeHours);
+  const overage = exactCentsLabel(terms.exactHourlyRateCents);
   return <div className="space-y-3">
-    <h3 className="text-sm font-semibold">{ready ? "New machine subscription terms" : "Proposed machine subscription — held"}</h3>
-    <p>{terms.size}: {exactCentsLabel(String(terms.monthlyPriceCents))}/month, {String(terms.includedOwnSizeHours)} own-size hours, {String(terms.includedDiskGib)} GiB disk. Extra running time {exactCentsLabel(terms.exactHourlyRateCents)}/hour. App hosting and AI are separate.</p>
-    {!ready ? <div role="status"><p>New paid machine checkout is held. Proposed prices are not an approved live offer.</p><ul>{terms.holdReasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div> : !canManage ? <p>Only an organization owner or admin can accept machine purchase terms.</p> : <>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} />I accept version {terms.pricingVersion} at the displayed monthly and hourly prices for this new subscription. This is not next-period acceptance for an existing subscription.</label>
+    <h3 className="text-sm font-semibold">Your machine plan</h3>
+    <p className="text-sm" data-testid="machine-sale-summary">{size} machine · {price}/month · {hours} hours included · {String(terms.includedDiskGib)} GB disk · {overage}/hour after that</p>
+    <p className="text-xs text-muted-foreground">App hosting and AI credit are billed separately.</p>
+    {!canManage ? <p className="text-sm">Only an organization owner or admin can buy a machine plan.</p> : <>
+      <ConsentCheckbox checked={accepted} onChange={event => setAccepted(event.target.checked)}>
+        I agree to pay {price} a month for the {size} machine plan, which includes {hours} hours of running time each month. Extra running time is {overage} an hour. The plan renews monthly, and I can cancel anytime.
+      </ConsentCheckbox>
       {accepted && <MachineSaleContext.Provider value={{ orgId, planId, pricingVersion: terms.pricingVersion, termsSha256: terms.termsSha256 }}>{children(Number(terms.monthlyPriceCents))}</MachineSaleContext.Provider>}
     </>}
   </div>;

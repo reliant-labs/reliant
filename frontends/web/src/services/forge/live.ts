@@ -21,15 +21,18 @@
  * The only daemon-dependent surfaces are BUILD/DEPLOY, which need the user's
  * checkout, and a local env's Running tab.
  *
- * ── ONE CALL, NOT SIX ───────────────────────────────────────────────────────
+ * ── A ROSTER IN ONE CALL; DOCUMENTS PER ENVIRONMENT ─────────────────────────
  *
- * GetLiveView returns each environment with its declaration, current
- * promotion, release, bundle, latest apply and sessions together. That is
- * deliberate: the page cannot render until it has all of it, and N
- * environments × six reads is both a slow page and a page assembled from six
- * different instants. `declared_shape` lives on the environment row for the
- * same reason — so the default view of an env needs nothing but the control
- * plane.
+ * GetLiveView returns every environment's ROSTER ROW together: identity, the
+ * current promotion (release version, provenance, resolved digests), the
+ * bundle's identity, phase, drift, holds and tree-health counts. One round
+ * trip, so the list renders from one instant.
+ *
+ * It carries nothing that grows with an environment. The DECLARED SHAPE
+ * (workloads, secrets, alert rules — hundreds of KB for a real environment)
+ * is `getEnvironmentShape`, fetched by the page that shows ONE environment's
+ * secrets, workloads or alerts. When the shape rode on every row, a project's
+ * Live view was ~630 KB and every console page paid for it.
  *
  * ── PLAIN SHAPES, READ EXPLICITLY ───────────────────────────────────────────
  *
@@ -70,7 +73,7 @@
  *
  * ── WHAT IS DELIBERATELY NOT HERE ───────────────────────────────────────────
  *
- * `current_bundle` and `sessions` are not read. Per-object drift is not read
+ * `current_bundle_summary` and `sessions` are not read. Per-object drift is not read
  * either, because the control plane does not compute it: the baseline it was
  * measured against disappeared with the apply model, so the list is always
  * empty and rendering it would imply a capability the system does not have.
@@ -510,9 +513,10 @@ function objects(value: unknown): Record<string, unknown>[] {
 }
 
 /**
- * Decode `DeployEnvironment.declared_shape`. The Struct's content is the
- * canonical JSON of forge's `release.Shape`, so keys are snake_case — that is
- * what a Struct carries verbatim and what protojson accepts.
+ * Decode a declared shape (GetEnvironmentShape's `declared_shape`). The
+ * Struct's content is the canonical JSON of forge's `release.Shape`, so keys
+ * are snake_case — that is what a Struct carries verbatim and what protojson
+ * accepts.
  *
  * Returns null for an absent or empty shape, which is the NEVER-BUILT state
  * and a normal one. Null is never conflated with "declares nothing": an env
@@ -684,8 +688,12 @@ export interface LiveEnv {
   kind: LiveEnvKind;
   createdAt?: string;
 
-  /** The last render recorded for this env, or null if nothing ever recorded one. */
-  declaredShape: LiveShape | null;
+  /**
+   * Whether a render has been recorded for this env (its declared shape
+   * exists). The shape itself is `getEnvironmentShape(id)` — a document, not
+   * a roster field.
+   */
+  declared: boolean;
   /** Where that render came from. A claim (O-11). */
   declaredBy: LiveProvenance | null;
   declaredAt?: string;
@@ -734,12 +742,12 @@ export interface LiveEnv {
 
 /** Declared by a render, and nothing promoted to it yet. A normal state. */
 export function declaredNotBuilt(env: LiveEnv): boolean {
-  return env.release.trim() === "" && env.declaredShape !== null;
+  return env.release.trim() === "" && env.declared;
 }
 
 /** A row exists but nothing has ever recorded a render or a promotion. */
 export function neverBuilt(env: LiveEnv): boolean {
-  return env.release.trim() === "" && env.declaredShape === null;
+  return env.release.trim() === "" && !env.declared;
 }
 
 function toISO(ts: Timestamp | undefined): string | undefined {
@@ -760,17 +768,16 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
   if (!environment || environment.id === "" || environment.name === "") return null;
 
   const kind = kindOf(environment.kind);
-  const declaredShape = toLiveShape(environment.declaredShape);
+  const declaredAt = toISO(environment.declaredAt);
   const declaredBy = toProvenance(environment.declaredBy);
   const promotion = msg.currentPromotion;
-  const release = msg.currentRelease;
 
-  // The release's own provenance is the better source for "where the images
-  // came from" — it is the record the bytes were cut from. The promotion's
-  // copy is the fallback for a ledger row imported without one.
-  const releaseProvenance =
-    toProvenance(release?.provenance) ?? toProvenance(promotion?.releaseProvenance);
-  const releaseVersion = promotion?.releaseVersion ?? release?.version ?? "";
+  // Where the images came from: the release's provenance as the promotion
+  // carries it. The roster has no release message — the promotion names the
+  // release's version, provenance and resolved digests, and GetRelease has
+  // the rest.
+  const releaseProvenance = toProvenance(promotion?.releaseProvenance);
+  const releaseVersion = promotion?.releaseVersion ?? "";
 
   // THE ABSENT DRIFT MESSAGE IS THE COMMON CASE, and it is a state rather
   // than a gap. The control plane omits the field entirely when no pass has
@@ -796,9 +803,10 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
     kind,
     createdAt: toISO(environment.createdAt),
 
-    declaredShape,
+    // declared_at is set exactly when a declared shape exists.
+    declared: declaredAt !== undefined,
     declaredBy,
-    declaredAt: toISO(environment.declaredAt),
+    declaredAt,
 
     release: releaseVersion,
     releaseProvenance,
@@ -963,6 +971,21 @@ export async function getLiveView(project: string): Promise<LiveEnv[]> {
     .map(toLiveEnv)
     .filter((env): env is LiveEnv => env !== null && env.project === project)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * One environment's DECLARED SHAPE: what its last recorded render declares —
+ * workloads, secrets by name and provider, alert rules and routes, the
+ * observability policy. Null when nothing has declared it yet ("never
+ * built"), which is never the same as a shape that declares nothing.
+ *
+ * Its own call because it is a document, not a roster field: hundreds of KB
+ * for a real environment, read only by the pages that show one environment's
+ * secrets, workloads or alerts.
+ */
+export async function getEnvironmentShape(environmentId: string): Promise<LiveShape | null> {
+  const res = await getControlPlaneClient(DeployService).getEnvironmentShape({ environmentId });
+  return toLiveShape(res.declaredShape);
 }
 
 export function toLiveConvergence(msg: DeployConvergence): LiveConvergence {

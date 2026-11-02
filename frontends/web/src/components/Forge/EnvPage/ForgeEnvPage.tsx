@@ -52,6 +52,7 @@ import {
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { isAwakeMachine } from "@/lib/chatMachine";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
 import { daemonSideForTab, daemonSideOf, type ForgeProjectName } from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
@@ -118,6 +119,7 @@ export function ForgeEnvPage() {
   // daemon is "not asked yet", never "offline".
   const daemonAsked = daemonWanted || topology.data !== undefined || topology.error !== null;
   const daemon = daemonSideOf(topology.data, topology.error);
+  const checkoutMissing = projectCheckoutMissing(topology.error);
 
   // What a daemon TAB waits on. Topology is a whole forge run (~30s on a real
   // project); the registry knows a machine is up in milliseconds, so an awake
@@ -206,7 +208,9 @@ export function ForgeEnvPage() {
         ? "Checking your daemon…"
         : daemon === "disabled"
           ? FORGE_API_DISABLED_COPY
-          : "Needs your daemon: forge plans this against your checkout.";
+          : daemon === "no-checkout"
+            ? "Needs a checkout of this project on one of your machines: forge plans this against it."
+            : "Needs your daemon: forge plans this against your checkout.";
   const promoteReason =
     daemonReason ??
     (!daemonAsked
@@ -327,6 +331,8 @@ export function ForgeEnvPage() {
             liveLoading={live.isLoading}
             forgeEnv={forgeEnv}
             daemon={daemon}
+            checkoutMissing={checkoutMissing}
+            projectName={currentProject?.name}
             projectId={projectId}
             forgeProject={projectName.name}
             domains={domains.data}
@@ -359,6 +365,7 @@ export function ForgeEnvPage() {
             }}
             retrying={envStatus.isFetching}
             projectName={currentProject?.name}
+            checkoutMissing={checkoutMissing}
           />
         )}
       </div>

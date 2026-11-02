@@ -159,6 +159,7 @@ const cases: DefaultCase[] = [
     set: () => userEvent.selectOptions(defaultSelect(), "claude-sonnet-5"),
     expected: expect.objectContaining({ id: "claude-sonnet-5" }),
     shownInEditor: () => expect(defaultSelect()).toHaveValue("claude-sonnet-5"),
+    toolbar: "Sonnet 5",
   },
   {
     type: "object",

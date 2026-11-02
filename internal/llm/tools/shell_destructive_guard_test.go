@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -30,7 +29,7 @@ func runShellAgainst(t *testing.T, workingDir, command string) (*commandRecordin
 	tc := &rctx.ToolContext{
 		Context: context.Background(),
 		ChatID:  "chat-1",
-		Project: &db.Project{ID: "p", Path: workingDir},
+		Project: &rctx.Project{ID: "p", Checkout: workingDir},
 		Daemon:  d,
 	}
 	resp, err := (&shellTool{}).Execute(tc, ShellParams{Command: command})

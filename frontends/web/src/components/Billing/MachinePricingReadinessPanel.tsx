@@ -7,7 +7,7 @@ import { MachinePricingReadinessCard } from "./MachinePricingReadinessCard";
 /** Explicit org/plan/digest tuple, never whichever org is selected after consent. */
 export function MachinePricingReadinessPanel({ planId, currentPriceLabel }: { planId: string; currentPriceLabel?: string }) {
   const org = useActiveOrg();
-  return org.active ? <OrgMachineReadiness key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} currentPriceLabel={currentPriceLabel} canManage={org.active.role === "owner" || org.active.role === "admin"} /> : <p>Machine pricing readiness is unavailable until the organization can be verified.</p>;
+  return org.active ? <OrgMachineReadiness key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} currentPriceLabel={currentPriceLabel} canManage={org.active.role === "owner" || org.active.role === "admin"} /> : null;
 }
 function OrgMachineReadiness({ orgId, planId, canManage, currentPriceLabel }: { orgId: string; planId: string; canManage: boolean; currentPriceLabel?: string }) {
   const state = useQuery({
@@ -27,7 +27,9 @@ function OrgMachineReadiness({ orgId, planId, canManage, currentPriceLabel }: { 
     isSubmitting={accept.isPending}
     acceptanceState={accept.data?.activationState}
     acceptanceRecorded={accept.isSuccess}
-    error={state.error ? "Machine pricing readiness is unavailable on this server. No price change has been authorized." : accept.error ? "Acceptance could not be verified. Check readiness before trying again; no activation can be inferred." : undefined}
+    // A failed read renders nothing (the card needs terms to show at all); a
+    // failed confirmation says so, beside the terms it was for.
+    error={accept.error ? "We couldn't record your confirmation. Try again." : undefined}
     onRetry={() => { accept.reset(); void state.refetch(); }}
     onAccept={terms => { if (canManage && state.data?.activationReady && state.data.termsSha256 === terms.termsSha256) accept.mutate(terms); }}
   />;

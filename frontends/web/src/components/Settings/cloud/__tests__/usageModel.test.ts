@@ -358,6 +358,21 @@ describe("buildAttribution", () => {
     expect(attribution[0]?.cpuDisplay).toBe(5);
   });
 
+  it("attributes every billed hosting line: egress and extra static sites too", () => {
+    const attribution = buildAttribution([
+      // Internet egress is recorded in MiB; static-site egress in KiB; both are
+      // hourly flows, so ListUsage's unit-hours are the plain quantity.
+      usageRow({ deploymentId: "api", resourceKind: DeployResourceKind.EGRESS_MIB, quantity: 2048n }),
+      usageRow({ deploymentId: "api", resourceKind: DeployResourceKind.STATIC_EGRESS_KIB, quantity: 1024n * 1024n }),
+      usageRow({ deploymentId: "", environmentId: "", resourceKind: DeployResourceKind.STATIC_SITE, quantity: 730n, costUsdNanos: 5_000_000_000n }),
+    ]);
+    const api = attribution.find((r) => r.deploymentId === "api");
+    expect(api?.egressDisplay).toBe(3);
+    const sites = attribution.find((r) => r.deploymentId === "");
+    expect(sites?.staticSiteHours).toBe(730);
+    expect(sites?.accruedCents).toBe(500);
+  });
+
   it("keeps rows that name no deployment instead of dropping them", () => {
     // A row whose deployment was purged still records what it cost. Dropping
     // it makes this table disagree with the total above it.

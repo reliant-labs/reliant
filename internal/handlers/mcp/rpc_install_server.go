@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
 // InstallServer installs a new MCP server
@@ -30,7 +31,7 @@ func (s *Service) InstallServer(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -70,7 +71,7 @@ func (s *Service) InstallServer(
 	// Docker host env detection is handled daemon-side during tool execution.
 	// No server-side DOCKER_HOST probing needed.
 
-	if err := s.preflightMCPServer(ctx, name, internalConfig); err != nil {
+	if err := s.preflightMCPServer(ctx, checkout, name, internalConfig); err != nil {
 		logging.ErrorContext(ctx, "MCP server install failed",
 			"operation", "install",
 			"server", name,
@@ -90,12 +91,12 @@ func (s *Service) InstallServer(
 	mcpConfig.MCPServers[name] = convertToMCPServerConfig(internalConfig)
 
 	// Write updated config via daemon
-	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig); err != nil {
+	if err := s.writeMCPConfigViaDaemon(ctx, checkout, scope, mcpConfig); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
 	if scope == reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL {
-		s.ensureProjectLocalGitignore(ctx, projectID)
+		s.ensureProjectLocalGitignore(ctx, checkout)
 	}
 
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
@@ -104,7 +105,7 @@ func (s *Service) InstallServer(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
-	bundleSummary, bundleErr := s.installBundledSkillsForRecommended(ctx, projectPath, scope, recommendedEntry)
+	bundleSummary, bundleErr := s.installBundledSkillsForRecommended(ctx, checkout, scope, recommendedEntry)
 	if bundleErr != nil {
 		// Roll back MCP config update to avoid partial silent state.
 		if hadPreviousCfg {
@@ -112,7 +113,7 @@ func (s *Service) InstallServer(
 		} else {
 			delete(mcpConfig.MCPServers, name)
 		}
-		rollbackErr := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig)
+		rollbackErr := s.writeMCPConfigViaDaemon(ctx, checkout, scope, mcpConfig)
 		if rollbackErr != nil {
 			logging.ErrorContext(ctx, "Failed to rollback MCP config after skill bundle failure", "error", rollbackErr, "server", name)
 		}
@@ -150,7 +151,7 @@ func (s *Service) InstallServer(
 	defer cancel()
 
 	if internalConfig.Enabled {
-		if err := s.mcpManagerForUser(userID).AddProjectServer(startCtx, projectPath, name, internalConfig); err != nil {
+		if err := s.mcpManagerFor(userID, checkout).AddProjectServer(startCtx, checkout.Path, name, internalConfig); err != nil {
 			logging.ErrorContext(ctx, "MCP server install failed",
 				"operation", "install",
 				"server", name,
@@ -207,7 +208,7 @@ func installSkillBundleTargetDir(projectPath string, scope reliantv1.ConfigScope
 	}
 }
 
-func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projectPath string, scope reliantv1.ConfigScope, rec *config.RecommendedMCP) (string, error) {
+func (s *Service) installBundledSkillsForRecommended(ctx context.Context, checkout projectcheckout.Target, scope reliantv1.ConfigScope, rec *config.RecommendedMCP) (string, error) {
 	if rec == nil || rec.Bundles == nil || len(rec.Bundles.Skills) == 0 {
 		return "", nil
 	}
@@ -220,7 +221,7 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projec
 	totalInstalled := 0
 	totalSkipped := 0
 	for _, bundle := range rec.Bundles.Skills {
-		targetDir, err := installSkillBundleTargetDir(projectPath, scope, bundle.TargetScope)
+		targetDir, err := installSkillBundleTargetDir(checkout.Path, scope, bundle.TargetScope)
 		if err != nil {
 			return "", err
 		}
@@ -247,7 +248,7 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projec
 			return "", fmt.Errorf("failed to marshal bundle install request: %w", err)
 		}
 
-		respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.install_bundle", payload, 30000)
+		respBytes, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.install_bundle", payload, 30000)
 		if err != nil {
 			return "", fmt.Errorf("daemon bundle install failed: %w", err)
 		}
@@ -277,8 +278,10 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projec
 	return fmt.Sprintf("Installed %d bundled skill file(s)", totalInstalled), nil
 }
 
-// checkResourceExistsViaDaemon checks whether a file/path exists on the daemon's filesystem.
-func (s *Service) checkResourceExistsViaDaemon(ctx context.Context, path string) bool {
+// checkResourceExistsViaDaemon checks whether a file/path exists on the
+// filesystem of the machine holding the project's checkout — the one the
+// server will run on.
+func (s *Service) checkResourceExistsViaDaemon(ctx context.Context, checkout projectcheckout.Target, path string) bool {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || s.deps.Router == nil {
 		return false
@@ -288,7 +291,7 @@ func (s *Service) checkResourceExistsViaDaemon(ctx context.Context, path string)
 		Path string `json:"path"`
 	}{Path: path})
 
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.check_resource", payload, 5000)
+	respBytes, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.check_resource", payload, 5000)
 	if err != nil {
 		return false
 	}
@@ -302,7 +305,7 @@ func (s *Service) checkResourceExistsViaDaemon(ctx context.Context, path string)
 	return resp.Exists
 }
 
-func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg config.MCPServer) error {
+func (s *Service) preflightMCPServer(ctx context.Context, checkout projectcheckout.Target, name string, cfg config.MCPServer) error {
 	name = strings.ToLower(strings.TrimSpace(name))
 
 	if cfg.Type == "" {
@@ -384,7 +387,7 @@ func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg confi
 		if dbPath == "" {
 			return fmt.Errorf("missing required configuration value: SQLITE_DB_PATH")
 		}
-		if !s.checkResourceExistsViaDaemon(ctx, dbPath) {
+		if !s.checkResourceExistsViaDaemon(ctx, checkout, dbPath) {
 			return fmt.Errorf("SQLITE_DB_PATH does not exist: %s", dbPath)
 		}
 	}
@@ -393,7 +396,7 @@ func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg confi
 		host := strings.TrimSpace(envMap["DOCKER_HOST"])
 		if strings.HasPrefix(host, "unix://") {
 			socketPath := strings.TrimPrefix(host, "unix://")
-			if !s.checkResourceExistsViaDaemon(ctx, socketPath) {
+			if !s.checkResourceExistsViaDaemon(ctx, checkout, socketPath) {
 				return fmt.Errorf("docker socket not found at %s", socketPath)
 			}
 		}

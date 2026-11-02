@@ -743,6 +743,18 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 		logging.Debug("Background process completed", "id", process.ID)
 		eventType = "completed"
 	}
+	// Threads the kernel refused the command at a thread limit
+	// (internal/proctree), whatever its exit status: the note names the
+	// limit behind a child's "Resource temporarily unavailable".
+	if note := process.tree.LimitNote(); note != "" {
+		process.outputSeq++
+		process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{
+			Type:     "stderr",
+			Text:     note,
+			Sequence: process.outputSeq,
+		})
+		process.stderr.WriteString(note + "\n")
+	}
 
 	// Capture values before unlocking
 	event := ProcessEvent{

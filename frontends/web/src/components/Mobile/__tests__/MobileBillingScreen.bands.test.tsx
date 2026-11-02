@@ -34,7 +34,9 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
   useComputeSubscription: () => query(state.sub),
   useWalletOverview: () => query(state.wallet),
   useComputeUsage: () => query(state.usage),
-  usePlans: () => query({ plans: [] }),
+  // The price list's own weights turn weighted seconds into hours at the
+  // plan's size (L here), the one hour unit every screen speaks.
+  usePlans: () => query({ plans: [], daemonPricing: { pricingVersion: "test-version", sizes: [{ size: "m", costWeight: "1/2" }, { size: "l", costWeight: "1/1" }] } }),
   useCreateCheckoutSession: () => mutation(),
   useCreateWalletTopupSession: () => mutation(),
   isCheckoutIdentityRequired: () => false,
@@ -136,8 +138,9 @@ describe("the phone distinguishes the two products too", () => {
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
     expect(compute.getByText("Beta")).toBeInTheDocument();
-    expect(compute.getByText(/12\.0 weighted h/)).toBeInTheDocument();
-    expect(compute.getByText(/41\.0 weighted h included/)).toBeInTheDocument();
+    expect(compute.getByText(/^12 hours used$/)).toBeInTheDocument();
+    expect(compute.getByText(/^41 hours included$/)).toBeInTheDocument();
+    expect(compute.queryByText(/weighted|equivalent/i)).toBeNull();
     expect(compute.queryByText("$18.40")).toBeNull();
   });
 
@@ -208,7 +211,7 @@ describe("the phone distinguishes the two products too", () => {
     renderScreen();
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
-    expect(compute.queryByText(/0\.0 weighted h/i)).toBeNull();
+    expect(compute.queryByText(/^0 hours used$/i)).toBeNull();
     expect(compute.getByText(/usage unavailable/i)).toBeInTheDocument();
   });
 
@@ -228,7 +231,7 @@ describe("the phone distinguishes the two products too", () => {
     renderScreen();
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
-    expect(compute.getByText(/0\.0 weighted h/i)).toBeInTheDocument();
+    expect(compute.getByText(/^0 hours used$/i)).toBeInTheDocument();
     expect(compute.queryByText(/usage unavailable/i)).toBeNull();
   });
 

@@ -223,10 +223,10 @@ describe("states", () => {
     expect(screen.getByText("No releases yet")).toBeInTheDocument();
     const state = screen.getByTestId("releases-getting-started");
     expect(within(state).getByTestId("releases-getting-started-about")).toHaveTextContent("every build of");
-    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
-    expect(within(state).getByText("forge env deploy prod --from staging")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge env deploy prod --from staging")).toBeInTheDocument();
     // A local environment's missing releases are by design, and the page says so.
-    expect(state).toHaveTextContent("A local environment (forge env up) runs your working tree and never has releases");
+    expect(state).toHaveTextContent("A local environment (reliant forge env up) runs your working tree and never has releases");
     expect(within(state).getByTestId("releases-getting-started-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/environments-and-deploys");
   });
 

@@ -180,7 +180,7 @@ describe('machine detail — grow disk', () => {
     showMachine(machine())
     renderDetail()
 
-    expect(await screen.findByText('260 GB disk')).toBeInTheDocument()
+    expect((await screen.findAllByText('260 GB disk'))[0]).toBeInTheDocument()
     await waitFor(() => expect(mocks.getComputeEligibility).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /^grow$/i })).not.toBeInTheDocument()
   })

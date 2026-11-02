@@ -198,6 +198,52 @@ func TestForeignDaemonIDRecoveryRetriesAtMostOnce(t *testing.T) {
 	require.NotContains(t, message, "verify the pat")
 }
 
+// A saved id reserved for daemon-bound credentials — the instance once ran
+// with a daemon token, now with a login token — is this account's own
+// machine, but the login token may not connect as it. The daemon recovers the
+// same way: set the id aside (as "reserved", not "foreign") and register as a
+// new machine, rather than stopping or treating the refusal as a bad token.
+func TestReservedSavedDaemonIDIsSetAsideAndReRegistered(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, bootstrap.WriteDaemonID(dataDir, "cloud-machine"))
+
+	gw := &foreignIDGateway{foreignID: "cloud-machine", mintedID: "laptop", refusal: func() error {
+		return bootstrap.NewReservedDaemonIDError()
+	}}
+	client := newDaemonClientForInstance(t, dataDir, serveGateway(t, gw), "")
+
+	startDaemon(t, client)
+
+	waitForStream(t, dataDir, daemonstate.StreamConnected)
+	require.Equal(t, []string{"cloud-machine", ""}, gw.registrations(),
+		"refused once for the reserved id, then exactly one re-registration asserting no id")
+	require.Eventually(t, func() bool {
+		return bootstrap.ReadDaemonID(dataDir) == "laptop"
+	}, 5*time.Second, 20*time.Millisecond, "the gateway-minted id must become this instance's saved identity")
+
+	moved, err := filepath.Glob(filepath.Join(dataDir, bootstrap.DaemonIDFileName+".reserved-*"))
+	require.NoError(t, err)
+	require.Len(t, moved, 1, "the reserved id is moved aside, never deleted")
+	require.Empty(t, setAsideFiles(t, dataDir), "a reserved id is not another account's")
+}
+
+// A reserved id a launcher supplied explicitly is left in place, and the
+// daemon stops naming the reservation — never a credential problem.
+func TestReservedDaemonIDNotFromLocalFileStopsWithTheReason(t *testing.T) {
+	dataDir := t.TempDir()
+	gw := &foreignIDGateway{foreignID: "cloud-machine", refusal: func() error {
+		return bootstrap.NewReservedDaemonIDError()
+	}}
+	client := newDaemonClientForInstance(t, dataDir, serveGateway(t, gw), "cloud-machine")
+
+	runErr := runUntilDone(t, client)
+
+	require.True(t, bootstrap.IsReservedDaemonIDError(runErr), "the cause survives wrapping for the CLI to classify")
+	require.Equal(t, []string{"cloud-machine"}, gw.registrations())
+	require.Contains(t, runErr.Error(), "reserved for that machine's own daemon token")
+	require.NotContains(t, strings.ToLower(runErr.Error()), "token rejected")
+}
+
 // Only an id read from this instance's file is this daemon's to move. An id a
 // launcher supplied explicitly is left exactly where it was found.
 func TestForeignDaemonIDNotFromLocalFileIsLeftAlone(t *testing.T) {

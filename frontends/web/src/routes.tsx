@@ -95,6 +95,8 @@ const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
 const ObservabilityBillingPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityBillingPreview'), 'default')
+const TraceLatencyPreview = lazyRoute(
+  () => import('./components/Forge/Observability/traceScatter/__preview__/TraceLatencyPreview'), 'default')
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
@@ -567,6 +569,15 @@ const forgeObservabilityPreviewRoute = createRoute({
   component: () => <DevOnlyRoute>{new URLSearchParams(window.location.search).has('billingCase') ? <ObservabilityBillingPreview /> : <ObservabilityPreview />}</DevOnlyRoute>,
 })
 
+// The traces page's latency chart (scatter + histogram) in every state, on
+// seeded synthetic traces — a busy hour, the newest page of many, a brushed
+// region, loading, error, empty — in every scheme, no backend.
+const forgeTraceLatencyPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-trace-latency-preview',
+  component: () => <DevOnlyRoute><TraceLatencyPreview /></DevOnlyRoute>,
+})
+
 const consolePrimitivesPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-ui-preview',
@@ -931,6 +942,7 @@ const routeTree = rootRoute.addChildren([
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,
+  forgeTraceLatencyPreviewRoute,
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,

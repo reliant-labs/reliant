@@ -17,6 +17,7 @@ export const obsMocks = {
       width = 0;
       destroy() {}
       setSize() {}
+      setSeries() {}
     },
   }),
   /** Render every row: which rows a real virtualizer would choose is beside the point in jsdom. */

@@ -48,6 +48,7 @@ import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observa
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../../Console/envScope";
+import { DeployWithAgentButton } from "../AskReliant/AskReliant";
 import { formatAgo } from "../format";
 import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
@@ -93,6 +94,8 @@ export interface DashboardsListProps {
   navigateTo: (href: string) => void;
   /** Org mode: narrow to some apps. */
   appFilter?: DashboardsAppFilter;
+  /** The environment list could not be read: `environments` is empty for that reason, not because nothing is deployed. */
+  environmentsUnread?: boolean;
 }
 
 function requireProject(project: string | undefined): string {
@@ -102,7 +105,7 @@ function requireProject(project: string | undefined): string {
 
 const NO_FILTERS: Partial<DashboardsSearch> = { q: undefined, group: undefined, source: undefined, owner: undefined };
 
-export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter }: DashboardsListProps) {
+export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter, environmentsUnread }: DashboardsListProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const orgWide = project === undefined;
@@ -318,14 +321,15 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
         icon={<LayoutDashboard className="h-4 w-4" />}
         title="No dashboards yet"
         about={OBS_TOPICS.dashboards.about}
+        agent={<DeployWithAgentButton env={env === ENV_ALL ? null : env} />}
         steps={[
           {
             text: "Deploy a release. Forge generates a dashboard for every service and frontend, and they appear here with it.",
-            command: `forge env deploy ${env === ENV_ALL ? "<env>" : env}`,
+            command: `reliant forge env deploy ${env === ENV_ALL ? "<env>" : env}`,
           },
           {
             text: "Keep one in your repository: add a panel to a dashboard under deploy/observability/dashboards, and it ships with the next release.",
-            command: "forge obs dashboards add-panel <slug> --panel <panel.json>",
+            command: "reliant forge obs dashboards add-panel <slug> --panel <panel.json>",
           },
           // The org-wide list has no app to start one in: that is each app's own Dashboards page.
           { text: orgWide ? "Or open an app and start one there, from a template or blank." : "Or start one here, from a template or blank, below." },
@@ -411,6 +415,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               project={project!}
               env={env}
               environments={environments}
+              environmentsUnread={environmentsUnread}
               dashboards={all}
               hrefs={{ ...hub, dashboard: hrefs.dashboard }}
               onOpenGroup={openGroup}

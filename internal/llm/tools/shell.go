@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // ShellParams defines the parameters for the unified shell tool.
@@ -183,10 +184,9 @@ const (
 	MaxShellTimeout = 10 * time.Minute
 	// MaxRunStepTimeout caps a workflow `run` node's command
 	// (rctx.ToolContext.RunStep), which is bounded by the node's declared
-	// timeout instead of MaxShellTimeout: release cuts, full gates, builds
-	// and deploys run for hours. It is still a cap — a typo'd `timeout:`
-	// must not pin a machine's command, and the lane it holds, for days.
-	MaxRunStepTimeout    = 12 * time.Hour
+	// timeout instead of MaxShellTimeout. Workflow validation refuses a
+	// literal timeout: above it at load, so the two must be one value.
+	MaxRunStepTimeout    = model.MaxRunStepTimeout
 	MaxShellOutputLength = 16000
 )
 

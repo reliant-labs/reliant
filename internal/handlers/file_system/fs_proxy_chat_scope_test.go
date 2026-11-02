@@ -62,3 +62,38 @@ func TestFileSystemProxy_ChatOnlyScopeReadsTheChatsWorkspaceOnItsMachine(t *test
 
 	assert.Equal(t, []string{machineA + " fs.get_tree"}, router.sent, "the workspace's machine, not the chat's stale pin")
 }
+
+// shiftingDefaultRouter resolves default resolution to one machine when asked
+// by id and delivers an unpinned command to another: a machine connected in
+// between. Every pinned command is recorded with its machine.
+type shiftingDefaultRouter struct {
+	machineRecordingRouter
+	resolves, delivers string
+}
+
+func (r *shiftingDefaultRouter) SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommandToDaemon(ctx, userID, r.delivers, commandType, payload, timeoutMs)
+}
+
+func (r *shiftingDefaultRouter) ResolveDaemonID(context.Context, string) (string, error) {
+	return r.resolves, nil
+}
+
+// A request left to default resolution is resolved on one machine and must
+// run on THAT machine: its path is that machine's. Sent unpinned, a second
+// resolution could land it — a delete included — on a machine that connected
+// in between, with the first machine's path.
+func TestFileSystemProxy_DefaultResolutionIsPinnedToTheMachineThePathCameFrom(t *testing.T) {
+	repo, projectID, _ := seedFSProxyProject(t)
+	ctx := fsProxyContext()
+	resolved, other := "resolved-"+uuid.NewString(), "other-"+uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: resolved, UserID: fsProxyTestUser}))
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, resolved, "/srv/resolved/p", nil))
+
+	router := &shiftingDefaultRouter{resolves: resolved, delivers: other}
+	svc := newProxy(t, router, repo)
+	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{resolved + " fs.get_tree"}, router.sent, "pinned to the machine whose path the request carries")
+}

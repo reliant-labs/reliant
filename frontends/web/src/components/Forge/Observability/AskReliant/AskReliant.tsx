@@ -26,7 +26,7 @@
 
 import { useCallback, useContext, useId, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { ChevronDown, Loader2, MessageSquarePlus, MessageSquareText, Wrench } from "lucide-react";
+import { ChevronDown, Loader2, MessageSquarePlus, MessageSquareText, Rocket, Wrench } from "lucide-react";
 
 import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
@@ -38,7 +38,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { ForgeConsoleContext } from "../../Console/consoleContext";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "../Dashboards/parts";
 import { useObsAskContext } from "./askReliantContext";
-import { askWorkspaceName, buildAskReliantPrompt, type AskIntent, type AskSubject } from "./askReliantPrompt";
+import { askWorkspaceName, buildAskReliantPrompt, type AskEnv, type AskIntent, type AskSubject } from "./askReliantPrompt";
 import { resolveAskProject, type AskProjectResolution } from "./askReliantProject";
 import { startAskReliantChat } from "./startAskReliantChat";
 
@@ -285,6 +285,33 @@ export function AskReliantButton({
           {label}
         </Button>
       )}
+      {dialog}
+    </>
+  );
+}
+
+/**
+ * "Deploy with an agent": the console's empty states lead with this, as /apps
+ * leads with "Build an app". It opens a new chat on its own workspace with the
+ * deploy written up (askReliantPrompt `deploy`: `reliant forge env deploy`,
+ * then `obs check`), waiting for the reader to send it; the command itself
+ * stays on the page beside it for anyone who would rather run it.
+ */
+export function DeployWithAgentButton({ env, forgeProject, envChoices }: AskReliantOptions & { env: AskEnv }) {
+  const { ask, busy, dialog } = useAskReliant({ forgeProject, envChoices });
+  return (
+    <>
+      <Button
+        variant="primary"
+        size="md"
+        leftIcon={<Rocket className="h-4 w-4" />}
+        onClick={() => void ask({ kind: "deploy", env })}
+        loading={busy}
+        title={`Open a new chat with the deploy${env ? ` to ${env}` : ""} written up for an agent. Nothing runs until you send it.`}
+        data-testid="deploy-with-agent"
+      >
+        Deploy with an agent
+      </Button>
       {dialog}
     </>
   );

@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
@@ -199,16 +200,26 @@ func (s *Service) SaveWorkflow(
 		if !isValid {
 			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
 		}
-		// Validate that the source path is within the project's .reliant/workflows directory
 		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
-		if project == nil || project.Path == "" {
-			return nil, svcerr.FailedPrecondition("project not found or has no path")
+		if project == nil {
+			return nil, svcerr.FailedPrecondition("project not found")
+		}
+		if s.deps.Router == nil {
+			return nil, svcerr.Unavailable("no daemon router: this server cannot write to the project's machine")
+		}
+		userID := auth.MustGetUserID(ctx)
+		// The file is written on the machine holding the project's checkout,
+		// so it is confined to THAT checkout's .reliant/workflows — never to
+		// projects.path, the creating machine's path.
+		checkout, err := projectcheckout.Resolve(ctx, s.deps.Repo, s.deps.Router, userID, project, "save a workflow into it")
+		if err != nil {
+			return nil, err
 		}
 
-		workflowsDir := filepath.Join(project.Path, ".reliant", "workflows")
+		workflowsDir := checkout.Join(filepath.Join(".reliant", "workflows"))
 		absSourcePath, err := filepath.Abs(sourcePath)
 		if err != nil {
 			return nil, svcerr.InvalidArgument("invalid source path: " + err.Error())
@@ -224,15 +235,11 @@ func (s *Service) SaveWorkflow(
 		}
 
 		// Write the YAML to the file via daemon
-		if s.deps.Router == nil {
-			return nil, svcerr.Unavailable("no daemon router: this server cannot write to the project's machine")
-		}
-		userID := auth.MustGetUserID(ctx)
 		writePayload, _ := json.Marshal(map[string]interface{}{
 			"path":    sourcePath,
 			"content": string(definitionYAML),
 		})
-		if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
+		if _, err := checkout.Send(ctx, s.deps.Router, userID, "fs.write_file", writePayload, 15000); err != nil {
 			return nil, daemonerr.Error("write the workflow file", err)
 		}
 
