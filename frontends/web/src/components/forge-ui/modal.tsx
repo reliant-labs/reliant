@@ -1,6 +1,5 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { dialogOpener } from "../../lib/dialogOpener";
 
 /**
  * Modal — a dialog over the page: header (title, description, header
@@ -11,15 +10,20 @@ import { dialogOpener } from "../../lib/dialogOpener";
  *   - Focus moves in on open — to an element that took `autoFocus`, else the
  *     body's first focusable, else the footer's, else the panel. Never the
  *     close button: Enter on a dialog that just opened must not dismiss it.
- *   - Tab and Shift+Tab cycle inside the dialog.
+ *   - Tab and Shift+Tab cycle inside the dialog. The trap moves focus on every
+ *     Tab, because Safari's default Tab order skips links and would carry focus
+ *     out past a trailing one. It stands aside for a Tab something inside
+ *     already handled (preventDefault) and for a non-forge dialog stacked above.
  *   - Escape closes it, unless something inside already handled the key (an
  *     open menu calls preventDefault). Only the TOP dialog responds when
  *     dialogs stack; the one underneath keeps its focus trap off until the
  *     top one closes.
- *   - Closing returns focus to the control that opened it, or else to whatever
- *     had focus before the dialog opened (`dialogOpener`). If that element is
- *     gone (the menu item that opened the dialog unmounted),
- *     `fallbackFocus` decides where focus goes instead.
+ *   - Closing returns focus to the control the user activated to open it,
+ *     else to whatever had focus before the dialog opened (Safari never
+ *     focuses a button on click, so focus alone would name <body> or the field
+ *     the user was typing in). If that element is gone (the menu item that
+ *     opened the dialog unmounted), `fallbackFocus` decides where focus goes
+ *     instead.
  *   - The page behind does not scroll. The lock is counted, so a nested
  *     dialog closing does not unlock the page under the one still open.
  *   - It portals to <body>, so a transformed or `overflow: hidden` ancestor
@@ -73,6 +77,45 @@ const sizeStyles: Record<NonNullable<ModalProps["size"]>, string> = {
 // rendered by unrelated components.
 const openStack: symbol[] = [];
 const isTop = (id: symbol) => openStack[openStack.length - 1] === id;
+
+// The control the user activated in the current task. Safari (macOS and iOS)
+// never focuses a button on click or tap, so document.activeElement cannot be
+// trusted to name the opener. The click is recorded in the capture phase,
+// ahead of whatever handler opens the dialog, and forgotten after the task:
+// a later programmatic open must not inherit a stale control.
+const ACTIVATABLE =
+  'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
+let activated: HTMLElement | null = null;
+let clearScheduled = false;
+let trackedDocument: Document | null = null;
+
+function trackActivation() {
+  if (typeof document === "undefined" || trackedDocument === document) return;
+  trackedDocument = document;
+  document.addEventListener(
+    "click",
+    (e) => {
+      activated = e.target instanceof Element ? e.target.closest<HTMLElement>(ACTIVATABLE) : null;
+      if (clearScheduled) return;
+      clearScheduled = true;
+      setTimeout(() => {
+        activated = null;
+        clearScheduled = false;
+      }, 0);
+    },
+    true,
+  );
+}
+trackActivation();
+
+function findOpener(): HTMLElement | null {
+  if (activated?.isConnected) return activated;
+  // <body> is not an opener: focus falls back to it when the focused
+  // element unmounts in the same render that opens the dialog (a menu
+  // item that closes its menu), so treat it as "the opener is gone".
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body ? active : null;
+}
 
 // The body scroll lock, counted across stacked dialogs.
 let lockCount = 0;
@@ -169,12 +212,13 @@ export default function Modal({
   });
 
   useEffect(() => {
+    trackActivation();
     if (!open) return;
     const id = Symbol("modal");
     openStack.push(id);
     lockScroll();
 
-    const previouslyFocused = dialogOpener();
+    const previouslyFocused = findOpener();
     const panel = panelRef.current;
     if (panel && !panel.contains(document.activeElement)) {
       const initial =
@@ -194,27 +238,25 @@ export default function Modal({
       }
       // A control that uses Tab itself (an editor indenting) already said so.
       if (e.key !== "Tab" || e.defaultPrevented) return;
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
-      if (focusable.length === 0) {
-        e.preventDefault();
-        panelRef.current.focus();
-        return;
-      }
       const active = document.activeElement;
       // A dialog stacked above this one that is not a forge Modal (an image
       // viewer, a command palette) owns its own Tab order.
       const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
       if (owner && owner !== panelRef.current) return;
-      // The trap moves focus on every Tab rather than only wrapping at the
-      // ends: Safari's default Tab order skips links, so letting the browser
-      // advance would carry focus past a trailing link and out of the dialog.
       e.preventDefault();
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      if (focusable.length === 0) {
+        panelRef.current.focus();
+        return;
+      }
       const index = focusable.indexOf(active as HTMLElement);
       const next =
         index === -1
-          ? e.shiftKey ? focusable.length - 1 : 0
+          ? e.shiftKey
+            ? focusable.length - 1
+            : 0
           : (index + (e.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
       focusable[next]!.focus();
     }
