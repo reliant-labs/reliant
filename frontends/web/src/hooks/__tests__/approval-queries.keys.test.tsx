@@ -145,7 +145,7 @@ describe("ApprovalService keys", () => {
 
     server = server.map((a) => ({ ...a, status: ApprovalStatus.CANCELLED }));
     notPending = true;
-    await approveAllPendingApprovals("c1"); // resolves: not an error to surface raw
+    await approveAllPendingApprovals("c1", ["a1", "a2"]); // resolves: not an error to surface raw
 
     await waitFor(() => expect(pending.result.current.data?.approvals).toEqual([]));
   });
@@ -154,10 +154,21 @@ describe("ApprovalService keys", () => {
     const pending = renderHook(() => usePendingApprovals("c1"), { wrapper });
     await waitFor(() => expect(pending.result.current.data?.approvals).toHaveLength(2));
 
-    await approveAllPendingApprovals("c1");
+    await approveAllPendingApprovals("c1", ["a1", "a2"]);
 
     await waitFor(() => expect(listCalls).toBe(2));
     expect(pending.result.current.data?.approvals).toEqual([]);
+  });
+
+  it("the keyboard shortcut approves only what its confirmation showed", async () => {
+    const pending = renderHook(() => usePendingApprovals("c1"), { wrapper });
+    await waitFor(() => expect(pending.result.current.data?.approvals).toHaveLength(2));
+
+    // a2 arrived after the confirmation opened on a1: it was never shown.
+    await approveAllPendingApprovals("c1", ["a1"]);
+
+    await waitFor(() => expect(listCalls).toBe(2));
+    expect(pending.result.current.data?.approvals.map((a) => a.id)).toEqual(["a2"]);
   });
 
   it("approvalServiceKeys.all reaches the chat's list", async () => {

@@ -152,8 +152,31 @@ export interface MetricsExplorerHrefs {
   dashboard: (ref: DashboardRef) => string;
 }
 
+/**
+ * The org place (Observability › Metrics, org-wide): every app's metrics, with
+ * the app and environment pickers the other org views have. What writes into
+ * an app (Save to dashboard, Alert from this, Copy CLI) needs that app, so the
+ * org explorer reads and links only.
+ */
+export interface MetricsExplorerOrg {
+  apps: string[];
+  selectedApps: string[];
+  onAppsChange: (names: string[]) => void;
+  /** The picker's environments: those of the selected apps (named `app/env`). */
+  pickerEnvironments: ObsEnvironment[];
+  selectedEnvs: string[];
+  onEnvsChange: (names: string[]) => void;
+  /** The ids to read (obsPlace.envIdsOf). Empty: the whole org. */
+  envIds: string[];
+  /** Apps are picked but own no environment: nothing to read. */
+  empty: boolean;
+}
+
 export interface MetricsExplorerProps {
-  project: string;
+  /** The forge project the query is narrowed to. Absent: every app (org-wide). */
+  project?: string;
+  /** Set on the org page; the explorer then reads and links only. */
+  org?: MetricsExplorerOrg;
   /** The console scope: an environment name or "all". */
   env: string;
   /** The project's recorded environments (id ↔ name). */
@@ -201,7 +224,7 @@ function runnable(panel: Panel): boolean {
 
 const COMPARE_OPTIONS: { value: CompareMode; label: string }[] = (["off", "period", "release"] as const).map((value) => ({ value, label: COMPARE_LABELS[value] }));
 
-export function MetricsExplorer({ project, env, environments, search, onSearch, hrefs }: MetricsExplorerProps) {
+export function MetricsExplorer({ project, org: orgPlace, env, environments, search, onSearch, hrefs }: MetricsExplorerProps) {
   const queryClient = useQueryClient();
   const org = useObservabilityOrg();
   const orgId = org.orgId;
@@ -234,11 +257,16 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
   const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = env !== ENV_ALL && !envId;
   const scopeFilters = useMemo(() => scopeFiltersOf(filterTokens), [filterTokens]);
-  const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: scopeFilters } : null),
-    [orgId, project, envId, unrecorded, scopeFilters]
+  const envIdsKey = orgPlace ? orgPlace.envIds.join(",") : (envId ?? "");
+  const barScope = useMemo<ObsScope | null>(
+    () => (orgId && !unrecorded ? { orgId, projectId: project, envIds: envIdsKey ? envIdsKey.split(",") : [], filters: scopeFilters } : null),
+    [orgId, project, envIdsKey, unrecorded, scopeFilters]
   );
-  const subject = env === ENV_ALL ? project : env;
+  // Picked apps with no environment: an empty id list would read the whole org, so nothing is read.
+  const scope = orgPlace?.empty ? null : barScope;
+  const subject = env !== ENV_ALL ? env : (project ?? (orgPlace?.selectedApps.length ? orgPlace.selectedApps.join(", ") : "All apps"));
+  // Saving, alerting and the CLI write into one app's console: the org explorer reads and links.
+  const writable = !!project && !orgPlace;
 
   // ── Catalog and detail ──
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -295,7 +323,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
   const closeExemplars = useCallback(() => setExemplarAt(null), []);
 
   // ── Save, alert, copy ──
-  const index = useDashboardIndex(orgId, project, envId ?? undefined);
+  const index = useDashboardIndex(writable ? orgId : null, project, envId ?? undefined);
   const [alertOpen, setAlertOpen] = useState(false);
   const [copied, setCopied] = useState<"cli" | "link" | null>(null);
   const later = useUnmountSafeTimeout();
@@ -343,12 +371,16 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="metrics-toolbar">
       {main.data && <ObsAsOf updatedAt={main.dataUpdatedAt} />}
-      {scope && (
+      {barScope && (
         <ObsScopeBar
-          scope={scope}
+          scope={barScope}
           range={range}
-          selectedEnvs={[]}
-          onEnvsChange={() => undefined}
+          environments={orgPlace?.pickerEnvironments}
+          apps={orgPlace?.apps}
+          selectedApps={orgPlace?.selectedApps}
+          onAppsChange={orgPlace?.onAppsChange}
+          selectedEnvs={orgPlace?.selectedEnvs ?? []}
+          onEnvsChange={orgPlace?.onEnvsChange ?? (() => undefined)}
           filters={filterTokens}
           onFiltersChange={(tokens: FilterToken[]) => onSearch({ f: filterParam(tokens) })}
           groupBy={[]}
@@ -388,6 +420,16 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
     </div>
   );
 
+  if (orgPlace?.empty) {
+    return (
+      <div className="space-y-4" data-testid="metrics-explorer">
+        {toolbar}
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" role="status" data-testid="metrics-org-no-envs">
+          {subject} {orgPlace.selectedApps.length === 1 ? "has" : "have"} no environment yet, so there are no metrics to read. Pick another app.
+        </p>
+      </div>
+    );
+  }
   if (catalogError) {
     return (
       <div className="space-y-4" data-testid="metrics-explorer">
@@ -413,7 +455,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
 
   const unit = chartUnitOf(main.data?.seriesMeta ?? []);
   const lines = main.data && queryPanel.kind === "line" ? displaySeries(queryPanel, main.data) : null;
-  const cli = env === ENV_ALL ? null : cliCommand(env, state, range);
+  const cli = env === ENV_ALL || !writable ? null : cliCommand(env, state, range);
   const compare = comparing ? { query: compareQuery, label: target.label, offsetSec: Math.round(target.offsetMs / 1000) } : undefined;
 
   return (
@@ -536,6 +578,8 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3" data-testid="metrics-actions">
+                {project && writable && (
+                <>
                 <SaveToDashboard
                   orgId={orgId}
                   project={project}
@@ -566,6 +610,13 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
                 >
                   {copied === "cli" ? "Copied" : "Copy CLI"}
                 </ActionButton>
+                </>
+                )}
+                {!writable && (
+                  <span className="text-xs text-ink-muted" data-testid="metrics-org-readonly">
+                    To save this to a dashboard or alert on it, open Metrics in an app.
+                  </span>
+                )}
                 <ActionButton
                   icon={copied === "link" ? <Check className="h-3 w-3" aria-hidden="true" /> : <Link2 className="h-3 w-3" aria-hidden="true" />}
                   onClick={() => copy("link", window.location.href)}

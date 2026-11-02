@@ -31,7 +31,9 @@ import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
 import { HomeNewChat } from "./components/Apps/HomeNewChat";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
-import { approveAllPendingApprovals, countPendingApprovals } from "./hooks/approval-queries";
+import { approveAllPendingApprovals, pendingApprovalBatch, type Approval } from "./hooks/approval-queries";
+import type { ApprovalBatchPlan } from "./lib/approvalCard";
+import { ApprovalBatchConfirm } from "./components/Chat/ApprovalBatchConfirm";
 import { ESCAPE_STOP_WINDOW_MS, escapeStopDecision, isTypingIn } from "./lib/escapeToStop";
 import ConfirmationDialog from "./components/forge-ui/confirmation_dialog";
 import { useChatListWithWorkspaces, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
@@ -203,7 +205,9 @@ function App() {
   const headerRef = useRef<HeaderRef>(null);
   // Cmd+Enter approves every pending tool call; it asks first, naming how
   // many, since a chord is easy to press by accident.
-  const [approveAllPrompt, setApproveAllPrompt] = useState<{ chatId: string; count: number } | null>(null);
+  // What ⌘↵ asked to approve, as shown: the confirmation approves exactly
+  // these, never what is pending by the time it is confirmed.
+  const [approveAllPrompt, setApproveAllPrompt] = useState<{ chatId: string; plan: ApprovalBatchPlan<Approval> } | null>(null);
   // When an Escape typed in a field armed the stop (lib/escapeToStop).
   const escapeArmedAt = useRef<number | null>(null);
 
@@ -525,8 +529,8 @@ function App() {
         // Approvals are server data in the React Query cache; the helper reads
         // pending straight from the cache and batch-approves optimistically.
         if (activeChatId) {
-          const count = countPendingApprovals(activeChatId);
-          if (count > 0) setApproveAllPrompt({ chatId: activeChatId, count });
+          const plan = pendingApprovalBatch(activeChatId);
+          if (plan.together.length > 0) setApproveAllPrompt({ chatId: activeChatId, plan });
         }
       },
       onToggleTerminal: () => {
@@ -1767,22 +1771,34 @@ function App() {
       </div>
 
       {/* Git Initialization Modal */}
+      {/* A batch that grants an automation standing power shows each card's
+          grant summary before it is approved; a routine one, its count. */}
+      <ApprovalBatchConfirm
+        plan={approveAllPrompt && approveAllPrompt.plan.grants.length > 0 ? approveAllPrompt.plan : null}
+        onCancel={() => setApproveAllPrompt(null)}
+        onConfirm={(plan) => {
+          const prompt = approveAllPrompt;
+          setApproveAllPrompt(null);
+          if (!prompt) return;
+          approveAllPendingApprovals(prompt.chatId, plan.together.map((a) => a.id)).catch((error) => void toast.error(error));
+        }}
+      />
       <ConfirmationDialog
-        open={approveAllPrompt !== null}
+        open={approveAllPrompt !== null && approveAllPrompt.plan.grants.length === 0}
         title={
-          approveAllPrompt?.count === 1
+          approveAllPrompt?.plan.together.length === 1
             ? "Approve the waiting tool call?"
-            : `Approve all ${approveAllPrompt?.count ?? 0} waiting tool calls?`
+            : `Approve all ${approveAllPrompt?.plan.together.length ?? 0} waiting tool calls?`
         }
         description="Each one runs as soon as you approve. Review them in the chat first if you're not sure what they do."
-        confirmLabel={approveAllPrompt?.count === 1 ? "Approve" : `Approve ${approveAllPrompt?.count ?? 0}`}
+        confirmLabel={approveAllPrompt?.plan.together.length === 1 ? "Approve" : `Approve ${approveAllPrompt?.plan.together.length ?? 0}`}
         variant="warning"
         onConfirm={() => {
           const prompt = approveAllPrompt;
           setApproveAllPrompt(null);
           if (!prompt) return;
           logger.info("✅ Approving all tool requests for:", prompt.chatId);
-          approveAllPendingApprovals(prompt.chatId).catch((error) => void toast.error(error));
+          approveAllPendingApprovals(prompt.chatId, prompt.plan.together.map((a) => a.id)).catch((error) => void toast.error(error));
         }}
         onCancel={() => setApproveAllPrompt(null)}
       />

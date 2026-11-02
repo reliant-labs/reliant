@@ -24,6 +24,11 @@ export default {
           // (primaryInkContrast.test.ts). `text-primary` is not used.
           ink: "hsl(var(--primary-ink) / <alpha-value>)",
         },
+        // The brand's label hue (`text-brand-violet`): eyebrows only, never
+        // interactive. Blue is --primary / --primary-ink / --ring.
+        brand: {
+          violet: "hsl(var(--brand-violet) / <alpha-value>)",
+        },
         secondary: {
           DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
           foreground: "hsl(var(--secondary-foreground) / <alpha-value>)",

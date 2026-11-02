@@ -315,16 +315,23 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval snapshot size limit exceeded")
 	}
 	safe, _ := automationpolicy.SafeJSON(row)
-	connectionIdentity := "default/delegated at runtime (dynamic identity)"
-	if c, ok := closure.Connection.(*core.Connection); ok && c != nil {
-		connectionIdentity = fmt.Sprintf("id %s; integration %s; account %s", discloseScope(c.ID), discloseScope(c.IntegrationID), discloseScope(func() string {
-			if c.ExternalAccountID != nil {
-				return *c.ExternalAccountID
-			}
-			return "unknown"
-		}()))
+	connection, _ := closure.Connection.(*core.Connection)
+	workflowTitle := wf.GetTitle()
+	if strings.TrimSpace(workflowTitle) == "" {
+		workflowTitle = def.Workflow
 	}
-	title := fmt.Sprintf("%s\nApproval: %s\nMachine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", approvalHeadline(operation, row), decision.Reason, machineName, row.DaemonID, operation, user, row.ActingIdentity.OrOwner(), connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
+	title := activationCard{
+		Operation:    operation,
+		Workflow:     workflowTitle,
+		Reason:       decision.Reason,
+		Row:          row,
+		Inputs:       closure.EffectiveInputs,
+		Connection:   connection,
+		MachineName:  machineName,
+		Capabilities: next.Sorted(),
+		Summary:      closure.Summary,
+		SafeRow:      safe,
+	}.String()
 	if len(title) > automationpolicy.MaxDisplayBytes {
 		return nil, tools.ActivationPreview{}, none, refusedPrecondition("Activation approval display size limit exceeded")
 	}
@@ -334,21 +341,6 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 		revision = existing.UpdatedAt
 	}
 	return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: revision}, decision, nil
-}
-
-// approvalHeadline is a card's first line: which change, to which
-// activation, from the same allowlist as SafeDefinition (the activation's name
-// is withheld). It is the line the Inbox shows, so several cards one turn
-// raised together read apart without opening them.
-func approvalHeadline(operation string, row *core.Trigger) string {
-	headline := operation + " " + row.Workflow
-	if row.WorkflowTrigger != nil && *row.WorkflowTrigger != "" {
-		headline += " · " + *row.WorkflowTrigger
-	}
-	if row.ID != "" {
-		headline += " (id " + row.ID + ")"
-	}
-	return headline
 }
 
 // ManageActivation always revalidates the preview before calling the app RPC.

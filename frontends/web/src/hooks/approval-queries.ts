@@ -25,6 +25,7 @@ import {
   type Approval,
   type ListApprovalsByChatResponse,
 } from "../gen/reliant/v1/approval_pb";
+import { planApprovalBatch, type ApprovalBatchPlan } from "../lib/approvalCard";
 import { connectClient } from "../lib/connect";
 import { hasErrorReason } from "../lib/errorReasons";
 import { queryClient } from "../lib/query-client";
@@ -272,19 +273,27 @@ export function useBatchDenyInChat(chatId?: string) {
 }
 
 /**
- * Imperatively approve every pending approval for a chat — for non-component
- * contexts like the global keyboard shortcut. Same contract as
+ * The chat's pending approvals as "Approve all" treats them, from the cache
+ * (no fetch): what one Approve all decides, the activation cards whose grant
+ * summaries its confirmation must show, and what stays out (lib/approvalCard).
+ */
+export function pendingApprovalBatch(chatId: string): ApprovalBatchPlan<Approval> {
+  return planApprovalBatch(approvalsFromCache(chatId).filter((a) => a.status === ApprovalStatus.PENDING));
+}
+
+/**
+ * Imperatively approve the approvals a confirmation showed — for
+ * non-component contexts like the global keyboard shortcut. It approves
+ * exactly `requestIds` (pendingApprovalBatch's `together`, as shown), never
+ * whatever is pending by the time the person confirms: an approval raised
+ * after the confirmation opened was not read. Same contract as
  * useBatchApproveInChat: optimistic, rolled back on error, and the service's
  * reads invalidated once the server has recorded it.
  */
-/** How many of the chat's approvals are waiting, from the cache (no fetch). */
-export function countPendingApprovals(chatId: string): number {
-  return approvalsFromCache(chatId).filter((a) => a.status === ApprovalStatus.PENDING).length;
-}
-
-export async function approveAllPendingApprovals(chatId: string): Promise<void> {
+export async function approveAllPendingApprovals(chatId: string, requestIds: readonly string[]): Promise<void> {
+  const shown = new Set(requestIds);
   const pendingIds = approvalsFromCache(chatId)
-    .filter((a) => a.status === ApprovalStatus.PENDING)
+    .filter((a) => a.status === ApprovalStatus.PENDING && shown.has(a.id))
     .map((a) => a.id);
   if (pendingIds.length === 0) return;
 

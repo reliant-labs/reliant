@@ -35,7 +35,13 @@ once (`activationApprovalBatchChangeID`) and the turn waits for all of the
 decisions. Cards raised together are `APPROVAL_TYPE_TOOL_CALL` rows that share
 an `approvals.batch_id`; the chat's approval card and the Inbox offer the batch
 as one decision (`BatchApprove`/`BatchDeny`, which skip any card decided
-elsewhere meanwhile) and keep each card decidable on its own. Each decision
+elsewhere meanwhile) and keep each card decidable on its own. When the batch
+holds an activation card, Approve all first opens a confirmation showing every
+card's grant summary (its lead sentence and labelled rows,
+`activation_card.go`) and approves exactly the cards it showed
+(`ApprovalBatchConfirm`, `planApprovalBatch` in `lib/approvalCard.ts`). An
+activation approval in the pre-card plain-text form has no plain-words
+summary, so it stays out of Approve all and says why. Each decision
 still binds only its own call's fingerprint. A denied tool-call card is
 answered by its run (the call's refusal), never by a denial message over the
 whole turn. Concurrent changes in one turn do not refuse each other: a commit

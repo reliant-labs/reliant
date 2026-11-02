@@ -21,6 +21,7 @@ import {
   CleanupStorageResponseSchema,
   InboxApprovalSchema,
   type HeldWorktreeSchema,
+  InboxApprovalSchema,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -164,16 +165,17 @@ describe("InboxPage item kinds", () => {
     expect(mocks.restoreInboxItem).not.toHaveBeenCalled();
   });
 
-  it("an approval shows its title on one line, with Approve / Deny", async () => {
+  it("an approval opens with its card, and Approve / Deny named after the run", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     expect(within(row).getByText("Deploy to production?")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /hide/i })).toHaveAttribute("aria-expanded", "true");
 
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
 
-    await userEvent.click(within(row).getByRole("button", { name: "Deny" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Deny Nightly triage" }));
     await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("appr-1", undefined, undefined));
   });
 
@@ -289,64 +291,93 @@ describe("InboxPage item kinds", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
 
-  it("approvals a run asked for together are one row, decided at once or one by one", async () => {
-    const batched = (id: string, title: string) =>
-      approvalItem(
-        {
-          payload: {
-            case: "approval",
-            value: create(InboxApprovalSchema, {
-              approvalId: id,
-              approvalType: ApprovalType.TOOL_CALL,
-              title,
-              batchId: "wf/call-1",
-            }),
-          },
+  // One turn's activation cards (activation_card.go's layout), raised together.
+  const card = (what: string) =>
+    [
+      `Turn on ${what} for acme/shopfront: it will run on a schedule (0 3 * * *).`,
+      "Approval needed: A new activation is new standing power.",
+      `Repositories: acme/${what}`,
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+  const batched = (id: string, title: string, batchId = "wf/call-1") =>
+    approvalItem(
+      {
+        payload: {
+          case: "approval",
+          value: create(InboxApprovalSchema, { approvalId: id, approvalType: ApprovalType.TOOL_CALL, title, batchId }),
         },
-        id,
-      );
+      },
+      id,
+    );
+
+  it("approvals a run asked for together are one row, decided at once or one by one", async () => {
     const solo = approvalItem({ chatId: "chat-2", chatTitle: "Other run" }, "solo");
-    respond([
-      batched("a-1", "pause_trigger nightly\nApproval: details"),
-      solo,
-      batched("a-2", "pause_trigger weekly\nApproval: details"),
-      batched("a-3", "pause_trigger hourly\nApproval: details"),
-    ]);
+    respond([batched("a-1", card("nightly")), solo, batched("a-2", card("weekly")), batched("a-3", card("hourly"))]);
     renderInboxAt(<InboxPage />);
     const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
     expect(within(batch).getByText("3 approvals, asked together")).toBeInTheDocument();
-    // Each keeps its own row with the change's headline.
-    expect(within(batch).getByText("pause_trigger weekly")).toBeInTheDocument();
+    // Each keeps its own row, open on its card, named after it.
+    const second = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(second).getByText(/^Turn on weekly for acme\/shopfront/)).toBeInTheDocument();
+    expect(within(second).getByText("acme/weekly")).toBeInTheDocument();
     expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
 
     // One of them on its own.
-    const second = within(batch).getByTestId("inbox-item-approval:a-2");
-    await userEvent.click(within(second).getByRole("button", { name: "Details" }));
-    expect(within(second).getByText(/Approval: details/)).toBeInTheDocument();
-    respond([batched("a-1", "pause_trigger nightly"), solo, batched("a-3", "pause_trigger hourly")]);
-    await userEvent.click(within(second).getByRole("button", { name: "Deny" }));
+    respond([batched("a-1", card("nightly")), solo, batched("a-3", card("hourly"))]);
+    await userEvent.click(within(second).getByRole("button", { name: /^Deny Turn on weekly/ }));
     await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("a-2", undefined, undefined));
     await waitFor(() => expect(within(batch).queryByTestId("inbox-item-approval:a-2")).toBeNull());
 
-    // The rest at once.
-    respond([solo]);
+    // The rest at once, after the confirmation shows what each grants.
     await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    expect(mocks.batchApprove).not.toHaveBeenCalled();
+    const confirm = await screen.findByTestId("approval-batch-confirm");
+    for (const what of ["nightly", "hourly"]) {
+      const grant = within(within(confirm).getByTestId(`batch-grant-a-${what === "nightly" ? 1 : 3}`));
+      expect(grant.getByText(new RegExp(`^Turn on ${what} for acme/shopfront`))).toBeInTheDocument();
+      expect(grant.getByText(`acme/${what}`)).toBeInTheDocument();
+    }
+    respond([solo]);
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
     await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
     await waitFor(() => expect(screen.queryByTestId("inbox-approval-batch-wf/call-1")).toBeNull());
     expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
   });
 
+  it("an old-format activation approval in a batch is decided on its own, and says why", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nMachine: laptop (id d_1)\nOperation: enable_trigger";
+    respond([batched("a-1", card("nightly")), batched("a-2", legacy), batched("a-3", "Run the migration?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText(/3 approvals, asked together · 1 decided on its own/)).toBeInTheDocument();
+    const old = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(old).getByText(/^Not in Approve all: this request was raised before approval cards said/)).toBeInTheDocument();
+
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    const confirm = within(await screen.findByTestId("approval-batch-confirm"));
+    expect(confirm.queryByTestId("batch-grant-a-2")).toBeNull();
+    expect(confirm.getByText("Run the migration?")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+  });
+
+  it("a routine batch is approved at once, without a confirmation", async () => {
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(screen.queryByTestId("approval-batch-confirm")).toBeNull();
+  });
+
   it("a batch already decided elsewhere says so", async () => {
-    const batched = (id: string) =>
-      approvalItem(
-        { payload: { case: "approval", value: create(InboxApprovalSchema, { approvalId: id, title: id, batchId: "b" }) } },
-        id,
-      );
-    respond([batched("x-1"), batched("x-2")]);
+    respond([batched("x-1", "x-1", "b"), batched("x-2", "x-2", "b")]);
     mocks.batchDeny.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
     const batch = await screen.findByTestId("inbox-approval-batch-b");
-    await userEvent.click(within(batch).getByRole("button", { name: "Deny all" }));
+    await userEvent.click(within(batch).getByRole("button", { name: "Deny all 2" }));
     expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
   });
 
@@ -355,7 +386,7 @@ describe("InboxPage item kinds", () => {
     mocks.approve.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
   });
 
@@ -367,7 +398,7 @@ describe("InboxPage item kinds", () => {
     );
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     expect(await within(row).findByText(message)).toBeInTheDocument();
   });
 });
@@ -404,9 +435,42 @@ describe("InboxPage layout", () => {
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     const time = row.querySelector("time")!;
     expect(within(time).getByText("3h")).toHaveAttribute("aria-hidden", "true");
-    expect(within(time).getByText(/waiting since 3 hours ago/)).toHaveClass("sr-only");
+    expect(within(time).getByText("waiting for 3 hours")).toHaveClass("sr-only");
     // The answer form and other tall content are not rendered until asked for.
     expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
+  });
+
+  it("shows and announces the same age: 41 hours is 1d and 1 day", async () => {
+    respond([approvalItem({ waitingSince: new Date(Date.now() - 41 * 60 * 60_000).toISOString() })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    const time = row.querySelector("time")!;
+    expect(within(time).getByText("1d")).toHaveAttribute("aria-hidden", "true");
+    expect(within(time).getByText("waiting for 1 day")).toHaveClass("sr-only");
+  });
+
+  it("an activation approval shows what it grants, Approve under it, and folds the technical lines", async () => {
+    const title = [
+      "Turn on PR review for acme/shopfront: it will run on each GitHub event it watches (pull_request.opened), and use GitHub as the Reliant GitHub app (a bot account).",
+      "Approval needed: A new activation is new standing power.",
+      "Repositories: acme/shopfront",
+      "Acts as: the Reliant GitHub app (a bot account)",
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+    respond([approvalItem({ payload: { case: "approval", value: create(InboxApprovalSchema, { approvalId: "appr-1", title }) } })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(within(row).getByText(/^Turn on PR review for acme\/shopfront/)).toBeInTheDocument();
+    const repos = within(row).getByText("acme/shopfront");
+    const approve = within(row).getByRole("button", { name: "Approve Nightly triage" });
+    // Approve follows the details in reading order.
+    expect(repos.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(row).getByText("Technical details").closest("details")).not.toHaveAttribute("open");
+    // Collapsing hides Approve with the card: it is never beside a cut-off line.
+    await userEvent.click(within(row).getByRole("button", { name: /hide/i }));
+    expect(within(row).queryByRole("button", { name: "Approve Nightly triage" })).toBeNull();
   });
 
   it("an automation item without a run links to the trigger", async () => {

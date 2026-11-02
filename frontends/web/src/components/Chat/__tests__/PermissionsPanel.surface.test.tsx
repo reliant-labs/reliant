@@ -6,19 +6,19 @@ import { create } from "@bufbuild/protobuf";
 import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 
-// The batch "N Pending / Approve All / Deny All" bar ChatPresenter mounts
-// above the composer. On a 390px viewport its desktop `inline-flex` row does
-// not fit, and the keyboard-shortcut badge is meaningless without a keyboard.
-// Two, so the bar is the batch's ("Approve all 2"); one alone reads "Approve".
-const pending: Approval[] = ["approval-1", "approval-2"].map((id) =>
+// The approvals ChatPresenter mounts above the composer. On a 390px viewport
+// a desktop `inline-flex` row does not fit, and the keyboard-shortcut badge
+// is meaningless without a keyboard.
+const approval = (id: string, title: string) =>
   create(ApprovalSchema, {
     id,
     chatId: "chat-1",
     entityId: `block-${id}`,
+    title,
     status: ApprovalStatus.PENDING,
     createdAt: new Date().toISOString(),
-  }),
-);
+  });
+const pending: Approval[] = [approval("approval-1", "Run the migration?"), approval("approval-2", "Deploy?")];
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
@@ -26,14 +26,14 @@ vi.mock("../../../store/chatStoreHooks", () => ({
 
 vi.mock("../../../hooks/approval-queries", () => ({
   usePendingApprovals: () => ({ data: { approvals: pending } }),
-  useBatchApproveInChat: () => ({ mutate: vi.fn() }),
-  useBatchDenyInChat: () => ({ mutate: vi.fn() }),
   useApproveToolRequest: () => ({ mutate: vi.fn() }),
   useDenyToolRequest: () => ({ mutate: vi.fn() }),
+  useBatchApproveInChat: () => ({ mutate: vi.fn() }),
+  useBatchDenyInChat: () => ({ mutate: vi.fn() }),
 }));
 
-describe("PermissionsPanel batch approval bar", () => {
-  it("renders both batch actions on every surface", () => {
+describe("PermissionsPanel approvals", () => {
+  it("renders per-item and batch actions on every surface", () => {
     for (const surface of ["desktop", "mobile", "embed"] as const) {
       const { unmount } = render(
         <SurfaceProvider surface={surface}>
@@ -41,15 +41,16 @@ describe("PermissionsPanel batch approval bar", () => {
         </SurfaceProvider>,
       );
 
-      expect(screen.getByText("2 Pending")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /approve all/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /deny all/i })).toBeInTheDocument();
+      expect(screen.getByText("2 requests")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Approve: Run the migration?" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /approve all 2/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /deny all 2/i })).toBeInTheDocument();
 
       unmount();
     }
   });
 
-  it("gives the batch buttons 44px touch targets and drops the shortcut badge on mobile", () => {
+  it("gives the buttons 44px touch targets and drops the shortcut badge on mobile", () => {
     render(
       <SurfaceProvider surface="mobile">
         <PermissionsPanel chatId="chat-1" />
@@ -60,10 +61,11 @@ describe("PermissionsPanel batch approval bar", () => {
     const deny = screen.getByRole("button", { name: /deny all/i });
     expect(approve.className).toMatch(/min-h-\[44px\]/);
     expect(deny.className).toMatch(/min-h-\[44px\]/);
+    expect(screen.getByRole("button", { name: "Approve: Deploy?" }).className).toMatch(/min-h-\[44px\]/);
     expect(approve.textContent).not.toMatch(/\+↵/);
   });
 
-  it("lets the panel span the viewport instead of sizing to content on mobile", () => {
+  it("lets the batch bar span the viewport instead of sizing to content on mobile", () => {
     render(
       <SurfaceProvider surface="mobile">
         <PermissionsPanel chatId="chat-1" />
@@ -84,8 +86,6 @@ describe("PermissionsPanel batch approval bar", () => {
 
     const panel = screen.getByTestId("permissions-popup");
     expect(panel.className).toMatch(/inline-flex/);
-    expect(
-      screen.getByRole("button", { name: /approve all/i }).textContent,
-    ).toMatch(/\+↵/);
+    expect(screen.getByRole("button", { name: /approve all/i }).textContent).toMatch(/\+↵/);
   });
 });

@@ -8,7 +8,9 @@
  * Inbox spans projects, how long it has waited, and the inline action.
  *
  * A row is one line by default. Anything taller — an answer form, a failure's
- * full reason — opens on demand, so ten waiting items fit on one screen.
+ * full reason — opens on demand, so ten waiting items fit on one screen. An
+ * approval is the exception: it opens with its whole card (ApprovalCardView),
+ * and Approve sits under it, so what is granted is read before it is approved.
  *
  * The actions reuse the chat's own pieces, through their store-free cores:
  * ApprovalActions for approve/deny, QuestionPrompt + answerQuestion for an
@@ -54,13 +56,16 @@ import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
-import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
+import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { relativeTime as compactAge } from "../Mobile/relativeTime";
 import { hasErrorReason } from "@/lib/errorReasons";
 import { cn } from "@/lib/utils";
 import { useSurface } from "@/lib/surfaceContext";
 import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
+import { ApprovalBatchConfirm } from "../Chat/ApprovalBatchConfirm";
+import { ApprovalCardView } from "../Chat/ApprovalCardView";
+import { parseApprovalCard, planApprovalBatch, type ApprovalBatchPlan } from "@/lib/approvalCard";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
@@ -102,9 +107,36 @@ export function failedTimesInARow(failures: number): string {
   return `Failed ${failures} times in a row.`;
 }
 
-/** A server error string ("daemon x is offline") shown on its own reads as a sentence. */
-function sentenceCase(text: string): string {
+/**
+ * A server error string ("daemon x is offline") shown on its own reads as a
+ * sentence. A leading identifier ("default_repo is now required") is a name,
+ * not a word: capitalising it would misspell it.
+ */
+export function sentenceCase(text: string): string {
+  const first = text.split(/\s/, 1)[0] ?? "";
+  if (/[_./:@]|[a-z][A-Z]/.test(first)) return text;
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const AGE_UNITS: Record<string, [string, string]> = {
+  m: ["minute", "minutes"],
+  h: ["hour", "hours"],
+  d: ["day", "days"],
+  w: ["week", "weeks"],
+};
+
+/**
+ * How long an item has waited: "1d" for the row and "1 day" for its
+ * accessible name and tooltip, from one rounding, so what is shown and what
+ * is announced never disagree (41 hours is "1d" and "1 day", not "2 days").
+ */
+export function waitedFor(iso: string): { short: string; long: string } {
+  const short = compactAge(iso);
+  const match = /^(\d+)([mhdw])$/.exec(short);
+  if (!match) return { short, long: short === "now" ? "just now" : short };
+  const count = Number(match[1]);
+  const [one, many] = AGE_UNITS[match[2]];
+  return { short, long: `${count} ${count === 1 ? one : many}` };
 }
 
 interface InboxItemProps {
@@ -118,20 +150,25 @@ interface InboxItemProps {
    * names the run, so this row is its detail and its own decision.
    */
   nested?: boolean;
+  /** Why this approval of a batch is not in its Approve all, when it is not. */
+  apartReason?: string;
 }
 
-export function InboxItem({ item, showProject, onDismiss, nested }: InboxItemProps) {
+export function InboxItem({ item, showProject, onDismiss, nested, apartReason }: InboxItemProps) {
   // What already happened to the item, once an action lost the race to it:
   // the server's sentence for an approval ("This request expired: …").
   const [handled, setHandled] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  // An approval opens with its whole card showing: what it grants is read
+  // before Approve is reachable, and Approve sits under it.
+  const [expanded, setExpanded] = useState(item.payload.case === "approval");
+  const queryClient = useQueryClient();
 
   // "Already handled": show it, then take the row out (§8.3).
   useEffect(() => {
     if (handled === null) return;
-    const timer = window.setTimeout(() => removeInboxItems([item.itemId]), ALREADY_HANDLED_MS);
+    const timer = window.setTimeout(() => removeInboxItems([item.itemId], queryClient), ALREADY_HANDLED_MS);
     return () => window.clearTimeout(timer);
-  }, [handled, item.itemId]);
+  }, [handled, item.itemId, queryClient]);
 
   const onRaceOrError = (verb: string) => (error: unknown) => {
     if (isAlreadyResolvedError(error)) {
@@ -145,8 +182,11 @@ export function InboxItem({ item, showProject, onDismiss, nested }: InboxItemPro
   const expandable = hasExpansion(item);
   // "2h" in the row (a dense list wants a narrow, fixed column); the long
   // form and the exact time are the tooltip and the accessible name.
-  const waited = compactAge(item.waitingSince);
-  const waitedLong = formatRelativeTime(item.waitingSince);
+  const { short: waited, long: waitedLong } = waitedFor(item.waitingSince);
+  // An open approval shows its full card below; the one-line lead would only
+  // repeat its first sentence, cut short. In a batch the lead is the row's
+  // name (the batch row names the run), so it stays and the card omits it.
+  const showDetail = detail && (nested || !(expanded && item.payload.case === "approval"));
 
   return (
     <li
@@ -165,7 +205,7 @@ export function InboxItem({ item, showProject, onDismiss, nested }: InboxItemPro
           )}
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             {!nested && <SubjectLink item={item} />}
-            {detail && (
+            {showDetail && (
               <span
                 className={cn("min-w-0 truncate text-xs", nested ? "text-foreground" : "text-muted-foreground")}
                 title={detail.title}
@@ -190,16 +230,15 @@ export function InboxItem({ item, showProject, onDismiss, nested }: InboxItemPro
               item={item}
               expanded={expanded}
               onToggle={expandable ? () => setExpanded((open) => !open) : undefined}
-              onRaceOrError={onRaceOrError}
             />
           )}
           <time
             dateTime={item.waitingSince}
-            title={`Waiting since ${waitedLong} · ${formatAbsoluteTime(item.waitingSince)}`}
+            title={`Waiting for ${waitedLong} · since ${formatAbsoluteTime(item.waitingSince)}`}
             className="w-8 whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground"
           >
             <span aria-hidden="true">{waited}</span>
-            <span className="sr-only">waiting since {waitedLong}</span>
+            <span className="sr-only">waiting for {waitedLong}</span>
           </time>
           {!handled && <DismissButton label={`Dismiss ${subjectName(item)}`} onClick={() => onDismiss(item)} />}
         </div>
@@ -211,7 +250,7 @@ export function InboxItem({ item, showProject, onDismiss, nested }: InboxItemPro
       )}
       {expanded && !handled && (
         <div className="mt-2 pl-7 max-sm:pl-0">
-          <Expansion item={item} onRaceOrError={onRaceOrError} />
+          <Expansion item={item} nested={nested} apartReason={apartReason} onRaceOrError={onRaceOrError} />
         </div>
       )}
     </li>
@@ -252,11 +291,23 @@ interface InboxApprovalBatchProps {
   onDismissAll: (items: InboxItemData[]) => void;
 }
 
+/** One approval of a batch, as planApprovalBatch reads it. */
+interface BatchMember {
+  id: string;
+  title: string;
+  itemId: string;
+}
+
 /**
  * Approvals one run raised together — one turn's activation changes, say — as
  * one Inbox row: the run, how many it asks for, and one decision for all of
- * them. Under it each approval keeps its own row, its details and its own
+ * them. Under it each approval keeps its own row, its card and its own
  * Approve / Deny, for reviewing them one by one.
+ *
+ * Approve all covers what planApprovalBatch puts together. When that includes
+ * an activation card it first opens ApprovalBatchConfirm, which shows every
+ * card's grant summary, and approves exactly what it showed. An activation
+ * approval in the old plain-text form stays out, its row saying why.
  *
  * A batch is one chat's, so one BatchApprove (or BatchDeny) decides it. The
  * server skips any approval decided elsewhere in the meantime and refuses only
@@ -265,12 +316,27 @@ interface InboxApprovalBatchProps {
 export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismissAll }: InboxApprovalBatchProps) {
   const [handled, setHandled] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState<ApprovalBatchPlan<BatchMember> | null>(null);
   const queryClient = useQueryClient();
   const approve = useBatchApprove();
   const deny = useBatchDeny();
   const first = items[0]!;
   const itemIds = useMemo(() => items.map((item) => item.itemId), [items]);
-  const requestIds = items.flatMap((item) => (item.payload.case === "approval" ? [item.payload.value.approvalId] : []));
+  const plan = useMemo(
+    () =>
+      planApprovalBatch(
+        items.flatMap((item): BatchMember[] =>
+          item.payload.case === "approval"
+            ? [{ id: item.payload.value.approvalId, title: item.payload.value.title, itemId: item.itemId }]
+            : [],
+        ),
+      ),
+    [items],
+  );
+  const apartReason = useMemo(
+    () => new Map(plan.apart.map(({ approval, reason }) => [approval.itemId, reason])),
+    [plan],
+  );
 
   useEffect(() => {
     if (!handled) return;
@@ -278,12 +344,16 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
     return () => window.clearTimeout(timer);
   }, [handled, itemIds, queryClient]);
 
-  const act = async (verb: "approve" | "deny") => {
+  const act = async (verb: "approve" | "deny", members: BatchMember[]) => {
     setBusy(true);
     try {
+      const requestIds = members.map((m) => m.id);
       if (verb === "approve") await approve.mutateAsync({ requestIds });
       else await deny.mutateAsync({ requestIds });
-      removeInboxItems(itemIds, queryClient);
+      removeInboxItems(
+        members.map((m) => m.itemId),
+        queryClient,
+      );
     } catch (error) {
       if (isAlreadyResolvedError(error)) setHandled(true);
       else toast.error(`Could not ${verb} them`, { description: errorText(error) });
@@ -292,9 +362,10 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
     }
   };
 
-  const waited = compactAge(first.waitingSince);
-  const waitedLong = formatRelativeTime(first.waitingSince);
+  const { short: waited, long: waitedLong } = waitedFor(first.waitingSince);
   const batchId = first.payload.case === "approval" ? first.payload.value.batchId : "";
+  const count = plan.together.length;
+  const apart = plan.apart.length;
   return (
     <li className="relative" data-testid={`inbox-approval-batch-${batchId}`}>
       <div className="group/row flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2 transition-colors hover:bg-muted/40 focus-within:bg-muted/40">
@@ -306,6 +377,7 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
             <SubjectLink item={first} />
             <span className="min-w-0 truncate text-xs text-muted-foreground">
               {items.length} approvals, asked together
+              {apart > 0 && ` · ${apart} decided on ${apart === 1 ? "its" : "their"} own`}
             </span>
           </div>
         </div>
@@ -320,24 +392,29 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
               Already handled
             </span>
           ) : (
-            <div className="shrink-0">
-              <ApprovalActions
-                compact
-                approveLabel={`Approve all ${items.length}`}
-                denyLabel="Deny all"
-                disabled={busy}
-                onApprove={() => void act("approve")}
-                onDeny={() => void act("deny")}
-              />
-            </div>
+            count > 1 && (
+              <div className="shrink-0">
+                <ApprovalActions
+                  compact
+                  approveLabel={`Approve all ${count}`}
+                  denyLabel={`Deny all ${count}`}
+                  disabled={busy}
+                  onApprove={() => {
+                    if (plan.grants.length > 0) setConfirming(plan);
+                    else void act("approve", plan.together);
+                  }}
+                  onDeny={() => void act("deny", plan.together)}
+                />
+              </div>
+            )
           )}
           <time
             dateTime={first.waitingSince}
-            title={`Waiting since ${waitedLong} · ${formatAbsoluteTime(first.waitingSince)}`}
+            title={`Waiting for ${waitedLong} · since ${formatAbsoluteTime(first.waitingSince)}`}
             className="w-8 whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground"
           >
             <span aria-hidden="true">{waited}</span>
-            <span className="sr-only">waiting since {waitedLong}</span>
+            <span className="sr-only">waiting for {waitedLong}</span>
           </time>
           {!handled && <DismissButton label={`Dismiss ${items.length} approvals for ${subjectName(first)}`} onClick={() => onDismissAll(items)} />}
         </div>
@@ -345,10 +422,25 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
       {!handled && (
         <ul aria-label={`Approvals for ${subjectName(first)}`} className="divide-y divide-border/60 border-t border-border/60">
           {items.map((item) => (
-            <InboxItem key={item.itemId} item={item} showProject={false} onDismiss={onDismissRow} nested />
+            <InboxItem
+              key={item.itemId}
+              item={item}
+              showProject={false}
+              onDismiss={onDismissRow}
+              nested
+              apartReason={apartReason.get(item.itemId)}
+            />
           ))}
         </ul>
       )}
+      <ApprovalBatchConfirm
+        plan={confirming}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(shown) => {
+          setConfirming(null);
+          void act("approve", shown.together);
+        }}
+      />
     </li>
   );
 }
@@ -499,11 +591,9 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
   const { payload } = item;
   switch (payload.case) {
     case "approval": {
-      // An activation card's first line names the change; the rest (machine,
-      // identity, privileges) opens on demand.
-      const title = payload.value.title;
-      const headline = title.split("\n", 1)[0];
-      return title ? { node: headline, title } : null;
+      // The lead sentence; the rest of the card is the expansion.
+      const lead = parseApprovalCard(payload.value.title).lead;
+      return lead ? { node: lead, title: lead } : null;
     }
     case "question": {
       const prompt = payload.value.prompt;
@@ -646,9 +736,12 @@ export function processesDetail(storage: InboxStorageData): string {
   return parts.join(" · ");
 }
 
-/** A row opens downward only when its action needs more than a line. */
+/**
+ * A row opens downward only when its action needs more than a line: an
+ * answer form, or an approval (which is decided under its full card).
+ */
 function hasExpansion(item: InboxItemData): boolean {
-  if (item.payload.case === "approval") return item.payload.value.title.includes("\n");
+  if (item.payload.case === "approval") return true;
   return item.payload.case === "question" && askUserQuestionItems(item.payload.value.metadata) !== null;
 }
 
@@ -659,25 +752,20 @@ interface InlineActionProps {
   item: InboxItemData;
   expanded: boolean;
   onToggle?: () => void;
-  onRaceOrError: (verb: string) => (error: unknown) => void;
 }
 
-function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionProps) {
+function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
   const { payload } = item;
   const mobile = useSurface() === "mobile";
   switch (payload.case) {
     case "approval":
-      return (
-        <>
-          {onToggle && (
-            <button type="button" className={actionButtonClass} aria-expanded={expanded} onClick={onToggle}>
-              Details
-              <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
-            </button>
-          )}
-          <ApprovalRowAction approvalId={payload.value.approvalId} itemId={item.itemId} onFailure={onRaceOrError} />
-        </>
-      );
+      // Approve and Deny are in the expansion, under what is approved.
+      return onToggle ? (
+        <button type="button" className={actionButtonClass} aria-expanded={expanded} onClick={onToggle}>
+          {expanded ? "Hide" : "Review"}
+          <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
+        </button>
+      ) : null;
     case "question":
       if (onToggle) {
         return (
@@ -745,15 +833,29 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
 
 function Expansion({
   item,
+  nested,
+  apartReason,
   onRaceOrError,
 }: {
   item: InboxItemData;
+  nested?: boolean;
+  apartReason?: string;
   onRaceOrError: (verb: string) => (error: unknown) => void;
 }) {
   if (item.payload.case === "approval") {
+    const title = item.payload.value.title;
+    // In a batch every row is the same run: name each decision after its card.
+    const subject = (nested && parseApprovalCard(title).lead) || subjectName(item);
     return (
-      <CardInset padding="sm">
-        <pre className="whitespace-pre-wrap break-words text-xs text-foreground">{item.payload.value.title}</pre>
+      <CardInset padding="sm" className="space-y-3">
+        {apartReason && <p className="text-xs text-warning-ink">{apartReason}</p>}
+        <ApprovalCardView title={title} hideLead={nested} />
+        <ApprovalRowAction
+          approvalId={item.payload.value.approvalId}
+          itemId={item.itemId}
+          subject={subject}
+          onFailure={onRaceOrError}
+        />
       </CardInset>
     );
   }
@@ -772,10 +874,12 @@ function Expansion({
 function ApprovalRowAction({
   approvalId,
   itemId,
+  subject,
   onFailure,
 }: {
   approvalId: string;
   itemId: string;
+  subject: string;
   onFailure: (verb: string) => (error: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -795,11 +899,13 @@ function ApprovalRowAction({
     }
   };
   return (
-    <div className="shrink-0">
+    <div className="flex justify-end">
       <ApprovalActions
         compact
         approveLabel="Approve"
         denyLabel="Deny"
+        approveName={`Approve ${subject}`}
+        denyName={`Deny ${subject}`}
         disabled={busy}
         onApprove={() => void act("approve")}
         onDeny={() => void act("deny")}

@@ -1,15 +1,18 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Shield } from 'lucide-react';
 import { ApprovalActions } from './ApprovalActions';
+import { ApprovalBatchConfirm } from './ApprovalBatchConfirm';
+import { ApprovalCardView } from './ApprovalCardView';
 import { useActiveChatId } from '../../store/chatStoreHooks';
 import {
   usePendingApprovals,
-  useBatchApproveInChat,
-  useBatchDenyInChat,
   useApproveToolRequest,
   useDenyToolRequest,
+  useBatchApproveInChat,
+  useBatchDenyInChat,
+  type Approval,
 } from '../../hooks/approval-queries';
-import type { Approval } from '../../gen/reliant/v1/approval_pb';
+import { parseApprovalCard, planApprovalBatch, type ApprovalBatchPlan } from '../../lib/approvalCard';
 import { cn } from '../../lib/utils';
 import { useSurface } from '../../lib/surfaceContext';
 
@@ -18,11 +21,14 @@ interface PermissionsPanelProps {
 }
 
 /**
- * The chat's approval card: every approval the open chat is waiting on, above
- * the composer. A run that asks for several at once (one turn's activation
- * changes, say) raises them together, so the bar decides all of them in one
- * click; each one also keeps its own Approve/Deny, for reviewing them one by
- * one.
+ * The open chat's pending approvals, above the composer. Every approval is
+ * listed with its own Approve / Deny. A run that asks for several at once
+ * (one turn's activation changes, say) can be decided with "Approve all N":
+ * when the batch includes an activation card, which grants an automation
+ * standing power, Approve all first opens a confirmation that shows every
+ * card's grant summary (ApprovalBatchConfirm). An activation approval in the
+ * old plain-text form has no such summary, so it stays out of the batch and
+ * says why (planApprovalBatch).
  */
 export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps = {}) {
   const activeChatId = useActiveChatId();
@@ -36,32 +42,41 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
     () => pendingApprovalsQuery.data?.approvals ?? [],
     [pendingApprovalsQuery.data],
   );
-  const batchApproveMutation = useBatchApproveInChat(chatId ?? undefined);
-  const batchDenyMutation = useBatchDenyInChat(chatId ?? undefined);
+  const plan = useMemo(() => planApprovalBatch(pendingApprovals), [pendingApprovals]);
+  const apartReason = useMemo(
+    () => new Map(plan.apart.map(({ approval, reason }) => [approval.id, reason])),
+    [plan],
+  );
+  const [confirming, setConfirming] = useState<ApprovalBatchPlan<Approval> | null>(null);
   const approveOne = useApproveToolRequest(chatId ?? undefined);
   const denyOne = useDenyToolRequest(chatId ?? undefined);
-  
+  const batchApproveMutation = useBatchApproveInChat(chatId ?? undefined);
+  const batchDenyMutation = useBatchDenyInChat(chatId ?? undefined);
+
   // Detect platform for keyboard shortcut hint
-  const isMac = typeof window !== 'undefined' && 
-    (window.navigator.platform.toUpperCase().includes('MAC') || 
+  const isMac = typeof window !== 'undefined' &&
+    (window.navigator.platform.toUpperCase().includes('MAC') ||
      window.navigator.userAgent.toUpperCase().includes('MAC'));
   const shortcutKey = isMac ? '⌘' : 'Ctrl';
 
-  const handleApprove = useCallback(() => {
-    if (chatId && pendingApprovals.length > 0) {
-      batchApproveMutation.mutate({
-        requestIds: pendingApprovals.map((a) => a.id),
-      });
+  const approveTogether = useCallback((shown: ApprovalBatchPlan<Approval>) => {
+    if (chatId && shown.together.length > 0) {
+      batchApproveMutation.mutate({ requestIds: shown.together.map((a) => a.id) });
     }
-  }, [chatId, pendingApprovals, batchApproveMutation]);
+  }, [chatId, batchApproveMutation]);
 
-  const handleDeny = useCallback(() => {
-    if (chatId && pendingApprovals.length > 0) {
-      batchDenyMutation.mutate({
-        requestIds: pendingApprovals.map((a) => a.id),
-      });
+  // A batch that grants standing power is approved from its confirmation,
+  // which shows each card's grant summary; a routine one at once.
+  const handleApproveAll = useCallback(() => {
+    if (plan.grants.length > 0) setConfirming(plan);
+    else approveTogether(plan);
+  }, [plan, approveTogether]);
+
+  const handleDenyAll = useCallback(() => {
+    if (chatId && plan.together.length > 0) {
+      batchDenyMutation.mutate({ requestIds: plan.together.map((a) => a.id) });
     }
-  }, [chatId, pendingApprovals, batchDenyMutation]);
+  }, [chatId, plan, batchDenyMutation]);
 
   // Only show permissions panel if there are pending approvals
   // The backend determines whether approvals are created based on workflow params
@@ -69,73 +84,104 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
     return null;
   }
 
-  const several = pendingApprovals.length > 1;
+  // The ⌘↵ shortcut does what Approve all does (through the same
+  // confirmation): show it on the batch button when there is one, else on
+  // the only approval it would approve.
+  const batch = plan.together.length > 1;
+  const count = plan.together.length;
 
-  // Always show when there are pending approvals - now inline above chat input.
-  // `inline-flex` sizes to content on desktop; on mobile it forces the "N
-  // Pending" label and both buttons onto one row that doesn't fit a 390px
-  // viewport, so narrow surfaces get a full-width, wrapping layout instead.
   return (
-    <div className="flex w-full flex-col items-end">
+    <div className="flex w-full flex-col items-end" data-testid="permissions-panel">
       <ul
-        className="mb-2 max-h-80 w-full divide-y divide-border/60 overflow-auto rounded-lg border border-border bg-background px-3"
-        aria-label="Pending approval details"
+        className="mb-2 max-h-96 w-full divide-y divide-border overflow-auto rounded-lg border border-border bg-background"
+        aria-label="Pending approvals"
       >
         {pendingApprovals.map((approval) => (
-          <PendingApprovalRow
+          <ApprovalItem
             key={approval.id}
             approval={approval}
-            // One approval is decided by the bar below; a row of its own
-            // would only repeat it.
-            onApprove={several ? () => approveOne.mutate({ requestId: approval.id }) : undefined}
-            onDeny={several ? () => denyOne.mutate({ requestId: approval.id }) : undefined}
+            apartReason={apartReason.get(approval.id)}
+            shortcutKey={!batch && plan.together[0]?.id === approval.id ? shortcutKey : undefined}
+            onApprove={() => approveOne.mutate({ requestId: approval.id })}
+            onDeny={() => denyOne.mutate({ requestId: approval.id })}
           />
         ))}
       </ul>
-      <div
-        className={cn(
-          "flex items-center gap-3 px-4 py-3 mb-3 bg-primary/5 dark:bg-primary/10 border border-primary/30 rounded-lg elevation-3",
-          surface === "desktop" ? "inline-flex" : "w-full flex-wrap"
-        )}
-        data-testid="permissions-popup"
-      >
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-primary-ink" />
-          <span className="font-medium text-primary-ink">
-            {pendingApprovals.length} Pending
-          </span>
-        </div>
+      {batch && (
+        <div
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 mb-3 bg-primary/5 dark:bg-primary/10 border border-primary/30 rounded-lg elevation-3",
+            surface === "desktop" ? "inline-flex" : "w-full flex-wrap"
+          )}
+          data-testid="permissions-popup"
+        >
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary-ink" aria-hidden="true" />
+            <span className="font-medium text-primary-ink">
+              {count} requests
+              {plan.apart.length > 0 && (
+                <span className="font-normal text-muted-foreground">
+                  {` · ${plan.apart.length} decided on ${plan.apart.length === 1 ? "its" : "their"} own`}
+                </span>
+              )}
+            </span>
+          </div>
 
-        <ApprovalActions
-          onApprove={handleApprove}
-          onDeny={handleDeny}
-          shortcutKey={shortcutKey}
-          approveLabel={several ? `Approve all ${pendingApprovals.length}` : "Approve"}
-          denyLabel={several ? "Deny all" : "Deny"}
-        />
-      </div>
+          <ApprovalActions
+            onApprove={handleApproveAll}
+            onDeny={handleDenyAll}
+            shortcutKey={shortcutKey}
+            approveLabel={`Approve all ${count}`}
+            denyLabel={`Deny all ${count}`}
+          />
+        </div>
+      )}
+      <ApprovalBatchConfirm
+        plan={confirming}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(shown) => {
+          setConfirming(null);
+          approveTogether(shown);
+        }}
+      />
     </div>
   );
 }
 
-/** One pending approval's title, with its own decision when there are several. */
-function PendingApprovalRow({
+function ApprovalItem({
   approval,
+  apartReason,
+  shortcutKey,
   onApprove,
   onDeny,
 }: {
   approval: Approval;
-  onApprove?: () => void;
-  onDeny?: () => void;
+  /** Why this approval is not in Approve all, when it is not. */
+  apartReason?: string;
+  shortcutKey?: string;
+  onApprove: () => void;
+  onDeny: () => void;
 }) {
+  const surface = useSurface();
+  const card = parseApprovalCard(approval.title);
+  const subject = card.lead || "this request";
   return (
-    <li className="flex items-start gap-3 py-2" data-testid={`pending-approval-${approval.id}`}>
-      <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs text-foreground">{approval.title}</pre>
-      {onApprove && onDeny && (
-        <div className="shrink-0">
-          <ApprovalActions compact approveLabel="Approve" denyLabel="Deny" onApprove={onApprove} onDeny={onDeny} />
-        </div>
+    <li className="space-y-2.5 p-3" data-testid={`approval-${approval.id}`}>
+      {card.grantsPower && (
+        <p className="text-xs font-medium text-warning-ink">Grants an automation standing power: read it before you approve.</p>
       )}
+      {apartReason && <p className="text-xs text-warning-ink">{apartReason}</p>}
+      <ApprovalCardView title={approval.title} />
+      <div className={cn("flex", surface === "desktop" ? "justify-end" : "w-full")}>
+        <ApprovalActions
+          compact={surface === "desktop"}
+          onApprove={onApprove}
+          onDeny={onDeny}
+          shortcutKey={shortcutKey}
+          approveName={`Approve: ${subject}`}
+          denyName={`Deny: ${subject}`}
+        />
+      </div>
     </li>
   );
 }
