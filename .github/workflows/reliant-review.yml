@@ -43,7 +43,7 @@ jobs:
   reliant-review:
     name: Reliant review
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 15
     steps:
       - name: pr-review passed this exact head
         env:
@@ -68,19 +68,26 @@ jobs:
       # so without this every reviewed pull request sat BLOCKED with
       # auto-merge armed and never entered the queue (forge #1603,
       # 2026-11-01). So a green verdict re-runs this head's earlier red and
-      # cancelled ones: each re-run reads the same marker and turns green.
+      # cancelled ones, ONE AT A TIME (scripts/ci-review-rerun.sh): a branch
+      # cut before this workflow lost its concurrency group still runs that
+      # definition, whose re-runs cancel each other when started together.
+      # A re-run (attempt > 1) heals nothing, so re-runs never cascade.
+      # reliant-review-rerun.yml covers what this step cannot see: a run that
+      # ends red after it looked, and heads whose runs predate it. Best-effort:
+      # this step never turns the verdict red. The script is read from the
+      # run's own commit, not main: it can only re-run this same check, whose
+      # gate is still read from main.
       - name: re-run this head's earlier red verdicts
-        if: github.event_name != 'merge_group'
+        if: github.event_name != 'merge_group' && github.run_attempt == 1
+        continue-on-error: true
+        timeout-minutes: 12
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          head=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq .head.sha)
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/reliant-review.yml/runs?head_sha=${head}&status=completed&per_page=100" \
-            --jq ".workflow_runs[] | select(.id != ${RUN_ID} and (.conclusion == \"failure\" or .conclusion == \"timed_out\" or .conclusion == \"cancelled\")) | .id" |
-            while read -r id; do
-              echo "re-running red verdict ${id} on ${head}"
-              gh run rerun "${id}" --repo "${GITHUB_REPOSITORY}" || echo "::warning::could not re-run ${id}"
-            done
+          heal="${RUNNER_TEMP}/ci-review-rerun.sh"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/ci-review-rerun.sh?ref=${GITHUB_SHA}" > "${heal}"
+          bash "${heal}" pr "${PR}" "${HEAD_SHA}" "${RUN_ID}"
