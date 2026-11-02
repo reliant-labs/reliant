@@ -248,6 +248,13 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   // A replay page is up to 16 MiB of events (the console asks for 4 MiB),
   // base64 inside JSON: on a slow link the 10s default aborts it mid-body.
   "controlplane.v1.RumService/GetSessionReplay": 60_000,
+  // Every environment row carries its whole declared shape (alert rules'
+  // SQL included) and, on Live, its current bundle: control-plane's two prod
+  // environments are ~1 MB of JSON. The server answers in ~0.3s, but with a
+  // few console tabs loading at once the 10s default aborted the body
+  // (2026-11-01), and the roster then read as "no environments".
+  "controlplane.v1.DeployService/GetLiveView": 30_000,
+  "controlplane.v1.DeployService/ListEnvironments": 30_000,
 };
 
 /** The client-side budget for one RPC. Exported for the transport tests. */

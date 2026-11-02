@@ -1,5 +1,8 @@
 /**
- * The collapsed group header names what ran rather than counting tool calls.
+ * The collapsed group header says what the lead call did rather than counting
+ * tool calls: "Edited totals.ts", a shell call's own description ("Run the
+ * tests"), "Spawned researcher" — and name(preview) for a tool with no
+ * plain-words verb.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -56,12 +59,12 @@ describe("ToolExecutionGroup header label", () => {
         executions={[shell("1", "Run the tests"), shell("2", "Lint"), shell("3", "Build")]}
       />
     );
-    expect(screen.getByText("shell(Run the tests) and 2 other tools")).toBeInTheDocument();
+    expect(screen.getByText("Run the tests and 2 other tools")).toBeInTheDocument();
   });
 
   it("uses the singular for exactly one other call", () => {
     render(<ToolExecutionGroup executions={[shell("1", "Run the tests"), mk("grep", "2")]} />);
-    expect(screen.getByText("shell(Run the tests) and 1 other tool")).toBeInTheDocument();
+    expect(screen.getByText("Run the tests and 1 other tool")).toBeInTheDocument();
   });
 
   it("leads with spawn wherever it appears in the group", () => {
@@ -74,7 +77,7 @@ describe("ToolExecutionGroup header label", () => {
         ]}
       />
     );
-    expect(screen.getByText(/^spawn\(.*\) and 2 other tools$/)).toBeInTheDocument();
+    expect(screen.getByText("Spawned researcher and 2 other tools")).toBeInTheDocument();
   });
 
   it("strips the mcp__ prefix from the lead name", () => {
@@ -83,12 +86,22 @@ describe("ToolExecutionGroup header label", () => {
         executions={[shell("1", "Run the tests"), mk("mcp__reliant__spawn", "2", {})]}
       />
     );
-    expect(screen.getByText(/^spawn.* and 1 other tool$/)).toBeInTheDocument();
+    expect(screen.getByText("Spawned and 1 other tool")).toBeInTheDocument();
   });
 
   it("shows just the lead preview when the group holds a single call", () => {
     render(<ToolExecutionGroup executions={[shell("1", "Run the tests")]} />);
-    expect(screen.getByText("shell(Run the tests)")).toBeInTheDocument();
+    expect(screen.getByText("Run the tests")).toBeInTheDocument();
+  });
+
+  it("names an edit by its file, as the action", () => {
+    render(<ToolExecutionGroup executions={[mk("edit", "1", { file_path: "src/cart/totals.ts" }), mk("grep", "2")]} />);
+    expect(screen.getByText(/^Edited .*totals\.ts and 1 other tool$/)).toBeInTheDocument();
+  });
+
+  it("keeps name(preview) for a tool with no plain-words verb", () => {
+    render(<ToolExecutionGroup executions={[mk("custom_thing", "1", { query: "x" }), mk("grep", "2")]} />);
+    expect(screen.getByText(/^custom_thing.* and 1 other tool$/)).toBeInTheDocument();
   });
 
   it("truncates a long preview so the trailing count stays visible", () => {

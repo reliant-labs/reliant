@@ -22,6 +22,7 @@ type pinRecorder struct {
 
 	defaultCalls int
 	pinnedTo     []string
+	paths        []string
 }
 
 func (p *pinRecorder) answer() ([]byte, error) {
@@ -36,8 +37,13 @@ func (p *pinRecorder) SendDaemonCommand(context.Context, string, string, []byte,
 	return p.answer()
 }
 
-func (p *pinRecorder) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, _ string, _ []byte, _ int32) ([]byte, error) {
+func (p *pinRecorder) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, _ string, payload []byte, _ int32) ([]byte, error) {
 	p.pinnedTo = append(p.pinnedTo, daemonID)
+	var req struct {
+		Path string `json:"path"`
+	}
+	_ = json.Unmarshal(payload, &req)
+	p.paths = append(p.paths, req.Path)
 	return p.answer()
 }
 
@@ -65,8 +71,12 @@ func memAdoptStore() (*MockAdoptStore, *[]*core.Repo) {
 }
 
 func adoptProject() *db.Project {
-	return &db.Project{ID: "p1", UserID: "u1", Name: "control-plane", Path: "/home/workspace/projects/control-plane"}
+	return &db.Project{ID: "p1", UserID: "u1", Name: "control-plane", Path: "/Users/owner/src/control-plane"}
 }
+
+// checkoutPath is the project's checkout on the machine asked, which is not
+// where the project was created (adoptProject's Path).
+const checkoutPath = "/home/workspace/projects/control-plane"
 
 // The project's checkout lives on one machine; default resolution prefers a
 // connected local daemon, which has no checkout at the cloud path. Adoption
@@ -76,11 +86,12 @@ func TestAdoptFromDaemon_AsksTheBoundMachine(t *testing.T) {
 	store, rows := memAdoptStore()
 	project := adoptProject()
 
-	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "cloud-machine"), project)
+	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "cloud-machine"), project, checkoutPath)
 	require.NoError(t, err)
 	require.Len(t, repos, 1)
 	assert.Equal(t, "", repos[0].RelativePath)
 	assert.Equal(t, []string{"cloud-machine"}, router.pinnedTo)
+	assert.Equal(t, []string{checkoutPath}, router.paths, "the machine is asked about ITS checkout, never projects.path")
 	assert.Zero(t, router.defaultCalls, "a bound adoption never falls back to default resolution")
 	require.Len(t, *rows, 1)
 	assert.True(t, project.IsGitRepo)
@@ -90,7 +101,7 @@ func TestAdoptFromDaemon_UnboundUsesDefaultResolution(t *testing.T) {
 	router := &pinRecorder{discovered: []map[string]any{{"relative_path": "api"}}}
 	store, _ := memAdoptStore()
 
-	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, ""), adoptProject())
+	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, ""), adoptProject(), checkoutPath)
 	require.NoError(t, err)
 	require.Len(t, repos, 1)
 	assert.Equal(t, "api", repos[0].Name)
@@ -106,7 +117,7 @@ func TestAdoptFromDaemon_DiscoverFailureIsAnError(t *testing.T) {
 	router := &pinRecorder{err: cause}
 	store, rows := memAdoptStore()
 
-	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "m"), adoptProject())
+	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "m"), adoptProject(), checkoutPath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cause)
 	assert.Contains(t, err.Error(), "/home/workspace/projects/control-plane")
@@ -118,14 +129,14 @@ func TestAdoptFromDaemon_NothingOnDiskIsNoErrorAndNoRepos(t *testing.T) {
 	router := &pinRecorder{}
 	store, rows := memAdoptStore()
 
-	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "m"), adoptProject())
+	repos, err := AdoptFromDaemon(context.Background(), store, OnDaemon(router, "m"), adoptProject(), checkoutPath)
 	require.NoError(t, err)
 	assert.Empty(t, repos)
 	assert.Empty(t, *rows)
 }
 
 func TestNoReposMessageNamesTheFolder(t *testing.T) {
-	msg := NoReposMessage(adoptProject())
+	msg := NoReposMessage(checkoutPath)
 	assert.Contains(t, msg, "/home/workspace/projects/control-plane")
 	assert.Contains(t, msg, "git init")
 	assert.NotContains(t, msg, "project has no git repos")

@@ -60,15 +60,23 @@ one-hour token scoped to that repository from `reliant github token --as app
 (`reliant-01`): its ruleset bypass is the owner's alone. Fall back to the user
 only where the bot cannot act at all, and say so.
 
-**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included.** Label
-the PR `merge:queue` and stop. The `pr-review` workflow reviews the exact head;
-on `review:passed` it enqueues it (`gh pr merge --auto --match-head-commit`).
-`CI result` is green on a PR within a minute, so auto-merge armed before the
-review puts the unreviewed head straight into the queue, where the review
-marker check (`scripts/ci-review-marker.sh`) fails it and every group behind
-it. `review:changes` means fix, push, and re-add `merge:queue`. Design:
-control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
-script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
+**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included, and no
+queue label.** Open the PR **non-draft** when it is ready (a draft is never
+reviewed), report its URL and stop. The `pr-review` workflow reviews the exact
+head; on a pass it adds `review:passed` + `merge:queue` and enqueues it
+(`gh pr merge --auto --match-head-commit`). `CI result` is green on a PR within
+a minute, so auto-merge armed before the review puts the unreviewed head
+straight into the queue, where the review marker check
+(`scripts/ci-review-marker.sh`) fails it and every group behind it. On
+`review:changes` or `merge:failed`, fix and push: every push is reviewed again
+(pr-fix takes over a PR nobody is fixing). `hold` keeps a PR out of both
+queues. Design: control-plane `docs/pr-pipeline.md`. There is no waiver and no
+local merge script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are
+retired).
+
+**Releases are control-plane's `rc-train` workflow's, never a chat's.** It cuts
+a release candidate when a main moved and 2h passed, or right after a PR
+labelled **`release:asap`** merges: add that label to ship sooner.
 
 ## Load these skills before touching their area
 
@@ -108,12 +116,12 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
   repeat does not merge. A red main opens a `ci:main-red` issue. Details:
   `dev-docs/merge-and-release-gates.md`.
-- **A flaky test never blocks a merge or keeps main red** (owner, 2026-10-30:
-  "I'd rather remove a test than have it be flaky"). An existing test that
-  fails intermittently is fixed within the day, or deleted (the test, or just
-  its flaky assertion) in the same PR that finds it, with an issue labelled
-  `flake:removed` holding the test body, the failure signature and its
-  frequency, so coverage is restored on purpose later. A failure caused by the
+- **Flaky = delete immediately; rewrite as a new deterministic test if it's
+  worth having** (owner, 2026-11-01: "a flaky test is a broken test, and is
+  less useful than if we just deleted that test"). An existing test that fails
+  intermittently is deleted, not root-caused (the test, or just its flaky
+  assertion), in the same PR that finds it, with an issue labelled
+  `flake:removed` holding the test body and the failure signature. A failure caused by the
   host (inotify or fd budget exhausted, disk full) makes the test `t.Skip` with
   a message naming the missing resource, never fail. Never re-run to green: the
   `Flake report` workflow on main reruns failed tests once and files a

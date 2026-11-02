@@ -35,11 +35,20 @@ func (s *Service) GetProjectInitStatus(
 		Initialized bool   `json:"initialized"`
 		Message     string `json:"message"`
 	}
-	initPayload := struct {
-		Path      string `json:"path"`
-		IsGitRepo bool   `json:"is_git_repo"`
-	}{Path: project.Path, IsGitRepo: project.IsGitRepo}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_init_status", initPayload, &initStatus); err != nil {
+	// Asked of the machine holding a checkout, about its path there — never
+	// projects.path, the creating machine's. With no checkout to ask, the
+	// fallback below answers, as it does for a daemon that cannot.
+	err = errNoDaemonRouter
+	if target, terr := s.checkout(ctx, userID, project, "open it"); terr != nil {
+		err = terr
+	} else {
+		initPayload := struct {
+			Path      string `json:"path"`
+			IsGitRepo bool   `json:"is_git_repo"`
+		}{Path: target.Path, IsGitRepo: project.IsGitRepo}
+		err = s.sendToDaemon(ctx, userID, target.DaemonID, "project.check_init_status", initPayload, &initStatus)
+	}
+	if err != nil {
 		logging.ErrorContext(ctx, "Failed to check init status via daemon", "error", err, "projectID", req.Msg.ProjectId)
 		// Fallback: assume initialized since it exists in the database
 		initStatus.Initialized = true

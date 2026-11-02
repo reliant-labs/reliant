@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -100,7 +99,7 @@ func runShellCall(t *testing.T, runStep bool, input string) (*timingOutDaemon, S
 	t.Helper()
 	d := &timingOutDaemon{}
 	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1",
-		Project: &db.Project{ID: "p", Path: "/work/p"}, Daemon: d, RunStep: runStep}
+		Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: d, RunStep: runStep}
 	resp, err := NewShellTool(ShellPlatformUnix).Run(tc, ToolCall{ID: "call-1", Name: ShellToolName, Input: input})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -139,7 +138,7 @@ func TestShellTool_ToolInputCannotClaimRunStep(t *testing.T) {
 	} {
 		d := &timingOutDaemon{}
 		tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1",
-			Project: &db.Project{ID: "p", Path: "/work/p"}, Daemon: d}
+			Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: d}
 		resp, err := NewShellTool(ShellPlatformUnix).Run(tc, ToolCall{ID: "call-1", Name: ShellToolName, Input: input})
 		if err != nil {
 			t.Fatalf("input %s: Run: %v", input, err)

@@ -31,6 +31,12 @@ import (
 
 // NATS subject patterns for tool execution and daemon routing.
 // Subjects now include {userID}.{daemonID} for multi-daemon routing.
+//
+// Every NATS subject reliant uses is granted per role — the api-server, worker
+// and gateway each connect as their own user — in control-plane's
+// deploy/nats/permissions.yaml. A subject added here (or anywhere else) must be
+// granted there in the same change, or the broker refuses it and natsutil logs
+// "NATS refused an operation outside this service's permissions".
 const (
 	toolRequestSubject = "tools.request"    // tools.request.{userID}.{daemonID}
 	toolCancelSubject  = "tools.cancel"     // tools.cancel.{userID}.{daemonID}

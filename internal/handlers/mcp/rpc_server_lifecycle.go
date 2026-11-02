@@ -26,7 +26,7 @@ func (s *Service) UninstallServer(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -41,7 +41,7 @@ func (s *Service) UninstallServer(
 	}
 
 	// Remove from running manager first
-	if err := s.mcpManagerForUser(userID).RemoveProjectServer(projectPath, name); err != nil {
+	if err := s.mcpManagerFor(userID, checkout).RemoveProjectServer(checkout.Path, name); err != nil {
 		logging.WarnContext(ctx, "Failed to remove MCP server from manager during uninstall", "error", err, "name", name)
 		// Continue anyway to remove from config files
 	}
@@ -79,7 +79,7 @@ func (s *Service) RestartServer(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -93,7 +93,7 @@ func (s *Service) RestartServer(
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "MCP not available")
 	}
 
-	mgr := s.mcpManagerForUser(userID)
+	mgr := s.mcpManagerFor(userID, checkout)
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Service) RestartServer(
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "server not found in configuration")
 	}
 
-	if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
+	if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 		logging.WarnContext(ctx, "RestartServer: failed to remove existing server before restart", "name", name, "error", err)
 	}
 
@@ -119,7 +119,7 @@ func (s *Service) RestartServer(
 
 	intCfg := scopedConfigToInternal(scoped.Config)
 
-	if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
+	if err := s.preflightMCPServer(ctx, checkout, name, intCfg); err != nil {
 		logging.ErrorContext(ctx, "MCP server restart failed",
 			"operation", "restart",
 			"server", name,
@@ -136,7 +136,7 @@ func (s *Service) RestartServer(
 	startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
 	defer cancel()
 
-	if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
+	if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
 		logging.ErrorContext(ctx, "MCP server restart failed",
 			"operation", "restart",
 			"server", name,
@@ -174,7 +174,7 @@ func (s *Service) UpdateServerConfig(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -215,7 +215,7 @@ func (s *Service) UpdateServerConfig(
 	}
 	mcpConfig.MCPServers[name] = serverCfg
 
-	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scoped.Scope, mcpConfig); err != nil {
+	if err := s.writeMCPConfigViaDaemon(ctx, checkout, scoped.Scope, mcpConfig); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
@@ -226,14 +226,14 @@ func (s *Service) UpdateServerConfig(
 	}
 
 	if s.deps.Router != nil {
-		mgr := s.mcpManagerForUser(userID)
-		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
+		mgr := s.mcpManagerFor(userID, checkout)
+		if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 			logging.WarnContext(ctx, "Failed to remove server before restart", "error", err)
 		}
 
 		intCfg := scopedConfigToInternal(serverCfg)
 		if intCfg.Enabled {
-			if err := mgr.AddProjectServer(ctx, projectPath, name, intCfg); err != nil {
+			if err := mgr.AddProjectServer(ctx, checkout.Path, name, intCfg); err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText(fmt.Sprintf("configuration saved to %s scope but failed to restart server", scoped.Scope.String()), err)))
 			}
 		}
@@ -264,7 +264,7 @@ func (s *Service) SetServerEnabled(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -291,7 +291,7 @@ func (s *Service) SetServerEnabled(
 	serverCfg.Enabled = ptr.Of(req.Msg.Enabled)
 	mcpConfig.MCPServers[name] = serverCfg
 
-	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scoped.Scope, mcpConfig); err != nil {
+	if err := s.writeMCPConfigViaDaemon(ctx, checkout, scoped.Scope, mcpConfig); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
@@ -302,9 +302,9 @@ func (s *Service) SetServerEnabled(
 	}
 
 	if s.deps.Router != nil {
-		mgr := s.mcpManagerForUser(userID)
+		mgr := s.mcpManagerFor(userID, checkout)
 		if req.Msg.Enabled {
-			if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
+			if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 				logging.WarnContext(ctx, "Failed to remove server before enable restart", "name", name, "error", err)
 			}
 
@@ -312,7 +312,7 @@ func (s *Service) SetServerEnabled(
 			startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
 			defer cancel()
 
-			if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
+			if err := s.preflightMCPServer(ctx, checkout, name, intCfg); err != nil {
 				logging.ErrorContext(ctx, "MCP server enable/disable failed",
 					"operation", "set_enabled",
 					"server", name,
@@ -327,7 +327,7 @@ func (s *Service) SetServerEnabled(
 				}), nil
 			}
 
-			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
+			if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
 				logging.ErrorContext(ctx, "MCP server enable/disable failed",
 					"operation", "set_enabled",
 					"server", name,
@@ -342,7 +342,7 @@ func (s *Service) SetServerEnabled(
 				}), nil
 			}
 		} else {
-			if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
+			if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 				logging.WarnContext(ctx, "Failed to stop server while disabling", "name", name, "error", err)
 			}
 		}
@@ -377,7 +377,7 @@ func (s *Service) MoveServerScope(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -421,15 +421,15 @@ func (s *Service) MoveServerScope(
 	}
 
 	targetConfig.MCPServers[name] = serverCfg
-	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, targetScope, targetConfig); err != nil {
+	if err := s.writeMCPConfigViaDaemon(ctx, checkout, targetScope, targetConfig); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to write target MCP configuration", err)))
 	}
 
 	delete(sourceConfig.MCPServers, name)
-	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, sourceScope, sourceConfig); err != nil {
+	if err := s.writeMCPConfigViaDaemon(ctx, checkout, sourceScope, sourceConfig); err != nil {
 		// Best effort rollback: restore source entry if source write failed after target write.
 		sourceConfig.MCPServers[name] = serverCfg
-		_ = s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, sourceScope, sourceConfig)
+		_ = s.writeMCPConfigViaDaemon(ctx, checkout, sourceScope, sourceConfig)
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText(fmt.Sprintf("failed to finalize move from %s to %s", scoped.Scope.String(), targetScope.String()), err)))
 	}
 
@@ -441,12 +441,12 @@ func (s *Service) MoveServerScope(
 	}
 
 	if targetScope == reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL {
-		s.ensureProjectLocalGitignore(ctx, projectID)
+		s.ensureProjectLocalGitignore(ctx, checkout)
 	}
 
 	if s.deps.Router != nil {
-		mgr := s.mcpManagerForUser(userID)
-		if err := mgr.RemoveProjectServer(projectPath, name); err != nil {
+		mgr := s.mcpManagerFor(userID, checkout)
+		if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 			logging.WarnContext(ctx, "Failed to remove server before restarting after scope move", "name", name, "error", err)
 		}
 
@@ -455,7 +455,7 @@ func (s *Service) MoveServerScope(
 			startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
 			defer cancel()
 
-			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
+			if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
 				logging.ErrorContext(ctx, "MCP server scope move failed",
 					"operation", "move_scope",
 					"server", name,

@@ -31,7 +31,6 @@ import { CreditAmountPicker } from "@/components/Billing/CreditAmountPicker";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import {
   TOPUP_PRESETS_CENTS,
-  formatCentsAsDollars,
 } from "@/components/Settings/cloud/billingUtils";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
@@ -39,6 +38,7 @@ import { trackEvent } from "@/lib/analytics";
 import { getEventBus } from "@/lib/events";
 import type { ModelProvider, StepProps } from "../types";
 import { getForcedEligibility } from "../forcedEligibility";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 const PROVIDERS = [
   {
@@ -540,8 +540,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
                   <div className="space-y-2 border-t border-border/40 pt-3">
                     <p className="text-xs text-muted-foreground">
-                      Have a coupon? Redeem it here — it covers this in full,
-                      and no card is needed.
+                      Have a coupon? Redeem it here. If it covers the full amount,
+                      no card is needed.
                     </p>
                     <RedeemCouponForm
                       variant="collapsed"
@@ -574,7 +574,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {walletLoading || creditsAvailable
                   ? "Start with Reliant"
-                  : `Continue with ${formatCentsAsDollars(creditCents)} credit`}
+                  : `Continue with ${formatPrice(creditCents)} credit`}
               </button>
             </div>
           ) : provider.usesOAuth === "copilot" ? (

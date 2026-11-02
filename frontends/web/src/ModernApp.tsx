@@ -31,7 +31,9 @@ import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
 import { HomeNewChat } from "./components/Apps/HomeNewChat";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
-import { approveAllPendingApprovals } from "./hooks/approval-queries";
+import { approveAllPendingApprovals, countPendingApprovals } from "./hooks/approval-queries";
+import { ESCAPE_STOP_WINDOW_MS, escapeStopDecision, isTypingIn } from "./lib/escapeToStop";
+import ConfirmationDialog from "./components/forge-ui/confirmation_dialog";
 import { useChatListWithWorkspaces, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
 
 
@@ -199,6 +201,11 @@ function App() {
     : viewers.length > 0;
 
   const headerRef = useRef<HeaderRef>(null);
+  // Cmd+Enter approves every pending tool call; it asks first, naming how
+  // many, since a chord is easy to press by accident.
+  const [approveAllPrompt, setApproveAllPrompt] = useState<{ chatId: string; count: number } | null>(null);
+  // When an Escape typed in a field armed the stop (lib/escapeToStop).
+  const escapeArmedAt = useRef<number | null>(null);
 
   // Note: Removed file polling - now handled by viewer store and individual viewer components
 
@@ -491,8 +498,16 @@ function App() {
           const activity = useActivityStore.getState().activities.get(activeChatId);
           const isBusy = isBusyActivity(activity);
 
-          // Only stop if chat is actually busy
+          // Only stop if chat is actually busy. While the user is typing,
+          // the first Escape only arms the stop: a second one stops it.
           if (isBusy) {
+            const decision = escapeStopDecision(isTypingIn(document.activeElement), escapeArmedAt.current, Date.now());
+            if (decision === "arm") {
+              escapeArmedAt.current = Date.now();
+              toast.info("Press Esc again to stop the run", { id: "escape-stop", duration: ESCAPE_STOP_WINDOW_MS });
+              return;
+            }
+            escapeArmedAt.current = null;
             logger.info(
               "🛑 ESC pressed - pausing chat for:",
               activeChatId
@@ -510,11 +525,8 @@ function App() {
         // Approvals are server data in the React Query cache; the helper reads
         // pending straight from the cache and batch-approves optimistically.
         if (activeChatId) {
-          logger.info(
-            "✅ Cmd+Enter pressed - approving all tool requests for:",
-            activeChatId,
-          );
-          void approveAllPendingApprovals(activeChatId);
+          const count = countPendingApprovals(activeChatId);
+          if (count > 0) setApproveAllPrompt({ chatId: activeChatId, count });
         }
       },
       onToggleTerminal: () => {
@@ -1745,7 +1757,7 @@ function App() {
                 storageKey="file-browser-width"
               >
                 <div id="layout-right-sidebar" className="flex flex-col h-full w-full">
-                  <RightSidebar onCloseSidebar={() => setShowFileBrowser(false)} />
+                  <RightSidebar />
                 </div>
               </ResizableSidebar>
             )}
@@ -1755,6 +1767,26 @@ function App() {
       </div>
 
       {/* Git Initialization Modal */}
+      <ConfirmationDialog
+        open={approveAllPrompt !== null}
+        title={
+          approveAllPrompt?.count === 1
+            ? "Approve the waiting tool call?"
+            : `Approve all ${approveAllPrompt?.count ?? 0} waiting tool calls?`
+        }
+        description="Each one runs as soon as you approve. Review them in the chat first if you're not sure what they do."
+        confirmLabel={approveAllPrompt?.count === 1 ? "Approve" : `Approve ${approveAllPrompt?.count ?? 0}`}
+        variant="warning"
+        onConfirm={() => {
+          const prompt = approveAllPrompt;
+          setApproveAllPrompt(null);
+          if (!prompt) return;
+          logger.info("✅ Approving all tool requests for:", prompt.chatId);
+          approveAllPendingApprovals(prompt.chatId).catch((error) => void toast.error(error));
+        }}
+        onCancel={() => setApproveAllPrompt(null)}
+      />
+
       {showGitInitModal && gitInitProjectInfo && currentProject && (
         <InitializeGitModal
           isOpen={showGitInitModal}

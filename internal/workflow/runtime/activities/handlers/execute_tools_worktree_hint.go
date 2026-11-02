@@ -35,7 +35,8 @@ func (a *ExecuteToolsActivity) worktreeAddSuggestion(ctx context.Context, caps *
 
 	// Relative targets resolve against the directory the command ran in.
 	req := tec.buildToolRequest()
-	toolCtx := rctx.NewToolContext(ctx, tec.chatID, tec.thread, tec.project, &rctx.WorktreeInfo{Path: req.WorktreePath})
+	project := &rctx.Project{ID: tec.project.ID, Name: tec.project.Name, Checkout: req.ProjectPath}
+	toolCtx := rctx.NewToolContext(ctx, tec.chatID, tec.thread, project, &rctx.WorktreeInfo{Path: req.WorktreePath})
 	toolCtx.Repos = tec.repos
 	workingDir, err := tools.ResolveRepoPath(toolCtx, params.Repo)
 	if err != nil {

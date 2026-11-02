@@ -458,6 +458,7 @@ export async function queryPanel(req: QueryPanelRequest, options: { signal?: Abo
       errors: Number(session.errors),
       hasReplay: session.hasReplay,
     })),
+    heatmap: (res.heatmap ?? []).map((cell) => ({ timeSec: Math.round(msOf(cell.time) / 1000), low: cell.low, high: cell.high, count: cell.count })),
     seriesMeta: (res.seriesMeta ?? []).map(mapSeriesMeta),
     seriesTotal: res.seriesTotal ?? 0,
     warnings: [...(res.warnings ?? [])],

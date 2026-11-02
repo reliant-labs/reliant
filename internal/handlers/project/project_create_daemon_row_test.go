@@ -25,6 +25,7 @@ import (
 // pending path.
 type createProjectRowRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 	resolveID  string
 	mkdirFails bool
 	enqueued   int

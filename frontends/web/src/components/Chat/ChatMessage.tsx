@@ -668,7 +668,6 @@ function ChatMessageComponent({
             <ToolExecutionGroup
               executions={otherTools}
               messageId={message.id}
-              defaultCollapsed={true}
               chatId={chatId || undefined}
               showRichContent={true}
               onSelectThread={onSelectThread}

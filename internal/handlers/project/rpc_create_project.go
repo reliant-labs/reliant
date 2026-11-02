@@ -48,7 +48,10 @@ func (s *Service) CreateProject(
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
 	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); err == nil && existing != nil {
-		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, existing.Path); verr != nil {
+		// The row was found BY this path, so the path asked about is the
+		// one the caller named — on the machine the request runs on.
+		machine := s.requestMachine(ctx, userID, existing.ID, req.Msg.Path)
+		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, req.Msg.Path, machine); verr != nil {
 			return nil, verr
 		}
 		return nil, svcerr.AlreadyExists("a project already exists at this path")

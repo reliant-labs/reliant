@@ -63,10 +63,12 @@ import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { useSwitchTriggers } from "../useSwitchTriggers";
 import { useWorkflowsScope } from "../useWorkflowsScope";
 import { ComingUpTimeline } from "./ComingUpTimeline";
+import { ReadyMadeStrip } from "./ReadyMadeStrip";
 import { workflowsColumns, type WorkflowRowAction, type WorkflowRowItem, type WorkflowsTableRow } from "./WorkflowRow";
 import {
   automationsDeletedWith,
   deletedAutomationsSentence,
+  invalidWorkflowKey,
   workflowsView,
   type ListedWorkflow,
   type WorkflowListRow,
@@ -579,8 +581,11 @@ function WorkflowsBody() {
         </Card>
       ) : (
         <>
+          <ReadyMadeStrip rows={view.readyMade} projectId={scope.currentProjectId} />
           {tableRows.length > 0 && (
-            <div className="forge-ui">
+            // A size container: the table folds its columns by its own
+            // width, not the window's (WorkflowRow.tsx, FOLD).
+            <div className="forge-ui @container">
               <DataTable<WorkflowsTableRow>
                 ariaLabel="Workflows"
                 columns={workflowsColumns()}
@@ -619,7 +624,7 @@ function WorkflowsBody() {
               <p className="mb-2 px-1 text-xs text-muted-foreground">
                 Used by other workflows. You can run them directly, but they are not offered in the composer.
               </p>
-              <div className="forge-ui">
+              <div className="forge-ui @container">
                 <DataTable<WorkflowsTableRow>
                   ariaLabel="Building blocks"
                   columns={workflowsColumns()}
@@ -632,7 +637,14 @@ function WorkflowsBody() {
               </div>
             </details>
           )}
-          {view.invalid.length > 0 && <InvalidSection workflows={view.invalid} />}
+          {view.invalid.length > 0 && (
+            <InvalidSection
+              workflows={view.invalid}
+              triggersOf={(workflow) => view.invalidTriggers.get(invalidWorkflowKey(workflow)) ?? []}
+              onPause={(triggers, name) => switchTriggers(triggers, false, name, true)}
+              pausing={switching}
+            />
+          )}
         </>
       )}
 
@@ -766,9 +778,21 @@ function WorkflowsControls({
 
 /**
  * Definitions that did not parse. They cannot run or be opened in the builder
- * as a graph, so each shows its file and errors, and how to fix it.
+ * as a graph, so each shows its file and errors, and how to fix it. Triggers
+ * that run one are listed with it — they refuse every event until it parses —
+ * with Pause, since the file is there, not gone.
  */
-function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
+function InvalidSection({
+  workflows,
+  triggersOf,
+  onPause,
+  pausing,
+}: {
+  workflows: InvalidWorkflow[];
+  triggersOf: (workflow: InvalidWorkflow) => Trigger[];
+  onPause: (triggers: Trigger[], name: string) => void;
+  pausing: boolean;
+}) {
   return (
     <section aria-label="Failed to load" className="pt-2">
       <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive-ink">
@@ -794,11 +818,47 @@ function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
               <p className="mt-1.5 text-xs text-muted-foreground">
                 Fix the YAML file directly, or ask the workflow assistant to resolve it.
               </p>
+              <InvalidWorkflowTriggers
+                triggers={triggersOf(workflow)}
+                name={workflowDisplayName(workflow)}
+                onPause={onPause}
+                pausing={pausing}
+              />
             </li>
           ))}
         </ul>
       </Card>
     </section>
+  );
+}
+
+function InvalidWorkflowTriggers({
+  triggers,
+  name,
+  onPause,
+  pausing,
+}: {
+  triggers: Trigger[];
+  name: string;
+  onPause: (triggers: Trigger[], name: string) => void;
+  pausing: boolean;
+}) {
+  if (triggers.length === 0) return null;
+  const on = triggers.filter((t) => t.enabled);
+  const names = triggers.map((t) => t.name).filter(Boolean).join(", ");
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5" data-testid="invalid-workflow-triggers">
+      <p className="text-xs text-warning-ink">
+        {triggers.length === 1 ? "1 trigger runs it" : `${triggers.length} triggers run it`}
+        {names ? ` (${names})` : ""}
+        {on.length > 0 ? ", and refuses every event until the file parses." : ", and is off."}
+      </p>
+      {on.length > 0 && (
+        <Button variant="outline" size="sm" disabled={pausing} onClick={() => onPause(on, name)}>
+          {on.length === 1 ? "Pause trigger" : `Pause ${on.length} triggers`}
+        </Button>
+      )}
+    </div>
   );
 }
 

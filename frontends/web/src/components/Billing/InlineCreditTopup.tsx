@@ -12,11 +12,12 @@
 import { useCallback, useRef, useState } from "react";
 
 import { useWalletOverview } from "@/hooks/useCloudBillingQueries";
-import { formatCentsAsDollars, nanosFromFields, TOPUP_PRESETS_CENTS } from "@/components/Settings/cloud/billingUtils";
+import { nanosFromFields, TOPUP_PRESETS_CENTS } from "@/components/Settings/cloud/billingUtils";
 import { cn } from "@/lib/utils";
 
 import { LinkIdentityModal } from "./LinkIdentityModal";
 import { WalletTopupCheckout } from "./WalletTopupCheckout";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 export interface InlineCreditTopupProps {
   /** The amount to start on; the user can pick another preset. */
@@ -65,7 +66,7 @@ export function InlineCreditTopup({ defaultAmountCents, onDone }: InlineCreditTo
                 : "border-border bg-background text-muted-foreground hover:text-foreground",
             )}
           >
-            {formatCentsAsDollars(cents)}
+            {formatPrice(cents)}
           </button>
         ))}
       </div>

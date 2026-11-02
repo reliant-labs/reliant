@@ -13,7 +13,8 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import { cn } from "@/lib/utils";
 
 import { formatValue, type ValueUnit } from "../format";
-import { TONE_SWATCH, type DisplaySeries } from "./ExplorerChart";
+import { tokenColor } from "../charts/chartPalette";
+import type { DisplaySeries } from "./ExplorerChart";
 import { seriesFigures } from "./seriesView";
 
 export interface SeriesTableProps {
@@ -47,7 +48,7 @@ export function SeriesTable({ series, unit, hidden, onHidden }: SeriesTableProps
             className="inline-flex max-w-full items-center gap-2 truncate rounded text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="metrics-series-toggle"
           >
-            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", TONE_SWATCH[s.tone], off && "opacity-30")} aria-hidden="true" />
+            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", off && "opacity-30")} style={{ backgroundColor: tokenColor(s.color) }} aria-hidden="true" />
             <span className={cn("truncate", off ? "text-ink-muted line-through" : "text-ink")}>{s.label}</span>
             {off ? <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" /> : <Eye className="h-3 w-3 shrink-0 opacity-0" aria-hidden="true" />}
           </button>

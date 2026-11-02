@@ -54,7 +54,8 @@ import {
 } from './viewerViewport'
 import { useExpandedLoops } from './hooks/useExpandedLoops'
 import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
+import { builderReturnState } from '../../lib/routeParent'
 import { useProjectStore } from '../../store/projectStore'
 import { saveWorkflow } from '../../hooks/workflow-queries'
 import { cn } from '../../lib/utils'
@@ -132,6 +133,8 @@ function WorkflowViewerInner({
 }: WorkflowViewerProps) {
   const { getNodes, getNodesBounds, getViewport, setViewport } = useReactFlow()
   const navigate = useNavigate()
+  // No warning without a RouterProvider: tests render the viewer bare.
+  const router = useRouter({ warn: false })
   const currentProject = useProjectStore((state) => state.currentProject)
   const currentWorktree = useCurrentWorktree()
   
@@ -799,6 +802,9 @@ function WorkflowViewerInner({
                   navigate({
                     to: '/workflow/$workflowName',
                     params: { workflowName: name },
+                    // The builder's Back returns here (a chat), not to the
+                    // workflow's page.
+                    state: router ? builderReturnState(router.state.location.href) : undefined,
                   });
                 }}
                 className="p-1 hover:bg-muted rounded"

@@ -29,8 +29,8 @@ import (
 // which names the PROJECT — whose path was correct the whole time — and sends
 // whoever reads it to the wrong table.
 
-// stubRepo answers the three lookups ResolveBasePath makes: all of
-// BasePathReader, so there is nothing else it could be asked.
+// stubRepo answers the lookups ResolveBasePath makes — all of BasePathReader —
+// and its project stands for the main checkout on the request's machine.
 type stubRepo struct {
 	worktree    *db.Worktree
 	worktreeErr error
@@ -44,8 +44,13 @@ func (s *stubRepo) GetWorktree(_ context.Context, _ string) (*db.Worktree, error
 	return s.worktree, s.worktreeErr
 }
 
-func (s *stubRepo) GetProject(_ context.Context, _ string) (*db.Project, error) {
-	return s.project, s.projectErr
+// mainCheckout is the MainCheckout ResolveBasePath falls back to: the
+// project's checkout on the request's machine.
+func (s *stubRepo) mainCheckout(context.Context) (string, error) {
+	if s.projectErr != nil {
+		return "", s.projectErr
+	}
+	return s.project.Path, nil
 }
 
 func (s *stubRepo) GetChat(_ context.Context, _ string) (*db.Chat, error) {
@@ -67,7 +72,7 @@ func TestResolveBasePath_FailedWorktreeWithEmptyPathFallsBackToProject(t *testin
 		project:  &db.Project{ID: "proj-1", Path: projectPath},
 	}
 
-	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-failed"), nil)
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-failed"), nil, repo.mainCheckout)
 	if err != nil {
 		t.Fatalf("ResolveBasePath: %v", err)
 	}
@@ -86,7 +91,7 @@ func TestResolveBasePath_WhitespaceOnlyWorktreePathFallsBackToProject(t *testing
 		project:  &db.Project{ID: "proj-1", Path: projectPath},
 	}
 
-	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-blank"), nil)
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-blank"), nil, repo.mainCheckout)
 	if err != nil {
 		t.Fatalf("ResolveBasePath: %v", err)
 	}
@@ -105,7 +110,7 @@ func TestResolveBasePath_UsableWorktreeStillWins(t *testing.T) {
 		project:  &db.Project{ID: "proj-1", Path: projectPath},
 	}
 
-	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-ok"), nil)
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-ok"), nil, repo.mainCheckout)
 	if err != nil {
 		t.Fatalf("ResolveBasePath: %v", err)
 	}
@@ -124,7 +129,7 @@ func TestResolveBasePath_ChatPointingAtFailedWorktreeFallsBackToProject(t *testi
 		project:  &db.Project{ID: "proj-1", Path: projectPath},
 	}
 
-	got, err := ResolveBasePath(context.Background(), repo, "proj-1", nil, strPtr("chat-1"))
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", nil, strPtr("chat-1"), repo.mainCheckout)
 	if err != nil {
 		t.Fatalf("ResolveBasePath: %v", err)
 	}
@@ -141,11 +146,31 @@ func TestResolveBasePath_MissingWorktreeFallsBackToProject(t *testing.T) {
 		project:     &db.Project{ID: "proj-1", Path: projectPath},
 	}
 
-	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-gone"), nil)
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-gone"), nil, repo.mainCheckout)
 	if err != nil {
 		t.Fatalf("ResolveBasePath: %v", err)
 	}
 	if got != projectPath {
 		t.Fatalf("base path = %q, want %q", got, projectPath)
+	}
+}
+
+// The main worktree row mirrors projects.path, the creating machine's path.
+// It is the main checkout, which is the request machine's own: a Files tab on
+// a cloud machine must never be scoped to the laptop path the project was
+// created at.
+func TestResolveBasePath_MainWorktreeRowIsTheMachinesCheckout(t *testing.T) {
+	const cloudCheckout = "/home/workspace/projects/project"
+	repo := &stubRepo{
+		worktree: &db.Worktree{ID: "wt-main", Path: projectPath, IsMain: true},
+		project:  &db.Project{ID: "proj-1", Path: cloudCheckout},
+	}
+
+	got, err := ResolveBasePath(context.Background(), repo, "proj-1", strPtr("wt-main"), nil, repo.mainCheckout)
+	if err != nil {
+		t.Fatalf("ResolveBasePath: %v", err)
+	}
+	if got != cloudCheckout {
+		t.Fatalf("base path = %q, want the machine's checkout %q, not the main row's creation path", got, cloudCheckout)
 	}
 }
