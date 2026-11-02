@@ -25,7 +25,7 @@ func isolateLogout(t *testing.T) {
 func writeDaemonSignIn(t *testing.T, server, sub string) {
 	t.Helper()
 	require.NoError(t, auth.WriteDaemonCredentials(&auth.DaemonCredentials{
-		PAT: "rlat_DAEMON_" + sub, ServerURL: server, Sub: sub, RegisteredAt: time.Now().UTC(),
+		PAT: "rlat_DAEMON_" + sub, ServerURL: server, Sub: sub, RegisteredAt: fixtureTime,
 	}))
 }
 
@@ -157,12 +157,22 @@ func TestShellQuote(t *testing.T) {
 // told the new user their Add machine sheet was never going to get a code.
 func TestSavedSignInNotice(t *testing.T) {
 	saved := time.Date(2026, 9, 12, 12, 0, 0, 0, time.Local)
-	notice := savedSignInNotice(&auth.DaemonCredentials{RegisteredAt: saved},
-		&connection{ServerURL: testServerURL, ServerSource: sourceFlag})
+	flagged := &connection{ServerURL: testServerURL, ServerSource: sourceFlag}
+	notice := savedSignInNotice(&auth.DaemonCredentials{RegisteredAt: saved}, flagged, false)
 	require.Equal(t, "Using the daemon sign-in saved on this machine on 12 Sep 2026, so there is no pairing code to approve.\n"+
 		"Not you? Run 'reliant auth logout --server "+testServerURL+"', then 'reliant daemon start --server "+testServerURL+"' again.\n", notice)
 
-	notice = savedSignInNotice(&auth.DaemonCredentials{}, &connection{ServerURL: testServerURL})
+	notice = savedSignInNotice(&auth.DaemonCredentials{}, &connection{ServerURL: testServerURL}, false)
 	require.True(t, strings.HasPrefix(notice, "Using the daemon sign-in saved on this machine, so"), notice)
 	require.Contains(t, notice, "Not you? Run 'reliant auth logout', then 'reliant daemon start' again.")
+
+	// Whose it is, when that is recorded.
+	notice = savedSignInNotice(&auth.DaemonCredentials{RegisteredAt: saved, AccountID: "ext-ada", AccountEmail: "ada@example.test"}, flagged, false)
+	require.True(t, strings.HasPrefix(notice, "Using the daemon sign-in saved on this machine for ada@example.test on 12 Sep 2026, so"), notice)
+
+	// Chosen because it is the CLI login's account: logging the CLI in as
+	// someone else is the remedy, since that retires this sign-in.
+	notice = savedSignInNotice(&auth.DaemonCredentials{RegisteredAt: saved, AccountID: "ext-ada", AccountEmail: "ada@example.test"}, flagged, true)
+	require.Equal(t, "Using the daemon sign-in saved on this machine for ada@example.test on 12 Sep 2026, the account you are logged in to the CLI as, so there is no pairing code to approve.\n"+
+		"Not you? Run 'reliant auth login --server "+testServerURL+"' and sign in as yourself, then 'reliant daemon start --server "+testServerURL+"' again.\n", notice)
 }
