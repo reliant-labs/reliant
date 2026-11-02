@@ -19,7 +19,17 @@ import (
 
 // Live dashboard panels query as forge_dash, which reads exactly the columns
 // db/migrations/*_dashboard_grants.up.sql grants (forge db/dashboards). These
-// tests pin that allowlist and prove it by logging in.
+// tests pin that allowlist and prove it by logging in. The queries use fixed
+// timestamps rather than the clock: only whether the server permits them is
+// asserted.
+//
+// Who may run a statement as forge_dash is decided outside this repo, by
+// control-plane's AppDatabase.QueryDatabasePanel (proto-vendor/controlplane/
+// services/app_database/v1/app_database.proto, "LIVE DASHBOARD PANELS"): a
+// signed-in person who is a member of the environment's org and holds db:query,
+// on a database whose ManagedDatabase.dashboards opted in, audited per request;
+// access tokens are refused. Until a deploy opts in, forge_dash stays NOLOGIN and
+// these grants are inert.
 
 // dashboardColumns is every column forge_dash may read. A panel that needs a
 // new column adds a GRANT migration AND a row here; never PII, free text or a
@@ -86,11 +96,11 @@ func TestDashboardRoleLoginReadsGrantedColumnsOnly(t *testing.T) {
 		   FROM messages m
 		   JOIN chats c ON c.id = m.chat_id
 		   LEFT JOIN provider_accounts pa ON pa.id = m.provider_account_id
-		  WHERE m.created_at > now() - interval '30 days' AND m.role IS NOT NULL
+		  WHERE m.created_at >= '2026-01-01T00:00:00Z'::timestamptz AND m.role IS NOT NULL
 		  GROUP BY 1, 4, 5, 6, 7`,
 		`SELECT state, count(*), max(last_active), min(created_at) FROM chats GROUP BY state`,
 		`SELECT provider, model, auth_mode, purpose, outcome, error_class, sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), sum(latency_ms), max(attempt)
-		   FROM llm_call_usage WHERE created_at > now() - interval '1 day' GROUP BY 1, 2, 3, 4, 5, 6`,
+		   FROM llm_call_usage WHERE created_at >= '2026-01-01T00:00:00Z'::timestamptz GROUP BY 1, 2, 3, 4, 5, 6`,
 		`SELECT day, user_id, org_id, sum(calls), sum(error_calls), sum(latency_ms_total), max(updated_at) FROM llm_call_usage_daily GROUP BY 1, 2, 3`,
 	} {
 		_, err := dash.Exec(q)
