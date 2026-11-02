@@ -402,9 +402,9 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 		db.WorkflowStateStopped, db.StopReasonCompleted, f.chat, db.WorkflowStateStopped)
 	// The call's thread works in a workspace that is then archived.
 	exec(`INSERT INTO worktrees (id, name, path, branch, base_branch, project_id, created_at, updated_at, last_active)
-	      VALUES ('wt-bg', 'wt-bg', '/tmp/wt-bg', 'b', 'main', ?, now(), now(), now())`, storetest.SeedProjectID)
+	      VALUES ('wt-bg', 'wt-bg', '/tmp/wt-bg', 'b', 'main', ?0, ?1, ?1, ?1)`, storetest.SeedProjectID, t0)
 	exec(`UPDATE threads SET worktree_id = 'wt-bg' WHERE id = ?`, f.main)
-	exec(`UPDATE worktrees SET deleted_at = now() WHERE id = 'wt-bg'`)
+	exec(`UPDATE worktrees SET deleted_at = ? WHERE id = 'wt-bg'`, t0.Add(time.Hour))
 	procs, err = store.ListBackgroundedProcessToolCalls(ctx, o)
 	if err != nil || len(procs) != 1 || procs[0].ChatRunning || !procs[0].WorkspaceArchived {
 		t.Fatalf("finished chat in an archived workspace: %+v, %v", procs, err)

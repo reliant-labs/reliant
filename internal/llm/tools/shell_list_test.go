@@ -35,9 +35,10 @@ func (d *listingDaemon) TouchProcesses(_ context.Context, ids []string) error {
 // when it could be stopped.
 func TestShellList_ScopedToTheWorkspaceTouchesWhatItShowsAndSaysWhenItStops(t *testing.T) {
 	workspace := t.TempDir()
-	lastActive := time.Now().Add(-90 * time.Minute)
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	lastActive := now.Add(-90 * time.Minute)
 	stopsAfter := lastActive.Add(4 * time.Hour)
-	ended := time.Now()
+	ended := now
 	d := &listingDaemon{processes: []*daemon.ProcessInfo{
 		{ID: "p-dev", Command: "npm run dev", Status: "running", StartTime: lastActive,
 			WorkingDir: filepath.Join(workspace, "frontends", "web"), LastActive: lastActive, StopsAfter: &stopsAfter},
@@ -49,13 +50,14 @@ func TestShellList_ScopedToTheWorkspaceTouchesWhatItShowsAndSaysWhenItStops(t *t
 	}}
 	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1", Daemon: d, Worktree: &rctx.WorktreeInfo{Path: workspace}}
 
-	resp, err := (&shellListTool{}).Execute(tc, ShellListParams{})
+	resp, err := (&shellListTool{clock: func() time.Time { return now }}).Execute(tc, ShellListParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := resp.Content
 	for _, want := range []string{"p-dev", "p-server", "Idle for: 1 hours, 30 minutes",
-		"Auto-stop: after 4 hours, 0 minutes idle once its chat has no run in progress", "Auto-stop: never (keep_alive)"} {
+		"Auto-stop: after 4 hours, 0 minutes idle once its chat has no run in progress; not before 2026-11-02T16:00:00Z",
+		"Auto-stop: never (keep_alive)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("listing lacks %q:\n%s", want, out)
 		}

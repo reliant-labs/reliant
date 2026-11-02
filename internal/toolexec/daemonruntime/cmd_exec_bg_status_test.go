@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"runtime"
 	"testing"
 	"time"
 
@@ -126,7 +127,6 @@ func TestHandleExecBGTouch_ResetsIdleTimeWithinTheCallersGrant(t *testing.T) {
 	before := mgr.ReapOutlook(process).LastActive
 	touch := func(ctx context.Context) time.Time {
 		t.Helper()
-		time.Sleep(5 * time.Millisecond)
 		payload, _ := json.Marshal(daemon.TouchProcessesRequest{ProcessIDs: []string{process.ID, "never-started"}})
 		if _, err := handleExecBGTouch(ctx, payload); err != nil {
 			t.Fatalf("handleExecBGTouch: %v", err)
@@ -134,6 +134,15 @@ func TestHandleExecBGTouch_ResetsIdleTimeWithinTheCallersGrant(t *testing.T) {
 		return mgr.ReapOutlook(process).LastActive
 	}
 
+	// The clock may not have ticked since the start: wait until it has, so
+	// a touch that works is distinguishable from one that did nothing.
+	deadline := time.Now().Add(10 * time.Second)
+	for !time.Now().UTC().After(before) {
+		if time.Now().After(deadline) {
+			t.Fatal("the clock never moved past the process start")
+		}
+		runtime.Gosched()
+	}
 	if got := touch(daemonpolicy.NewContext(context.Background(), &daemonpolicy.Policy{GrantID: "grant-1"})); !got.Equal(before) {
 		t.Fatalf("a connector touched a first-party process: last active %v -> %v", before, got)
 	}

@@ -37,7 +37,10 @@ type ShellListResponseMetadata struct {
 	RunningProcesses int `json:"running_processes"`
 }
 
-type shellListTool struct{}
+type shellListTool struct {
+	// clock reads the time idle durations are measured to; nil is time.Now.
+	clock func() time.Time
+}
 
 const (
 	ShellListToolName    = "shell_list"
@@ -102,6 +105,9 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 	// would keep every other workspace's leftovers alive forever.
 	workspace, _ := GetWorkingDirectory(rctx)
 	now := time.Now()
+	if b.clock != nil {
+		now = b.clock()
+	}
 
 	// Filter out non-running processes if not showing all
 	var filteredProcesses []*filteredProcess
@@ -153,7 +159,7 @@ func (b *shellListTool) Execute(rctx *rctx.ToolContext, params ShellListParams) 
 		fmt.Fprintf(&output, "Started: %s\n", p.StartTime.Format(time.RFC3339))
 
 		if p.Status == "running" {
-			duration := time.Since(p.StartTime)
+			duration := now.Sub(p.StartTime)
 			fmt.Fprintf(&output, "Running for: %s\n", formatDuration(duration))
 			// Surface the env-aware proxied preview URL for any publicly-bound
 			// (0.0.0.0) listening port so the agent can post a reachable link

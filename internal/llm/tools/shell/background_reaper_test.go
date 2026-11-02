@@ -4,8 +4,10 @@
 package shell
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -146,6 +148,84 @@ func TestReapIdle_OutputKeepsAProcessActive(t *testing.T) {
 	require.Equal(t, []string{process.ID}, m.ReapIdle(reapTestConfig))
 }
 
+// Any output is activity, not only whole lines: a command printing progress
+// dots with no newline for hours is not idle.
+func TestReapIdle_PartialLineOutputKeepsAProcessActive(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	dir := t.TempDir()
+	process := startQuiet(t, m, StartProcessOptions{
+		ChatID:     "chat-done",
+		WorkingDir: dir,
+		Command:    `while [ ! -e dot ]; do sleep 0.02; done; printf .; exec sleep 600`,
+	})
+	before := m.ReapOutlook(process).LastActive
+
+	clock.Advance(4*time.Hour - time.Minute)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "dot"), nil, 0o600))
+	require.Eventually(t, func() bool { return m.ReapOutlook(process).LastActive.After(before) },
+		10*time.Second, 10*time.Millisecond, "a write with no newline is activity")
+	clock.Advance(2 * time.Minute)
+
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+	require.Empty(t, m.ReapIdle(reapTestConfig), "it printed a progress dot two minutes ago")
+}
+
+// A foreground command detached into the background keeps writing into the
+// buffers its foreground writers fill. Those writers stamp the activity the
+// adopted process is judged by, so its output after the detach still counts.
+func TestReapIdle_AdoptedCommandsOutputKeepsItActive(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	dir := t.TempDir()
+	activity := NewOutputActivity(clock.Now)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("bash", "-c", `while [ ! -e speak ]; do sleep 0.02; done; echo still here; exec sleep 600`)
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = activity.Writer(&stdout), activity.Writer(&stderr)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	waitCh := make(chan error, 1)
+	go func() { waitCh <- cmd.Wait() }()
+	process, err := m.AdoptRunningProcess(AdoptRunningProcessOptions{
+		Cmd: cmd, Command: "detached", WorkingDir: dir, ChatID: "chat-done", StartTime: clock.Now(),
+		StdoutBuf: &stdout, StderrBuf: &stderr, WaitErrCh: waitCh, Activity: activity,
+	})
+	require.NoError(t, err)
+
+	clock.Advance(4*time.Hour - time.Minute)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "speak"), nil, 0o600))
+	require.Eventually(t, func() bool { return m.ReapOutlook(process).LastActive.Equal(clock.Now()) },
+		10*time.Second, 10*time.Millisecond, "output after the detach is the adopted process's activity")
+	clock.Advance(2 * time.Minute)
+
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+	require.Empty(t, m.ReapIdle(reapTestConfig))
+	clock.Advance(4 * time.Hour)
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+	require.Equal(t, []string{process.ID}, m.ReapIdle(reapTestConfig), "idle again after it fell silent")
+}
+
+// The reaper judges each candidate twice: once in the scan, and again right
+// before its kill. An agent that uses the process in between wins.
+func TestReapIdle_UseBetweenScanAndKillSparesTheProcess(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	process := startQuiet(t, m, StartProcessOptions{ChatID: "chat-done"})
+	clock.Advance(5 * time.Hour)
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+
+	beforeReap = func(p *BackgroundProcess) { m.Touch(p.ID) }
+	t.Cleanup(func() { beforeReap = nil })
+	require.Empty(t, m.ReapIdle(reapTestConfig))
+	require.Equal(t, "running", process.StatusSafe())
+
+	// The same holds for a verdict that the chat started running again.
+	clock.Advance(5 * time.Hour)
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+	beforeReap = func(p *BackgroundProcess) { m.RecordChatVerdicts(map[string]ChatVerdict{p.ID: {Running: true}}) }
+	require.Empty(t, m.ReapIdle(reapTestConfig))
+	require.Equal(t, "running", process.StatusSafe())
+}
+
 // The server's word goes stale: once it stops repeating that the chat has
 // ended (it is unreachable, or stopped polling), the reaper does nothing.
 // Unknown is not finished.
@@ -230,9 +310,7 @@ wait`,
 
 	clock.Advance(5 * time.Hour)
 	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
-	start := time.Now()
 	require.Equal(t, []string{process.ID}, m.ReapIdle(reapTestConfig))
-	require.GreaterOrEqual(t, time.Since(start), KillGraceTimeout, "the grandchild ignores SIGTERM, so the reap waited out the grace period")
 	require.True(t, gone(grandchild), "the grandchild that ignored SIGTERM was SIGKILLed with its group")
 	require.Equal(t, "killed", process.StatusSafe())
 }

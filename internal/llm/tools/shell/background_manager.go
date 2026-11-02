@@ -127,15 +127,13 @@ type BackgroundProcess struct {
 	// (internal/proctree). Nil for a process recovered from the database.
 	tree *proctree.Tree
 
-	// clock stamps lastActive: the manager's clock. Nil for a process
-	// recovered from the database, which the reaper never stops.
-	clock func() time.Time
-	// lastActive is when the process last wrote output or an agent touched
-	// it; chat is the server's latest word on the chat that started it,
-	// heard at chatAt. Guarded by outputMu. See background_reaper.go.
-	lastActive time.Time
-	chat       ChatVerdict
-	chatAt     time.Time
+	// activity is when the process last wrote output or an agent touched
+	// it. Nil for a process recovered from the database, which the reaper
+	// never stops. chat is the server's latest word on the chat that started
+	// it, heard at chatAt, guarded by outputMu. See background_reaper.go.
+	activity *OutputActivity
+	chat     ChatVerdict
+	chatAt   time.Time
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -498,8 +496,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		ThreadID:       opts.ThreadID,
 		KeepAlive:      opts.KeepAlive,
 		GrantID:        opts.GrantID,
-		clock:          m.now,
-		lastActive:     m.now(),
+		activity:       NewOutputActivity(m.now),
 		cmd:            cmd,
 		stdout:         stdout,
 		stderr:         stderr,
@@ -612,6 +609,11 @@ type outputLineWriter struct {
 
 func (w *outputLineWriter) Write(p []byte) (int, error) {
 	written := len(p)
+	// Output is activity, whole line or not: a process printing progress
+	// dots without a newline is as alive as one printing log lines.
+	if written > 0 {
+		w.process.activity.Touch()
+	}
 	for len(p) > 0 {
 		newline := bytes.IndexByte(p, '\n')
 		if newline < 0 {
@@ -647,8 +649,6 @@ func (w *outputLineWriter) emit(raw []byte) {
 	process.outputMu.Lock()
 	w.buffer.WriteString(line)
 	w.buffer.WriteByte('\n')
-	// Output is activity: a process still writing is not idle.
-	process.touchLocked()
 	process.outputSeq++
 	outputLine := OutputLineWithSeq{
 		Type:     w.outputType,
@@ -1456,6 +1456,10 @@ type AdoptRunningProcessOptions struct {
 	// Tree is the command's process tree (proctree), which the background
 	// manager takes over: it releases it, and a kill reaches all of it.
 	Tree *proctree.Tree
+	// Activity is stamped by the writers that feed StdoutBuf/StderrBuf
+	// (OutputActivity.Writer), so output after adoption keeps the process
+	// from looking idle. Nil starts a fresh one that only touches stamp.
+	Activity *OutputActivity
 }
 
 // AdoptRunningProcess adopts an already-running command into the background manager.
@@ -1500,6 +1504,12 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 	if stderr == nil {
 		stderr = &bytes.Buffer{}
 	}
+	// The command keeps writing into the caller's buffers; their writers
+	// stamp opts.Activity, which becomes this process's activity clock.
+	activity := opts.Activity
+	if activity == nil {
+		activity = NewOutputActivity(m.now)
+	}
 
 	process := &BackgroundProcess{
 		ID:             processID,
@@ -1512,8 +1522,7 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		ChatID:         opts.ChatID,
 		ThreadID:       opts.ThreadID,
 		KeepAlive:      opts.KeepAlive,
-		clock:          m.now,
-		lastActive:     m.now(),
+		activity:       activity,
 		cmd:            opts.Cmd,
 		tree:           opts.Tree,
 		stdout:         stdout,

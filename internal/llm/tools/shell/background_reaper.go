@@ -4,9 +4,11 @@ package shell
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -100,11 +102,58 @@ func (m *BackgroundManager) now() time.Time {
 	return time.Now()
 }
 
-// touchLocked records activity now. The caller holds outputMu.
-func (p *BackgroundProcess) touchLocked() {
-	if p.clock != nil {
-		p.lastActive = p.clock()
+// OutputActivity is when a command last showed life: wrote any output, or an
+// agent used it. A foreground command's output writers stamp one from the
+// start (Writer), so a command detached into the background
+// (AdoptRunningProcess) keeps the clock its output has been setting. Safe for
+// concurrent use; the zero of a nil *OutputActivity is "never active".
+type OutputActivity struct {
+	clock func() time.Time
+	nanos atomic.Int64
+}
+
+// NewOutputActivity starts an activity clock reading clock (nil: time.Now),
+// active now.
+func NewOutputActivity(clock func() time.Time) *OutputActivity {
+	if clock == nil {
+		clock = time.Now
 	}
+	a := &OutputActivity{clock: clock}
+	a.Touch()
+	return a
+}
+
+// Touch records activity now.
+func (a *OutputActivity) Touch() {
+	if a != nil {
+		a.nanos.Store(a.clock().UnixNano())
+	}
+}
+
+// At is when the activity was last recorded.
+func (a *OutputActivity) At() time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	return time.Unix(0, a.nanos.Load()).UTC()
+}
+
+// Writer wraps w so that every non-empty write — a whole line or a progress
+// dot — records activity.
+func (a *OutputActivity) Writer(w io.Writer) io.Writer {
+	return activityWriter{w: w, activity: a}
+}
+
+type activityWriter struct {
+	w        io.Writer
+	activity *OutputActivity
+}
+
+func (aw activityWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		aw.activity.Touch()
+	}
+	return aw.w.Write(p)
 }
 
 // Touch records that an agent used these processes (read their output,
@@ -129,9 +178,7 @@ func (m *BackgroundManager) TouchForGrant(grantID string, processIDs ...string) 
 	}
 	m.mu.RUnlock()
 	for _, p := range touched {
-		p.outputMu.Lock()
-		p.touchLocked()
-		p.outputMu.Unlock()
+		p.activity.Touch()
 	}
 }
 
@@ -191,13 +238,13 @@ func (m *BackgroundManager) ReapOutlook(process *BackgroundProcess) ReapOutlook 
 	now := m.now()
 	process.outputMu.RLock()
 	defer process.outputMu.RUnlock()
-	out := ReapOutlook{LastActive: process.lastActive}
+	out := ReapOutlook{LastActive: process.activity.At()}
 	if !process.chatAt.IsZero() && now.Sub(process.chatAt) <= defaultVerdictTTL {
 		running := process.chat.Running
 		out.ChatRunning = &running
 	}
 	switch {
-	case process.clock == nil || process.cmd == nil:
+	case process.activity == nil || process.cmd == nil:
 		out.Exempt = "not started by this daemon"
 	case process.ChatID == "":
 		out.Exempt = "not started by a chat"
@@ -206,7 +253,7 @@ func (m *BackgroundManager) ReapOutlook(process *BackgroundProcess) ReapOutlook 
 	case window <= 0:
 		out.Exempt = "idle reaping is off"
 	default:
-		at := process.lastActive.Add(window)
+		at := out.LastActive.Add(window)
 		out.StopsAfter = &at
 	}
 	return out
@@ -218,7 +265,7 @@ func (m *BackgroundManager) reapReason(process *BackgroundProcess, now time.Time
 	defer process.outputMu.RUnlock()
 	// Only what this daemon started and still controls: a process recovered
 	// from the database, or one that has ended, is not the reaper's.
-	if process.Status != "running" || process.cmd == nil || process.cancelFunc == nil || process.clock == nil {
+	if process.Status != "running" || process.cmd == nil || process.cancelFunc == nil || process.activity == nil {
 		return ""
 	}
 	fresh := !process.chatAt.IsZero() && now.Sub(process.chatAt) <= cfg.VerdictTTL
@@ -228,7 +275,7 @@ func (m *BackgroundManager) reapReason(process *BackgroundProcess, now time.Time
 	if process.ChatID == "" || process.KeepAlive || cfg.IdleAfter <= 0 {
 		return ""
 	}
-	idle := now.Sub(process.lastActive)
+	idle := now.Sub(process.activity.At())
 	if idle < cfg.IdleAfter || !fresh || process.chat.Running {
 		return ""
 	}
@@ -251,7 +298,11 @@ func (m *BackgroundManager) ReapIdle(cfg ReaperConfig) []string {
 		}
 	}
 	m.mu.RUnlock()
-	return m.reapAll(reasons)
+	// Each candidate is judged again right before its kill: output, a touch
+	// or a "running" verdict that landed since the scan above must win.
+	return m.reapAll(reasons, func(p *BackgroundProcess) string {
+		return m.reapReason(p, m.now(), cfg)
+	})
 }
 
 // StopProcessesUnder stops every running process this daemon started whose
@@ -273,7 +324,8 @@ func (m *BackgroundManager) StopProcessesUnder(dir, why string) int {
 		}
 	}
 	m.mu.RUnlock()
-	return len(m.reapAll(reasons))
+	// No second look: the directory is going, whatever the process does.
+	return len(m.reapAll(reasons, nil))
 }
 
 // within reports whether path is root or below it.
@@ -285,9 +337,15 @@ func within(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// beforeReap, when set (tests only), runs for each candidate between the scan
+// that chose it and the second look before its kill.
+var beforeReap func(*BackgroundProcess)
+
 // reapAll stops each process, concurrently: each kill may wait out
-// KillGraceTimeout, and the processes are independent.
-func (m *BackgroundManager) reapAll(reasons map[*BackgroundProcess]string) []string {
+// KillGraceTimeout, and the processes are independent. recheck, when set,
+// re-judges each candidate just before its kill and returns the reason to
+// stop it, or "" to spare it.
+func (m *BackgroundManager) reapAll(reasons map[*BackgroundProcess]string, recheck func(*BackgroundProcess) string) []string {
 	var (
 		wg     sync.WaitGroup
 		mu     sync.Mutex
@@ -297,6 +355,15 @@ func (m *BackgroundManager) reapAll(reasons map[*BackgroundProcess]string) []str
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if beforeReap != nil {
+				beforeReap(p)
+			}
+			if recheck != nil {
+				if reason = recheck(p); reason == "" {
+					logging.Debug("Background process no longer reapable; sparing it", "id", p.ID)
+					return
+				}
+			}
 			if m.reap(p, reason) {
 				mu.Lock()
 				reaped = append(reaped, p.ID)
@@ -318,8 +385,8 @@ func (m *BackgroundManager) reap(process *BackgroundProcess, reason string) bool
 	process.outputSeq++
 	process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{Type: "stderr", Text: note, Sequence: process.outputSeq})
 	process.stderr.WriteString(note + "\n")
-	idle := m.now().Sub(process.lastActive)
 	process.outputMu.Unlock()
+	idle := m.now().Sub(process.activity.At())
 
 	logging.Info("Reaping background process",
 		"id", process.ID, "chat_id", process.ChatID, "thread_id", process.ThreadID,

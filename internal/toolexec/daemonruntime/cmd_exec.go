@@ -143,8 +143,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	// Output stamps activity, so if the command is detached into the
+	// background its idle time starts from its last output, not the detach.
+	activity := shell.NewOutputActivity(nil)
+	cmd.Stdout = activity.Writer(&stdoutBuf)
+	cmd.Stderr = activity.Writer(&stderrBuf)
 
 	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
 	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
@@ -205,6 +208,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			ChatID:     req.ChatID,
 			ThreadID:   req.ThreadID,
 			KeepAlive:  req.KeepAlive,
+			Activity:   activity,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release

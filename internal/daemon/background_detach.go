@@ -88,6 +88,10 @@ type DetachOptions struct {
 	ChatID    string
 	ThreadID  string
 	KeepAlive bool
+	// Activity is stamped by the writers feeding StdoutBuf/StderrBuf
+	// (shell.OutputActivity.Writer); adopted, it is the process's activity
+	// clock, so output after the detach keeps it from looking idle.
+	Activity *shell.OutputActivity
 }
 
 // PollForBackgroundDetach waits for the command to finish OR for the user to ask
@@ -142,6 +146,7 @@ func PollForBackgroundDetach(ctx context.Context, opts DetachOptions) (CommandRe
 				ChatID:     opts.ChatID,
 				ThreadID:   opts.ThreadID,
 				KeepAlive:  opts.KeepAlive,
+				Activity:   opts.Activity,
 			})
 			if adoptErr != nil {
 				// Adoption failed: the command is still running and still owned
