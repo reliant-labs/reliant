@@ -121,7 +121,7 @@ func checkViewerFile(f *os.File, path, root string, protected []Credential) erro
 		return err
 	}
 	abs, real := viewerPaths(path)
-	if ri, err := os.Stat(real); err != nil || !os.SameFile(info, ri) {
+	if ri, err := viewerStat(real); err != nil || !os.SameFile(info, ri) {
 		return fmt.Errorf("%w (%s changed while it was opened)", ErrViewerCredential, path)
 	}
 	return checkViewerRead(abs, real, root, info, protected)
@@ -132,7 +132,7 @@ func denyViewerRead(path, root string, protected []Credential) error {
 		return nil
 	}
 	abs, real := viewerPaths(path)
-	info, err := os.Stat(real)
+	info, err := viewerStat(real)
 	if err != nil {
 		info = nil
 	}
@@ -150,28 +150,53 @@ func viewerPaths(path string) (abs, real string) {
 
 // checkViewerRead is the guard itself. info is the file being read (nil when
 // it does not exist); it is what a hard link is recognised by.
+//
+// Pathnames alone cannot decide it: a case-insensitive volume (macOS by
+// default) opens ~/.SSH/id_rsa as ~/.ssh/id_rsa, and symlink resolution keeps
+// the spelling it was given. So besides the string checks, a path is in a
+// directory store when the store's directory is, by file identity, the path
+// or one of its parents, and it is a file store when it is that file.
 func checkViewerRead(abs, real, root string, info os.FileInfo, protected []Credential) error {
 	realRoot := ""
+	var rootInfo os.FileInfo
 	if strings.TrimSpace(root) != "" {
 		realRoot = ResolveLoose(root)
+		rootInfo, _ = viewerStat(realRoot)
 	}
+	chain := identityChain(real)
 	for _, c := range protected {
 		realStore := ResolveLoose(c.Path)
+		storeInfo, _ := viewerStat(realStore)
 		hit := c.covers(abs) || c.covers(real) ||
 			Credential{Path: realStore, Dir: c.Dir}.covers(real)
-		if !hit && info != nil && sameAsStored(info, realStore, c.Dir) {
-			// A hard link, or a second mount of the same disk. Where it sits
-			// says nothing about what it is, so no exemption below applies.
+		if !hit && storeInfo != nil && holdsByIdentity(chain, info, storeInfo, c.Dir) {
+			// The store under another spelling, a hard link, or a second
+			// mount of the same disk. Where it sits says nothing about what
+			// it is, so no exemption below applies.
 			return fmt.Errorf("%w (%s)", ErrViewerCredential, c.Path)
-		}
-		if !hit {
-			continue
 		}
 		// Where the store sits, its own name unresolved: ~/.ssh stays ~/.ssh
 		// when it links into a dotfiles repo, and becomes /data/u/.ssh when
 		// the home directory itself is a link to /data/u.
 		storeAt := filepath.Join(ResolveLoose(filepath.Dir(c.Path)), filepath.Base(c.Path))
-		if realRoot != "" && within(real, realRoot) && !within(storeAt, realRoot) {
+		exempt := realRoot != "" && within(real, realRoot) && !withinByIdentity(storeAt, realRoot, rootInfo)
+		if !hit && c.Dir && storeInfo != nil && storeInfo.IsDir() && info != nil && info.Mode().IsRegular() {
+			switch {
+			case mayHaveOtherNames(info):
+				// A second name for a file reached through the store,
+				// directly or by a symlink in it, wherever the name sits.
+				if storeHolds(realStore, info, false) {
+					return fmt.Errorf("%w (%s)", ErrViewerCredential, c.Path)
+				}
+			case !exempt:
+				// A single-name file is in the store only as the target of
+				// a symlink in it (~/.ssh/id_rsa -> /keys/id_rsa). A file
+				// of the workspace that a store links to is the dotfiles
+				// case below, so the walk is spared there.
+				hit = storeHolds(realStore, info, true)
+			}
+		}
+		if !hit || exempt {
 			continue
 		}
 		return fmt.Errorf("%w (%s)", ErrViewerCredential, c.Path)
@@ -179,33 +204,115 @@ func checkViewerRead(abs, real, root string, info os.FileInfo, protected []Crede
 	return nil
 }
 
-// sameAsStored reports whether info is the credential file store or, for a
-// directory store, a file inside it. A directory is only walked for a file
-// that may have a second name (more than one link), which an ordinary project
-// file does not.
-func sameAsStored(info os.FileInfo, store string, dir bool) bool {
-	if !dir {
-		si, err := os.Stat(store)
-		return err == nil && os.SameFile(info, si)
+// viewerStat is os.Stat; tests replace it to stand in for a case-insensitive
+// volume, which the hosts that run them do not have.
+var viewerStat = os.Stat
+
+// identityChain returns the file identities of p and each of its parents, p
+// first. A component that does not exist is skipped.
+func identityChain(p string) []os.FileInfo {
+	var out []os.FileInfo
+	for {
+		if fi, err := viewerStat(p); err == nil {
+			out = append(out, fi)
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return out
+		}
+		p = parent
 	}
-	if !info.Mode().IsRegular() || !mayHaveOtherNames(info) {
+}
+
+// holdsByIdentity reports whether the file whose identity chain is chain (and
+// whose own info is info, nil when it does not exist) is the file store, or
+// lies in the directory store, whose info is store.
+func holdsByIdentity(chain []os.FileInfo, info, store os.FileInfo, dir bool) bool {
+	if !dir {
+		return info != nil && os.SameFile(info, store)
+	}
+	for _, fi := range chain {
+		if os.SameFile(fi, store) {
+			return true
+		}
+	}
+	return false
+}
+
+// withinByIdentity is within, also true when root is, by file identity, p or
+// one of its parents.
+func withinByIdentity(p, root string, rootInfo os.FileInfo) bool {
+	if within(p, root) {
+		return true
+	}
+	if rootInfo == nil {
 		return false
 	}
-	found := false
-	_ = filepath.WalkDir(store, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || found {
-			return nil
+	for _, fi := range identityChain(p) {
+		if os.SameFile(fi, rootInfo) {
+			return true
 		}
-		if !d.Type().IsRegular() {
-			return nil
+	}
+	return false
+}
+
+// storeHolds reports whether target is a file reached through the directory
+// store: a regular file in it, a file a symlink in it points at, or one of
+// those beneath a directory a symlink in it points at. Directories are
+// visited once by identity, so a symlink cycle ends. linkedOnly counts only
+// files reached through a symlink, for a target with one name: a regular file
+// in the store's own tree has that tree's path, which the string checks saw.
+func storeHolds(store string, target os.FileInfo, linkedOnly bool) bool {
+	var seen []os.FileInfo
+	var walk func(dir string, linked bool) bool
+	walk = func(dir string, linked bool) bool {
+		di, err := viewerStat(dir)
+		if err != nil || !di.IsDir() {
+			return false
 		}
-		if si, err := d.Info(); err == nil && os.SameFile(info, si) {
-			found = true
-			return filepath.SkipAll
+		for _, s := range seen {
+			if os.SameFile(s, di) {
+				return false
+			}
 		}
-		return nil
-	})
-	return found
+		seen = append(seen, di)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		for _, e := range entries {
+			p := filepath.Join(dir, e.Name())
+			switch {
+			case e.IsDir():
+				if walk(p, linked) {
+					return true
+				}
+			case e.Type()&fs.ModeSymlink != 0:
+				fi, err := viewerStat(p)
+				if err != nil {
+					continue
+				}
+				if fi.IsDir() {
+					if walk(p, true) {
+						return true
+					}
+					continue
+				}
+				if os.SameFile(fi, target) {
+					return true
+				}
+			case e.Type().IsRegular():
+				if linkedOnly && !linked {
+					continue
+				}
+				if fi, err := e.Info(); err == nil && os.SameFile(fi, target) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(store, false)
 }
 
 // covers reports whether p is the credential location c or, for a directory,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -130,7 +131,7 @@ func TestDenyViewerRead_HardLinksIntoStores(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := filepath.Join(project, name)
 			if err := os.Link(target, p); err != nil {
-				t.Skipf("hard links unavailable here: %v", err)
+				t.Fatalf("os.Link: %v", err)
 			}
 			if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
 				t.Errorf("denyViewerRead(hard link to %s) = %v, want ErrViewerCredential", target, err)
@@ -148,7 +149,7 @@ func TestDenyViewerRead_HardLinksIntoStores(t *testing.T) {
 	// A project file with a second name of its own is still a project file.
 	readme := filepath.Join(project, "README.md")
 	if err := os.Link(readme, filepath.Join(project, "README.copy")); err != nil {
-		t.Skipf("hard links unavailable here: %v", err)
+		t.Fatalf("os.Link: %v", err)
 	}
 	if err := denyViewerRead(readme, project, protected); err != nil {
 		t.Errorf("a hard-linked project file was refused: %v", err)
@@ -191,5 +192,157 @@ func TestCheckViewerFile_RefusesAPathThatChanged(t *testing.T) {
 	defer f.Close()
 	if err := checkViewerFile(f, link, project, protected); err != nil {
 		t.Errorf("an unchanged project file was refused: %v", err)
+	}
+}
+
+// A key that ~/.ssh reaches through a symlink (to the file, or to a directory
+// holding it) is in the store: a project hard link to it is refused, and so is
+// a project symlink to it, though neither names a path under ~/.ssh. A cycle
+// of symlinks in the store does not stop the walk.
+func TestDenyViewerRead_StoreReachesKeysThroughSymlinks(t *testing.T) {
+	home, project := viewerHome(t)
+	protected := viewerProtected(home, "")
+	keys := filepath.Join(home, "keys")
+	for _, f := range []string{"key", "dir/key", "single"} {
+		p := filepath.Join(keys, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("secret"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ssh := filepath.Join(home, ".ssh")
+	// id_rsa is a regular file in viewerHome; here it is a symlink.
+	if err := os.Remove(filepath.Join(ssh, "id_rsa")); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]string{
+		"id_rsa":   filepath.Join(keys, "key"),
+		"keydir":   filepath.Join(keys, "dir"),
+		"id_ecdsa": filepath.Join(keys, "single"),
+		"loop":     ssh,
+	} {
+		if err := os.Symlink(target, filepath.Join(ssh, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, target := range map[string]string{
+		"login.txt": filepath.Join(keys, "key"),
+		"deploy":    filepath.Join(keys, "dir", "key"),
+	} {
+		t.Run("hard link "+name, func(t *testing.T) {
+			p := filepath.Join(project, name)
+			if err := os.Link(target, p); err != nil {
+				t.Fatalf("os.Link: %v", err)
+			}
+			if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("denyViewerRead(project hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := checkViewerFile(f, p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("checkViewerFile(project hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+		})
+	}
+	t.Run("the link target by its own path", func(t *testing.T) {
+		if err := denyViewerRead(filepath.Join(keys, "single"), project, protected); !errors.Is(err, ErrViewerCredential) {
+			t.Errorf("denyViewerRead(target of ~/.ssh/id_ecdsa) = %v, want ErrViewerCredential", err)
+		}
+	})
+	t.Run("a project symlink to the link target", func(t *testing.T) {
+		p := filepath.Join(project, "single")
+		if err := os.Symlink(filepath.Join(keys, "single"), p); err != nil {
+			t.Fatal(err)
+		}
+		if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+			t.Errorf("denyViewerRead(project symlink to the target of ~/.ssh/id_ecdsa) = %v, want ErrViewerCredential", err)
+		}
+	})
+	t.Run("a project file is still served", func(t *testing.T) {
+		if err := denyViewerRead(filepath.Join(project, "README.md"), project, protected); err != nil {
+			t.Errorf("a project file was refused: %v", err)
+		}
+	})
+}
+
+// foldStat is os.Stat on a case-insensitive volume under root: each path
+// component below root matches a directory entry whatever its case, as on
+// macOS's default APFS. Symlink resolution still keeps the spelling it is
+// given, which is what makes string prefixes miss.
+func foldStat(root string) func(string) (os.FileInfo, error) {
+	return func(p string) (os.FileInfo, error) {
+		rel, err := filepath.Rel(root, p)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			return os.Stat(p)
+		}
+		cur := root
+		for _, part := range strings.Split(rel, string(filepath.Separator)) {
+			next := filepath.Join(cur, part)
+			if _, err := os.Lstat(next); err != nil {
+				entries, rerr := os.ReadDir(cur)
+				if rerr != nil {
+					return nil, err
+				}
+				for _, e := range entries {
+					if strings.EqualFold(e.Name(), part) {
+						next = filepath.Join(cur, e.Name())
+						break
+					}
+				}
+			}
+			cur = next
+		}
+		return os.Stat(cur)
+	}
+}
+
+// On a case-insensitive volume ~/.SSH/id_rsa opens ~/.ssh/id_rsa. The guard
+// recognises the store by identity, not spelling.
+func TestDenyViewerRead_CaseInsensitiveVolume(t *testing.T) {
+	home, project := viewerHome(t)
+	protected := viewerProtected(home, "")
+	saved := viewerStat
+	viewerStat = foldStat(home)
+	t.Cleanup(func() { viewerStat = saved })
+
+	for _, rel := range []string{
+		".SSH/id_rsa", ".Ssh/ID_RSA", ".SSH/id_ed25519", ".SSH",
+		".AWS/credentials", ".Config/GH/hosts.yml", ".NETRC",
+		".Config/Google-Chrome/Default/Cookies", "PROJ/../.SSH/id_rsa",
+	} {
+		p := filepath.Join(home, rel)
+		if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+			t.Errorf("denyViewerRead(%s) = %v, want ErrViewerCredential", p, err)
+		}
+	}
+	for _, rel := range []string{"PROJ/README.md", ".Config/App/settings.toml", ".Claude/settings.json"} {
+		p := filepath.Join(home, rel)
+		if err := denyViewerRead(p, project, protected); err != nil {
+			t.Errorf("denyViewerRead(%s) = %v, want nil", p, err)
+		}
+	}
+}
+
+// The same on a real case-insensitive volume, where the host has one (macOS,
+// Windows): the open-file check too, which compares the file with itself.
+func TestCheckViewerFile_CaseInsensitiveVolume(t *testing.T) {
+	home, project := viewerHome(t)
+	upper := filepath.Join(home, ".SSH", "id_rsa")
+	f, err := os.Open(upper)
+	if err != nil {
+		t.Skipf("needs a case-insensitive volume; %s is case-sensitive (%v)", home, err)
+	}
+	defer f.Close()
+	protected := viewerProtected(home, "")
+	if err := denyViewerRead(upper, project, protected); !errors.Is(err, ErrViewerCredential) {
+		t.Errorf("denyViewerRead(%s) = %v, want ErrViewerCredential", upper, err)
+	}
+	if err := checkViewerFile(f, upper, project, protected); !errors.Is(err, ErrViewerCredential) {
+		t.Errorf("checkViewerFile(%s) = %v, want ErrViewerCredential", upper, err)
 	}
 }
