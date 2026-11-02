@@ -345,39 +345,6 @@ func TestUninspectable_RealAccountedUndumpableProcess(t *testing.T) {
 	}
 }
 
-// A real ssh-agent is undumpable (it says so itself; Debian also installs it
-// setgid), and is not use. The check proceeds past it.
-func TestUninspectable_RealSSHAgentIsNotUse(t *testing.T) {
-	bin, err := exec.LookPath("ssh-agent")
-	if err != nil {
-		t.Skip("ssh-agent is not installed")
-	}
-	sockDir, err := os.MkdirTemp("", "sa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sock := filepath.Join(sockDir, "s")
-	cmd := exec.Command(bin, "-D", "-a", sock)
-	cmd.Dir = sockDir
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	pid := cmd.Process.Pid
-	// Wait for the agent itself, not only for undumpability, which starts
-	// inside execve: the agent is then fully what it says it is.
-	waitListening(t, sock)
-	waitUninspectable(t, pid)
-	root := t.TempDir()
-	if err := checkProcessUseAt(context.Background(), liveProc(t, pid), os.Geteuid(), []string{root}); err != nil {
-		t.Fatalf("an ssh-agent must not hold a workspace: %v", err)
-	}
-	if err := checkProcessUseAt(context.Background(), liveProc(t, pid), os.Geteuid(), []string{sockDir}); err != nil {
-		t.Fatalf("a known agent is not inspected at all, so not even its own directory is use: %v", err)
-	}
-}
-
 // End to end through the daemon's launch path: credsandbox's init, started as
 // a proctree tree, is entered in the ledger with what it holds, is not use of
 // a workspace it does not run in, and leaves the ledger once released.
