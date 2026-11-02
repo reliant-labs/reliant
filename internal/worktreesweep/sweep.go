@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -885,7 +886,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			// request carries no fence (worktreereclaim: held unverified), so
 			// this is a find and never a removal.
 			holds = append(holds, sharedHold{cand: c, reason: worktreereclaim.ReasonNoMachine,
-				detail: "no machine is on record for it, so its repositories cannot be checked; it is cleaned up once a machine that still has its folder connects"})
+				detail: "no machine is on record for it, so its repositories cannot be checked; it is cleaned up once a machine that still has its folder connects, and it can be forgotten once no connected machine has it"})
 			req.Worktrees = append(req.Worktrees, worktreereclaim.Worktree{ID: wt.ID, Path: wt.Path, State: worktreereclaim.StateArchived, BaseBranch: wt.BaseBranch})
 			continue
 		}
@@ -1063,6 +1064,11 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 	find := seen.DaemonID == nil && seen.DeletedAt != nil
 	switch r.Outcome {
 	case worktreereclaim.OutcomeForeign:
+		if find {
+			// Outside this machine's worktree root: it can never claim the
+			// folder, which for the find is the same as not having it.
+			s.recordAbsent(ctx, seen, daemonID)
+		}
 		return
 	case worktreereclaim.OutcomeDeferred:
 		// Never reached: ask again next pass. Reached and stopped by the
@@ -1110,8 +1116,11 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 					return false
 				}
 				m.HeldReason, m.HeldDetail, m.CheckedAt, m.Rechecks, m.Transient = "", "", nil, 0, ""
+				m.AbsentOn = nil
 				return true
 			})
+		} else if r.Outcome == worktreereclaim.OutcomeGone {
+			s.recordAbsent(ctx, wt, daemonID)
 		}
 		return
 	}
@@ -1182,6 +1191,27 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		}
 		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
 		s.recordStripped(ctx, wt, r)
+	}
+}
+
+// recordAbsent records that daemonID, asked about an archived row with no
+// machine on record, does not have its folder. Once every connected machine
+// has said so, the Storage view offers to forget the row (Forget): a hold
+// nothing connected can ever settle otherwise stays forever. Nothing else
+// about the row changes, its back-off included.
+func (s *Sweeper) recordAbsent(ctx context.Context, wt *core.Worktree, daemonID string) {
+	if daemonID == "" {
+		return
+	}
+	err := s.store.MergeWorktreeCleanupMetadata(ctx, wt.ID, func(m *core.CleanupMetadata, archived bool) bool {
+		if !archived || slices.Contains(m.AbsentOn, daemonID) {
+			return false
+		}
+		m.AbsentOn = append(m.AbsentOn, daemonID)
+		return true
+	})
+	if err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not record a machine without the folder", "worktreeID", wt.ID, "error", err)
 	}
 }
 

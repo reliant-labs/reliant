@@ -40,6 +40,9 @@ const (
 	// InboxServiceCleanupStorageProcedure is the fully-qualified name of the InboxService's
 	// CleanupStorage RPC.
 	InboxServiceCleanupStorageProcedure = "/reliant.v1.InboxService/CleanupStorage"
+	// InboxServiceForgetStorageWorktreeProcedure is the fully-qualified name of the InboxService's
+	// ForgetStorageWorktree RPC.
+	InboxServiceForgetStorageWorktreeProcedure = "/reliant.v1.InboxService/ForgetStorageWorktree"
 	// InboxServiceDismissInboxItemProcedure is the fully-qualified name of the InboxService's
 	// DismissInboxItem RPC.
 	InboxServiceDismissInboxItemProcedure = "/reliant.v1.InboxService/DismissInboxItem"
@@ -63,6 +66,16 @@ type InboxServiceClient interface {
 	// repository, or files outside their checkouts are never removed: they come
 	// back SKIPPED and are listed for manual removal.
 	CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error)
+	// ForgetStorageWorktree drops Reliant's record of the folder of an archived
+	// workspace that no machine is on record for, and deletes nothing on any
+	// disk. It is the way out for a workspace held "no-machine-on-record"
+	// (its machine was removed) that no connected machine has: such a hold
+	// otherwise never clears. Allowed only while HeldWorktree.forgettable: every
+	// connected machine was asked and none has the folder. Refused with
+	// FAILED_PRECONDITION otherwise, NOT_FOUND for a workspace that is not the
+	// caller's. The archived workspace stays in the archive; restoring it later
+	// makes a new folder.
+	ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -97,6 +110,12 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(inboxServiceMethods.ByName("CleanupStorage")),
 			connect.WithClientOptions(opts...),
 		),
+		forgetStorageWorktree: connect.NewClient[v1.ForgetStorageWorktreeRequest, v1.ForgetStorageWorktreeResponse](
+			httpClient,
+			baseURL+InboxServiceForgetStorageWorktreeProcedure,
+			connect.WithSchema(inboxServiceMethods.ByName("ForgetStorageWorktree")),
+			connect.WithClientOptions(opts...),
+		),
 		dismissInboxItem: connect.NewClient[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse](
 			httpClient,
 			baseURL+InboxServiceDismissInboxItemProcedure,
@@ -114,10 +133,11 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // inboxServiceClient implements InboxServiceClient.
 type inboxServiceClient struct {
-	listInbox        *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
-	cleanupStorage   *connect.Client[v1.CleanupStorageRequest, v1.CleanupStorageResponse]
-	dismissInboxItem *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
-	restoreInboxItem *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
+	listInbox             *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
+	cleanupStorage        *connect.Client[v1.CleanupStorageRequest, v1.CleanupStorageResponse]
+	forgetStorageWorktree *connect.Client[v1.ForgetStorageWorktreeRequest, v1.ForgetStorageWorktreeResponse]
+	dismissInboxItem      *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
+	restoreInboxItem      *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
 }
 
 // ListInbox calls reliant.v1.InboxService.ListInbox.
@@ -128,6 +148,11 @@ func (c *inboxServiceClient) ListInbox(ctx context.Context, req *connect.Request
 // CleanupStorage calls reliant.v1.InboxService.CleanupStorage.
 func (c *inboxServiceClient) CleanupStorage(ctx context.Context, req *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error) {
 	return c.cleanupStorage.CallUnary(ctx, req)
+}
+
+// ForgetStorageWorktree calls reliant.v1.InboxService.ForgetStorageWorktree.
+func (c *inboxServiceClient) ForgetStorageWorktree(ctx context.Context, req *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error) {
+	return c.forgetStorageWorktree.CallUnary(ctx, req)
 }
 
 // DismissInboxItem calls reliant.v1.InboxService.DismissInboxItem.
@@ -155,6 +180,16 @@ type InboxServiceHandler interface {
 	// repository, or files outside their checkouts are never removed: they come
 	// back SKIPPED and are listed for manual removal.
 	CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error)
+	// ForgetStorageWorktree drops Reliant's record of the folder of an archived
+	// workspace that no machine is on record for, and deletes nothing on any
+	// disk. It is the way out for a workspace held "no-machine-on-record"
+	// (its machine was removed) that no connected machine has: such a hold
+	// otherwise never clears. Allowed only while HeldWorktree.forgettable: every
+	// connected machine was asked and none has the folder. Refused with
+	// FAILED_PRECONDITION otherwise, NOT_FOUND for a workspace that is not the
+	// caller's. The archived workspace stays in the archive; restoring it later
+	// makes a new folder.
+	ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -185,6 +220,12 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(inboxServiceMethods.ByName("CleanupStorage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	inboxServiceForgetStorageWorktreeHandler := connect.NewUnaryHandler(
+		InboxServiceForgetStorageWorktreeProcedure,
+		svc.ForgetStorageWorktree,
+		connect.WithSchema(inboxServiceMethods.ByName("ForgetStorageWorktree")),
+		connect.WithHandlerOptions(opts...),
+	)
 	inboxServiceDismissInboxItemHandler := connect.NewUnaryHandler(
 		InboxServiceDismissInboxItemProcedure,
 		svc.DismissInboxItem,
@@ -203,6 +244,8 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 			inboxServiceListInboxHandler.ServeHTTP(w, r)
 		case InboxServiceCleanupStorageProcedure:
 			inboxServiceCleanupStorageHandler.ServeHTTP(w, r)
+		case InboxServiceForgetStorageWorktreeProcedure:
+			inboxServiceForgetStorageWorktreeHandler.ServeHTTP(w, r)
 		case InboxServiceDismissInboxItemProcedure:
 			inboxServiceDismissInboxItemHandler.ServeHTTP(w, r)
 		case InboxServiceRestoreInboxItemProcedure:
@@ -222,6 +265,10 @@ func (UnimplementedInboxServiceHandler) ListInbox(context.Context, *connect.Requ
 
 func (UnimplementedInboxServiceHandler) CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.CleanupStorage is not implemented"))
+}
+
+func (UnimplementedInboxServiceHandler) ForgetStorageWorktree(context.Context, *connect.Request[v1.ForgetStorageWorktreeRequest]) (*connect.Response[v1.ForgetStorageWorktreeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.ForgetStorageWorktree is not implemented"))
 }
 
 func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {

@@ -1103,6 +1103,15 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
+// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+// daemon's clones queued while it was away, now that it has connected.
+func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
+}
+
 // FailProjectDaemonInstall settles a clone still installing as failed: one
 // whose outcome was lost.
 func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
@@ -1756,6 +1765,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
+}
+
+// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
+// archived row that still has no machine on record.
+func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("worktree ID cannot be empty")
+	}
+	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
