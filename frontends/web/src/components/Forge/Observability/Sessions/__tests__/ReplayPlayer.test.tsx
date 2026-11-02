@@ -205,7 +205,9 @@ describe("an incomplete recording", () => {
     expect(await screen.findByTestId("replay-incomplete")).toHaveTextContent(/It holds 1 event but no full snapshot/);
     expect(screen.queryByTestId("replay-play")).not.toBeInTheDocument();
     expect(FakeReplayer.instances).toHaveLength(0);
-    expect(isReplayKnownUnplayable("sess-1")).toBe(true);
+    // Noted by a passive effect after the render that shows the notice, so it
+    // can land a tick after findByTestId resolves (1 run in 4 under load).
+    await waitFor(() => expect(isReplayKnownUnplayable("sess-1")).toBe(true));
   });
 
   it("does not offer a snapshot with nothing recorded after it, even after a stray earlier event", async () => {
@@ -213,7 +215,8 @@ describe("an incomplete recording", () => {
     renderPlayer(api);
     expect(await screen.findByTestId("replay-incomplete")).toHaveTextContent(/single snapshot of the page and nothing recorded after it/);
     expect(FakeReplayer.instances).toHaveLength(0);
-    expect(isReplayKnownUnplayable("sess-1")).toBe(true);
+    // The same passive effect as above: wait for it, do not race it.
+    await waitFor(() => expect(isReplayKnownUnplayable("sess-1")).toBe(true));
   });
 
   it("says nothing was kept when a recorded session has no events left", async () => {

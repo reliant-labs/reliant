@@ -111,6 +111,10 @@ const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTi
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // Mid-hour, so no test's advance reaches the quota's top-of-hour reset: the
+  // provider's recovery refetch would otherwise make the quota test depend on
+  // the wall clock (it failed whenever it started under a minute before the hour).
+  vi.setSystemTime(new Date("2026-11-01T12:15:00Z"));
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   resetObsReadScheduler();
   Object.assign(server, { cap: SERVER_READ_CAP, live: 0, peak: 0, refused: 0, served: 0, arrivals: [], verdict: () => "serve", serveMs: 500 });
