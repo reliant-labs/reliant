@@ -71,9 +71,11 @@ jobs:
       # cancelled ones, ONE AT A TIME (scripts/ci-review-rerun.sh): a branch
       # cut before this workflow lost its concurrency group still runs that
       # definition, whose re-runs cancel each other when started together.
-      # A re-run (attempt > 1) heals nothing, so re-runs never cascade.
-      # reliant-review-rerun.yml covers what this step cannot see: a run that
-      # ends red after it looked, and heads whose runs predate it. Best-effort:
+      # It first waits for runs created before it that are still in progress:
+      # one may have read the gate before the marker existed and end red
+      # after this run looked. A re-run (attempt > 1) heals nothing, so
+      # re-runs never cascade. reliant-review-rerun.yml's schedule heals the
+      # heads whose runs use an older definition of this file. Best-effort:
       # this step never turns the verdict red. The script is read from the
       # run's own commit, not main: it can only re-run this same check, whose
       # gate is still read from main.
