@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { COMPOSER_CONTROL } from "./composerControl";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -180,12 +181,13 @@ export function WorkflowSelector({
           // Compact mode is icon-only, so the label must come from here.
           aria-label={`Workflow: ${displayText}`}
           className={cn(
-            "flex items-center gap-1.5 rounded-full transition-colors text-2xs font-medium h-6 touch:h-[44px] touch:min-w-[44px] touch:justify-center touch:px-3",
+            "flex items-center gap-1.5 rounded-full transition-colors text-2xs font-medium touch:h-[44px] touch:min-w-[44px] touch:justify-center touch:px-3",
+            COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
@@ -248,7 +250,7 @@ export function WorkflowSelector({
                         >
                           <div className="flex-shrink-0 w-4 flex justify-center">
                             {isSelected ? (
-                              <Check className="w-3.5 h-3.5 text-primary" />
+                              <Check className="w-3.5 h-3.5 text-primary-ink" />
                             ) : (
                               <Workflow className="w-3.5 h-3.5 text-muted-foreground" />
                             )}
@@ -300,7 +302,7 @@ export function WorkflowSelector({
                         >
                           <div className="flex-shrink-0 w-4 flex justify-center">
                             {isSelected ? (
-                              <Check className="w-3.5 h-3.5 text-primary" />
+                              <Check className="w-3.5 h-3.5 text-primary-ink" />
                             ) : (
                               <Workflow className="w-3.5 h-3.5 text-muted-foreground" />
                             )}

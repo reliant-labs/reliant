@@ -99,6 +99,64 @@ export function measuredMachineUsage(usage: DaemonUsageLike | undefined): boolea
       parseRational(row.exactRunningSeconds) !== null && parseRational(row.exactOverageSeconds) !== null);
 }
 
+/**
+ * The size a customer's hours are counted in, and its exact cost weight.
+ *
+ * Every hour figure a customer reads is in ONE unit: hours of the plan's own
+ * machine size (the largest it runs), because that is what the price list
+ * sells ("160 hours a month"). Balances arrive as versioned weighted seconds;
+ * dividing by this weight turns them back into those hours.
+ */
+export interface HoursReference {
+  size: string;
+  weight: string;
+}
+
+/**
+ * The size a coupon's hours are counted in when there is no plan: the coupon
+ * unit (control-plane pricing.yaml `coupons.unit_size`; a coupon-funded org
+ * admits only it). The same fact lib/formatMachineMinutes states as
+ * "hours on an M machine".
+ */
+export const COUPON_UNIT_SIZE = "m";
+
+/** The sizes whose hours a customer is counted in: their plan's, else the coupon unit's. */
+export function hoursSizes(planAllowedSizes: string[] | undefined): string[] {
+  return planAllowedSizes && planAllowedSizes.length > 0 ? planAllowedSizes : [COUPON_UNIT_SIZE];
+}
+
+/**
+ * The plan's own size among `allowedSizes` — the one with the largest exact
+ * cost weight — or null when the price list is missing, its version differs
+ * from the usage's, or none of the sizes is priced.
+ */
+export function hoursReference(
+  pricing: DaemonPricingLike | undefined,
+  allowedSizes: string[],
+  usage?: Pick<DaemonUsageLike, "pricingVersion">,
+): HoursReference | null {
+  if (!pricing?.pricingVersion) return null;
+  if (usage && usage.pricingVersion !== pricing.pricingVersion) return null;
+  const own = pricing.sizes.filter(s => allowedSizes.includes(s.size)).reduce<DaemonSizePriceLike | undefined>((top, row) => {
+    const weight = parseRational(row.costWeight);
+    const previous = parseRational(top?.costWeight);
+    return weight && weight.numerator > 0n && (!previous || compareRational(weight, previous) > 0) ? row : top;
+  }, undefined);
+  return own?.costWeight ? { size: own.size, weight: own.costWeight } : null;
+}
+
+/** Hours to one decimal, rounded down, without a trailing ".0": "160", "33.3". */
+function hoursText(hours: Rational): string {
+  return formatRational(hours, 1, "floor").replace(/\.0$/, "");
+}
+
+/** Weighted seconds as hours of the reference size, or null without one. */
+export function hoursAt(weightedSeconds: Rational, reference: HoursReference | null | undefined): string | null {
+  const weight = parseRational(reference?.weight);
+  if (!weight || weight.numerator === 0n) return null;
+  return hoursText(divideRational(divideRational(weightedSeconds, weight)!, rational(3600n)!)!);
+}
+
 export function equivalentHours(usage: DaemonUsageLike | undefined, weight: string | undefined, field: "allowanceWeightedSeconds" | "consumedWeightedSeconds" | "remainingWeightedSeconds" | "grantRemainingWeightedSeconds"): string | null {
   if (!measuredMachineUsage(usage)) return null;
   const amount = parseRational(usage?.[field]);
@@ -110,9 +168,9 @@ export function equivalentHours(usage: DaemonUsageLike | undefined, weight: stri
 export function usageWindowLabel(usage: DaemonUsageLike): string {
   const from = usage.measuredFrom;
   const partial = from && (!usage.periodStart || BigInt(from.seconds) > BigInt(usage.periodStart.seconds));
-  if (!from) return "Machine runtime measurement window is unavailable; do not assume whole-period cost coverage";
-  if (!partial) return "Measured machine runtime this billing period";
-  return `Measured runtime and costs since ${new Date(Number(from.seconds) * 1000).toISOString()}; earlier use this period is not shown.`;
+  if (!from) return "Machine usage this billing period. Some earlier use may not be shown yet.";
+  if (!partial) return "Machine usage this billing period.";
+  return `Machine usage since ${new Date(Number(from.seconds) * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Earlier use this period isn't shown.`;
 }
 
 /** "XL" from "xl", "3XL" from "3xl". */
@@ -128,15 +186,19 @@ export function sizeName(size: string): string {
  * not measure is the unknown-as-known defect usage_measured exists to close,
  * and here it would tell a user they are out when they may not be.
  */
-export function remainingHeadline(usage: DaemonUsageLike | undefined): string | null {
+export function remainingHeadline(usage: DaemonUsageLike | undefined, reference?: HoursReference | null): string | null {
   if (!measuredMachineUsage(usage)) return null;
-  // A weighted balance is not native runtime. Name the current burn explicitly.
+  // While machines run, time left at that rate; otherwise the plan's own hours.
   const burn = burnLabel(usage);
-  return burn ?? (parseRational(usage?.remainingWeightedSeconds)!.numerator === 0n ? "Included allowance exhausted" : "Included balance available; select a size for equivalent hours");
+  if (burn) return burn;
+  const remaining = parseRational(usage?.remainingWeightedSeconds)!;
+  if (remaining.numerator === 0n) return "Included hours used up";
+  const hours = hoursAt(remaining, reference);
+  return hours ? `${hours} hours left` : "Included hours available";
 }
 
 /**
- * The burn line: "≈ 10.4 h on your Large (4×)".
+ * The burn line: "≈ 10.4 hours left at the current rate".
  *
  * Remaining weighted seconds divided by exact running cost-weight sum yields
  * equivalent wall-clock time. Approximation is display-only. Never infer a size
@@ -147,8 +209,7 @@ export function burnLabel(usage: DaemonUsageLike | undefined): string | null {
   const rate = parseRational(usage.runningCostWeightSum)!;
   if (rate.numerator === 0n) return null;
   const seconds = divideRational(parseRational(usage.remainingWeightedSeconds)!, rate)!;
-  const wallHours = formatRational(divideRational(seconds, rational(3600n)!)!, 1, "floor");
-  return `≈ ${wallHours} h left at the current running-machine rate`;
+  return `≈ ${hoursText(divideRational(seconds, rational(3600n)!)!)} hours left at the current rate`;
 }
 
 /**
@@ -177,7 +238,7 @@ export function runsOutLabel(usage: DaemonUsageLike | undefined, now: Date = new
 export function asOfLabel(usage: DaemonUsageLike | undefined): string | null {
   if (!usage || !measuredMachineUsage(usage) || !usage.measuredThrough) return null;
   const at = new Date(Number(usage.measuredThrough.seconds) * 1000);
-  return `as of ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  return `as of ${at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
 /** Exact-decimal cents string → dollars, "$0.13". */
@@ -223,7 +284,7 @@ export function sizeHours(
   const included = parseRational(includedWeightedSeconds);
   const seconds = weight && included ? divideRational(included, weight) : null;
   if (!pricing?.pricingVersion || !seconds) return null;
-  return formatRational(divideRational(seconds, rational(3600n)!)!, 1, "floor");
+  return hoursText(divideRational(seconds, rational(3600n)!)!);
 }
 
 /**
@@ -235,11 +296,7 @@ export function planOwnSizeHours(
   allowedSizes: string[],
   includedWeightedSeconds: string | undefined,
 ): string | null {
-  const own = (pricing?.sizes ?? []).filter(s => allowedSizes.includes(s.size)).reduce<DaemonSizePriceLike | undefined>((top, row) => {
-    const weight = parseRational(row.costWeight);
-    const previous = parseRational(top?.costWeight);
-    return weight && (!previous || compareRational(weight, previous) > 0) ? row : top;
-  }, undefined);
+  const own = hoursReference(pricing, allowedSizes);
   return own ? sizeHours(pricing, own.size, includedWeightedSeconds) : null;
 }
 

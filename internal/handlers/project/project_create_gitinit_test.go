@@ -20,6 +20,7 @@ import (
 // fresh directory (zero discovered repos) whose auto git-init succeeds.
 type createProjectDaemonRouter struct {
 	toolexectest.Stub
+	placesAsNamed
 	gitInitCalled bool
 }
 

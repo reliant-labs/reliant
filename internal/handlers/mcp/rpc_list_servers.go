@@ -33,7 +33,7 @@ func (s *Service) ListServers(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -63,7 +63,7 @@ func (s *Service) ListServers(
 	// Only an enabled server has a runtime status to report.
 	var status *daemonMCPServerStatus
 	if anyEnabled {
-		status = s.serverStatus(ctx, userID, projectPath)
+		status = s.serverStatus(ctx, userID, checkout)
 	}
 
 	// Build server list from merged scoped config (source of truth)
@@ -96,7 +96,7 @@ func (s *Service) GetServer(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -121,7 +121,7 @@ func (s *Service) GetServer(
 	}
 
 	server := mcpServerFromConfig(name, scoped)
-	status := s.serverStatus(ctx, userID, projectPath)
+	status := s.serverStatus(ctx, userID, checkout)
 	if !scoped.Config.IsEnabled() {
 		// A disabled server reports why it last failed, if it did.
 		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED
@@ -147,7 +147,7 @@ func (s *Service) GetServerTools(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	projectPath, err := s.getProjectPath(ctx, projectID, userID)
+	checkout, err := s.projectCheckout(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -176,13 +176,13 @@ func (s *Service) GetServerTools(
 	}
 
 	// A server the daemon does not have has no tools to list.
-	if _, ok := s.serverStatus(ctx, userID, projectPath).entry(name); !ok {
+	if _, ok := s.serverStatus(ctx, userID, checkout).entry(name); !ok {
 		return connect.NewResponse(&reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}), nil
 	}
 
 	// The tools themselves are a live question for the server; ask within
 	// the request's own budget.
-	tools, err := newDaemonMCPProxy(s.deps.Router, userID).listTools(ctx, projectPath, name)
+	tools, err := s.mcpProxy(userID, checkout).listTools(ctx, checkout.Path, name)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to list tools", err)))
 	}

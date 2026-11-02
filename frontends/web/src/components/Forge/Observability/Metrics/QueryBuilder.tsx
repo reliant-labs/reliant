@@ -88,7 +88,7 @@ export interface QueryBuilderProps {
 }
 
 const SELECT =
-  "h-7 min-w-0 rounded-md border border-border bg-surface-sunken px-1.5 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "h-7 min-w-0 rounded-md border border-border bg-surface-sunken px-1.5 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function QueryBuilder({ panel, chart, catalog, attributes, scope, range, onPanel, onChart }: QueryBuilderProps) {
   const entryOf = (name: string | undefined) => catalog.find((m) => m.name === name);
@@ -216,7 +216,7 @@ export function QueryBuilder({ panel, chart, catalog, attributes, scope, range, 
 }
 
 const ICON =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function SeriesRow({
   series,
@@ -384,7 +384,7 @@ function WhereEditor({
           <button
             type="button"
             onClick={() => onChange(where.filter((_, j) => j !== i))}
-            className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Remove filter ${predicateText(p)}`}
           >
             <X className="h-3 w-3" aria-hidden="true" />
@@ -459,7 +459,7 @@ function WhereEditor({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid={`${testId}-add`}
         >
           <Plus className="h-3 w-3" aria-hidden="true" />
@@ -482,7 +482,7 @@ function GroupByEditor({ fields, groupBy, onChange }: { fields: string[]; groupB
           <button
             type="button"
             onClick={() => onChange(groupBy.filter((f) => f !== field))}
-            className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Stop grouping by ${fieldLabel(field)}`}
           >
             <X className="h-3 w-3" aria-hidden="true" />

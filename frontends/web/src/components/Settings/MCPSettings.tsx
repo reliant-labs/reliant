@@ -64,7 +64,7 @@ function MCPInitialLoadingState() {
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
         <div className="flex items-start gap-4">
           <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background shadow-sm">
-            <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+            <RefreshCw className="h-5 w-5 animate-spin text-primary-ink" />
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-card bg-primary" />
           </div>
           <div className="min-w-0 flex-1">
@@ -142,7 +142,7 @@ function MCPRefreshStatus({
 
   return (
     <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/50 bg-background/70 px-3 py-1 text-xs text-muted-foreground sm:self-auto">
-      <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+      <CheckCircle2 className="h-3.5 w-3.5 text-primary-ink" />
       Status up to date
     </div>
   );

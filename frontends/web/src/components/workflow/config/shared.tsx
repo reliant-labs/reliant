@@ -184,7 +184,7 @@ export function AdvancedProjectSettings({
         )}
         <span>Advanced</span>
         {hasConfig && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
             configured
           </span>
         )}

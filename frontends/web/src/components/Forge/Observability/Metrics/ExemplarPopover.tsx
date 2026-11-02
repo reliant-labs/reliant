@@ -80,7 +80,7 @@ export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen,
               }}
               style={{ left: `${x}%`, bottom: `${4 + y * 14}px` }}
               className={cn(
-                "absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                "absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 e.traceStored ? "bg-primary" : "bg-surface-sunken"
               )}
               aria-label={exemplarLabel(e, unit)}
@@ -141,7 +141,7 @@ export function ExemplarPopover({ at, bucketStartMs, exemplars, isLoading, error
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>

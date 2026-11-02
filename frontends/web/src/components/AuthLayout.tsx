@@ -87,7 +87,7 @@ export function AuthLegalLinks() {
         href="https://reliantlabs.io/terms"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-primary hover:underline"
+        className="text-primary-ink hover:underline"
       >
         Terms of Service
       </a>{' '}
@@ -96,7 +96,7 @@ export function AuthLegalLinks() {
         href="https://reliantlabs.io/privacy"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-primary hover:underline"
+        className="text-primary-ink hover:underline"
       >
         Privacy Policy
       </a>

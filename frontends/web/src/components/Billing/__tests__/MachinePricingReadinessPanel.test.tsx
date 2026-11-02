@@ -19,19 +19,20 @@ it("discovers candidate read-only and submits exact org/plan/version/digest, nev
   mount();
   fireEvent.click(await screen.findByRole("checkbox"));
   expect(mock.read).toHaveBeenCalledWith({ orgId: "org-a", planId: "plan-small", pricingVersion: "" });
-  fireEvent.click(screen.getByRole("button", { name: /Accept next-period/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm pricing/ }));
   await waitFor(() => expect(mock.accept).toHaveBeenCalledWith({ orgId: "org-a", planId: "plan-small", pricingVersion: "discovered-version", termsSha256: "digest-a" }));
-  expect(await screen.findByText(/Pending verification — not activated/)).toBeInTheDocument();
+  expect(await screen.findByText(/confirmation is recorded/)).toBeInTheDocument();
 });
 it("clears unchecked/checked consent on org switch and never accepts for a member", async () => {
   const { rerender, view } = mount(); fireEvent.click(await screen.findByRole("checkbox"));
   mock.active = { id: "org-b", role: "member" }; rerender(view());
   await waitFor(() => expect(mock.read).toHaveBeenCalledWith({ orgId: "org-b", planId: "plan-small", pricingVersion: "" }));
-  await screen.findByText(/Only this organization’s owner/);
-  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument(); expect(mock.accept).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole("checkbox")).not.toBeInTheDocument());
+  expect(mock.accept).not.toHaveBeenCalled();
 });
-it("missing RPC fails closed with actionable unavailable copy", async () => {
+it("missing RPC fails closed and quietly: nothing to confirm, no alarm", async () => {
   mock.read.mockRejectedValue(new Error("unimplemented")); mount();
-  expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable on this server/);
+  await waitFor(() => expect(mock.read).toHaveBeenCalled());
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
 });

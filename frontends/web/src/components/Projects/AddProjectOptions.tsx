@@ -35,7 +35,7 @@ function AddProjectTile({ action }: { action: AddProjectAction }) {
       data-variant={action.lead ? "primary" : "secondary"}
       className={cn(
         "flex h-full flex-col items-start gap-2 rounded-md border p-4 text-left transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "disabled:cursor-not-allowed disabled:opacity-60",
         action.lead
           ? "border-accent-border bg-accent-surface enabled:hover:border-accent"

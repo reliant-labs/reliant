@@ -417,7 +417,7 @@ export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }:
       {worktreesQuery.hasMore && (
         <button
           type="button"
-          className="mt-1 text-xs text-primary hover:underline disabled:opacity-60"
+          className="mt-1 text-xs text-primary-ink hover:underline disabled:opacity-60"
           disabled={disabled || worktreesQuery.isLoadingMore}
           onClick={worktreesQuery.loadMore}
         >

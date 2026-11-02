@@ -200,7 +200,7 @@ export function ColorSchemeSelector() {
                   {isSelected && (
                     <Check 
                       className="w-4 h-4 flex-shrink-0" 
-                      style={{ color: 'hsl(var(--primary))' }}
+                      style={{ color: 'hsl(var(--primary-ink))' }}
                     />
                   )}
                 </div>
@@ -225,7 +225,7 @@ export function ColorSchemeSelector() {
 
       <div className="mt-4 p-3 rounded-lg border border-border/60 bg-background">
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
-          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" aria-hidden />
+          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-ink" aria-hidden />
           <span><strong>Tip:</strong> The color scheme affects buttons, links, active states, and focus indicators throughout the app.</span>
         </p>
       </div>

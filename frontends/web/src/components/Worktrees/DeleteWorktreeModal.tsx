@@ -117,7 +117,7 @@ export function DeleteWorktreeModal({
               <button
                 type="button"
                 onClick={openCleanupSettings}
-                className="rounded-sm text-xs text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-sm text-xs text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Change defaults
               </button>

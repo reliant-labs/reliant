@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { COMPOSER_CONTROL } from "../Chat/composerControl";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
@@ -112,14 +113,15 @@ export function InlinePresetPicker({
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+            COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             valueIsTemplate
               ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30"
               : isOpen
-                ? "bg-primary/20 text-primary"
+                ? "bg-primary/20 text-primary-ink"
                 : isStreaming
                   ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -215,7 +217,7 @@ export function InlinePresetPicker({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">None (use defaults)</span>
-                {!value && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                {!value && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
               </div>
             </button>
 
@@ -305,7 +307,7 @@ function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
           )}
         </div>
         {isSelected && (
-          <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+          <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
         )}
       </div>
     </button>

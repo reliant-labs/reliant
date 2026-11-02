@@ -43,7 +43,7 @@ export function GraphPanel({ graph, filters, scope, navigate, onRPC, envNames, o
       <span className="inline-flex items-center gap-1.5 text-danger-ink"><svg aria-hidden width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" strokeWidth="2" /></svg>Errors</span>
       {filters.declared && <span className="inline-flex items-center gap-1.5"><svg aria-hidden width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" strokeWidth="1.5" strokeDasharray="5 3" /></svg>Declared, not observed</span>}
       <span>Hover a connection for details; click to pin.</span>
-      {model.hiddenUnresolved > 0 && onShowUnresolved && <span>{model.hiddenUnresolved} unresolved caller/peer node{model.hiddenUnresolved === 1 ? "" : "s"} hidden · <button type="button" className="text-primary hover:underline" onClick={onShowUnresolved}>Show</button></span>}
+      {model.hiddenUnresolved > 0 && onShowUnresolved && <span>{model.hiddenUnresolved} unresolved caller/peer node{model.hiddenUnresolved === 1 ? "" : "s"} hidden · <button type="button" className="text-primary-ink hover:underline" onClick={onShowUnresolved}>Show</button></span>}
       {(model.omittedNodes > 0 || model.omittedEdges > 0) && <span role="status">{model.omittedNodes + model.omittedEdges} smaller connections not drawn; filter by service to see them.</span>}
     </div>
     {(node || link) && <section aria-label="Graph detail" className="rounded-lg border border-border bg-surface p-4">
@@ -57,7 +57,7 @@ export function GraphPanel({ graph, filters, scope, navigate, onRPC, envNames, o
     </section>}
     <details className="text-sm">
       <summary className="cursor-pointer text-xs text-ink-muted">Connections as a list ({model.links.length})</summary>
-      <ul className="mt-2 space-y-1">{model.links.map((l) => <li key={l.id}><button className="text-left text-xs text-primary hover:underline" onClick={() => setSelection({ kind: "link", id: l.id })}>
+      <ul className="mt-2 space-y-1">{model.links.map((l) => <li key={l.id}><button className="text-left text-xs text-primary-ink hover:underline" onClick={() => setSelection({ kind: "link", id: l.id })}>
         {label(l.source)} → {label(l.target)} · {fmtCount(l.count)} {unitLabel(l.unit)}{l.faults > 0n ? ` · ${fmtErrorRate(l.faults, l.count)} errors` : ""}
       </button></li>)}</ul>
     </details>
@@ -78,7 +78,7 @@ function MethodTable({ rows, onRPC }: { rows: MethodRow[]; onRPC: (rpc: string) 
   return <table className="w-full text-left text-sm">
     <thead className="text-xs text-ink-muted"><tr><th className="py-1 font-normal">Method</th><th className="py-1 text-right font-normal">Requests</th><th className="py-1 text-right font-normal">Errors</th><th className="py-1 text-right font-normal">p95</th></tr></thead>
     <tbody>{rows.slice(0, 25).map((r) => { const [svc, m] = r.rpcId.split("/"); return <tr key={r.rpcId} className="border-t border-border/60">
-      <td className="py-1"><button className="text-left text-primary hover:underline" title={r.rpcId} onClick={() => onRPC(r.rpcId)}>{shortService(svc)}/{m}</button></td>
+      <td className="py-1"><button className="text-left text-primary-ink hover:underline" title={r.rpcId} onClick={() => onRPC(r.rpcId)}>{shortService(svc)}/{m}</button></td>
       <td className="py-1 text-right tabular-nums">{fmtCount(r.count)}</td>
       <td className={r.faults > 0n ? "py-1 text-right tabular-nums text-danger-ink" : "py-1 text-right tabular-nums"}>{fmtErrorRate(r.faults, r.count)}</td>
       <td className="py-1 text-right tabular-nums">{fmtLatency(r.p95)}</td>

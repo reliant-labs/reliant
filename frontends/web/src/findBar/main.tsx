@@ -6,6 +6,9 @@
 import "../lib/browser-log-boot";
 
 import { createRoot } from "react-dom/client";
+// The app's faces (see ../main.tsx): index.css names them in --font-sans.
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "../index.css";
 import { FindBar } from "./FindBar";
 

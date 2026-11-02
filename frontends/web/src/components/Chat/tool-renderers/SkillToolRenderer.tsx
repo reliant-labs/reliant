@@ -53,11 +53,11 @@ function LoadActionContent({
     <div className="tool-content-skill">
       {/* Skill name + action */}
       <div className="px-2 py-1.5 border-b border-border/30 bg-muted/20 flex items-center gap-2">
-        <BookMarked className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+        <BookMarked className="w-3.5 h-3.5 text-primary-ink flex-shrink-0" />
         <span className="text-xs font-medium text-foreground truncate">
           {skillName || 'Loading skill...'}
         </span>
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-3xs font-medium bg-primary/10 text-primary border border-primary/20">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-3xs font-medium bg-primary/10 text-primary-ink border border-primary/20">
           load
         </span>
       </div>

@@ -466,7 +466,7 @@ function LifecycleMenu({ worktree }: { worktree: Worktree }) {
                   <span className="block text-sm text-foreground">{option.label}</span>
                   <span className="block text-xs text-muted-foreground">{option.description}</span>
                 </span>
-                {selected && <Check className="mt-1 h-3.5 w-3.5 text-primary" aria-hidden="true" />}
+                {selected && <Check className="mt-1 h-3.5 w-3.5 text-primary-ink" aria-hidden="true" />}
               </button>
             );
           })}

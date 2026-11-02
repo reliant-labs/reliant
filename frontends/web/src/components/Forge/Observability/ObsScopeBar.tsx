@@ -97,7 +97,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
             <button
               type="button"
               onClick={props.onWiden}
-              className="ml-1 rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-1 rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="obs-widen-envs"
             >
               Compare across environments
@@ -261,7 +261,7 @@ function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: str
           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-app-all"
         >
-          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
+          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary-ink" : "invisible")} aria-hidden="true" />
           Every app
         </button>
         {apps.map((app) => (
@@ -312,7 +312,7 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-env-all"
         >
-          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
+          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary-ink" : "invisible")} aria-hidden="true" />
           Every environment
         </button>
         {environments.map((env) => (

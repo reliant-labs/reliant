@@ -42,7 +42,7 @@ export function MobilePrivacyPanel() {
           href={PRIVACY_DOCS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-[44px] items-center gap-1 font-medium text-primary"
+          className="inline-flex min-h-[44px] items-center gap-1 font-medium text-primary-ink"
         >
           What is stored where
           <ExternalLink className="h-3 w-3" aria-hidden="true" />

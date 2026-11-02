@@ -40,7 +40,7 @@ export async function waitForSettings(): Promise<void> {
 }
 
 const selectClass =
-  "block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80";
+  "block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80";
 
 export function SettingToggle({
   label,

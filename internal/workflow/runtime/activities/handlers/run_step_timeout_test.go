@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -70,13 +71,17 @@ func (r *loopbackDaemonRouter) lastContext(t *testing.T) map[string]any {
 // minutes.
 //
 // The clock is shrunk a millionfold (tools.ShellTimeoutUnit: one "millisecond"
-// of timeout is a microsecond), so the node's 30 minutes are 1.8s, the model's
-// 10-minute cap is 0.6s, and a command that takes "12 minutes" sleeps 0.72s.
+// of timeout is a microsecond), so the model's 10-minute cap is 0.6s and a
+// command that takes "12 minutes" sleeps 0.72s. The node's timeout is two
+// hours (7.2s), far past the command: what this proves is that the run step is
+// not stopped at the cap, so nothing but the cap may stop it. A 30-minute node
+// (1.8s) left ~1s for spawning bash and crossing the wire, and a loaded
+// machine spent it: the step was stopped by its own timeout, not the cap.
 // The run step goes through the real path: RemoteRunExecutor -> RemoteExecutor
 // -> the wire -> the daemon's LocalToolExecutor -> the shell tool -> a real
 // process. The same command from a model, even one claiming run_step in its
 // input, is stopped at the cap.
-func TestRunStep_ThirtyMinuteNodeOutlivesTheModelCap(t *testing.T) {
+func TestRunStep_LongNodeOutlivesTheModelCap(t *testing.T) {
 	// Not parallel: it scales a package-level clock.
 	prev := tools.ShellTimeoutUnit
 	tools.ShellTimeoutUnit = time.Microsecond
@@ -84,7 +89,7 @@ func TestRunStep_ThirtyMinuteNodeOutlivesTheModelCap(t *testing.T) {
 
 	dir := t.TempDir()
 	const command = "sleep 0.72; echo finished" // "12 minutes" on the shrunk clock
-	nodeTimeoutMs := int((30 * time.Minute).Milliseconds())
+	nodeTimeoutMs := int((2 * time.Hour).Milliseconds())
 
 	local := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{ShellPlatform: tools.ShellPlatformUnix}))
 	local.SetDaemonClient(daemon.NewLocalClient())
@@ -92,7 +97,7 @@ func TestRunStep_ThirtyMinuteNodeOutlivesTheModelCap(t *testing.T) {
 	remote := toolexec.NewRemoteExecutor(router)
 	remote.SetServerExecutor(local)
 
-	t.Run("run node with timeout 30m is not killed at 10 minutes", func(t *testing.T) {
+	t.Run("run node with timeout 2h is not killed at 10 minutes", func(t *testing.T) {
 		run := NewRemoteRunExecutor(remote)
 		run.SetContext(RunExecutorContext{UserID: "u", ChatID: "c", ProjectID: "p", ProjectPath: dir})
 		stdout, stderr, exitCode, _, err := run.ExecuteCommand(context.Background(), command, dir, nodeTimeoutMs, nil)
@@ -106,8 +111,10 @@ func TestRunStep_ThirtyMinuteNodeOutlivesTheModelCap(t *testing.T) {
 	// The agent tool path: what execute_tools dispatches for a model's call.
 	modelCall := func(input string) *toolexec.ToolRequest {
 		tec := &toolExecutionContext{
-			chat:          &db.Chat{ID: "c"},
-			project:       &db.Project{ID: "p", UserID: "u", Path: dir},
+			chat:    &db.Chat{ID: "c"},
+			project: &db.Project{ID: "p", UserID: "u", Path: dir},
+			// The machine's checkout, resolved at dispatch (callCheckout).
+			checkout:      callCheckout{main: projectcheckout.Target{Path: dir}},
 			worktree:      &rctx.WorktreeInfo{},
 			chatID:        "c",
 			toolName:      names.ToolShell,

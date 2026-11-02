@@ -218,10 +218,10 @@ export function DeleteEnvironmentDialog({
           <p data-testid="delete-environment-data-note">
             Its databases are <strong>deleted</strong> with it, data included. This cannot be undone. To
             keep the databases, delete from the CLI with{" "}
-            <code className="font-mono">forge env delete {envName} --keep-data</code>.
+            <code className="font-mono">reliant forge env delete {envName} --keep-data</code>.
           </p>
           <p>
-            To bring the environment back (empty), run <code className="font-mono">forge env deploy {envName}</code>{" "}
+            To bring the environment back (empty), run <code className="font-mono">reliant forge env deploy {envName}</code>{" "}
             or use the Deploy button.
           </p>
         </div>

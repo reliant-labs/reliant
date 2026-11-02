@@ -344,7 +344,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                 value={filePattern}
                 onChange={(e) => setFilePattern(e.target.value)}
                 placeholder="e.g., *.ts, *.go"
-                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-primary/50"
+                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>
@@ -429,7 +429,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                           <ChevronRight className="w-3 h-3 text-muted-foreground" />
                         )}
                       </button>
-                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <FileText className="w-4 h-4 text-primary-ink flex-shrink-0" />
                       <span
                         className="text-sm font-mono truncate flex-1"
                         onClick={() => handleResultClick(result.path, undefined, false)} // Click - don't auto-focus

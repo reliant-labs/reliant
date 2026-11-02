@@ -806,7 +806,7 @@ function CreateKeyForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. production-agent"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
         />
       </div>
 
@@ -833,7 +833,7 @@ function CreateKeyForm({
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                     active
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-primary-ink"
                       : "border-border bg-background text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -855,7 +855,7 @@ function CreateKeyForm({
             onChange={(e) => setBudget(e.target.value)}
             inputMode="decimal"
             placeholder="e.g. 25"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
           />
         </div>
         <div className="space-y-2">
@@ -866,7 +866,7 @@ function CreateKeyForm({
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             disabled={!budget.trim()}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40 disabled:opacity-50"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             <option value="1d">Daily</option>
             <option value="7d">Weekly</option>

@@ -117,7 +117,7 @@ export const BaseChatInput = forwardRef<HTMLTextAreaElement, BaseChatInputProps>
           stableStreaming
             ? "bg-[var(--chat-button-bg)] text-destructive-ink border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
             : canSend
-            ? "bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
+            ? "bg-[var(--chat-button-bg)] text-primary-ink border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
             : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] opacity-60"
         )}
       >

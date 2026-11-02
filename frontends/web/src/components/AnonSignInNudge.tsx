@@ -57,7 +57,7 @@ export function AnonSignInNudge() {
     >
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-start gap-3">
-          <div className="rounded-full bg-primary/10 p-2 text-primary">
+          <div className="rounded-full bg-primary/10 p-2 text-primary-ink">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div className="flex-1 text-sm text-foreground">

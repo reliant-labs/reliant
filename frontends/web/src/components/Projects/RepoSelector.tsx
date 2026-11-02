@@ -250,7 +250,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
             }}
             className={cn(
               "min-w-0 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground",
-              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
             )}
           />
           <input
@@ -260,7 +260,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
             onChange={(e) => setManualBranch(e.target.value)}
             className={cn(
               "min-w-0 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground",
-              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
             )}
             aria-label="Branch"
           />
@@ -309,7 +309,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
               className={cn(
                 "w-full rounded-md py-2 pl-9 pr-3 text-sm transition-colors",
                 "border border-input bg-background text-foreground placeholder:text-muted-foreground/70",
-                "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
               )}
             />
           </div>

@@ -83,6 +83,19 @@ func preferredInstall(ctx context.Context, machines Machines, userID string, ins
 	return installs[0]
 }
 
+// UserCheckouts is the project's installed checkouts on machines that exist
+// and belong to userID, oldest first. A row of a removed machine, or of
+// another user's, is not a checkout anyone can use: counting one is how a
+// replaced machine's leftover row kept a plain folder from ever being healed
+// onto the machine that replaced it.
+func UserCheckouts(ctx context.Context, repo Installs, userID, projectID string) ([]*core.ProjectDaemon, error) {
+	rows, err := userInstalls(ctx, repo, userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return installed(rows), nil
+}
+
 // installed keeps the rows whose clone has landed.
 func installed(rows []*core.ProjectDaemon) []*core.ProjectDaemon {
 	var out []*core.ProjectDaemon

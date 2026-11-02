@@ -191,11 +191,18 @@ export function AppearanceSettings() {
             <label htmlFor="appearance-font" className="text-sm font-medium block">
               App font
             </label>
-            <select id="appearance-font" value={font} onChange={(e) => setFont(e.target.value)} className={settingSelectClass}>
-              <option value="default">Inter (Default)</option>
+            <select
+              id="appearance-font"
+              // "geist" was its own option before Geist became the default;
+              // a stored "geist" renders the same face, so show it as Default.
+              value={font === "geist" ? "default" : font}
+              onChange={(e) => setFont(e.target.value)}
+              className={settingSelectClass}
+            >
+              <option value="default">Geist (Default)</option>
+              <option value="inter">Inter</option>
               <option value="system">System Default</option>
               <option value="mono">JetBrains Mono</option>
-              <option value="geist">Geist</option>
               <option value="comic">Comic Sans (Fun)</option>
             </select>
           </div>
@@ -224,7 +231,7 @@ export function AppearanceSettings() {
                 <option value="inherit">Inherit from System</option>
                 <option value="system">System Default</option>
                 <option value="inter">Inter (Modern)</option>
-                <option value="geist">Geist</option>
+                <option value="geist">Geist Mono</option>
                 <option value="comic">Comic Sans (Fun)</option>
               </select>
             )}

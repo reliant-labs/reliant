@@ -13,6 +13,7 @@ import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, type ReactNode } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -91,6 +92,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <MemberPermissions />;
       case "git-connections":
         return <GitConnectionsSettings />;
+      case "integrations":
+        return <IntegrationsSettings />;
       case "developer":
         return <DeveloperSettings />;
       case "projects":

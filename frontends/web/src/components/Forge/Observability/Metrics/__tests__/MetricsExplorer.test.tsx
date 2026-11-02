@@ -407,13 +407,13 @@ describe("states", () => {
     renderExplorer({ empty: true, signals: { services: [], truncated: false } });
     const state = await screen.findByTestId("obs-nothing-yet", {}, SLOW);
     expect(within(state).getByTestId("obs-nothing-yet-about")).toHaveTextContent("Metrics charts RPC rate");
-    expect(within(state).getByText("forge obs status prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge obs status prod")).toBeInTheDocument();
   });
 
   it("leads the not-set-up answer with what Metrics shows", async () => {
     renderExplorer({ failWith: Code.FailedPrecondition });
     const state = await screen.findByTestId("obs-not-set-up", {}, SLOW);
     expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("Metrics charts RPC rate");
-    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
   });
 });

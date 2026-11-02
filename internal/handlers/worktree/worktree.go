@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -110,7 +111,9 @@ func (s *Service) relockActive(ctx context.Context, userID string, worktree *db.
 // half-finished removal. The directory is the daemon's to judge; whatever it
 // declines is recorded and offered in the storage inbox item.
 func (s *Service) settleArchived(ctx context.Context, userID string, worktree *db.Worktree, projectPath string) {
-	if s.deps.Settler == nil || worktree.Path == "" {
+	// projectPath is the project's checkout on the owner (ownerCheckout); ""
+	// leaves the settle to the sweep.
+	if s.deps.Settler == nil || worktree.Path == "" || projectPath == "" {
 		return
 	}
 	archived, err := s.deps.Repo.GetWorktree(ctx, worktree.ID)
@@ -263,17 +266,63 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 	return proto
 }
 
+// placed is the machine chosen for a workspace and the project's main
+// checkout on it: the repos a workspace is made from are THAT machine's
+// checkout, never projects.path (the creating machine's).
+type placed struct {
+	machine  machinewake.Target
+	checkout projectcheckout.Target
+}
+
+// checkoutOn is the project's main checkout on daemonID — the machine a new
+// workspace is placed on, or a workspace's owner, whose repos hold its branch
+// and git metadata. "" (a legacy row with no recorded owner) is the project's
+// placed machine. A machine with no checkout is projectcheckout's actionable
+// refusal: which machines have it, or how to put it there.
+func (s *Service) checkoutOn(ctx context.Context, userID string, project *db.Project, daemonID, purpose string) (projectcheckout.Target, error) {
+	machines, _ := s.deps.Router.(daemonplacement.Machines)
+	return projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, daemonID, purpose)
+}
+
+// withCheckout resolves the project's checkout on target's machine and pins
+// target to the machine that answered, so the path and the commands agree.
+func (s *Service) withCheckout(ctx context.Context, userID string, project *db.Project, target machinewake.Target, purpose string) (placed, error) {
+	checkout, err := s.checkoutOn(ctx, userID, project, target.DaemonID, purpose)
+	if err != nil {
+		return placed{}, err
+	}
+	target.DaemonID = checkout.DaemonID
+	return placed{machine: target, checkout: checkout}, nil
+}
+
+// ownerCheckout is the project's checkout on a workspace's owner for the
+// best-effort follow-ups of an archive or delete (the settle, branch
+// cleanup), which skip rather than fail: "" when there is no project or the
+// owner holds no checkout any more. The sweep retries the settle later.
+func (s *Service) ownerCheckout(ctx context.Context, userID string, project *db.Project, worktree *db.Worktree) string {
+	if project == nil {
+		return ""
+	}
+	checkout, err := s.checkoutOn(ctx, userID, project, daemonplacement.WorktreeOwner(worktree), "clean up its workspaces")
+	if err != nil {
+		logging.WarnContext(ctx, "No checkout of the project on the workspace's machine; skipping its cleanup here",
+			"error", err, "worktreeID", worktree.ID, "projectID", project.ID)
+		return ""
+	}
+	return checkout.Path
+}
+
 // listProjectRepos returns the project's nested repos, rejecting projects with
 // none. Empty list is a precondition failure rather than success-with-zero so
 // callers can rely on at least one fan-out target.
 //
 // The registry trails the filesystem — a project cloned onto a cloud machine
 // or announced by a daemon has no repo rows — so an empty registry asks the
-// machine the worktree goes on (place, called only then) what exists and
-// adopts it. Default resolution is project-blind: it can pick a laptop with no
-// checkout, whose "not here" used to surface as "project has no git repos"
-// for a project that is one.
-func (s *Service) listProjectRepos(ctx context.Context, userID string, project *db.Project, place func() (machinewake.Target, error)) ([]*core.Repo, error) {
+// machine the worktree goes on (place, called only then) what exists in ITS
+// checkout and adopts it. Default resolution is project-blind: it can pick a
+// laptop with no checkout, whose "not here" used to surface as "project has
+// no git repos" for a project that is one.
+func (s *Service) listProjectRepos(ctx context.Context, userID string, project *db.Project, place func() (placed, error)) ([]*core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
@@ -282,40 +331,41 @@ func (s *Service) listProjectRepos(ctx context.Context, userID string, project *
 		return repos, nil
 	}
 	if s.deps.Router == nil {
-		return nil, svcerr.FailedPrecondition(repopkg.NoReposMessage(project))
+		return nil, svcerr.FailedPrecondition("the project has no registered git repository, and no machine is connected to look for one")
 	}
 	target, err := place()
 	if err != nil {
 		return nil, err
 	}
-	repos, err = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, repopkg.OnDaemon(s.deps.Router, target.DaemonID), project)
+	repos, err = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, repopkg.OnDaemon(s.deps.Router, target.machine.DaemonID), project, target.checkout.Path)
 	if err != nil {
-		return nil, s.repoDiscoveryError(ctx, userID, project, target, err)
+		return nil, s.repoDiscoveryError(ctx, userID, target, err)
 	}
 	if len(repos) == 0 {
-		return nil, svcerr.FailedPrecondition(repopkg.NoReposMessage(project))
+		return nil, svcerr.FailedPrecondition(repopkg.NoReposMessage(target.checkout.Path))
 	}
 	return repos, nil
 }
 
 // repoDiscoveryError is the answer when the project's machine could not say
 // which repos the project has. It never claims there are none: a missing
-// folder is the user's to fix (FailedPrecondition, naming the path), an
-// asleep machine is woken (the client retries), anything else is Unavailable.
-func (s *Service) repoDiscoveryError(ctx context.Context, userID string, project *db.Project, target machinewake.Target, err error) error {
+// folder is the user's to fix (FailedPrecondition, naming the path on that
+// machine), an asleep machine is woken (the client retries), anything else is
+// Unavailable.
+func (s *Service) repoDiscoveryError(ctx context.Context, userID string, target placed, err error) error {
 	if toolexec.DaemonReportedMissingPath(err) {
-		return svcerr.FailedPrecondition(fmt.Sprintf("the project folder %s does not exist on the machine this workspace would be created on", project.Path))
+		return svcerr.FailedPrecondition(fmt.Sprintf("the project folder %s does not exist on the machine this workspace would be created on", target.checkout.Path))
 	}
 	var cutShort *repopkg.SearchCutShortError
 	if errors.As(err, &cutShort) {
 		// The machine answered: waking it or retrying will not change that.
 		return svcerr.FailedPrecondition(cutShort.Error())
 	}
-	err = s.wake().AfterFailure(ctx, userID, target, err)
+	err = s.wake().AfterFailure(ctx, userID, target.machine, err)
 	if machinewake.IsWaking(err) {
 		return err
 	}
-	doing := fmt.Sprintf("could not check %s for git repositories", project.Path)
+	doing := fmt.Sprintf("could not check %s for git repositories", target.checkout.Path)
 	if serr, ok := daemonerr.MachineState(doing, err); ok {
 		return serr
 	}

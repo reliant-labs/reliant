@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
-import { MACHINE_BURST, MACHINE_SPECS } from "../machineSpecs";
+import { MACHINE_BURST, MACHINE_SPECS, formatMachineSpec } from "../machineSpecs";
 
 // Public consumer contract of CP config.DaemonTierResources. Do not add sizes or
 // fractional requests here; migrate to public hardware fields when available.
@@ -21,4 +21,10 @@ it("matches actual sibling CP canonical requests and limits when available", () 
     const row = new RegExp(`"${size}":\\s*\\{CPURequest: "([^"]+)", CPULimit: "([^"]+)", MemoryRequest: "([^"]+)", MemoryLimit: "([^"]+)"`).exec(text);
     expect(row?.slice(1), `${size}: CP canonical guest changed; update public hardware contract`).toEqual([String(cpu), String(cpu), `${memory}Gi`, `${memory}Gi`]);
   }
+});
+it("words a machine as the landing page's price table does: vCPU, then memory, then disk", () => {
+  expect(formatMachineSpec("s1", 30n)).toBe("1 vCPU · 2 GB RAM · 30 GB disk");
+  expect(formatMachineSpec("m", 50)).toBe("2 vCPU · 4 GB RAM · 50 GB disk");
+  // No server disk figure: the disk is left out, never guessed.
+  expect(formatMachineSpec("l")).toBe("4 vCPU · 8 GB RAM");
 });

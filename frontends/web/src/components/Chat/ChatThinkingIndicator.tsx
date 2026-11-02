@@ -159,7 +159,7 @@ export function ChatThinkingIndicator({
               <button
                 type="button"
                 onClick={onShowRunStatus}
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-medium text-primary-ink hover:underline"
               >
                 Run status
               </button>
@@ -169,7 +169,7 @@ export function ChatThinkingIndicator({
                 type="button"
                 onClick={onStop}
                 title="Stop this run. Sending a message starts it again."
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-medium text-primary-ink hover:underline"
               >
                 Stop
               </button>

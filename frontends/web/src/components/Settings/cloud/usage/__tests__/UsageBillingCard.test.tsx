@@ -24,7 +24,14 @@ describe("independent hosting consent", () => {
     fireEvent.change(screen.getByLabelText(/Monthly app hosting admission budget/), { target: { value: "12.34" } });
     fireEvent.click(screen.getByRole("button", { name: /Authorize and continue/ }));
     await waitFor(() => expect(checkout).toHaveBeenCalledWith({ policyVersion: "policy-1", infraBudgetCents: 1234n }));
-    expect(screen.getByText(/not a guaranteed maximum bill/)).toBeInTheDocument();
+    expect(screen.getByText(/isn’t a hard limit on your bill/)).toBeInTheDocument();
+  });
+  it("states the price list and the minimum in plain words, never a base-fee claim", () => {
+    render(<UsageBillingCard {...base} rates={["Hosted CPU: $0.07/vCPU-hr"]} minimumLine="A $5 minimum applies in any month with hosting usage." />);
+    expect(screen.getByTestId("hosting-rates")).toHaveTextContent("Hosted CPU: $0.07/vCPU-hr");
+    expect(screen.getByTestId("hosting-minimum")).toHaveTextContent("A $5 minimum applies");
+    expect(screen.getByRole("checkbox")).toHaveAccessibleName(/including the monthly minimum/);
+    expect(document.body.textContent).not.toMatch(/no base fee|policy-1|under policy/i);
   });
   it("does not treat pending checkout as active funding", () => {
     render(<UsageBillingCard {...base} agreement={{ status: "pending", infraBudgetCents: 1000n }} />);

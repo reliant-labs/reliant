@@ -221,7 +221,7 @@ export function PresetPicker({
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground">None (use defaults)</span>
-            {!value && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+            {!value && <Check className="w-4 h-4 text-primary-ink flex-shrink-0" />}
           </div>
         </button>
 
@@ -561,7 +561,7 @@ function PresetOption({
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {isSelected && (
-              <Check className="w-4 h-4 text-primary" />
+              <Check className="w-4 h-4 text-primary-ink" />
             )}
             <button
               onClick={(e) => {

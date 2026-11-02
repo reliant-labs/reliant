@@ -18,13 +18,21 @@ describe('machine pricing disclosure', () => {
     expect(diskGrowPrice(pricing, { currentGib: 170, targetGib: 180 })).toEqual({ added: '+$2.50/mo' });
     expect(diskGrowPrice(undefined, { currentGib: 170, targetGib: 180 })).toBeNull();
   });
-  it('puts only name, spec and monthly price on a plan row', () => {
+  it('puts name, spec and monthly price on a plan row, and no hours claim of its own', () => {
     render(<PlanTileRow plan={plan} selected={false} onSelect={() => {}} />);
     const row = screen.getByRole('button');
     expect(row).toHaveTextContent('Small');
     expect(row).toHaveTextContent('2 GB · 0.5 CPU');
-    expect(row).toHaveTextContent('$15.00/mo');
-    expect(row).not.toHaveTextContent(/hrs|hours|\/hr|GiB|GB\b.*month|suspended|included|shared|overage/i);
+    expect(row).toHaveTextContent('$15/mo');
+    expect(row).not.toHaveTextContent(/hrs|hours|\/hr|GiB|GB\b.*month|suspended|included|shared/i);
+  });
+  it('states the overage price on a priced row, never on a covered one', () => {
+    const priced = { ...plan, overage: '$0.30/hr after included hours' };
+    const { unmount } = render(<PlanTileRow plan={priced} selected={false} onSelect={() => {}} />);
+    expect(screen.getByRole('button')).toHaveTextContent('$0.30/hr after included hours');
+    unmount();
+    render(<PlanTileRow plan={priced} selected={false} covered onSelect={() => {}} />);
+    expect(screen.getByRole('button')).not.toHaveTextContent('/hr');
   });
   it('claims hours only when every offered plan includes the same own-size hours', () => {
     const at = (includedHours: string | null): ComputePlanOption => ({ ...plan, includedHours });

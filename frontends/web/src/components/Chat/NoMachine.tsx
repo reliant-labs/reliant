@@ -55,7 +55,7 @@ export function NoMachineComposerHint({ chatId }: { chatId: string }) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="font-medium text-primary hover:underline"
+            className="font-medium text-primary-ink hover:underline"
           >
             Connect a machine
           </button>
@@ -104,7 +104,7 @@ export function ContinueWithoutMachineButton({
       onClick={() => void branch()}
       disabled={busy}
       data-testid="continue-without-machine"
-      className={className ?? "font-medium text-primary hover:underline disabled:opacity-60"}
+      className={className ?? "font-medium text-primary-ink hover:underline disabled:opacity-60"}
     >
       {busy ? "Branching…" : "Continue without machine"}
     </button>

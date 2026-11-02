@@ -325,7 +325,7 @@ export function WorktreesPanel({
             <div className="flex justify-center border-t border-border p-2">
               <button
                 type="button"
-                className="text-xs text-primary hover:underline disabled:opacity-60"
+                className="text-xs text-primary-ink hover:underline disabled:opacity-60"
                 disabled={isLoadingMore}
                 onClick={loadMoreWorktrees}
                 data-testid="load-more-workspaces"
@@ -394,7 +394,7 @@ function LinkedChatCell({ chats, onOpen }: { chats: Chat[]; onOpen: (chat: Chat)
         type="button"
         onClick={() => onOpen(latest)}
         aria-label={`Open chat ${title}`}
-        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {title}
       </button>

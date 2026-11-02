@@ -59,7 +59,7 @@ function StepHeading({ index, title, tone = "neutral" }: { index: number; title:
       <span
         className={cn(
           "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-2xs font-semibold",
-          tone === "accent" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+          tone === "accent" ? "bg-primary/15 text-primary-ink" : "bg-muted text-muted-foreground",
         )}
       >
         {index}

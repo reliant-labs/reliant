@@ -180,7 +180,7 @@ export function DashboardsHub({ project, env, environments, environmentsUnread =
               <button
                 type="button"
                 onClick={onOpenAll}
-                className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="hub-open-all"
               >
                 <span className="text-sm font-medium text-ink">All dashboards</span>
@@ -389,7 +389,7 @@ function GroupCard({ group, members, href, onOpen }: { group: DashboardGroup; me
         <button
           type="button"
           onClick={onOpen}
-          className="flex items-center gap-1 border-t border-border px-4 py-2 text-left text-xs text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex items-center gap-1 border-t border-border px-4 py-2 text-left text-xs text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid={`hub-group-${group}-open`}
         >
           View all {count} in {GROUP_LABELS[group]}

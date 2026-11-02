@@ -49,7 +49,7 @@ export function SidebarApps() {
             <button
               type="button"
               onClick={() => void navigate({ href: consolePath(app.name, { kind: "overview" }) })}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground/85 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground/85 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid={`sidebar-app-${app.name}`}
             >
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[tone])} aria-hidden="true" />
@@ -63,7 +63,7 @@ export function SidebarApps() {
                 aria-label={`Open ${app.name} at ${link.host}`}
                 className={cn(
                   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
                 data-testid={`sidebar-app-link-${app.name}`}
               >
@@ -78,7 +78,7 @@ export function SidebarApps() {
           <button
             type="button"
             onClick={() => void navigate({ to: "/apps" })}
-            className="flex h-6 items-center rounded-md px-2 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex h-6 items-center rounded-md px-2 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {more} more
           </button>

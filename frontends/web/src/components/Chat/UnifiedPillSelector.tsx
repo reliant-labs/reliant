@@ -212,7 +212,7 @@ export function UnifiedPillSelector({
                         </div>
                       </div>
                       {!selectedWorktreeId && (
-                        <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                        <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                       )}
                     </div>
                   </button>
@@ -251,16 +251,16 @@ export function UnifiedPillSelector({
                                 worktree.status === WorktreeStatus.ACTIVE
                                   ? "bg-success/10 text-success-ink"
                                   : worktree.status === WorktreeStatus.COMPLETED
-                                  ? "bg-primary/10 text-primary"
+                                  ? "bg-primary/10 text-primary-ink"
                                   : worktree.status === WorktreeStatus.MERGING
-                                  ? "bg-primary/10 text-primary"
+                                  ? "bg-primary/10 text-primary-ink"
                                   : "bg-warning/10 text-warning-ink"
                               }`}
                             >
                               {getWorktreeStatusLabel(worktree.status)}
                             </span>
                             {selectedWorktreeId === worktree.id && (
-                              <Check className="w-3 h-3 text-primary" />
+                              <Check className="w-3 h-3 text-primary-ink" />
                             )}
                           </div>
                         </div>
@@ -275,7 +275,7 @@ export function UnifiedPillSelector({
                       setShowWorktreeDropdown(false);
                       setShowCreateModal(true);
                     }}
-                    className="w-full px-3 py-2 text-left text-xs transition-colors text-primary hover:bg-[var(--chat-button-hover)]"
+                    className="w-full px-3 py-2 text-left text-xs transition-colors text-primary-ink hover:bg-[var(--chat-button-hover)]"
                     style={{
                       color: "var(--primary)",
                     }}

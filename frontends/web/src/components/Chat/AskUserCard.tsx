@@ -196,7 +196,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           data-testid="ask-user-summary"
           className={cn(
             "flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
-            "transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+            "transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           <span className="flex-shrink-0 [&>svg]:mt-0">{icon}</span>
@@ -265,7 +265,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           aria-expanded={true}
           aria-controls={bodyId}
           onClick={() => setExpanded(false)}
-          className="-mx-1 flex min-h-[44px] w-[calc(100%+0.5rem)] items-start gap-2.5 rounded-md px-1 text-left hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="-mx-1 flex min-h-[44px] w-[calc(100%+0.5rem)] items-start gap-2.5 rounded-md px-1 text-left hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {header}
           <ChevronDown

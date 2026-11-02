@@ -46,7 +46,7 @@ export function SettingsProjectScope({ hint }: { /** What the scope decides, for
         <button
           type="button"
           onClick={() => void navigate({ to: "/settings/$section", params: { section: "projects" } })}
-          className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
           Add a project
         </button>

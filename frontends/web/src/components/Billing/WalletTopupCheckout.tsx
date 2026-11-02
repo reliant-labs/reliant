@@ -198,7 +198,7 @@ export function WalletTopupCheckout({
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">
-          Have a coupon? Redeem it here — it covers this in full, and no card is
+          Have a coupon? Redeem it here. If it covers the full amount, no card is
           needed.
         </p>
         {/* "open", not "collapsed": on this page redeeming is a first-class way
@@ -327,7 +327,7 @@ function EntitlementSummary({ legs }: { legs: EntitlementLeg[] }) {
           )}
         >
           {leg.covered ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
           ) : (
             <span
               aria-hidden
@@ -338,7 +338,7 @@ function EntitlementSummary({ legs }: { legs: EntitlementLeg[] }) {
             <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
               {leg.label}
               {leg.covered && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary-ink">
                   {leg.coveredBy ?? "covered"}
                 </span>
               )}
@@ -670,8 +670,8 @@ function Notice({
   const iconTones = {
     error: "text-destructive-ink",
     muted: "text-muted-foreground",
-    pending: "text-primary",
-    success: "text-primary",
+    pending: "text-primary-ink",
+    success: "text-primary-ink",
   } as const;
 
   return (

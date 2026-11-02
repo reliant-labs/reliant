@@ -384,7 +384,7 @@ function MonacoEditorSettings() {
               id="diff-view-mode"
               value={settings.diffSideBySide ? "side-by-side" : "inline"}
               onChange={(e) => updateSettings({ diffSideBySide: e.target.value === "side-by-side" })}
-              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary hover:border-border/80"
             >
               <option value="side-by-side">Side-by-side</option>
               <option value="inline">Inline</option>

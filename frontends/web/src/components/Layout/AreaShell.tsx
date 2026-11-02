@@ -92,7 +92,7 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={exitTooltip.replace(" (Esc)", "")}
               >
                 {isElectron && !isDetail ? (
