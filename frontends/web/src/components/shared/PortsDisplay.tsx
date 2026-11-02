@@ -52,9 +52,9 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
       onClick={(e) => handlePortClick(port.port, e)}
       disabled={!onOpenPort}
       className={cn(
-        "flex items-center gap-0.5 font-mono text-primary",
+        "flex items-center gap-0.5 font-mono text-primary-ink",
         compact ? "text-xs" : "text-xs",
-        onOpenPort && "hover:text-primary/80 hover:underline cursor-pointer"
+        onOpenPort && "hover:text-primary-ink/80 hover:underline cursor-pointer"
       )} aria-label={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`}>
       {showIcon && <Globe className={cn(compact ? "w-3 h-3" : "w-3.5 h-3.5", "flex-shrink-0")} />}
       <span>{port.port}</span>
@@ -103,7 +103,7 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
                   className={cn(
                     "w-full px-3 py-1.5 text-left font-mono text-xs",
                     "hover:bg-accent transition-colors",
-                    onOpenPort ? "text-primary" : "text-muted-foreground"
+                    onOpenPort ? "text-primary-ink" : "text-muted-foreground"
                   )}
                 >
                   :{p.port}

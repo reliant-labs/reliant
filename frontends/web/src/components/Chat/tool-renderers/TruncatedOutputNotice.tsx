@@ -40,7 +40,7 @@ function TruncatedOutputNoticeComponent({
           onShowFull();
         }}
         disabled={isLoading}
-        className="touch-target inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-default disabled:opacity-70"
+        className="touch-target inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium text-primary-ink transition-colors hover:bg-primary/10 disabled:cursor-default disabled:opacity-70"
       >
         {isLoading && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
         {error ? "Retry" : `Show full output${size}`}

@@ -67,7 +67,7 @@ export function MobileProjectList() {
   };
 
   const trailing = (scope: Scope) =>
-    filterId === scope && <Check className="h-4 w-4 shrink-0 text-primary" />;
+    filterId === scope && <Check className="h-4 w-4 shrink-0 text-primary-ink" />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">

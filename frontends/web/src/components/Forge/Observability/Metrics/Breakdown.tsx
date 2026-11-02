@@ -24,7 +24,7 @@ import { formatCount, type ValueUnit } from "../format";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
 import { BREAKDOWN_TOP, breakdownPanel, topSeries } from "./model/explorerState";
 import { capNote, fieldLabel, seriesByValue } from "./seriesView";
-import { TONES } from "./ExplorerChart";
+import { chartToken } from "../charts/chartPalette";
 
 export interface BreakdownProps {
   /** The explorer's (debounced) query, as a line panel. */
@@ -78,7 +78,7 @@ export function Breakdown({ panel, field, scope, range, unit, onClose, onFilter,
                       <button
                         type="button"
                         onClick={() => onFilter(field, group.value)}
-                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label={`Keep only ${key} = ${group.value}`}
                         data-testid="metrics-breakdown-filter"
                       >
@@ -90,7 +90,7 @@ export function Breakdown({ panel, field, scope, range, unit, onClose, onFilter,
                   <UPlotChart
                     height={88}
                     timestamps={timestamps}
-                    series={group.series.map((s, i) => ({ label: s.label, values: alignTo(timestamps, s), tone: TONES[i % TONES.length] }))}
+                    series={group.series.map((s, i) => ({ label: s.label, values: alignTo(timestamps, s), color: chartToken(i) }))}
                     unit={unit}
                     label={`${panel.title || "Metrics"} where ${key} is ${group.value || "unset"}`}
                     legend={false}

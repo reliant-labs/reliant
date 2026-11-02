@@ -470,7 +470,7 @@ func (m *MockWorkflowResolver) WorkflowSourceDiagnostic(ctx context.Context, pro
 var _ WorkflowResolver = (*MockWorkflowResolver)(nil)
 
 // forge:section MockProjectLookup
-// forge:hash=722324e00837838fb4e7d1c09a29cdfabd0957f73b4492d749813d7fc5f3a02b
+// forge:hash=9c01e413a19d6a8a9087c6fa6b6d91c66eb576efccb83a6fd7d51ec0f6d005ee
 
 // MockProjectLookup is a test mock for the ProjectLookup interface.
 //
@@ -480,11 +480,31 @@ var _ WorkflowResolver = (*MockWorkflowResolver)(nil)
 // "MockProjectLookup.<Method>Func not set" error.
 type MockProjectLookup struct {
 	contractkit.Recorder
-	GetProjectFunc              func(context.Context, string) (*db.Project, error)
-	GetProjectWithUserCheckFunc func(context.Context, string, string) (*db.Project, error)
-	GetWorktreeFunc             func(context.Context, string) (*db.Worktree, error)
-	ListWorktreesFunc           func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	GetSettingFunc              func(context.Context, string, *string, string) (*db.Setting, error)
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
+	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
+	GetProjectWithUserCheckFunc      func(context.Context, string, string) (*db.Project, error)
+	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
+	ListWorktreesFunc                func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	GetSettingFunc                   func(context.Context, string, *string, string) (*db.Setting, error)
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockProjectLookup) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookup", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockProjectLookup) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookup", "ListProjectDaemonsForProject")
 }
 
 // GetProject records the call and delegates to GetProjectFunc when set.
@@ -608,7 +628,7 @@ func (m *MockChatSelections) CopyChatSelection(ctx context.Context, fromChatID s
 var _ ChatSelections = (*MockChatSelections)(nil)
 
 // forge:section MockStore
-// forge:hash=effd0ef7adf055cd68d8fd5425f4536aebbb10888bf2924148cfceee5dbfd81c
+// forge:hash=5008864cb7c6a608ec0179da216f73f351107ecba49ba16b608d5d25f7b49871
 
 // MockStore is a test mock for the Store interface.
 //
@@ -648,6 +668,8 @@ type MockStore struct {
 	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
 	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
+	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc   func(context.Context, string) ([]*core.ProjectDaemon, error)
 	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
 	GetProjectWithUserCheckFunc        func(context.Context, string, string) (*db.Project, error)
 	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
@@ -924,6 +946,24 @@ func (m *MockStore) WorkflowSourceDiagnostic(ctx context.Context, projectID stri
 		return m.WorkflowSourceDiagnosticFunc(ctx, projectID, daemonID, ref)
 	}
 	return "", contractkit.MockNotSet("MockStore", "WorkflowSourceDiagnostic")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockStore) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "ListProjectDaemonsForProject")
 }
 
 // GetProject records the call and delegates to GetProjectFunc when set.

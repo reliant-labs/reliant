@@ -433,7 +433,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
                         >
                           <div className={cn(
                             "flex-shrink-0",
-                            highlightedIndex === globalIndex ? "text-primary" : "text-muted-foreground"
+                            highlightedIndex === globalIndex ? "text-primary-ink" : "text-muted-foreground"
                           )}>
                             {cmd.icon}
                           </div>

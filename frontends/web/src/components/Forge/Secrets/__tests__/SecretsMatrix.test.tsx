@@ -5,21 +5,30 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { RosterEnv } from "@/services/forge/roster";
 import { SecretsMatrix } from "../SecretsMatrix";
 const store = vi.hoisted(() => ({ list: vi.fn(), history: vi.fn(), reveal: vi.fn() }));
+// Each environment's declared shape, served per environment (GetEnvironmentShape).
+const shapes = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test" }));
 vi.mock("@/services/forge/secretStore", async (original) => ({
   ...await original<typeof import("@/services/forge/secretStore")>(),
   listSecrets: store.list, getSecretVersions: store.history, revealSecret: store.reveal,
 }));
+vi.mock("@/services/forge/live", async (original) => ({
+  ...await original<typeof import("@/services/forge/live")>(),
+  getEnvironmentShape: async (id: string) => shapes.get(id) ?? null,
+}));
 vi.mock("@tanstack/react-router", async (original) => ({ ...await original<typeof import("@tanstack/react-router")>(), useNavigate: () => vi.fn() }));
-const env = (name: string, provider = "hosted"): RosterEnv => ({
+const env = (name: string, provider = "hosted"): RosterEnv => {
+  shapes.set(name, { kind: "persistent", workloads: [], domains: [], clusters: [], secrets: [{ name: "API_KEY", provider, declaredBy: [] }] });
+  return {
   name, source: "backend", lifecycle: "deployed", forge: null,
   live: {
     id: name, name, project: "shop", kind: "persistent", declaredBy: null,
     release: "v1", releaseProvenance: null, promotedByActor: "", promotedByUserId: "",
     phase: "succeeded", observed: { state: "not-reported" }, drift: { state: "not-reported" }, driftDetail: "", provenance: "", holds: [],
-    declaredShape: { kind: "persistent", workloads: [], domains: [], clusters: [], secrets: [{ name: "API_KEY", provider, declaredBy: [] }] },
+    declared: true,
   },
-});
+  };
+};
 function mount(envs: RosterEnv[], projectId: string | null = "project") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><SecretsMatrix envs={envs} projectId={projectId} secretHref={(env, name) => `/secrets?env=${env}${name ? `&secret=${name}` : ""}`} /></QueryClientProvider>);
@@ -71,10 +80,10 @@ describe("secrets environment matrix", () => {
     expect(store.history).not.toHaveBeenCalled();
     expect(store.reveal).not.toHaveBeenCalled();
   });
-  it("preserves declared names while metadata is loading", () => {
+  it("preserves declared names while metadata is loading", async () => {
     store.list.mockImplementation(() => new Promise(() => {}));
     mount([env("prod")]);
-    expect(screen.getByRole("rowheader", { name: "API_KEY" })).toBeInTheDocument();
+    expect(await screen.findByRole("rowheader", { name: "API_KEY" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "API_KEY in prod: Loading…" })).toBeInTheDocument();
   });
 });

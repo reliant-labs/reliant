@@ -127,7 +127,7 @@ export function SeriesLegend({
                       <button
                         type="button"
                         onClick={() => onSort(stat)}
-                        className={cn("rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", sort === stat && "text-ink")}
+                        className={cn("rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort === stat && "text-ink")}
                         title={`Sort by ${STAT_LABEL[stat].toLowerCase()}`}
                       >
                         {STAT_LABEL[stat]}
@@ -162,7 +162,7 @@ export function SeriesLegend({
                       onFocus={() => onHighlight(row.key)}
                       onBlur={() => onHighlight(null)}
                       className={cn(
-                        "flex w-full min-w-0 items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                        "flex w-full min-w-0 items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         dim ? "text-ink-muted" : "text-ink"
                       )}
                       title={`${row.label}\nClick to show only this series; ⌘/Ctrl-click to add or remove it.`}
@@ -181,7 +181,7 @@ export function SeriesLegend({
                       <button
                         type="button"
                         onClick={(event) => onDrill(row.key, event)}
-                        className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted opacity-60 hover:bg-ink/5 hover:text-ink hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent group-hover:opacity-100"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted opacity-60 hover:bg-ink/5 hover:text-ink hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
                         aria-label={`Open ${row.label} in the explorer`}
                         title="Open in Logs or Traces"
                       >
@@ -216,12 +216,12 @@ export function SeriesLegend({
       {(onShowAll || isolating || compareLabel) && (
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {onShowAll && (
-            <button type="button" onClick={() => onShowAll(!showAll)} className="rounded underline decoration-ink-muted/50 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="obs-panel-legend-show-all">
+            <button type="button" onClick={() => onShowAll(!showAll)} className="rounded underline decoration-ink-muted/50 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="obs-panel-legend-show-all">
               {showAll ? `Show the top ${topN}` : `Show all ${total}`}
             </button>
           )}
           {isolating && (
-            <button type="button" onClick={onReset} className="rounded underline decoration-ink-muted/50 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="obs-panel-legend-reset">
+            <button type="button" onClick={onReset} className="rounded underline decoration-ink-muted/50 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="obs-panel-legend-reset">
               Show every series
             </button>
           )}

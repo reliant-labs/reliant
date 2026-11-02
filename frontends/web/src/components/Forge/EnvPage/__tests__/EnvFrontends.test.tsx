@@ -26,7 +26,7 @@ const PROD = {
   name: "prod",
   project: "shop",
   kind: "persistent",
-  declaredShape: null,
+  declared: false,
   declaredBy: null,
   release: "v1.7.15",
   releaseProvenance: null,

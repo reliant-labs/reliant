@@ -160,11 +160,31 @@ describe("the Overview", () => {
 });
 
 describe("its states", () => {
-  it("says nothing is deployed, with the command that deploys", async () => {
+  it("says nothing is deployed, leads with an agent, and keeps the command that deploys", async () => {
     renderOverview({ envs: [] });
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "empty");
     expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
-    expect(screen.getByText(/forge env deploy <env>/)).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Deploy with an agent" })).toBeInTheDocument();
+    expect(screen.getByText("reliant forge env deploy <env>")).toBeInTheDocument();
+  });
+
+  it("never says nothing is deployed when the deploy state could not be read", async () => {
+    const onRetry = vi.fn();
+    renderOverview({ envs: [], envsUnread: { onRetry, retrying: false } });
+    expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "unread");
+    expect(screen.getByTestId("overview-unread")).toHaveTextContent("Couldn't load deployment status");
+    expect(screen.queryByText("Nothing deployed yet")).toBeNull();
+    expect(screen.queryByTestId("overview-counts")).toBeNull();
+    await userEvent.setup().click(screen.getByTestId("overview-unread-retry"));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Ask Reliant on every row that needs attention", async () => {
+    renderOverview();
+    await ready();
+    const rows = within(screen.getByTestId("overview-attention")).getAllByRole("row");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(within(row).getByTestId("ask-reliant-menu")).toBeInTheDocument();
   });
 
   it("loads at the tables' own row height", () => {

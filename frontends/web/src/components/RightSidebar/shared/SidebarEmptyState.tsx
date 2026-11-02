@@ -63,7 +63,7 @@ export function SidebarEmptyState({
       )}
     >
       <Icon
-        className={cn("text-primary/60", styles.icon)}
+        className={cn("text-primary-ink/60", styles.icon)}
       />
       <p className={cn("text-foreground font-semibold", styles.title)}>
         {title}
@@ -76,7 +76,7 @@ export function SidebarEmptyState({
       {action && (
         <button
           onClick={action.onClick}
-          className="mt-3 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          className="mt-3 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/10 text-primary-ink hover:bg-primary/20 transition-colors"
         >
           {action.label}
         </button>

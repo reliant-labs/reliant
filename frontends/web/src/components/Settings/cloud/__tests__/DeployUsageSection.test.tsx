@@ -168,10 +168,12 @@ describe("DeployUsageSection — consumption against allowance", () => {
     expect(screen.getByText(/50 vCPU-hours over/i)).toBeDefined();
   });
 
-  it("never surfaces egress, CDN or build dimensions", () => {
+  it("never surfaces CDN or build dimensions; egress is attributed, not an allowance", () => {
     renderSection();
 
-    expect(screen.queryByText(/egress/i)).toBeNull();
+    // Egress is a billed hosting line, so attribution names it — as a
+    // column, never as an allowance meter of its own.
+    expect(screen.queryByRole("progressbar", { name: /egress/i })).toBeNull();
     expect(screen.queryByText(/CDN/i)).toBeNull();
     expect(screen.queryByText(/build minutes/i)).toBeNull();
   });
@@ -308,7 +310,7 @@ describe("DeployUsageSection — attribution", () => {
       rows: [usageRow({ deploymentId: "", environmentId: "" })],
     });
 
-    expect(screen.getByText(/cluster floor \(no deployment\)/i)).toBeDefined();
+    expect(screen.getByText(/not tied to a deployment/i)).toBeDefined();
   });
 });
 

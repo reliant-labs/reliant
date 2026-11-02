@@ -500,7 +500,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
                   type={showKey ? "text" : "password"}
                   className={cn(
                     "w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm",
-                    "focus:outline-none focus:ring-2 focus:ring-primary"
+                    "focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                   autoComplete="off"
                 />

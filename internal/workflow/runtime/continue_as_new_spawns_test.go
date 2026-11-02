@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -308,6 +309,74 @@ func TestContinueAsNew_CarriesLiveSpawnMidLoop(t *testing.T) {
 }
 
 // ── Main thread parked in awaitLiveDetachedSpawns ─────────────────────────────
+
+// The main thread has finished its turn and is PARKED waiting on its spawn
+// when the threshold is crossed — the exact shape of chat 0e15fdba, where no
+// check ran for the entire wait. The handoff must still happen, and the
+// successor must wait on the relaunched spawn instead of spending a turn.
+func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
+	t.Parallel()
+	const chatID = "chat-can-parked-main"
+	child := canChildThread("tc-spawn")
+	parent := "thread-" + chatID
+
+	var suite1 temporaltest.WorkflowTestSuite
+	env1 := suite1.NewTestWorkflowEnvironment()
+	e1 := newCANSpawnEnv(t, env1)
+	e1.scripts[parent] = []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc-spawn", "long research")}},
+		{toolCalls: nil}, // parent parks in awaitLiveDetachedSpawns
+	}
+	e1.scripts[child] = repeatTurns("c", 10)
+
+	pressure := newPressureDial(historyPressureNone)
+	forcePressure(t, chatID, pressure.get)
+	// The threshold is crossed while the spawn is mid-loop (its third call)
+	// AND the parent has taken its final turn — the one that parks it. Both
+	// threads' activities run on their own goroutines, so nothing orders the
+	// child's third call after the parent's second: turning the dial at the
+	// child's call alone sometimes landed first, and the parent handed off at
+	// its next boundary instead of taking that turn (#1655). The child's
+	// third call waits for the parent's second, so the dial always turns
+	// after the parent's last turn has begun.
+	parentLastTurn := make(chan struct{})
+	e1.onLLM = func(thread string, n int) {
+		switch {
+		case thread == parent && n == 2:
+			close(parentLastTurn)
+		case thread == child && n == 3:
+			select {
+			case <-parentLastTurn:
+			case <-time.After(30 * time.Second):
+				t.Error("the parent never took its second turn while the spawn was mid-loop")
+			}
+			pressure.set(historyPressureSoft)
+		}
+	}
+
+	env1.ExecuteWorkflow(DynamicWorkflow, spawnE2EWorkflowInput(chatID))
+	carried := carriedInput(t, env1)
+	require.Equal(t, 2, e1.llmCalls[parent], "the parent was parked, not taking turns")
+	require.True(t, carried.Resume.AwaitSpawnsFirst, "the successor must re-park on the spawn")
+	require.Len(t, carried.Resume.Spawns, 1)
+
+	pressure.set(historyPressureNone)
+	var suite2 temporaltest.WorkflowTestSuite
+	env2 := suite2.NewTestWorkflowEnvironment()
+	e2 := newCANSpawnEnv(t, env2)
+	e2.scripts[child] = repeatTurns("r", 1)
+	var parentCallsBeforeChildDone int
+	e2.onLLM = func(thread string, n int) {
+		if thread == child && n == 2 { // the child's final (no-tool-calls) turn
+			parentCallsBeforeChildDone = e2.llmCalls[parent]
+		}
+	}
+
+	env2.ExecuteWorkflow(DynamicWorkflow, carried)
+	require.NoError(t, env2.GetWorkflowError())
+	require.Zero(t, parentCallsBeforeChildDone, "the resumed parent waits on the relaunched spawn before its first turn")
+	require.Equal(t, 1, e2.enqueuedFor("tc-spawn"))
+}
 
 // ── Hard backstop ─────────────────────────────────────────────────────────────
 

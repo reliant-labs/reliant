@@ -60,7 +60,7 @@ function Field({ label, hint, children, htmlFor }: { label: string; hint?: React
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function EnvChoice({ env, value, onChange }: { env: string; value: "scope" | "all"; onChange: (value: "scope" | "all") => void }) {
   const name = useId();

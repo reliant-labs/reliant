@@ -25,12 +25,13 @@ import { cn } from "@/lib/utils";
 import type { Frontend } from "@/services/forge/frontends";
 
 import { DOCS, GettingStarted } from "../GettingStarted";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { VerdictChip } from "../HostedWorkloads";
 import { DomainStateBadge } from "../Domains/DomainStateBadge";
 import { shortVersion } from "../Releases/releaseModel";
 
 const ICON_BUTTON =
-  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Copies `value`; the icon turns into a tick for a moment. Silent without a clipboard — the URL is on screen to select. */
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -73,7 +74,7 @@ function UrlLine({ url, host, testId }: { url: string; host: string; testId: str
         rel="noreferrer"
         title={`Open ${url}`}
         data-testid={testId}
-        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="truncate">{host}</span>
         <ExternalLink className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
@@ -120,7 +121,7 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
                 target="_blank"
                 rel="noreferrer"
                 title={`Open ${frontend.platformUrl}`}
-                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {frontend.platformHost}
               </a>
@@ -194,9 +195,10 @@ export function FrontendsEmpty({ env }: { env?: string }) {
       icon={<Globe className="h-4 w-4" />}
       title="No frontend deployed here yet"
       about="A frontend is a website forge builds and Reliant hosts: it gets a live address on its first deploy, and you can add your own domain later."
+      agent={<DeployWithAgentButton env={env ?? null} />}
       steps={[
-        { text: "Add a frontend to your project (a landing page, a docs site, a web app).", command: "forge scaffold frontend web" },
-        { text: "Deploy the environment. The address appears here once it is live.", command: `forge env deploy ${env ?? "<env>"}` },
+        { text: "Add a frontend to your project (a landing page, a docs site, a web app).", command: "reliant forge scaffold frontend web" },
+        { text: "Deploy the environment. The address appears here once it is live.", command: `reliant forge env deploy ${env ?? "<env>"}` },
       ]}
       docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
     />

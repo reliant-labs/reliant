@@ -39,6 +39,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -421,7 +422,11 @@ type WorkflowResolver interface {
 }
 
 // ProjectLookup resolves the project, worktrees and settings a launch runs in.
+//
+// Installs is each machine's checkout of a project (project_daemons): a
+// chat's main checkout is its machine's, never projects.path.
 type ProjectLookup interface {
+	daemonplacement.Installs
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

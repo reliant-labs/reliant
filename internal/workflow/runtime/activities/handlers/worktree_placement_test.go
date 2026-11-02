@@ -117,7 +117,24 @@ func newUnregisteredActivityPlacementFixture(t *testing.T) *activityPlacementFix
 		ID: f.projectID, Name: "P", Path: "/home/u/projects/p", UserID: f.userID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
+	// The project is checked out on each machine the user owns, as create,
+	// clone and reconcile record it: a call's directory is its machine's own
+	// checkout.
+	for id := range activityOwnedDaemons {
+		f.installOn(t, id, "/home/u/projects/p")
+	}
 	return f
+}
+
+// installOn records the project as checked out at path on daemonID, a
+// machine of the fixture's user.
+func (f *activityPlacementFixture) installOn(t *testing.T, daemonID, path string) {
+	t.Helper()
+	ctx := context.Background()
+	if d, err := f.repo.GetDaemon(ctx, daemonID); err != nil || d == nil {
+		require.NoError(t, f.repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
+	}
+	require.NoError(t, f.repo.UpsertProjectDaemon(ctx, f.projectID, daemonID, path, nil))
 }
 
 func (f *activityPlacementFixture) worktree(t *testing.T, name, ownerDaemonID string) string {

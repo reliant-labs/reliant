@@ -64,20 +64,23 @@ export const MACHINE_SPECS: Record<DaemonSizeName, MachineSpec> = {
 };
 
 /**
- * The reserved figures, as one short phrase to sit beside a size name.
+ * The reserved figures, as one short phrase to sit beside a size name:
+ * "1 vCPU · 2 GB RAM · 30 GB disk".
  *
- * Memory leads because it is the constraint a user actually hits — a build that
- * outgrows it dies, where one short of cores merely takes longer. "CPU" is not
- * pluralised: "0.5 CPUs" is technically correct and reads as a typo, and the
- * unit is doing the work of a label here rather than counting objects.
+ * Worded as the landing page's price table words it — vCPU first, then
+ * memory, then the disk — so the machine a customer picks here reads as the
+ * one they priced there. `diskGib` is the server's per-size disk
+ * (`daemonPricing.sizes[].storageGib`); without it the disk is left out
+ * rather than guessed.
  *
  * The BURST figures are deliberately not in this string. See
  * MACHINE_BURST_MULTIPLE.
  */
-export function formatMachineSpec(size: DaemonSizeName): string | undefined {
+export function formatMachineSpec(size: DaemonSizeName, diskGib?: number | bigint | null): string | undefined {
   const spec = MACHINE_SPECS[size];
   if (!spec) return undefined;
-  return `${spec.memoryReservedGb} GB RAM · ${spec.cpuReserved} CPU`;
+  const disk = diskGib != null && Number(diskGib) > 0 ? ` · ${Number(diskGib)} GB disk` : "";
+  return `${spec.cpuReserved} vCPU · ${spec.memoryReservedGb} GB RAM${disk}`;
 }
 
 /**

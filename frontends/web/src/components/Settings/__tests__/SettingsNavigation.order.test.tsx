@@ -26,6 +26,7 @@ describe("SettingsNavigation order", () => {
       "automations",
       "machines",
       "git-connections",
+      "integrations",
       "tokens",
       "appearance",
       "shortcuts",

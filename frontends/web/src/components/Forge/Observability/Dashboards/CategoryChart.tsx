@@ -105,7 +105,7 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
                 type="button"
                 disabled={!onDrill}
                 onClick={drill(row)}
-                className="flex h-3.5 min-w-0 items-stretch gap-px rounded-sm text-left hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:hover:opacity-100"
+                className="flex h-3.5 min-w-0 items-stretch gap-px rounded-sm text-left hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:opacity-100"
                 aria-label={`${labelOf(row)}: ${columns.map((c, i) => `${columns.length > 1 ? `${c} ` : ""}${formatValue(row.values[i] ?? null, unit)}`).join(", ")}`}
               >
                 {stack ? (
@@ -140,7 +140,7 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
               disabled={!onDrill}
               onClick={drill(row)}
               className={cn(
-                "flex min-h-0 flex-1 rounded-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:hover:opacity-100",
+                "flex min-h-0 flex-1 rounded-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:opacity-100",
                 stack ? "flex-col-reverse items-stretch" : "items-end justify-center gap-px"
               )}
               aria-label={`${labelOf(row)}: ${columns.map((c, i) => `${columns.length > 1 ? `${c} ` : ""}${formatValue(row.values[i] ?? null, unit)}`).join(", ")}`}
@@ -260,7 +260,7 @@ function PieChart({ panel, data, unit, keys, onDrill, height, compact, donut }: 
                     onClick={(event) => drill(s, event)}
                     onFocus={() => setHovered(s.key)}
                     onBlur={() => setHovered(null)}
-                    className="flex w-full min-w-0 items-center gap-1.5 rounded text-left text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="flex w-full min-w-0 items-center gap-1.5 rounded text-left text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title={`Open ${s.label} in the explorer`}
                   >
                     <Swatch token={s.token} />

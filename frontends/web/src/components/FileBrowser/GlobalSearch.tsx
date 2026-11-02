@@ -311,7 +311,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                 value={filePattern}
                 onChange={(e) => setFilePattern(e.target.value)}
                 placeholder="e.g., *.ts, *.go"
-                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-primary/50"
+                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>
@@ -391,7 +391,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                       ) : (
                         <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                       )}
-                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <FileText className="w-4 h-4 text-primary-ink flex-shrink-0" />
                       <span className="text-sm font-mono truncate flex-1">{result.path}</span>
                       <span className="text-xs text-muted-foreground">
                         {result.matches.length} match{result.matches.length !== 1 ? "es" : ""}

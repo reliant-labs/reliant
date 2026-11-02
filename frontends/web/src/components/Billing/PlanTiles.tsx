@@ -18,12 +18,12 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 
 import {
-  formatCentsAsDollars,
   type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 import { cn } from "@/lib/utils";
 
 import { machinePricingFootnote } from "./daemonUsage";
+import { formatPrice } from "./priceFormat";
 
 /**
  * One purchasable plan, reduced to what these tiles render.
@@ -38,7 +38,7 @@ export interface ComputePlanOption {
   planId: string;
   label: string;
   /**
-   * What this row buys, beneath its name — "4 GB RAM · 1 CPU".
+   * What this row buys, beneath its name — "2 vCPU · 4 GB RAM · 50 GB disk".
    *
    * A real slot rather than something the caller concatenates into `label`.
    * Onboarding used to build `"Medium — 4 GB RAM · 1 CPU"` and then had to
@@ -47,6 +47,8 @@ export interface ComputePlanOption {
    * back into a bare machine name. Two facts, two fields.
    */
   detail?: string;
+  /** "$0.30/hr after included hours", from the server's price list. */
+  overage?: string;
   /** The machine size this tile represents, when the caller selects by size. */
   size?: DaemonSizeName;
   monthlyPriceCents: number;
@@ -82,8 +84,8 @@ export function PlanTiles({
    * "Covered" instead of a monthly price.
    *
    * A single id rather than a boolean, because coverage is per-size and not
-   * blanket: a redeemed compute grant buys machine TIME at the free plan's
-   * allowance (small), so marking every tile covered would promise an XL the
+   * blanket: a redeemed compute grant buys machine TIME at the coupon's
+   * unit size (M), so marking every tile covered would promise an XL the
    * server refuses at provisioning. The remaining tiles keep their prices,
    * which is what makes picking a bigger one legible as a purchase.
    */
@@ -173,7 +175,7 @@ export function PlanTileRow({
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           {plan.label}
           {(selected || current) && (
-            <CheckCircle2 className="h-4 w-4 text-primary" />
+            <CheckCircle2 className="h-4 w-4 text-primary-ink" />
           )}
         </span>
         {/* The specs, in their own slot. Callers pass a `detail` rather than
@@ -184,10 +186,15 @@ export function PlanTileRow({
             {plan.detail}
           </span>
         )}
+        {plan.overage && !covered && (
+          <span className="block text-xs text-muted-foreground">
+            {plan.overage}
+          </span>
+        )}
       </span>
       <span className="flex-shrink-0 text-sm font-medium tabular-nums text-foreground">
         {current ? (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary-ink">
             Current plan
           </span>
         ) : covered ? (
@@ -195,7 +202,7 @@ export function PlanTileRow({
           // "$40.00/mo" and onboarding's "Free", in the same type.
           <>Covered</>
         ) : (
-          <>{formatCentsAsDollars(plan.monthlyPriceCents)}/mo</>
+          <>{formatPrice(plan.monthlyPriceCents)}/mo</>
         )}
       </span>
     </button>

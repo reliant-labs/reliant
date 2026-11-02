@@ -91,6 +91,11 @@ func (e *BranchHeldError) Error() string {
 // project's repos themselves and resolve the owner daemon.
 type Request struct {
 	Project *db.Project
+	// Checkout is the project's main checkout ON THE OWNER MACHINE
+	// (projectcheckout.On for OwnerDaemonID): every repo is checked out from
+	// Checkout/<repo.RelativePath>. projects.path is the creating machine's
+	// path and is never sent; Finish refuses an empty Checkout.
+	Checkout string
 	// Repos are the project's nested repos; one checkout is made for each.
 	Repos []*core.Repo
 	// Name is the human name, also the workspace directory's prefix.
@@ -111,7 +116,7 @@ type Request struct {
 	// from CopySource (gitignored files such as .env). Callers validate them
 	// with copypath.CleanAll.
 	CopyPaths []string
-	// CopySource is where CopyPaths come from; "" means Project.Path.
+	// CopySource is where CopyPaths come from; "" means Checkout.
 	CopySource string
 	// ChatID, when set, records the chat the workspace was created for.
 	ChatID *string
@@ -243,6 +248,7 @@ func claimName(ctx context.Context, store Store, projectID, name, branch string)
 // fail the workspace. The returned error is the reason for FAILED.
 func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) error {
 	project, repos := req.Project, req.Repos
+	checkout := req.Checkout
 	workspaceID := req.WorkspaceID
 	if workspaceID == "" {
 		workspaceID = worktreepath.WorkspaceDirName(project.Name, wt.Name)
@@ -276,7 +282,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 				Error   string `json:"error"`
 			}
 			err := m.Send(ctx, "worktree.adopt_restore", map[string]string{
-				"repo_path": filepath.Join(project.Path, repo.RelativePath),
+				"repo_path": filepath.Join(checkout, repo.RelativePath),
 				"src":       ex.OriginalPath,
 				"dest":      ex.Path,
 			}, &rr, commandTimeoutMs)
@@ -294,7 +300,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			if _, adopted := req.Existing[s.repo.ID]; adopted {
 				continue
 			}
-			repoPath := filepath.Join(project.Path, s.repo.RelativePath)
+			repoPath := filepath.Join(checkout, s.repo.RelativePath)
 			_ = m.Send(ctx, "worktree.delete_directory", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": s.worktreePath,
@@ -313,7 +319,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 		if workspaceRoot != "" && !restoreFailed && !inPlace {
 			_ = m.Send(ctx, "worktree.delete_directory", map[string]string{
-				"project_path":  project.Path,
+				"project_path":  checkout,
 				"worktree_path": workspaceRoot,
 			}, nil, commandTimeoutMs)
 		}
@@ -339,11 +345,14 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 		return reason
 	}
+	if checkout == "" {
+		return fail(errors.New("workspacecreate: no checkout of the project on the owner machine (Request.Checkout)"))
+	}
 
 	// createRepo checks out ONE repo. It runs concurrently with its siblings,
 	// so it touches nothing shared.
 	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
-		repoPath := filepath.Join(project.Path, repo.RelativePath)
+		repoPath := filepath.Join(checkout, repo.RelativePath)
 
 		// Per-repo override > global > daemon auto-detect (empty).
 		repoBase := globalBase
@@ -482,7 +491,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 	// A failed copy does not fail the workspace: the checkouts are complete
 	// and usable, and a missing .env is something the user can see and fix.
 	if len(req.CopyPaths) > 0 {
-		copySource := firstNonEmpty(req.CopySource, project.Path)
+		copySource := firstNonEmpty(req.CopySource, checkout)
 		var copyResp struct {
 			Copied  []string          `json:"copied"`
 			Missing []string          `json:"missing"`

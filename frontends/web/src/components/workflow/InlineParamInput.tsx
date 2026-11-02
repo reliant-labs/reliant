@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { COMPOSER_CONTROL } from "../Chat/composerControl";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -139,7 +140,8 @@ export function InlineParamInput({
         <Tooltip content={`${displayName}: ${getInputDescription(schema) || "No description"}`} side="top" triggerClassName="block">
           <div
             className={cn(
-              "flex items-center gap-1 rounded-full text-xs font-medium h-6 px-2.5",
+              "flex items-center gap-1 rounded-full text-xs font-medium px-2.5",
+              COMPOSER_CONTROL,
               "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
               "opacity-60 cursor-not-allowed",
               className
@@ -216,12 +218,13 @@ function InlineEnumInput({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+          COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -261,7 +264,7 @@ function InlineEnumInput({
                   )}
                 >
                   <span>{formatOption(option)}</span>
-                  {isSelected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                  {isSelected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
                 </button>
               );
             })}
@@ -356,12 +359,13 @@ function InlineMultiEnumInput({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+          COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -393,7 +397,7 @@ function InlineMultiEnumInput({
               <button 
                 type="button" 
                 onClick={selectAll} 
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-primary-ink hover:underline"
               >
                 All
               </button>
@@ -476,12 +480,13 @@ function InlineBooleanInput({
         onClick={() => canInteract && onChange(!isOn)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+          COMPOSER_CONTROL,
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
           isOn
-            ? "bg-primary/20 text-primary"
+            ? "bg-primary/20 text-primary-ink"
             : isStreaming
             ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
             : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
@@ -560,8 +565,8 @@ function InlineStringInput({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         className={cn(
-          "h-6 px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "h-[32px] px-2 text-xs rounded border border-primary bg-background",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "min-w-20 max-w-32",
           className
         )}
@@ -579,7 +584,8 @@ function InlineStringInput({
         onClick={() => canInteract && setIsEditing(true)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+          COMPOSER_CONTROL,
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
@@ -669,8 +675,8 @@ function InlineNumberInput({
         max={getInputMax(schema)}
         step={schema.type === "integer" ? 1 : 0.1}
         className={cn(
-          "h-6 px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "h-[32px] px-2 text-xs rounded border border-primary bg-background",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "w-20",
           className
         )}
@@ -690,7 +696,8 @@ function InlineNumberInput({
         onClick={() => canInteract && setIsEditing(true)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+          COMPOSER_CONTROL,
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
@@ -777,12 +784,13 @@ function InlineModelInput({
             {...triggerProps}
             title={getInputDescription(schema) || `${displayName}: ${shown || "(none)"}`}
             className={cn(
-              "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+              "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+              COMPOSER_CONTROL,
               canInteract
                 ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                 : "cursor-default opacity-60",
               open
-                ? "bg-primary/20 text-primary"
+                ? "bg-primary/20 text-primary-ink"
                 : isStreaming
                 ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
                 : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",

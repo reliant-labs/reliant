@@ -8,6 +8,10 @@ import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { openCheckout } from "@/lib/stripeCheckout";
 import { UsageBillingCard } from "./UsageBillingCard";
 import { usageBillingReturnUrls } from "./usageBillingCheckout";
+import { hostedRateLines, hostingMinimumLine, type HostedRateLike } from "@/components/Billing/priceFormat";
+
+/** The hosting terms this panel discloses, as GetCurrentUserUsageBilling carries them. */
+type HostedTerms = { rates: HostedRateLike[]; minimumMonthlyCents?: bigint };
 
 export function UsageBillingPanel() {
   const org = useActiveOrg();
@@ -46,7 +50,14 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     enabled={!undeployed && (state.data?.enabled ?? false)}
     policyVersion={state.data?.policyVersion ?? ""}
     agreement={state.data?.agreement}
-    rates={(state.data?.rates ?? []).map(rate => `${rate.displayName}: ${rate.priceCents} cents / ${rate.unit}`)}
+    // Dollars in the units the price list sells in. The free egress allowance
+    // and the monthly minimum come from the server (control-plane #1790:
+    // HostedUsageRate.included_monthly, minimum_monthly_cents), never from
+    // this client. Read structurally so this compiles before and after the
+    // vendored contract carries them; until then they are absent and the
+    // lines are simply not shown.
+    rates={hostedRateLines((state.data?.rates ?? []) as HostedTerms["rates"])}
+    minimumLine={hostingMinimumLine((state.data as HostedTerms | undefined)?.minimumMonthlyCents)}
     canManage={canManage}
     isLoading={state.isLoading}
     error={state.error && !undeployed ? "Could not verify app hosting billing. Try again before authorizing usage." : checkout.error || handoffError ? "Checkout could not be completed. Check billing status and review the policy before retrying." : undefined}

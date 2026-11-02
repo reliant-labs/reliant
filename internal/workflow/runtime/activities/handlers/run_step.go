@@ -86,6 +86,9 @@ type ExecuteRunStepActivity struct {
 	machineWait *machineWait
 	// secrets resolves the workflow's declared secrets for the command.
 	secrets SecretResolver
+	// router resolves a run node's machine named by name, type or labels to
+	// the machine whose checkout the command runs in (WithDaemonRouter).
+	router toolexec.DaemonRouter
 }
 
 // WithSecretResolver lets a run step export the workflow's declared secrets to
@@ -93,6 +96,13 @@ type ExecuteRunStepActivity struct {
 // run without them.
 func (a *ExecuteRunStepActivity) WithSecretResolver(r SecretResolver) *ExecuteRunStepActivity {
 	a.secrets = r
+	return a
+}
+
+// WithDaemonRouter lets a run node that names its machine by name, type or
+// labels run in THAT machine's checkout (resolveRunCheckout).
+func (a *ExecuteRunStepActivity) WithDaemonRouter(router toolexec.DaemonRouter) *ExecuteRunStepActivity {
+	a.router = router
 	return a
 }
 
@@ -215,6 +225,15 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 	execCtx.Credentials = credentials
+
+	// The command's machine is final: its checkout is the working directory.
+	// A machine without one fails the command with the reason and the way
+	// out (exit -1), never a stuck step.
+	if err := resolveRunCheckout(ctx, a.repo, a.router, &execCtx); err != nil {
+		refusal := missingRefusal(err)
+		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
+	}
 
 	// Declared secrets: resolved here, inside the attempt, and exported to the
 	// command as environment variables of the same name. The command text keeps

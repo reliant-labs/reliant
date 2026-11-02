@@ -88,7 +88,7 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
                 type="button"
                 onClick={() => setViewing(preset)}
                 aria-description={typeof preset.description === "string" && preset.description ? preset.description : undefined}
-                className="min-w-0 flex-1 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="min-w-0 flex-1 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium text-foreground hover:underline">{name}</span>

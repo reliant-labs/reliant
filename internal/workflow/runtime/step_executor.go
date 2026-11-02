@@ -1273,6 +1273,10 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 			rtx.ChatProvider = driver
 			rtx.Descendant = rtx.Thread != e.childTracker.rootThread
 			rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+			if rtx.Descendant {
+				rtx.ChatModel = e.childTracker.chatModel()
+				rtx.ThreadModelChosen = e.childTracker.threadChoseModel(rtx.Thread)
+			}
 			// Kept for query/observability consumers too; strict enforcement
 			// happens at the activity's model-resolution boundary.
 			rtx.ProviderPreference = []string{driver}
@@ -1299,6 +1303,10 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.ChatProvider = e.childTracker.chatProvider
 		rtx.Descendant = rtx.Thread != e.childTracker.rootThread
 		rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+		if rtx.ChatProvider != "" && rtx.Descendant {
+			rtx.ChatModel = e.childTracker.chatModel()
+			rtx.ThreadModelChosen = e.childTracker.threadChoseModel(rtx.Thread)
+		}
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 	}

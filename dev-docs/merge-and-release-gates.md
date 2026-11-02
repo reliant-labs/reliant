@@ -4,8 +4,8 @@
 has reviewed. A pull request push runs nothing heavy; `pr-review` reads the
 diff, not CI results; a passed PR enters GitHub's merge queue, where the merge
 gate runs **once**, on main plus the entry, and decides the merge. The whole
-suite runs on main after the merge and never blocks one: a red main is filed
-and fixed by pipeline-health (`pipeline:slo`), and `task release:tag` refuses a
+suite runs on main after the merge and never blocks one: a red main keeps a
+`ci:main-red` issue open until it is fixed, and `task release:tag` refuses a
 commit without a green release-gate record, so it is fixed before the next
 release. Details: [CI](#ci).
 
@@ -390,6 +390,14 @@ that.
    tag lands on exactly the commit the gate judged, so what ships is what was
    gated.
 
+The RC train (control-plane `scripts/rc/rc.sh`) gates the set's reliant commit
+on its own machine (owner, 2026-11-02): `scripts/rc/rl-gate.sh` runs this
+gate's parts (`release-gate.sh run --part`) and ci.yml's Playwright and
+electron lanes in parallel, assembles the record and publishes it as the
+commit's note. `release-tag.sh --rc` accepts that green record, and otherwise
+the commit's `Release gate` job on Actions (the train's fallback, ci.yml
+dispatched at the RC branch, which publishes no note off main).
+
 The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
 `Release Electron App` (publishing to the alpha channel, a GitHub Release
 and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
@@ -417,8 +425,9 @@ unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
 required checks are green on its head. Only the `pr-review` workflow enqueues,
 with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
-passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
-`merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
+passes (control-plane `docs/pr-pipeline.md`); an author opens the PR non-draft,
+adds no queue label (the pass adds `merge:queue`) and never runs `gh pr merge`
+(`--auto` included). In the queue,
 the required `Reliant review` check (`reliant-review.yml`) requires
 `pr-review`'s pass marker on every PR head in the group
 (`scripts/ci-review-marker.sh`, fetched from main). Because the PR's own `CI result` is

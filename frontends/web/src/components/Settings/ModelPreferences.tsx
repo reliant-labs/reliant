@@ -344,7 +344,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                       {tag}
                     </span>
                     {hasOverrides && (
-                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary-ink font-medium">
                         customized
                       </span>
                     )}

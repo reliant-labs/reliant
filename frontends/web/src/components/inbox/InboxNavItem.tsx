@@ -80,7 +80,7 @@ export function InboxNavItem({ onOpen }: InboxNavItemProps) {
       className={cn(
         "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
         "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-        "focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "focus:outline-none focus:ring-2 focus:ring-ring",
         "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent",
       )}
       data-testid="sidebar-inbox-button"

@@ -22,6 +22,7 @@ import {
   DAEMON_SIZE_ORDER,
   isSizeAllowedByPlan,
   offeredDaemonSizes,
+  planDisplayName,
   plansAllowingSize,
   smallestPlanAllowingSize,
 } from "../billingUtils";
@@ -216,5 +217,16 @@ describe("offeredDaemonSizes", () => {
       plan("tier_odd", { priceCents: 1000n, allowedDaemonSizes: ["m", "titan"] }),
     ];
     expect(offeredDaemonSizes(odd)).toEqual(["m"]);
+  });
+});
+
+describe("planDisplayName", () => {
+  it("names a plan by the size it sells, as the price list does", () => {
+    expect(planDisplayName({ name: "Compute M", structuredLimits: { machineSize: "m" } })).toBe("M");
+    expect(planDisplayName({ name: "Compute 3XL", structuredLimits: { machineSize: "3xl" } })).toBe("3XL");
+  });
+  it("falls back to the catalog name without its product prefix", () => {
+    expect(planDisplayName({ name: "Compute S1" })).toBe("S1");
+    expect(planDisplayName({ name: "Team" })).toBe("Team");
   });
 });

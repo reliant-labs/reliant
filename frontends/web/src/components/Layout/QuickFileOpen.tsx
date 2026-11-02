@@ -376,7 +376,7 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
                 >
                   <FileText className={cn(
                     "w-4 h-4 flex-shrink-0",
-                    highlightedIndex === index ? "text-primary" : "text-muted-foreground"
+                    highlightedIndex === index ? "text-primary-ink" : "text-muted-foreground"
                   )} />
                   <div className="flex-1 min-w-0">
                     <div className={cn(

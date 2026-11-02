@@ -50,8 +50,11 @@ import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
+import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
+import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
@@ -123,6 +126,8 @@ export interface OverviewHomeProps {
   /** The recorded, deployed environments: long-lived first (prod leading), previews apart. */
   envs: StripEnv[];
   envsLoading: boolean;
+  /** The environment read failed: `envs` is empty because nothing was read (DeployStatusUnread). */
+  envsUnread?: DeployStatusUnreadState;
   search: OverviewSearch;
   onSearch: (next: Partial<OverviewSearch>) => void;
   hrefs: OverviewHrefs;
@@ -156,6 +161,7 @@ export function OverviewHome({
   env,
   envs,
   envsLoading,
+  envsUnread,
   search,
   onSearch,
   hrefs,
@@ -215,11 +221,13 @@ export function OverviewHome({
   // NOTHING DEPLOYED: the header states no counts. They would be drawn from
   // telemetry about environments the page is about to say do not exist.
   const empty = !envsLoading && envs.length === 0;
+  // An empty list from a failed read says nothing about what is deployed.
+  const unread = empty && !!envsUnread;
   const header = (
     <PageHeader
       title="Overview"
       meta={
-        empty ? (
+        unread ? undefined : empty ? (
           <span data-testid="overview-counts">Not deployed</span>
         ) : loading ? (
           <span className="inline-flex h-4 w-56 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading" />
@@ -247,27 +255,32 @@ export function OverviewHome({
 
   if (empty) {
     return (
-      <div className="space-y-6" data-testid="overview" data-state="empty">
+      <div className="space-y-6" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
         {deploys}
-        <GettingStarted
-          testId="overview-getting-started"
-          icon={<Boxes className="h-4 w-4" />}
-          title="Nothing deployed yet"
-          about="The overview shows every service, worker and job of each environment: whether it is healthy, its CPU and memory against its limits, restarts, and recent events."
-          steps={[
-            {
-              text: "Deploy an environment through Reliant from your checkout. Its workloads and their health appear here as soon as they start.",
-              command: "forge env deploy <env>",
-            },
-          ]}
-          docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
-        >
-          <p>
-            {project} has no deployed environment for Reliant to watch yet. A local environment (forge env up) runs on your machine and
-            reports nothing here.
-          </p>
-        </GettingStarted>
+        {envsUnread ? (
+          <DeployStatusUnread state={envsUnread} testId="overview-unread" />
+        ) : (
+          <GettingStarted
+            testId="overview-getting-started"
+            icon={<Boxes className="h-4 w-4" />}
+            title="Nothing deployed yet"
+            about="The overview shows every service, worker and job of each environment: whether it is healthy, its CPU and memory against its limits, restarts, and recent events."
+            agent={<DeployWithAgentButton env={null} forgeProject={project} />}
+            steps={[
+              {
+                text: "Deploy an environment through Reliant. Its workloads and their health appear here as soon as they start.",
+                command: "reliant forge env deploy <env>",
+              },
+            ]}
+            docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+          >
+            <p>
+              {project} has no deployed environment for Reliant to watch yet. A local environment (reliant forge env up) runs on your machine and
+              reports nothing here.
+            </p>
+          </GettingStarted>
+        )}
       </div>
     );
   }
@@ -332,7 +345,7 @@ export function OverviewHome({
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
-            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
               <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="sr-only">Filter services</span>
               <input
@@ -525,7 +538,7 @@ function EnvStrip({
                 <Link
                   href={scopedHref(preview.name)}
                   aria-current={preview.name === env ? "page" : undefined}
-                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", preview.name === env && "font-medium text-ink")}
+                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", preview.name === env && "font-medium text-ink")}
                 >
                   {preview.name}
                 </Link>
@@ -563,7 +576,7 @@ function EnvCell({
       data-testid={`overview-env-${env.name}`}
       data-tone={loading || failed ? undefined : cell.tone}
       className={cn(
-        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         !first && "border-l border-border"
       )}
     >
@@ -679,6 +692,9 @@ function NeedsAttention({
                       </span>
                     )}
                   </td>
+                  <td className="h-10 w-px whitespace-nowrap pr-2 text-right" data-testid={`attention-ask-${item.key}`}>
+                    <AskReliantMenu subject={attentionSubject(item)} label={`Ask Reliant about ${item.subject}`} />
+                  </td>
                   {rollback && (
                     <td className="h-10 w-px whitespace-nowrap pr-4 text-right">
                       {target && (
@@ -704,6 +720,19 @@ function NeedsAttention({
       )}
     </Panel>
   );
+}
+
+/** What "Ask Reliant" hands an agent about a row: references only (askReliantPrompt). */
+export function attentionSubject(item: AttentionItem): AskSubject {
+  if (item.kind === "alert") return { kind: "alert", rule: item.subject, fingerprint: "", env: item.envName || null, state: "firing" };
+  return {
+    kind: "workload",
+    name: item.workload ?? item.subject,
+    env: item.envName || null,
+    job: item.kind === "job",
+    state: item.what,
+    release: item.release || undefined,
+  };
 }
 
 /**
@@ -744,7 +773,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
       ) : releases.error ? (
         <p className="text-xs text-ink-muted">Releases could not be read right now.</p>
       ) : recent.length === 0 ? (
-        <p className="text-xs text-ink-muted">No release has been cut yet. The first forge env deploy cuts one.</p>
+        <p className="text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
       ) : (
         <ol className="space-y-3.5">
           {recent.map((release, index) => {

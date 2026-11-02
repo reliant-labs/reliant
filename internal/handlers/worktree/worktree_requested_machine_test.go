@@ -23,6 +23,7 @@ func (f *placementFixture) ownedDaemon(t *testing.T, userID string) string {
 	t.Helper()
 	id := "daemon-" + uuid.NewString()[:8]
 	require.NoError(t, f.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: id, UserID: userID}))
+	require.NoError(t, f.repo.UpsertProjectDaemon(context.Background(), f.projectID, id, f.projectPath, nil))
 	return id
 }
 

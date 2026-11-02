@@ -55,7 +55,7 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
         return <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0" />;
       case DisplayStyle.INFO:
       default:
-        return <Info className="w-3.5 h-3.5 text-primary flex-shrink-0" />;
+        return <Info className="w-3.5 h-3.5 text-primary-ink flex-shrink-0" />;
     }
   };
 

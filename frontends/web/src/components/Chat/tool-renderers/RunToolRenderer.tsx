@@ -77,7 +77,7 @@ function RunToolRendererComponent({ ctx }: ToolContentProps) {
           <Link
             to="/workflows/runs/$runId"
             params={{ runId }}
-            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Open run
             <ArrowRight className="h-3 w-3" aria-hidden="true" />

@@ -633,7 +633,7 @@ export function DeclaredAutomationForm({
               <button
                 type="button"
                 onClick={() => onUseCustom(projectId)}
-                className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Need a different trigger?
               </button>
@@ -1015,7 +1015,7 @@ function PerTriggerOverrides({
         type="button"
         aria-expanded={shown}
         onClick={() => setShown((s) => !s)}
-        className="flex w-full items-baseline gap-2 rounded-sm text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="flex w-full items-baseline gap-2 rounded-sm text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {shown ? <ChevronDown className="h-4 w-4 shrink-0 self-center" aria-hidden /> : <ChevronRight className="h-4 w-4 shrink-0 self-center" aria-hidden />}
         <span className="font-semibold text-foreground">Per-trigger exceptions</span>
@@ -1037,7 +1037,7 @@ function PerTriggerOverrides({
                   <CardInset padding="none">
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-expanded={expanded}
                       aria-controls={panel}
                       onClick={() => onToggle(name)}

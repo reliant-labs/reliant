@@ -52,7 +52,7 @@ export function FailedSendStatus({ chatId, clientMessageId, className }: FailedS
           type="button"
           onClick={() => void retry()}
           disabled={retrying}
-          className="flex items-center gap-1 rounded px-1 font-medium text-primary hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-60"
+          className="flex items-center gap-1 rounded px-1 font-medium text-primary-ink hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-60"
         >
           {retrying ? (
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
