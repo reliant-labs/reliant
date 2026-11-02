@@ -2,9 +2,14 @@ import { useState, useEffect } from "react";
 import { Check, Lightbulb } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
-import { COLOR_SCHEME_ATTR, RETIRED_COLOR_SCHEME_IDS } from "../../lib/forgeTokens";
+import {
+  COLOR_SCHEME_ATTR,
+  DEFAULT_COLOR_SCHEME,
+  DEFAULT_COLOR_SCHEME_ATTR,
+  RETIRED_COLOR_SCHEME_IDS,
+} from "../../lib/forgeTokens";
 
-type ColorScheme = "purple" | "blue" | "neutral" | "teal" | "slate" | "black";
+type ColorScheme = "reliant" | "purple" | "blue" | "neutral" | "teal" | "slate" | "pure-black";
 
 interface ColorSchemeOption {
   id: ColorScheme;
@@ -18,6 +23,16 @@ interface ColorSchemeOption {
 }
 
 const COLOR_SCHEMES: ColorSchemeOption[] = [
+  {
+    id: "reliant",
+    name: "Reliant",
+    description: "The brand: blue on blue-black",
+    preview: {
+      primary: "#0A70E0",
+      accent: "#6E39FF",
+      background: "#0A0A0F",
+    },
+  },
   {
     id: "blue",
     name: "Professional Blue",
@@ -69,7 +84,7 @@ const COLOR_SCHEMES: ColorSchemeOption[] = [
     },
   },
   {
-    id: "black",
+    id: "pure-black",
     name: "Pure Black",
     description: "True black for OLED screens",
     preview: {
@@ -81,7 +96,7 @@ const COLOR_SCHEMES: ColorSchemeOption[] = [
 ];
 
 export function ColorSchemeSelector() {
-  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>("black");
+  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>(DEFAULT_COLOR_SCHEME);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from settingsSync on mount (wait for initialization)
@@ -95,10 +110,10 @@ export function ColorSchemeSelector() {
       }
       
       // Now read settings from settingsSync (which has loaded from database)
-      const raw = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black") as string;
+      const raw = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME) as string;
       // A scheme retired since it was picked selects its replacement.
       const stored = (RETIRED_COLOR_SCHEME_IDS[raw] ?? raw) as ColorScheme;
-      setSelectedScheme(stored || "black");
+      setSelectedScheme(stored || DEFAULT_COLOR_SCHEME);
       setIsLoaded(true);
     };
     
@@ -112,7 +127,7 @@ export function ColorSchemeSelector() {
     const applyScheme = (scheme: ColorScheme) => {
       const root = document.documentElement;
 
-      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? "pure-black");
+      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? DEFAULT_COLOR_SCHEME_ATTR);
 
       // Sync to database
       settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, scheme).catch((error) => {

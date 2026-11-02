@@ -788,7 +788,9 @@ async function createWindow() {
     webPreferences: windowConfig.getWebPreferences(),
     ...windowConfig.getCommonWindowOptions(),
     titleBarStyle: windowConfig.getTitleBarStyle('inset'), // Main window uses hiddenInset
-    backgroundColor: "#111111", // avoids white flash if we show early
+    // Avoids a white flash if we show early: the default (Reliant) scheme's
+    // dark canvas, so the first frame matches the app that paints into it.
+    backgroundColor: "#0a0a0f",
   });
 
   // Register with WindowManager immediately, not after the load below: the
