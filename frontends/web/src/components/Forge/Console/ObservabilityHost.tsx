@@ -27,10 +27,10 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
-import { ObsNoEnvironments } from "../Observability/ObsStates";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL } from "./envScope";
+import { NoEnvironmentsState } from "./NoEnvironmentsState";
 import { carriedObsSearch, consolePath, envScopeOfEnvs, pageOfObsView, withSearch } from "./paths";
 
 // Its own chunk: uPlot and the views load only on a page that shows them.
@@ -113,9 +113,7 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
           it. Once it is deployed through Reliant, its logs, traces and metrics appear here.
         </p>
       ) : needsEnvironments && environments.length === 0 ? (
-        <div data-testid="forge-observability-no-envs">
-          <ObsNoEnvironments topic={view} />
-        </div>
+        <NoEnvironmentsState topic={view} testId="forge-observability-no-envs" />
       ) : (
         <Suspense fallback={loading}>
           <ObservabilityPanel

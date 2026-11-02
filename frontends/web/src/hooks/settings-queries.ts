@@ -407,10 +407,12 @@ export function useToggleHiddenItem() {
   }, [qc, mutateAsync]);
 }
 
-// --- Browser: default page, link handling, bookmarks (in `additional`) ---
+// --- Browser: default page, bookmarks (in `additional`) ---
+//
+// Where a clicked link opens is not a preference: dev URLs open in the
+// embedded browser and everything else in the default browser (lib/open-link).
 
 export const BROWSER_DEFAULT_PAGE = "browserDefaultPage";
-export const BROWSER_OPEN_LINKS_IN_APP = "browserOpenLinksInApp";
 const BROWSER_BOOKMARKS = "browserBookmarks";
 
 export const FALLBACK_BROWSER_PAGE = "https://www.google.com";
@@ -418,14 +420,11 @@ export const FALLBACK_BROWSER_PAGE = "https://www.google.com";
 export interface BrowserPreferences {
   /** The page a new tab opens; empty when the user set none. */
   defaultPage: string;
-  /** Whether links open in the embedded browser (the default) or the system one. */
-  openLinksInApp: boolean;
 }
 
 function browserPreferencesOf(response: GetPreferencesResponse | undefined): BrowserPreferences {
   return {
     defaultPage: response?.additional[BROWSER_DEFAULT_PAGE] ?? "",
-    openLinksInApp: response?.additional[BROWSER_OPEN_LINKS_IN_APP] !== "false",
   };
 }
 
@@ -453,7 +452,6 @@ export function useUpdateBrowserPreferences() {
     () => (prefs: Partial<BrowserPreferences>) => {
       const additional: Record<string, string> = {};
       if (prefs.defaultPage !== undefined) additional[BROWSER_DEFAULT_PAGE] = prefs.defaultPage;
-      if (prefs.openLinksInApp !== undefined) additional[BROWSER_OPEN_LINKS_IN_APP] = String(prefs.openLinksInApp);
       return mutateAsync({ additional }).then(() => undefined);
     },
     [mutateAsync],

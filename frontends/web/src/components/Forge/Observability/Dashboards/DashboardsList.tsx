@@ -93,6 +93,8 @@ export interface DashboardsListProps {
   navigateTo: (href: string) => void;
   /** Org mode: narrow to some apps. */
   appFilter?: DashboardsAppFilter;
+  /** The environment list could not be read: `environments` is empty for that reason, not because nothing is deployed. */
+  environmentsUnread?: boolean;
 }
 
 function requireProject(project: string | undefined): string {
@@ -102,7 +104,7 @@ function requireProject(project: string | undefined): string {
 
 const NO_FILTERS: Partial<DashboardsSearch> = { q: undefined, group: undefined, source: undefined, owner: undefined };
 
-export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter }: DashboardsListProps) {
+export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter, environmentsUnread }: DashboardsListProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const orgWide = project === undefined;
@@ -411,6 +413,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               project={project!}
               env={env}
               environments={environments}
+              environmentsUnread={environmentsUnread}
               dashboards={all}
               hrefs={{ ...hub, dashboard: hrefs.dashboard }}
               onOpenGroup={openGroup}

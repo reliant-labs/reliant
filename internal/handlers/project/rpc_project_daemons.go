@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // projectDirHealConsumerName is the durable JetStream consumer name used by
@@ -104,7 +105,16 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 			_ = msg.Ack()
 			return
 		}
-		s.ensureProjectDirsOnDaemon(evt.UserID, evt.DaemonID)
+		if err := s.ensureProjectDirsOnDaemon(evt.UserID, evt.DaemonID); err != nil {
+			// The machine stopped answering mid-heal. The connect event
+			// is published only once its link answered a probe, so this
+			// is a link that dropped again: try the whole heal later
+			// (mkdir is idempotent), a bounded number of times.
+			if md, mdErr := msg.Metadata(); mdErr == nil && md.NumDelivered < projectDirHealMaxDeliveries {
+				_ = msg.NakWithDelay(projectDirHealRetryDelay)
+				return
+			}
+		}
 		_ = msg.Ack()
 	})
 	if err != nil {
@@ -123,20 +133,34 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 	return nil
 }
 
+// Project-dir heal retry bounds: a heal stopped by a transport failure is
+// redelivered after projectDirHealRetryDelay, up to
+// projectDirHealMaxDeliveries deliveries in all.
+const (
+	projectDirHealRetryDelay    = 30 * time.Second
+	projectDirHealMaxDeliveries = 5
+)
+
 // ensureProjectDirsOnDaemon mkdirs each of the user's project paths on the
 // connected daemon. Called by StartDaemonEventConsumer on every daemon
 // connect event. Idempotent.
-func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) {
+//
+// The mkdirs go to daemonID, the machine that connected: sent to the user's
+// default machine instead, a cloud machine's connect healed the user's laptop.
+// A mkdir whose round trip failed stops the heal and is returned: every later
+// one would meet the same link, one 30s timeout at a time. A mkdir the daemon
+// itself refused is logged and the heal goes on.
+func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 200})
 	if err != nil {
 		logging.Warn("project-dir-heal: failed to list user projects", "error", err, "userID", userID, "daemonID", daemonID)
-		return
+		return nil
 	}
 	if len(projects) == 0 {
-		return
+		return nil
 	}
 	// The counts are logged, not just the total. The total alone read as
 	// "ensured 2 project dirs" on 2026-10-07 when the heal had in fact
@@ -166,12 +190,37 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) {
 				"userID", userID, "daemonID", daemonID, "projectID", p.ID, "path", p.Path)
 			continue
 		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
-			logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
-			continue
+		if err := s.healProjectDir(ctx, userID, daemonID, p.Path); err != nil {
+			if _, daemonRefused := toolexec.DaemonReportedText(err); daemonRefused {
+				logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+				continue
+			}
+			logging.Info("project-dir-heal: stopped; the machine did not answer, so the heal is retried later",
+				"error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+			return err
 		}
 		healed++
 	}
+	return nil
+}
+
+// healProjectDir sends one heal mkdir to daemonID, or to the user's default
+// machine when the connect event named none.
+func (s *Service) healProjectDir(ctx context.Context, userID, daemonID, path string) error {
+	if daemonID == "" {
+		return s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": path}, nil)
+	}
+	payload, err := json.Marshal(map[string]string{"path": path})
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	if s.deps.Router == nil {
+		return fmt.Errorf("daemon command fs.mkdir: %w", errNoDaemonRouter)
+	}
+	if _, err := s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, daemonID, "fs.mkdir", payload, 30_000); err != nil {
+		return fmt.Errorf("daemon command fs.mkdir: %w", err)
+	}
+	return nil
 }
 
 // projectDirIsHealable reports whether project-dir-heal may create a

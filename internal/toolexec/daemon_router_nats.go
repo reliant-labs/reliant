@@ -31,6 +31,12 @@ import (
 
 // NATS subject patterns for tool execution and daemon routing.
 // Subjects now include {userID}.{daemonID} for multi-daemon routing.
+//
+// Every NATS subject reliant uses is granted per role — the api-server, worker
+// and gateway each connect as their own user — in control-plane's
+// deploy/nats/permissions.yaml. A subject added here (or anywhere else) must be
+// granted there in the same change, or the broker refuses it and natsutil logs
+// "NATS refused an operation outside this service's permissions".
 const (
 	toolRequestSubject = "tools.request"    // tools.request.{userID}.{daemonID}
 	toolCancelSubject  = "tools.cancel"     // tools.cancel.{userID}.{daemonID}
@@ -1319,6 +1325,10 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		switch resp.ErrorCode {
 		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))
+		case ErrorCodeDaemonReconnecting:
+			// The gateway held it for a stream that had not answered yet
+			// and released it unsent: nothing ran.
+			return nil, notDispatched(fmt.Errorf("daemon command %q: %w", commandType, ErrDaemonReconnecting), daemonID)
 		case ErrorCodeDaemonRoundTrip:
 			// The gateway could not complete the round trip; the daemon
 			// said nothing.

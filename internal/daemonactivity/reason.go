@@ -185,6 +185,9 @@ var userActionCommands = map[string]bool{
 var backgroundCommands = map[string]bool{
 	"auth.close_oauth_helper": true,
 
+	// The gateway's link probe, sent on every reconnect: session plumbing.
+	"daemon.ping": true,
+
 	// Automatic preservation/verification/reclamation is housekeeping, not
 	// evidence of a human or agent actively using the machine.
 	"git.recovery_publish":       true,

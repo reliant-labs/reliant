@@ -95,6 +95,7 @@ func TestMergeVetIncludesProductionPackageWithoutTests(t *testing.T) {
 	cmd := exec.Command("bash", "-c", `set -euo pipefail
 run_plan=$1
 gofull=false
+queue=0
 quarter=2
 pids=()
 phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }

@@ -69,6 +69,14 @@ import (
 // helper is the namespace's init and must not be wrapped by another.
 const HelperArg = "__cred-sandbox"
 
+// IsInit reports whether cmd, as Apply left it, starts the sandbox's init. The
+// init makes itself undumpable, so no one can list its descriptors through
+// /proc; but from then on it opens no file, and it never changes directory, so
+// what it holds is exactly what cmd hands it (internal/procledger).
+func IsInit(cmd *exec.Cmd) bool {
+	return cmd != nil && len(cmd.Args) == 2 && cmd.Args[0] == cmd.Path && cmd.Args[1] == HelperArg
+}
+
 // RefusedExitCode is the exit status of a command the sandbox could not start:
 // the shell's "found but could not execute".
 const RefusedExitCode = 126

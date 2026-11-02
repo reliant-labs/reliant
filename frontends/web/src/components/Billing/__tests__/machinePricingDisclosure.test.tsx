@@ -5,7 +5,7 @@ import { MachinePricingLine, PlanTileRow, commonPlanHours, type ComputePlanOptio
 import { diskGrowPrice } from '@/components/Settings/cloud/diskGrow';
 import { formatMachineMinutes, formatMachineMinutesShort } from '@/lib/formatMachineMinutes';
 
-const pricing = { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 60 }], storageCentsPerGibMonth: '25', placeholder: false };
+const pricing = { sizes: [{ size: 'm', multiplier: 1, hourlyPriceCents: '13', storageGib: 60 }], storageCentsPerGibMonth: '25', placeholder: false };
 const plan: ComputePlanOption = { planId: 'small', label: 'Small', detail: '2 GB · 0.5 CPU', size: 'm', monthlyPriceCents: 1500, includedHours: '160' };
 
 describe('machine pricing disclosure', () => {

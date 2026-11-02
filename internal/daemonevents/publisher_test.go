@@ -45,11 +45,11 @@ type controlPlaneDaemonEvent struct {
 	Platform  string    `json:"platform,omitempty"`
 }
 
-func TestPublisher_OnDaemonConnectedWithInfo_MarshalsNameHostnamePlatform(t *testing.T) {
+func TestPublisher_OnDaemonLinkReady_MarshalsNameHostnamePlatform(t *testing.T) {
 	js := &fakeJetStream{}
 	p := &Publisher{js: js}
 
-	p.OnDaemonConnectedWithInfo("user-1", "daemon-1", "my-laptop", "my-laptop.local", "darwin")
+	p.OnDaemonLinkReady("user-1", "daemon-1", "my-laptop", "my-laptop.local", "darwin")
 
 	require.Len(t, js.published, 1)
 	require.Equal(t, SubjectConnected, js.published[0].subject)
@@ -117,7 +117,7 @@ func TestPublisher_NamePrecedence(t *testing.T) {
 			js := &fakeJetStream{}
 			p := &Publisher{js: js}
 
-			p.OnDaemonConnectedWithInfo("user-1", tt.daemonID, tt.daemonName, tt.hostname, "darwin")
+			p.OnDaemonLinkReady("user-1", tt.daemonID, tt.daemonName, tt.hostname, "darwin")
 
 			require.Len(t, js.published, 1)
 			var evt Event
@@ -127,17 +127,23 @@ func TestPublisher_NamePrecedence(t *testing.T) {
 	}
 }
 
-func TestPublisher_OnDaemonConnected_NoInfoStillPublishes(t *testing.T) {
+// A registered stream is not a usable machine: the connected event waits for
+// the link to prove itself (OnDaemonLinkReady), so registration alone
+// publishes nothing.
+func TestPublisher_OnDaemonConnected_PublishesNothingUntilLinkReady(t *testing.T) {
 	js := &fakeJetStream{}
 	p := &Publisher{js: js}
 
 	p.OnDaemonConnected("user-1", "daemon-1")
+	require.Empty(t, js.published)
 
+	p.OnDaemonLinkReady("user-1", "daemon-1", "", "", "")
 	require.Len(t, js.published, 1)
 	var evt Event
 	require.NoError(t, json.Unmarshal(js.published[0].data, &evt))
-	// No name/hostname available on this path, so the resolved name falls
-	// all the way back to the daemon id.
+	require.Equal(t, string(EventTypeConnected), string(evt.Type))
+	// No name/hostname given, so the resolved name falls all the way back
+	// to the daemon id.
 	require.Equal(t, "daemon-1", evt.Name)
 	require.Empty(t, evt.Hostname)
 }

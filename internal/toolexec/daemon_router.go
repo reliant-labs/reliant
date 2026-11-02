@@ -138,6 +138,33 @@ func IsDaemonTimeout(err error) bool {
 	return errors.Is(err, ErrDaemonTimeout)
 }
 
+// ErrDaemonReconnecting means the machine's daemon has registered a fresh
+// stream but has not yet answered anything on it — typically a laptop waking
+// from sleep, whose stream comes up a minute before its network does. The
+// gateway holds a command for such a stream instead of sending it into a link
+// that may be dead, and answers with this when the link has not proven itself
+// within half the command's budget. The command was never sent, so asking
+// again is always safe.
+//
+// A USER-class Unavailable, like errDaemonNotConnected: it is the state of the
+// user's machine, and the answer is "wait a moment", not a page. Its reason is
+// errreason.DaemonReconnecting.
+var ErrDaemonReconnecting = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailable(
+	"your machine is reconnecting: it is back online but has not answered yet; try again in a moment"),
+	svcerr.ClassUser), errreason.DaemonReconnecting)
+
+// LinkProbeCommand is the daemon's no-op command: the gateway sends it to a
+// freshly registered stream to prove the stream carries a round trip before it
+// fans connect-time work out to it, and to measure that round trip. Its answer
+// is an empty object. A daemon built before it answers with an
+// unknown-command failure, which proves the round trip all the same.
+const LinkProbeCommand = "daemon.ping"
+
+// IsDaemonReconnecting reports whether err is ErrDaemonReconnecting.
+func IsDaemonReconnecting(err error) bool {
+	return errors.Is(err, ErrDaemonReconnecting)
+}
+
 // TerminalOutputEvent represents a terminal output message or session lifecycle event.
 type TerminalOutputEvent struct {
 	SessionID string
@@ -171,6 +198,10 @@ type ProcessOutputEvent struct {
 //	                             daemon may have run it, and may still be
 //	ErrorCodeDaemonRestarted   — the daemon, once restarted, for a call it was
 //	                             running when its previous process died
+//	ErrorCodeDaemonReconnecting — the NATS bridge, when the daemon had
+//	                             registered but not yet answered anything, so
+//	                             the gateway held the request and never sent
+//	                             it (ErrDaemonReconnecting)
 //
 // Everything the TOOL reports about its own execution — including a command
 // that exited non-zero — comes back Success=true / IsError=false with the exit
@@ -187,6 +218,10 @@ const (
 	// call cannot be resumed, so the outcome is unknown. It comes from the
 	// daemon (it persisted the fact), not from a transport.
 	ErrorCodeDaemonRestarted = "DAEMON_RESTARTED"
+	// ErrorCodeDaemonReconnecting is the gateway's answer for a request it
+	// held because the daemon's fresh stream had not yet carried a round
+	// trip, and released unsent. Nothing ran.
+	ErrorCodeDaemonReconnecting = "DAEMON_RECONNECTING"
 )
 
 // IsTransportErrorCode reports whether an ErrorCode means no result came back
@@ -196,7 +231,8 @@ const (
 // as a lint/test/build failure.
 func IsTransportErrorCode(code string) bool {
 	switch code {
-	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted:
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted,
+		ErrorCodeDaemonReconnecting:
 		return true
 	default:
 		return false
@@ -391,18 +427,25 @@ type DaemonConnectionListener interface {
 	OnDaemonDisconnected(userID, daemonID string)
 }
 
-// DaemonConnectionInfoListener is an optional extension of
-// DaemonConnectionListener for listeners that need the identity the daemon
-// asserted at registration time (name/hostname/platform), not just the ids.
-// ToolsDaemonService type-asserts each registered listener against this
-// interface and calls it alongside OnDaemonConnected when satisfied, so
-// existing listeners (NATSToolBridge, daemonquery.Responder/UserResponder)
-// that only care about ids need no change. daemonevents.Publisher is the
-// only current implementor — it needs this to carry a usable machine name
-// through to the control plane, which OnDaemonConnected's two bare ids
-// cannot express.
-type DaemonConnectionInfoListener interface {
-	OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform string)
+// DaemonLinkReadyListener is an optional extension of DaemonConnectionListener
+// for listeners whose work must wait until a daemon's stream is proven to
+// carry traffic, not merely registered. ToolsDaemonService calls
+// OnDaemonLinkReady once per connection, after a no-op probe round trip came
+// back fast (see the gateway's link_liveness.go), and never for a connection
+// whose probe never did.
+//
+// The distinction exists because registration proves nothing about the far
+// end: a laptop that wakes mostly asleep re-registers, then answers nothing
+// for a minute. Everything fanned out at registration — the connected event
+// that starts queued deliveries and project-dir heals, the pending-command
+// drain — ran into that dead link and timed out one command at a time
+// (prod 2026-10-30, daemon 317e0bb7).
+//
+// It carries the identity the daemon asserted at registration
+// (name/hostname/platform) for daemonevents.Publisher, which needs a usable
+// machine name for the control plane.
+type DaemonLinkReadyListener interface {
+	OnDaemonLinkReady(userID, daemonID, name, hostname, platform string)
 }
 
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.
