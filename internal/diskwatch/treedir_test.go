@@ -139,6 +139,45 @@ func TestRemoveTreeRefusesAForeignOwner(t *testing.T) {
 	}
 }
 
+// The owner is checked on every descendant, not only the root: a directory
+// another user owns inside this user's go-build tree is neither chmodded,
+// traversed nor removed. Its owner is moved by the ownerOf seam, since a
+// test cannot chown.
+func TestRemoveTreeRefusesAForeignOwnedDescendant(t *testing.T) {
+	tree := filepath.Join(t.TempDir(), "go-build1234")
+	foreign := filepath.Join(tree, "b001", "theirs")
+	if err := os.MkdirAll(foreign, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(foreign, "data"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(foreign, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(foreign, 0o700) })
+	p := &pacer{rate: 1 << 20, ownerOf: func(path string, uid int) int {
+		if path == foreign {
+			return uid + 1
+		}
+		return uid
+	}}
+	_, err := p.removeTree(context.Background(), tree, os.Getuid())
+	if !errors.Is(err, errForeignOwner) {
+		t.Fatalf("removeTree = %v, want the foreign-owned descendant refused", err)
+	}
+	if !exists(filepath.Join(foreign, "data")) {
+		t.Fatal("a descendant owned by another uid was removed")
+	}
+	info, err := os.Lstat(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o500 {
+		t.Fatalf("the foreign-owned descendant was chmodded to %o, want it left 0500", got)
+	}
+}
+
 // G-2: another user's stale go-build dir in a shared /tmp is skipped. The
 // trim's uid is moved instead of the directory's owner, which a test cannot
 // chown.

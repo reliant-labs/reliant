@@ -331,6 +331,9 @@ type pacer struct {
 	// afterLstat, when set, runs between removeTree examining an entry and
 	// acting on it (tests: the swap race).
 	afterLstat func(string)
+	// ownerOf, when set, overrides the uid removeTree read for an entry
+	// (tests: a foreign-owned descendant, which a test cannot chown).
+	ownerOf func(path string, uid int) int
 }
 
 func (w *Watcher) newPacer(rate int) *pacer {
@@ -402,8 +405,10 @@ const anyOwner = -1
 var errForeignOwner = errors.New("owned by another user")
 
 // removeTree removes a tree through the pacer, children first, and returns
-// the bytes it freed. owner, unless anyOwner, is the uid the tree's root must
-// belong to, checked on the entry the walk then holds open.
+// the bytes it freed. owner, unless anyOwner, is the uid every entry of the
+// tree must belong to — the root and each descendant — checked on the entry
+// the walk then acts on, before any chmod, traversal or unlink: an entry
+// another user owns stops the removal with errForeignOwner and is left whole.
 //
 // The walk holds each directory open and acts on its entries relative to that
 // descriptor (treedir_unix.go): it never follows a symlink, including one
@@ -433,6 +438,9 @@ func (p *pacer) removeEntry(ctx context.Context, parent *treeDir, name, path str
 		}
 		return 0, p.observe(err)
 	}
+	if p.ownerOf != nil {
+		st.uid = p.ownerOf(path, st.uid)
+	}
 	if owner != anyOwner && st.uid != owner {
 		return 0, &fs.PathError{Op: "remove", Path: path, Err: errForeignOwner}
 	}
@@ -459,7 +467,7 @@ func (p *pacer) removeEntry(ctx context.Context, parent *treeDir, name, path str
 		return 0, p.observe(err)
 	}
 	for _, n := range names {
-		got, err := p.removeEntry(ctx, dir, n, filepath.Join(path, n), anyOwner)
+		got, err := p.removeEntry(ctx, dir, n, filepath.Join(path, n), owner)
 		freed += got
 		if err != nil {
 			dir.close()

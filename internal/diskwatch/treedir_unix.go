@@ -116,7 +116,9 @@ func (d *treeDir) openDir(name string, want treeStat) (*treeDir, error) {
 		_ = unix.Close(fd)
 		return nil, &fs.PathError{Op: "fstat", Path: path, Err: err}
 	}
-	if got := treeStatOf(&st); got.dev != want.dev || got.ino != want.ino {
+	// The owner is compared too, so the chmod below acts only on the
+	// directory whose owner removeEntry checked.
+	if got := treeStatOf(&st); got.dev != want.dev || got.ino != want.ino || got.uid != want.uid {
 		_ = unix.Close(fd)
 		return nil, &fs.PathError{Op: "openat", Path: path, Err: errTreeChanged}
 	}
