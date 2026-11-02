@@ -303,7 +303,15 @@ func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	_, err = e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
-	require.NoError(t, err)
+	if err != nil {
+		// The refusal says only "in_use"; the recorded hold names the process
+		// that held it, which is what a red run on another host needs.
+		var detail string
+		if got, gerr := e.repo.GetWorktree(e.ctx, wt.ID); gerr == nil && got.CleanupMetadata != nil {
+			detail = got.CleanupMetadata.HeldDetail
+		}
+		require.NoError(t, err, "held by: %s", detail)
+	}
 	assert.False(t, exists(path))
 }
 
