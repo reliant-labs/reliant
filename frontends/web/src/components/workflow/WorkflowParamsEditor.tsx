@@ -1,6 +1,7 @@
 import { useState, useRef, useId } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { ToolsSelector } from './ToolsSelector'
+import Combobox, { type ComboboxOption } from '../forge-ui/combobox'
 import { useProjectPresets } from '../../hooks/preset-queries'
 import { useProjectStore } from '../../store/projectStore'
 import { useModels } from '../../store/globalDataStore'
@@ -67,6 +68,14 @@ const PARAM_TYPES = [
   // Advanced
   { value: 'any', label: 'Any', group: 'Advanced', description: 'Generic input for complex types', hasDefault: true },
 ]
+
+// The Type picker's options, grouped by category.
+const PARAM_TYPE_OPTIONS: ComboboxOption[] = PARAM_TYPES.map(({ value, label, group, description }) => ({
+  value,
+  label,
+  group,
+  description,
+}))
 
 // Types that represent lists (empty array as implicit default)
 const LIST_TYPES = ['tools', 'attachments']
@@ -213,6 +222,7 @@ interface ParamEditorProps {
 }
 
 function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) {
+  const typeId = useId()
   const typeConfig = PARAM_TYPES.find(t => t.value === param.type)
   const isListType = param.type ? LIST_TYPES.includes(param.type) : false
   
@@ -246,13 +256,15 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
 
       {/* Type selector */}
       <div>
-        <label className="block text-xs font-medium text-foreground mb-1">
+        <label htmlFor={typeId} className="block text-xs font-medium text-foreground mb-1">
           Type
         </label>
-        <select
-          value={param.type}
-          onChange={(e) => {
-            const newType = e.target.value
+        <Combobox
+          id={typeId}
+          options={PARAM_TYPE_OPTIONS}
+          value={param.type ?? null}
+          onChange={(newType) => {
+            if (!newType || newType === param.type) return
             // Clear default when switching to a type that doesn't support it
             const newTypeConfig = PARAM_TYPES.find(t => t.value === newType)
             const updates: Record<string, unknown> = { type: newType }
@@ -265,26 +277,8 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
             }
             onUpdate(updates)
           }}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
-        >
-          {/* Group types by category */}
-          {Object.entries(
-            PARAM_TYPES.reduce((acc, t) => {
-              const group = t.group || 'Other'
-              if (!acc[group]) acc[group] = []
-              acc[group].push(t)
-              return acc
-            }, {} as Record<string, typeof PARAM_TYPES>)
-          ).map(([group, types]) => (
-            <optgroup key={group} label={group}>
-              {types.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          searchPlaceholder="Search types"
+        />
         {typeConfig?.description && (
           <p className="mt-1 text-xs text-muted-foreground">
             {typeConfig.description}
@@ -364,7 +358,13 @@ type Visibility = 'toolbar' | 'settings' | 'hidden'
 
 // Types InlineParamInput can render as a toolbar pill. Others fall back to a
 // label-only pill there, which isn't a usable control.
-const TOOLBAR_TYPES = new Set(['enum', 'boolean', 'string', 'number', 'integer'])
+const TOOLBAR_TYPES = new Set(['enum', 'boolean', 'string', 'number', 'integer', 'model'])
+
+const VISIBILITY_OPTIONS: Array<ComboboxOption & { value: Visibility }> = [
+  { value: 'toolbar', label: 'Toolbar', description: 'Under the chat input' },
+  { value: 'settings', label: 'Settings', description: 'Behind ⚙' },
+  { value: 'hidden', label: 'Hidden', description: 'Runtime only' },
+]
 
 function visibilityOf(ui: string | undefined): Visibility {
   if (ui === 'toolbar') return 'toolbar'
@@ -392,16 +392,15 @@ function VisibilitySelect({ param, onUpdate }: TypeSpecificInputProps) {
       <label htmlFor={selectId} className="block text-xs font-medium text-foreground mb-1">
         Visibility in chat
       </label>
-      <select
+      <Combobox
         id={selectId}
+        options={VISIBILITY_OPTIONS.filter((o) => toolbarAllowed || o.value !== 'toolbar')}
         value={visibility}
-        onChange={(e) => handleChange(e.target.value as Visibility)}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
-      >
-        {toolbarAllowed && <option value="toolbar">Toolbar — under the chat input</option>}
-        <option value="settings">Settings — behind ⚙</option>
-        <option value="hidden">Hidden — runtime only</option>
-      </select>
+        onChange={(next) => {
+          if (next) handleChange(next as Visibility)
+        }}
+        searchPlaceholder="Search placements"
+      />
       <p className="mt-1 text-xs text-muted-foreground">
         Sets <code className="font-mono">ui:</code> in the workflow YAML.
       </p>

@@ -26,5 +26,8 @@ func (t *Tree) Kill() bool { return false }
 // Populated is false outside Linux.
 func (t *Tree) Populated() bool { return false }
 
-// Release does nothing outside Linux.
-func (t *Tree) Release() {}
+// Release does nothing else outside Linux.
+func (t *Tree) Release() { t.forget() }
+
+// processIdentity is unknown outside Linux, so nothing enters the ledger.
+func processIdentity(int) (pgid int, start uint64, ok bool) { return 0, 0, false }

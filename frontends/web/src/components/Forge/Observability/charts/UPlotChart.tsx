@@ -37,6 +37,15 @@
  * A dashed (comparison) series is never stacked or filled, and the caption and
  * the cursor read each series' own value, not the running total.
  *
+ * ── BARS, HIGHLIGHT, CURSOR (opt-in) ────────────────────────────────────────
+ *
+ * `bars` draws one bar per bucket instead of a line: side by side per bucket,
+ * or, with `area="stacked"`, stacked into one bar whose height is the total.
+ * `highlight` (a series index) dims every other series, without rebuilding the
+ * chart, which is how a legend row says which line it is. `onCursor` reports
+ * the bucket under the pointer (null when it leaves) so a legend can show the
+ * values there, in place of uPlot's own legend.
+ *
  * ── EXEMPLARS (opt-in) ──────────────────────────────────────────────────────
  *
  * An exemplar is one sampled observation: a time and the value it had. With
@@ -65,10 +74,17 @@ export interface ChartSeries {
   values: (number | null)[];
   tone?: ChartTone;
   /**
+   * A palette token (a CSS custom property holding an HSL triplet, such as
+   * `--chart-3`) that wins over `tone`: the dashboard series palette.
+   */
+  color?: string;
+  /**
    * Drawn dashed and unfilled: a comparison (the previous period, or the
    * window before the current release), laid over the series it compares.
    */
   dashed?: boolean;
+  /** Drawn dotted (still filled, still stacked): a series whose colour repeats an earlier one's. */
+  dotted?: boolean;
 }
 
 /** One sampled observation, placed on the plot at its time and value. */
@@ -170,6 +186,12 @@ export interface UPlotChartProps {
   legend?: boolean;
   /** Fill under the series, or stack them. Absent: today's look (a fill only under a lone series). */
   area?: "fill" | "stacked";
+  /** One bar per bucket instead of a line; stacked with `area="stacked"`. */
+  bars?: boolean;
+  /** Dims every series but this one (an index into `series`); null or absent dims none. */
+  highlight?: number | null;
+  /** The bucket index under the pointer, and null when the pointer leaves the plot. */
+  onCursor?: (index: number | null) => void;
   /** Observations to place on the plot at their value. */
   exemplars?: readonly ChartExemplar[];
   /** A dot was activated; `at` is its bottom-left in viewport pixels, for anchoring a popover. */
@@ -205,6 +227,9 @@ export function UPlotChart({
   bands = NO_BANDS,
   legend,
   area,
+  bars = false,
+  highlight = null,
+  onCursor,
   exemplars,
   onExemplarOpen,
   onExemplarsPlaced,
@@ -216,6 +241,10 @@ export function UPlotChart({
   const layoutKey = useRef("");
   const placedCallback = useRef(onExemplarsPlaced);
   placedCallback.current = onExemplarsPlaced;
+  const cursorCallback = useRef(onCursor);
+  cursorCallback.current = onCursor;
+  const chartRef = useRef<uPlot | null>(null);
+  const hasCursorListener = !!onCursor;
   const themeVersion = useThemeVersion();
   const inherited = useContext(ObsChartMarkersContext);
   const markers = useMemo(
@@ -239,6 +268,7 @@ export function UPlotChart({
 
   // uPlot wants columns: x, then one array per series.
   const stacked = area === "stacked" && !compact;
+  const barred = bars && !compact;
   const data = useMemo<uPlot.AlignedData>(
     () => [timestamps, ...(stacked ? stackValues(series) : series.map((s) => s.values))] as uPlot.AlignedData,
     [timestamps, series, stacked]
@@ -250,6 +280,8 @@ export function UPlotChart({
     const palette = readPalette();
     const width = Math.max(host.clientWidth, 40);
     const tones = series.map((s, index) => s.tone ?? CATEGORICAL[index % CATEGORICAL.length]);
+    const strokes = series.map((s, index) => (s.color ? palette.resolve(s.color) : palette.tones[tones[index]]));
+    const solidIndexes = series.flatMap((s, index) => (s.dashed ? [] : [index]));
     const layoutExemplars = (u: uPlot) => {
       if (!exemplars) return;
       const next = layoutOf(u, exemplars);
@@ -267,6 +299,7 @@ export function UPlotChart({
       // the previous evening for anyone west of Greenwich.
       ...(calendar ? { tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), calendar.timezone) } : {}),
       cursor: compact ? { show: false } : { drag: { x: false, y: false } },
+      focus: { alpha: 0.2 },
       legend: { show: legend ?? !compact },
       // The x axis reaches a marker in the last (or first) bucket's span: a
       // promotion 10 minutes ago is in the window even when the newest
@@ -279,14 +312,15 @@ export function UPlotChart({
           range: () => extent,
         },
         // An area is read against its baseline: start at zero, with headroom above.
-        ...(area && !compact
+        ...((area || barred) && !compact
           ? { y: { range: (_u: uPlot, min: number, max: number): [number, number] => [Math.min(0, min), max + Math.abs(max) * 0.1 || 1] } }
           : {}),
       },
-      bands: stacked ? stackBands(series, tones, palette) : undefined,
+      bands: stacked && !barred ? stackBands(series, strokes) : undefined,
       hooks:
-        markers.length || shown.length || exemplars
+        markers.length || shown.length || exemplars || hasCursorListener
           ? {
+              setCursor: hasCursorListener ? [(u: uPlot) => cursorCallback.current?.(u.cursor.idx ?? null)] : [],
               // Bands go under the series (drawAxes runs before the series
               // paint); markers over them.
               drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette)] : [],
@@ -312,24 +346,31 @@ export function UPlotChart({
       series: [
         calendar ? { value: "{YYYY}-{MM}-{DD}" } : {},
         ...series.map((s, index) => {
-          const stroke = palette.tones[tones[index]];
-          const solid = series.filter((candidate) => !candidate.dashed).length;
+          const stroke = strokes[index];
+          const solid = solidIndexes.length;
+          const bar = barred && !s.dashed;
           return {
             label: s.label,
             stroke: s.dashed ? withAlpha(stroke, 0.7) : stroke,
             width: compact ? 1.25 : 1.5,
-            dash: s.dashed ? [4, 3] : undefined,
-            fill: seriesFill(s, index, series, stroke, { area, compact, stacked, solid }),
+            dash: s.dashed ? [4, 3] : s.dotted && !bar ? [1.5, 2.5] : undefined,
+            fill: bar ? withAlpha(stroke, s.dotted ? 0.45 : 0.85) : seriesFill(s, index, series, stroke, { area, compact, stacked, solid }),
+            ...(bar
+              ? { paths: stacked ? barPaths(0, 1, s.values) : barPaths(solidIndexes.indexOf(index), solid, null) }
+              : {}),
             // A line cannot show a singleton or an observation surrounded
             // by nulls. Draw just those glyphs, never connect across a gap.
             // A series with under two observations has no line at all: its
             // marker is the whole series, so it is larger and solid.
-            points: {
-              show: false,
-              size: presentCount(s.values) < 2 ? (compact ? 5 : 9) : compact ? 4 : 6,
-              fill: stroke,
-              filter: (u: uPlot, seriesIdx: number) => isolatedIndexes(u.data[seriesIdx]),
-            },
+            // A bar is its own glyph.
+            points: bar
+              ? { show: false }
+              : {
+                  show: false,
+                  size: presentCount(s.values) < 2 ? (compact ? 5 : 9) : compact ? 4 : 6,
+                  fill: stroke,
+                  filter: (u: uPlot, seriesIdx: number) => isolatedIndexes(u.data[seriesIdx]),
+                },
             spanGaps: false,
             // A stacked column holds the running total; the cursor reads the series' own value.
             value: stacked
@@ -343,6 +384,7 @@ export function UPlotChart({
     let chart: uPlot | null = null;
     try {
       chart = new uPlot(opts, data, host);
+      chartRef.current = chart;
     } catch {
       // No 2D context (a headless renderer, a GPU process that died): the
       // caption still carries the numbers, so draw nothing rather than throw.
@@ -362,8 +404,18 @@ export function UPlotChart({
     return () => {
       observer?.disconnect();
       chart?.destroy();
+      if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars, extent, calendar]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, barred, hasCursorListener, exemplars, extent, calendar]);
+
+  // Highlight without a rebuild: uPlot dims every other series in place.
+  // Re-applied after a rebuild too (a new chart starts unfocused).
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || compact) return;
+    const index = highlight !== null && highlight >= 0 && highlight < series.length ? highlight + 1 : null;
+    chart.setSeries(index, { focus: true });
+  }, [highlight, series, compact, data, themeVersion, height]);
 
   useEffect(() => {
     if (exemplars && layout) placedCallback.current?.(layout.dots.map((dot) => dot.index));
@@ -441,13 +493,44 @@ export function stackValues(series: readonly ChartSeries[]): (number | null)[][]
 }
 
 /** One band per solid series after the first: between its running total and the one below. */
-function stackBands(series: readonly ChartSeries[], tones: readonly ChartTone[], palette: Palette): uPlot.Band[] {
+function stackBands(series: readonly ChartSeries[], strokes: readonly string[]): uPlot.Band[] {
   const solid = series.map((s, index) => ({ s, index })).filter(({ s }) => !s.dashed);
   return solid.slice(1).map(({ index }, k) => ({
     // uPlot series are 1-based (0 is x).
     series: [index + 1, solid[k].index + 1] as [number, number],
-    fill: withAlpha(palette.tones[tones[index]], STACK_ALPHA),
+    fill: withAlpha(strokes[index], STACK_ALPHA),
   }));
+}
+
+/**
+ * Bars for one series: `slot` of `slots` side by side within each bucket, or,
+ * given the series' own values (`own`), a stacked segment from the running
+ * total below it (the stacked column minus its own value) up to the column.
+ * A bucket is 80% filled by its bars, sized from the narrowest gap between
+ * neighbouring buckets, so a missing bucket never widens the others.
+ */
+export function barPaths(slot: number, slots: number, own: readonly (number | null)[] | null): uPlot.Series.PathBuilder {
+  return (u, seriesIdx, idx0, idx1) => {
+    const xs = u.data[0] as ArrayLike<number>;
+    const ys = u.data[seriesIdx] as ArrayLike<number | null | undefined>;
+    const ratio = uPlot.pxRatio || 1;
+    let gap = Infinity;
+    for (let i = Math.max(idx0, 1); i <= idx1; i++) gap = Math.min(gap, u.valToPos(xs[i], "x", true) - u.valToPos(xs[i - 1], "x", true));
+    if (!Number.isFinite(gap) || gap <= 0) gap = (u.bbox?.width ?? 40) / 6;
+    const group = Math.max(gap * 0.8, ratio);
+    const width = Math.max(group / Math.max(slots, 1) - ratio, ratio);
+    const fill = new Path2D();
+    for (let i = idx0; i <= idx1; i++) {
+      const y = ys[i];
+      if (y === null || y === undefined || !Number.isFinite(y)) continue;
+      const base = own ? y - (own[i] ?? 0) : 0;
+      const x = u.valToPos(xs[i], "x", true) - group / 2 + Math.max(slot, 0) * (group / Math.max(slots, 1));
+      const top = u.valToPos(y, "y", true);
+      const bottom = u.valToPos(base, "y", true);
+      fill.rect(x, Math.min(top, bottom), width, Math.abs(bottom - top));
+    }
+    return { stroke: fill, fill };
+  };
 }
 
 const STACK_ALPHA = 0.35;
@@ -651,6 +734,8 @@ interface Palette {
   tones: Record<ChartTone, string>;
   axis: string;
   grid: string;
+  /** A palette token (`--chart-3`) as a colour the canvas can paint. */
+  resolve: (token: string) => string;
 }
 
 function readPalette(): Palette {
@@ -666,6 +751,7 @@ function readPalette(): Palette {
     tones,
     axis: token("--muted-foreground", "rgb(100, 116, 139)"),
     grid: withAlpha(token("--border", "rgb(203, 213, 225)"), 0.6),
+    resolve: (name: string) => token(name, "rgb(100, 116, 139)"),
   };
 }
 

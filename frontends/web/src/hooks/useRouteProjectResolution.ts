@@ -40,6 +40,9 @@ export function useRouteProjectResolution({ reflectInUrl }: { reflectInUrl: bool
       void navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => ({ ...prev, project: projectId }),
+        // Only the URL changes: the entry's history state (e.g. where the
+        // builder's Back returns to) stays.
+        state: true,
         replace: true,
       } as never);
     },
