@@ -287,8 +287,13 @@ func TestReap_AdoptedCommandStillWritingDoesNotRace(t *testing.T) {
 
 	require.Equal(t, 1, m.StopProcessesUnder(dir, "its workspace was removed"))
 	require.Equal(t, "killed", process.StatusSafe())
+	// The note is always in the combined output; the stderr buffer gets it
+	// only if the command had already stopped writing when the reap ended.
+	lines, _, err := m.GetCombinedOutputWithSeq(process.ID, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, lines)
+	require.Equal(t, "[reliant] Stopped this background process: its workspace was removed.", lines[len(lines)-1].Text)
 	<-process.done
-	require.Contains(t, stderr.String(), "[reliant] Stopped this background process: its workspace was removed.")
 }
 
 // A connector's touch reaches only its own processes; a first-party one, all.
