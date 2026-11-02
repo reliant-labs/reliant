@@ -94,6 +94,39 @@ describe("Prompts autosave", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Saved");
   });
 
+  it("keeps saves in order across leaving the page and coming back", async () => {
+    let finishFirst: (v: unknown) => void = () => {};
+    mocks.save
+      .mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+      .mockImplementation(async ({ prompts }) => {
+        mocks.prompts = prompts;
+        return {};
+      });
+    const first = render(<PromptsSettings />);
+    fireEvent.change(screen.getByLabelText("Prompt content"), { target: { value: "Old" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    // Leave while "Old" is in flight, come back, and edit again.
+    first.unmount();
+    render(<PromptsSettings />);
+    fireEvent.change(screen.getByLabelText("Prompt content"), { target: { value: "New" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    // The remounted page's save waits for the old one, so "Old" cannot land
+    // after "New" and restore the stale set.
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finishFirst({});
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(mocks.save.mock.calls[1][0].prompts[0].content).toBe("New");
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+  });
+
   it("saves an unsaved edit to its own project when the project changes", async () => {
     mocks.save.mockResolvedValue({});
     const { rerender } = render(<PromptsSettings projectId="p1" />);

@@ -45,10 +45,54 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 interface SaveJob {
   projectId: string;
   next: Prompt[];
+  /** The page that queued it, so its outcome reaches that page alone. */
+  owner: object;
   /** editSeq when queued: a newer edit makes this save's outcome stale. */
   seq: number;
   /** scopeGen when queued: a project switch makes it stale too. */
   gen: number;
+  save: (req: { projectId: string; prompts: ReturnType<typeof promptToProto>[] }) => Promise<unknown>;
+  /** Called as the save starts and when it settles. */
+  report: (job: SaveJob, state: "saving" | "saved" | "error", complete: boolean) => void;
+}
+
+// Every save sends the whole set, so saves run one at a time: two in flight
+// could land out of order and an older set overwrite a newer one. The queue
+// is the module's, not a mounted page's: a save still in flight when the page
+// unmounts would otherwise race the first save of the page mounted next, and
+// whichever landed last would win. Edits made while one is in flight wait
+// here, newest snapshot per project only.
+const saveQueue: SaveJob[] = [];
+let saveDraining = false;
+
+async function drainSaves() {
+  if (saveDraining) return;
+  saveDraining = true;
+  try {
+    for (let job = saveQueue.shift(); job; job = saveQueue.shift()) {
+      job.report(job, "saving", false);
+      // A prompt still without a title is kept on screen but not saved yet.
+      const complete = job.next
+        .map((p) => ({ ...p, id: p.id.trim(), title: p.title.trim() }))
+        .filter((p) => p.id && p.title);
+      try {
+        await job.save({ projectId: job.projectId, prompts: complete.map(promptToProto) });
+        job.report(job, "saved", complete.length === job.next.length);
+      } catch (e) {
+        console.error(e);
+        job.report(job, "error", false);
+      }
+    }
+  } finally {
+    saveDraining = false;
+  }
+}
+
+function enqueueSave(job: SaveJob) {
+  const superseded = saveQueue.findIndex((j) => j.projectId === job.projectId);
+  if (superseded >= 0) saveQueue.splice(superseded, 1);
+  saveQueue.push(job);
+  void drainSaves();
 }
 
 interface PromptsSettingsProps {
@@ -86,52 +130,55 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
   // Bumped when the project changes: a save for the previous project still
   // lands, but no longer touches this page's state.
   const scopeGen = useRef(0);
-  // Every save sends the whole set, so saves run one at a time: two in flight
-  // could land out of order and an older set overwrite a newer one. Edits made
-  // while one is in flight wait here, newest snapshot per project only.
-  const queue = useRef<SaveJob[]>([]);
-  const draining = useRef(false);
+  // This page's identity in the shared save queue (saveQueue).
+  const owner = useRef({}).current;
+  // False once unmounted: a save that settles later reports to no one.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const mutateRef = useRef(savePrompts.mutateAsync);
   mutateRef.current = savePrompts.mutateAsync;
 
-  const drain = useCallback(async () => {
-    if (draining.current) return;
-    draining.current = true;
-    try {
-      for (let job = queue.current.shift(); job; job = queue.current.shift()) {
-        const current = () => job.gen === scopeGen.current && job.seq === editSeq.current && queue.current.length === 0;
-        if (job.gen === scopeGen.current) setSaveState("saving");
-        // A prompt still without a title is kept on screen but not saved yet.
-        const complete = job.next
-          .map((p) => ({ ...p, id: p.id.trim(), title: p.title.trim() }))
-          .filter((p) => p.id && p.title);
-        try {
-          await mutateRef.current({ projectId: job.projectId, prompts: complete.map(promptToProto) });
-          if (!current()) continue;
-          setSaveState("saved");
-          toast.success("Prompts saved", { id: "prompts-autosave" });
-          // The cache now holds what was saved; show it, unless an untitled
-          // prompt is still being written.
-          if (complete.length === job.next.length) setDraft(null);
-        } catch (e) {
-          console.error(e);
-          if (!current()) continue;
-          setSaveState("error");
-          toast.error("Couldn't save prompts", { id: "prompts-autosave" });
-        }
+  const report = useCallback<SaveJob["report"]>(
+    (job, state, complete) => {
+      if (!mounted.current || job.gen !== scopeGen.current) return;
+      if (state === "saving") {
+        setSaveState("saving");
+        return;
       }
-    } finally {
-      draining.current = false;
-    }
-  }, []);
+      // Only the newest edit's save speaks; an older one's outcome is stale.
+      if (job.seq !== editSeq.current || saveQueue.some((j) => j.owner === owner)) return;
+      if (state === "saved") {
+        setSaveState("saved");
+        toast.success("Prompts saved", { id: "prompts-autosave" });
+        // The cache now holds what was saved; show it, unless an untitled
+        // prompt is still being written.
+        if (complete) setDraft(null);
+      } else {
+        setSaveState("error");
+        toast.error("Couldn't save prompts", { id: "prompts-autosave" });
+      }
+    },
+    [owner],
+  );
 
   const enqueue = useCallback(
     (projectId: string, next: Prompt[]) => {
-      const job = { projectId, next, seq: editSeq.current, gen: scopeGen.current };
-      queue.current = [...queue.current.filter((j) => j.projectId !== projectId), job];
-      void drain();
+      enqueueSave({
+        projectId,
+        next,
+        owner,
+        seq: editSeq.current,
+        gen: scopeGen.current,
+        save: (req) => mutateRef.current(req),
+        report,
+      });
     },
-    [drain],
+    [owner, report],
   );
 
   useEffect(() => {
