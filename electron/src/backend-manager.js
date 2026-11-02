@@ -216,6 +216,152 @@ class BackendManager {
   }
 
   /**
+   * The environment the daemon is spawned with: Electron's own environment,
+   * then the paths and URLs this app sets on top. Anything else the user
+   * exported (a RELIANT_* daemon setting, say) reaches the daemon unchanged;
+   * this sets none of the daemon's guard settings, so it runs their defaults
+   * unless the user chose otherwise. appPath is Electron's app.getPath,
+   * injectable for tests.
+   */
+  buildDaemonEnv(appPath = (name) => app.getPath(name)) {
+    const homeDir = require('os').homedir();
+    let backendEnv = {
+      ...process.env,
+      TOOLS_DAEMON_PORT: this.daemonPort.toString(),
+      // User config: ~/.reliant/ (user-editable, git-friendly)
+      RELIANT_USER_CONFIG_DIR: path.join(homeDir, '.reliant'),
+      // Internal app data: platform-specific (databases, analytics, auth, cache)
+      RELIANT_APP_DATA_DIR: appPath('userData'),
+      // Logs: platform-specific logs directory
+      RELIANT_LOGS_PATH: appPath('logs'),
+      // Temp: system temp directory
+      RELIANT_TEMP_PATH: appPath('temp'),
+      // CRITICAL: Set environment mode for the Go backend
+      // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
+      RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
+      // Pass hosted API URLs to the daemon process as env vars
+      RELIANT_SERVER_URL: this.apiUrl,
+    };
+
+    // Pass gateway URL if explicitly configured
+    if (this.gatewayUrl) {
+      backendEnv.RELIANT_GATEWAY_URL = this.gatewayUrl;
+    }
+
+    // CRITICAL: In production, ensure PATH includes common locations for MCP tools
+    // MCP servers often use npx, uvx, python, etc. which aren't in Electron's default PATH
+    if (!this.isDevelopment) {
+      const isWindows = process.platform === 'win32';
+      const pathSeparator = isWindows ? ';' : ':';
+
+      let additionalPaths = [];
+
+      if (isWindows) {
+        // Windows-specific paths
+        additionalPaths = [
+          path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs'),
+          path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'npm'),
+          path.join(homeDir, 'AppData', 'Local', 'Programs', 'Python'),
+          path.join(homeDir, '.local', 'bin'),
+          path.join(homeDir, 'go', 'bin'),  // Go binaries on Windows
+        ];
+      } else {
+        // Unix-specific paths (macOS/Linux)
+        additionalPaths = [
+          '/usr/local/bin',
+          '/opt/homebrew/bin',  // macOS Apple Silicon Homebrew
+          '/usr/bin',
+          '/bin',
+          path.join(homeDir, 'go', 'bin'),  // Go binaries (air, etc.)
+          path.join(homeDir, '.local', 'bin'),  // Python user binaries (uvx, etc.)
+          path.join(homeDir, '.npm-global', 'bin'),  // Global npm binaries
+          '/opt/homebrew/opt/python/libexec/bin',  // Homebrew python
+          '/usr/local/go/bin',  // System Go installation
+        ];
+
+        // Try to find nvm-managed node installations (Unix only)
+        const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node');
+        if (fs.existsSync(nvmDir)) {
+          try {
+            const versions = fs.readdirSync(nvmDir);
+            if (versions.length > 0) {
+              // Use the latest version (or default)
+              const latestVersion = versions.sort().reverse()[0];
+              const nvmNodeBin = path.join(nvmDir, latestVersion, 'bin');
+              if (fs.existsSync(nvmNodeBin)) {
+                additionalPaths.push(nvmNodeBin);
+                log.info('[BackendManager] Found nvm node installation:', nvmNodeBin);
+              }
+            }
+          } catch (err) {
+            log.warn('[BackendManager] Error scanning nvm directory:', err.message);
+          }
+        }
+      }
+
+      // Get existing PATH and deduplicate
+      const existingPath = backendEnv.PATH || backendEnv.Path || '';
+      const pathParts = existingPath.split(pathSeparator).filter(p => p);
+
+      // Add additional paths if they exist and aren't already in PATH
+      for (const dir of additionalPaths) {
+        if (fs.existsSync(dir) && !pathParts.includes(dir)) {
+          pathParts.push(dir);
+        }
+      }
+
+      backendEnv.PATH = pathParts.join(pathSeparator);
+      if (isWindows) {
+        backendEnv.Path = backendEnv.PATH; // Windows uses both PATH and Path
+      }
+      log.debug('[BackendManager] Production PATH set', { entries: pathParts.length });
+
+      // Ensure critical environment variables are set for MCP servers
+      if (!isWindows) {
+        if (!backendEnv.SHELL) {
+          backendEnv.SHELL = '/bin/zsh';  // macOS default
+        }
+      }
+      if (!backendEnv.HOME && !isWindows) {
+        backendEnv.HOME = homeDir;
+      }
+      if (!backendEnv.USERPROFILE && isWindows) {
+        backendEnv.USERPROFILE = homeDir;
+      }
+      // Some MCP servers need USER/USERNAME
+      if (!backendEnv.USER && !isWindows) {
+        backendEnv.USER = require('os').userInfo().username;
+      }
+      if (!backendEnv.USERNAME && isWindows) {
+        backendEnv.USERNAME = require('os').userInfo().username;
+      }
+      // TERM is needed for scripts that use tput or terminal capabilities
+      if (!backendEnv.TERM && !isWindows) {
+        backendEnv.TERM = 'xterm-256color';
+      }
+
+      log.info('[BackendManager] Environment variables set:', {
+        SHELL: backendEnv.SHELL,
+        HOME: backendEnv.HOME,
+        USERPROFILE: backendEnv.USERPROFILE,
+        USER: backendEnv.USER,
+        USERNAME: backendEnv.USERNAME,
+        PATH_length: backendEnv.PATH.length
+      });
+    }
+
+    // Set data directory based on mode
+    // In development: use ./data (relative to cwd) for worktree isolation
+    // In production: use userData/data for shared app data
+    if (!backendEnv.RELIANT_DATA_DIR) {
+      backendEnv.RELIANT_DATA_DIR = this.isDevelopment
+        ? './data'  // Dev: local to each worktree
+        : path.join(appPath('userData'), 'data');  // Prod: shared app data
+    }
+    return backendEnv;
+  }
+
+  /**
    * Build the daemon start args array with --server and --gateway flags.
    */
   buildDaemonArgs() {
@@ -1732,141 +1878,7 @@ class BackendManager {
 
       // Get binary path
       const binaryPath = this.getBinaryPath();
-      // Build environment variables
-      const homeDir = require('os').homedir();
-      let backendEnv = {
-        ...process.env,
-        TOOLS_DAEMON_PORT: this.daemonPort.toString(),
-        // User config: ~/.reliant/ (user-editable, git-friendly)
-        RELIANT_USER_CONFIG_DIR: path.join(homeDir, '.reliant'),
-        // Internal app data: platform-specific (databases, analytics, auth, cache)
-        RELIANT_APP_DATA_DIR: app.getPath('userData'),
-        // Logs: platform-specific logs directory
-        RELIANT_LOGS_PATH: app.getPath('logs'),
-        // Temp: system temp directory
-        RELIANT_TEMP_PATH: app.getPath('temp'),
-        // CRITICAL: Set environment mode for the Go backend
-        // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
-        RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
-        // Pass hosted API URLs to the daemon process as env vars
-        RELIANT_SERVER_URL: this.apiUrl,
-      };
-
-      // Pass gateway URL if explicitly configured
-      if (this.gatewayUrl) {
-        backendEnv.RELIANT_GATEWAY_URL = this.gatewayUrl;
-      }
-
-      // CRITICAL: In production, ensure PATH includes common locations for MCP tools
-      // MCP servers often use npx, uvx, python, etc. which aren't in Electron's default PATH
-      if (!this.isDevelopment) {
-        const isWindows = process.platform === 'win32';
-        const pathSeparator = isWindows ? ';' : ':';
-
-        let additionalPaths = [];
-
-        if (isWindows) {
-          // Windows-specific paths
-          additionalPaths = [
-            path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs'),
-            path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'npm'),
-            path.join(homeDir, 'AppData', 'Local', 'Programs', 'Python'),
-            path.join(homeDir, '.local', 'bin'),
-            path.join(homeDir, 'go', 'bin'),  // Go binaries on Windows
-          ];
-        } else {
-          // Unix-specific paths (macOS/Linux)
-          additionalPaths = [
-            '/usr/local/bin',
-            '/opt/homebrew/bin',  // macOS Apple Silicon Homebrew
-            '/usr/bin',
-            '/bin',
-            path.join(homeDir, 'go', 'bin'),  // Go binaries (air, etc.)
-            path.join(homeDir, '.local', 'bin'),  // Python user binaries (uvx, etc.)
-            path.join(homeDir, '.npm-global', 'bin'),  // Global npm binaries
-            '/opt/homebrew/opt/python/libexec/bin',  // Homebrew python
-            '/usr/local/go/bin',  // System Go installation
-          ];
-
-          // Try to find nvm-managed node installations (Unix only)
-          const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node');
-          if (fs.existsSync(nvmDir)) {
-            try {
-              const versions = fs.readdirSync(nvmDir);
-              if (versions.length > 0) {
-                // Use the latest version (or default)
-                const latestVersion = versions.sort().reverse()[0];
-                const nvmNodeBin = path.join(nvmDir, latestVersion, 'bin');
-                if (fs.existsSync(nvmNodeBin)) {
-                  additionalPaths.push(nvmNodeBin);
-                  log.info('[BackendManager] Found nvm node installation:', nvmNodeBin);
-                }
-              }
-            } catch (err) {
-              log.warn('[BackendManager] Error scanning nvm directory:', err.message);
-            }
-          }
-        }
-
-        // Get existing PATH and deduplicate
-        const existingPath = backendEnv.PATH || backendEnv.Path || '';
-        const pathParts = existingPath.split(pathSeparator).filter(p => p);
-
-        // Add additional paths if they exist and aren't already in PATH
-        for (const dir of additionalPaths) {
-          if (fs.existsSync(dir) && !pathParts.includes(dir)) {
-            pathParts.push(dir);
-          }
-        }
-
-        backendEnv.PATH = pathParts.join(pathSeparator);
-        if (isWindows) {
-          backendEnv.Path = backendEnv.PATH; // Windows uses both PATH and Path
-        }
-        log.debug('[BackendManager] Production PATH set', { entries: pathParts.length });
-
-        // Ensure critical environment variables are set for MCP servers
-        if (!isWindows) {
-          if (!backendEnv.SHELL) {
-            backendEnv.SHELL = '/bin/zsh';  // macOS default
-          }
-        }
-        if (!backendEnv.HOME && !isWindows) {
-          backendEnv.HOME = homeDir;
-        }
-        if (!backendEnv.USERPROFILE && isWindows) {
-          backendEnv.USERPROFILE = homeDir;
-        }
-        // Some MCP servers need USER/USERNAME
-        if (!backendEnv.USER && !isWindows) {
-          backendEnv.USER = require('os').userInfo().username;
-        }
-        if (!backendEnv.USERNAME && isWindows) {
-          backendEnv.USERNAME = require('os').userInfo().username;
-        }
-        // TERM is needed for scripts that use tput or terminal capabilities
-        if (!backendEnv.TERM && !isWindows) {
-          backendEnv.TERM = 'xterm-256color';
-        }
-
-        log.info('[BackendManager] Environment variables set:', {
-          SHELL: backendEnv.SHELL,
-          HOME: backendEnv.HOME,
-          USERPROFILE: backendEnv.USERPROFILE,
-          USER: backendEnv.USER,
-          USERNAME: backendEnv.USERNAME,
-          PATH_length: backendEnv.PATH.length
-        });
-      }
-
-      // Set data directory based on mode
-      // In development: use ./data (relative to cwd) for worktree isolation
-      // In production: use userData/data for shared app data
-      if (!backendEnv.RELIANT_DATA_DIR) {
-        backendEnv.RELIANT_DATA_DIR = this.isDevelopment
-          ? './data'  // Dev: local to each worktree
-          : path.join(app.getPath('userData'), 'data');  // Prod: shared app data
-      }
+      const backendEnv = this.buildDaemonEnv();
 
       // Spawn daemon process.
       //

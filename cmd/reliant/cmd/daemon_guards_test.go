@@ -77,12 +77,21 @@ func TestDaemonGuards_BackgroundIdleReap(t *testing.T) {
 }
 
 // What production daemons run with. Neither of the two ways a daemon is
-// started outside dev overrides background_idle_reap — a workspace pod gets
-// only the env control-plane's workspace operator sets (none of the guard
-// settings), and Electron spawns it with backend-manager.js's env — so both
-// run the schema default. That default is written three times (the proto,
-// the KCL schema rendered from it, and shell.DefaultIdleReap); this pins the
-// rendered one and the Electron spawn to the runtime's.
+// started outside dev overrides background_idle_reap, so both run the schema
+// default:
+//
+//   - a workspace pod gets only the env control-plane's workspace operator
+//     sets, which is none of the guard settings — pinned there by
+//     TestWorkspacePodSetsNoDaemonGuardSetting
+//     (control-plane internal/operators/workspace/daemon_guard_env_test.go);
+//   - Electron spawns it with BackendManager.buildDaemonEnv, which sets none
+//     either and passes on a value the user exported — pinned by
+//     electron/test/backend-manager-daemon-env.test.js.
+//
+// The default is written three times (the proto, the KCL schema rendered
+// from it, and shell.DefaultIdleReap); this pins the rendered one to the
+// runtime's, and TestDaemonGuards_BackgroundIdleReap pins what any value
+// becomes once loaded.
 func TestDaemonGuards_BackgroundIdleReapProductionDefault(t *testing.T) {
 	schema, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "kcl", "config_gen.k"))
 	require.NoError(t, err)
@@ -91,11 +100,6 @@ func TestDaemonGuards_BackgroundIdleReapProductionDefault(t *testing.T) {
 	rendered, err := time.ParseDuration(string(m[1]))
 	require.NoError(t, err)
 	assert.Equal(t, shell.DefaultIdleReap, rendered, "the KCL schema's default is the runtime's")
-
-	electron, err := os.ReadFile(filepath.Join("..", "..", "..", "electron", "src", "backend-manager.js"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(electron), "RELIANT_BACKGROUND_IDLE_REAP",
-		"Electron's daemon runs the default; an override there must be a decision, and this test updated with it")
 }
 
 func TestDaemonGuards_HeavyCommandsReplaceOrClearTheDefault(t *testing.T) {
