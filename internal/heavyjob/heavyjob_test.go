@@ -204,12 +204,18 @@ func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 	}
 
 	heavy := exec.Command("sh", "-c", "go test ./...")
+	heavy.Env = []string{"PATH=/bin", "GOMAXPROCS=6"}
 	origPath := heavy.Path
 	if ok, err := g.Prepare(heavy, Job{Command: "go test ./..."}); !ok || err != nil {
 		t.Fatalf("a heavy command was not rewritten: %v", err)
 	}
-	want := []string{testSelf(t)[0], WrapperArg, "--dir", dir, "--label", "go test ./...", "--slots", "3", "--", origPath, "-c", "go test ./..."}
+	want := []string{testSelf(t)[0], WrapperArg, "--dir", dir, "--label", "go test ./...", "--slots", "3", "--child-gomaxprocs", "6", "--", origPath, "-c", "go test ./..."}
 	if heavy.Path != testSelf(t)[0] || !slices.Equal(heavy.Args, want) {
 		t.Fatalf("rewritten to %s %q, want %q", heavy.Path, heavy.Args, want)
+	}
+	// The wrapper starts on one P; the command's own value rides in
+	// --child-gomaxprocs.
+	if want := []string{"PATH=/bin", "GOMAXPROCS=6", "GOMAXPROCS=1"}; !slices.Equal(heavy.Env, want) {
+		t.Fatalf("wrapper env %q, want %q", heavy.Env, want)
 	}
 }

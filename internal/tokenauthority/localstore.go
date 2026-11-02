@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -62,6 +63,13 @@ func (s *LocalStore) Introspect(ctx context.Context, token string) (*fat.Princip
 	// Best-effort, throttled to once a minute per token.
 	_ = store.TouchAccessToken(ctx, s.db, p.TokenID)
 	return &p, nil
+}
+
+// IntrospectAccount is Introspect. A self-hosted reliant keeps no user
+// records, so it names no email.
+func (s *LocalStore) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
+	p, err := s.Introspect(ctx, token)
+	return auth.AccessTokenAccount{Principal: p}, err
 }
 
 // MintForUser mints a personal token acting as req.UserID. With Rotate, it

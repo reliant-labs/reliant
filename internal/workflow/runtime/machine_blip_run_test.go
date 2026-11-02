@@ -260,6 +260,50 @@ nodes:
 		"the activity may also wait out an unreachable machine, plus one send's transport overhead")
 }
 
+// The release train's control-plane gate takes ~2.7h. Its node declares 3h,
+// and that is what the command gets and what the activity allows — no
+// 10-minute cap anywhere between — while the heartbeat timeout stays short,
+// so a worker that dies an hour in is still detected in a minute.
+func (s *MachineBlipRunSuite) TestHoursLongTimeoutIsTheCommandsAndHeartbeatsStayShort() {
+	const longGateYAML = `
+name: agent
+entry: [gate]
+daemon:
+  id: daemon-1
+nodes:
+  - id: gate
+    type: run
+    command: task ci:full
+    timeout: 3h
+`
+	var (
+		mu             sync.Mutex
+		commandTimeout interface{}
+		activityBound  time.Duration
+		heartbeat      time.Duration
+	)
+	e, calls, input := s.setupYAML("chat-long-gate", longGateYAML, true, func(ctx context.Context, in map[string]interface{}, _ int) (map[string]interface{}, error) {
+		info := activity.GetInfo(ctx)
+		mu.Lock()
+		defer mu.Unlock()
+		commandTimeout = in["timeout"]
+		activityBound = info.Deadline.Sub(info.StartedTime)
+		heartbeat = info.HeartbeatTimeout
+		return gatePassed(), nil
+	})
+
+	e.env.ExecuteWorkflow(DynamicWorkflow, input)
+	mu.Lock()
+	defer mu.Unlock()
+
+	s.Require().True(e.env.IsWorkflowCompleted())
+	s.Require().NoError(e.env.GetWorkflowError())
+	s.Equal(1, calls.count())
+	s.EqualValues((3 * time.Hour).Milliseconds(), commandTimeout)
+	s.Equal(3*time.Hour+types.RunStepMachineWaitBudget+types.RunStepSendOverhead, activityBound.Round(time.Second))
+	s.Equal(activityHeartbeatTimeout, heartbeat)
+}
+
 // A blip that clears while the ladder is still climbing: the next rung's retry
 // goes through and the run completes, with nothing failed and nobody involved.
 func (s *MachineBlipRunSuite) TestUnattended_MachineBackDuringTheLadderCompletes() {

@@ -1,13 +1,15 @@
 // Copyright (c) 2026 Reliant Labs
-import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen } from "@testing-library/react";
 import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 import { renderWithApi } from "../../__tests__/obsTestUtils";
 import { DashboardPage, DashboardsPage } from "../DashboardsPages";
 
 const route = vi.hoisted(() => ({ params: { kind: "builtin", key: "org-costs" }, search: { env: "unrecorded", service: "worker", range: "7d", rpcMethod: "Get", version: 9 } }));
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), useParams: () => route.params, useSearch: () => route.search, useNavigate: () => vi.fn() }));
-vi.mock("../../../Console/consoleContext", async (original) => ({ ...(await original<typeof import("../../../Console/consoleContext")>()), useForgeConsole: () => ({ forgeProject: "shop", env: "unrecorded", setEnv: vi.fn(), href: () => "/dashboard", roster: { envs: [], isLoading: false, resolvingName: false, live: {} } }) }));
+const EMPTY_ROSTER = { envs: [], isLoading: false, resolvingName: false, live: {} as Record<string, unknown> };
+const consoleState = vi.hoisted(() => ({ roster: { envs: [], isLoading: false, resolvingName: false, live: {} as Record<string, unknown> } }));
+vi.mock("../../../Console/consoleContext", async (original) => ({ ...(await original<typeof import("../../../Console/consoleContext")>()), useForgeConsole: () => ({ forgeProject: "shop", env: "unrecorded", setEnv: vi.fn(), href: () => "/dashboard", roster: consoleState.roster }) }));
 vi.mock("../OrganizationCostsView", () => ({ OrganizationCostsView: ({ orgId }: { orgId: string }) => <h1>Organization costs for {orgId}</h1> }));
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
@@ -18,6 +20,10 @@ const builtin = {
 };
 
 describe("organization dashboard routes without deployments", () => {
+  afterEach(() => {
+    consoleState.roster = { ...EMPTY_ROSTER };
+  });
+
   it("opens the typed cost view without roster, environment or viewer controls", async () => {
     const onCall = vi.fn();
     const api = createFixtureApi({ onCall });
@@ -42,5 +48,30 @@ describe("organization dashboard routes without deployments", () => {
     expect(await screen.findByTestId("hub-group-platform")).toHaveTextContent("Organization costs");
     expect(screen.getByTestId("hub-health-undeployed")).toBeInTheDocument();
     expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
+  });
+
+  // 2026-11-01: control-plane has two prod environments, GetLiveView was aborted, and the page told
+  // its owner "No environments to observe yet". An unread roster is not an empty one.
+  it("does not say there are no environments when the roster read failed, and offers to read it again", async () => {
+    const refetch = vi.fn();
+    consoleState.roster = { ...EMPTY_ROSTER, live: { data: { availability: "unreachable", envs: [], detail: "GetLiveView timed out" }, refetch, isFetching: false } };
+    const api = createFixtureApi();
+    api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
+    renderWithApi(api, <DashboardsPage />);
+    expect(await screen.findByTestId("hub-health-unread")).toHaveTextContent("once shop's environments load");
+    expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hub-health-undeployed")).not.toBeInTheDocument();
+    expect(screen.getByTestId("forge-cloud-unreachable")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("obs-environments-retry"));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("claims nothing about environments while the roster is still loading", async () => {
+    consoleState.roster = { ...EMPTY_ROSTER, isLoading: true };
+    const api = createFixtureApi();
+    api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
+    renderWithApi(api, <DashboardsPage />);
+    expect(await screen.findByTestId("hub-group-platform")).toBeInTheDocument();
+    expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
   });
 });

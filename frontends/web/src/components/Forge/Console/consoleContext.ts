@@ -42,6 +42,17 @@ export interface ForgeConsole {
 
 export const ForgeConsoleContext = createContext<ForgeConsole | null>(null);
 
+/**
+ * The roster's control-plane read FAILED (unreachable, no access, not
+ * configured). Its environment list is then empty because nothing was read,
+ * not because the project has none, so a page must not answer "No
+ * environments" over it: the CloudNotice says what happened instead.
+ */
+export function rosterReadFailed(roster: Pick<ForgeConsole["roster"], "live">): boolean {
+  const availability = roster.live.data?.availability;
+  return availability !== undefined && availability !== "available";
+}
+
 export function useForgeConsole(): ForgeConsole {
   const value = useContext(ForgeConsoleContext);
   if (!value) throw new Error("useForgeConsole must be used inside the forge console layout (ConsoleLayout)");

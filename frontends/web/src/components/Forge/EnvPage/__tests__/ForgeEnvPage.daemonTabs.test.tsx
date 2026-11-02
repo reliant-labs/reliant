@@ -68,7 +68,7 @@ const DEV: LiveEnv = {
   name: "dev",
   project: "hounders",
   kind: "local",
-  declaredShape: null,
+  declared: false,
   declaredBy: null,
   release: "v12",
   releaseProvenance: null,

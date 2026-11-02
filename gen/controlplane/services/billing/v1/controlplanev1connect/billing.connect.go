@@ -116,6 +116,12 @@ const (
 	// BillingServiceAcceptNextMachinePricingProcedure is the fully-qualified name of the
 	// BillingService's AcceptNextMachinePricing RPC.
 	BillingServiceAcceptNextMachinePricingProcedure = "/controlplane.v1.BillingService/AcceptNextMachinePricing"
+	// BillingServicePreviewMachinePlanChangeProcedure is the fully-qualified name of the
+	// BillingService's PreviewMachinePlanChange RPC.
+	BillingServicePreviewMachinePlanChangeProcedure = "/controlplane.v1.BillingService/PreviewMachinePlanChange"
+	// BillingServiceChangeMachinePlanProcedure is the fully-qualified name of the BillingService's
+	// ChangeMachinePlan RPC.
+	BillingServiceChangeMachinePlanProcedure = "/controlplane.v1.BillingService/ChangeMachinePlan"
 	// BillingServiceGetCurrentUserUsageBillingProcedure is the fully-qualified name of the
 	// BillingService's GetCurrentUserUsageBilling RPC.
 	BillingServiceGetCurrentUserUsageBillingProcedure = "/controlplane.v1.BillingService/GetCurrentUserUsageBilling"
@@ -259,6 +265,17 @@ type BillingServiceClient interface {
 	// Machine pricing is accepted explicitly for the next billing period only.
 	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
 	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	// Quotes a change of the org's machine plan: an upgrade applies now and is
+	// charged the prorated difference today; a downgrade applies at the next
+	// billing period and charges or credits nothing; choosing the current plan
+	// while a downgrade is scheduled withdraws it. Changes nothing. The quote is
+	// binding for ten minutes through terms_sha256.
+	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
+	// Makes the change the caller confirmed, at exactly its quote: an upgrade
+	// is paid before it applies (a declined payment changes nothing), a
+	// downgrade is scheduled for the next period. Retrying the same confirmed
+	// quote never charges twice.
+	ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -473,6 +490,18 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
 			connect.WithClientOptions(opts...),
 		),
+		previewMachinePlanChange: connect.NewClient[v1.PreviewMachinePlanChangeRequest, v1.PreviewMachinePlanChangeResponse](
+			httpClient,
+			baseURL+BillingServicePreviewMachinePlanChangeProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
+			connect.WithClientOptions(opts...),
+		),
+		changeMachinePlan: connect.NewClient[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse](
+			httpClient,
+			baseURL+BillingServiceChangeMachinePlanProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("ChangeMachinePlan")),
+			connect.WithClientOptions(opts...),
+		),
 		getCurrentUserUsageBilling: connect.NewClient[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserUsageBillingProcedure,
@@ -576,6 +605,8 @@ type billingServiceClient struct {
 	createCurrentUserComputeSubscriptionIntent *connect.Client[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse]
 	getMachinePricingReadiness                 *connect.Client[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse]
 	acceptNextMachinePricing                   *connect.Client[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse]
+	previewMachinePlanChange                   *connect.Client[v1.PreviewMachinePlanChangeRequest, v1.PreviewMachinePlanChangeResponse]
+	changeMachinePlan                          *connect.Client[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse]
 	getCurrentUserUsageBilling                 *connect.Client[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse]
 	createCurrentUserUsageBillingCheckout      *connect.Client[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse]
 	getCurrentUserWalletAutoRecharge           *connect.Client[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse]
@@ -727,6 +758,16 @@ func (c *billingServiceClient) GetMachinePricingReadiness(ctx context.Context, r
 // AcceptNextMachinePricing calls controlplane.v1.BillingService.AcceptNextMachinePricing.
 func (c *billingServiceClient) AcceptNextMachinePricing(ctx context.Context, req *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
 	return c.acceptNextMachinePricing.CallUnary(ctx, req)
+}
+
+// PreviewMachinePlanChange calls controlplane.v1.BillingService.PreviewMachinePlanChange.
+func (c *billingServiceClient) PreviewMachinePlanChange(ctx context.Context, req *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error) {
+	return c.previewMachinePlanChange.CallUnary(ctx, req)
+}
+
+// ChangeMachinePlan calls controlplane.v1.BillingService.ChangeMachinePlan.
+func (c *billingServiceClient) ChangeMachinePlan(ctx context.Context, req *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error) {
+	return c.changeMachinePlan.CallUnary(ctx, req)
 }
 
 // GetCurrentUserUsageBilling calls controlplane.v1.BillingService.GetCurrentUserUsageBilling.
@@ -900,6 +941,17 @@ type BillingServiceHandler interface {
 	// Machine pricing is accepted explicitly for the next billing period only.
 	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
 	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	// Quotes a change of the org's machine plan: an upgrade applies now and is
+	// charged the prorated difference today; a downgrade applies at the next
+	// billing period and charges or credits nothing; choosing the current plan
+	// while a downgrade is scheduled withdraws it. Changes nothing. The quote is
+	// binding for ten minutes through terms_sha256.
+	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
+	// Makes the change the caller confirmed, at exactly its quote: an upgrade
+	// is paid before it applies (a declined payment changes nothing), a
+	// downgrade is scheduled for the next period. Retrying the same confirmed
+	// quote never charges twice.
+	ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -1110,6 +1162,18 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
 		connect.WithHandlerOptions(opts...),
 	)
+	billingServicePreviewMachinePlanChangeHandler := connect.NewUnaryHandler(
+		BillingServicePreviewMachinePlanChangeProcedure,
+		svc.PreviewMachinePlanChange,
+		connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceChangeMachinePlanHandler := connect.NewUnaryHandler(
+		BillingServiceChangeMachinePlanProcedure,
+		svc.ChangeMachinePlan,
+		connect.WithSchema(billingServiceMethods.ByName("ChangeMachinePlan")),
+		connect.WithHandlerOptions(opts...),
+	)
 	billingServiceGetCurrentUserUsageBillingHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserUsageBillingProcedure,
 		svc.GetCurrentUserUsageBilling,
@@ -1236,6 +1300,10 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceGetMachinePricingReadinessHandler.ServeHTTP(w, r)
 		case BillingServiceAcceptNextMachinePricingProcedure:
 			billingServiceAcceptNextMachinePricingHandler.ServeHTTP(w, r)
+		case BillingServicePreviewMachinePlanChangeProcedure:
+			billingServicePreviewMachinePlanChangeHandler.ServeHTTP(w, r)
+		case BillingServiceChangeMachinePlanProcedure:
+			billingServiceChangeMachinePlanHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserUsageBillingProcedure:
 			billingServiceGetCurrentUserUsageBillingHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure:
@@ -1371,6 +1439,14 @@ func (UnimplementedBillingServiceHandler) GetMachinePricingReadiness(context.Con
 
 func (UnimplementedBillingServiceHandler) AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.AcceptNextMachinePricing is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.PreviewMachinePlanChange is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ChangeMachinePlan is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {

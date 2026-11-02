@@ -62,18 +62,27 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 				t.Fatalf("%s is marked NO_SIDE_EFFECTS but has no row in calls: add one that proves it only reads", name)
 			}
 
+			// Every forge command is pinned to the checkout's machine, so the
+			// pinned send is the one that answers; SendDaemonCommand is left
+			// unset and so fails any row that reaches default resolution.
 			router := &MockRouter{
-				SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) {
+				SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
 					return forgeDaemonReply(t, true, true, 0, `{"dry_run": true}`), nil
+				},
+				PlacementDaemonIDFunc: func(_ context.Context, _, daemonID string) (string, error) {
+					return daemonID, nil
 				},
 			}
 			// SetProjectForgeNameFunc is left unset on purpose: the mock
 			// answers an unset method with an error, and the recorder below
 			// fails the row if anything tried.
+			installs := forgeTestProjects("/daemon/workspace/control-plane")
 			repo := &MockRepository{
 				GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
 					return &db.Project{ID: id, Path: "/daemon/workspace/control-plane"}, nil
 				},
+				ListProjectDaemonsForProjectFunc: installs.ListProjectDaemonsForProjectFunc,
+				GetDaemonFunc:                    installs.GetDaemonFunc,
 			}
 
 			if err := call(newForgeService(router, repo)); err != nil {
@@ -83,12 +92,12 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 			if n := repo.CallCount("SetProjectForgeName"); n != 0 {
 				t.Errorf("%s wrote the project row %d time(s); a NO_SIDE_EFFECTS rpc may only read it", name, n)
 			}
-			dispatched := router.Calls("SendDaemonCommand")
+			dispatched := router.Calls("SendDaemonCommandToDaemon")
 			if len(dispatched) == 0 {
 				t.Fatalf("%s dispatched no daemon command; the row no longer exercises its read", name)
 			}
 			for _, c := range dispatched {
-				commandType, _ := c.Args[2].(string)
+				commandType, _ := c.Args[3].(string)
 				if _, ok := readOnlyForgeCommands[commandType]; !ok {
 					t.Errorf("%s dispatched %q, which is not a read-only forge command", name, commandType)
 				}

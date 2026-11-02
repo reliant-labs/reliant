@@ -124,6 +124,15 @@ describe("rules are code", () => {
     expect(screen.getByTestId("obs-code-snippet")).toHaveTextContent("forge.AlertRule {");
   });
 
+  it("waits for the declared shapes instead of saying no rule is declared", async () => {
+    // Each env's shape is fetched on its own (GetEnvironmentShape): until it
+    // arrives, "none declared" would be a guess.
+    const pending: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: FIXTURE_ENVS.map((env) => ({ ...env, declaredPending: true })) };
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" }, pending);
+    expect(await screen.findByTestId("obs-rules-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-rules-none")).not.toBeInTheDocument();
+  });
+
   it("shows a forge default with how to turn it off and how to tune it", async () => {
     renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules", rule: "staging/ServiceSilent" }, PROJECT);
     const detail = await screen.findByTestId("obs-rule-detail");
