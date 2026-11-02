@@ -142,7 +142,13 @@ func daemonNonInteractive(nonInteractive, managed bool) bool {
 // account names which credential this registration writes. It is part of the
 // store key, so registering account A cannot overwrite account B's token at
 // the same origin. Empty means the default account.
-func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) error {
+//
+// want, when known, is the account the pairing must be approved as — the CLI
+// login's (daemonAccountForCLILogin). A pairing approved as anyone else is
+// refused and not saved, so the machine never ends up connected as an account
+// other than the one it is logged in to the CLI as. A control plane that does
+// not name the approving account cannot be checked and is taken as before.
+func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 	if nonInteractive {
 		return fmt.Errorf("daemon login: %w", cliauth.ErrInteractiveRequired)
@@ -184,6 +190,11 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	if !scopeGranted(cred.Scopes, cliauth.ScopeDaemon) {
 		return fmt.Errorf("the control plane did not grant %s (granted: %v)", cliauth.ScopeDaemon, cred.Scopes)
 	}
+	if want.Known() && cred.Account.Known() && !cred.Account.Same(want) {
+		return fmt.Errorf("this machine was approved as %s, but you are logged in to the CLI as %s, so the sign-in was not saved.\n"+
+			"Approve the code while signed in to Reliant as %s, or run 'reliant auth login%s' as %s first",
+			cred.Account, want, want, conn.serverFlagHint(), cred.Account)
+	}
 
 	creds := &auth.DaemonCredentials{
 		PAT:          cred.Token,
@@ -192,6 +203,8 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		RegisteredAt: time.Now().UTC(),
 		Sub:          account,
 		ExpiresAt:    cred.ExpiresAt,
+		AccountID:    cred.Account.ID,
+		AccountEmail: cred.Account.Email,
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
@@ -199,6 +212,9 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
+	if cred.Account.Known() {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Account:     %s\n", cred.Account)
+	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", conn.describeServer())
 	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", conn.describeGateway())
@@ -239,12 +255,21 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 // is set, when it returns cliauth.ErrInteractiveRequired instead. A CLI
 // session from `reliant auth login` is a different credential and is never
 // reused for this.
-func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+//
+// want, when known, is the CLI login's account: a stored credential is used
+// only when it is recorded as that account (daemonAccountForCLILogin recorded
+// it), and a registration must be approved as it.
+func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	creds, err := auth.ReadDaemonCredentials(apiURL, account)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
+	}
+	if creds != nil && want.Known() && !daemonSignInAccount(creds).Same(want) {
+		// Filed where the login's sign-in would be, but not confirmed as
+		// the login's account: pair rather than connect as it.
+		creds = nil
 	}
 	if creds != nil {
 		// A stored PAT that carries a known expiry and has lapsed (or is about to)
@@ -275,15 +300,17 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 			// machine still signed in as someone else — otherwise sees only
 			// "connected", as an account that is not theirs.
 			if !nonInteractive {
-				fmt.Fprint(cmd.OutOrStdout(), savedSignInNotice(creds, conn))
+				fmt.Fprint(cmd.OutOrStdout(), savedSignInNotice(creds, conn, want.Known()))
 			}
 			return creds, nil
 		}
-	} else if !nonInteractive {
+	} else if !nonInteractive && !want.Known() {
+		// With a CLI login, daemonAccountForCLILogin has already said why
+		// this machine is being paired.
 		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
 	}
 
-	if err := registerDaemon(ctx, cmd, conn, account, nonInteractive); err != nil {
+	if err := registerDaemon(ctx, cmd, conn, account, want, nonInteractive); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
@@ -296,12 +323,23 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 }
 
 // savedSignInNotice is what `daemon start` prints before connecting with a
-// credential saved by an earlier sign-in: that it is doing so, which is why no
-// pairing code follows, and how to sign in as someone else instead.
-func savedSignInNotice(creds *auth.DaemonCredentials, conn *connection) string {
+// credential saved by an earlier sign-in: whose it is when that is known, that
+// it is using it, which is why no pairing code follows, and how to sign in as
+// someone else instead. cliLogin says the sign-in was chosen because it is the
+// CLI login's account; then logging the CLI in as someone else is the remedy,
+// since that retires this sign-in.
+func savedSignInNotice(creds *auth.DaemonCredentials, conn *connection, cliLogin bool) string {
 	saved := "Using the daemon sign-in saved on this machine"
+	if who := daemonSignInAccount(creds).String(); who != "" {
+		saved += " for " + who
+	}
 	if !creds.RegisteredAt.IsZero() {
 		saved += " on " + creds.RegisteredAt.Local().Format("2 Jan 2006")
+	}
+	if cliLogin {
+		return fmt.Sprintf("%s, the account you are logged in to the CLI as, so there is no pairing code to approve.\n"+
+			"Not you? Run 'reliant auth login%s' and sign in as yourself, then 'reliant daemon start%s' again.\n",
+			saved, conn.serverFlagHint(), conn.serverFlagHint())
 	}
 	return fmt.Sprintf("%s, so there is no pairing code to approve.\n"+
 		"Not you? Run 'reliant auth logout%s', then 'reliant daemon start%s' again.\n",
@@ -387,8 +425,8 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 // cliauth.ErrInteractiveRequired as a fatal error. This is the seam used
 // by both the initial credential resolution and the auth-failure retry path
 // in `daemon start`, so neither can regress into popping a browser.
-func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, nonInteractive)
+func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, want, nonInteractive)
 	if err == nil {
 		shareDaemonSessionWithForge(conn, creds)
 		return creds, nil
@@ -410,8 +448,8 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 // the auth-failure retry path: the caller has already deleted stale
 // credentials and needs a fresh registration, but a non-interactive daemon
 // must idle rather than fail when that requires a login it cannot run.
-func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	regErr := registerDaemon(ctx, cmd, conn, account, nonInteractive)
+func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	regErr := registerDaemon(ctx, cmd, conn, account, want, nonInteractive)
 	if regErr == nil {
 		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL, account)
 		if readErr != nil || newCreds == nil {
@@ -626,7 +664,7 @@ After registering, run 'reliant daemon start' to connect.`,
 			// `daemon register` is always an explicit, interactive CLI
 			// invocation — never spawned by Electron — so it never passes
 			// nonInteractive.
-			return registerDaemon(cmd.Context(), cmd, conn, account, false)
+			return registerDaemon(cmd.Context(), cmd, conn, account, cliauth.Account{}, false)
 		},
 	}
 
@@ -766,8 +804,12 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register'). It says so before
-     connecting; 'reliant auth logout' removes it, to sign in as someone else.
+     earlier 'daemon start' or 'reliant daemon register'). It says so, and
+     whose it is, before connecting; 'reliant auth logout' removes it, to sign
+     in as someone else. When you are logged in to the CLI ('reliant auth
+     login'), only the daemon credential of that same account is used: one
+     of another account is passed over, said so, and the machine is paired
+     as you instead, so the daemon never connects as someone else.
   3. Otherwise it pairs the machine: it prints a short code and a link, and
      you approve "this machine" in the Reliant app — on the link, or by typing
      the code into the Add machine window. Nothing has to reach back to this
@@ -848,6 +890,8 @@ To switch back to an account whose token is already stored:
 			// stored credential's account applies (resolveInstanceAccount).
 			var pastedToken string
 			tokenVerified := false
+			// want is the CLI login's account when the daemon is kept to it.
+			var want cliauth.Account
 			if useToken && !serverMode {
 				pastedToken, err = readPastedToken(ctx, cmd)
 				if err != nil {
@@ -864,6 +908,23 @@ To switch back to an account whose token is already stored:
 				tokenVerified = verified
 				if strings.TrimSpace(instance.account) == "" {
 					instance.account = owner
+				}
+			} else if !serverMode && !nonInteractive && strings.TrimSpace(instance.account) == "" {
+				// A person at a terminal with no --account: keep the daemon
+				// to the account the CLI is logged in as, when it names one
+				// (account_in_step.go). Electron and managed pods run
+				// non-interactively and name their account themselves, so
+				// they never get here.
+				gatewayFor := func(c *auth.DaemonCredentials) (daemonGateway, error) {
+					saved := c.GatewayURL
+					if saved == "" {
+						saved = conn.GatewayURL
+					}
+					return resolveDaemonGateway(cmd, grpcURL, saved, port, tlsMode, tlsCert, tlsKey)
+				}
+				instance.account, want = daemonAccountForCLILogin(ctx, cmd, conn, gatewayFor)
+				if !want.Known() {
+					instance.account = resolveInstanceAccount("", conn.ServerURL)
 				}
 			} else {
 				instance.account = resolveInstanceAccount(instance.account, conn.ServerURL)
@@ -937,7 +998,7 @@ To switch back to an account whose token is already stored:
 					return err
 				}
 			} else {
-				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
+				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, instance.account, want, dataDir, nonInteractive)
 				if err != nil {
 					return err
 				}
@@ -1001,7 +1062,7 @@ To switch back to an account whose token is already stored:
 				if !nonInteractive {
 					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
 				}
-				newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
+				newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, want, dataDir, nonInteractive)
 				if regErr != nil {
 					return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 				}

@@ -134,7 +134,7 @@ export function DetectedPortsChip() {
         <div className="min-w-[16rem] py-1">
           {canManageAccess && (
             <div className="border-b border-border px-3 pb-2 pt-1">
-              <div className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-xs font-medium text-muted-foreground">
                 Default access for new ports
               </div>
               <div className="flex overflow-hidden rounded border border-border">
@@ -182,7 +182,7 @@ export function DetectedPortsChip() {
               )}
             </div>
           )}
-          <div className="px-3 py-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="px-3 py-1 text-xs font-medium text-muted-foreground">
             Detected ports
           </div>
           {ports.map((port) => {

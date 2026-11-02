@@ -74,6 +74,13 @@ type ProjectDaemon struct {
 	// InstallRequestID ties the row to a queued daemon command, so the
 	// outcome notification — which carries no project id — can find it.
 	InstallRequestID string `json:"install_request_id,omitempty"`
+	// CloneStartedAt is when an installing clone could first run: when it
+	// was queued, if its machine was connected then, else the machine's next
+	// connect. Nil while it waits for a machine that has not connected since.
+	// The connect reconcile's stuck-clone timeout counts from here, never
+	// from ClonedAt (the queue time): a clone queued to a sleeping machine
+	// only starts when the machine wakes.
+	CloneStartedAt *time.Time `json:"clone_started_at,omitempty"`
 }
 
 // ProjectInstallState is how far a project's checkout has got on one daemon.
@@ -148,6 +155,15 @@ type CleanupMetadata struct {
 	// the user made.
 	LandedAt        *time.Time `json:"landed_at,omitempty"`
 	ArchivedBecause string     `json:"archived_because,omitempty"`
+	// AbsentOn names the machines that, asked about an archived row with no
+	// machine on record, answered that they do not have its folder. Once
+	// every connected machine is on it the row may be forgotten
+	// (worktreesweep.Forget). Cleared when a machine claims the row.
+	AbsentOn []string `json:"absent_on,omitempty"`
+	// Forgotten says the user dropped the record of the folder of a row no
+	// machine was on record for and none connected had: DirectoryDeleted is
+	// set so nothing tracks it any more, but nothing was deleted.
+	Forgotten bool `json:"forgotten,omitempty"`
 }
 
 // ArchivedBecauseLanded marks a worktree the sweep archived because its work

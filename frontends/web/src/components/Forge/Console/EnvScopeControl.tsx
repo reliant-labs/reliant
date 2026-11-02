@@ -36,7 +36,7 @@ export interface EnvScopeControlProps {
 const MAX_SEGMENTS = 5;
 
 const segment =
-  "inline-flex h-6 items-center gap-1 whitespace-nowrap rounded px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-6 items-center gap-1 whitespace-nowrap rounded px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, platformWide }: EnvScopeControlProps) {
   const [menuOpen, setMenuOpen] = useState(false);

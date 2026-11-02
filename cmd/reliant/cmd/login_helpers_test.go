@@ -12,6 +12,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/memtemp"
 )
 
+// fixtureTime stamps the credentials these tests store: no assertion reads
+// the time, so a fixed one keeps them off the wall clock.
+var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
 // isolateCLI points HOME and the shared credentials file at a temp dir and
 // clears the RELIANT_* variables the resolver reads, so no test can read or
 // write a developer's real login. A dev shell often exports
@@ -43,7 +47,7 @@ func isolateCLI(t *testing.T) string {
 // `reliant auth login --server <server>` would.
 func loginFor(t *testing.T, server, token string) {
 	t.Helper()
-	if _, err := cliauth.Store(server, credentials.Credential{Token: token, CreatedAt: time.Now()}); err != nil {
+	if _, err := cliauth.Store(server, cliauth.Session{Credential: credentials.Credential{Token: token, CreatedAt: fixtureTime}}); err != nil {
 		t.Fatal(err)
 	}
 }

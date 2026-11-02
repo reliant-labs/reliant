@@ -55,7 +55,7 @@ function CopyValueButton({ text, label }: { text: string; label: string }) {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`Copy ${label}`}
       onClick={() => {
         void navigator.clipboard?.writeText(text);
@@ -91,7 +91,7 @@ export function ValueView({ value, label }: { value: unknown; label: string }) {
         {long && (
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded}
             onClick={() => setExpanded((open) => !open)}
           >
@@ -166,7 +166,7 @@ function ErrorBlock({ message, fieldKey, onFocusField }: { message: string; fiel
           <button
             type="button"
             onClick={() => onFocusField(fieldKey)}
-            className="rounded border border-destructive/40 bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded border border-destructive/40 bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Go to {humanizeField(fieldKey)}
           </button>
@@ -176,7 +176,7 @@ function ErrorBlock({ message, fieldKey, onFocusField }: { message: string; fiel
             type="button"
             aria-expanded={showDetails}
             onClick={() => setShowDetails((open) => !open)}
-            className="text-xs font-medium underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="text-xs font-medium underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {showDetails ? "Hide details" : "Show details"}
           </button>
@@ -225,7 +225,7 @@ function InnerStep({ record, onFocusField }: { record: StepRecord; onFocusField:
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {open ? <ChevronDown className="h-3 w-3 flex-shrink-0" aria-hidden /> : <ChevronRight className="h-3 w-3 flex-shrink-0" aria-hidden />}
         <code className="min-w-0 flex-1 truncate font-mono">{name}</code>
@@ -287,7 +287,7 @@ function StepRunBody({ stepRun }: { stepRun: StepRun }) {
               aria-pressed={record === selected}
               onClick={() => setAttemptIndex(index)}
               className={cn(
-                "rounded border px-2 py-0.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "rounded border px-2 py-0.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 record === selected ? "border-foreground/50 bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted",
               )}
             >
@@ -348,7 +348,7 @@ function StepRunBody({ stepRun }: { stepRun: StepRun }) {
       <Link
         to="/workflows/runs/$runId"
         params={{ runId: stepRun.chatId }}
-        className="inline-block text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="inline-block text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         Open the full run
       </Link>

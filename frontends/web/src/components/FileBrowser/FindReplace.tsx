@@ -344,7 +344,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                 value={filePattern}
                 onChange={(e) => setFilePattern(e.target.value)}
                 placeholder="e.g., *.ts, *.go"
-                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-primary/50"
+                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>

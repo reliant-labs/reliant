@@ -112,9 +112,9 @@ export function ProjectFilterMenu({
           aria-label={`Switch project. Showing ${label}`}
           className={cn(
             "flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 text-left",
-            "text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+            "text-xs font-medium text-muted-foreground",
             "transition-colors hover:bg-muted/60 hover:text-foreground",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           {filterId === null ? (

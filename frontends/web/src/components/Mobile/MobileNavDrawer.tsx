@@ -242,7 +242,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               <FolderOpen className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 Project
               </div>
               <div className="truncate text-sm font-medium text-foreground">

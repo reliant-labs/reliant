@@ -180,7 +180,7 @@ export function BuilderTestRunPanel({
                 <Link
                   to="/workflows/runs/$runId"
                   params={{ runId: testChatId }}
-                  className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Watch full run
                 </Link>
@@ -188,7 +188,7 @@ export function BuilderTestRunPanel({
                   <button
                     type="button"
                     onClick={onClear}
-                    className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Clear from canvas
                   </button>

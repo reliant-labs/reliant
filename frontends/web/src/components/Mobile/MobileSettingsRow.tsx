@@ -332,7 +332,7 @@ export function MobileSettingsSectionTitle({
 }) {
   return (
     <div className="px-4 pt-4 pb-1">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-xs font-medium text-muted-foreground">
         {title}
       </h3>
       {description && (

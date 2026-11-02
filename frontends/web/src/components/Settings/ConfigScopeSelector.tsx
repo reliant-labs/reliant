@@ -155,7 +155,7 @@ export function ConfigScopeSelector({
             checked={rememberChoice}
             onChange={(e) => onRememberChoiceChange?.(e.target.checked)}
             disabled={disabled}
-            className="w-4 h-4 rounded border-border text-primary-ink focus:ring-primary focus:ring-offset-0"
+            className="w-4 h-4 rounded border-border text-primary-ink focus:ring-ring focus:ring-offset-0"
           />
           <span className="text-sm text-muted-foreground">
             Remember this choice

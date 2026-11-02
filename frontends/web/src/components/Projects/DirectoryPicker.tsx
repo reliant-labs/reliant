@@ -283,7 +283,7 @@ export function DirectoryPicker({
                 }}
                 placeholder="New folder name"
                 disabled={isSubmittingFolder}
-                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-60"
+                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary disabled:opacity-60"
               />
               <button
                 type="button"
@@ -395,7 +395,7 @@ export function DirectoryPicker({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             Cancel
           </button>
@@ -403,7 +403,7 @@ export function DirectoryPicker({
             type="button"
             onClick={handleSelect}
             disabled={!resolvedPath}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Use this folder
           </button>

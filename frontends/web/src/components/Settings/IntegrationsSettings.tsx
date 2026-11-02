@@ -225,7 +225,7 @@ function ConnectionRow({
                   setRenaming(false);
                 }
               }}
-              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <Button type="submit" size="sm" disabled={rename.isPending}>
               Save

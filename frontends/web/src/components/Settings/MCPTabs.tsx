@@ -83,7 +83,7 @@ export function MCPTabs({ tabs, activeTab, onTabChange, className }: MCPTabsProp
             onKeyDown={(event) => handleTabKeyDown(event, index)}
             className={cn(
               "inline-flex min-w-max shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors md:min-w-0 md:flex-1",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isActive
                 ? "border border-border/60 bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"

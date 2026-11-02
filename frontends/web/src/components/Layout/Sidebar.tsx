@@ -93,7 +93,7 @@ import {
 import { archiveWorktree } from "../../hooks/worktree-actions";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring";
 const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";
 const CHAT_HEADER_ACTION_TOOLTIP_CLASS = "flex shrink-0";
 
@@ -195,7 +195,7 @@ function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut
       className={cn(
         "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
         "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-        "focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "focus:outline-none focus:ring-2 focus:ring-ring",
         "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
       )}
       data-testid={testId}
@@ -381,7 +381,7 @@ const ChatItem = memo(function ChatItem({
             onBlur={() => onSaveRename(chat.id)}
             onClick={(e) => e.stopPropagation()}
             autoFocus
-            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
           />
         ) : (
           <span className="flex min-w-0 items-center gap-1.5">
@@ -767,7 +767,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           nested
             ? "bg-transparent"
             : hasActiveChat
-              ? "bg-primary/10"
+              ? "bg-foreground/5"
               : "bg-transparent hover:bg-muted/30"
         )}
       >
@@ -790,8 +790,11 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
               <div
                 className={cn(
                   "min-w-0 flex-1 truncate text-xs",
-                  nested ? "font-medium" : "font-semibold uppercase tracking-wide",
-                  hasActiveChat ? "text-primary-ink" : "text-muted-foreground"
+                  // Sentence case, one weight: a group label, not a heading
+                  // that shouts. The active group is foreground, not the
+                  // accent, so it does not read as a link.
+                  "font-medium",
+                  hasActiveChat ? "text-foreground" : "text-muted-foreground"
                 )}
                 title={title}
               >
@@ -1719,7 +1722,7 @@ function SidebarComponent({
             aria-expanded={isExpanded}
             className={cn(
               "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left text-sm font-semibold transition-colors",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               hasActiveChat ? "text-primary-ink" : "text-foreground",
             )}
           >

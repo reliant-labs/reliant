@@ -213,7 +213,7 @@ function WorkflowsCloseButton({ onClose }: { onClose: () => void }) {
         style={noDragRegionStyle}
         aria-label={exitLabel}
         data-testid="workflows-close"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {isElectron ? <X className="h-4 w-4" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}
       </button>
@@ -283,7 +283,7 @@ function ProjectSwitcher() {
           type="button"
           {...props}
           data-testid="workflows-project-switcher"
-          className="inline-flex h-8 max-w-[18rem] items-center gap-2 rounded-md border border-border px-2.5 text-sm text-foreground transition-colors hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-8 max-w-[18rem] items-center gap-2 rounded-md border border-border px-2.5 text-sm text-foreground transition-colors hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="text-muted-foreground">Project</span>
           <span className="truncate font-medium">{scope.allProjects ? "All projects" : (currentProject?.name ?? "All projects")}</span>

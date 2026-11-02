@@ -372,7 +372,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
           id="metrics-range"
           value={range}
           onChange={(event) => onSearch({ range: event.target.value === DEFAULT_RANGE ? undefined : event.target.value })}
-          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="metrics-range"
         >
           {RANGE_PRESETS.map((preset) => (
@@ -647,7 +647,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
           tabIndex={tab === t.id ? 0 : -1}
           onClick={() => onTab(t.id)}
           className={cn(
-            "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             tab === t.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
           )}
           data-testid={`metrics-tab-${t.id}`}

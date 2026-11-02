@@ -53,7 +53,7 @@ function FilterTrigger({
       aria-label={`${label}: ${summary}`}
       className={cn(
         "inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "border-primary/50 bg-primary/10 text-foreground"
           : "border-border bg-background text-foreground hover:border-muted-foreground/50",
@@ -181,7 +181,7 @@ export function FilterSearch({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
     </label>
   );

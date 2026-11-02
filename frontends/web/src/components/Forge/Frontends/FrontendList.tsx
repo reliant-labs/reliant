@@ -31,7 +31,7 @@ import { DomainStateBadge } from "../Domains/DomainStateBadge";
 import { shortVersion } from "../Releases/releaseModel";
 
 const ICON_BUTTON =
-  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Copies `value`; the icon turns into a tick for a moment. Silent without a clipboard — the URL is on screen to select. */
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -74,7 +74,7 @@ function UrlLine({ url, host, testId }: { url: string; host: string; testId: str
         rel="noreferrer"
         title={`Open ${url}`}
         data-testid={testId}
-        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="truncate">{host}</span>
         <ExternalLink className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
@@ -121,7 +121,7 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
                 target="_blank"
                 rel="noreferrer"
                 title={`Open ${frontend.platformUrl}`}
-                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {frontend.platformHost}
               </a>

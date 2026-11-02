@@ -78,7 +78,7 @@ export function Breakdown({ panel, field, scope, range, unit, onClose, onFilter,
                       <button
                         type="button"
                         onClick={() => onFilter(field, group.value)}
-                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label={`Keep only ${key} = ${group.value}`}
                         data-testid="metrics-breakdown-filter"
                       >

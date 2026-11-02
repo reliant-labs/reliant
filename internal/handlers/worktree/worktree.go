@@ -260,6 +260,7 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 			SnapshotRefs:     w.CleanupMetadata.SnapshotRefs,
 			StrippedPaths:    w.CleanupMetadata.StrippedPaths,
 			StrippedBytes:    w.CleanupMetadata.StrippedBytes,
+			Forgotten:        w.CleanupMetadata.Forgotten,
 		}
 	}
 

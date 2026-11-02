@@ -38,20 +38,26 @@ import (
 
 // Service is the CLI's login surface.
 type Service interface {
-	// Login runs one browser login and returns the credential, unstored — a
-	// daemon registration keeps its credential in the daemon store, not the
-	// CLI's. Unset Login.HTTPClient / Login.OpenURL fall back to Deps.
-	Login(ctx context.Context, l Login) (credentials.Credential, error)
+	// Login runs one browser login and returns the credential and the
+	// account it signed in as, unstored — a daemon registration keeps its
+	// credential in the daemon store, not the CLI's. Unset Login.HTTPClient /
+	// Login.OpenURL fall back to Deps.
+	Login(ctx context.Context, l Login) (Session, error)
 	// CredentialsPath is the shared credentials file this adapter reads and
 	// writes.
 	CredentialsPath() (string, error)
-	// Store saves c as the reliant CLI's credential for server and returns
-	// the file path.
-	Store(server string, c credentials.Credential) (string, error)
+	// Store saves s as the reliant CLI's login for server, with the account
+	// it signed in as (see account_record.go), and returns the credentials
+	// file path.
+	Store(server string, s Session) (string, error)
 	// Lookup returns the stored credential for server, or ErrNotLoggedIn.
 	// An entry past its issuer-reported expiry counts as not logged in.
 	Lookup(server string) (credentials.Credential, string, error)
-	// Remove forgets the stored credential for server.
+	// LookupSession is Lookup plus the account the login signed in as —
+	// zero when this machine never recorded it (a login saved before it
+	// did, or by a control plane that does not name accounts).
+	LookupSession(server string) (Session, string, error)
+	// Remove forgets the stored credential for server, and its account.
 	Remove(server string) (bool, string, error)
 	// RemoveLegacyForgeDeposits deletes the copies of Reliant session tokens
 	// older releases deposited into forge's credentials file (client

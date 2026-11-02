@@ -48,10 +48,10 @@ type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
 
 const FONT_OPTIONS = [
-  { value: "default", label: "Inter (Default)" },
+  { value: "default", label: "Geist (Default)" },
+  { value: "inter", label: "Inter" },
   { value: "system", label: "System Default" },
   { value: "mono", label: "JetBrains Mono" },
-  { value: "geist", label: "Geist" },
   { value: "comic", label: "Comic Sans (Fun)" },
 ];
 
@@ -60,7 +60,7 @@ const CODE_FONT_OPTIONS = [
   { value: "inherit", label: "Inherit from System" },
   { value: "system", label: "System Default" },
   { value: "inter", label: "Inter (Modern)" },
-  { value: "geist", label: "Geist" },
+  { value: "geist", label: "Geist Mono" },
   { value: "comic", label: "Comic Sans (Fun)" },
 ];
 
@@ -257,7 +257,8 @@ export function MobileAppearancePanel() {
       </div>
       <MobileSelectRow
         label="App font"
-        value={font}
+        // A stored "geist" (an option before Geist became the default) is the same face.
+        value={font === "geist" ? "default" : font}
         options={FONT_OPTIONS}
         onChange={setFont}
       />

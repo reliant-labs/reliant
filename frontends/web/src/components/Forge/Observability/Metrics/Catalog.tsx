@@ -101,7 +101,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
             }
           }}
           placeholder="Search metrics"
-          className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-7 pr-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-7 pr-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="metrics-catalog-search"
           aria-busy={isFetching || undefined}
         />
@@ -136,7 +136,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
                       return next;
                     })
                   }
-                  className="flex w-full items-center gap-1 rounded px-1 py-1 text-left text-xs font-medium text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className="flex w-full items-center gap-1 rounded px-1 py-1 text-left text-xs font-medium text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   data-testid={`metrics-catalog-group-${g.group}`}
                 >
                   {open ? <ChevronDown className="h-3 w-3" aria-hidden="true" /> : <ChevronRight className="h-3 w-3" aria-hidden="true" />}
@@ -203,7 +203,7 @@ function CatalogRow({
       onClick={onPick}
       data-metric={entry.name}
       className={cn(
-        "cursor-pointer rounded-md px-2 py-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent",
+        "cursor-pointer rounded-md px-2 py-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         selected ? "bg-ink/8" : "hover:bg-ink/5",
         !entry.queryable && "cursor-not-allowed opacity-60"
       )}

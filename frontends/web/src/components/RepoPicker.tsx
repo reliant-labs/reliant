@@ -119,7 +119,7 @@ export function RepoPicker({
           className={cn(
             "w-full pl-9 pr-3 py-2 text-sm",
             "bg-muted/50 border border-border rounded-md",
-            "focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50",
+            "focus:outline-none focus:ring-1 focus:ring-ring focus:border-primary/50",
             "placeholder:text-muted-foreground/50",
             "transition-all"
           )}

@@ -140,13 +140,13 @@ export function MobileScreenBody({
 }
 
 /**
- * Label above a card group — the small-caps section heading of the
- * iOS-settings idiom. Sits outside the card so the card itself stays a clean
- * stack of equal rows.
+ * Label above a card group — the section heading of the iOS-settings idiom,
+ * in sentence case (shell labels never shout in caps). Sits outside the card
+ * so the card itself stays a clean stack of equal rows.
  */
 export function MobileSectionLabel({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <h2 className="mb-2 px-1 text-xs font-medium text-muted-foreground">
       {children}
     </h2>
   );

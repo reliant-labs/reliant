@@ -627,7 +627,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   placeholder={provider.keyFormat || "Enter your API key"}
                   className={cn(
                     "w-full rounded-lg border border-border/40 bg-background px-3 py-2.5 pr-10 font-mono text-sm text-foreground transition-colors placeholder:text-muted-foreground/50",
-                    "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                    "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring",
                   )}
                 />
                 <button

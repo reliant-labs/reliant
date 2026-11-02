@@ -27,6 +27,7 @@ import { useProjectStore } from "../store/projectStore";
 import {
   inboxServiceKeys,
   useCleanupStorage as useCleanupStorageRpc,
+  useForgetStorageWorktree as useForgetStorageWorktreeRpc,
   useDismissInboxItem,
   useListInbox,
   useRestoreInboxItem,
@@ -190,6 +191,21 @@ export const useRestoreInboxItems = useRestoreInboxItem;
 export function useCleanupStorage() {
   const queryClient = useQueryClient();
   return useCleanupStorageRpc({
+    onError: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
+ * Forget an archived workspace no machine is on record for and no connected
+ * machine has (`mutate({ worktreeId })`): Reliant drops its record of the
+ * folder and deletes nothing. Refused unless the server still finds it
+ * forgettable; the inbox is read again either way.
+ */
+export function useForgetStorageWorktree() {
+  const queryClient = useQueryClient();
+  return useForgetStorageWorktreeRpc({
     onError: () => {
       void invalidateInbox(queryClient);
     },

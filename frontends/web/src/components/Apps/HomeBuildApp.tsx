@@ -31,7 +31,7 @@ export function HomeBuildApp({ onStart }: { onStart: () => void }) {
       onClick={onStart}
       className={cn(
         "group flex w-full items-center gap-3 rounded-lg border border-dashed border-border bg-card/60 px-4 py-3 text-left transition-colors",
-        "hover:border-primary/50 hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        "hover:border-primary/50 hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
       data-testid="home-build-app"
     >

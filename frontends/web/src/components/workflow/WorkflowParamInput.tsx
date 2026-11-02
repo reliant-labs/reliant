@@ -49,11 +49,11 @@ export function isInputRequired(schema: InputDef): boolean {
 }
 
 const PARAM_CONTROL_BASE_CLASS =
-  "rounded-lg border border-border/50 bg-background/80 text-sm text-foreground shadow-sm shadow-black/5 transition-all placeholder:text-muted-foreground/60 hover:border-border hover:bg-background focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20";
+  "rounded-lg border border-border/50 bg-background/80 text-sm text-foreground shadow-sm shadow-black/5 transition-all placeholder:text-muted-foreground/60 hover:border-border hover:bg-background focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring";
 const PARAM_CONTROL_CLASS = `w-full px-3 py-2 ${PARAM_CONTROL_BASE_CLASS}`;
 const PARAM_COMPACT_CONTROL_CLASS = `px-2.5 py-1.5 ${PARAM_CONTROL_BASE_CLASS}`;
 const PARAM_SELECT_CLASS =
-  "flex w-full items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/80 px-3 py-2 text-sm text-foreground shadow-sm shadow-black/5 transition-all hover:border-border hover:bg-accent/30 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20";
+  "flex w-full items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/80 px-3 py-2 text-sm text-foreground shadow-sm shadow-black/5 transition-all hover:border-border hover:bg-accent/30 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring";
 const PARAM_DROPDOWN_CLASS =
   "absolute left-0 right-0 top-full mt-1.5 overflow-hidden rounded-xl border border-border/50 shadow-xl shadow-black/10 backdrop-blur-sm";
 const PARAM_DROPDOWN_ITEM_CLASS =
@@ -398,7 +398,7 @@ function BooleanInput({
               disabled={nativeDisabled}
               className={cn(
                 "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border border-border/40 p-0.5 shadow-inner transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isOn ? "bg-primary" : "bg-muted/70 hover:bg-muted",
                 nativeDisabled && "opacity-50 cursor-not-allowed"
               )}

@@ -239,7 +239,7 @@ export function TriggersCard({
             <button
               type="button"
               onClick={onShowAllProjects}
-              className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Show all projects
             </button>
@@ -360,7 +360,7 @@ function TriggerRow({
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={onToggleExpanded}
-          className="flex min-w-0 flex-1 items-start gap-2 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {expanded ? (
             <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -651,7 +651,7 @@ function TriggerHistory({ trigger }: { trigger: Trigger }) {
         <Link
           to="/workflows/runs"
           search={{ trigger: trigger.id, range: "all", allProjects: true }}
-          className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           View all in Runs
         </Link>

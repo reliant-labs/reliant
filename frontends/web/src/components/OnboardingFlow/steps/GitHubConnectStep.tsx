@@ -272,7 +272,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
               className={cn(
                 "w-full px-3 py-2.5 rounded-lg text-sm transition-colors",
                 "bg-background border border-border/40 text-foreground placeholder:text-muted-foreground/50",
-                "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
               )}
             />
           </div>

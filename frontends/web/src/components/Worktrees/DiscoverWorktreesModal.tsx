@@ -243,7 +243,7 @@ export function DiscoverWorktreesModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={pending.name}
-                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
             {pendingError && (

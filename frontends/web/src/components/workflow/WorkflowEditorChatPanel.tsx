@@ -82,13 +82,15 @@ export function WorkflowEditorChatPanel({
           "fixed bottom-6 z-50",
           isConfigPanelOpen ? "right-[440px] px-4 py-3" : "right-6 px-6 py-4 gap-3",
           "flex items-center gap-2",
-          "bg-gradient-to-r from-blue-500 to-purple-500 border border-blue-400/50",
-          "text-white rounded-full shadow-lg",
-          "hover:from-blue-600 hover:to-purple-600 transition-all hover:scale-105",
+          // A raised neutral pill carrying the two-color mark: the mark is
+          // the brand moment, so the fill stays out of its way (it was a
+          // blue-to-purple gradient that grew on hover).
+          "bg-popover border border-border text-foreground rounded-full shadow-lg",
+          "hover:bg-muted transition-colors",
         )}
         title="Chat"
       >
-        <ReliantIcon className="w-5 h-5 brightness-0 invert" />
+        <ReliantIcon className="w-5 h-5" />
         <span className="font-medium text-sm">{isConfigPanelOpen ? "Chat" : "Chat with an agent"}</span>
       </button>
     );

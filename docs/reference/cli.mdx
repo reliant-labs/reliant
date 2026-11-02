@@ -444,6 +444,12 @@ which exchanges this login — or the daemon's credential — for one that holds
 only deploy/secret/domain authority, for at most an hour. This login never
 leaves this machine's Reliant files.
 
+ONE ACCOUNT PER MACHINE. The daemon on this machine has its own sign-in
+(~/.reliant/daemon.json, see 'reliant daemon start'). Logging in as one
+account removes a saved daemon sign-in of any other account for this server,
+says so, and names any daemon still running as it; the next 'reliant daemon
+start' pairs the machine as you.
+
 For CI, skip login and set RELIANT_TOKEN.
 
 ```
@@ -728,8 +734,12 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register'). It says so before
-     connecting; 'reliant auth logout' removes it, to sign in as someone else.
+     earlier 'daemon start' or 'reliant daemon register'). It says so, and
+     whose it is, before connecting; 'reliant auth logout' removes it, to sign
+     in as someone else. When you are logged in to the CLI ('reliant auth
+     login'), only the daemon credential of that same account is used: one
+     of another account is passed over, said so, and the machine is paired
+     as you instead, so the daemon never connects as someone else.
   3. Otherwise it pairs the machine: it prints a short code and a link, and
      you approve "this machine" in the Reliant app — on the link, or by typing
      the code into the Add machine window. Nothing has to reach back to this
@@ -4618,12 +4628,18 @@ whatever the expectation says, so a retried success is never a conflict.
 Exit codes (release deploys):
   0  deployed and healthy, or already on this release (no-op), or --plan /
      --plan-only, or a confirmation answered "no" (nothing was written)
-  1  failed: invalid input, unreadable ledger, release not found, DEGRADED
+  1  failed: invalid input, unreadable ledger, release not found, DEGRADED,
+     or health_gate_regressed — the release regressed in an env this one's
+     delivery_policy.health_gate follows
   2  undetermined — we could not look (the control plane was unreachable)
   3  promotion_conflict / source_moved — the env (or --from's source) moved
      since the plan was read. Stop and look; retrying would overwrite it
   4  rollout_in_flight / environment_pinned — declined, nothing lost. Wait
-     and retry, or pass --supersede (recorded) to replace an unfinished rollout
+     and retry, or pass --supersede (recorded) to replace an unfinished rollout.
+     Also health_gate_pending (the env it follows has no verdict for the
+     release yet: forge obs check \<that env> --release `<v>` --wait) and
+     health_gate_unproven (inconclusive, or never ran there). An incident
+     overrides the health gate with --override-health-gate "`<why>`" (recorded)
   5  plan_unconfirmed — the plan was printed and nobody approved it: no
      terminal to prompt on and no --yes. NOTHING was promoted. Add --yes
   6  superseded — the env was promoted past the promotion being waited on
@@ -4771,6 +4787,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--offline-ledger` | `bool` | - | Break-glass for a control plane that is down: deploy the env's cached CURRENT release by its recorded digests (nothing is built, the ledger is not contacted) and queue the promotion record, replayed idempotently on the next successful ledger contact. Refuses a hosted tier and a hub-converged env, and a move to any other release. Prints the cache's age; the cache is refreshed by every successful ledger read or write |
 | `--option`, `-D` | `stringArray` | `[]` | REFUSED on deploy: a deploy renders from the repo alone, and a release records no render options. Use it on 'forge env up' or 'forge env build', or declare the value in the env's KCL. |
 | `--org` | `string` | - | Owner organization for the first unbound hosted deployment; never changes an existing project's owner |
+| `--override-health-gate` | `string` | - | Promote even though the env's health gate (delivery_policy.health_gate) refuses: an env it follows has not proved this release good. Give the reason; it is recorded on the promotion with who overrode it. For incidents — the gate's refusal says what is missing |
 | `--plan` | `bool` | - | Compute and print the full change set WITHOUT writing the binding or applying anything |
 | `--plan-only` | `bool` | - | Build, push and cut as usual, print the plan, and STOP without writing the promotion (exit 0). The first stage of a two-stage pipeline |
 | `--prune` | `bool` | - | Delete forge-managed Deployments in the namespace that the current KCL render no longer produces (opt-in) |

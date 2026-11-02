@@ -414,7 +414,7 @@ export function InlineAutomationForm({
             <button
               type="button"
               onClick={() => setEditingName(true)}
-              className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={`Name: ${shownName || "derived from when and what"}. Rename`}
               data-testid="automation-name"
             >
@@ -483,7 +483,7 @@ export function InlineAutomationForm({
                       <button
                         type="button"
                         onClick={() => onUseWorkflow!(w.name, workflowDisplayName(w), projectId)}
-                        className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Use it
                       </button>
@@ -497,7 +497,7 @@ export function InlineAutomationForm({
             <button
               type="button"
               onClick={onBackToDeclared}
-              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Use the workflow's own triggers instead
             </button>

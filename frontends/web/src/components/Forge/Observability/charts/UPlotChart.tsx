@@ -450,7 +450,7 @@ export function UPlotChart({
                 }}
                 style={{ left: dot.x, top: dot.y }}
                 className={cn(
-                  "pointer-events-auto absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                  "pointer-events-auto absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   exemplar.solid ? "bg-primary" : "bg-surface-sunken"
                 )}
                 aria-label={exemplar.label}
