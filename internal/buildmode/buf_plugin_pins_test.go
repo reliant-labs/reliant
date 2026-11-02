@@ -41,6 +41,16 @@ const protocGenESDir = "tools/protoc-gen-es"
 //
 // It also keeps templates that write the SAME directory on the same plugin
 // version, or each `buf generate` would undo the other.
+//
+// And every local plugin must declare `strategy: all`. buf's default,
+// `directory`, runs a plugin once per proto directory, every invocation at
+// once up to NumCPU: buf.gen.controlplane.yaml ran ~65 plugin processes
+// together, each a Go runtime (plus the `go` command in front of it) or a
+// node with ~GOMAXPROCS / ~10 threads, and on a 31-CPU machine that crossed
+// the daemon's per-command cgroup pids.max (2000, counting threads) with
+// `pthread_create: Resource temporarily unavailable`. With `all` it is one
+// process per plugin and byte-identical output. A plugin whose output does
+// depend on the per-directory split goes in perDirectoryPlugins, with why.
 func TestBufPluginsAreLocalAndPinned(t *testing.T) {
 	t.Parallel()
 
@@ -78,7 +88,7 @@ func TestBufPluginsAreLocalAndPinned(t *testing.T) {
 		t.Fatalf("%s/package.json: %v", protocGenESDir, err)
 	}
 
-	for _, problem := range checkBufPluginPins(sources, goModTools(goMod), esPins) {
+	for _, problem := range checkBufPluginPins(sources, goModTools(goMod), esPins, perDirectoryPlugins) {
 		t.Error(problem)
 	}
 }
@@ -105,18 +115,56 @@ func TestCheckBufPluginPins(t *testing.T) {
 	const es212 = "[node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.12.0/bin/protoc-gen-es]"
 
 	cases := []struct {
-		name      string
-		templates map[string]string
-		wantFound []string // substrings; empty means "no problems"
+		name         string
+		templates    map[string]string
+		perDirectory map[string]string // the allowlist; nil means none
+		wantFound    []string          // substrings; empty means "no problems"
 	}{
 		{
 			name: "all local and pinned",
 			templates: map[string]string{
 				"buf.gen.yaml": "version: v2\nplugins:\n" +
-					"  - local: [go, tool, protoc-gen-go]\n    out: gen\n" +
-					"  - local: [go, tool, protoc-gen-connect-go]\n    out: gen\n" +
-					"  - local: " + es215 + "\n    out: frontends/web/src/gen\n",
+					"  - local: [go, tool, protoc-gen-go]\n    out: gen\n    strategy: all\n" +
+					"  - local: [go, tool, protoc-gen-connect-go]\n    out: gen\n    strategy: all\n" +
+					"  - local: " + es215 + "\n    out: frontends/web/src/gen\n    strategy: all\n",
 			},
+		},
+		{
+			name: "local plugin on the per-directory default",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, tool, protoc-gen-go]\n    out: gen\n",
+			},
+			wantFound: []string{"buf.gen.yaml: local plugin [go tool protoc-gen-go] runs once per proto directory"},
+		},
+		{
+			name: "explicit strategy: directory",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: " + es215 + "\n    out: frontends/web/src/gen\n    strategy: directory\n",
+			},
+			wantFound: []string{"runs once per proto directory (strategy: directory)"},
+		},
+		{
+			name: "per-directory plugin on the allowlist",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, tool, protoc-gen-go]\n    out: gen\n",
+			},
+			perDirectory: map[string]string{"buf.gen.yaml: [go tool protoc-gen-go]": "fixture reason"},
+		},
+		{
+			name: "allowlist entry with no reason",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, tool, protoc-gen-go]\n    out: gen\n",
+			},
+			perDirectory: map[string]string{"buf.gen.yaml: [go tool protoc-gen-go]": " "},
+			wantFound:    []string{"entry gives no reason why it cannot be `strategy: all`"},
+		},
+		{
+			name: "stale allowlist entry",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, tool, protoc-gen-go]\n    out: gen\n    strategy: all\n",
+			},
+			perDirectory: map[string]string{"buf.gen.yaml: [go tool protoc-gen-go]": "fixture reason"},
+			wantFound:    []string{`perDirectoryPlugins entry "buf.gen.yaml: [go tool protoc-gen-go]" matches no per-directory plugin`},
 		},
 		{
 			name: "remote plugin",
@@ -178,8 +226,8 @@ func TestCheckBufPluginPins(t *testing.T) {
 		{
 			name: "same plugin, different out dirs may differ",
 			templates: map[string]string{
-				"buf.gen.yaml":              "version: v2\nplugins:\n  - local: " + es215 + "\n    out: frontends/web/src/gen\n",
-				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: frontends/web/src/gen/controlplane\n",
+				"buf.gen.yaml":              "version: v2\nplugins:\n  - local: " + es215 + "\n    out: frontends/web/src/gen\n    strategy: all\n",
+				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: frontends/web/src/gen/controlplane\n    strategy: all\n",
 			},
 		},
 		{
@@ -199,7 +247,7 @@ func TestCheckBufPluginPins(t *testing.T) {
 			for name, body := range tc.templates {
 				sources[name] = []byte(body)
 			}
-			problems := checkBufPluginPins(sources, goTools, esPins)
+			problems := checkBufPluginPins(sources, goTools, esPins, tc.perDirectory)
 
 			if len(tc.wantFound) == 0 && len(problems) > 0 {
 				t.Fatalf("want no problems, got:\n%s", strings.Join(problems, "\n"))
@@ -225,16 +273,24 @@ var exactNPMAlias = regexp.MustCompile(`^npm:((?:@[^/@\s]+/)?[^@\s]+)@(\d+\.\d+\
 // majorVersionSuffix is the /vN element `go tool` drops from a short name.
 var majorVersionSuffix = regexp.MustCompile(`^v\d+$`)
 
+// perDirectoryPlugins lists the local plugins allowed to keep buf's
+// per-directory strategy, keyed "<template>: <argv>" (e.g.
+// "buf.gen.yaml: [go tool protoc-gen-go]"), each with the reason its output
+// differs under `strategy: all`. Empty: every plugin here is per-file.
+var perDirectoryPlugins = map[string]string{}
+
 // checkBufPluginPins returns one human-readable problem per violation across
 // the given templates (keyed by file name). goTools holds go.mod's tool
-// directives; esPins maps each tools/protoc-gen-es alias to its `npm:` spec.
-// An empty result means every plugin is local and pinned, and plugins that
-// write the same directory agree on a version.
-func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins map[string]string) []string {
+// directives; esPins maps each tools/protoc-gen-es alias to its `npm:` spec;
+// perDirectory is the perDirectoryPlugins allowlist. An empty result means
+// every plugin is local, pinned and run once (`strategy: all`) unless
+// allowlisted, and plugins that write the same directory agree on a version.
+func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins, perDirectory map[string]string) []string {
 	type pluginRef struct {
-		Remote string `yaml:"remote"`
-		Local  any    `yaml:"local"`
-		Out    string `yaml:"out"`
+		Remote   string `yaml:"remote"`
+		Local    any    `yaml:"local"`
+		Out      string `yaml:"out"`
+		Strategy string `yaml:"strategy"`
 	}
 	type template struct {
 		Plugins []pluginRef `yaml:"plugins"`
@@ -247,6 +303,8 @@ func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins ma
 	sort.Strings(names)
 
 	var problems []string
+	// perDirectory keys a per-directory plugin actually used.
+	allowed := map[string]bool{}
 	// plugin identity + out dir -> version -> templates using it
 	seen := map[string]map[string][]string{}
 	record := func(identity, version, out, template string) {
@@ -289,6 +347,9 @@ func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins ma
 				for _, arg := range local {
 					argv = append(argv, fmt.Sprint(arg))
 				}
+				if problem := checkStrategy(name, argv, plugin.Strategy, perDirectory, allowed); problem != "" {
+					problems = append(problems, problem)
+				}
 				identity, version, problem := resolveLocalPlugin(argv, goTools, esPins)
 				if problem != "" {
 					problems = append(problems, fmt.Sprintf("%s: local plugin %v %s", name, argv, problem))
@@ -298,6 +359,13 @@ func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins ma
 			default:
 				problems = append(problems, fmt.Sprintf("%s: plugin writing %q is neither remote nor local; the checker cannot see what it runs", name, plugin.Out))
 			}
+		}
+	}
+
+	for _, key := range sortedKeys(perDirectory) {
+		if !allowed[key] {
+			problems = append(problems, fmt.Sprintf(
+				"perDirectoryPlugins entry %q matches no per-directory plugin; delete it.", key))
 		}
 	}
 
@@ -322,6 +390,43 @@ func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins ma
 			key, strings.Join(detail, "; ")))
 	}
 	return problems
+}
+
+// checkStrategy returns the problem with a local plugin that is not
+// `strategy: all`, or "" when it is, or when perDirectory allowlists it with a
+// reason (recorded in allowed, so a stale entry can be reported).
+func checkStrategy(template string, argv []string, strategy string, perDirectory map[string]string, allowed map[string]bool) string {
+	if strategy == "all" {
+		return ""
+	}
+	key := fmt.Sprintf("%s: %v", template, argv)
+	if reason, ok := perDirectory[key]; ok {
+		allowed[key] = true
+		if strings.TrimSpace(reason) != "" {
+			return ""
+		}
+		return fmt.Sprintf("%s: local plugin %v runs once per proto directory, and its perDirectoryPlugins "+
+			"entry gives no reason why it cannot be `strategy: all`.", template, argv)
+	}
+	shown := strategy
+	if shown == "" {
+		shown = "unset, so buf's default: directory"
+	}
+	return fmt.Sprintf(
+		"%s: local plugin %v runs once per proto directory (strategy: %s), every invocation "+
+			"concurrently, which fans one generate out to dozens of processes and threads "+
+			"(enough to exhaust a cgroup pids.max). Add `strategy: all` to run it once, or, "+
+			"if its output differs that way, add %q to perDirectoryPlugins with the reason.",
+		template, argv, shown, key)
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // resolveLocalPlugin maps a `local:` argv onto the pin that fixes its version.
