@@ -16,6 +16,13 @@
 import { COMPOSER_CONTROL } from "./composerControl";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { ComposerSheet } from "./ComposerSheet";
+import type { ReactNode } from "react";
+
+function UsagePanel({ mobile, title, id, onClose, children }: { mobile: boolean; title: string; id: string; onClose: () => void; children: ReactNode }) {
+  if (mobile) return <ComposerSheet title={title} onClose={onClose}><div id={id} data-testid="account-usage-popover" className="space-y-2">{children}</div></ComposerSheet>;
+  return <div id={id} role="dialog" aria-label={title} data-testid="account-usage-popover" className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[min(20rem,calc(100vw-2rem))] space-y-2 rounded-xl border border-border bg-popover p-3 shadow-xl">{children}</div>;
+}
 import { useSurface } from "@/lib/surfaceContext";
 import { useChatAccountUsage } from "@/hooks/useChatAccountUsage";
 import { PlanBadge } from "@/components/Settings/providers/PlanBadge";
@@ -47,7 +54,7 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
   const visible = !!active && !!state;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || compact) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -60,7 +67,7 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, compact]);
 
   const show = useCallback(() => setOpen(true), []);
   const hide = useCallback(() => setOpen(false), []);
@@ -87,20 +94,14 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
         className={cn(
           "flex max-w-[16rem] items-center rounded-full border px-2.5 text-2xs font-medium transition-colors",
           COMPOSER_CONTROL,
-          compact && "min-h-[28px]",
+          compact && "min-h-[44px]",
           TONE[state.kind],
         )}
       >
         <span className="truncate">{text.label}</span>
       </button>
       {open && (
-        <div
-          id={popoverId}
-          role="dialog"
-          aria-label={`${active.label} usage`}
-          data-testid="account-usage-popover"
-          className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[min(20rem,calc(100vw-2rem))] space-y-2 rounded-xl border border-border bg-popover p-3 shadow-xl"
-        >
+        <UsagePanel mobile={compact} id={popoverId} title={`${active.label} usage`} onClose={hide}>
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-medium text-foreground">{active.label}</div>
@@ -117,7 +118,7 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
               The next request continues on {state.next.label}.
             </p>
           )}
-        </div>
+        </UsagePanel>
       )}
     </div>
   );

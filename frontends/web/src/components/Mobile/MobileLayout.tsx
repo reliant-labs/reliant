@@ -79,6 +79,10 @@ export function MobileLayout({ children }: { children: ReactNode }) {
           // progress bar) sit outside it and inset themselves. Inline because
           // these are `env()` values Tailwind has no token for.
           paddingTop: "env(safe-area-inset-top)",
+          // Landscape notches occupy the sides, not the top. In-flow screens
+          // inherit this protection; portalled/fixed overlays own their insets.
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
           // `fixed` rather than a transform: a transform would make the shell
           // the containing block of every fixed descendant.
           ...(keyboardOpen && viewport

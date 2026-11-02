@@ -92,18 +92,14 @@ describe("ChatMessage long-press actions (mobile)", () => {
     vi.useRealTimers();
   });
 
-  it("opens the actions sheet after a 500ms press", () => {
+  it("opens the actions sheet from a discoverable button", () => {
     renderMobile(MessageRole.USER);
-    const surface = messageSurface();
-
-    fireEvent.touchStart(surface, touch(10, 10));
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Branch in place")).toBeInTheDocument();
-    expect(screen.getByText("Branch to existing workspace")).toBeInTheDocument();
+    expect(screen.getByText("Copy message")).toBeInTheDocument();
+    expect(screen.queryByText("Branch in place")).not.toBeInTheDocument();
+    expect(screen.queryByText("Branch to existing workspace")).not.toBeInTheDocument();
   });
 
   it("does not open the sheet on a short tap", () => {
@@ -140,37 +136,32 @@ describe("ChatMessage long-press actions (mobile)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("calls branchChat when 'Branch in place' is selected from the sheet", () => {
+  it("does not expose branching before mobile routing supports it", () => {
+    branchChat.mockClear();
     renderMobile(MessageRole.USER);
-    const surface = messageSurface();
-
-    fireEvent.touchStart(surface, touch(10, 10));
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-
-    fireEvent.click(screen.getByText("Branch in place"));
-    expect(branchChat).toHaveBeenCalledWith("chat-1", "msg-1");
+    fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
+    expect(screen.queryByText("Branch in place")).not.toBeInTheDocument();
+    expect(branchChat).not.toHaveBeenCalled();
   });
 
   it.each([
     ["user", MessageRole.USER],
     ["assistant", MessageRole.ASSISTANT],
-  ] as const)("makes the %s long-press surface non-selectable on mobile", (_n, role) => {
+  ] as const)("keeps %s prose selectable on mobile", (_n, role) => {
     renderMobile(role);
     const surface = messageSurface();
-    expect(surface.className).toContain("select-none");
-    expect(surface.className).toContain("[-webkit-touch-callout:none]");
+    expect(surface.className).toContain("select-text");
+    expect(surface.className).not.toContain("touch-callout");
   });
 
-  it("prevents the native context menu on the long-press surface", () => {
+  it("preserves the native context menu on prose", () => {
     renderMobile(MessageRole.USER);
     const surface = messageSurface();
     const notPrevented = fireEvent.contextMenu(surface);
-    expect(notPrevented).toBe(false);
+    expect(notPrevented).toBe(true);
   });
 
-  it("clears an in-progress selection when the long press fires", () => {
+  it("never clears selection or opens actions while holding prose", () => {
     const removeAllRanges = vi.fn();
     const spy = vi
       .spyOn(window, "getSelection")
@@ -181,7 +172,8 @@ describe("ChatMessage long-press actions (mobile)", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(removeAllRanges).toHaveBeenCalled();
+      expect(removeAllRanges).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     } finally {
       spy.mockRestore();
     }

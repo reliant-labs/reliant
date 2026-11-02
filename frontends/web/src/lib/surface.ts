@@ -43,9 +43,9 @@ export interface SurfaceCapabilities {
   chatCreate: boolean;
   /** Approve/deny tool-approval requests inline. */
   chatApprovals: boolean;
-  /** Attach files to a message. Needs an OS picker + upload; deferred on mobile. */
+  /** Attach files to a message through the shared upload flow. */
   chatAttachments: boolean;
-  /** Edit workflow params mid-chat. Authoring-adjacent; desktop only. */
+  /** Configure workflow execution before or during a chat; not authoring. */
   chatWorkflowParams: boolean;
   /** Pick which daemon a chat runs on. Power-user affordance. */
   chatDaemonSelection: boolean;
@@ -196,10 +196,9 @@ const MOBILE: SurfaceCapabilities = {
   chatSend: true,
   chatCreate: true,
   chatApprovals: true,
-  // Deferred to iteration 2 — needs an OS picker and upload progress UI.
-  chatAttachments: false,
-  // Authoring. Explicitly out of scope for the mobile surface.
-  chatWorkflowParams: false,
+  // Shared composer: uploads and execution configuration, not authoring.
+  chatAttachments: true,
+  chatWorkflowParams: true,
   // Where a new chat runs: one of the user's machines, or No machine —
   // preselected when none is awake (research/NO_MACHINE_CHATS.md §2.5).
   chatDaemonSelection: true,

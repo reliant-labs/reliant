@@ -217,6 +217,58 @@ export function useChatInputState({
     }
   }, [draftKey, isNewChat]);
 
+  // The composer's draft identity as of the last render, read by a submitted
+  // draft's cleanup to tell whether this composer still shows that draft.
+  const identityRef = useRef({ projectId: currentProjectId, worktreeId: currentWorktreeId ?? null, draftKey, isNewChat });
+  identityRef.current = { projectId: currentProjectId, worktreeId: currentWorktreeId ?? null, draftKey, isNewChat };
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Bind a draft's cleanup to the draft being submitted, for a send that clears
+  // only after it completes. By then the user may have moved to another chat,
+  // worktree or project, and handleClearInput would clear whatever draft is
+  // current then. The returned function clears the submitted draft's own
+  // persisted copy (only while it still holds the submitted text) and empties
+  // the composer only if it still shows that draft, which it reports.
+  const captureSubmittedDraft = useCallback((submitted: string) => {
+    const target = {
+      projectId: useProjectStore.getState().currentProject?.id,
+      worktreeId: useWorktreeStore.getState().currentWorktreeId ?? null,
+      draftKey,
+      isNewChat,
+    };
+    // Persist the submitted text now, so a debounced save cannot write it back
+    // after the clear below.
+    if (draftSaveTimeoutRef.current) {
+      clearTimeout(draftSaveTimeoutRef.current);
+      draftSaveTimeoutRef.current = null;
+    }
+    saveDraft(submitted);
+    return () => {
+      const { projectId } = target;
+      if (projectId) {
+        const store = useWorkspaceStateStore.getState();
+        if (target.isNewChat) {
+          if (store.getNewChatDraft(projectId) === submitted) store.clearNewChatDraft(projectId);
+        } else {
+          const saved = store.getWorktreeState(projectId, target.worktreeId).chatDrafts?.[target.draftKey] ?? "";
+          if (saved === submitted) store.clearChatDraft(projectId, target.worktreeId, target.draftKey);
+        }
+      }
+      const now = identityRef.current;
+      const stillShown = mountedRef.current &&
+        now.projectId === target.projectId &&
+        now.worktreeId === target.worktreeId &&
+        now.draftKey === target.draftKey &&
+        now.isNewChat === target.isNewChat;
+      if (stillShown) setInputRaw((prev) => (prev === submitted ? "" : prev));
+      return stillShown;
+    };
+  }, [draftKey, isNewChat, saveDraft]);
+
   // Check if chat is pending (hasn't started yet - can switch workflows)
   // A pending chat has no messages yet (lastMessageAt is unset)
   const isPendingChat = !chatId || !currentChat?.lastMessageAt;
@@ -265,5 +317,6 @@ export function useChatInputState({
 
     // Handlers
     handleClearInput,
+    captureSubmittedDraft,
   };
 }
