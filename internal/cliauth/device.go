@@ -75,13 +75,16 @@ type tokenReply struct {
 	AccessToken      string `json:"access_token"`
 	ExpiresIn        int64  `json:"expires_in"`
 	Scope            string `json:"scope"`
+	AccountID        string `json:"account_id"`
+	AccountEmail     string `json:"account_email"`
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
 }
 
-// Run waits for the approval and returns the credential. Like Login.Run it does not
-// store it. ErrNoDeviceFlow when the authorization server does not offer it.
-func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
+// Run waits for the approval and returns the credential with the account that
+// approved it. Like Login.Run it does not store it. ErrNoDeviceFlow when the
+// authorization server does not offer it.
+func (l DeviceLogin) Run(ctx context.Context) (Session, error) {
 	client := l.HTTPClient
 	if client == nil {
 		client = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: oauth2.DefaultExchangeTimeout})
@@ -97,16 +100,16 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 
 	meta, err := oauth2.DiscoverAuthorizationServer(ctx, client, l.Server)
 	if errors.Is(err, oauth2.ErrNoAuthorizationServer) {
-		return credentials.Credential{}, fmt.Errorf("%s does not offer sign-in (%w)\n"+
+		return Session{}, fmt.Errorf("%s does not offer sign-in (%w)\n"+
 			"it must publish %s naming its control plane; for a self-hosted server, "+
 			"mint a token there and pass it with RELIANT_TOKEN", l.Server, err, oauth2.AuthorizationServerMetadataPath)
 	}
 	if err != nil {
-		return credentials.Credential{}, err
+		return Session{}, err
 	}
 	endpoint, err := deviceEndpoint(meta)
 	if err != nil {
-		return credentials.Credential{}, err
+		return Session{}, err
 	}
 
 	pairing := l.pairsMachine()
@@ -125,10 +128,10 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 	var auth deviceAuthorization
 	status, err := postForm(ctx, client, endpoint, form, &auth)
 	if err != nil {
-		return credentials.Credential{}, fmt.Errorf("%s: %w", what, err)
+		return Session{}, fmt.Errorf("%s: %w", what, err)
 	}
 	if status != http.StatusOK || auth.DeviceCode == "" || auth.UserCode == "" {
-		return credentials.Credential{}, fmt.Errorf("%s: %s answered HTTP %d", what, endpoint, status)
+		return Session{}, fmt.Errorf("%s: %s answered HTTP %d", what, endpoint, status)
 	}
 
 	approveURL := auth.VerificationURIComplete
@@ -164,7 +167,7 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 
 	for {
 		if err := sleep(ctx, interval); err != nil {
-			return credentials.Credential{}, err
+			return Session{}, err
 		}
 		var reply tokenReply
 		status, err := postForm(ctx, client, meta.TokenEndpoint, url.Values{
@@ -176,7 +179,7 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 			// A dropped poll is not a failed pairing: the request is still
 			// waiting server-side, so try again until it expires.
 			if time.Now().After(deadline) {
-				return credentials.Credential{}, fmt.Errorf("%s: %w", what, err)
+				return Session{}, fmt.Errorf("%s: %w", what, err)
 			}
 			continue
 		}
@@ -189,11 +192,11 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 		case "slow_down":
 			interval += 5 * time.Second // RFC 8628 §3.5
 		case "access_denied":
-			return credentials.Credential{}, fmt.Errorf("the %s was declined in the web app", what)
+			return Session{}, fmt.Errorf("the %s was declined in the web app", what)
 		case "expired_token":
-			return credentials.Credential{}, errors.New("the code expired before it was approved; run the command again")
+			return Session{}, errors.New("the code expired before it was approved; run the command again")
 		default:
-			return credentials.Credential{}, fmt.Errorf("%s: %s: %s", what, reply.Error, reply.ErrorDescription)
+			return Session{}, fmt.Errorf("%s: %s: %s", what, reply.Error, reply.ErrorDescription)
 		}
 	}
 }
@@ -254,7 +257,7 @@ func postForm(ctx context.Context, client oauth2.HTTPDoer, endpoint string, form
 	return resp.StatusCode, nil
 }
 
-func credentialFrom(reply tokenReply, issuer string) credentials.Credential {
+func credentialFrom(reply tokenReply, issuer string) Session {
 	now := time.Now().UTC()
 	c := credentials.Credential{
 		Token:     reply.AccessToken,
@@ -269,7 +272,7 @@ func credentialFrom(reply tokenReply, issuer string) credentials.Credential {
 		exp := now.Add(time.Duration(reply.ExpiresIn) * time.Second)
 		c.ExpiresAt = &exp
 	}
-	return c
+	return Session{Credential: c, Account: Account{ID: reply.AccountID, Email: reply.AccountEmail}}
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

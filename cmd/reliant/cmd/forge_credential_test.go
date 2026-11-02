@@ -184,7 +184,7 @@ func TestForgeCredential_ElectronDaemonSessionEndToEnd(t *testing.T) {
 	// The daemon starts.
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
-	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, &connection{ServerURL: api.url}, "", t.TempDir(), true); err != nil {
+	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, &connection{ServerURL: api.url}, "", cliauth.Account{}, t.TempDir(), true); err != nil {
 		t.Fatalf("daemon start: %v", err)
 	}
 
@@ -275,7 +275,7 @@ func TestForgeCredential_ManagedCloudDaemon(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
-	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, &connection{ServerURL: api.url}, "",
+	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, &connection{ServerURL: api.url}, "", cliauth.Account{},
 		t.TempDir(), daemonNonInteractive(false, true)); err != nil {
 		t.Fatalf("a managed daemon failed to start on its mounted credential: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestDaemonRegister_AsksForDaemonConnectAlone(t *testing.T) {
 	cp := newFakeCP(t, "rlat_NEWDAEMON000000000")
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
-	if err := registerDaemon(context.Background(), cmd, &connection{ServerURL: cp.srv.URL}, "", false); err != nil {
+	if err := registerDaemon(context.Background(), cmd, &connection{ServerURL: cp.srv.URL}, "", cliauth.Account{}, false); err != nil {
 		t.Fatalf("registerDaemon: %v", err)
 	}
 	scope := strings.Fields(cp.lastRequest().Get("scope"))

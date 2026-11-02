@@ -15,14 +15,19 @@
  * It runs in the background; the item shows progress. The ids sent are the ones
  * listed here, so a workspace archived while the dialog is open is never
  * removed unseen.
+ *
+ * Archived workspaces whose machine was removed have no machine to clean them
+ * up; they come as an item with no machine, whose action is "Forget": once no
+ * connected machine has a folder, Reliant drops its record and deletes nothing.
  */
 
 import { useState } from "react";
+import { ConnectError } from "@connectrpc/connect";
 import { toast } from "sonner";
 
 import { type InboxStorage, type HeldWorktree, CleanupStorageOutcome } from "@/gen/reliant/v1/inbox_pb";
 import type { DiskVolume } from "@/gen/reliant/v1/tools_daemon_pb";
-import { useCleanupStorage } from "@/hooks/inbox-queries";
+import { useCleanupStorage, useForgetStorageWorktree } from "@/hooks/inbox-queries";
 import { formatBytes } from "@/lib/formatBytes";
 import { pressuredVolume } from "@/lib/machineDisk";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
@@ -75,6 +80,21 @@ export function removable(held: HeldWorktree[]): HeldWorktree[] {
   return held.filter((w) => w.removable && !w.cleaning);
 }
 
+/**
+ * A storage item with no machine holds the archived workspaces whose machine
+ * was removed (InboxStorage with an empty daemon_id): no disk and no Clean up,
+ * only Forget for the ones no connected machine has.
+ */
+export function isUnownedStorage(storage: InboxStorage): boolean {
+  return !storage.daemonId && !storage.processes;
+}
+
+/** Why Forget is not offered for an unowned workspace yet, in the dialog's words. */
+export function notForgettableNote(held: HeldWorktree): string {
+  if (held.reason !== "no-machine-on-record") return "Waits for what holds it to change.";
+  return "Not yet: a connected machine has not been checked for its folder.";
+}
+
 export function totalHeldBytes(held: HeldWorktree[]): number {
   return held.reduce((sum, w) => sum + Number(w.sizeBytes), 0);
 }
@@ -85,6 +105,9 @@ export function totalHeldBytes(held: HeldWorktree[]): number {
  * can clear), and "Clean up" when it holds archived workspaces.
  */
 export function StorageAction({ storage, label }: { storage: InboxStorage; label: string }) {
+  if (isUnownedStorage(storage)) {
+    return storage.held.length > 0 ? <ForgetWorkspacesAction storage={storage} /> : null;
+  }
   const full = pressuredVolume(storage);
   if (!full && storage.held.length === 0) return null;
   return (
@@ -186,7 +209,7 @@ function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; la
           </p>
           <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto" aria-label="Workspaces to remove">
             {toRemove.map((w) => (
-              <WorktreeRow key={w.worktreeId} w={w} />
+              <WorktreeRow key={w.worktreeId} w={w} note={removalNote(w)} showPath={false} />
             ))}
           </ul>
           {manual.length > 0 && (
@@ -194,7 +217,7 @@ function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; la
               <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remove manually</h4>
               <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto" aria-label="Workspaces to remove manually">
                 {manual.map((w) => (
-                  <WorktreeRow key={w.worktreeId} w={w} />
+                  <WorktreeRow key={w.worktreeId} w={w} note={removalNote(w)} showPath />
                 ))}
               </ul>
             </div>
@@ -213,7 +236,107 @@ function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; la
   );
 }
 
-function WorktreeRow({ w }: { w: HeldWorktree }) {
+/**
+ * The item's action for archived workspaces no machine is on record for:
+ * "Forget" drops Reliant's record of each folder that no connected machine
+ * has, and deletes nothing. Otherwise such a workspace stays here for good,
+ * because nothing connected can ever clean it up.
+ */
+function ForgetWorkspacesAction({ storage }: { storage: InboxStorage }) {
+  const [open, setOpen] = useState(false);
+  const forget = useForgetStorageWorktree();
+  const [pending, setPending] = useState(false);
+  // Frozen at open, as Clean up's list is.
+  const [shown, setShown] = useState<HeldWorktree[]>([]);
+
+  const canForget = storage.held.some((w) => w.forgettable);
+  const toForget = shown.filter((w) => w.forgettable);
+  const notYet = shown.filter((w) => !w.forgettable);
+
+  const openDialog = () => {
+    setShown(storage.held);
+    setOpen(true);
+  };
+
+  const confirm = async () => {
+    setPending(true);
+    let forgotten = 0;
+    const failures: string[] = [];
+    for (const w of toForget) {
+      try {
+        await forget.mutateAsync({ worktreeId: w.worktreeId });
+        forgotten++;
+      } catch (error) {
+        failures.push(`${w.name}: ${error instanceof ConnectError ? error.rawMessage : String(error)}`);
+      }
+    }
+    setPending(false);
+    if (forgotten > 0) {
+      toast.success(`Forgot ${forgotten} ${forgotten === 1 ? "workspace" : "workspaces"}`, {
+        description: "Nothing was deleted from any disk.",
+      });
+    }
+    if (failures.length > 0) toast.error("Some workspaces were not forgotten", { description: failures.join(" · ") });
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={openDialog}
+        disabled={!canForget}
+        title={
+          canForget
+            ? undefined
+            : !storage.online
+              ? "Connect a machine so Reliant can check whether it has these folders"
+              : "Every connected machine is checked for these folders first"
+        }
+      >
+        Forget
+      </Button>
+      <Modal open={open} onClose={() => !pending && setOpen(false)} title="Forget workspaces with no machine" size="md">
+        <div className="flex flex-col gap-4">
+          <p className="text-pretty text-sm text-muted-foreground">
+            No machine is on record for these archived workspaces, and none of your connected machines has their folders.
+            Forgetting one stops Reliant tracking its folder. <span className="font-medium text-foreground">Nothing is
+            deleted from any disk</span>: if a folder is still on a machine that is not connected, remove it there by hand.
+            The workspace stays in your archive, and restoring it makes a new folder.
+          </p>
+          {toForget.length > 0 && (
+            <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto" aria-label="Workspaces to forget">
+              {toForget.map((w) => (
+                <WorktreeRow key={w.worktreeId} w={w} note="No connected machine has its folder." showPath />
+              ))}
+            </ul>
+          )}
+          {notYet.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not yet</h4>
+              <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto" aria-label="Workspaces that cannot be forgotten yet">
+                {notYet.map((w) => (
+                  <WorktreeRow key={w.worktreeId} w={w} note={notForgettableNote(w)} showPath />
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => void confirm()} disabled={pending || toForget.length === 0}>
+              {pending ? "Forgetting…" : `Forget ${toForget.length} ${toForget.length === 1 ? "workspace" : "workspaces"}`}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function WorktreeRow({ w, note, showPath }: { w: HeldWorktree; note: string; showPath: boolean }) {
   return (
     <li>
       <CardInset padding="sm">
@@ -228,9 +351,9 @@ function WorktreeRow({ w }: { w: HeldWorktree }) {
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
           <span className="text-foreground/80">{reasonLabel(w.reason)}</span>
-          {w.detail ? ` — ${w.detail}` : ""}. {removalNote(w)}
+          {w.detail ? ` — ${w.detail}` : ""}. {note}
         </p>
-        {!w.removable && (
+        {showPath && (
           <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground" title={w.path}>
             {w.path}
           </p>

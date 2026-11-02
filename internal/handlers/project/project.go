@@ -156,9 +156,10 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 }
 
 // requestMachine is the machine a request about path runs on: the one its
-// credentials name (a daemon's own token), else the user's live machine whose
-// checkout of the project is recorded at exactly that path. "" when neither
-// says: the API never guesses which disk a path is on.
+// credentials name (a daemon's own token), else the machine of the user's
+// (one that exists and is theirs, connected or not) whose checkout of the
+// project is recorded at exactly that path. "" when neither says: the API
+// never guesses which disk a path is on.
 func (s *Service) requestMachine(ctx context.Context, userID, projectID, path string) string {
 	if id := auth.GetDaemonIDFromContext(ctx); id != "" {
 		return id

@@ -295,6 +295,43 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 	})
 }
 
+// MergeUnownedWorktreeCleanupMetadata is MergeWorktreeCleanupMetadata for an
+// archived row with no machine on record, and only while it has none: the
+// row is selected FOR UPDATE with daemon_id IS NULL, the lock
+// AdoptWorktreeDaemon's UPDATE takes too, so a machine that claims the row
+// first leaves nothing to merge, and fn sees the stored value of a row nobody
+// can claim until it commits. It reports whether fn's change was written.
+func MergeUnownedWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	wrote := false
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
+		wrote = false
+		var rows []Worktree
+		err := db.Bun().NewSelect().Model(&rows).
+			Column(WorktreeFieldCleanupMetadata).
+			Where("id = ?", id).
+			Where("daemon_id IS NULL").
+			Where("deleted_at IS NOT NULL").
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		meta := core.CleanupMetadata{}
+		if rows[0].CleanupMetadata != nil && *rows[0].CleanupMetadata != "" {
+			_ = json.Unmarshal([]byte(*rows[0].CleanupMetadata), &meta)
+		}
+		if !fn(&meta) {
+			return nil
+		}
+		if err := SetWorktreeCleanupMetadata(ctx, db, id, &meta); err != nil {
+			return err
+		}
+		wrote = true
+		return nil
+	})
+	return wrote, err
+}
+
 // cleanupMetadataPending is true while a row's directory may still be on
 // disk: it has no cleanup metadata saying directory_deleted. The jsonb cast
 // sits inside a CASE so a hand-edited value cannot fail the whole listing.

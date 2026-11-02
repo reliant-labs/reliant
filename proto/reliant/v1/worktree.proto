@@ -400,6 +400,10 @@ message CleanupMetadata {
   // workspace needs its install/generate step run again.
   repeated string stripped_paths = 7;
   int64 stripped_bytes = 8;
+  // The user forgot the folder (InboxService.ForgetStorageWorktree): no
+  // machine was on record for it and no connected machine had it.
+  // directory_deleted is set so nothing tracks it, but nothing was deleted.
+  bool forgotten = 9;
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos

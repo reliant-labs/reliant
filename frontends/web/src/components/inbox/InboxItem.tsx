@@ -65,7 +65,7 @@ import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
-import { StorageAction, totalHeldBytes } from "./StorageAction";
+import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
 import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -95,6 +95,7 @@ function errorText(error: unknown): string {
 export function machineName(daemonName: string, daemonId: string): string {
   return daemonName || (daemonId ? `machine ${daemonId.slice(0, 8)}` : "this machine");
 }
+
 
 /** "Failed 3 times in a row": one Inbox item counts the whole failure streak. */
 export function failedTimesInARow(failures: number): string {
@@ -258,6 +259,7 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
+    if (isUnownedStorage(item.payload.value)) return "Workspaces with no machine";
     const what = item.payload.value.processes ? "processes" : "storage";
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} ${what}`;
   }
@@ -460,6 +462,11 @@ export function storageDetail(storage: InboxStorageData): string {
     const size = totalHeldBytes(storage.held);
     const noun = storage.held.length === 1 ? "workspace" : "workspaces";
     parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
+  }
+  if (isUnownedStorage(storage)) {
+    // online: whether any machine is connected to be asked for the folders.
+    if (!storage.online) parts.push("no machine connected to check");
+    return parts.join(" · ");
   }
   if (!storage.online) parts.push("offline");
   return parts.join(" · ");
