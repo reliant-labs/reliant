@@ -160,25 +160,33 @@ func (w *ActivityWrapper[I, O]) awaitDatabase(ctx context.Context, workflowID, a
 		return databaseUnavailableError(activityType, cause, false)
 	}
 	policy := w.dbOutage
-	limit := policy.rideOut
+
+	// The attempt's own deadline bounds the hold through a context, not a
+	// computed duration: every sleep AND every probe runs under holdCtx, so
+	// neither can carry the attempt past deadline-margin, and the margin is
+	// left to return the typed, retryable error before the start-to-close
+	// timeout kills the attempt. The ride-out is measured on policy.clock.
+	holdCtx := ctx
 	if deadline, ok := ctx.Deadline(); ok {
-		limit = min(limit, time.Until(deadline)-dbOutageDeadlineMargin)
+		var cancel context.CancelFunc
+		holdCtx, cancel = context.WithDeadline(ctx, deadline.Add(-dbOutageDeadlineMargin))
+		defer cancel()
 	}
 
 	logging.WarnContext(ctx, "[ActivityWrapper] Database unavailable; holding the attempt until it answers",
 		"activityType", activityType,
 		"activityID", activityID,
 		"workflowID", workflowID,
-		"holdUpTo", limit.Round(time.Second),
+		"rideOut", policy.rideOut,
 		"error", cause)
 
 	start := policy.clock.Now()
 	back := false
-	for n := 1; policy.clock.Now().Sub(start) < limit; n++ {
-		if policy.clock.Sleep(ctx, policy.backoff(n)) != nil {
+	for n := 1; holdCtx.Err() == nil && policy.clock.Now().Sub(start) < policy.rideOut; n++ {
+		if policy.clock.Sleep(holdCtx, policy.backoff(n)) != nil {
 			break
 		}
-		if w.databaseAnswers(ctx, workflowID) {
+		if w.databaseAnswers(holdCtx, workflowID) {
 			back = true
 			break
 		}

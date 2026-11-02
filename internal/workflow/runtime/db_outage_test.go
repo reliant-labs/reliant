@@ -333,3 +333,42 @@ func TestClassifyError_DatabaseOutageIsRetryable(t *testing.T) {
 		})
 	}
 }
+
+// hangingProbeStore is a database that accepts the probe's connection and
+// never answers: GetWorkflow returns only when its context ends.
+type hangingProbeStore struct {
+	*wrapperTestRepo
+}
+
+func (hangingProbeStore) GetWorkflow(ctx context.Context, _ string) (*db.Workflow, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// TestAwaitDatabase_ProbeNeverOutrunsTheDeadline: a hold whose probe hangs
+// still returns the typed, retryable error by deadline-margin, not when the
+// probe's own five-second timeout fires past the attempt's deadline.
+func TestAwaitDatabase_ProbeNeverOutrunsTheDeadline(t *testing.T) {
+	t.Parallel()
+	w := &ActivityWrapper[types.ActivityInput, *reliantv1.CallLLMOutput]{
+		repo: hangingProbeStore{&wrapperTestRepo{}},
+		dbOutage: dbOutagePolicy{
+			rideOut:      dbOutageRideOut,
+			firstBackoff: time.Millisecond,
+			maxBackoff:   time.Millisecond,
+			clock:        wallClock{},
+		},
+	}
+	deadline := time.Now().Add(dbOutageDeadlineMargin + 200*time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+
+	err := w.awaitDatabase(ctx, "wf-1", "CallLLM", "act-1", incidentError("8bf7a9b0"))
+
+	assert.True(t, time.Now().Before(deadline.Add(-dbOutageDeadlineMargin/2)),
+		"the hold must end at deadline-margin, leaving the margin to fail by itself")
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, DatabaseUnavailableErrType, appErr.Type())
+	assert.False(t, appErr.NonRetryable())
+}

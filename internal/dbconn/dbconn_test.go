@@ -65,6 +65,10 @@ func TestUnavailable(t *testing.T) {
 		// Not the database at all: a provider's transport says the same words.
 		{"bare connection reset", errors.New("stream llm response: read tcp: connection reset by peer"), false},
 		{"provider 503", errors.New("stream llm response: 503 service unavailable"), false},
+		{"websocket conn closed", errors.New("mcp transport: websocket conn closed"), false},
+		{"http2 conn closed", errors.New("stream llm response: http2: client conn closed"), false},
+		// pgconn's own closed connection, still typed.
+		{"pgconn conn closed", fmt.Errorf("query: %w", pgconn.ErrConnClosed), true},
 		// The caller stopped waiting.
 		{"caller cancelled", fmt.Errorf("get thread: %w", context.Canceled), false},
 		{"nil", nil, false},

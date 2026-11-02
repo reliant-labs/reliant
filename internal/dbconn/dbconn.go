@@ -68,7 +68,10 @@ func Unavailable(err error) bool {
 	// database/sql's and pgx's own "this connection is gone" signals. pgconn
 	// marks an error SafeToRetry only when the connection failed before the
 	// statement was sent, which a closed or broken connection does.
-	if errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) || pgconn.SafeToRetry(err) {
+	// pgconn.ErrConnClosed is matched by identity only: its text, a bare
+	// "conn closed", is not specific to the database.
+	if errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) ||
+		errors.Is(err, pgconn.ErrConnClosed) || pgconn.SafeToRetry(err) {
 		return true
 	}
 
@@ -122,7 +125,10 @@ var unavailableTexts = []string{
 	"failed to connect to `",
 	"driver: bad connection",
 	"sql: connection is already closed",
-	"conn closed",
+	// Not pgconn's bare "conn closed": an HTTP client, a websocket or a
+	// provider SDK says the same, and holding those for a database that is
+	// fine would stall a conversation for minutes. Unavailable recognises
+	// pgconn.ErrConnClosed by identity instead.
 }
 
 // UnavailableText is Unavailable for an error that survives only as text.
