@@ -126,6 +126,27 @@ describe("ChatInput prefill", () => {
     expect(useAttachmentStore.getState().getAttachments(otherDraft)).toEqual([]);
     act(() => useAttachmentStore.getState().reset());
   });
+  it("never imports a desktop composer's configuration from another project into a remounted mobile composer", async () => {
+    const OTHER = "p-prefill-desktop";
+    const mobile = () => <SurfaceProvider surface="mobile"><NewChatDraftBoundary key={PROJECT_ID} projectId={PROJECT_ID}><ChatInput attachmentDraftId={newChatAttachmentDraftId(PROJECT_ID)} onSend={vi.fn()} /></NewChatDraftBoundary></SurfaceProvider>;
+    const { rerender } = renderWithQuery(mobile());
+    await waitFor(() => expect(composer()).toBeInTheDocument());
+    act(() => { useChatParamsStore.getState().setTempNewChatParams({ secret: "project-a" }); useChatParamsStore.getState().setTempNewChatWorkflow("project-a-workflow"); });
+
+    // Desktop, project B: the same temp slot, written with no mobile boundary.
+    act(() => useProjectStore.setState({ currentProject: { id: OTHER } as never }));
+    rerender(<ChatInput onSend={vi.fn()} />);
+    act(() => { useChatParamsStore.getState().setTempNewChatParams({ secret: "project-b" }); useChatParamsStore.getState().setTempNewChatWorkflow("project-b-workflow"); useChatParamsStore.getState().setTempNewChatPresets({ group: "project-b-preset" }); });
+
+    // Back to mobile, project A: B's choices must not ride along.
+    act(() => useProjectStore.setState({ currentProject: { id: PROJECT_ID } as never }));
+    rerender(mobile());
+    await waitFor(() => expect(composer()).toBeInTheDocument());
+    const temp = useChatParamsStore.getState();
+    expect(temp.tempNewChatParams).not.toHaveProperty("secret");
+    expect(temp.tempNewChatWorkflow).not.toBe("project-b-workflow");
+    expect(temp.tempNewChatPresets).toEqual({});
+  });
   it("retains a mobile draft on failure and blocks duplicate sends and edits in flight", async () => {
     let reject!: (reason: Error) => void;
     const onSend = vi.fn(() => new Promise<void>((_, r) => { reject = r; }));

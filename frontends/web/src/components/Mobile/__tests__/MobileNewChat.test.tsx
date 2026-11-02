@@ -54,10 +54,14 @@ vi.mock('../../../store/chatStore', () => ({
   }),
 }))
 
-vi.mock('../../../store/projectStore', () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: 'p1', name: 'reliant' } }),
-}))
+vi.mock('../../../store/projectStore', () => {
+  const state = { currentProject: { id: 'p1', name: 'reliant' } }
+  return {
+    useProjectStore: Object.assign((selector: (s: unknown) => unknown) => selector(state), {
+      getState: () => state,
+    }),
+  }
+})
 
 // WorktreeStatus: ACTIVE = 1, CREATING = 5, FAILED = 6.
 const worktreeList = vi.hoisted(() => ({
