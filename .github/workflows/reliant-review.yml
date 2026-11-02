@@ -92,4 +92,4 @@ jobs:
           set -euo pipefail
           heal="${RUNNER_TEMP}/ci-review-rerun.sh"
           gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/ci-review-rerun.sh?ref=${GITHUB_SHA}" > "${heal}"
-          bash "${heal}" pr "${PR}" "${HEAD_SHA}" "${RUN_ID}"
+          RERUN_STOP_AT=$(($(date +%s) + 10 * 60)) bash "${heal}" pr "${PR}" "${HEAD_SHA}" "${RUN_ID}"

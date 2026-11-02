@@ -38,6 +38,11 @@ wait_max=${RERUN_WAIT_SECONDS:-600}
 max_attempts=${RERUN_MAX_ATTEMPTS:-4}
 max_reruns=${RERUN_MAX:-20}
 jobs=${RERUN_SWEEP_JOBS:-4}
+# Epoch second by which to be done (the caller's step or job timeout, less a
+# margin): nothing new is started within a minute of it, and no wait outlasts
+# it, so a slow runner queue ends the heal cleanly instead of timing out the
+# job. What is left, the next sweep continues.
+stop_at=${RERUN_STOP_AT:-}
 
 runs() { # <sha>: this head's pull-request runs of the check, oldest first: id status conclusion attempt
   gh api --paginate "repos/$repo/actions/workflows/$workflow/runs?head_sha=$1&per_page=100" \
@@ -56,11 +61,14 @@ reds() { # <calling run id> < runs: the oldest completed red run but the caller:
 
 wait_run() { # <id> <min attempt>: wait for that attempt to complete; prints its conclusion
   local deadline=$((SECONDS + wait_max)) st att concl
+  if [ -n "$stop_at" ] && [ $((SECONDS + stop_at - $(date +%s))) -lt "$deadline" ]; then
+    deadline=$((SECONDS + stop_at - $(date +%s)))
+  fi
   while :; do
     IFS=$'\t' read -r st att concl < <(gh api "repos/$repo/actions/runs/$1" --jq '[.status, .run_attempt, (.conclusion // "-")] | @tsv')
     if [ "$st" = completed ] && [ "$att" -ge "$2" ]; then echo "$concl"; return 0; fi
     if [ "$SECONDS" -ge "$deadline" ]; then
-      echo "::warning::run $1 attempt $2 did not complete in ${wait_max}s" >&2
+      echo "::warning::run $1 attempt $2 did not complete in time" >&2
       return 1
     fi
     sleep "$poll"
@@ -96,14 +104,21 @@ heal() { # <pr> <sha> [<calling run id>]
       echo "::warning::#$n: run $id is $concl after $att attempts: leaving it"
       skip+="$id "; continue
     fi
+    if [ -n "$stop_at" ] && [ "$(date +%s)" -ge $((stop_at - 60)) ]; then
+      echo "#$n: out of time with $concl run $id still red: the next sweep continues"
+      return 0
+    fi
     echo "#$n: re-running $concl run $id (attempt $att) on $head"
     reruns=$((reruns + 1))
     if ! gh run rerun "$id" --repo "$repo"; then
       # Another healer may have re-run it first: then wait for that attempt.
       cur=$(gh api "repos/$repo/actions/runs/$id" --jq .run_attempt)
       if [ "$cur" -le "$att" ]; then
-        echo "::warning::#$n: could not re-run $id"
-        skip+="$id "; continue
+        # GitHub refuses while another run of the check holds the old
+        # definition's concurrency group ("This workflow is already
+        # running"): try again shortly, within RERUN_MAX re-runs.
+        echo "#$n: could not re-run $id yet: retrying"
+        sleep "$poll"; continue
       fi
     fi
     if ! concl=$(wait_run "$id" $((att + 1))); then skip+="$id "; continue; fi

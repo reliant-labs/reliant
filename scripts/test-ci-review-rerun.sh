@@ -28,6 +28,9 @@ case "$*" in
     jq --argjson id "$id" '.runs[] | select(.id == $id)' "$st" | jq -r "$jqexpr" ;;
   "run rerun "*)
     id=$3
+    if [ -n "${REFUSE_FIRST:-}" ] && [ ! -e "$FX/refused" ]; then
+      touch "$FX/refused"; echo "run $id cannot be rerun; This workflow is already running" >&2; exit 1
+    fi
     [ "$(jq --argjson id "$id" '.runs[] | select(.id == $id) | .status' "$st")" = '"completed"' ] ||
       { echo "run $id is still in flight" >&2; exit 1; }
     # A re-run still in flight (the caller's own run is in flight too, legitimately).
@@ -63,7 +66,7 @@ setup() {
   local IFS=,
   echo "{\"runs\":[$*]}" > "$fx/state.json"
   : > "$fx/log"
-  rm -f "$fx/first"
+  rm -f "$fx/first" "$fx/refused"
 }
 reruns() { grep '^rerun' "$fx/log" | cut -d' ' -f2 | paste -sd' ' -; }
 conclusions() { jq -r '[.runs[] | "\(.id):\(.status)/\(.conclusion)"] | join(" ")' "$fx/state.json"; }
@@ -117,6 +120,18 @@ RERUN_FIRST=cancelled heal pr 7 "$head" 9
 [ "$(reruns)" = "1 1" ] || fail "a re-run another healer cancelled is retried: got '$(reruns)'"
 [ "$(conclusions)" = "1:completed/success 9:completed/success" ] || fail "the retried run is green: $(conclusions)"
 echo "ok: a cancelled re-run is retried, not taken as a verdict"
+
+setup "$(run 1 completed failure)" "$(run 9 completed success)"
+REFUSE_FIRST=1 heal pr 7 "$head" 9
+[ "$(reruns)" = 1 ] || fail "a re-run GitHub refused for now is tried again: got '$(reruns)'"
+[ "$(conclusions)" = "1:completed/success 9:completed/success" ] || fail "the refused run is green: $(conclusions)"
+echo "ok: a re-run GitHub refuses while the check is running is retried"
+
+setup "$(run 1 completed failure)" "$(run 9 completed success)"
+RERUN_STOP_AT=$(($(date +%s) + 30)) heal pr 7 "$head" 9
+[ -z "$(reruns)" ] || fail "nothing new starts within a minute of RERUN_STOP_AT: got '$(reruns)'"
+grep -q 'out of time' "$fx/out" || fail "running out of time does not say so: $(cat "$fx/out")"
+echo "ok: a heal out of time stops cleanly and leaves the rest to the next sweep"
 
 setup "$(run 1 completed failure 4)" "$(run 9 completed success)"
 heal pr 7 "$head" 9

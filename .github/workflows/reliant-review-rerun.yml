@@ -44,4 +44,6 @@ jobs:
           for s in ci-review-rerun.sh ci-review-marker.sh; do
             gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/${s}?ref=main" > "${dir}/${s}"
           done
-          bash "${dir}/ci-review-rerun.sh" sweep
+          # Done 5 minutes before the job's timeout: a backlog that does not
+          # fit (runners the org shares 20 at a time) is the next sweep's.
+          RERUN_STOP_AT=$(($(date +%s) + 25 * 60)) bash "${dir}/ci-review-rerun.sh" sweep
