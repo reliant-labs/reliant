@@ -782,7 +782,7 @@ function OverviewTab({
           loading={trend.isLoading}
           testId="workload-chart-requests"
         >
-          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests, tone: "primary" }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
+          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
         </ChartPanel>
         <ChartPanel
           title="Error rate"
@@ -894,7 +894,7 @@ function UsageChart({
   );
   const lines = series
     ? [
-        { label: title.split(" ")[0]!.toLowerCase(), values: series.values, tone: "primary" as const },
+        { label: title.split(" ")[0]!.toLowerCase(), values: series.values },
         ...(limit !== null ? [{ label: "limit", values: series.values.map(() => limit), tone: "muted" as const, dashed: true }] : []),
       ]
     : [];

@@ -9,14 +9,14 @@
  *
  * ── COLOURS ────────────────────────────────────────────────────────────────
  *
- * The categorical palette is the `--chart-1..8` tokens (index.css); a series
- * that is an error takes `--destructive` (the forge-ui `danger` token) instead,
- * so red always means "error" and never "the fifth series". Colours are dealt
- * in rank order (largest first) over the WHOLE result, not the drawn subset:
- * the eight series a busy chart draws get the eight distinct colours, and a
- * series keeps its colour when "Show all" or isolating one changes what is
- * drawn. Past eight the palette repeats; a repeat is drawn dotted so two
- * series never look identical.
+ * The categorical palette is the `--chart-1..6` tokens (charts/chartPalette.ts,
+ * themes/chart-palette.css); a series that is an error takes `--destructive`
+ * (the forge-ui `danger` token) instead, so red always means "error" and never
+ * "the fifth series". Colours are dealt in rank order (largest first) over the
+ * WHOLE result, not the drawn subset: the six series a busy chart draws get the
+ * six distinct colours, and a series keeps its colour when "Show all" or
+ * isolating one changes what is drawn. Past six the palette repeats; a repeat
+ * is drawn dotted so two series never look identical.
  *
  * ── ERRORS ARE NEVER FOLDED AWAY ───────────────────────────────────────────
  *
@@ -38,23 +38,15 @@
 
 import type { Panel, PanelResult, Series, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 
+import { CHART_PALETTE, DANGER_PALETTE } from "../charts/chartPalette";
 import { groupLabel } from "../obsFilters";
 
-/** The categorical data-viz tokens, in the order they are dealt. */
-export const CHART_PALETTE = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6", "--chart-7", "--chart-8"] as const;
-/** Error series: the danger token first, then its alternate. */
-export const DANGER_PALETTE = ["--destructive", "--chart-danger-alt"] as const;
-/** "Other": neutral, so it never reads as one more series. */
-export const OTHER_TOKEN = "--muted-foreground";
+// The palette is shared with every other chart (charts/chartPalette.ts).
+export { CHART_PALETTE, DANGER_PALETTE, OTHER_TOKEN, tokenColor } from "../charts/chartPalette";
 
 /** How many series a line draws before folding the rest into "Other": the palette's size, so no two drawn series repeat a colour. */
 export const DEFAULT_TOP_N = CHART_PALETTE.length;
 const MAX_TOP_N = 50;
-
-/** A palette token as a CSS colour, optionally translucent (the tokens are bare HSL triplets). */
-export function tokenColor(token: string, alpha?: number): string {
-  return alpha === undefined ? `hsl(var(${token}))` : `hsl(var(${token}) / ${alpha})`;
-}
 
 const ERROR_WORDS = new Set([
   "error",

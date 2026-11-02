@@ -33,30 +33,20 @@ import type { MetricAttribute, MetricExemplar } from "@/services/controlPlane/ob
 import type { Panel, PanelResult, Series } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
-import { UPlotChart, type ChartExemplar, type ChartSeries, type ChartTone } from "../charts/UPlotChart";
+import { chartToken, type ChartPaletteToken } from "../charts/chartPalette";
+import { UPlotChart, type ChartExemplar, type ChartSeries } from "../charts/UPlotChart";
 import { alignShifted, alignTo, PanelBody, seriesLabel, unionTimestamps, type PanelQuery } from "../Dashboards/PanelBody";
 import { formatCount, formatValue, type ValueUnit } from "../format";
 import { ExemplarRail, exemplarLabel } from "./ExemplarPopover";
 import type { ChartKind } from "./model/explorerState";
 import { areaModeFor, capNote, fieldLabel, panelUnitOf, splitPartial, warningText } from "./seriesView";
 
-/** The categorical order UPlotChart cycles through; the legend's swatches use the same. */
-export const TONES: ChartTone[] = ["primary", "secondary", "success", "warning", "destructive", "muted"];
-
-export const TONE_SWATCH: Record<ChartTone, string> = {
-  primary: "bg-primary",
-  secondary: "bg-secondary",
-  success: "bg-success",
-  warning: "bg-warning",
-  destructive: "bg-danger",
-  muted: "bg-ink-muted",
-};
-
 export interface DisplaySeries {
   /** What the legend and the hide list call it ("status=error — A"). */
   label: string;
   source: Series;
-  tone: ChartTone;
+  /** Its colour: the n-th of the shared palette, the same one UPlotChart and the series table use. */
+  color: ChartPaletteToken;
   /** On the shared axis. */
   values: (number | null)[];
   partial: boolean[];
@@ -77,7 +67,7 @@ export function displaySeries(panel: Panel, result: PanelResult): { timestamps: 
     return {
       label: seriesLabel(s, panel, keys),
       source: s,
-      tone: TONES[index % TONES.length]!,
+      color: chartToken(index),
       values: alignTo(timestamps, s),
       partial: timestamps.map((t) => byTime.get(t) ?? false),
     };
@@ -151,17 +141,17 @@ function LineChart({
   const lines: ChartSeries[] = [];
   for (const s of shown) {
     if (stacked) {
-      lines.push({ label: s.label, values: s.values, tone: s.tone });
+      lines.push({ label: s.label, values: s.values, color: s.color });
       continue;
     }
     const { complete, open } = splitPartial(s.values, s.partial);
-    lines.push({ label: s.label, values: complete, tone: s.tone });
-    if (open.some((v) => v !== null)) lines.push({ label: `${s.label} (still filling)`, values: open, tone: s.tone, dashed: true });
+    lines.push({ label: s.label, values: complete, color: s.color });
+    if (open.some((v) => v !== null)) lines.push({ label: `${s.label} (still filling)`, values: open, color: s.color, dashed: true });
   }
   if (compare) {
     for (const s of shown) {
       const match = previous.find((p) => p.label === s.source.label && groupKey(p.group) === groupKey(s.source.group));
-      if (match) lines.push({ label: `${s.label} (${compare.label})`, values: alignShifted(timestamps, match, compare.offsetSec), tone: s.tone, dashed: true });
+      if (match) lines.push({ label: `${s.label} (${compare.label})`, values: alignShifted(timestamps, match, compare.offsetSec), color: s.color, dashed: true });
     }
   }
   const caption = `${panel.title || "Metrics"}${compare ? `, compared with the ${compare.label}` : ""}`;
