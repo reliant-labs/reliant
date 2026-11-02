@@ -112,6 +112,14 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if threadBound && worktree == nil {
 		return out
 	}
+	// A thread bound to the project's MAIN worktree row (spawn(worktree:
+	// "main")) is bound to the main checkout, which is each machine's own:
+	// the row's path mirrors projects.path, the creating machine's. It runs,
+	// and is checked, where any main-checkout call is.
+	boundToMain := threadBound && worktree.IsMain
+	if boundToMain {
+		threadBound, worktree = false, nil
+	}
 
 	// The machine the calls are routed to (toolDaemonSelector, exactly as
 	// the calls it precedes) and the project's checkout THERE: the check must
@@ -135,13 +143,18 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	// The directory the calls would run in: buildToolRequest's own priority,
 	// where a thread-bound worktree beats the run's path.
 	path := checkout.path(rtx.ProjectPath, branchPath(worktree))
-	if threadBound {
+	switch {
+	case threadBound:
 		path = worktree.Path
+	case boundToMain:
+		// Not the path it inherited (the parent's, which may be a branch
+		// workspace): the main checkout on this machine.
+		path = mainPath
 	}
 	if path == "" {
 		return out
 	}
-	if !threadBound && rtx.ProjectPath != "" && !samePath(path, rtx.ProjectPath) {
+	if !threadBound && (rtx.ProjectPath != "" || boundToMain) && !samePath(path, rtx.ProjectPath) {
 		// The run's path was rebased onto this machine's checkout (the chat
 		// changed machine since it was computed): every call runs there.
 		out.path = path

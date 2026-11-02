@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -249,4 +250,11 @@ func TestProjectDirHeal_AReplacedMachinesLeftoverRowDoesNotBlockTheHeal(t *testi
 	defer router.mu.Unlock()
 	require.Equal(t, []string{myProject.Path}, router.mkdired, "my-project is healed onto the replacement machine")
 	require.Equal(t, []string{replacement.ID}, router.targets)
+
+	// And recorded as that machine's checkout in the same step, so its chats
+	// resolve a directory this session, whatever the concurrent connect
+	// reconcile probed.
+	checkout, err := projectcheckout.On(ctx, repo, userID, myProject, replacement.ID, "use it")
+	require.NoError(t, err)
+	require.Equal(t, myProject.Path, checkout.Path)
 }

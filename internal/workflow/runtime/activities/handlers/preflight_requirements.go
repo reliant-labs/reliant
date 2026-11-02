@@ -58,6 +58,15 @@ type PreflightRequirementsActivity struct {
 	credentials httpaction.CredentialSource
 	// machine overrides the daemon-backed probe runner; tests set it.
 	machine func(RunExecutorContext) requirements.Machine
+	// router resolves the run's machine as the run's commands do.
+	router toolexec.DaemonRouter
+}
+
+// WithDaemonRouter resolves a machine named by name, type or labels the way
+// the run's commands will (resolveRunCheckout).
+func (a *PreflightRequirementsActivity) WithDaemonRouter(router toolexec.DaemonRouter) *PreflightRequirementsActivity {
+	a.router = router
+	return a
 }
 
 // NewPreflightRequirementsActivity builds the activity. credentials may be nil
@@ -97,7 +106,7 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 			// The project root is that machine's own checkout. A machine
 			// without one is the run's one unmet requirement, with the way
 			// out, and nothing runs.
-			if err := resolveRunCheckout(ctx, a.repo, &execCtx); err != nil {
+			if err := resolveRunCheckout(ctx, a.repo, a.router, &execCtx); err != nil {
 				report := requirements.Report{Problems: []requirements.Problem{{
 					Kind: "project", Name: execCtx.ProjectName,
 					Problem: svcerr.ToConnect(err).Message(),

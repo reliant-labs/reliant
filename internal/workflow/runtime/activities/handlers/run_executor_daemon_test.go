@@ -109,7 +109,7 @@ func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
 	// resolveRunCheckout: the project's machine and its own checkout, with
 	// the command pinned there so the two agree.
 	installTestCheckout(t, repo, projectID, userID, "/srv/checkouts/p")
-	require.NoError(t, resolveRunCheckout(ctx, repo, &execCtx))
+	require.NoError(t, resolveRunCheckout(ctx, repo, nil, &execCtx))
 	assert.Equal(t, "/srv/checkouts/p", execCtx.ProjectPath, "never projects.path")
 	require.NotNil(t, execCtx.DaemonSelector)
 	assert.Equal(t, testMachine, execCtx.DaemonSelector.ID)

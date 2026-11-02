@@ -59,13 +59,22 @@ func ForMachine(ctx context.Context, r Reader, machines daemonplacement.Machines
 // it relative to the checkout it was in. "" is the checkout itself. A path in
 // none of them (a branch worktree, a directory outside the project) is
 // returned as it is.
+//
+// The project's creation path counts as one of them for RECOGNITION only: a
+// run started before checkouts were resolved per machine carries it as its
+// path, and it is moved onto this machine's checkout like any other. It is
+// never the answer; the result is always under t.Path.
 func (t Target) Rebase(path string) string {
 	if path == "" {
 		return t.Path
 	}
 	clean := filepath.Clean(path)
 	best := ""
-	for _, root := range append([]string{t.Path}, t.roots...) {
+	roots := append([]string{t.Path}, t.roots...)
+	if t.Project != nil {
+		roots = append(roots, t.Project.Path)
+	}
+	for _, root := range roots {
 		if strings.TrimSpace(root) == "" {
 			continue
 		}

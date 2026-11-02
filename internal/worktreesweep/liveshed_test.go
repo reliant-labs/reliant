@@ -146,3 +146,37 @@ func TestDescribe_DoesNotShedARowBeingRestored(t *testing.T) {
 	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(time.Hour, &runningStore{})
 	assert.Equal(t, map[string]int64{"restoring": 0}, shedAsks(t, s, store, false))
 }
+
+// A row whose machine has no installed checkout of the project on record
+// (the store lists it with no project path) is never removed and never
+// probed: every one of those steps runs git in the project's repository, and
+// the sweep does not guess one. The archived row is held with the reason; the
+// live one is only locked, its checkouts carrying no repository path.
+func TestDescribe_NoCheckoutOnRecordIsKeptAndOnlyLocked(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore("d")
+	store.add("archived", true, nil)
+	store.add("live", false, nil)
+	for _, c := range store.rows {
+		c.ProjectPath = ""
+	}
+	rs := &runningStore{running: map[string]bool{}}
+	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(time.Hour, rs)
+	cands, err := store.ListWorktreesForReclaim(context.Background())
+	require.NoError(t, err)
+
+	req, holds := s.describe(context.Background(), cands, nil, false, s.runActivity(context.Background(), cands))
+	require.Len(t, holds, 1)
+	assert.Equal(t, "archived", holds[0].cand.Worktree.ID)
+	assert.Equal(t, worktreereclaim.ReasonNoCheckout, holds[0].reason)
+	require.Len(t, req.Worktrees, 1, "the archived row is not sent to be removed")
+	live := req.Worktrees[0]
+	assert.Equal(t, "live", live.ID)
+	assert.False(t, live.ProbeIdle)
+	assert.False(t, live.ProbeLanded)
+	assert.Zero(t, live.ShedAfterSeconds)
+	assert.Zero(t, live.ProbeRecoverableAfterSeconds)
+	for _, c := range live.Checkouts {
+		assert.Empty(t, c.RepoPath, "no repository path is guessed")
+	}
+}

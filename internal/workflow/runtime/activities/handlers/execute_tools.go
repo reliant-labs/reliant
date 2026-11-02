@@ -169,6 +169,9 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
 	}
 
+	// The main row mirrors projects.path: no path here. A thread bound to
+	// it (threadBound with an empty Path) runs in the main checkout on the
+	// call's machine (buildToolRequest).
 	if worktree.IsMain {
 		return &rctx.WorktreeInfo{ID: worktree.ID}, threadBound, nil
 	}
@@ -185,8 +188,13 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 	// worktree > projectPathOverride (rebased onto this machine's checkout) >
 	// branch worktree > this machine's checkout.
 	effectiveWorktreePath := tec.checkout.path(tec.projectPathOverride, tec.worktree.Path)
-	if tec.worktreeThreadBound {
+	switch {
+	case tec.worktreeThreadBound && tec.worktree.Path != "":
 		effectiveWorktreePath = tec.worktree.Path
+	case tec.worktreeThreadBound:
+		// Bound to the main worktree row: the main checkout on this
+		// machine, never the path the thread inherited.
+		effectiveWorktreePath = tec.checkout.main.Path
 	}
 
 	return &toolexec.ToolRequest{

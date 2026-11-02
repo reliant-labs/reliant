@@ -232,26 +232,24 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 }
 
 // resolveRunCheckout fills execCtx.ProjectPath with the project's checkout on
-// the machine the command runs on: the selector's machine when it names one,
-// else the machine the project's work goes to — and then pins the command
-// there, so the path and the machine agree. A selector by name or label is
-// left to route as it does (no router here to resolve it), with the project's
-// default checkout as its path.
+// the machine the command runs on, and pins the command there, so the path
+// and the machine agree. The machine is the selector's: an id names it, a
+// name, type or labels is resolved through router the way dispatch resolves
+// it (configMachine), and no selector at all is the machine the project's
+// work is placed on. A selector router cannot resolve keeps routing as it
+// does, with the project's placed checkout as its path.
 //
 // A command in the main checkout of a machine without one returns
 // projectcheckout's refusal (the machines that have it, or cloning it there):
 // the step reports it as a failed command, never a stuck run. A branch
 // worktree's command runs at the worktree, so its machine's checkout is only
 // the project root it is told, best effort.
-func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, execCtx *RunExecutorContext) error {
+func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, router toolexec.DaemonRouter, execCtx *RunExecutorContext) error {
 	if execCtx.project == nil {
 		return nil
 	}
-	daemonID := ""
-	if execCtx.DaemonSelector != nil {
-		daemonID = execCtx.DaemonSelector.ID
-	}
-	target, err := projectcheckout.ForMachine(ctx, r, nil, execCtx.UserID, execCtx.project, daemonID, checkoutPurpose)
+	daemonID := configMachine(ctx, router, execCtx.UserID, execCtx.DaemonSelector)
+	target, err := projectcheckout.ForMachine(ctx, r, machinesOf(router), execCtx.UserID, execCtx.project, daemonID, checkoutPurpose)
 	if err != nil {
 		if execCtx.WorktreePath != "" {
 			return nil
@@ -259,7 +257,7 @@ func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, execCtx *
 		return err
 	}
 	execCtx.ProjectPath = target.Path
-	if execCtx.DaemonSelector == nil {
+	if execCtx.DaemonSelector == nil || (execCtx.DaemonSelector.ID == "" && daemonID != "") {
 		execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: target.DaemonID}
 	}
 	return nil

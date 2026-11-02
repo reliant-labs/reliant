@@ -301,17 +301,18 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN false
 	ELSE COALESCE((worktrees.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false`
 
-// ownerCheckoutPath is the project's checkout ON THE WORKTREE'S OWNER — its
-// project_daemons row — which is the repo a reclaim runs git in on that
-// machine. projects.path is where the project was created, on whichever
-// machine created it; it answers only for a row with no owner checkout on
-// record (a legacy row from before owners were recorded, whose only possible
-// machine is the creating one). The architecture guard
-// (TestProjectPathNeverReachesADaemon) lists this as the one SQL read of it.
-const ownerCheckoutPath = "COALESCE(NULLIF(pd.path, ''), p.path)"
+// ownerCheckoutPath is the project's INSTALLED checkout on the worktree's
+// owner — its project_daemons row — which is the repo a reclaim runs git in on
+// that machine. Nothing else answers: a row of a clone still landing or one
+// that failed is not a repository, projects.path is where the project was
+// created (another machine's path, possibly another clone), and a worktree
+// with no recorded owner has no machine to ask. Those get "", and the sweep
+// skips every step that needs a repository (reclaim, snapshot, git branch -D)
+// rather than guess one.
+const ownerCheckoutPath = "COALESCE(pd.path, '')"
 
-// ownerCheckoutJoin joins a worktree to its owner's checkout of the project.
-const ownerCheckoutJoin = "LEFT JOIN project_daemons AS pd ON pd.project_id = worktrees.project_id AND pd.daemon_id = worktrees.daemon_id"
+// ownerCheckoutJoin joins a worktree to its owner's installed checkout.
+const ownerCheckoutJoin = "LEFT JOIN project_daemons AS pd ON pd.project_id = worktrees.project_id AND pd.daemon_id = worktrees.daemon_id AND pd.install_state = 'installed'"
 
 // ListWorktreesForReclaim returns every workspace whose directory a daemon
 // may still hold: not main, has a path, and not already known to be

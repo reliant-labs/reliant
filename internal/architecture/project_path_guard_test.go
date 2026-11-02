@@ -58,6 +58,10 @@ const (
 	// project-dir-heal recreates a plain folder on the machine that
 	// connected, only when no other machine holds it.
 	reasonHeal projectPathReason = "recreating a plain folder on the machine that connected, when no other machine holds it"
+	// Target.Rebase recognises a path under the creation path (a run started
+	// before checkouts were resolved per machine) and moves it onto the
+	// chosen machine's checkout; the creation path is never the result.
+	reasonRebaseRoot projectPathReason = "recognising a run path under the creation path, moved onto the chosen machine's checkout; never the result"
 )
 
 // projectPathAllowed is every function that may read a project's .Path, how
@@ -70,8 +74,9 @@ var projectPathAllowed = map[string]struct {
 	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
 	"internal/handlers/project/project.go:projectToProto":                              {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
-	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {5, reasonHeal},
-	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {4, reasonProbe},
+	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {6, reasonHeal},
+	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {6, reasonProbe},
+	"internal/projectcheckout/machine.go:Rebase":                                       {1, reasonRebaseRoot},
 	// The main worktree row mirrors projects.path for display; every runtime
 	// reader treats an is_main row as the main checkout ON ITS OWN MACHINE.
 	"internal/handlers/worktree/rpc_list_worktrees.go:ListWorktrees": {1, reasonProjectRow},

@@ -1140,7 +1140,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 		// The main worktree row mirrors projects.path, the creating
 		// machine's: the main checkout is resolved on this turn's machine.
-		if !worktree.IsMain {
+		if worktree.IsMain {
+			// Bound to the main row: the main checkout, routed like it.
+			worktreeThreadBound = false
+		} else {
 			worktreePath = worktree.Path
 			if worktree.DaemonID != nil {
 				worktreeDaemonID = *worktree.DaemonID

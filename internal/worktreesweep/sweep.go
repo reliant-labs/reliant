@@ -682,7 +682,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	byID := map[string]*core.ReclaimCandidate{}
 	req, shared := s.describe(ctx, batch, live, keep, s.runActivity(ctx, batch))
 	for _, h := range shared {
-		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
+		s.recordHold(ctx, h.cand.Worktree, h.reason, h.detail, 0, nil)
 	}
 	if len(req.Worktrees) == 0 {
 		return batchDone
@@ -820,10 +820,13 @@ func (s *Sweeper) settleNow(ctx context.Context, userID string, cand *core.Recla
 	s.settleBatch(ctx, target{userID, *cand.Worktree.DaemonID}, []*core.ReclaimCandidate{cand}, live, keep)
 }
 
-// sharedHold is an archived row kept without asking its daemon, because
-// removing its directory would remove a live row's directory or checkout.
+// sharedHold is an archived row kept without asking its daemon: removing its
+// directory would remove a live row's directory or checkout
+// (ReasonSharedWithLive), or its machine has no checkout of the project on
+// record to check it against (ReasonNoCheckout).
 type sharedHold struct {
 	cand   *core.ReclaimCandidate
+	reason worktreereclaim.HeldReason
 	detail string
 }
 
@@ -861,10 +864,23 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 				liveDirs = occupiedBy(live, reposOf)
 			}
 			if detail, shared := sharedWithLive(wt, liveDirs); shared {
-				holds = append(holds, sharedHold{cand: c, detail: detail})
+				holds = append(holds, sharedHold{cand: c, reason: worktreereclaim.ReasonSharedWithLive, detail: detail})
 				continue
 			}
 			state = worktreereclaim.StateArchived
+		}
+		// No installed checkout of the project on the row's machine on record
+		// (store.ownerCheckoutPath): there is no repository to check its
+		// branch against, snapshot into or delete a branch from, and the
+		// sweep never guesses one. An archived row is kept; a live one is
+		// only locked.
+		noCheckout := c.ProjectPath == ""
+		if noCheckout && state == worktreereclaim.StateArchived {
+			logging.InfoContext(ctx, "[WorktreeSweep] no installed checkout of the project on the workspace's machine on record; keeping it",
+				"worktreeID", wt.ID, "projectID", wt.ProjectID, "daemonID", ptrString(wt.DaemonID))
+			holds = append(holds, sharedHold{cand: c, reason: worktreereclaim.ReasonNoCheckout,
+				detail: "its machine has no checkout of the project on record, so its repositories cannot be checked; clone the project onto that machine (or reconnect it) to let it be cleaned up"})
+			continue
 		}
 		w := worktreereclaim.Worktree{ID: wt.ID, Path: wt.Path, State: state, BaseBranch: wt.BaseBranch, Fence: Fence(wt), KeepFiles: keep}
 		if state == worktreereclaim.StateActive && wt.CleanupMetadata != nil {
@@ -895,10 +911,19 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		// Whole-worktree retirement follows row-locked archival. Never permit
 		// the landed probe to delete subsets from a still-live workspace.
 		w.ShedLanded = false
+		if noCheckout {
+			// Locked as reliant's, and nothing more: every probe can end
+			// in a removal, which needs the repository.
+			w.ProbeIdle, w.ProbeLanded, w.ShedAfterSeconds, w.ProbeRecoverableAfterSeconds = false, false, 0, 0
+		}
 		repos, _ := reposOf(wt.ProjectID)
 		for _, repo := range repos {
+			repoPath := ""
+			if !noCheckout {
+				repoPath = filepath.Join(c.ProjectPath, repo.RelativePath)
+			}
 			w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{
-				RepoPath:   filepath.Join(c.ProjectPath, repo.RelativePath),
+				RepoPath:   repoPath,
 				Rel:        filepath.ToSlash(repo.RelativePath),
 				BaseBranch: wt.BaseBranches[repo.ID],
 			})
@@ -1384,4 +1409,12 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
 	logging.InfoContext(ctx, "[WorktreeSweep] reconcile batch", "daemonID", t.daemonID, "rows", len(results),
 		"outcomes", outcomes, "held", held, "landed", landed, "recoverable_idle", recoverable,
 		"shed_rows", shed, "shed_bytes", shedBytes)
+}
+
+// ptrString is *p, or "" for nil.
+func ptrString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

@@ -62,6 +62,13 @@ func resolveCallCheckout(ctx context.Context, r projectcheckout.Reader, router t
 	switch {
 	case err == nil:
 		out.main = target
+		if out.daemonID == "" && selector == nil {
+			// No machine was chosen up front (no router, or none resolved):
+			// the call goes to the machine the directory was resolved
+			// from. Left to resolve again at dispatch, it could reach a
+			// machine that connected in between, carrying this one's path.
+			out.daemonID = target.DaemonID
+		}
 	case !inMain:
 		// A branch worktree runs without the main checkout; its repairs and
 		// repo list just go without a source.
@@ -102,7 +109,11 @@ func (c callCheckout) path(runPath, branchWorktreePath string) string {
 }
 
 // missingRefusal is the text a call refused for c.missing returns: the
-// actionable reason, and that nothing ran and the next call re-checks.
+// actionable reason, that nothing ran, and that retrying cannot help — so the
+// model stops and asks the user, who is the only one who can switch the
+// chat's machine or clone the project. (Each call does re-check, so once the
+// user has acted the next turn just works.)
 func missingRefusal(err error) string {
-	return svcerr.ToConnect(err).Message() + ". No machine tools ran; the next call checks again, so cloning the project or switching this chat's machine unblocks it."
+	return svcerr.ToConnect(err).Message() + ". No machine tools ran. Retrying will not help: stop calling tools that need the machine, " +
+		"tell the user exactly this, and ask them to switch this chat's machine or clone the project; it works on the next turn once they have."
 }

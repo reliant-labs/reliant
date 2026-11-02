@@ -166,6 +166,12 @@ const (
 	// under this archived row's directory, so removing it would remove theirs.
 	// Decided by the server, which never sends such a row to the daemon.
 	ReasonSharedWithLive HeldReason = "shared-with-live-workspace"
+	// ReasonNoCheckout: the machine holding the workspace has no installed
+	// checkout of its project on record, so there is no repository to check
+	// its branch against, snapshot into or delete a branch from. Decided by
+	// the server, which never sends such a row to be removed: it never
+	// guesses a repository path (projects.path is another machine's).
+	ReasonNoCheckout HeldReason = "no-checkout-on-record"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
 	// ReasonStale: the request's fence no longer matches the lock.

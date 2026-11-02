@@ -11,8 +11,10 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 )
 
 // reconcileTotalTimeout bounds the entire per-connect reconcile pass so a
@@ -83,7 +85,7 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 		}, nil
 	}
 
-	missing, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	missing, err := s.reconcileAndWatch(ctx, conn, check)
 	if err != nil {
 		return err
 	}
@@ -91,6 +93,24 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 	// (tools_daemon_restore.go). Its own, longer, budget: clones are slow.
 	s.restoreCheckoutsOnConnect(conn, missing)
 	return nil
+}
+
+// reconcileAndWatch runs the reconcile pass for conn's machine and starts the
+// project config watcher (skills, memory, MCP servers) for each checkout it
+// recorded. Registration asked the machine to watch the checkouts it had on
+// record BEFORE this pass; one the pass just recorded is watched from now,
+// not from the next reconnect, including by a pass that was interrupted
+// after recording it. It returns the projects absent from the disk and the
+// pass's error (errReconcileInterrupted).
+func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection, check daemonPathChecker) ([]*db.Project, error) {
+	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	for _, path := range added {
+		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to start the project config watcher for a recorded checkout",
+				"error", err, "daemonID", conn.daemonID, "path", path)
+		}
+	}
+	return missing, err
 }
 
 // reconcileProjectDaemons is the testable core of the reconcile pass. For each
@@ -101,18 +121,39 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 // failure (check reports a path that is simply absent as {Exists: false}), and
 // stops the pass with errReconcileInterrupted: every later check would meet
 // the same dead link, one timeout at a time. It returns the projects whose
-// path the daemon reported absent.
+// path the daemon reported absent, and the paths of the checkouts it recorded
+// that the machine had no row for.
+//
+// It never overwrites what the machine's own row already says without
+// evidence: a directory at the creation path is evidence of a checkout there
+// only when the row has no other path and no clone is landing or failed. A
+// machine whose recorded checkout is elsewhere keeps it, and a clone in
+// flight settles through its own outcome.
 func reconcileProjectDaemons(
 	ctx context.Context,
 	database ProjectReconcileStore,
 	daemonID, userID string,
 	check daemonPathChecker,
-) (missing []*db.Project, _ error) {
+) (missing []*db.Project, added []string, _ error) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to list projects",
 			"error", err, "userID", userID, "daemonID", daemonID)
-		return nil, nil
+		return nil, nil, nil
+	}
+	recorded := map[string]*core.ProjectDaemon{}
+	rows, err := database.ListProjectDaemonsForDaemon(ctx, daemonID)
+	if err != nil {
+		// Without the machine's rows nothing can be told from new: write
+		// nothing rather than overwrite a path it may already have.
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to read the machine's checkouts",
+			"error", err, "userID", userID, "daemonID", daemonID)
+		return nil, nil, nil
+	}
+	for _, row := range rows {
+		if row != nil {
+			recorded[row.ProjectID] = row
+		}
 	}
 
 	var reconciled, backfilled, skipped int
@@ -124,13 +165,22 @@ func reconcileProjectDaemons(
 			continue
 		}
 
+		prior := recorded[project.ID]
+		if prior != nil && (prior.InstallState != core.ProjectInstallInstalled || ospath.Clean(prior.Path) != ospath.Clean(project.Path)) {
+			// The machine's row says something the creation path cannot
+			// overrule: its checkout is elsewhere, or a clone is landing or
+			// failed there.
+			skipped++
+			continue
+		}
+
 		state, err := check(ctx, project.Path)
 		if err != nil {
 			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: interrupted; a path check met a transport failure, so the pass stops here and is retried once the link is ready",
 				"error", err, "userID", userID, "daemonID", daemonID,
 				"projectID", project.ID, "path", project.Path,
 				"reconciled", reconciled, "checked", i, "projects", len(projects))
-			return missing, fmt.Errorf("%w: %w", errReconcileInterrupted, err)
+			return missing, added, fmt.Errorf("%w: %w", errReconcileInterrupted, err)
 		}
 		if !state.Exists {
 			// Not on this daemon — must not write a row.
@@ -146,6 +196,9 @@ func reconcileProjectDaemons(
 			continue
 		}
 		reconciled++
+		if prior == nil {
+			added = append(added, project.Path)
+		}
 
 		// Backfill projects.remote_url when it's unset and discover resolved a
 		// root remote for this clone.
@@ -162,12 +215,12 @@ func reconcileProjectDaemons(
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: stopped before it finished",
 			"userID", userID, "daemonID", daemonID, "error", ctx.Err(),
 			"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped, "projects", len(projects))
-		return missing, fmt.Errorf("%w: %w", errReconcileInterrupted, ctx.Err())
+		return missing, added, fmt.Errorf("%w: %w", errReconcileInterrupted, ctx.Err())
 	}
 	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: complete",
 		"userID", userID, "daemonID", daemonID,
 		"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped)
-	return missing, nil
+	return missing, added, nil
 }
 
 // backfillProjectRemoteURL sets project.remote_url to remoteURL, respecting the

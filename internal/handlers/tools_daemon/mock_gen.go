@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=b5c319df5d623667cf86c26d8f26a795deb6e63e88dd54badaeaf8dbb2e511a5
+// forge:hash=41a6e6266b352b9f8004474d281a8c482defbc04d661f09ef489db830d689f78
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -48,11 +48,11 @@ type MockRepository struct {
 	EmitUserRefetchFunc                  func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	SetProjectForgeNameFunc              func(context.Context, string, string, string) (bool, error)
 	ListProjectsFunc                     func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListProjectDaemonsForDaemonFunc      func(context.Context, string) ([]*core.ProjectDaemon, error)
 	UpsertProjectDaemonFunc              func(context.Context, string, string, string, *string) error
 	GetProjectByRemoteURLAndUserFunc     func(context.Context, string, string) (*db.Project, error)
 	UpdateProjectFunc                    func(context.Context, *db.Project, string) error
 	ListMachinePoolsForUserFunc          func(context.Context, string) ([]*db.MachinePool, error)
-	ListProjectDaemonsForDaemonFunc      func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListReposByProjectFunc               func(context.Context, string) ([]*core.Repo, error)
 	UpsertQueuedProjectDaemonFunc        func(context.Context, string, string, string, *string, string) error
 	ListDaemonsByUserIDFunc              func(context.Context, string) ([]*db.Daemon, error)
@@ -238,6 +238,15 @@ func (m *MockRepository) ListProjects(ctx context.Context, filters db.ProjectFil
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjects")
 }
 
+// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
+func (m *MockRepository) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonsForDaemonFunc != nil {
+		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForDaemon")
+}
+
 // UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
 func (m *MockRepository) UpsertProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) error {
 	m.Recorder.Record("UpsertProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
@@ -274,15 +283,6 @@ func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID str
 	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
 }
 
-// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
-func (m *MockRepository) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonsForDaemonFunc != nil {
-		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForDaemon")
-}
-
 // ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
 func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
 	m.Recorder.Record("ListReposByProject", ctx, projectID)
@@ -314,7 +314,7 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=bbfbce473e7daedf1110b69d254b4362007b89ed708d03fcded4713adf8fa752
+// forge:hash=7a31a2bdc55c37886fcb38ee3f813aa9af6ff4645ceae623be867bf222514c45
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -325,6 +325,7 @@ var _ Repository = (*MockRepository)(nil)
 type MockProjectReconcileStore struct {
 	contractkit.Recorder
 	ListProjectsFunc                 func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListProjectDaemonsForDaemonFunc  func(context.Context, string) ([]*core.ProjectDaemon, error)
 	UpsertProjectDaemonFunc          func(context.Context, string, string, string, *string) error
 	GetProjectByRemoteURLAndUserFunc func(context.Context, string, string) (*db.Project, error)
 	UpdateProjectFunc                func(context.Context, *db.Project, string) error
@@ -337,6 +338,15 @@ func (m *MockProjectReconcileStore) ListProjects(ctx context.Context, filters db
 		return m.ListProjectsFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjects")
+}
+
+// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
+func (m *MockProjectReconcileStore) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonsForDaemonFunc != nil {
+		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonsForDaemon")
 }
 
 // UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.

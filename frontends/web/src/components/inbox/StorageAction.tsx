@@ -42,6 +42,7 @@ const REASON_LABEL: Record<string, string> = {
   "nested-repository": "Contains another git repository",
   "files-outside-checkout": "Has files outside its repositories",
   "shared-with-live-workspace": "Used by an open workspace",
+  "no-checkout-on-record": "Its machine has no checkout of the project",
   unmanaged: "Not managed by Reliant",
   quarantined: "Parked in quarantine",
 };

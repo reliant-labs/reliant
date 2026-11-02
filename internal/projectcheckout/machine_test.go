@@ -126,3 +126,16 @@ func TestRebase_MovesARunPathOntoThisMachinesCheckout(t *testing.T) {
 	assert.Equal(t, "/home/u/.reliant/worktrees/cp/feat", cloud.Rebase("/home/u/.reliant/worktrees/cp/feat"), "a branch worktree is not under a checkout")
 	assert.Equal(t, "/Users/creator/cpx", cloud.Rebase("/Users/creator/cpx"), "a sibling with the checkout as a name prefix is not inside it")
 }
+
+// A run started before checkouts were resolved per machine carries the
+// project's creation path. The machine that created it may have no installed
+// row any more, but that path is still recognised and moved onto the chosen
+// machine's checkout, so the model is not told on every batch that its
+// workspace is missing.
+func TestRebase_TheCreationPathOfARunInFlightIsMovedOntoThisMachine(t *testing.T) {
+	f := fleet{rows: []*core.ProjectDaemon{installed("cloud", "/home/workspace/projects/cp")}}
+	cloud, err := On(context.Background(), f, "u", mac, "cloud", "use it")
+	require.NoError(t, err)
+	assert.Equal(t, "/home/workspace/projects/cp/svc", cloud.Rebase(mac.Path+"/svc"))
+	assert.Equal(t, "/home/workspace/projects/cp", cloud.Rebase(mac.Path))
+}

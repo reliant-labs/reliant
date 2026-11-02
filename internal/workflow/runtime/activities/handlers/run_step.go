@@ -77,6 +77,16 @@ type ExecuteRunStepActivity struct {
 	// machineWait overrides defaultMachineWait; tests shrink it or give it a
 	// fake clock.
 	machineWait *machineWait
+	// router resolves a run node's machine named by name, type or labels to
+	// the machine whose checkout the command runs in (WithDaemonRouter).
+	router toolexec.DaemonRouter
+}
+
+// WithDaemonRouter lets a run node that names its machine by name, type or
+// labels run in THAT machine's checkout (resolveRunCheckout).
+func (a *ExecuteRunStepActivity) WithDaemonRouter(router toolexec.DaemonRouter) *ExecuteRunStepActivity {
+	a.router = router
+	return a
 }
 
 // MachineObserver reports the state of the machine a run's commands execute
@@ -202,7 +212,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// The command's machine is final: its checkout is the working directory.
 	// A machine without one fails the command with the reason and the way
 	// out (exit -1), never a stuck step.
-	if err := resolveRunCheckout(ctx, a.repo, &execCtx); err != nil {
+	if err := resolveRunCheckout(ctx, a.repo, a.router, &execCtx); err != nil {
 		refusal := missingRefusal(err)
 		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds()}, nil

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
@@ -60,6 +61,9 @@ type Repository interface {
 // (user_id, remote_url) unique index.
 type ProjectReconcileStore interface {
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
+	// ListProjectDaemonsForDaemon is what the machine already has on record,
+	// which a creation-path probe never overrules.
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
