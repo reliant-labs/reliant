@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dialogOpener } from "../dialogOpener";
 
 // A bare dispatched click focuses nothing — exactly what Safari does when a
@@ -7,10 +7,20 @@ function safariClick(el: Element) {
   el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 }
 
-const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
+// The module forgets the clicked control in a zero-delay timer scheduled from
+// its click listener. Fake timers make "the click's task is over" an explicit
+// step instead of a wait; they must be installed before the click.
+const endClickTask = () => vi.runOnlyPendingTimers();
 
 describe("dialogOpener", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
   afterEach(() => {
+    // Run the pending clear so the module's scheduling flag resets for the next test.
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
     document.body.innerHTML = "";
   });
 
@@ -31,19 +41,18 @@ describe("dialogOpener", () => {
     expect(opener).toBe(button);
   });
 
-  it("falls back to the focused element once the click's task is over", async () => {
+  it("falls back to the focused element once the click's task is over", () => {
     document.body.innerHTML = '<input /><button type="button">open</button>';
     const input = document.querySelector("input")!;
     safariClick(document.querySelector("button")!);
-    await nextTask();
+    endClickTask();
 
     input.focus();
     expect(dialogOpener()).toBe(input);
   });
 
-  it("is nothing when only <body> has focus", async () => {
+  it("is nothing when only <body> has focus", () => {
     document.body.innerHTML = '<button type="button">open</button>';
-    await nextTask();
     expect(dialogOpener()).toBeNull();
   });
 
