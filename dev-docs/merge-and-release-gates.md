@@ -4,8 +4,8 @@
 has reviewed. A pull request push runs nothing heavy; `pr-review` reads the
 diff, not CI results; a passed PR enters GitHub's merge queue, where the merge
 gate runs **once**, on main plus the entry, and decides the merge. The whole
-suite runs on main after the merge and never blocks one: a red main is filed
-and fixed by pipeline-health (`pipeline:slo`), and `task release:tag` refuses a
+suite runs on main after the merge and never blocks one: a red main keeps a
+`ci:main-red` issue open until it is fixed, and `task release:tag` refuses a
 commit without a green release-gate record, so it is fixed before the next
 release. Details: [CI](#ci).
 
@@ -417,8 +417,9 @@ unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
 required checks are green on its head. Only the `pr-review` workflow enqueues,
 with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
-passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
-`merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
+passes (control-plane `docs/pr-pipeline.md`); an author opens the PR non-draft,
+adds no queue label (the pass adds `merge:queue`) and never runs `gh pr merge`
+(`--auto` included). In the queue,
 the required `Reliant review` check (`reliant-review.yml`) requires
 `pr-review`'s pass marker on every PR head in the group
 (`scripts/ci-review-marker.sh`, fetched from main). Because the PR's own `CI result` is
