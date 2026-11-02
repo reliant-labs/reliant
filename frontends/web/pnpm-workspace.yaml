@@ -11,3 +11,9 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   protobufjs: false
+
+# Dependency versions forced past what a package pins.
+#   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
+#   the same patched release as ours.
+overrides:
+  monaco-editor>dompurify: ^3.4.17
