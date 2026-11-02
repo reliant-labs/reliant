@@ -7780,7 +7780,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"%COMPUTE_INELIGIBLE_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12-\n" +
 	")COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION\x10\x03\x12-\n" +
-	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xaa+\n" +
+	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xb0+\n" +
 	"\x0eBillingService\x12\x85\x01\n" +
 	"\x1aGetOrganizationCostSummary\x122.controlplane.v1.GetOrganizationCostSummaryRequest\x1a3.controlplane.v1.GetOrganizationCostSummaryResponse\x12v\n" +
 	"\x15ListOrganizationUsage\x12-.controlplane.v1.ListOrganizationUsageRequest\x1a..controlplane.v1.ListOrganizationUsageResponse\x12R\n" +
@@ -7807,8 +7807,8 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x1aGetCurrentUserInfraOverage\x122.controlplane.v1.GetCurrentUserInfraOverageRequest\x1a3.controlplane.v1.GetCurrentUserInfraOverageResponse\x12\xb5\x01\n" +
 	"*CreateCurrentUserComputeSubscriptionIntent\x12B.controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest\x1aC.controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse\x12\x85\x01\n" +
 	"\x1aGetMachinePricingReadiness\x122.controlplane.v1.GetMachinePricingReadinessRequest\x1a3.controlplane.v1.GetMachinePricingReadinessResponse\x12\x7f\n" +
-	"\x18AcceptNextMachinePricing\x120.controlplane.v1.AcceptNextMachinePricingRequest\x1a1.controlplane.v1.AcceptNextMachinePricingResponse\x12\x7f\n" +
-	"\x18PreviewMachinePlanChange\x120.controlplane.v1.PreviewMachinePlanChangeRequest\x1a1.controlplane.v1.PreviewMachinePlanChangeResponse\x12j\n" +
+	"\x18AcceptNextMachinePricing\x120.controlplane.v1.AcceptNextMachinePricingRequest\x1a1.controlplane.v1.AcceptNextMachinePricingResponse\x12\x84\x01\n" +
+	"\x18PreviewMachinePlanChange\x120.controlplane.v1.PreviewMachinePlanChangeRequest\x1a1.controlplane.v1.PreviewMachinePlanChangeResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x11ChangeMachinePlan\x12).controlplane.v1.ChangeMachinePlanRequest\x1a*.controlplane.v1.ChangeMachinePlanResponse\x12\x85\x01\n" +
 	"\x1aGetCurrentUserUsageBilling\x122.controlplane.v1.GetCurrentUserUsageBillingRequest\x1a3.controlplane.v1.GetCurrentUserUsageBillingResponse\x12\xa6\x01\n" +
 	"%CreateCurrentUserUsageBillingCheckout\x12=.controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest\x1a>.controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse\x12\x97\x01\n" +

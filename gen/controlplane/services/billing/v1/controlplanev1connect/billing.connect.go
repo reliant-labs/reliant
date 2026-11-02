@@ -269,7 +269,9 @@ type BillingServiceClient interface {
 	// charged the prorated difference today; a downgrade applies at the next
 	// billing period and charges or credits nothing; choosing the current plan
 	// while a downgrade is scheduled withdraws it. Changes nothing. The quote is
-	// binding for ten minutes through terms_sha256.
+	// binding for ten minutes through terms_sha256. A pure read: it reads the
+	// subscription, period, snapshot and pending/scheduled changes, and prices
+	// an upgrade with Stripe's invoice preview, which persists nothing.
 	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
 	// Makes the change the caller confirmed, at exactly its quote: an upgrade
 	// is paid before it applies (a declined payment changes nothing), a
@@ -494,6 +496,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServicePreviewMachinePlanChangeProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		changeMachinePlan: connect.NewClient[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse](
@@ -945,7 +948,9 @@ type BillingServiceHandler interface {
 	// charged the prorated difference today; a downgrade applies at the next
 	// billing period and charges or credits nothing; choosing the current plan
 	// while a downgrade is scheduled withdraws it. Changes nothing. The quote is
-	// binding for ten minutes through terms_sha256.
+	// binding for ten minutes through terms_sha256. A pure read: it reads the
+	// subscription, period, snapshot and pending/scheduled changes, and prices
+	// an upgrade with Stripe's invoice preview, which persists nothing.
 	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
 	// Makes the change the caller confirmed, at exactly its quote: an upgrade
 	// is paid before it applies (a declined payment changes nothing), a
@@ -1166,6 +1171,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServicePreviewMachinePlanChangeProcedure,
 		svc.PreviewMachinePlanChange,
 		connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceChangeMachinePlanHandler := connect.NewUnaryHandler(
