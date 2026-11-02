@@ -14,6 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/forge/pkg/credentials"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/daemoninstance"
@@ -170,7 +172,7 @@ For CI, skip login and set RELIANT_TOKEN.`,
 // runLogin gets the CLI's login token by flow. Both flows ask for the same
 // authority under the same name, so where it came from makes no difference
 // to the token.
-func runLogin(cmd *cobra.Command, server string, flow loginFlow) (cliauth.Session, error) {
+func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Credential, error) {
 	out := cmd.OutOrStdout()
 	// ONE LOGIN: the forge scopes ride along as a CEILING the control plane
 	// clips to your grants, so forge can later exchange this login for a
@@ -204,7 +206,7 @@ func runLogin(cmd *cobra.Command, server string, flow loginFlow) (cliauth.Sessio
 			return cred, err
 		}
 		if flow.Remote != "" {
-			return cliauth.Session{}, fmt.Errorf("%s does not offer device-code sign-in, and a browser login cannot work here (%s).\n"+
+			return credentials.Credential{}, fmt.Errorf("%s does not offer device-code sign-in, and a browser login cannot work here (%s).\n"+
 				"Mint a token in the web app and set RELIANT_TOKEN, or pass --browser if a browser can reach this machine after all", server, flow.Remote)
 		}
 		fmt.Fprintf(out, "%s does not offer device-code sign-in; approving in your browser instead.\n", server)
@@ -222,12 +224,13 @@ func runLogin(cmd *cobra.Command, server string, flow loginFlow) (cliauth.Sessio
 // and reports it — the same for either flow. A saved daemon sign-in of another
 // account is part of what is retired: the machine is kept to one account
 // (account_in_step.go).
-func finishLogin(cmd *cobra.Command, target *connection, cred cliauth.Session) error {
+func finishLogin(cmd *cobra.Command, target *connection, cred credentials.Credential) error {
 	path, err := cliauth.Store(target.ServerURL, cred)
 	if err != nil {
 		return fmt.Errorf("saving credentials: %w", err)
 	}
-	retired, retireErr := retireOtherAccountsDaemonSignIns(cmd.Context(), target, cred.Account)
+	account := cliauth.AccountOf(cred)
+	retired, retireErr := retireOtherAccountsDaemonSignIns(cmd.Context(), target, account)
 	// A fresh login means fresh exchanges: drop tokens cached from the
 	// previous one, and the copies older releases deposited into forge's file.
 	if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
@@ -236,15 +239,15 @@ func finishLogin(cmd *cobra.Command, target *connection, cred cliauth.Session) e
 	retireLegacyForgeDeposits()
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
-	if cred.Account.Known() {
-		fmt.Fprintf(out, "  Account:     %s\n", cred.Account)
+	if account.Known() {
+		fmt.Fprintf(out, "  Account:     %s\n", account)
 	}
 	fmt.Fprintf(out, "  Token:       %s… (%s)\n", cred.TokenPrefix, strings.Join(cred.Scopes, " "))
 	if cred.ExpiresAt != nil {
 		fmt.Fprintf(out, "  Expires:     %s\n", cred.ExpiresAt.Format(time.RFC3339))
 	}
 	fmt.Fprintf(out, "  Credentials: %s\n", path)
-	writeRetiredSignIns(out, retired, cred.Account)
+	writeRetiredSignIns(out, retired, account)
 	if retireErr != nil {
 		daemonPath, _ := auth.DaemonCredentialsFilePath()
 		return fmt.Errorf("logged in, but could not remove another account's daemon sign-in for %s from %s: %w", target.ServerURL, daemonPath, retireErr)
@@ -280,7 +283,7 @@ Purely local: no network call.`,
 				fmt.Fprintf(out, "Using the token in %s\n  Server: %s\n", envToken, target.describeServer())
 				return nil
 			}
-			cred, path, err := cliauth.LookupSession(target.ServerURL)
+			cred, path, err := cliauth.Lookup(target.ServerURL)
 			if err != nil {
 				info["logged_in"] = false
 				info["reason"] = err.Error()
@@ -294,10 +297,11 @@ Purely local: no network call.`,
 			}
 			info["logged_in"] = true
 			info["credential"] = path
-			if cred.Account.Known() {
-				info["account_id"] = cred.Account.ID
-				if cred.Account.Email != "" {
-					info["account_email"] = cred.Account.Email
+			account := cliauth.AccountOf(cred)
+			if account.Known() {
+				info["account_id"] = account.ID
+				if account.Email != "" {
+					info["account_email"] = account.Email
 				}
 			}
 			info["token_prefix"] = cred.TokenPrefix
@@ -309,8 +313,8 @@ Purely local: no network call.`,
 				return writeJSON(out, info)
 			}
 			fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
-			if cred.Account.Known() {
-				fmt.Fprintf(out, "  Account:     %s\n", cred.Account)
+			if account.Known() {
+				fmt.Fprintf(out, "  Account:     %s\n", account)
 			} else {
 				fmt.Fprintf(out, "  Account:     not recorded (this login predates it; 'reliant auth login%s' records it)\n", target.serverFlagHint())
 			}

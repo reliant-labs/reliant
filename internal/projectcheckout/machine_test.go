@@ -76,6 +76,18 @@ func TestOn_NotThereNamesTheMachinesThatHaveItAndHowToRecover(t *testing.T) {
 	assert.Equal(t, "https://github.com/acme/cp.git", d.RemoteUrl)
 }
 
+// A pin naming another account's machine (corrupted or foreign) is refused
+// without describing that machine: its display name never reaches this user.
+func TestOn_AnotherAccountsMachineIsNeverNamed(t *testing.T) {
+	f := fleet{rows: []*core.ProjectDaemon{installed("laptop", "/Users/creator/cp")}, owner: map[string]string{"cloud": "someone-else"}}
+	_, err := On(context.Background(), f, "u", withRemote, "cloud", "keep working in this chat")
+	require.Error(t, err)
+	msg := svcerr.ToConnect(err).Message()
+	assert.NotContains(t, msg, "Cloud box", "another account's machine name leaked")
+	assert.Contains(t, msg, `"cp" isn't checked out on machine cloud`)
+	assert.Contains(t, msg, `switch to "Sean's Mac", which has it`, "the user's own machines are still named")
+}
+
 // A clone still landing fixes itself: say so, offer no clone.
 func TestOn_CloningSaysWaitNotClone(t *testing.T) {
 	f := fleet{rows: []*core.ProjectDaemon{{DaemonID: "cloud", Path: "/home/workspace/projects/cp", InstallState: core.ProjectInstallInstalling}}}

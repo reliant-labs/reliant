@@ -38,26 +38,27 @@ import (
 
 // Service is the CLI's login surface.
 type Service interface {
-	// Login runs one browser login and returns the credential and the
+	// Login runs one browser login and returns the credential, naming the
 	// account it signed in as, unstored — a daemon registration keeps its
 	// credential in the daemon store, not the CLI's. Unset Login.HTTPClient /
 	// Login.OpenURL fall back to Deps.
-	Login(ctx context.Context, l Login) (Session, error)
+	Login(ctx context.Context, l Login) (credentials.Credential, error)
 	// CredentialsPath is the shared credentials file this adapter reads and
 	// writes.
 	CredentialsPath() (string, error)
-	// Store saves s as the reliant CLI's login for server, with the account
-	// it signed in as (see account_record.go), and returns the credentials
-	// file path.
-	Store(server string, s Session) (string, error)
+	// Store saves c as the reliant CLI's login for server and returns the
+	// credentials file path. The account it signed in as rides on c
+	// (AccountID / AccountEmail; see AccountOf).
+	Store(server string, c credentials.Credential) (string, error)
 	// Lookup returns the stored credential for server, or ErrNotLoggedIn.
 	// An entry past its issuer-reported expiry counts as not logged in.
+	// AccountOf names the account it signed in as — zero when the login
+	// does not say (saved before this machine recorded it, or by a control
+	// plane that does not name accounts). A login an earlier release
+	// recorded in reliant-accounts.json keeps that account: a record whose
+	// token hash matches is moved onto the credential (legacy_account.go).
 	Lookup(server string) (credentials.Credential, string, error)
-	// LookupSession is Lookup plus the account the login signed in as —
-	// zero when this machine never recorded it (a login saved before it
-	// did, or by a control plane that does not name accounts).
-	LookupSession(server string) (Session, string, error)
-	// Remove forgets the stored credential for server, and its account.
+	// Remove forgets the stored credential for server.
 	Remove(server string) (bool, string, error)
 	// RemoveLegacyForgeDeposits deletes the copies of Reliant session tokens
 	// older releases deposited into forge's credentials file (client
