@@ -28,7 +28,7 @@ export function ObservabilityUsageDetails({ orgId }: { orgId: string }) {
           <p>{change.resource} · {change.field}: <span className="break-words">{historyValue(change.resource, change.oldValue)} → {historyValue(change.resource, change.newValue)}</span></p>
           <p className="text-xs text-muted-foreground">{change.actorEmail || "System"} · {at(change.at)}</p>
         </li>)}</ul>
-        {history.hasNextPage && <button type="button" className="text-primary underline" disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>Load older changes</button>}
+        {history.hasNextPage && <button type="button" className="text-primary-ink underline" disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>Load older changes</button>}
       </>}
     </Card>
   </>;
@@ -52,11 +52,11 @@ function DailyUsage({ orgId }: { orgId: string }) {
   };
   return <Card><CardHeader title="Daily ingestion" description="Selected month's UTC ingestion by signal and service. Billable bytes include data kept free above the spend cap; the included allowance is deducted before charging." />
     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm"><label>Month <input aria-label="Usage month" type="month" className="ml-2 rounded border border-border bg-background px-2 py-1" min={earliestMonth()} max={monthNow()} value={month} onChange={e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) setMonth(e.target.value); }} /></label>
-      <button type="button" className="text-primary underline disabled:opacity-50" disabled={days.isPending || !!days.error || days.hasNextPage || days.isFetching} onClick={exportCsv}>Download CSV</button>
+      <button type="button" className="text-primary-ink underline disabled:opacity-50" disabled={days.isPending || !!days.error || days.hasNextPage || days.isFetching} onClick={exportCsv}>Download CSV</button>
     </div>
     {days.isPending ? <Loading label="Loading daily ingestion…" /> : days.error ? <BillingUnavailable label="Daily ingestion" error={days.error} retry={() => void days.refetch()} /> : <>
       <DailyUsageTable buckets={buckets} />
-      {days.hasNextPage && <div className="mt-3 text-sm"><p>Showing part of this month. Load all rows to enable CSV export.</p><button type="button" className="text-primary underline" disabled={days.isFetchingNextPage} onClick={() => void days.fetchNextPage()}>Load more usage</button></div>}
+      {days.hasNextPage && <div className="mt-3 text-sm"><p>Showing part of this month. Load all rows to enable CSV export.</p><button type="button" className="text-primary-ink underline" disabled={days.isFetchingNextPage} onClick={() => void days.fetchNextPage()}>Load more usage</button></div>}
     </>}
   </Card>;
 }

@@ -156,7 +156,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           <div className="space-y-2">
             <button
               onClick={onBackToSignIn}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary mb-4"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary-ink mb-4"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Sign In
@@ -227,14 +227,14 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
         <div className="space-y-2">
           <button
             onClick={handleBackToEmail}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary mb-4"
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary-ink mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </button>
 
           <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-primary/15">
-            <CheckCircle className="w-8 h-8 text-primary" />
+            <CheckCircle className="w-8 h-8 text-primary-ink" />
           </div>
 
           <h2 className="text-2xl font-semibold text-center text-foreground">
@@ -302,7 +302,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
                 type="button"
                 onClick={handleResendCode}
                 disabled={loading}
-                className="text-sm font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+                className="text-sm font-medium text-primary-ink transition-colors hover:text-primary-ink/80 disabled:opacity-50"
               >
                 Resend verification code
               </button>

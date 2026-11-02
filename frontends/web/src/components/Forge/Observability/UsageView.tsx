@@ -86,7 +86,7 @@ export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageR
     <p className="mt-2 text-xs text-ink-muted">{u.measuredThrough ? `Measured through ${at(u.measuredThrough)} (updated hourly; may lag by about 75 minutes).` : "No fully metered hour yet. Usage is not current; the first reading usually arrives within about 75 minutes."}</p>
     <p className="mt-2 text-sm">Browser: {gb(u.browserBilledBytes)} of {gb(u.browserCapBytes)} billable; {gb(u.browserBytes > u.browserBilledBytes ? u.browserBytes - u.browserBilledBytes : 0n)} more kept free.</p>
     <p className="mt-2 text-xs text-ink-muted">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
-    <a className="mt-3 inline-block text-sm text-primary underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
+    <a className="mt-3 inline-block text-sm text-primary-ink underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
   </Card>;
 }
 

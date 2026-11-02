@@ -44,7 +44,7 @@ export function AppOutOfDateModal({ isOpen, onClose }: AppOutOfDateModalProps) {
     >
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-start gap-3">
-          <div className="rounded-full border border-border/60 bg-background p-2 text-primary">
+          <div className="rounded-full border border-border/60 bg-background p-2 text-primary-ink">
             <RefreshCw className="h-5 w-5" />
           </div>
           <p className="flex-1 text-sm text-foreground">

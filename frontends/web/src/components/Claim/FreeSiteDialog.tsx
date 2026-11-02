@@ -109,7 +109,7 @@ export function FreeSiteDialog({ conflict, site, onAnswer, onCancel }: Props) {
                 htmlFor={id}
                 className={cn(
                   "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm transition-colors",
-                  "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent",
+                  "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring",
                   checked ? "border-primary" : "border-border hover:border-border-strong",
                 )}
               >

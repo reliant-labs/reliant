@@ -80,7 +80,7 @@ function MobileRuns() {
               <Link
                 to="/m/chats/$chatId"
                 params={{ chatId: row.run.chatId }}
-                className="flex min-h-[56px] items-center gap-3 px-4 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+                className="flex min-h-[56px] items-center gap-3 px-4 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <RunStatusDot status={runStatusFromDisplayState(row.run.displayState, row.run.outcome)} />
                 <span className="min-w-0 flex-1">
@@ -125,7 +125,7 @@ function MobileRuns() {
           type="button"
           onClick={() => void list.fetchNextPage()}
           disabled={list.isFetchingNextPage}
-          className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {list.isFetchingNextPage ? "Loading…" : "Load more"}
         </button>

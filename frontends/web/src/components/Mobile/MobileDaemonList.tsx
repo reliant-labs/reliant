@@ -57,7 +57,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
       type="button"
       onClick={onCreate}
       aria-label="Add machine"
-      className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-sm font-medium text-primary active:bg-primary/10"
+      className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-sm font-medium text-primary-ink active:bg-primary/10"
     >
       <Plus className="h-4 w-4" />
       <span>Add</span>
@@ -93,7 +93,7 @@ function DaemonRow({ daemon }: { daemon: Daemon }) {
               {machineDisplayName(daemon)}
             </span>
             {size && (
-              <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+              <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-ink">
                 {size}
               </span>
             )}

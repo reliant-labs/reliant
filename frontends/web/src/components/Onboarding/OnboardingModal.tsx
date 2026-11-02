@@ -148,7 +148,7 @@ export function OnboardingModal({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-2 -mr-2 hover:bg-muted/80 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              className="p-2 -mr-2 hover:bg-muted/80 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               aria-label="Close wizard"
             >
               <X className="w-5 h-5 text-muted-foreground" />

@@ -240,7 +240,7 @@ function StartedBy({
         {parts.lead}
         <a
           href={automationHref({ id: chat.triggerId, workflow: chat.workflowName, projectId: chat.projectId })}
-          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {parts.automation}
         </a>
@@ -256,7 +256,7 @@ function StartedBy({
         <Link
           to="/workflows/runs/$runId"
           params={{ runId: parent.chatId }}
-          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {parent.title || "another run"}
         </Link>

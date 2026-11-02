@@ -190,7 +190,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                     "group flex items-start gap-2.5 w-full text-left rounded-lg px-3 py-2",
                     "touch:min-h-[44px] touch:py-2.5",
                     "border transition-all duration-150 cursor-pointer",
-                    "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-1 focus:ring-offset-background",
+                    "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
                     isSelected
                       ? "border-primary/50 bg-primary/10"
                       : "border-border/50 hover:border-border hover:bg-muted/50"
@@ -256,7 +256,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
               "w-full rounded-md border bg-background px-3 py-2 text-sm",
               "touch:min-h-[44px]",
               "placeholder:text-muted-foreground/50",
-              "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+              "focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
               "resize-none transition-colors",
               isOtherActive
                 ? "border-primary/50"
@@ -289,7 +289,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                 "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium",
                 "touch:min-h-[44px] touch:px-5 touch:text-sm",
                 "transition-all duration-150",
-                "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-background",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
                 canAdvance
                   ? "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
                   : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"

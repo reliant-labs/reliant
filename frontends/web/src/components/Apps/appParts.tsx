@@ -56,8 +56,8 @@ export function LiveLink({ link, className }: { link: AppLink; className?: strin
       title={`Open ${link.workload || link.host} (${link.url})`}
       onClick={(event) => event.stopPropagation()}
       className={cn(
-        "no-color inline-flex min-w-0 max-w-full items-center gap-1 rounded text-sm text-primary underline-offset-2 hover:underline",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "no-color inline-flex min-w-0 max-w-full items-center gap-1 rounded text-sm text-primary-ink underline-offset-2 hover:underline",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
       data-testid="app-live-link"

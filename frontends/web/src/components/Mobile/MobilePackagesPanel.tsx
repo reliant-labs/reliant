@@ -29,7 +29,7 @@ const PACKAGE_TYPE_ICON: Record<PackageType, React.ReactNode> = {
 function statusIcon(status: BackgroundProcessStatus) {
   switch (status) {
     case BackgroundProcessStatus.RUNNING:
-      return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
+      return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-ink" />;
     case BackgroundProcessStatus.COMPLETED:
       return <CheckCircle2 className="h-3.5 w-3.5 text-success-ink" />;
     case BackgroundProcessStatus.FAILED:

@@ -39,7 +39,7 @@ export const ContextUsageIndicator = memo(function ContextUsageIndicator({
 
   // Use consistent primary color throughout
   const strokeColor = "hsl(var(--primary))";
-  const textClass = "text-primary";
+  const textClass = "text-primary-ink";
 
   // Format token counts for tooltip
   const formatTokens = (count: number) => {

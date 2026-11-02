@@ -205,7 +205,7 @@ function NameCell({ row }: { row: WorkflowsTableRow }) {
           // The description is read on request, not as part of the row: it
           // is clipped to one line on screen and was read out in full.
           aria-description={summary || undefined}
-          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {workflowDisplayName(workflow)}
         </Link>
@@ -323,7 +323,7 @@ function ActionsCell({ row }: { row: WorkflowsTableRow }) {
             type="button"
             onClick={row.onSetUp}
             aria-label={`Set up ${displayName} (${qualifier})`}
-            className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Set up…
           </button>
@@ -334,7 +334,7 @@ function ActionsCell({ row }: { row: WorkflowsTableRow }) {
           type="button"
           onClick={row.onRun}
           aria-label={`Run ${displayName} (${qualifier})`}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Play className="h-3.5 w-3.5" aria-hidden="true" />
           Run…
@@ -355,7 +355,7 @@ function LastRun({ run }: { run?: RunSummary }) {
     <Link
       to="/workflows/runs/$runId"
       params={{ runId: run.chatId }}
-      className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`${status.label} · ${run.title || "Untitled run"}`}
     >
       <RunStatusDot status={status} size="sm" />

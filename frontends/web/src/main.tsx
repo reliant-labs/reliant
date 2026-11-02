@@ -12,6 +12,10 @@ import "./lib/configGuard";
 import "./lib/claimLinkBoot";
 
 import { createRoot } from "react-dom/client";
+// The brand faces, bundled and served from our own origin (index.css names
+// them in --font-sans / --font-mono; vite.config.ts preloads the Latin file).
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./index.css";
 import "./components/workflow/workflow-theme.css";
 import "./lib/debug.ts";

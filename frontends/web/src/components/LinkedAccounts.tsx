@@ -148,7 +148,7 @@ export function LinkedAccounts() {
                     disabled={linkingProvider !== null}
                     className="px-4 py-2 text-sm font-medium rounded-md transition-all disabled:opacity-50 border-2 border-transparent hover:bg-accent/50 hover:border-border"
                     style={{
-                      color: 'hsl(var(--primary))'
+                      color: 'hsl(var(--primary-ink))'
                     }}
                   >
                     {linkingProvider === provider ? 'Connecting...' : 'Link'}
@@ -168,7 +168,7 @@ export function LinkedAccounts() {
             borderColor: 'hsl(var(--primary) / 0.2)'
           }}
         >
-          <p className="text-sm" style={{ color: 'hsl(var(--primary))' }}>
+          <p className="text-sm" style={{ color: 'hsl(var(--primary-ink))' }}>
             💡 You can sign in with any of your linked accounts. At least one account must remain linked.
           </p>
         </div>

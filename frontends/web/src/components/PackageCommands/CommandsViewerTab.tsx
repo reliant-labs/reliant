@@ -1075,7 +1075,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
               <SidebarHeaderButton
                 icon={
                   <span className="relative">
-                    <Layers className={cn("w-4 h-4", showAllWorkspaces && "text-primary")} />
+                    <Layers className={cn("w-4 h-4", showAllWorkspaces && "text-primary-ink")} />
                     {/* Show indicator when other workspaces have running processes */}
                     {!showAllWorkspaces && hasRunningInOtherWorkspaces && (
                       <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -1540,7 +1540,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
         disabled={isDisabled}
         className={cn(
           "rounded transition-colors flex-shrink-0",
-          isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary",
+          isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary-ink",
           isDisabled && "opacity-50 cursor-not-allowed",
           isCompact ? "p-1" : "p-1.5"
         )} aria-label={isRunning ? `${command.name} is running` : `Run ${command.name}`}>
@@ -1585,7 +1585,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
 <button
                   key={p.port}
                   onClick={(e) => { e.stopPropagation(); onOpenPort(p.port); }}
-                  className="flex items-center gap-0.5 text-xs text-primary hover:text-primary/80 hover:underline" aria-label={`Open localhost:${p.port} in browser`}>
+                  className="flex items-center gap-0.5 text-xs text-primary-ink hover:text-primary-ink/80 hover:underline" aria-label={`Open localhost:${p.port} in browser`}>
                   <Globe className="w-3 h-3" />
                   <span>{p.port}</span>
                 </button>
@@ -1815,7 +1815,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           <Tooltip content="Rerun command" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onRerun(); }}
-            className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
+            className={cn("rounded hover:bg-primary/20 text-primary-ink transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
             <RotateCw className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
           </button>
 </Tooltip>

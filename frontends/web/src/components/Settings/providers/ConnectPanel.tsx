@@ -284,7 +284,7 @@ export function ConnectPanel({
             autoCorrect="off"
             spellCheck={false}
             className={cn(
-              "w-full rounded-md border border-border bg-background px-3 py-2 pr-10 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40",
+              "w-full rounded-md border border-border bg-background px-3 py-2 pr-10 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
               mobile && "min-h-[44px]",
             )}
           />
@@ -303,7 +303,7 @@ export function ConnectPanel({
         {config?.docsUrl && (
           <p className="text-xs text-muted-foreground">
             Create a key in the{" "}
-            <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">
               {config.shortName} console
             </a>
             .

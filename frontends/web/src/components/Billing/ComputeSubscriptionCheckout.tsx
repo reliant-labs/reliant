@@ -575,8 +575,8 @@ function Notice({
   const iconTones = {
     error: "text-destructive-ink",
     muted: "text-muted-foreground",
-    pending: "text-primary",
-    success: "text-primary",
+    pending: "text-primary-ink",
+    success: "text-primary-ink",
   } as const;
 
   return (

@@ -45,7 +45,7 @@ export function MobileWorkflowExecutionEntry({
       aria-label={`Workflow: ${getWorkflowDisplayName(execution.workflowName, true)}`}
     >
       {running ? (
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-ink" />
       ) : (
         <WorkflowIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       )}

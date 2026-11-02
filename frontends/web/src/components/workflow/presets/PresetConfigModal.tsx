@@ -152,7 +152,7 @@ export function PresetConfigModal({
                       ...prev,
                       [group.name]: e.target.value
                     }))}
-                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                   >
                     <option value="">No default (use system default)</option>
                     {groupPresets.map(preset => (

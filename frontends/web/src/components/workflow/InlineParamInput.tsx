@@ -224,7 +224,7 @@ function InlineEnumInput({
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -264,7 +264,7 @@ function InlineEnumInput({
                   )}
                 >
                   <span>{formatOption(option)}</span>
-                  {isSelected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                  {isSelected && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
                 </button>
               );
             })}
@@ -365,7 +365,7 @@ function InlineMultiEnumInput({
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             isOpen
-              ? "bg-primary/20 text-primary"
+              ? "bg-primary/20 text-primary-ink"
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -397,7 +397,7 @@ function InlineMultiEnumInput({
               <button 
                 type="button" 
                 onClick={selectAll} 
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-primary-ink hover:underline"
               >
                 All
               </button>
@@ -486,7 +486,7 @@ function InlineBooleanInput({
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
           isOn
-            ? "bg-primary/20 text-primary"
+            ? "bg-primary/20 text-primary-ink"
             : isStreaming
             ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
             : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
@@ -566,7 +566,7 @@ function InlineStringInput({
         onKeyDown={handleKeyDown}
         className={cn(
           "h-[32px] px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "min-w-20 max-w-32",
           className
         )}
@@ -676,7 +676,7 @@ function InlineNumberInput({
         step={schema.type === "integer" ? 1 : 0.1}
         className={cn(
           "h-[32px] px-2 text-xs rounded border border-primary bg-background",
-          "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
+          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
           "w-20",
           className
         )}
@@ -790,7 +790,7 @@ function InlineModelInput({
                 ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                 : "cursor-default opacity-60",
               open
-                ? "bg-primary/20 text-primary"
+                ? "bg-primary/20 text-primary-ink"
                 : isStreaming
                 ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
                 : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",

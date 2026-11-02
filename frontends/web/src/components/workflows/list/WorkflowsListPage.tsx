@@ -155,7 +155,7 @@ function WorkflowsHeader({ projectId }: { projectId?: string }) {
               href="https://docs.reliantlabs.io/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-primary-ink hover:underline"
             >
               <BookOpen className="h-3 w-3" aria-hidden="true" />
               Docs
@@ -266,7 +266,7 @@ function ImportConflictModal({
               onChange={(event) => setNewName(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && saveAsNew()}
               disabled={importWorkflow.isPending}
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <Button onClick={saveAsNew} disabled={importWorkflow.isPending || !newName.trim()}>
               Save
@@ -608,7 +608,7 @@ function WorkflowsBody() {
               <button
                 type="button"
                 onClick={() => void navigate({ to: "/workflow/new" })}
-                className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 create your own
               </button>
@@ -757,8 +757,8 @@ function WorkflowsControls({
             onClick={() => onChange({ ...search, show: chip === "all" ? undefined : chip })}
             className={
               active === chip
-                ? "inline-flex h-7 items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 text-xs font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                : "inline-flex h-7 items-center rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                ? "inline-flex h-7 items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 text-xs font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                : "inline-flex h-7 items-center rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             }
           >
             {SHOW_LABEL[chip]}

@@ -75,7 +75,7 @@ export function newDashboardSpec(slug: string, title: string, panel: Panel): Das
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export interface SaveToDashboardProps {
   orgId: string | null;

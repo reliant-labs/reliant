@@ -8,7 +8,7 @@
  * therefore no way to sign out.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("../../../store/projectStore", () => ({
@@ -90,4 +90,19 @@ describe("Header settings escape hatch", () => {
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("leads with the Reliant mark, a link home that stays in the SPA on a plain click", async () => {
+    const onNavigateHome = vi.fn();
+    render(<Header onNavigateHome={onNavigateHome} />);
+
+    const mark = screen.getByRole("link", { name: "Reliant home" });
+    expect(mark).toHaveAttribute("href", "/");
+    expect(mark.querySelector("svg")).not.toBeNull();
+
+    await userEvent.click(mark);
+    expect(onNavigateHome).toHaveBeenCalledTimes(1);
+
+    // A modifier-click is the browser's (new tab), not the router's.
+    fireEvent.click(mark, { metaKey: true });
+    expect(onNavigateHome).toHaveBeenCalledTimes(1);
+  });
 });

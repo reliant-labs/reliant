@@ -1964,7 +1964,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                 "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
                                 COMPOSER_CONTROL,
                                 settingsPage === 'model'
-                                  ? "bg-primary/20 text-primary hover:bg-primary/30"
+                                  ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
                               )}
                               onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
@@ -2005,7 +2005,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                                   : "cursor-default opacity-60",
                                 settingsPage !== null
-                                  ? "bg-primary/20 text-primary"
+                                  ? "bg-primary/20 text-primary-ink"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
                               )}
                             >

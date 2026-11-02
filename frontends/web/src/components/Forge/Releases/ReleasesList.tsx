@@ -147,7 +147,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           <button
             type="button"
             onClick={() => void data.releases.refetch()}
-            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {data.releases.isFetching ? "Retrying…" : "Try again"}
           </button>
@@ -205,7 +205,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2" data-testid="releases-toolbar">
-          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="sr-only">Filter releases</span>
             <input
@@ -529,7 +529,7 @@ function PipelineSkeleton() {
 // ── Toolbar chips ───────────────────────────────────────────────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 /** Solid border on the surface fill, as the mockup's chips; a set filter reads in ink with a stronger border. */
 const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 

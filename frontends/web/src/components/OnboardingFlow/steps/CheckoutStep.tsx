@@ -367,7 +367,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
   if (!requirement.any) {
     return (
       <div className="space-y-3 py-6 text-center" role="status">
-        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary-ink" />
         <p className="text-sm text-muted-foreground">
           You&apos;re all set — continuing.
         </p>
@@ -403,7 +403,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
             className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-3"
             role="status"
           >
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary-ink" />
             <p className="text-sm text-foreground">
               Confirming your payment… this usually takes a few seconds.
             </p>

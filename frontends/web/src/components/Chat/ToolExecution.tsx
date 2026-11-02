@@ -719,7 +719,7 @@ function ToolExecutionComponent({
         ? <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
         : <XCircle className="w-3.5 h-3.5 text-destructive" />;
     }
-    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
+    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary-ink" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
         const statusIcons: Record<string, React.ReactNode> = {
@@ -734,7 +734,7 @@ function ToolExecutionComponent({
     }
     if (needsApproval) return <Shield className="w-3.5 h-3.5 text-info" />;
     if (isDenied) return <X className="w-3.5 h-3.5 text-destructive" />;
-    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />;
+    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />;
     if (isPreparing) return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
     if (isRequested) return <Clock className="w-3.5 h-3.5 text-info" />;
     return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
@@ -875,7 +875,7 @@ function ToolExecutionComponent({
 
     const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
       pending: { icon: Clock, color: "text-muted-foreground" },
-      in_progress: { icon: Zap, color: "text-primary" },
+      in_progress: { icon: Zap, color: "text-primary-ink" },
       completed: { icon: CheckCircle, color: "text-success-ink" },
       failed: { icon: XCircle, color: "text-destructive-ink" },
       blocked: { icon: AlertCircle, color: "text-warning-ink" },
@@ -893,7 +893,7 @@ function ToolExecutionComponent({
             {isPreparing ? (
               <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
             ) : isExecuting ? (
-              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />
             ) : hasFailed ? (
               <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
             ) : (
@@ -968,7 +968,7 @@ function ToolExecutionComponent({
                   : isCancelled ? "bg-muted text-muted-foreground"
                   : isCompleted ? "bg-muted text-muted-foreground"
                   : needsApproval ? "bg-warning/10 text-warning-ink"
-                  : isExecuting ? "bg-primary/10 text-primary"
+                  : isExecuting ? "bg-primary/10 text-primary-ink"
                   : "bg-muted text-muted-foreground"
               )}>
                 {getStatusText()}
@@ -986,7 +986,7 @@ function ToolExecutionComponent({
               <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
-                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary-ink transition-colors hover:bg-primary/10"
                 aria-label="Open file"
                 type="button"
               >

@@ -455,7 +455,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       <div className="space-y-3">
         <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
           <div className="flex items-start gap-3">
-            <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+            <KeyRound className="mt-0.5 h-4 w-4 text-primary-ink" />
             <div>
               <h3 className="text-sm font-medium text-foreground">
                 Choose a provider
@@ -627,7 +627,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   placeholder={provider.keyFormat || "Enter your API key"}
                   className={cn(
                     "w-full rounded-lg border border-border/40 bg-background px-3 py-2.5 pr-10 font-mono text-sm text-foreground transition-colors placeholder:text-muted-foreground/50",
-                    "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                    "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring",
                   )}
                 />
                 <button

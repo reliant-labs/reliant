@@ -159,7 +159,7 @@ describe("Sidebar: which project a chat is in", () => {
     // Pinned while its chats scroll under it.
     expect(apiHeader).toHaveClass("sticky");
     // The open chat is in web.
-    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).toHaveClass("text-primary");
+    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).toHaveClass("text-primary-ink");
   });
 
   it("lists a main-only project's chats straight under the project, with no MAIN heading", () => {

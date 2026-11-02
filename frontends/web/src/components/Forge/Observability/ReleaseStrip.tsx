@@ -62,7 +62,7 @@ export function ReleaseStrip({ releases, rangeLabel, defaultOpen = false, onComp
           <button
             type="button"
             onClick={releases.refetch}
-            className="inline-flex items-center gap-1 rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex items-center gap-1 rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Try again

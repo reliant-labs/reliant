@@ -53,7 +53,7 @@ function ReadyMadeCard({ row, projectId }: { row: WorkflowListRow; projectId?: s
           to="/workflows/library/$workflowRef"
           params={{ workflowRef: workflow.name }}
           search={projectId ? { project: projectId } : {}}
-          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {name}
         </Link>
