@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -523,7 +524,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	// masks the result it returns, but a background process's output is
 	// buffered, streamed to subscribers and read back by later shell_output
 	// calls, none of which pass through that mask.
-	if params.RunInBackground && rctx.MasksSecrets {
+	if params.RunInBackground && rctx.MasksSecrets() {
 		return NewTextErrorResponse("refused: this command uses the workflow's secrets, and a command with secrets cannot run in the background (a trailing & or run_in_background), because its output would be kept unmasked. Run it in the foreground. No command was run."), nil
 	}
 
@@ -604,6 +605,14 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 
 	stdout := result.Stdout
 	stderr := result.Stderr
+	// Masked here, on the command's whole output, before tail_lines and the
+	// head+tail truncation below: a secret echoed across a cut would leave
+	// two fragments, neither of which matches the value the daemon masks out
+	// of the result afterwards.
+	if rctx.MasksSecrets() {
+		m := stepsecrets.NewMasker(rctx.SecretMask...)
+		stdout, stderr = m.Mask(stdout), m.Mask(stderr)
+	}
 	exitCode := result.ExitCode
 	interrupted := result.TimedOut
 	outcome.completed(exitCode, result.DurationMs, interrupted)

@@ -416,6 +416,27 @@ func HasMaskValues(contextMap map[string]interface{}) bool {
 	return false
 }
 
+// MaskValues returns the values a server-built context map lists to mask
+// (SecretMaskContextKey), from either form HasMaskValues accepts; nil when
+// there are none.
+func MaskValues(contextMap map[string]interface{}) []string {
+	switch v := contextMap[SecretMaskContextKey].(type) {
+	case []string:
+		if len(v) > 0 {
+			return v
+		}
+	case []interface{}:
+		var out []string
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,
 // from server-side fields only; a model's tool input never reaches it.
