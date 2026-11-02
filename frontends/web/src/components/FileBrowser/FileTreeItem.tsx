@@ -585,7 +585,7 @@ export const FileTreeItem = memo(function FileTreeItem({
             <Folder
               className={cn(
                 "w-4 h-4 transition-colors",
-                effectiveIsExpanded ? "text-primary" : "text-muted-foreground"
+                effectiveIsExpanded ? "text-primary-ink" : "text-muted-foreground"
               )}
             />
           ) : (
@@ -597,7 +597,7 @@ export const FileTreeItem = memo(function FileTreeItem({
         <span
           className={cn(
             "flex-1 truncate transition-colors",
-            isSelected && "text-primary font-semibold",
+            isSelected && "text-primary-ink font-semibold",
             !isSelected && "group-hover:text-foreground"
           )}
         >
@@ -668,9 +668,9 @@ export const FileTreeItem = memo(function FileTreeItem({
         >
           <span className="w-4 h-4 flex-shrink-0">
             {creatingInline === "file" ? (
-              <FilePlus className="w-4 h-4 text-primary" />
+              <FilePlus className="w-4 h-4 text-primary-ink" />
             ) : (
-              <FolderPlus className="w-4 h-4 text-primary" />
+              <FolderPlus className="w-4 h-4 text-primary-ink" />
             )}
           </span>
           <input

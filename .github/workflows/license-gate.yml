@@ -56,8 +56,10 @@ on:
 permissions:
   contents: read
 
+# A PR: a new push cancels the run in progress. Main: the run in progress
+# finishes and a newer push supersedes the pending one (ci.yml says why).
 concurrency:
-  group: license-gate-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: license-gate-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

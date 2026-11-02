@@ -1103,6 +1103,24 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
+// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+// daemon's clones queued while it was away, now that it has connected.
+func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
+}
+
+// FailProjectDaemonInstall settles a clone still installing as failed: one
+// whose outcome was lost.
+func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+}
+
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1132,6 +1150,11 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 // immutable once the row exists.
 var ErrDaemonOwnedByAnotherUser = svcerr.PermissionDenied("daemon is owned by another user")
 
+// ErrDaemonRequiresBoundToken is returned when an unbound write (a daemon
+// connecting with a login token) names an id its owner's row reserves for
+// daemon-bound credentials (Daemon.RequiresBoundToken).
+var ErrDaemonRequiresBoundToken = svcerr.PermissionDenied("daemon id is reserved for daemon-bound credentials")
+
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
 		return fmt.Errorf("daemon cannot be nil")
@@ -1151,10 +1174,16 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
-	// The conflict branch only fires for the row's own owner, so a conflict
-	// against a different owner writes nothing — in a single statement, with
-	// no read-then-write window.
+	// The conflict branch only fires for the row's own owner, and for an
+	// unbound write only on a row not reserved for bound credentials, so
+	// either refusal writes nothing — in a single statement, with no
+	// read-then-write window. The read below only names which refusal it
+	// was; it decides nothing.
 	if !wrote {
+		if existing, getErr := store.GetDaemon(ctx, r.ORM(), daemon.ID); getErr == nil &&
+			existing.UserID == daemon.UserID && existing.RequiresBoundToken && !daemon.RequiresBoundToken {
+			return fmt.Errorf("%w: daemon %s", ErrDaemonRequiresBoundToken, daemon.ID)
+		}
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
 	return nil
@@ -1736,6 +1765,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
+}
+
+// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
+// archived row that still has no machine on record.
+func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("worktree ID cannot be empty")
+	}
+	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {

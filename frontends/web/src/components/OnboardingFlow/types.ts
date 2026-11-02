@@ -84,7 +84,7 @@ export interface LaunchPlan {
   commitKey?: string;
   /**
    * The compute plan the user picked on the checkout step, e.g.
-   * `plan_compute_small`. Written to the URL so the choice survives a reload
+   * `plan_compute_m`. Written to the URL so the choice survives a reload
    * mid-payment — the one moment where losing it is most expensive.
    */
   computePlanId?: string;

@@ -451,7 +451,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
                   >
                     <MessageSquare className={cn(
                       "w-4 h-4 flex-shrink-0",
-                      highlightedIndex === index ? "text-primary" : "text-muted-foreground"
+                      highlightedIndex === index ? "text-primary-ink" : "text-muted-foreground"
                     )} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{result.title}</div>
@@ -495,7 +495,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
                     <div className={cn(
                       "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5",
                       result.role === MessageRole.USER 
-                        ? "bg-primary/20 text-primary" 
+                        ? "bg-primary/20 text-primary-ink" 
                         : "bg-muted text-muted-foreground"
                     )}>
                       {result.role === MessageRole.USER ? "U" : "A"}

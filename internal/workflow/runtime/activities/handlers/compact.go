@@ -418,6 +418,8 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		ClearProviderPins: rtx.ClearProviderPins,
 		Descendant:        rtx.Descendant,
 		PresetModelTags:   rtx.PresetModelTags,
+		ChatModel:         chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen: rtx.ThreadModelChosen,
 		Routing:           a.routing,
 		Failover:          failover,
 		// The run's provider choice and the user's tag preferences, exactly as
@@ -550,10 +552,20 @@ func resolveCompactionModelForCall(ctx context.Context, userID string, preferred
 			RequireOutputModality: models.ModalityText,
 		}
 		if spec.ChatProvider != "" {
+			own := selector
 			spec.Selector = selector
 			selector = switchSelector(spec)
 			if _, err := registry.Resolve(selector, availableProviders); err != nil {
-				return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, selector, err)
+				// The agent turn ran on the chat's model for the same reason
+				// (resolveLLMCall), so its window is the one that filled.
+				if fallback, ok := chatModelFallback(spec); ok {
+					chatSelector := switchSelector(fallback)
+					chatSelector.RequireOutputModality = models.ModalityText
+					if _, ferr := registry.Resolve(chatSelector, availableProviders); ferr == nil {
+						return chatSelector, "the chat's model: the agent's own cannot run on the selected chat provider", nil
+					}
+				}
+				return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, own, err)
 			}
 			return selector, "agent selector on the selected chat provider", nil
 		}

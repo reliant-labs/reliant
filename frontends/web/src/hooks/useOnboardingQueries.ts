@@ -146,8 +146,13 @@ export function useCloudEligibility() {
     eligible,
     reason,
     isLoading,
-    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
     refetch,
+    /** The sizes the server will admit for this caller ([] until known). */
+    allowedDaemonSizes: computeEligibility?.allowedDaemonSizes ?? [],
+    /** A monthly plan funds compute — false for a coupon-only caller. */
+    hasActiveSubscription: computeEligibility?.hasActiveSubscription ?? false,
+    /** Unspent coupon time, in coupon-unit (M) seconds; 0 when none or unknown. */
+    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
   };
 }
 

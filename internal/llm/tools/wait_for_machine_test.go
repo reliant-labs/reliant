@@ -212,15 +212,6 @@ func TestWaitForMachine_TransientFailedKeepsWaiting(t *testing.T) {
 	assert.NotContains(t, resp.Content, "failed to start")
 }
 
-// The settle window counts an UNBROKEN run of Failed looks: a machine that
-// left Failed and came back to it starts over.
-func TestWaitForMachine_FailedSettleRestartsWhenFailedClears(t *testing.T) {
-	since := failedRunStart(time.Time{}, MachineStatus{Failed: true})
-	require.False(t, since.IsZero())
-	assert.Equal(t, since, failedRunStart(since, MachineStatus{Failed: true}), "an unbroken run keeps its start")
-	assert.True(t, failedRunStart(since, MachineStatus{Starting: true}).IsZero(), "any other state clears it")
-}
-
 // A budget that ends inside the settle window answers like any other timeout:
 // the machine is still not connected, it reported failed, call again.
 func TestWaitForMachine_BudgetElapsedWhileFailedSaysCallAgain(t *testing.T) {

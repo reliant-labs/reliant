@@ -130,8 +130,8 @@ export function GraphView({ scope, range, search, navigate, subject }: {
       <div className="ml-auto"><GraphQualityInfo quality={quality} window={explorer ? undefined : graph.data?.window} notes={notes} /></div>
     </div>
     <GraphQualityNotice quality={quality} />
-    {scope.filters.length > 0 && <p role="status" className="text-xs text-ink-muted">Attribute filters don't apply to this view. <button className="text-primary hover:underline" onClick={() => navigate({ f: undefined })}>Clear filters</button></p>}
-    {explorer && processService && <p role="status" className="text-sm text-ink-muted">Methods can't be narrowed to one process. <button className="text-primary hover:underline" onClick={() => navigate({ service: undefined })}>Clear the process filter</button> to browse them.</p>}
+    {scope.filters.length > 0 && <p role="status" className="text-xs text-ink-muted">Attribute filters don't apply to this view. <button className="text-primary-ink hover:underline" onClick={() => navigate({ f: undefined })}>Clear filters</button></p>}
+    {explorer && processService && <p role="status" className="text-sm text-ink-muted">Methods can't be narrowed to one process. <button className="text-primary-ink hover:underline" onClick={() => navigate({ service: undefined })}>Clear the process filter</button> to browse them.</p>}
     {explorer && !!catalogError && <GraphReadError error={catalogError} subject={`${subject} RPC methods`} retry={() => { void everything.refetch(); if (service) void scoped.refetch(); if (rpcId) void exactCatalog.refetch(); }} />}
     {explorer
       ? processService || catalogError ? null

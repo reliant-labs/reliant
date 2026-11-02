@@ -56,7 +56,9 @@ describe("state vocabulary", () => {
     expect(runStateOf(w("running", "ready")).label).toBe("Running");
     const billing = runStateOf(w("running", "suspended", "no active compute plan"));
     expect(billing.label).toBe("Suspended — billing");
-    expect(billing.detail).toContain("Subscribe to a compute plan");
+    expect(billing.detail).toContain("Resolve app hosting billing in Settings → Billing");
+    expect(billing.detail).toContain("A machine subscription does not enable app hosting");
+    expect(billing.detail).not.toContain("Subscribe to a compute plan");
     expect(billing.detail).toContain("no active compute plan");
   });
 });

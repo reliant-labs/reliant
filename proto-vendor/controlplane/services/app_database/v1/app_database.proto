@@ -3,8 +3,10 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/shared.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/app_database/v1;app_databasev1";
 
@@ -49,6 +51,36 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/app_data
 //   - DeadlineExceeded: the statement ran past timeout_ms.
 //   - Unavailable: querying is not configured on this server, or the database
 //     is unreachable.
+//
+// LIVE DASHBOARD PANELS (QueryDatabasePanel, ListDashboardDatabases) are a
+// second, narrower door onto the same databases. A panel refreshes on a timer
+// and is viewed by a whole team, so it cannot ask for a confirmation and a
+// reason per call; what earns it that exemption is how little it can reach:
+//   - the database must have opted in (ManagedDatabase.dashboards, recorded in
+//     the release shape; absent = disabled);
+//   - it connects as forge_dash, which can SELECT only the columns of tables
+//     the schema marks for dashboards (a subset of what forge_ro reads), never
+//     as forge_ro;
+//   - the caller is a signed-in PERSON of the environment's org who holds the
+//     db:query grant. An access token, of any kind, is refused.
+// Each request is still audited. Admission order, each step's error:
+//   1. unknown environment: NotFound.
+//   2. not a member of its org: NotFound (existence is not revealed).
+//   3. not a signed-in person with the db:query grant: PermissionDenied.
+//   4. data_access policy deny (or unknown): PermissionDenied.
+//   5. dashboards not enabled for the database: FailedPrecondition, reason
+//      "dashboards_not_enabled".
+//   6. no hosted placement (self-managed, local): FailedPrecondition, reason
+//      "datasource_unreachable".
+//   7. per-principal budget (shared with QueryDatabase): ResourceExhausted,
+//      reason "rate_limited", with Retry-After.
+//   8. too many panel queries in flight for this principal on this
+//      environment: ResourceExhausted, reason "query_in_flight".
+//   9. the database's panel concurrency is taken: ResourceExhausted, reason
+//      "db_panel_busy".
+//  10. at run time: DeadlineExceeded, reason "lock_timeout" (a migration holds a
+//      lock; the panel gave up in 500ms instead of queueing behind it), then
+//      "statement_timeout".
 service AppDatabaseService {
   option (forge.v1.service) = {
     name: "AppDatabaseService"
@@ -76,6 +108,27 @@ service AppDatabaseService {
         ]
       }
     };
+  }
+
+  // QueryDatabasePanel runs one dashboard panel's read-only statement as the
+  // database's dashboard role and returns it folded for drawing: a time series
+  // when draw is "line" (or "auto" and the first column is a time), otherwise
+  // rows. $1 (from), $2 (to) and $3 (step_seconds) are bound, never spliced.
+  //
+  // Not declared as an activity: a panel refreshes every minute, so the handler
+  // records one dashboard_db_access event per person, dashboard, environment
+  // and day instead. The audit_log row is written for every request.
+  rpc QueryDatabasePanel(QueryDatabasePanelRequest) returns (QueryDatabasePanelResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListDashboardDatabases returns the environment's databases that have
+  // dashboards enabled, their limits, and the tables and columns the dashboard
+  // role may SELECT (the editor's schema browser). Same admission as
+  // QueryDatabasePanel, without the database/placement steps for databases that
+  // are not enabled: those are simply absent.
+  rpc ListDashboardDatabases(ListDashboardDatabasesRequest) returns (ListDashboardDatabasesResponse) {
+    option (forge.v1.method) = {auth_required: true};
   }
 }
 
@@ -141,4 +194,141 @@ message DatabaseColumn {
 // DatabaseRow is one result row: one JSON value per column.
 message DatabaseRow {
   repeated google.protobuf.Value values = 1;
+}
+
+message QueryDatabasePanelRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which database of the environment. Empty = the environment's only managed
+  // database.
+  string database = 2 [(buf.validate.field).string.max_len = 128];
+  // One read-only statement. It may reference $1 (from, timestamptz), $2 (to,
+  // timestamptz, exclusive) and $3 (step in seconds, int4), and no other
+  // parameter. SET, RESET and set_config are refused.
+  string sql = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 16384
+  ];
+  // How the result is folded: "auto" (or empty), "line", "number", "table" or
+  // "bar". "line" needs time_column. Anything but "line" folds to rows; "auto"
+  // is a time series when the first column is a time.
+  string draw = 4 [(buf.validate.field).string.max_len = 16];
+  // The result column holding each row's timestamp. Empty = the first column
+  // when it is a time (auto) .
+  string time_column = 5 [(buf.validate.field).string.max_len = 63];
+  // The numeric result columns to plot. Empty = every numeric column that is
+  // not the time column or a group column.
+  repeated string value_columns = 6 [
+    (buf.validate.field).repeated.max_items = 10,
+    (buf.validate.field).repeated.items.string.max_len = 63
+  ];
+  // The result columns that split rows into separate series. Empty = every
+  // non-numeric column that is not the time column.
+  repeated string group_columns = 7 [
+    (buf.validate.field).repeated.max_items = 3,
+    (buf.validate.field).repeated.items.string.max_len = 63
+  ];
+  // The dashboard's time range: $1 = from (inclusive), $2 = to (exclusive).
+  // The server aligns both to step_seconds so one dashboard open in several
+  // tabs is one query. At most 400 days.
+  google.protobuf.Timestamp from = 8 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp to = 9 [(buf.validate.field).required = true];
+  // $3, a bucket width in seconds. 0 = chosen from the range (about 120
+  // points).
+  int32 step_seconds = 10 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 86400
+  ];
+  // The dashboard this panel belongs to and the panel itself, recorded in the
+  // audit row and the daily activity event.
+  // Identifiers, not free text: they are recorded in the audit row and shown in
+  // the activity feed. Letters, digits and . _ : / -, starting with a letter or
+  // digit.
+  string dashboard_ref = 11 [
+    (buf.validate.field).string.max_len = 128,
+    (buf.validate.field).string.pattern = "^([A-Za-z0-9][A-Za-z0-9._:/-]*)?$"
+  ];
+  string panel_id = 12 [
+    (buf.validate.field).string.max_len = 128,
+    (buf.validate.field).string.pattern = "^([A-Za-z0-9][A-Za-z0-9._:/-]*)?$"
+  ];
+}
+
+message QueryDatabasePanelResponse {
+  // What the result was folded as: "line", "number", "table" or "bar".
+  string draw = 1;
+  // The result columns, in order, with how each is drawn.
+  repeated PanelResultColumn sql_columns = 2;
+  // draw = "line": one entry per (numeric column x group), with points.
+  repeated PanelResultSeries series = 3;
+  // Otherwise: the numeric columns after the group columns, in result order,
+  // and one row per result row (group holds the other columns by name).
+  repeated string columns = 4;
+  repeated PanelResultRow rows = 5;
+  // A cap cut the result: truncated_by is "rows", "bytes", "series" or
+  // "points".
+  bool truncated = 6;
+  string truncated_by = 7;
+  // The $3 that was bound.
+  int32 step_seconds = 8;
+  int64 duration_ms = 9;
+  // Which server answered: "ro" (a read replica) or "rw" (the primary).
+  string replica = 10;
+  // When the rows were read. Up to 30 seconds old when served_from is "cache".
+  google.protobuf.Timestamp as_of = 11;
+  // "db" or "cache".
+  string served_from = 12;
+  // The audit_log row that recorded this request.
+  string audit_id = 13;
+  string sql_sha256 = 14;
+  // The database that answered.
+  string database = 15;
+  // The range actually bound to $1 and $2, aligned to step_seconds.
+  google.protobuf.Timestamp from = 16;
+  google.protobuf.Timestamp to = 17;
+}
+
+message ListDashboardDatabasesRequest {
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message ListDashboardDatabasesResponse {
+  repeated DashboardDatabase databases = 1;
+}
+
+// DashboardDatabase is one database of the environment with dashboards enabled,
+// the limits its panels run under (from the recorded release shape), and what
+// the dashboard role may read.
+message DashboardDatabase {
+  string name = 1;
+  int32 row_cap = 2;
+  int32 timeout_ms = 3;
+  int32 max_concurrency = 4;
+  repeated DashboardTable tables = 5;
+  // "ro" or "rw", as in QueryDatabasePanelResponse.
+  string replica = 6;
+  // Set when the tables could not be read (the dashboard role is not
+  // provisioned yet, the database is unreachable). The database is still
+  // listed: it is enabled.
+  string tables_error = 7;
+}
+
+message DashboardTable {
+  string schema = 1;
+  string name = 2;
+  repeated DashboardColumn columns = 3;
+}
+
+message DashboardColumn {
+  string name = 1;
+  // The Postgres type, e.g. "bigint", "timestamp with time zone".
+  string pg_type = 2;
 }

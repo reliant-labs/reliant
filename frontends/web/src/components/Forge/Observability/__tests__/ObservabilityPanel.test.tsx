@@ -97,7 +97,7 @@ describe("ObservabilityPanel", () => {
     const state = await screen.findByTestId("obs-not-set-up");
     expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
     // The pinned environment names itself in the command to copy.
-    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
     expect(within(state).getByTestId("obs-not-set-up-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability");
   });
 
@@ -113,8 +113,8 @@ describe("ObservabilityPanel", () => {
     expect(state).toHaveAttribute("role", "status");
     expect(state).toHaveTextContent("Nothing has arrived from prod yet");
     expect(state).toHaveTextContent("set up, but nothing in prod has sent telemetry in the last 7 days");
-    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
-    expect(within(state).getByText("forge obs status prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge obs status prod")).toBeInTheDocument();
     expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
   });
 

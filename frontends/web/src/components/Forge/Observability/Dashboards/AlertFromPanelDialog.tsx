@@ -49,7 +49,7 @@ export interface AlertFromPanelDialogProps {
 }
 
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-[invalid=true]:border-danger-ink";
+  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-danger-ink";
 
 /** What an environment's recorded shape says about the rules it already declares. */
 export function declaredRulesOf(env: ObsEnvironment | undefined): DeclaredRules {
@@ -315,7 +315,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
                       setCopied(false);
                     }}
                     className={cn(
-                      "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                      "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       !showRuleOnly === option.value ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink"
                     )}
                   >

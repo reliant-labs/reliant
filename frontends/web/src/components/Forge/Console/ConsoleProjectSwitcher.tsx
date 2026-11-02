@@ -74,7 +74,7 @@ export function ConsoleProjectSwitcher({ forgeProject, onSelect, onSelectAll }: 
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`App: ${forgeProject}. Switch app`}
-        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ProjectMonogram name={forgeProject} />
         <span className="min-w-0 flex-1 truncate">{forgeProject}</span>

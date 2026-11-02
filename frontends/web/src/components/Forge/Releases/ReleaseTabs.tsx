@@ -131,7 +131,7 @@ export function EnvPicker({ envs, value, onChange }: { envs: ReleaseEnv[]; value
             aria-pressed={env.name === value}
             onClick={() => onChange(env.name)}
             className={cn(
-              "inline-flex h-6 items-center rounded px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+              "inline-flex h-6 items-center rounded px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               env.name === value ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink"
             )}
           >
@@ -288,7 +288,7 @@ function BaseMenu({ value, options, onChange }: { value: string; options: Releas
         aria-expanded={open}
         aria-label={`Compare with ${value}`}
         onClick={() => setOpen((prev) => !prev)}
-        className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="release-base"
       >
         {shortVersion(value)}

@@ -629,19 +629,13 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					}
 				} else if currentContent != "" {
 					logging.WarnContext(ctx, fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
+						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
 					return
 				} else {
 					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("empty response from Reliant proxy"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("empty response from Reliant proxy"),
+						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
 					return
 				}
 
@@ -666,10 +660,12 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				return
 			}
 
+			// Out of retries, or not retryable: what this last request billed
+			// goes out after the error, or the usage ledger loses it.
+			billed := c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation)
 			retry, wait, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-				close(eventChan)
+				llm.EndStreamWithError(eventChan, retryErr, billed)
 				return
 			}
 			if retry {
@@ -685,7 +681,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				// supervision surface read it as "the model is thinking".
 				// The attempt's accumulator is dropped with it; what it billed
 				// goes out on the wait, so the usage ledger counts this request too.
-				wait.Usage = llm.FailedAttemptUsage(c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
+				wait.Usage = llm.FailedAttemptUsage(billed)
 				select {
 				case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 				case <-ctx.Done():
@@ -703,8 +699,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					continue
 				}
 			}
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-			close(eventChan)
+			llm.EndStreamWithError(eventChan, retryErr, billed)
 			return
 		}
 	}()

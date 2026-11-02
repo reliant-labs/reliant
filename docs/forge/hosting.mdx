@@ -24,26 +24,30 @@ Telemetry is collected from the first deploy too: see [Observability](/forge/obs
 
 ## Billing
 
-Anything that runs a process on Reliant's hosting needs an active Reliant Compute plan: every hosted service, worker and job, the managed database, and image builds. Set one up under **Settings → Billing**; plan details and prices are shown there. Compute plans are bought per user and attach to that user's first organization, so the person who sets one up is whoever can manage billing for the organization.
+Paid app hosting requires an independent, organization-wide **pay-as-you-go usage billing agreement**, authorized explicitly by an owner or admin under **Settings → Billing → Usage & invoices → App hosting billing**. There is no base fee and no machine purchase is required. CPU, memory and storage are billed from first use at the displayed usage rates; machine subscriptions include no separately spendable app hosting allowance.
+
+Choose a positive **monthly admission budget** and accept the displayed policy before continuing to checkout. A saved card, AI wallet credit, machine subscription or checkout return alone does not activate hosting: the server must verify the agreement's funding. The budget controls admission and suspension against measured usage, not a guaranteed maximum invoice. Enforcement can lag and in-flight workloads can keep accruing charges; storage is not deleted. Changing the consented budget is not currently supported in the app.
+
+Independent hosting billing is rolling out separately. If the app says it is unavailable, buying a machine plan does not enable it. Hosting authorization does not add an observability allowance or unlock longer product-event retention; [observability billing](/account/observability-billing) remains separate.
 
 Static sites are the exception. They run no process, just files behind the CDN, so an organization with no plan gets a free tier for them:
 
-- **One static site per organization**, counted across all of its environments. Deploying a second one is queued like any other billing hold (below) until you remove a site or set up a plan.
+- **One static site per organization**, counted across all of its environments. Deploying a second one is queued like any other billing hold (below) until you remove a site or enable independent app hosting billing.
 - **1 GiB of storage.** Reliant keeps a release's files three times (live, its archive and the previous release), so in practice a release of about 340 MiB or less fits. A larger one is held with the size in the message; shrink the site or subscribe.
 - **10 GiB of traffic per calendar month** (UTC) for the organization. The organization's owner is notified at 80% and 100%, and past the limit the site answers `429` until the month rolls over.
 
-A project that is only a static site, such as a landing page, can therefore be published without a plan. A project with a hosted backend needs a plan for the backend, even though its frontend is static.
+A project that is only a qualifying free static site, such as a landing page, can therefore be published without paid hosting authorization. A hosted backend needs the independent usage agreement, even though its frontend is static.
 
 ## Queued deploys
 
-You do not have to set up billing before your first deploy. If the organization has no plan, the deploy is **queued, not refused**. Reliant builds and records the release as usual, then holds it. Nothing is running yet, and nothing needs to be re-run: once billing is set up, the hold is released automatically and the deploy goes live. In the meantime:
+You do not have to set up billing before your first deploy. If required app hosting billing is not active, the deploy is **queued, not refused**. Reliant builds and records the release as usual, then holds it. Nothing is running yet, and nothing needs to be re-run: once billing is set up, the hold is released automatically and the deploy goes live. In the meantime:
 
 - `forge env deploy` prints one block (what it waits on, why, what to do, a link, and that there is nothing to re-run) and exits with code **7**. Seven means "queued on a person", not "failed", so a CI job can treat it differently from a real error. `--json` reports the same facts, and `forge env status <env>` also exits 7 while the deploy is queued.
 - `forge env deploy --wait` (or `forge env status <env> --wait`) blocks until the deploy is live.
 - The environment's page in **Apps** (**Environments → \<env\>**) shows a "Waiting on billing" banner. Someone who can manage billing gets a **Set up billing** button that returns them to the environment afterwards; anyone else is told that only an admin can set it up, with a **Copy link** button to send along. The environment is marked queued in the Apps navigation, and a desktop notification tells you once when the deploy goes live or fails.
 - A newer deploy to the same environment replaces a queued one.
 
-Some deploys are refused rather than queued, with the reason printed: when the deploy asks for more than your plan allows, when the plan cannot be determined (retry), or when your spend cap has been reached. The spend cap is deliberate: it can clear on its own at the start of a billing period, and a deploy should not fire unattended then.
+Some deploys are refused rather than queued, with the reason printed: when a resource limit is exceeded, funding cannot be determined, or the admission budget has been reached. Follow the reported action; a budget refusal must not be treated as authorization to retry unattended.
 
 ## Stopping and deleting an environment
 

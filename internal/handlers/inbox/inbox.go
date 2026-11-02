@@ -796,7 +796,7 @@ func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1
 			payload.Held = append(payload.Held, &reliantv1.HeldWorktree{
 				WorktreeId: h.WorktreeID, Name: h.Name, ProjectName: h.ProjectName, Path: h.Path,
 				Reason: h.Reason, Detail: h.Detail, SizeBytes: h.SizeBytes,
-				Removable: h.Removable, Cleaning: h.Cleaning,
+				Removable: h.Removable, Cleaning: h.Cleaning, Forgettable: h.Forgettable,
 			})
 		}
 		out = append(out, &reliantv1.InboxItem{

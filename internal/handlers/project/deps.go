@@ -28,6 +28,9 @@ type Repository interface {
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+	// GetDaemon completes projectcheckout.Reader: whose machine an install
+	// is, and what to call it in a sentence.
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
@@ -53,6 +56,9 @@ type Router interface {
 	// SendDaemonCommandToDaemon runs one on a specific daemon (reading a
 	// fresh clone's forge name).
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	// PlacementDaemonID ranks the machines holding a project's checkout the
+	// way the project's other work is placed (projectcheckout.Resolve).
+	PlacementDaemonID(ctx context.Context, userID, daemonID string) (string, error)
 	// ResolveDaemonID names the daemon SendDaemonCommand would route to.
 	ResolveDaemonID(ctx context.Context, userID string) (string, error)
 	// EnqueueDaemonCommand queues a command for the user's daemons'

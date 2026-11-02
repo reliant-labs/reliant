@@ -97,8 +97,8 @@ describe("SettingsService keys", () => {
   it("an imperative read shares the hook's cache entry", async () => {
     const [a, b] = await Promise.all([readBrowserPreferences(), readBrowserPreferences()]);
     expect(calls.GetPreferences).toBe(1);
-    expect(a.openLinksInApp).toBe(true);
-    expect(b.openLinksInApp).toBe(true);
+    expect(a.defaultPage).toBe("");
+    expect(b.defaultPage).toBe("");
     expect(queryClient.getQueryData(settingsServiceKeys.getPreferences({}))).toBeDefined();
   });
 

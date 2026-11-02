@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
   suspendDaemon: vi.fn(async () => {}),
   resumeEnvironment: vi.fn(async () => {}),
@@ -128,7 +128,7 @@ function cloudDaemon(over: Record<string, unknown> = {}) {
     status: ACTIVE,
     lifecyclePhase: PHASE_READY,
     platform: '',
-    size: 'medium',
+    size: 'l',
     lastStatusMessage: '',
     ...over,
   }
@@ -277,7 +277,7 @@ describe('machine detail — status presentation', () => {
 
     const header = await screen.findByTestId('machine-detail-header')
     expect(
-      within(header).getAllByText(/disconnected/i),
+      within(header).getAllByText(/^offline$/i),
     ).toHaveLength(1)
   })
 

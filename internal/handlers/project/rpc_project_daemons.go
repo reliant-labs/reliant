@@ -16,11 +16,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // projectDirHealConsumerName is the durable JetStream consumer name used by
@@ -104,7 +107,16 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 			_ = msg.Ack()
 			return
 		}
-		s.ensureProjectDirsOnDaemon(evt.UserID, evt.DaemonID)
+		if err := s.ensureProjectDirsOnDaemon(evt.UserID, evt.DaemonID); err != nil {
+			// The machine stopped answering mid-heal. The connect event
+			// is published only once its link answered a probe, so this
+			// is a link that dropped again: try the whole heal later
+			// (mkdir is idempotent), a bounded number of times.
+			if md, mdErr := msg.Metadata(); mdErr == nil && md.NumDelivered < projectDirHealMaxDeliveries {
+				_ = msg.NakWithDelay(projectDirHealRetryDelay)
+				return
+			}
+		}
 		_ = msg.Ack()
 	})
 	if err != nil {
@@ -123,55 +135,129 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 	return nil
 }
 
+// Project-dir heal retry bounds: a heal stopped by a transport failure is
+// redelivered after projectDirHealRetryDelay, up to
+// projectDirHealMaxDeliveries deliveries in all.
+const (
+	projectDirHealRetryDelay    = 30 * time.Second
+	projectDirHealMaxDeliveries = 5
+)
+
 // ensureProjectDirsOnDaemon mkdirs each of the user's project paths on the
 // connected daemon. Called by StartDaemonEventConsumer on every daemon
 // connect event. Idempotent.
-func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) {
+//
+// The mkdirs go to daemonID, the machine that connected: sent to the user's
+// default machine instead, a cloud machine's connect healed the user's laptop.
+// A mkdir whose round trip failed stops the heal and is returned: every later
+// one would meet the same link, one 30s timeout at a time. A mkdir the daemon
+// itself refused is logged and the heal goes on.
+//
+// A connect event that names no machine heals nothing: there is no machine to
+// pin the mkdirs to, and sending them to the default machine is the
+// laptop-healed-for-a-cloud-machine bug above.
+func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
+	if daemonID == "" {
+		logging.Warn("project-dir-heal: skipped; the connect event named no machine", "userID", userID)
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 200})
 	if err != nil {
 		logging.Warn("project-dir-heal: failed to list user projects", "error", err, "userID", userID, "daemonID", daemonID)
-		return
+		return nil
 	}
 	if len(projects) == 0 {
-		return
+		return nil
 	}
 	// The counts are logged, not just the total. The total alone read as
 	// "ensured 2 project dirs" on 2026-10-07 when the heal had in fact
 	// skipped both — they were repositories, whose directories only a clone
 	// may create — and the log was the first place anyone looked for why the
 	// new machine had no houndersclub directory.
-	var healed, skippedRepository int
+	var healed, skippedRepository, skippedElsewhere int
 	defer func() {
 		logging.Info("project-dir-heal: done",
 			"userID", userID, "daemonID", daemonID, "projects", len(projects),
-			"mkdir", healed, "skipped_repository", skippedRepository)
+			"mkdir", healed, "skipped_repository", skippedRepository, "skipped_elsewhere", skippedElsewhere)
 	}()
-	for _, p := range projects {
+	for _, project := range projects {
 		// Judged with ospath because the mkdir runs on the daemon, not here.
 		// Under filepath.IsAbs this heal silently skipped every project
 		// belonging to a Windows daemon, so their directories were never
 		// created and the skip left no trace.
-		if p == nil {
+		if project == nil {
 			continue
 		}
-		if !projectDirIsHealable(p) {
+		if !projectDirIsHealable(project) {
 			skippedRepository++
 			continue
 		}
-		if p.Path == "" || !ospath.IsAbs(p.Path) {
+		if project.Path == "" || !ospath.IsAbs(project.Path) {
 			logging.Warn("project-dir-heal: skipping project with a non-absolute path",
-				"userID", userID, "daemonID", daemonID, "projectID", p.ID, "path", p.Path)
+				"userID", userID, "daemonID", daemonID, "projectID", project.ID, "path", project.Path)
 			continue
 		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
-			logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+		// A plain folder that is already on another machine lives there: an
+		// empty twin here would read as a second checkout (the connect
+		// reconcile records it installed) and split the project's files.
+		if elsewhere, err := s.installedElsewhere(ctx, userID, project.ID, daemonID); err != nil || elsewhere {
+			skippedElsewhere++
 			continue
+		}
+		if err := s.healProjectDir(ctx, userID, daemonID, project.Path); err != nil {
+			if _, daemonRefused := toolexec.DaemonReportedText(err); daemonRefused {
+				logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", project.Path)
+				continue
+			}
+			logging.Info("project-dir-heal: stopped; the machine did not answer, so the heal is retried later",
+				"error", err, "userID", userID, "daemonID", daemonID, "path", project.Path)
+			return err
+		}
+		// The folder this made is the project's checkout on this machine, so
+		// it is recorded in the same step: a chat's directory comes only from
+		// a machine's own project_daemons row. Recorded here rather than left
+		// to the connect-time reconcile, which runs concurrently and may have
+		// probed before the mkdir landed — the outcome no longer depends on
+		// which finishes first. Neither ever removes a row, and both write the
+		// same (project, machine, path).
+		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+			logging.Warn("project-dir-heal: made the folder but could not record it; the next connect's reconcile records it",
+				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
 		}
 		healed++
 	}
+	return nil
+}
+
+// healProjectDir sends one heal mkdir to daemonID, pinned: the heal is about
+// the machine that connected, and default resolution may name another.
+func (s *Service) healProjectDir(ctx context.Context, userID, daemonID, path string) error {
+	return s.sendToDaemon(ctx, userID, daemonID, "fs.mkdir", map[string]string{"path": path}, nil)
+}
+
+// installedElsewhere reports whether the project's checkout is recorded on
+// another machine that exists and is the user's (daemonplacement.UserCheckouts),
+// whether or not it is connected. A row of a removed or replaced machine, or
+// of another user's, is not "elsewhere": nothing can run there, and counting
+// it left a replaced machine's plain folders (onboarding's my-project among
+// them) never healed again. A machine that is kept but never reconnects still
+// counts: the refusal names it, and removing it lets the heal run. An error
+// reads as "elsewhere": the heal is best effort, and creating a directory is
+// the irreversible direction.
+func (s *Service) installedElsewhere(ctx context.Context, userID, projectID, daemonID string) (bool, error) {
+	rows, err := daemonplacement.UserCheckouts(ctx, s.deps.Repo, userID, projectID)
+	if err != nil {
+		return true, err
+	}
+	for _, row := range rows {
+		if row.DaemonID != daemonID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // projectDirIsHealable reports whether project-dir-heal may create a
@@ -415,8 +501,10 @@ func (s *Service) resolveProjectDaemonRow(ctx context.Context, projectID, daemon
 }
 
 // PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
-// Reuses the user's default daemon command channel; control-plane callers
-// are expected to invoke this with the daemon's owner user identity.
+// The command is pinned to that daemon: the row's path is ITS path, and sent
+// by default resolution it named a directory on whichever machine answered.
+// Control-plane callers are expected to invoke this with the daemon's owner
+// user identity.
 func (s *Service) PullProjectOnDaemon(
 	ctx context.Context,
 	req *connect.Request[reliantv1.PullProjectOnDaemonRequest],
@@ -436,7 +524,7 @@ func (s *Service) PullProjectOnDaemon(
 		Error   string `json:"error"`
 	}
 	payload := map[string]string{"path": pd.Path, "branch": branch}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "git.pull", payload, &pullResp); err != nil {
+	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.pull", payload, &pullResp); err != nil {
 		return nil, daemonerr.Error("git pull", err)
 	}
 	// Refresh cloned_at so the admin UI shows "just now" after a successful
@@ -450,7 +538,8 @@ func (s *Service) PullProjectOnDaemon(
 }
 
 // RemoveProjectFromDaemon deletes the on-disk clone AND the
-// project_daemons row. The Project row itself is untouched (it may still be
+// project_daemons row. The delete is pinned to that daemon: sent by default
+// resolution, it removed whatever sat at the same path on another machine. The Project row itself is untouched (it may still be
 // cloned on other daemons). Idempotent — calling on an absent clone still
 // succeeds so the UI can clean up half-broken state.
 func (s *Service) RemoveProjectFromDaemon(
@@ -474,16 +563,40 @@ func (s *Service) RemoveProjectFromDaemon(
 		Error   string `json:"error"`
 	}
 	payload := map[string]string{"path": pd.Path}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "git.remove", payload, &removeResp); err != nil {
-		// On-disk remove failure: still try to drop the DB row so the UI
-		// stops listing a ghost. Log so an operator can investigate.
-		logging.WarnContext(ctx, "RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
+	// The row goes only once the machine has removed the checkout. It is the
+	// only record of a checkout on that machine: dropped while the clone is
+	// still on disk (the machine was offline, the remove failed), the machine
+	// is refused the project while its files sit there unrecorded, and the
+	// user is told to clone what they already have. The remove is retried
+	// from here; a machine that is gone for good releases its rows when it
+	// is removed (db.Repo.RemoveDaemon).
+	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
+		if daemonerr.Unreachable(err) {
+			// Refused, with the two ways out: nothing else ever drops the
+			// row of a machine that never comes back.
+			return nil, svcerr.WithReason(svcerr.WithCause(svcerr.WithClass(
+				svcerr.Unavailable(removeFromOfflineMachine), svcerr.ClassUser), err), errreason.DaemonNotConnected)
+		}
+		return nil, daemonerr.Error("remove the project from the machine", err)
+	}
+	if !removeResp.Success {
+		reason := strings.TrimSpace(removeResp.Error)
+		if reason == "" {
+			reason = "the machine did not report the checkout removed"
+		}
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("could not remove the project from the machine: %s", reason))
 	}
 	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 }
+
+// removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine
+// that is not connected. The checkout is still on that disk and the row is
+// its only record, so the row stays; the message names what lets it go.
+const removeFromOfflineMachine = "that machine is offline, so the project could not be removed from it: " +
+	"bring it online and try again, or remove the machine (that releases every project recorded on it)"
 
 // RecloneProjectOnDaemon blows away the existing clone and re-clones from the
 // project's remote_url at the recorded default branch. Refuses to run when
@@ -516,7 +629,7 @@ func (s *Service) RecloneProjectOnDaemon(
 		"repo":   *project.RemoteURL,
 		"branch": branch,
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "git.reclone", payload, &recloneResp); err != nil {
+	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp); err != nil {
 		return nil, daemonerr.Error("git reclone", err)
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the

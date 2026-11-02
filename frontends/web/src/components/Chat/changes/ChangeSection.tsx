@@ -25,7 +25,7 @@ export function ChangeSection({ title, count, expanded, onToggle, actions, child
           className={cn(
             "flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-0.5 text-left",
             "text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           <ChevronRight

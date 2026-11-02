@@ -295,11 +295,61 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 	})
 }
 
+// MergeUnownedWorktreeCleanupMetadata is MergeWorktreeCleanupMetadata for an
+// archived row with no machine on record, and only while it has none: the
+// row is selected FOR UPDATE with daemon_id IS NULL, the lock
+// AdoptWorktreeDaemon's UPDATE takes too, so a machine that claims the row
+// first leaves nothing to merge, and fn sees the stored value of a row nobody
+// can claim until it commits. It reports whether fn's change was written.
+func MergeUnownedWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	wrote := false
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
+		wrote = false
+		var rows []Worktree
+		err := db.Bun().NewSelect().Model(&rows).
+			Column(WorktreeFieldCleanupMetadata).
+			Where("id = ?", id).
+			Where("daemon_id IS NULL").
+			Where("deleted_at IS NOT NULL").
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		meta := core.CleanupMetadata{}
+		if rows[0].CleanupMetadata != nil && *rows[0].CleanupMetadata != "" {
+			_ = json.Unmarshal([]byte(*rows[0].CleanupMetadata), &meta)
+		}
+		if !fn(&meta) {
+			return nil
+		}
+		if err := SetWorktreeCleanupMetadata(ctx, db, id, &meta); err != nil {
+			return err
+		}
+		wrote = true
+		return nil
+	})
+	return wrote, err
+}
+
 // cleanupMetadataPending is true while a row's directory may still be on
 // disk: it has no cleanup metadata saying directory_deleted. The jsonb cast
 // sits inside a CASE so a hand-edited value cannot fail the whole listing.
 const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN false
 	ELSE COALESCE((worktrees.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false`
+
+// ownerCheckoutPath is the project's INSTALLED checkout on the worktree's
+// owner — its project_daemons row — which is the repo a reclaim runs git in on
+// that machine. Nothing else answers: a row of a clone still landing or one
+// that failed is not a repository, projects.path is where the project was
+// created (another machine's path, possibly another clone), and a worktree
+// with no recorded owner has no machine to ask. Those get "", and the sweep
+// skips every step that needs a repository (reclaim, snapshot, git branch -D)
+// rather than guess one.
+const ownerCheckoutPath = "COALESCE(pd.path, '')"
+
+// ownerCheckoutJoin joins a worktree to its owner's installed checkout.
+const ownerCheckoutJoin = "LEFT JOIN project_daemons AS pd ON pd.project_id = worktrees.project_id AND pd.daemon_id = worktrees.daemon_id AND pd.install_state = 'installed'"
 
 // ListWorktreesForReclaim returns every workspace whose directory a daemon
 // may still hold: not main, has a path, and not already known to be
@@ -311,8 +361,9 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.user_id AS owner_user_id").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("worktrees.is_main = false").
 		Where("worktrees.path <> ''").
 		Where("worktrees.status NOT IN (?, ?)",
@@ -342,8 +393,9 @@ func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.name AS project_name").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("p.user_id = ?", userID).
 		Where("worktrees.is_main = false").
 		Where("worktrees.deleted_at IS NOT NULL").

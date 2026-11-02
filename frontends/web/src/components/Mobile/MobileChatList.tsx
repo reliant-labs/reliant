@@ -285,7 +285,7 @@ const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: bo
                 </span>
                 {status && (
                   <span
-                    className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary-ink"
                     data-testid="mobile-chat-still-running"
                     aria-label={stillRunningPhrase(chat.workingThreads)}
                   >
@@ -300,7 +300,7 @@ const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: bo
                 Needs you
               </span>
             ) : busy ? (
-              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary">
+              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary-ink">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Working
               </span>
@@ -381,7 +381,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
               "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
               group.hasActivity
                 ? "bg-destructive/10 text-destructive-ink"
-                : "bg-primary/10 text-primary",
+                : "bg-primary/10 text-primary-ink",
             )}
           >
             {group.chats.length}
@@ -503,7 +503,7 @@ export function MobileChatList() {
             <button
               type="button"
               onClick={() => setCreatingWorkspace(true)}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary active:bg-primary/10"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary-ink active:bg-primary/10"
             >
               <GitBranchPlus className="h-4 w-4" />
               {/* Across projects, say which one it is made in. */}

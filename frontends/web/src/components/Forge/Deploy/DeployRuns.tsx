@@ -26,6 +26,8 @@ import { useDeployRun, useDeployRuns } from "@/hooks/release-queries";
 import { deployHeadline, deploysNeedingAttention, phaseWords, type DeployRun, type DeployRunState } from "@/services/forge/deployAttempts";
 import { cn } from "@/lib/utils";
 
+import { AskReliantActions, AskReliantMenu } from "../Observability/AskReliant/AskReliant";
+import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
 import { Ago, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 
@@ -143,7 +145,7 @@ function DeployRunRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />}
         <Status tone={TONE[run.state]} label={STATE_LABEL[run.state]} size="sm" />
@@ -189,6 +191,11 @@ function DeployRunDetail({ run, hrefs }: { run: DeployRun; hrefs: DeployRunHrefs
         )}
         {run.exitCode !== null && <span className="text-ink-muted">exit {run.exitCode}</span>}
       </div>
+      {run.state === "failed" && (
+        <div data-testid={`deploy-run-ask-${run.id}`}>
+          <AskReliantActions subject={failedDeploySubject(run)} />
+        </div>
+      )}
       {run.hasLog || run.state === "running" ? (
         detail.isLoading ? (
           <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading output" />
@@ -211,6 +218,11 @@ function DeployRunDetail({ run, hrefs }: { run: DeployRun; hrefs: DeployRunHrefs
       )}
     </div>
   );
+}
+
+/** A failed deploy as Ask Reliant's subject: references only, never its output (askReliantPrompt). */
+function failedDeploySubject(run: DeployRun): AskSubject {
+  return { kind: "deploy-failed", env: run.env || null, runId: run.id, version: run.release || undefined };
 }
 
 // ── Overview: above the environment strip ───────────────────────────────────
@@ -242,6 +254,7 @@ export function DeployRunsBanner({ project, deployHref }: { project: string; dep
           <Link href={deployHref(run)} className={cn(INK_LINK, "text-xs")}>
             {run.state === "running" ? "Watch" : "See the output"}
           </Link>
+          {run.state === "failed" && <AskReliantMenu subject={failedDeploySubject(run)} appearance="button" label="Ask Reliant" testId={`overview-deploy-ask-${run.id}`} />}
         </li>
       ))}
     </ul>

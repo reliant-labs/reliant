@@ -1847,29 +1847,29 @@ function WorkflowBuilderInner({
         {isBuiltinWorkflow && (
           <div className="bg-primary/10 border-b border-primary/30 px-4 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <Lock className="w-4 h-4 text-primary shrink-0" />
+              <Lock className="w-4 h-4 text-primary-ink shrink-0" />
               {source === "project" ? (
                 // A project workflow is a file in the repo, versioned and shared
                 // with the team. It is edited where it lives, not copied.
                 <>
-                  <span className="text-primary text-sm font-semibold">
+                  <span className="text-primary-ink text-sm font-semibold">
                     In your repo
                   </span>
-                  <span className="text-primary/60 text-sm">—</span>
-                  <span className="text-primary/90 text-sm">
+                  <span className="text-primary-ink/60 text-sm">—</span>
+                  <span className="text-primary-ink/90 text-sm">
                     Defined in this project's{" "}
-                    <code className="font-mono text-xs text-primary">.reliant/workflows/</code>.
+                    <code className="font-mono text-xs text-primary-ink">.reliant/workflows/</code>.
                     Edit the YAML file there to change it for everyone on the repo.
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="text-primary text-sm font-semibold">
+                  <span className="text-primary-ink text-sm font-semibold">
                     View Only
                   </span>
-                  <span className="text-primary/60 text-sm">—</span>
-                  <span className="text-primary/90 text-sm">
-                    This is a built-in workflow. Click <strong className="text-primary">"Create a Copy"</strong> to create an
+                  <span className="text-primary-ink/60 text-sm">—</span>
+                  <span className="text-primary-ink/90 text-sm">
+                    This is a built-in workflow. Click <strong className="text-primary-ink">"Create a Copy"</strong> to create an
                     editable copy.
                   </span>
                 </>
@@ -1879,7 +1879,7 @@ function WorkflowBuilderInner({
               href="https://docs.reliantlabs.io/workflows"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-primary/80 hover:text-primary text-xs transition-colors shrink-0"
+              className="flex items-center gap-1.5 text-primary-ink/80 hover:text-primary-ink text-xs transition-colors shrink-0"
             >
               Learn more
               <ExternalLink className="w-3 h-3" />
@@ -2483,7 +2483,7 @@ function WorkflowBuilderInner({
                 }}
                 placeholder="my-workflow"
                 autoFocus
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Use lowercase letters, numbers, and underscores for node IDs

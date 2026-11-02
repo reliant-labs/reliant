@@ -99,7 +99,7 @@ export function AccountOrderCell({
               drag.onDragStart(account.id);
             }}
             onDragEnd={() => drag.onDragEnd()}
-            className="shrink-0 cursor-grab rounded-md p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 active:cursor-grabbing"
+            className="shrink-0 cursor-grab rounded-md p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -181,7 +181,7 @@ function RenameField({
         if (e.key === "Escape") onDone();
       }}
       className={cn(
-        "min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
         mobile ? "min-h-[44px] w-full" : "py-1",
       )}
     />
@@ -236,7 +236,7 @@ export function AccountActionsCell({
     { label: "Remove", onClick: onRemove, variant: "danger" as const },
   ];
   const iconButton = cn(
-    "flex shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+    "flex shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
     mobile ? "min-h-[44px] min-w-[44px]" : "h-7 w-7",
   );
   return (

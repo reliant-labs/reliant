@@ -336,7 +336,7 @@ export function ModelSettingsPage({
           className={cn(
             "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
             activeTab === "tag"
-              ? "text-primary border-primary"
+              ? "text-primary-ink border-primary"
               : "text-muted-foreground border-transparent hover:text-foreground",
           )}
         >
@@ -347,7 +347,7 @@ export function ModelSettingsPage({
           className={cn(
             "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
             activeTab === "explicit"
-              ? "text-primary border-primary"
+              ? "text-primary-ink border-primary"
               : "text-muted-foreground border-transparent hover:text-foreground",
           )}
         >
@@ -472,7 +472,7 @@ export function ModelSettingsPage({
                           </span>
                         )}
                         {model.canReason && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-primary/15 text-primary">
+                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-primary/15 text-primary-ink">
                             reasoning
                           </span>
                         )}

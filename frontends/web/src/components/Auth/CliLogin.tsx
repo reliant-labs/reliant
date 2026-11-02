@@ -188,7 +188,7 @@ export function CliLogin() {
       <div className="max-w-md w-full space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Terminal className="w-6 h-6 text-primary" />
+            <Terminal className="w-6 h-6 text-primary-ink" />
           </div>
           <h1 className="text-xl font-semibold">Sign in {clientName}?</h1>
           <p className="text-sm text-muted-foreground">

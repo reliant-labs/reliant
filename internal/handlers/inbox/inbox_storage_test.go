@@ -38,6 +38,10 @@ func storageFixture(t *testing.T) (*inboxFixture, string, string) {
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("MacBook")}))
 	require.NoError(t, f.repo.UpsertDaemonAttachment(f.ctx, &db.DaemonAttachment{DaemonID: daemonID, UserID: f.userID, Source: db.DaemonAttachmentSourceInbound}))
+	// The machine holds the project's checkout, as it must to have created a
+	// worktree of it: the sweep holds a worktree whose owner has no checkout
+	// on record and never cleans it.
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project(), daemonID, "/home/u/proj", nil))
 
 	now := time.Now().UTC()
 	wtID := "wt-" + uuid.NewString()

@@ -373,7 +373,7 @@ export function MobileNewChat() {
                     type="button"
                     onClick={() => void setUpHere()}
                     disabled={settingUp}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary active:bg-muted disabled:opacity-60"
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary-ink active:bg-muted disabled:opacity-60"
                   >
                     {settingUp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                     Set up {currentProject?.name} on{" "}
@@ -442,7 +442,7 @@ export function MobileNewChat() {
           disabled={isCreating}
           className={cn(
             "max-h-40 min-h-14 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground",
-            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20",
+            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
             "disabled:opacity-60",
           )}
         />

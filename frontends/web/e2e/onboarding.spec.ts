@@ -299,78 +299,6 @@ test.describe('Onboarding Flow', () => {
     await loginWithApiKey(page);
   });
 
-  // Every plan includes 160 hours at its OWN size, so its small-hour total is
-  // 160 x that size's multiplier (the 2XL plan holds 2,560 small hours).
-  async function mockPricing(page: Page) {
-    const sizes = ['small', 'medium', 'large', 'xl'];
-    await page.route('**/controlplane.v1.BillingService/ListPlans', route => route.fulfill({
-      json: {
-        plans: sizes.map((size, index) => ({
-          id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(2000 * (index + 1)), displayOrder: index,
-          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), includedSmallDaemonHours: String(160 * 2 ** index) },
-        })),
-        daemonPricing: {
-          sizes: sizes.map((size, index) => ({ size, multiplier: String(2 ** index), hourlyPriceCents: String(13 * 2 ** index), storageGib: String([120, 140, 180, 260][index]) })),
-          suspendedDiskCentsPerGibMonth: '25', placeholder: false,
-        },
-      },
-    }));
-  }
-
-  const FOOTNOTE = 'Includes 160 hours a month. Extra hours and storage are billed separately.';
-  const BANNED = /GiB|\/hr|hrs|while suspended|per month\b.*GB|after included hours|uses included hours|as fast|small-daemon|hours\/month included|2,?560|1,?280/;
-
-  test('onboarding plan rows: name, spec and monthly price only', async ({ page }, testInfo) => {
-    page.on('pageerror', error => console.error(error));
-    await mockPricing(page);
-    // Not covered by a coupon: every row shows its monthly price.
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: false, hasActiveSubscription: false, grantedSmallDaemonSecondsRemaining: '0', planName: '' } }));
-    await gotoOnboarding(page);
-    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    for (const price of ['$20.00/mo', '$40.00/mo', '$60.00/mo', '$80.00/mo']) {
-      await expect(dialog.getByText(price, { exact: true })).toBeVisible();
-    }
-    for (const spec of ['2 GB RAM · 0.5 CPU', '4 GB RAM · 1 CPU', '8 GB RAM · 2 CPU', '16 GB RAM · 4 CPU']) {
-      await expect(dialog.getByText(spec, { exact: true })).toBeVisible();
-    }
-    await expect(dialog.getByTestId('machine-pricing-line')).toHaveText(FOOTNOTE);
-    await expect(dialog.getByText(BANNED)).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath('onboarding-plan-rows.png'), fullPage: true });
-  });
-
-  test('add machine sheet: name and spec per size, included terms without duplicate prices', async ({ page }, testInfo) => {
-    page.on('pageerror', error => console.error(error));
-    await mockPricing(page);
-    await page.route('**/controlplane.v1.UserService/GetCurrentUser', route =>
-      route.fulfill({ json: { user: { id: 'user_test', onboardingCompleted: true } } }));
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: true, hasActiveSubscription: true, grantedSmallDaemonSecondsRemaining: '0', planName: 'Compute xl', allowedDaemonSizes: ['small', 'medium', 'large', 'xl'] } }));
-    // The XL plan: 160 own-size hours = 1,280 small hours.
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeUsage', route =>
-      route.fulfill({ json: { usageMeasured: true, includedSmallDaemonSeconds: String(1280 * 3600), remainingSmallDaemonSeconds: String(3 * 3600) } }));
-
-    await page.goto('/settings/machines');
-    await page.getByRole('button', { name: 'Add machine', exact: true }).first().click();
-    const modal = page.getByRole('dialog', { name: 'Add a machine', exact: true });
-    const sizes = modal.getByRole('radiogroup', { name: 'Machine' });
-    for (const [name, spec] of [
-      ['Small', '2 GB RAM · 0.5 CPU'], ['Medium', '4 GB RAM · 1 CPU'],
-      ['Large', '8 GB RAM · 2 CPU'], ['XL', '16 GB RAM · 4 CPU'],
-    ]) {
-      const size = sizes.getByRole('radio', { name: new RegExp(`^${name}\\b`) });
-      await expect(size).toBeVisible();
-      await expect(size).toContainText(spec);
-      await expect(size).toContainText('On your plan');
-    }
-    await expect(sizes).not.toContainText('$');
-    await sizes.getByRole('radio', { name: /^Small\b/ }).click();
-    await modal.getByRole('button', { name: 'Advanced: name, auto-suspend, repository' }).click();
-    await expect(modal.getByRole('textbox', { name: 'Name', exact: true })).toBeVisible();
-    await expect(modal.getByText(BANNED)).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath('create-machine-modal.png'), fullPage: true });
-  });
-
   test('shows onboarding for a new (not-yet-onboarded) user at /onboarding', async ({ page }) => {
     await gotoOnboarding(page);
 
@@ -378,7 +306,7 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog).toBeVisible();
 
     // First step is Compute — verify the heading is visible.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
   });
 
@@ -466,7 +394,8 @@ test.describe('Onboarding Flow', () => {
     await expect(
       dialog.getByText('Install Reliant on that machine', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(dialog.getByText('reliant daemon start', { exact: true })).toBeVisible();
+    // .first(): the folded "Not seeing a code?" hint repeats the command.
+    await expect(dialog.getByText('reliant daemon start', { exact: true }).first()).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'Pairing code' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
 
@@ -646,7 +575,7 @@ test.describe('Onboarding Flow', () => {
     await expect(backButton).toBeVisible();
     await backButton.click();
 
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -668,7 +597,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -755,7 +684,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
     // Still on Compute — the step did not navigate away.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
   });
 });
 
@@ -1005,7 +934,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
 

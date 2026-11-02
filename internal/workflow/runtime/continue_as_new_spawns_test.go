@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -330,8 +331,25 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 
 	pressure := newPressureDial(historyPressureNone)
 	forcePressure(t, chatID, pressure.get)
+	// The threshold is crossed while the spawn is mid-loop (its third call)
+	// AND the parent has taken its final turn — the one that parks it. Both
+	// threads' activities run on their own goroutines, so nothing orders the
+	// child's third call after the parent's second: turning the dial at the
+	// child's call alone sometimes landed first, and the parent handed off at
+	// its next boundary instead of taking that turn (#1655). The child's
+	// third call waits for the parent's second, so the dial always turns
+	// after the parent's last turn has begun.
+	parentLastTurn := make(chan struct{})
 	e1.onLLM = func(thread string, n int) {
-		if thread == child && n == 3 {
+		switch {
+		case thread == parent && n == 2:
+			close(parentLastTurn)
+		case thread == child && n == 3:
+			select {
+			case <-parentLastTurn:
+			case <-time.After(30 * time.Second):
+				t.Error("the parent never took its second turn while the spawn was mid-loop")
+			}
 			pressure.set(historyPressureSoft)
 		}
 	}

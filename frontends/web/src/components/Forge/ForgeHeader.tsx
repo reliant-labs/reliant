@@ -24,7 +24,7 @@ export function ForgeCloseButton({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={onClose}
         style={noDragRegionStyle}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={label}
         data-testid="forge-close"
       >

@@ -51,7 +51,7 @@ export function PresetSettingsPage({
           )}
         >
           <span className="text-muted-foreground">None (use defaults)</span>
-          {!selectedPreset && <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />}
+          {!selectedPreset && <Check className="w-3.5 h-3.5 text-primary-ink flex-shrink-0" />}
         </button>
 
         {/* User Presets */}
@@ -132,7 +132,7 @@ function PresetGroup({
               )}
             </div>
             {selectedPreset === preset.name && (
-              <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+              <Check className="w-3.5 h-3.5 text-primary-ink flex-shrink-0 mt-0.5" />
             )}
           </div>
         </button>

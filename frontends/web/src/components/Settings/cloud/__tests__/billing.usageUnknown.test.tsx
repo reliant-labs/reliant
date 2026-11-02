@@ -104,7 +104,7 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
     useComputeSubscription: () => query(state.sub),
     useWalletOverview: () => query(state.wallet),
     useComputeUsage: () => query(state.usage, { error: state.usageError }),
-    usePlans: () => query(undefined),
+    usePlans: () => query({ plans: [], daemonPricing: { pricingVersion: "test-version", sizes: [{ size: "m", costWeight: "1/1" }] } }),
     useCurrentUserInvoices: () => query(undefined),
     useBillingEmail: () => query(undefined),
     useSetComputeOverage: () => mutation(),
@@ -131,14 +131,14 @@ const HEALTHY_SUB = {
       seconds: BigInt(Math.floor(Date.parse("2026-03-14") / 1000)),
     },
     plan: {
-      id: "plan_compute_small",
+      id: "plan_compute_m",
       name: "Compute Small",
       productId: "prod_compute",
       priceCents: 2000n,
       displayOrder: 1,
       structuredLimits: {
-        allowedDaemonSizes: ["small"],
-        includedSmallDaemonHours: 33n, // 33 h
+        allowedDaemonSizes: ["m"],
+        machineIncludedHours: 33n, // fixture hours at the plan's own size
       },
     },
   },
@@ -146,10 +146,12 @@ const HEALTHY_SUB = {
 
 /** What the server sends once it has actually measured the period. */
 const measured = (usedHours: number) => ({
-  includedSmallDaemonSeconds: 33 * 3600,
-  usedSmallDaemonSeconds: usedHours * 3600,
-  remainingSmallDaemonSeconds: Math.max(33 - usedHours, 0) * 3600,
-  runningMultiplier: 0,
+  pricingVersion: "test-version",
+  allowanceWeightedSeconds: "118800/1",
+  consumedWeightedSeconds: String(usedHours * 3600),
+  remainingWeightedSeconds: String(Math.max(33 - usedHours, 0) * 3600),
+  runningCostWeightSum: "0/1",
+  grantRemainingWeightedSeconds: "0/1",
   estimatedOverageCostCents: 0,
   bySize: [],
   grantedSmallDaemonSecondsRemaining: 0,
@@ -194,7 +196,7 @@ describe("unmeasured usage is never rendered as a measured zero", () => {
 
     // The exact string from the incident. `0.0 h` must not appear anywhere in
     // the band while the server is guessing.
-    expect(within(computeBand()).queryByText(/0\.0 h/)).not.toBeInTheDocument();
+    expect(within(computeBand()).queryByText(/^0 hours used$/)).not.toBeInTheDocument();
     expect(
       within(computeBand()).queryByText(/0\.0 h used/i),
     ).not.toBeInTheDocument();
@@ -219,17 +221,17 @@ describe("unmeasured usage is never rendered as a measured zero", () => {
     // Partial failure degrades partially. Included hours come from the plan,
     // so blanking them too would throw away a fact we hold.
     expect(
-      within(computeBand()).getByText(/your plan includes 33\.0 h/i),
+      within(computeBand()).getByText(/your plan includes 33 hours/i),
     ).toBeInTheDocument();
   });
 
   // THE DISCRIMINATOR. If this and the first test cannot both pass, the client
   // has collapsed "unknown" and "zero" again — in whichever direction.
-  it("DOES print 0.0 h for a user who genuinely ran nothing", () => {
+  it("DOES print 0 hours for a user who genuinely ran nothing", () => {
     state.usage = measured(0);
     renderSection();
 
-    expect(within(computeBand()).getByText(/0\.0 h/)).toBeInTheDocument();
+    expect(within(computeBand()).getByText(/^0 hours used$/)).toBeInTheDocument();
     expect(
       within(computeBand()).queryByText(/usage unavailable/i),
     ).not.toBeInTheDocument();
@@ -239,7 +241,7 @@ describe("unmeasured usage is never rendered as a measured zero", () => {
     state.usage = measured(12);
     renderSection();
 
-    expect(within(computeBand()).getByText(/12\.0 h/)).toBeInTheDocument();
+    expect(within(computeBand()).getByText(/^12 hours used$/)).toBeInTheDocument();
   });
 });
 
@@ -254,14 +256,14 @@ describe("the page's most prominent line does not carry an unmeasured number", (
     state.usage = UNMEASURED;
     const { container } = renderSection();
 
-    expect(container.textContent).not.toMatch(/0\.0 h of/);
+    expect(container.textContent).not.toMatch(/0 of 33 hours/);
   });
 
   it("includes the hours clause when usage WAS measured, even at zero", () => {
     state.usage = measured(0);
     const { container } = renderSection();
 
-    expect(container.textContent).toMatch(/0\.0 h of 33\.0 h included/);
+    expect(container.textContent).toMatch(/0 of 33 hours used/);
   });
 });
 
@@ -273,6 +275,6 @@ describe("an errored usage query and an unmeasured one both withhold", () => {
     state.usageError = new Error("boom");
     renderSection();
 
-    expect(within(computeBand()).queryByText(/0\.0 h/)).not.toBeInTheDocument();
+    expect(within(computeBand()).queryByText(/^0 hours used$/)).not.toBeInTheDocument();
   });
 });

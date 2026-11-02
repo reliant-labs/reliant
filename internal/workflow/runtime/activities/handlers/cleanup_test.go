@@ -19,6 +19,22 @@ func setupTestRepo(t *testing.T) *db.Repo {
 	return repo
 }
 
+// testMachine is the machine the test projects are checked out on.
+const testMachine = "test-machine"
+
+// installTestCheckout records the project as checked out at path on
+// testMachine, a machine of userID's: the project_daemons row create, clone
+// and the connect-time reconcile write, from which every call resolves its
+// directory on the machine it runs on.
+func installTestCheckout(t testing.TB, repo *db.Repo, projectID, userID, path string) {
+	t.Helper()
+	ctx := context.Background()
+	if d, err := repo.GetDaemon(ctx, testMachine); err != nil || d == nil {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: testMachine, UserID: userID}))
+	}
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, testMachine, path, nil))
+}
+
 // createTestChat creates a test project and chat
 func createTestChat(t *testing.T, repo *db.Repo) string {
 	chatID, _ := createTestChatWithContextWindow(t, repo)
@@ -43,6 +59,7 @@ func createTestChatWithContextWindow(t *testing.T, repo *db.Repo) (string, strin
 		LastActive: time.Now(),
 	})
 	require.NoError(t, err)
+	installTestCheckout(t, repo, projectID, "test-user", "/tmp/test")
 
 	// Create chat
 	err = repo.CreateChat(ctx, &db.Chat{

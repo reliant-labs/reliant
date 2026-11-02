@@ -14,20 +14,21 @@ import {
   MoreHorizontal,
   Copy,
   Edit2,
-  Trash2,
+  Archive,
   Download,
   Terminal,
   Workflow,
   ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries";
+import { useArchiveChat, useChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
 import { NoMachinePill } from "./NoMachine";
 import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
 import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import Tooltip from "../forge-ui/tooltip";
+import { toast } from "../../lib/toast-manager";
 import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
@@ -77,7 +78,8 @@ export function ChatHeader({
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
-  const deleteMutation = useDeleteChat();
+  const archiveMutation = useArchiveChat();
+  const unarchiveMutation = useUnarchiveChat();
   const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
   const showTerminal = useTerminalStore((state) => state.showTerminal);
@@ -219,14 +221,21 @@ export function ChatHeader({
     handleSaveTitle();
   };
 
-  const handleDeleteChat = async () => {
-    if (!chatId || !confirm('Are you sure you want to delete this chat?')) return;
+  // Archive, with Undo, like the sidebar row. This was "Delete Chat" behind a
+  // native confirm() while it archived; deleting for good is only offered on
+  // an archived chat, in the sidebar's Archived list.
+  const handleArchiveChat = async () => {
+    if (!chatId) return;
     setIsMenuOpen(false);
     try {
-      await deleteMutation.mutateAsync(chatId);
+      await archiveMutation.mutateAsync(chatId);
     } catch (err) {
-      console.error('Failed to delete chat:', err);
+      void toast.error(err);
+      return;
     }
+    toast.notify("Chat archived", {
+      action: { label: "Undo", onClick: () => unarchiveMutation.mutate(chatId) },
+    });
   };
 
   const handleExportChat = async () => {
@@ -480,11 +489,11 @@ export function ChatHeader({
                       <div className="border-t border-border my-1" />
                       
                       <button
-                        onClick={handleDeleteChat}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2 text-destructive-ink"
+                        onClick={() => void handleArchiveChat()}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        Delete Chat
+                        <Archive className="h-4 w-4" />
+                        Archive chat
                       </button>
                     </div>
                   )}

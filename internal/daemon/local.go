@@ -930,6 +930,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	stdout := stdoutBuf.String()
 	outcome := ClassifyExecOutcome(err, deadline.Err(), stdout, stderrBuf.String(), localMemReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
+	outcome.NoteThreadLimit(tree.LimitNote())
 
 	return &CommandResult{
 		ExitCode:         outcome.ExitCode,

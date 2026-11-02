@@ -16,7 +16,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: vi.fn(async () => ({
     eligible: true, reason: 0, hasActiveSubscription: true,
-    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['small'],
+    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['m'],
   })),
 }))
 vi.mock('@/lib/event-context', () => ({
@@ -34,7 +34,7 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }))
 vi.mock('@/services/controlPlane/environments', () => ({
-  DaemonSize: { DAEMON_SIZE_UNSPECIFIED: 0, DAEMON_SIZE_SMALL: 1, DAEMON_SIZE_MEDIUM: 2, DAEMON_SIZE_LARGE: 3, DAEMON_SIZE_XL: 4 },
+  DaemonSize: { DAEMON_SIZE_UNSPECIFIED: 0, DAEMON_SIZE_M: 8, DAEMON_SIZE_L: 9, DAEMON_SIZE_XL: 10, DAEMON_SIZE_2XL: 11 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
   portAccessRulesQueryKey: (id: string) => ['cp', 'ports', id],
@@ -70,7 +70,7 @@ const row = (name: string, daemonType: string, status: number) => ({
   daemonType,
   status,
   platform: 'darwin',
-  size: 'small',
+  size: 'm',
 })
 
 describe('canRemoveDaemon', () => {

@@ -40,6 +40,8 @@ export const ERROR_REASONS = [
   "daemon_waking",
   /** The machine's daemon is not on NATS: closed or restarting (errDaemonNotConnected). */
   "daemon_not_connected",
+  /** The machine re-registered but has not answered yet; the request was never sent (ErrDaemonReconnecting). */
+  "daemon_reconnecting",
   /** No machine exists for the request at all (ErrNoDaemon). Nothing to wait for. */
   "no_daemon",
   // ── reliant: handlers ──

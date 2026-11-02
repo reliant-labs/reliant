@@ -53,6 +53,8 @@ import {
 } from "../ForgeStates";
 import { CheckTable } from "./CheckTable";
 import { DispositionLegend } from "./DispositionLegend";
+import { CheckoutMissing } from "../EnvPage/CheckoutMissing";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 
 export interface DevStackPanelProps {
@@ -114,6 +116,15 @@ export function DevStackPanel({
       >
         Running runtime checks for <span className="font-mono">{env}</span>…
       </Card>
+    );
+  }
+
+  // Not on a machine that could answer: not a failure to reach the daemon,
+  // and not one a retry fixes — say so, with the remedy.
+  const missing = projectCheckoutMissing(error);
+  if (missing && !outcome) {
+    return (
+      <CheckoutMissing missing={missing} projectName={projectName} what={`forge's runtime checks for ${env}`} />
     );
   }
 

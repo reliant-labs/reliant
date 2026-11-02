@@ -54,6 +54,7 @@ import {
   TOPUP_PRESETS_CENTS,
   derivePlanDisplay,
   isPurchasableComputePlan,
+  planDisplayName,
   sortPlansForDisplay,
 } from "@/components/Settings/cloud/billingUtils";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
@@ -281,7 +282,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
         kind: "compute",
         label: "Cloud machine",
         detail: selectedPlan
-          ? `${selectedPlan.name} — a Reliant-hosted machine to run your work on.`
+          ? `${planDisplayName(selectedPlan)} — a Reliant-hosted machine to run your work on.`
           : "A Reliant-hosted machine to run your work on.",
         amountCents: display.monthlyPriceCents ?? 0,
         recurring: true,
@@ -336,6 +337,23 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
    * commit point, which asks the server for eligibility again before it will
    * start a machine.
    */
+  /**
+   * The free way out when machine checkout cannot go ahead (pricing is
+   * unavailable or held): un-choose the cloud machine, keeping the model
+   * choice, so derivation returns to the machine step, whose first row is
+   * "Use your own computer · Free". The same fields the checkout's Back
+   * clears for the compute leg — the settlement flag included, see
+   * BACK_CLEARS.checkout.
+   */
+  const useOwnComputer = useCallback(() => {
+    void updatePlan({
+      compute: undefined,
+      computeAutoSkipped: undefined,
+      computePlanId: undefined,
+      computeSettled: undefined,
+    });
+  }, [updatePlan]);
+
   const handleRedeemed = useCallback(() => {
     trackEvent("onboarding_checkout_confirmed", {
       leg: requirement.needsCompute ? "compute" : "credit",
@@ -349,7 +367,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
   if (!requirement.any) {
     return (
       <div className="space-y-3 py-6 text-center" role="status">
-        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary-ink" />
         <p className="text-sm text-muted-foreground">
           You&apos;re all set — continuing.
         </p>
@@ -385,7 +403,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
             className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-3"
             role="status"
           >
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary-ink" />
             <p className="text-sm text-foreground">
               Confirming your payment… this usually takes a few seconds.
             </p>
@@ -423,6 +441,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
             confirmCreditSettled={creditHasLanded}
             onDone={handlePanelDone}
             onRedeemed={handleRedeemed}
+            onUseOwnComputer={requirement.needsCompute ? useOwnComputer : undefined}
             renderIdentityRequired={(message) => (
               <LinkIdentityModal
                 message={message}

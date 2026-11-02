@@ -12,7 +12,7 @@
  * The sheet, in order:
  *
  *   choose     "Your own computer — Free", then every cloud size the catalog
- *              sells. Small (or the caller's suggestion) is preselected.
+ *              sells. M (or the caller's suggestion) is preselected.
  *              Sizes above the plan are upgrade rows, not hidden. Name
  *              (unique, generated), auto-suspend and repository sit under
  *              Advanced.
@@ -51,7 +51,7 @@ import { usePlans, useComputeSubscription, cloudBillingKeys } from "@/hooks/useC
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { classifyDaemonWait } from "@/lib/daemon-wait";
 import { cloudPathForRepo } from "@/lib/cloudProjectPath";
-import { isPurchasableComputePlan, sortPlansForDisplay, formatCentsAsDollars, type DaemonSizeName } from "@/components/Settings/cloud/billingUtils";
+import { isPurchasableComputePlan, sortPlansForDisplay, type DaemonSizeName } from "@/components/Settings/cloud/billingUtils";
 import { createMachine } from "@/components/Settings/cloud/createMachine";
 import { describeError } from "@/services/controlPlane/environments";
 import { deriveMachineOptions } from "@/components/Billing/machineOptions";
@@ -68,6 +68,7 @@ import {
   MACHINE_NAME_RULE,
   type CloudMachineRow,
 } from "./addMachine";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 const RepoSelector = React.lazy(() =>
   import("@/components/Projects/RepoSelector").then((m) => ({ default: m.RepoSelector })),
@@ -91,7 +92,7 @@ export interface AddMachineSheetProps {
   onClose: () => void;
   /** The new machine, once it is connected and can run work. */
   onReady?: (machine: ReadyMachine) => void;
-  /** Preselected size, e.g. the size the project last ran on. Default Small. */
+  /** Preselected size, e.g. the size the project last ran on. Default M. */
   suggestedSize?: DaemonSizeName;
   /** Preselected repository, when the caller is a project. */
   repo?: GitRepo | null;
@@ -160,7 +161,7 @@ function AddMachineSheetBody({
   const [repo, setRepo] = useState<GitRepo | null>(callerRepo);
   const [pickingRepo, setPickingRepo] = useState(false);
   const takenNames = daemons.map((d) => d.name);
-  const generatedName = defaultMachineName(row?.size ?? "small", takenNames, repo?.cloneUrl);
+  const generatedName = defaultMachineName(row?.size ?? "m", takenNames, repo?.cloneUrl);
   const name = typedName ?? generatedName;
   const nameValid = MACHINE_NAME_RULE.test(name);
 
@@ -533,6 +534,7 @@ function ChooseStep({
                 onSelect={() => onSelectSize(r.size)}
                 label={r.label}
                 detail={r.detail}
+                secondary={r.plan?.overage}
                 right={<RowTerms row={r} />}
               />
             ))
@@ -560,12 +562,12 @@ function ChooseStep({
 function RowTerms({ row }: { row: CloudMachineRow }) {
   if (row.terms === "included") {
     return (
-      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary-ink">
         On your plan
       </span>
     );
   }
-  const price = row.plan ? `${formatCentsAsDollars(row.plan.monthlyPriceCents)}/mo` : "";
+  const price = row.plan ? `${formatPrice(row.plan.monthlyPriceCents)}/mo` : "";
   return (
     <span className="text-right">
       <span className="block text-sm font-semibold text-foreground">{price}</span>
@@ -579,12 +581,15 @@ function MachineRowButton({
   onSelect,
   label,
   detail,
+  secondary,
   right,
 }: {
   selected: boolean;
   onSelect: () => void;
   label: React.ReactNode;
   detail: string;
+  /** A second detail line: the size's hourly price after included hours. */
+  secondary?: string;
   right: React.ReactNode;
 }) {
   return (
@@ -601,6 +606,7 @@ function MachineRowButton({
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-foreground">{label}</span>
         <span className="block text-xs text-muted-foreground">{detail}</span>
+        {secondary && <span className="block text-xs text-muted-foreground">{secondary}</span>}
       </span>
       <span className="flex-shrink-0">{right}</span>
     </button>

@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 )
 
 // TestEnsureDaemonCredentials_ReadOnlyFileTolerated simulates the managed-daemon
@@ -70,7 +71,7 @@ func TestEnsureDaemonCredentials_ReadOnlyFileTolerated(t *testing.T) {
 	// Pass a different gateway URL to force the drift-rewrite (persist) path.
 	const driftedGateway = "https://gateway-staging.reliantapi.com:8443"
 	target := &connection{ServerURL: serverURL, GatewayURL: driftedGateway}
-	creds, err := ensureDaemonCredentials(context.Background(), cmd, target, "", false)
+	creds, err := ensureDaemonCredentials(context.Background(), cmd, target, "", cliauth.Account{}, false)
 	if err != nil {
 		t.Fatalf("ensureDaemonCredentials returned error on read-only creds file: %v", err)
 	}

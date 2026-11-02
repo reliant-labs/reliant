@@ -55,9 +55,9 @@ import {
   isUnpricedComputePlan,
   nanosFromFields,
   normalizeInvoiceStatus,
-  deriveComputeCapacity,
   estimateCreditRunwayDays,
   isPlanDetailUnavailable,
+  planDisplayName,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
 import type { BillingOrigin } from "@/hooks/useGoToBilling";
@@ -70,9 +70,12 @@ import {
 import { MachinePricingLine, PlanTiles, commonPlanHours } from "@/components/Billing/PlanTiles";
 import {
   asOfLabel,
-  burnLabel,
+  hoursReference,
   hoursRanOut,
-  overageSmallDaemonSeconds,
+  hoursSizes,
+  measuredMachineUsage,
+  measuredWindowCost,
+  usageWindowLabel,
   projectedBillLabel,
   remainingHeadline,
   runsOutLabel,
@@ -83,7 +86,6 @@ import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
-import { formatMachineSecondsShort } from "@/lib/formatMachineMinutes";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 import {
   VISIBLE_BILLING_TABS,
@@ -108,7 +110,13 @@ import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
 // proxies to admin-api and therefore could never reach these RPCs at all.
 import { DeployUsageSection } from "./usage/DeployUsageSection";
 import { useDeployUsage } from "./usage/useDeployUsage";
+import { UsageBillingPanel } from "./usage/UsageBillingPanel";
+import { exactUsageDisplay } from "@/components/Billing/exactMachineUsage";
+import { friendlyUsageHold } from "@/components/Billing/holdReasons";
+import { MachinePricingReadinessPanel } from "@/components/Billing/MachinePricingReadinessPanel";
+import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -199,7 +207,7 @@ export function BillingSection() {
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
         title="Billing & usage"
-        description="Manage wallet credits, your compute plan, usage, limits, and invoices."
+        description="Manage wallet credits, machine subscriptions, independent app hosting billing, usage and invoices."
         className="mb-0"
       />
 
@@ -335,9 +343,9 @@ function CheckoutReturnBanner({
     <div className="flex flex-col gap-3 rounded-md border border-primary/40 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-2">
         {confirmed ? (
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
         ) : (
-          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary-ink" />
         )}
         <div>
           <p className="text-sm font-medium text-foreground">
@@ -661,53 +669,46 @@ function OverviewTab({
     // is. `usageMeasured` is that statement, and it is `false` by default, so
     // a server too old to send it is read as "unknown" rather than as
     // "measured zero" — the direction that withholds rather than asserts.
-    const usageFailed = (!!usageQ.error && !usage) || (!!usage && !usage.usageMeasured);
+    // Hours are counted at the plan's own size — the unit it was sold in.
+    const reference = hoursReference(plansQ.data?.daemonPricing, hoursSizes(d.allowedSizes), usage ?? undefined);
+    const exact = exactUsageDisplay(usage ?? undefined, reference);
+    const usageFailed = !!usageQ.error || !exact;
 
     // The card speaks SMALL-DAEMON-HOURS (design §6.2) and the bar fills in
     // them. Only ever read when `usageFailed` is false: every consumer below
     // is gated on it, so no unmeasured zero reaches a label.
     const sdh = usage && !usageFailed ? usage : undefined;
-    const sdhIncluded = sdh
-      ? Number(sdh.includedSmallDaemonSeconds)
-      : d.includedSmallDaemonHours * 3600;
-    const sdhUsed = sdh ? Number(sdh.usedSmallDaemonSeconds) : 0;
-    const sdhOverage = sdh ? overageSmallDaemonSeconds(sdh) : 0;
 
     return {
-      planName: plan?.name ?? null,
+      planName: plan ? planDisplayName(plan) : null,
       pricePerMonthLabel:
         d.monthlyPriceCents !== null
-          ? `${formatCentsAsDollars(d.monthlyPriceCents)}/mo`
+          ? `${formatPrice(d.monthlyPriceCents)}/mo`
           : null,
       renewsOnLabel: subscription?.currentPeriodEnd
         ? `renews ${formatTimestampDate(subscription.currentPeriodEnd)}`
         : null,
       // Degraded and absent both suppress these rather than rendering a
       // confident zero — `0 h / mo` was the whole complaint.
-      includedHoursLabel: degraded
-        ? null
-        : `${(sdhIncluded / 3600).toFixed(1)} h included`,
+      includedHoursLabel: degraded ? null : exact?.includedLabel ?? (plan?.structuredLimits?.machineIncludedHours ? `${String(plan.structuredLimits.machineIncludedHours)} hours included` : null),
       // null when unmeasured, NOT "0.0 h". Every consumer already treats null
       // as "render nothing", which is the same discipline `includedHoursLabel`
       // above uses for a plan whose detail did not load.
       usedHoursLabel:
-        degraded || usageFailed ? null : `${(sdhUsed / 3600).toFixed(1)} h`,
+        degraded || usageFailed ? null : exact?.usedLabel ?? null,
+      usedOfIncludedLabel:
+        degraded || usageFailed ? null : exact?.usedOfIncludedLabel ?? null,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
+      allowedSizes: degraded || d.allowedSizes.length === 0 ? undefined : d.allowedSizes,
       overageRateLabel: "Varies by machine size",
       capacity:
         degraded || usageFailed
           ? null
-          : // Used against included, overage as its own segment
-            // (Σ overage seconds × multiplier).
-            deriveComputeCapacity({
-              used: sdhUsed,
-              included: sdhIncluded,
-              overage: sdhOverage,
-            }),
+          : exact?.capacity ?? null,
       smallDaemon: sdh
         ? {
-            headline: usageFailed ? null : remainingHeadline(sdh),
-            burn: usageFailed ? null : burnLabel(sdh),
+            headline: usageFailed ? null : remainingHeadline(sdh, reference),
+            burn: null, // headline already carries the exact burn-equivalent estimate
             runsOut: usageFailed ? null : runsOutLabel(sdh),
             asOf: usageFailed ? null : asOfLabel(sdh),
           }
@@ -717,12 +718,8 @@ function OverviewTab({
       // so far" from a server that measured nothing is the same lie as
       // "0.0 h used", in the currency the user actually cares about.
       estimatedOverageCostLabel:
-        sdh && sdhOverage > 0
-          ? formatCentsAsDollars(sdh.estimatedOverageCostCents ?? 0)
-          : null,
-      grantedSmallDaemonSecondsRemaining: Number(
-        usage?.grantedSmallDaemonSecondsRemaining ?? 0,
-      ),
+        sdh && exact ? measuredWindowCost(sdh) : null,
+      grantRemainingLabel: exact?.hasGrant ? exact.grantLabel : null,
       overageEnabled: subscription?.overageEnabled ?? false,
       // The overage control needs the raw numbers, not the formatted labels:
       // it measures spend against the cap. undefined budgetCents means no cap
@@ -731,14 +728,14 @@ function OverviewTab({
       // The overage control shows spend against the cap. null, not 0:
       // unmeasured rendered as zero spent tells a user their whole limit is
       // still available.
-      overageSpentCents: usageFailed
-        ? null
-        : Number(usage?.estimatedOverageCostCents ?? 0),
+      // The current period may contain an audited opening balance with no
+      // historical cost attribution. Never show post-cutover costs as total cap spend.
+      overageSpentCents: null,
       monthlyPriceCents: d.monthlyPriceCents,
       planDetailUnavailable: degraded,
       usageUnavailable: usageFailed,
     };
-  }, [subscription, usage, usageQ.error]);
+  }, [subscription, usage, usageQ.error, plansQ.data?.daemonPricing]);
 
   /**
    * The cross-product answer to "am I about to be charged for anything?",
@@ -749,11 +746,7 @@ function OverviewTab({
   const statusParts = useMemo(() => {
     const parts: string[] = [];
     if (computeUi.planName) parts.push(computeUi.planName);
-    if (computeUi.usedHoursLabel && computeUi.includedHoursLabel) {
-      parts.push(
-        `${computeUi.usedHoursLabel} of ${computeUi.includedHoursLabel}`,
-      );
-    }
+    if (computeUi.usedOfIncludedLabel) parts.push(computeUi.usedOfIncludedLabel);
     if (creditUi.balance) parts.push(`${creditUi.balance} credit remaining`);
     return parts;
   }, [computeUi, creditUi]);
@@ -958,7 +951,7 @@ function OverviewTab({
                 smallDaemon: computeUi.smallDaemon,
               },
             ]}
-            grantedSmallDaemonSecondsRemaining={computeUi.grantedSmallDaemonSecondsRemaining}
+            grantRemainingLabel={computeUi.grantRemainingLabel}
             planDetailUnavailable={computeUi.planDetailUnavailable}
             usageUnavailable={computeUi.usageUnavailable}
             onChangePlan={onGoToPlans}
@@ -968,6 +961,7 @@ function OverviewTab({
                 enabled={computeUi.overageEnabled}
                 budgetCents={computeUi.budgetCents}
                 pricing={plansQ.data?.daemonPricing}
+                allowedSizes={computeUi.allowedSizes}
                 overageSpentCents={computeUi.overageSpentCents}
                 monthlyPriceCents={computeUi.monthlyPriceCents}
                 storage={
@@ -990,7 +984,7 @@ function OverviewTab({
             <button
               type="button"
               onClick={onGoToUsage}
-              className="text-sm font-medium text-primary hover:underline"
+              className="text-sm font-medium text-primary-ink hover:underline"
             >
               See usage and invoices →
             </button>
@@ -1238,6 +1232,7 @@ function PlansTab() {
         </p>
       </div>
 
+      {currentPlanId && <MachinePricingReadinessPanel planId={currentPlanId} currentPriceLabel={subQ.data?.subscription?.plan ? formatPrice(Number(subQ.data.subscription.plan.priceCents)) : undefined} />}
       {loading ? (
         <Loading label="Loading plans…" />
       ) : computePlans.length === 0 ? (
@@ -1379,6 +1374,7 @@ function UsageAndInvoicesTab() {
 
   return (
     <div className="flex flex-col gap-8">
+      <UsageBillingPanel />
       <InvoicesPanel />
       <div className="border-t border-border pt-6">
         <UsagePanel />
@@ -1396,8 +1392,6 @@ function UsageAndInvoicesTab() {
             isLoading={deployUsage.isLoading}
             error={deployUsage.error}
             onRetry={deployUsage.refetch}
-            onSaveCap={deployUsage.saveCap}
-            isSavingCap={deployUsage.isSavingCap}
             deploymentNames={deployUsage.deploymentNames}
             environmentNames={deployUsage.environmentNames}
           />
@@ -1480,7 +1474,7 @@ function InvoicesPanel() {
                       href={invoice.pdfUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary-ink hover:underline"
                     >
                       <Download className="h-4 w-4" />
                       Download
@@ -1503,25 +1497,20 @@ function InvoicesPanel() {
 
 function UsagePanel() {
   const usageQ = useComputeUsage("current");
+  const plansQ = usePlans();
+  const subQ = useComputeSubscription();
   const data = usageQ.data ?? null;
-  const measured = !!data && data.usageMeasured;
-
-  const summary = useMemo(
-    () => ({
-      includedHours: Number(data?.includedSmallDaemonSeconds ?? 0) / 3600,
-      usedHours: Number(data?.usedSmallDaemonSeconds ?? 0) / 3600,
-      overageHours: data ? overageSmallDaemonSeconds(data) / 3600 : 0,
-      overageCost: formatCentsAsDollars(data?.estimatedOverageCostCents ?? 0),
-      grantedSecondsRemaining: Number(data?.grantedSmallDaemonSecondsRemaining ?? 0),
-    }),
-    [data],
-  );
+  const allowedSizes = derivePlanDisplay(subQ.data?.subscription?.plan).allowedSizes;
+  const summary = exactUsageDisplay(data ?? undefined, hoursReference(plansQ.data?.daemonPricing, hoursSizes(allowedSizes), data ?? undefined));
+  const measured = measuredMachineUsage(data ?? undefined) && !!summary;
 
   return (
     <div className="flex flex-col gap-4">
       <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
-        Compute usage this period
+        Machine usage and allowance
       </h3>
+      {data && <p className="text-sm text-muted-foreground">{usageWindowLabel(data)} Hours are counted on your plan's machine size.</p>}
+      {data?.billingHoldReason && <p role="status" className="text-sm text-muted-foreground">{friendlyUsageHold(data.billingHoldReason)}</p>}
 
       {usageQ.error && (
         <ErrorBanner
@@ -1544,21 +1533,20 @@ function UsagePanel() {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <UsageStat label="Included" value={`${summary.includedHours.toFixed(0)} h`} />
-            <UsageStat label="Used" value={`${summary.usedHours.toFixed(1)} h`} />
-            <UsageStat label="Overage" value={`${summary.overageHours.toFixed(1)} h`} />
-            <UsageStat label="Estimated overage" value={summary.overageCost} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <UsageStat label="Included this month" value={summary?.includedLabel ?? "Unavailable"} />
+            <UsageStat label="Used" value={summary?.usedLabel ?? "Unavailable"} />
+            <UsageStat label="Extra hours so far" value={measuredWindowCost(data) ?? "Unavailable"} />
           </div>
 
           {/* Coupon grant is deliberately outside the four period stats above:
               included/used/overage all reset with the billing period, while a
               redeemed grant is a one-time bucket that carries over. */}
-          {summary.grantedSecondsRemaining >= 60 && (
+          {summary?.hasGrant && (
             <UsageStat
               label="Coupon hours remaining"
-              value={formatMachineSecondsShort(summary.grantedSecondsRemaining)}
-              hint="One-time bonus machine time from a redeemed coupon. Does not renew each period; used after your included hours, before overage."
+              value={summary.grantLabel ?? "Unavailable"}
+              hint="One-time machine hours from a redeemed coupon. They don't renew, and they're used after your plan's hours, before any extra hours are billed."
             />
           )}
 
@@ -1580,21 +1568,21 @@ function UsagePanel() {
                     { key: "size", header: "Size", className: "font-medium", render: (_, { row }) => sizeName(row.size) },
                     {
                       key: "running",
-                      header: "Running h",
+                      header: "Running hours",
                       numeric: true,
-                      render: (_, { row }) => (Number(row.runningSeconds) / 3600).toFixed(1),
+                      render: (_, { row }) => `≈ ${exactHours(row.exactRunningSeconds) ?? "unavailable"}`,
                     },
                     {
                       key: "overage",
-                      header: "Overage h",
+                      header: "Extra hours",
                       numeric: true,
-                      render: (_, { row }) => (Number(row.overageSeconds) / 3600).toFixed(1),
+                      render: (_, { row }) => `≈ ${exactHours(row.exactOverageSeconds) ?? "unavailable"}`,
                     },
                     {
                       key: "cost",
-                      header: "Overage cost",
+                      header: "Extra cost",
                       numeric: true,
-                      render: (_, { row }) => formatCentsAsDollars(Number(row.overageCostCents)),
+                      render: (_, { row }) => exactCentsLabel(row.overageCostCents) ?? "Unavailable",
                     },
                   ]}
                   data={data.bySize.map((row) => ({ size: String(row.size), row }))}

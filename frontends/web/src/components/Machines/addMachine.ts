@@ -12,11 +12,13 @@ import { uniqueMachineName } from "@/lib/uniqueMachineName";
 
 /** The wire enum for each catalog size name. */
 export const DAEMON_SIZE_BY_NAME: Record<DaemonSizeName, DaemonSize> = {
-  small: DaemonSize.DAEMON_SIZE_SMALL,
-  medium: DaemonSize.DAEMON_SIZE_MEDIUM,
-  large: DaemonSize.DAEMON_SIZE_LARGE,
+  s1: DaemonSize.DAEMON_SIZE_S1,
+  s2: DaemonSize.DAEMON_SIZE_S2,
+  m: DaemonSize.DAEMON_SIZE_M,
+  l: DaemonSize.DAEMON_SIZE_L,
   xl: DaemonSize.DAEMON_SIZE_XL,
   "2xl": DaemonSize.DAEMON_SIZE_2XL,
+  "3xl": DaemonSize.DAEMON_SIZE_3XL,
 };
 
 /**
@@ -71,15 +73,15 @@ export function cloudMachineRows(
   return rows.sort((a, b) => order.indexOf(a.size) - order.indexOf(b.size));
 }
 
-/** The row to start on: the caller's suggestion, else Small, else the first. */
+/** The row to start on: the caller's suggestion, else M, else the first. */
 export function defaultRow(rows: CloudMachineRow[], suggested?: DaemonSizeName): CloudMachineRow | undefined {
-  return rows.find((r) => r.size === suggested) ?? rows.find((r) => r.size === "small") ?? rows[0];
+  return rows.find((r) => r.size === suggested) ?? rows.find((r) => r.size === "m") ?? rows[0];
 }
 
 /**
  * The name a new machine gets unless the person types one: derived from the
  * repository when there is one ("api-server"), else from the size
- * ("cloud-small"), and suffixed until it is free on the account.
+ * ("cloud-m"), and suffixed until it is free on the account.
  */
 export function defaultMachineName(
   size: DaemonSizeName,

@@ -243,6 +243,27 @@ describe("workflowsView", () => {
     expect(workflowsView({ workflows, invalid, triggers, complete: false }).rows.some((row) => row.missing)).toBe(false);
   });
 
+  it("a trigger of a workflow that failed to load belongs to that definition, not a 'not found' row", () => {
+    // The file is there with a typo: telling the person it is gone is wrong,
+    // and listing it twice (Failed to load, and a pinned row) more so.
+    const triggers = [trigger("t1", "project://broken", "broken"), trigger("t2", "broken", "healthy", false)];
+    const view = workflowsView({ workflows, invalid, triggers });
+    expect(view.rows.some((row) => row.missing)).toBe(false);
+    expect(view.rows.some((row) => row.workflow.name.includes("broken"))).toBe(false);
+    expect(view.invalidTriggers.get("project:.reliant/workflows/broken.yaml:broken")?.map((t) => t.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("offers ready-made automations until each is on, and not while narrowing", () => {
+    const declared = [{ name: "pr-opened" }] as unknown as WorkflowResponse["triggers"];
+    const autopilot = { ...wf("builtin://autopilot-pr-review", "builtin"), automationOnly: true, triggers: declared };
+    const step = { ...wf("builtin://autopilot-lease-acquire", "builtin"), automationOnly: true, isHidden: true, triggers: declared };
+    const all = [...workflows, ...listed([autopilot, step])];
+    expect(workflowsView({ workflows: all, invalid, triggers: [] }).readyMade.map((r) => r.workflow.name)).toEqual(["builtin://autopilot-pr-review"]);
+    const on = [trigger("a1", "builtin://autopilot-pr-review")];
+    expect(workflowsView({ workflows: all, invalid, triggers: on }).readyMade).toEqual([]);
+    expect(workflowsView({ workflows: all, invalid, triggers: [], q: "review" }).readyMade).toEqual([]);
+  });
+
   it("says when a search or filter leaves nothing", () => {
     expect(workflowsView({ workflows, invalid, triggers: [], q: "zzz" }).noMatches).toBe(true);
     expect(workflowsView({ workflows, invalid: [], triggers: [], show: "failed" }).noMatches).toBe(true);

@@ -1,7 +1,6 @@
 package repo
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +32,7 @@ func mkLinked(t *testing.T, dir, mainDir, gitdirLine, commondir string) {
 
 func discoverRels(t *testing.T, dir string) []string {
 	t.Helper()
-	found, err := Discover(context.Background(), dir, 2)
+	found, err := discover(t, dir, 2)
 	require.NoError(t, err)
 	var rels []string
 	for _, f := range found {

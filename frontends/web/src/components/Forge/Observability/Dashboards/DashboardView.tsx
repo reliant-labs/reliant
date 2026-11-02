@@ -102,6 +102,7 @@ import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
+import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { OrgEnvPicker } from "./OrgEnvPicker";
 import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
@@ -879,7 +880,9 @@ function VariablesBar({
 }) {
   const overview = useServiceOverview(scope, range);
   const names = useMemo(() => {
-    const known = (overview.data?.services ?? []).filter((s) => !s.operatorData).map((s) => s.name);
+    // Operator-sourced processes stay: the scope is the project's environments, so
+    // they are the project's own (homeModel.serviceRows says why).
+    const known = (overview.data?.services ?? []).map((s) => s.name);
     if (service && !known.includes(service)) known.unshift(service);
     return [...new Set(known)];
   }, [overview.data, service]);
@@ -1038,7 +1041,7 @@ function DashboardPanelCard({
   const [bodyRef, near] = useNearViewport();
   const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
   // Not yet near is "not loaded yet", not "no data".
-  const query = near || queryPanel.kind === "search" ? rawQuery : { ...rawQuery, isLoading: true };
+  const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
