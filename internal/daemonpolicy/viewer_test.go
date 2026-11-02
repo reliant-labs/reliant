@@ -39,7 +39,7 @@ func viewerHome(t *testing.T) (home, project string) {
 
 func TestDenyViewerRead(t *testing.T) {
 	home, project := viewerHome(t)
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	link := func(name, target string) string {
 		p := filepath.Join(project, name)
 		if err := os.Symlink(target, p); err != nil {
@@ -106,7 +106,7 @@ func TestDenyViewerRead_DotfilesRepoKeepsItsFiles(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dotfiles, "ssh"), filepath.Join(home, ".ssh")); err != nil {
 		t.Fatal(err)
 	}
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 
 	if err := denyViewerRead(cfg, dotfiles, protected); err != nil {
 		t.Errorf("a dotfiles file viewed in its own repo was refused: %v", err)
@@ -122,7 +122,7 @@ func TestDenyViewerRead_DotfilesRepoKeepsItsFiles(t *testing.T) {
 // is refused, even though its path is in the workspace.
 func TestDenyViewerRead_HardLinksIntoStores(t *testing.T) {
 	home, project := viewerHome(t)
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	for name, target := range map[string]string{
 		"ssh-key": filepath.Join(home, ".ssh", "id_rsa"),
 		"netrc":   filepath.Join(home, ".netrc"),
@@ -161,7 +161,7 @@ func TestDenyViewerRead_HardLinksIntoStores(t *testing.T) {
 // refused, whichever way the swap went.
 func TestCheckViewerFile_RefusesAPathThatChanged(t *testing.T) {
 	home, project := viewerHome(t)
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	key := filepath.Join(home, ".ssh", "id_rsa")
 	readme := filepath.Join(project, "README.md")
 	link := filepath.Join(project, "link")
@@ -201,7 +201,7 @@ func TestCheckViewerFile_RefusesAPathThatChanged(t *testing.T) {
 // of symlinks in the store does not stop the walk.
 func TestDenyViewerRead_StoreReachesKeysThroughSymlinks(t *testing.T) {
 	home, project := viewerHome(t)
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	keys := filepath.Join(home, "keys")
 	for _, f := range []string{"key", "dir/key", "single"} {
 		p := filepath.Join(keys, f)
@@ -305,7 +305,7 @@ func foldStat(root string) func(string) (os.FileInfo, error) {
 // recognises the store by identity, not spelling.
 func TestDenyViewerRead_CaseInsensitiveVolume(t *testing.T) {
 	home, project := viewerHome(t)
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	saved := viewerStat
 	viewerStat = foldStat(home)
 	t.Cleanup(func() { viewerStat = saved })
@@ -338,11 +338,126 @@ func TestCheckViewerFile_CaseInsensitiveVolume(t *testing.T) {
 		t.Skipf("needs a case-insensitive volume; %s is case-sensitive (%v)", home, err)
 	}
 	defer f.Close()
-	protected := viewerProtected(home, "")
+	protected := viewerProtected(home, "", noEnv)
 	if err := denyViewerRead(upper, project, protected); !errors.Is(err, ErrViewerCredential) {
 		t.Errorf("denyViewerRead(%s) = %v, want ErrViewerCredential", upper, err)
 	}
 	if err := checkViewerFile(f, upper, project, protected); !errors.Is(err, ErrViewerCredential) {
 		t.Errorf("checkViewerFile(%s) = %v, want ErrViewerCredential", upper, err)
+	}
+}
+
+// noEnv is an environment with nothing set.
+func noEnv(string) string { return "" }
+
+// A credential store the environment relocates (XDG_CONFIG_HOME, GH_CONFIG_DIR,
+// …) is refused at its configured location, by path, through a project
+// symlink and through a project hard link, while the default location stays
+// protected and ordinary configuration beside the store is still served.
+func TestDenyViewerRead_RelocatedStores(t *testing.T) {
+	home, project := viewerHome(t)
+	data, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{
+		"config/gh/hosts.yml", "config/app/settings.toml", "config/google-chrome/Default/Cookies",
+		"share/keyrings/login.keyring", "ghdir/hosts.yml", "docker/config.json", "docker/features.json",
+		"claude/.credentials.json", "claude/settings.json", "kube/a", "kube/b",
+	} {
+		p := filepath.Join(data, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := map[string]string{
+		"XDG_CONFIG_HOME":   filepath.Join(data, "config"),
+		"XDG_DATA_HOME":     filepath.Join(data, "share"),
+		"GH_CONFIG_DIR":     filepath.Join(data, "ghdir"),
+		"DOCKER_CONFIG":     filepath.Join(data, "docker"),
+		"CLAUDE_CONFIG_DIR": filepath.Join(data, "claude"),
+		"KUBECONFIG":        filepath.Join(data, "kube", "a") + string(filepath.ListSeparator) + filepath.Join(data, "kube", "b"),
+	}
+	protected := viewerProtected(home, "", func(k string) string { return env[k] })
+
+	refused := []string{
+		filepath.Join(data, "config", "gh", "hosts.yml"),
+		filepath.Join(data, "config", "google-chrome", "Default", "Cookies"),
+		filepath.Join(data, "share", "keyrings", "login.keyring"),
+		filepath.Join(data, "ghdir", "hosts.yml"),
+		filepath.Join(data, "docker", "config.json"),
+		filepath.Join(data, "claude", ".credentials.json"),
+		filepath.Join(data, "kube", "a"),
+		filepath.Join(data, "kube", "b"),
+		// The defaults are still protected.
+		filepath.Join(home, ".config", "gh", "hosts.yml"),
+		filepath.Join(home, ".ssh", "id_rsa"),
+	}
+	for _, p := range refused {
+		if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+			t.Errorf("denyViewerRead(%s) = %v, want ErrViewerCredential", p, err)
+		}
+	}
+	for name, target := range map[string]string{
+		"xdg-gh": filepath.Join(data, "config", "gh", "hosts.yml"),
+		"gh-dir": filepath.Join(data, "ghdir", "hosts.yml"),
+	} {
+		t.Run("symlink "+name, func(t *testing.T) {
+			p := filepath.Join(project, "sym-"+name)
+			if err := os.Symlink(target, p); err != nil {
+				t.Fatal(err)
+			}
+			if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("denyViewerRead(project symlink to %s) = %v, want ErrViewerCredential", target, err)
+			}
+		})
+		t.Run("hard link "+name, func(t *testing.T) {
+			p := filepath.Join(project, "hard-"+name)
+			if err := os.Link(target, p); err != nil {
+				t.Fatalf("os.Link: %v", err)
+			}
+			if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("denyViewerRead(project hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := checkViewerFile(f, p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("checkViewerFile(project hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+		})
+	}
+	for _, p := range []string{
+		filepath.Join(data, "config", "app", "settings.toml"),
+		filepath.Join(data, "docker", "features.json"),
+		filepath.Join(data, "claude", "settings.json"),
+		filepath.Join(project, "README.md"),
+	} {
+		if err := denyViewerRead(p, project, protected); err != nil {
+			t.Errorf("denyViewerRead(%s) = %v, want nil", p, err)
+		}
+	}
+}
+
+// DenyViewerRead reads the relocating variables from the daemon's environment.
+func TestDenyViewerRead_ReadsTheEnvironment(t *testing.T) {
+	home, project := viewerHome(t)
+	t.Setenv("HOME", home)
+	cfg := filepath.Join(home, "elsewhere")
+	hosts := filepath.Join(cfg, "gh", "hosts.yml")
+	if err := os.MkdirAll(filepath.Dir(hosts), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hosts, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := DenyViewerRead(hosts, project); !errors.Is(err, ErrViewerCredential) {
+		t.Errorf("DenyViewerRead(%s) with XDG_CONFIG_HOME=%s = %v, want ErrViewerCredential", hosts, cfg, err)
 	}
 }

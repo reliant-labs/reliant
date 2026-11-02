@@ -60,22 +60,72 @@ var viewerOnlyHome = []homeEntry{
 	{"AppData/Roaming/Mozilla/Firefox", true},
 }
 
+// viewerXDGDirs are the home-relative directories an XDG variable moves: a
+// store under one of them is also refused at the same place under the
+// variable's directory (gh's login at $XDG_CONFIG_HOME/gh/hosts.yml).
+var viewerXDGDirs = []struct{ prefix, env string }{
+	{".config/", "XDG_CONFIG_HOME"},
+	{".local/share/", "XDG_DATA_HOME"},
+}
+
+// viewerEnvStores are credential stores a tool's own variable relocates. A
+// variable that is unset, or not an absolute path, adds nothing; the store's
+// default location stays protected either way.
+var viewerEnvStores = []struct {
+	env  string
+	file string // the credential file inside the directory env names; "" when env names the store itself
+	dir  bool
+}{
+	{"GH_CONFIG_DIR", "", true},
+	{"GNUPGHOME", "", true},
+	{"CLOUDSDK_CONFIG", "", true},
+	{"AWS_SHARED_CREDENTIALS_FILE", "", false},
+	{"DOCKER_CONFIG", "config.json", false},
+	{"CLAUDE_CONFIG_DIR", ".credentials.json", false},
+	{"CODEX_HOME", "auth.json", false},
+}
+
 // viewerProtected returns the credential stores the viewer refuses for a user
-// whose home is home.
-func viewerProtected(home, forgeCredentials string) []Credential {
+// whose home is home, in an environment read through getenv: each store at its
+// default location under home and wherever the environment relocates it.
+func viewerProtected(home, forgeCredentials string, getenv func(string) string) []Credential {
 	var out []Credential
-	if home != "" {
-		for _, e := range protectedHome {
-			if files, ok := viewerNarrowed[e.rel]; ok {
-				for _, f := range files {
-					out = appendCredential(out, Credential{Path: filepath.Join(home, f)})
-				}
-				continue
-			}
-			out = appendCredential(out, Credential{Path: filepath.Join(home, e.rel), Dir: e.dir})
+	add := func(rel string, dir bool) {
+		if home != "" {
+			out = appendCredential(out, Credential{Path: filepath.Join(home, rel), Dir: dir})
 		}
-		for _, e := range viewerOnlyHome {
-			out = appendCredential(out, Credential{Path: filepath.Join(home, e.rel), Dir: e.dir})
+		for _, x := range viewerXDGDirs {
+			if base := getenv(x.env); strings.HasPrefix(rel, x.prefix) && filepath.IsAbs(base) {
+				out = appendCredential(out, Credential{Path: filepath.Join(base, strings.TrimPrefix(rel, x.prefix)), Dir: dir})
+			}
+		}
+	}
+	for _, e := range protectedHome {
+		if files, ok := viewerNarrowed[e.rel]; ok {
+			for _, f := range files {
+				add(f, false)
+			}
+			continue
+		}
+		add(e.rel, e.dir)
+	}
+	for _, e := range viewerOnlyHome {
+		add(e.rel, e.dir)
+	}
+	for _, s := range viewerEnvStores {
+		p := getenv(s.env)
+		if !filepath.IsAbs(p) {
+			continue
+		}
+		if s.file != "" {
+			p = filepath.Join(p, s.file)
+		}
+		out = appendCredential(out, Credential{Path: p, Dir: s.dir})
+	}
+	// KUBECONFIG is a list of files, each a login.
+	for _, p := range filepath.SplitList(getenv("KUBECONFIG")) {
+		if filepath.IsAbs(p) {
+			out = appendCredential(out, Credential{Path: p})
 		}
 	}
 	for _, p := range reliantCredentialFiles(home, forgeCredentials) {
@@ -83,6 +133,10 @@ func viewerProtected(home, forgeCredentials string) []Credential {
 	}
 	return out
 }
+
+// viewerGetenv reads the variables that locate credential stores. They are
+// the user's tools' configuration, not Reliant's.
+var viewerGetenv = os.Getenv //nolint:forbidigo // locates third-party credential stores; not Reliant configuration
 
 // DenyViewerRead returns an error wrapping ErrViewerCredential when the file
 // viewer must not open path, and nil otherwise. root is the workspace the
@@ -98,7 +152,7 @@ func viewerProtected(home, forgeCredentials string) []Credential {
 // does not exempt it, and neither does a hard link.
 func DenyViewerRead(path, root string) error {
 	home, _ := os.UserHomeDir()
-	return denyViewerRead(path, root, viewerProtected(home, forgeCredentialsPath()))
+	return denyViewerRead(path, root, viewerProtected(home, forgeCredentialsPath(), viewerGetenv))
 }
 
 // CheckViewerFile is DenyViewerRead for a file the viewer has already opened
@@ -112,7 +166,7 @@ func DenyViewerRead(path, root string) error {
 // is a refusal, not a "not found" that tells the caller what ~/.ssh holds.
 func CheckViewerFile(f *os.File, path, root string) error {
 	home, _ := os.UserHomeDir()
-	return checkViewerFile(f, path, root, viewerProtected(home, forgeCredentialsPath()))
+	return checkViewerFile(f, path, root, viewerProtected(home, forgeCredentialsPath(), viewerGetenv))
 }
 
 func checkViewerFile(f *os.File, path, root string, protected []Credential) error {
