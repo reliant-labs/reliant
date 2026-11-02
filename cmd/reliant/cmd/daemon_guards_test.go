@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 )
@@ -18,7 +19,7 @@ import (
 // guard policy it hands the daemon runtime.
 func guardsFor(t *testing.T, env map[string]string) daemonruntime.Guards {
 	t.Helper()
-	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE"} {
+	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE", "RELIANT_COMMAND_THREADS"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range env {
@@ -40,11 +41,21 @@ func TestDaemonGuards_DefaultHeavyCommandsAreTheGatesDefault(t *testing.T) {
 	assert.Equal(t, heavyjob.DefaultCommands, g.HeavyCommands)
 	assert.Equal(t, diskguard.Config{}, g.Disk, "unset thresholds keep the guard's defaults")
 	assert.Zero(t, g.HeavyShare, "an unset share is derived from the slot pool")
+	assert.Zero(t, g.CommandThreads, "an unset thread limit is derived from the machine")
 }
 
 func TestDaemonGuards_HeavyShare(t *testing.T) {
 	g := guardsFor(t, map[string]string{"RELIANT_HEAVY_SHARE": "6"})
 	assert.Equal(t, 6, g.HeavyShare)
+}
+
+// The env var a command at its thread limit is told to raise is the one
+// command_threads reads.
+func TestDaemonGuards_CommandThreads(t *testing.T) {
+	g := guardsFor(t, map[string]string{"RELIANT_COMMAND_THREADS": "4096"})
+	assert.Equal(t, 4096, g.CommandThreads)
+	assert.Contains(t, proctree.CommandThreadsSetting, "command_threads")
+	assert.Contains(t, proctree.CommandThreadsSetting, "RELIANT_COMMAND_THREADS")
 }
 
 func TestDaemonGuards_HeavyCommandsReplaceOrClearTheDefault(t *testing.T) {

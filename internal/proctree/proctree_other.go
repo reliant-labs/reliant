@@ -23,6 +23,9 @@ func (t *Tree) limitNproc() {}
 // Kill kills nothing outside Linux; the caller kills the process group.
 func (t *Tree) Kill() bool { return false }
 
+// limitNote is "" outside Linux: no limit refuses a command anything.
+func (t *Tree) limitNote() string { return "" }
+
 // Populated is false outside Linux.
 func (t *Tree) Populated() bool { return false }
 
