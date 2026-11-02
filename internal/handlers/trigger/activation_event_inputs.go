@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -35,9 +37,11 @@ import (
 // maxEventContexts bounds the product of the bounded inputs' value sets.
 const maxEventContexts = maxApprovalDependencies
 
-// eventSupplied is an unbounded event input's value during approval. A target
-// field resolved from it is not a scope identifier, so discloseScope withholds
-// it as dynamic. It also marks the input as event-tainted: see taintedInputs.
+// eventSupplied is an unbounded event input's value during approval, and a
+// child's input whose argument reads what only a run has (maskTaintedArgs). A
+// target field resolved from it is not a scope identifier, so discloseScope
+// withholds it as dynamic. It also marks the input as tainted: see
+// taintedInputs.
 const eventSupplied = "\u27e8event-supplied\u27e9"
 
 // An unbounded event input must not choose a privilege: a child workflow or
@@ -48,8 +52,68 @@ const eventSupplied = "\u27e8event-supplied\u27e9"
 // arguments into child workflows: an argument leaf whose expression reads a
 // tainted input reaches the child as the sentinel (maskTaintedArgs), and a
 // target or binding expression that reads one is disclosed as dynamic.
+//
+// A value only a run has is tainted the same way, for the same reason: a
+// node's outputs (nodes.*), the event (trigger.*), a loop's iteration and
+// outputs (iter.*, outputs.*), a node's own output (output.*), the failure an
+// on_failure handler runs for,
+// and the run's own workflow context (workflow.id, .path, .branch, …; not
+// workflow.inputs or .name, see approvalWorkflowFields). None of them exists
+// before a run, and the approval's evaluator fills each with an empty
+// default, so an expression such as `nodes.?lane.?tools.orValue(['view'])`
+// would otherwise resolve to its fallback and be approved narrower than the
+// run. An agent's model or prompt passed from an earlier node's output is the
+// ordinary shape of that (pr-review); it reaches the child as the sentinel,
+// so the child can still be approved, and wherever it would choose a
+// privilege the approval refuses, as it does for an event value.
 
 var inputsReference = regexp.MustCompile(`\binputs\b\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([^'"]+)['"]\s*\])?`)
+
+// runtimeNamespaces are the CEL namespaces a run fills and an approval cannot.
+var runtimeNamespaces = []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELTrigger, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELFailure}
+
+// referencesRuntime reports whether a {{ }} template reads a value only a run
+// has (see above). It answers by parsing, so a namespace mentioned only inside
+// a string literal is no reference; a template that does not parse could read
+// anything, so it counts as one.
+func referencesRuntime(text string) bool {
+	reads, err := runtimeReference(text)
+	return reads || err != nil
+}
+
+// runtimeReference is referencesRuntime, with a parse failure as an error.
+func runtimeReference(text string) (bool, error) {
+	if !strings.Contains(text, "{{") {
+		return false, nil
+	}
+	exprs, err := wfcel.TemplateExpressions(text, false)
+	if err != nil || len(exprs) == 0 {
+		return false, err
+	}
+	for _, ns := range runtimeNamespaces {
+		refs, err := wfcel.ReferencesOf(exprs, ns)
+		if err != nil || refs.Referenced {
+			return refs.Referenced, err
+		}
+	}
+	refs, err := wfcel.ReferencesOf(exprs, wfcel.CELWorkflow)
+	if err != nil || refs.Whole {
+		return refs.Whole, err
+	}
+	for _, field := range refs.Fields {
+		if !approvalWorkflowFields[field] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// approvalWorkflowFields are the workflow namespace's fields an approval
+// knows: the inputs it resolves, and the name of the definition it is
+// reading (each is evaluated under its own ref, so `spawn(workflow.name, …)`
+// names the very definition the closure loads). The rest (id, chat, path,
+// branch, mode, …) describe one run.
+var approvalWorkflowFields = map[string]bool{"inputs": true, "name": true}
 
 // taintedInputs is the set of a context's inputs an event supplies unbounded.
 func taintedInputs(values map[string]any) map[string]bool {
@@ -63,12 +127,16 @@ func taintedInputs(values map[string]any) map[string]bool {
 	return out
 }
 
-// referencesTainted reports whether text — an expression, or a message holding
-// expressions — reads a tainted input, or carries the sentinel itself (an
-// expression already resolved from one). A reference that names no input
-// (bare `inputs`, or a computed `inputs[k]`) could read any of them.
+// referencesTainted reports whether text, an expression, reads a tainted
+// input or a value only a run has (referencesRuntime), or carries the
+// sentinel itself (an expression already resolved from one). A reference that
+// names no input (bare `inputs`, or a computed `inputs[k]`) could read any of
+// them.
 func referencesTainted(text string, tainted map[string]bool) bool {
 	if strings.Contains(text, eventSupplied) {
+		return true
+	}
+	if referencesRuntime(text) {
 		return true
 	}
 	if len(tainted) == 0 {
@@ -88,7 +156,64 @@ func referencesTainted(text string, tainted map[string]bool) bool {
 
 // referencesTaintedIn is referencesTainted over a proto message's expressions.
 func referencesTaintedIn(m proto.Message, tainted map[string]bool) bool {
-	return referencesTainted(canonicalProto(m), tainted)
+	return taintedField(m, tainted) != ""
+}
+
+// taintedField names the first field of m (by its JSON path, in sorted key
+// order) whose expression referencesTainted, or returns "" when none does.
+// Each string is judged on its own, since a template is parsed and the
+// message's JSON escaping is not CEL. A message that cannot be read is
+// tainted throughout.
+func taintedField(m proto.Message, tainted map[string]bool) string {
+	// Proto names are the YAML's: preloaded_tools, not preloadedTools.
+	raw, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
+	var value any
+	if err == nil {
+		err = json.Unmarshal(raw, &value)
+	}
+	if err != nil {
+		return "(unreadable)"
+	}
+	return taintedLeaf(value, "", tainted)
+}
+
+func taintedLeaf(v any, path string, tainted map[string]bool) string {
+	switch value := v.(type) {
+	case string:
+		if referencesTainted(value, tainted) {
+			if path == "" {
+				return "(value)"
+			}
+			return path
+		}
+	case []any:
+		for i, item := range value {
+			if p := taintedLeaf(item, fmt.Sprintf("%s[%d]", path, i), tainted); p != "" {
+				return p
+			}
+		}
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for k := range value {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			// A CelString/CelStringList's literal|expr wrapper is not a field
+			// its author wrote: `ref`, not `ref.expr`.
+			child := path
+			if k != "literal" && k != "expr" {
+				child = strings.TrimPrefix(path+"."+k, ".")
+			}
+			if referencesTainted(k, tainted) {
+				return child
+			}
+			if p := taintedLeaf(value[k], child, tainted); p != "" {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 var eventAttributeTemplate = regexp.MustCompile(`^\{\{\s*trigger\.payload\.attributes\.([A-Za-z0-9_]+)\s*\}\}$`)
@@ -208,10 +333,10 @@ func listValues(v any) []any {
 }
 
 // maskTaintedArgs replaces every argument leaf whose expression reads a
-// tainted input with the sentinel, so the child sees that input as
-// event-supplied however the parent transformed it.
+// tainted input or a run-time value with the sentinel, so the child sees that
+// input as event-supplied however the parent transformed it.
 func maskTaintedArgs(args map[string]*structpb.Value, tainted map[string]bool) map[string]*structpb.Value {
-	if len(tainted) == 0 || len(args) == 0 {
+	if len(args) == 0 {
 		return args
 	}
 	out := make(map[string]*structpb.Value, len(args))
@@ -224,6 +349,11 @@ func maskTaintedArgs(args map[string]*structpb.Value, tainted map[string]bool) m
 func maskTainted(v *structpb.Value, tainted map[string]bool) *structpb.Value {
 	switch k := v.GetKind().(type) {
 	case *structpb.Value_StringValue:
+		// One that does not parse is left for the resolver to refuse: an
+		// argument nobody can read is not approved as unbounded.
+		if _, err := runtimeReference(k.StringValue); err != nil {
+			return v
+		}
 		if strings.Contains(k.StringValue, "{{") && referencesTainted(k.StringValue, tainted) {
 			return structpb.NewStringValue(eventSupplied)
 		}

@@ -38,7 +38,7 @@ function computePlan(id: string, priceCents: bigint): Plan {
     priceCents,
     displayOrder: 0,
     structuredLimits: {
-      allowedDaemonSizes: ["small"],
+      allowedDaemonSizes: ["m"],
       includedSmallDaemonHours: 17n,
     } as PlanLimits,
   } as Plan;
@@ -61,8 +61,8 @@ function codePlan(id: string): Plan {
  */
 describe("every unpriced compute plan triggers the stale-catalog alarm", () => {
   it("counts a compute plan with no amount whether or not it names a Stripe price", () => {
-    const noStripePrice = { ...computePlan("plan_compute_small", 0n), stripePriceId: "" } as Plan;
-    const staleStripePrice = computePlan("plan_compute_medium", 0n); // stripePriceId: "price_test"
+    const noStripePrice = { ...computePlan("plan_compute_m", 0n), stripePriceId: "" } as Plan;
+    const staleStripePrice = computePlan("plan_compute_l", 0n); // stripePriceId: "price_test"
 
     expect(isUnpricedComputePlan(noStripePrice)).toBe(true);
     expect(isUnpricedComputePlan(staleStripePrice)).toBe(true);
@@ -71,7 +71,7 @@ describe("every unpriced compute plan triggers the stale-catalog alarm", () => {
   it("does not count a priced plan", () => {
     // Guard the guard: a predicate that always returned true would satisfy
     // the case above.
-    expect(isUnpricedComputePlan(computePlan("plan_compute_small", 2000n))).toBe(
+    expect(isUnpricedComputePlan(computePlan("plan_compute_m", 2000n))).toBe(
       false,
     );
   });
@@ -80,7 +80,7 @@ describe("every unpriced compute plan triggers the stale-catalog alarm", () => {
 describe("unpriced compute plans are distinguishable from an empty catalog", () => {
   it("treats a compute plan with no price as present-but-unpurchasable", () => {
     // The exact shape the stale dev database served.
-    const stale = computePlan("plan_compute_small", 0n);
+    const stale = computePlan("plan_compute_m", 0n);
 
     expect(isComputePlan(stale)).toBe(true);
     expect(isPurchasableComputePlan(stale)).toBe(false);
@@ -91,8 +91,8 @@ describe("unpriced compute plans are distinguishable from an empty catalog", () 
     // so a non-compute plan leaking in would report a compute-catalog problem
     // that does not exist.
     const served = [
-      computePlan("plan_compute_small", 0n),
-      computePlan("plan_compute_medium", 0n),
+      computePlan("plan_compute_m", 0n),
+      computePlan("plan_compute_l", 0n),
       codePlan("plan_code_pro"),
     ];
 
@@ -120,8 +120,8 @@ describe("unpriced compute plans are distinguishable from an empty catalog", () 
     // returned false would satisfy the two zero-expecting cases above and the
     // suite would still look green.
     const served = [
-      computePlan("plan_compute_small", 2000n),
-      computePlan("plan_compute_medium", 4000n),
+      computePlan("plan_compute_m", 2000n),
+      computePlan("plan_compute_l", 4000n),
     ];
 
     const unpriced = served.filter(

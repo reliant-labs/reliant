@@ -19,6 +19,7 @@
  *   …&case=few|ungrouped|empty|read-only|error|loading|not-set-up|no-telemetry|nothing-yet
  *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
+ *   /forge-dashboards-preview?page=chart-gallery              every panel chart (ChartGalleryPreview)
  */
 
 import { useEffect, useMemo } from "react";
@@ -40,6 +41,7 @@ import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
 import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
 import ChartCorrectnessPreview from "../../charts/__preview__/ChartCorrectnessPreview";
+import ChartGalleryPreview from "./ChartGalleryPreview";
 
 const BASE = "/forge-dashboards-preview";
 
@@ -243,6 +245,7 @@ export default function DashboardsPreview() {
           <select data-testid="preview-page" value={page} onChange={(e) => go({ page: e.target.value === "list" ? undefined : e.target.value })} className={CONTROL}>
             <option value="list">Dashboards</option>
             <option value="dashboard">A dashboard</option>
+            <option value="chart-gallery">Chart gallery</option>
           </select>
           <select data-testid="preview-case" value={caseId} onChange={(e) => go({ case: e.target.value === "data" ? undefined : e.target.value })} className={CONTROL}>
             {CASES.map((c) => (
@@ -266,7 +269,7 @@ export default function DashboardsPreview() {
     >
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={api}>
-          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page !== "dashboard" || !dashRef ? (
+          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page === "chart-gallery" ? <ChartGalleryPreview /> : page !== "dashboard" || !dashRef ? (
             <DashboardsList
               key={caseId}
               project={FIXTURE_PROJECT}

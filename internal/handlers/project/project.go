@@ -21,6 +21,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
+// gitCheckBudget bounds GetProject's live check of the project's git status
+// on the daemon. The daemon answers it from a short filesystem walk
+// (repo.ContainsRepo), well under this; past it, the stored flag is served.
+// A var so a test can shrink it.
+var gitCheckBudget = 1500 * time.Millisecond
+
 // errNoDaemonRouter is what the daemon-backed paths report in a composition
 // without a daemon router (Deps.Router is optional).
 var errNoDaemonRouter = errors.New("no daemon router")
@@ -238,10 +244,20 @@ func (s *Service) GetProject(
 	// derived from repo-count, because a git project the user never registers
 	// as a worktree repo still has zero repo rows. When the daemon is
 	// unreachable we keep the last-known DB value.
+	//
+	// The check is bounded by gitCheckBudget: it refreshes a cached flag, so a
+	// slow or unreachable daemon must cost the read that budget at most, never
+	// the request's whole deadline. Without the bound, GetProject in prod sat
+	// at exactly 10.0s (the client's deadline) whenever check_git was slow,
+	// and the client then failed the read it had waited for (2026-10-31/11-01:
+	// 16 of 31 calls).
 	var checkGitResp struct {
 		IsGitRepo bool `json:"is_git_repo"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
+	checkCtx, cancelCheck := context.WithTimeout(ctx, gitCheckBudget)
+	err = s.sendProjectDaemonCommand(checkCtx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp)
+	cancelCheck()
+	if err != nil {
 		logging.WarnContext(ctx, "GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
 	} else if err := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, checkGitResp.IsGitRepo); err != nil {
 		logging.WarnContext(ctx, "GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)

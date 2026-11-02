@@ -30,7 +30,9 @@ import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { isElectron } from "../../lib/constants";
-import { openExternalLink } from "../../lib/open-link";
+import { embeddedBrowserUrl, openExternalLink } from "../../lib/open-link";
+import { devServerUrl, isSameDevPage } from "../../lib/dev-preview";
+import { useActiveDaemonPreviewTemplate } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
@@ -386,6 +388,9 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const createBrowserTab = useBrowserStore((state) => state.createTab);
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
   const getWorktreeTabs = useBrowserStore((state) => state.getWorktreeTabs);
+  // A dev server listens on the daemon's localhost: with a cloud daemon that is
+  // the workspace pod, reached through the daemon's preview URL.
+  const previewTemplate = useActiveDaemonPreviewTemplate();
 
   // Get workspace names from the workspaces the app holds.
   // Default to main worktree when no worktreeId is provided
@@ -772,7 +777,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   }, [findCommandForProcess, handleRunCommand]);
 
   const handleOpenPort = useCallback(async (port: number) => {
-    const url = `http://localhost:${port}`;
+    const url = devServerUrl(port, previewTemplate);
     // Web build has no embedded <webview> — open the preview in a new browser tab.
     if (!isElectron()) {
       await openExternalLink(url);
@@ -780,10 +785,10 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }
     const projectId = currentProject?.id;
     if (projectId && effectiveWorktreeId) {
-      const tabId = await createBrowserTab(effectiveWorktreeId, url, projectId);
+      const tabId = await createBrowserTab(effectiveWorktreeId, await embeddedBrowserUrl(url, previewTemplate), projectId);
       await openBrowserViewer(projectId, effectiveWorktreeId, tabId);
     }
-  }, [currentProject?.id, effectiveWorktreeId, createBrowserTab, openBrowserViewer]);
+  }, [currentProject?.id, effectiveWorktreeId, createBrowserTab, openBrowserViewer, previewTemplate]);
 
   const runningProcesses = allProcesses.filter(
     (p) => p.status === BackgroundProcessStatus.RUNNING,
@@ -948,7 +953,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         
         for (const portInfo of process.ports || []) {
           const port = portInfo.port;
-          const url = `http://localhost:${port}`;
+          const url = devServerUrl(port, previewTemplate);
           
           // Skip if we've already opened this URL
           if (openedUrls.has(url)) continue;
@@ -956,14 +961,14 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
           
           try {
             // Check if a tab already exists for this URL
-            const existingTab = existingTabs.find(tab => tab.url === url);
+            const existingTab = existingTabs.find(tab => isSameDevPage(tab.url, url));
             
             if (existingTab) {
               // Tab exists - always open it (openBrowserViewer will handle if already open)
               await openBrowserViewer(projectId, worktreeId, existingTab.id);
             } else {
               // Tab doesn't exist - create and open it
-              const tabId = await createBrowserTab(worktreeId, url, projectId);
+              const tabId = await createBrowserTab(worktreeId, await embeddedBrowserUrl(url, previewTemplate), projectId);
               await openBrowserViewer(projectId, worktreeId, tabId);
             }
           } catch (err) {
@@ -979,7 +984,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, allProcesses, detectedTypes, commands, matchesSearch, commandProcessMap, currentProject?.id, getWorktreeTabs, createBrowserTab, openBrowserViewer]);
+  }, [searchQuery, allProcesses, detectedTypes, commands, matchesSearch, commandProcessMap, currentProject?.id, getWorktreeTabs, createBrowserTab, openBrowserViewer, previewTemplate]);
 
   // If a process is selected, show logs
   if (selectedProcessId) {

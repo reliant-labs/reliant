@@ -368,24 +368,70 @@ nothing else merges in between, the bump commit inherits that green.
 A hotfix that cannot wait takes `scripts/release-tag.sh --skip-release-gate`.
 Say so in the release notes. There is no waiver for a red run: fix it.
 
+### Release candidates: gate a frozen commit, never main's tip (owner, 2026-10-31)
+
+Main keeps merging all day and is never frozen, paused or blocked for a
+release. A release ships a **release candidate**: one commit of main, cut
+off as a branch, gated, and promoted unchanged. A captain spent 28 hours
+re-gating main's moving tip and shipped nothing; this is the rule that stops
+that.
+
+1. **Cut.** Push the commit as a branch, `release/vX.Y.Z-rc.N`, and mark its
+   head with the tag `rc/vX.Y.Z-rc.N`. Choose a commit whose
+   `electron/package.json` already carries `X.Y.Z` (the bump PR merged), so it
+   can be tagged without a new commit.
+2. **Gate that SHA only.** `scripts/release-gate.sh run <rc sha>`. CI's
+   push-to-main run of the same sha is an equal record. Nothing that merges
+   afterwards is in this RC: it goes in the next one.
+3. **Red:** file the failures for main's fixers (`pipeline:main-red`). Fixes go
+   to **main**, never to the RC branch. Cut `rc.N+1` from a newer main that
+   carries them. More than one RC may be in flight; the first green one ships.
+4. **Green:** `scripts/release-tag.sh vX.Y.Z --commit <rc sha>`. The release
+   tag lands on exactly the commit the gate judged, so what ships is what was
+   gated.
+
+The RC train (control-plane `scripts/rc/rc.sh`) gates the set's reliant commit
+on its own machine (owner, 2026-11-02): `scripts/rc/rl-gate.sh` runs this
+gate's parts (`release-gate.sh run --part`) and ci.yml's Playwright and
+electron lanes in parallel, assembles the record and publishes it as the
+commit's note. `release-tag.sh --rc` accepts that green record, and otherwise
+the commit's `Release gate` job on Actions (the train's fallback, ci.yml
+dispatched at the RC branch, which publishes no note off main).
+
+The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
+`Release Electron App` (publishing to the alpha channel, a GitHub Release
+and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
+gated yet. Two `v*` tags on one commit would also make
+`scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
+`release/` branch and the `rc/` tag trigger no workflow.
+
 ## The merge queue
 
 `main` merges only through GitHub's native merge queue. The ruleset
 "main: CI result + merge queue" requires the `CI result` check, squash-merges,
 and lists one bypass actor, the `reliant-01` account the pipeline acts as
-(never use it to bypass: no `--admin`). `ci.yml` runs on `merge_group`, so each
-queued PR is tested on main plus the entries ahead of it, and lands only if that
-run is green. That `merge_group` run is the only run of the merge gate an
+(never use it to bypass: no `--admin`). `merge-queue.yml` runs on
+`merge_group`, so each queued PR is tested on main plus the entries ahead of it,
+and lands only if that run is green. It is ONE job, `CI result`, running
+`task ci:merge -- --queue`, and its budget is five minutes of wall time, runner
+queue included (owner, 2026-11-01): the queue tier leaves vet and forge lint to
+the release gate and runs buf lint only for a proto change, and the renderer's
+release build, Playwright and the electron smoke run on main, where the release
+record requires them. Its last step reports the run's wall time split into
+runner wait and run time, and files one rolling `pipeline:slo` issue when it is
+over budget (it does not fail the group: a slow runner is not the change's
+fault). That `merge_group` run is the only run of the merge gate an
 unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
 required checks are green on its head. Only the `pr-review` workflow enqueues,
 with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
 passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
 `merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
-`CI result` also requires `pr-review`'s pass marker on every PR head in the
-group (`scripts/ci-review-marker.sh`). Because the PR's own `CI result` is
+the required `Reliant review` check (`reliant-review.yml`) requires
+`pr-review`'s pass marker on every PR head in the group
+(`scripts/ci-review-marker.sh`, fetched from main). Because the PR's own `CI result` is
 green within a minute, auto-merge an author arms before the review enqueues
-the unreviewed head at once: its group fails the review marker
+the unreviewed head at once: its group fails `Reliant review`
 (`latest: none`), and so does every group behind it. A queue failure dequeues
 the PR, which the pipeline's fixer picks up.
 
@@ -409,8 +455,8 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, and the path lanes below that the diff reaches; the review marker must pass |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed |
+| `merge_group` (`merge-queue.yml`) | `CI result` (one job) | `task ci:merge -- --base <the group's base> --queue`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. No path lanes |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
 
 ### Why the release gate runs as parts in CI
 

@@ -4,6 +4,7 @@ package worktree
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -305,6 +306,11 @@ func (s *Service) repoDiscoveryError(ctx context.Context, userID string, project
 	if toolexec.DaemonReportedMissingPath(err) {
 		return svcerr.FailedPrecondition(fmt.Sprintf("the project folder %s does not exist on the machine this workspace would be created on", project.Path))
 	}
+	var cutShort *repopkg.SearchCutShortError
+	if errors.As(err, &cutShort) {
+		// The machine answered: waking it or retrying will not change that.
+		return svcerr.FailedPrecondition(cutShort.Error())
+	}
 	err = s.wake().AfterFailure(ctx, userID, target, err)
 	if machinewake.IsWaking(err) {
 		return err
@@ -425,15 +431,18 @@ func (s *Service) wakeIfAsleep(ctx context.Context, userID string, target machin
 }
 
 // worktreeMachine adapts the service's daemon send (which wakes a sleeping
-// machine on failure) to workspacecreate.Machine, bound to one owner daemon.
+// machine on failure) to workspacecreate.Machine, bound to the placement the
+// worktree was made for. It carries the whole target, not just its daemon id:
+// a no-machine chat's workspace must never wake its machine, in the
+// background checkouts any more than in the request that placed them.
 type worktreeMachine struct {
-	s        *Service
-	userID   string
-	daemonID string
+	s      *Service
+	userID string
+	target machinewake.Target
 }
 
 func (m worktreeMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
-	return m.s.sendWorktreeDaemonCommandTimeout(ctx, m.userID, m.daemonID, commandType, payload, resp, timeoutMs)
+	return m.s.sendToMachine(ctx, m.userID, m.target, commandType, payload, resp, timeoutMs)
 }
 
 // emitWorktreeChanged tells connected clients a worktree's state settled.

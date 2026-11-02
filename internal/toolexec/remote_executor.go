@@ -381,8 +381,16 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 		}
 		contextMap["repos"] = repos
 	}
+	if req.RunStep {
+		contextMap[RunStepContextKey] = true
+	}
 	return contextMap
 }
+
+// RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
+// executing tool (rctx.ToolContext.RunStep). The context map is built here,
+// from server-side fields only; a model's tool input never reaches it.
+const RunStepContextKey = "run_step"
 
 // executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
 // Used for tools that must run in the user's environment (e.g., bash, shell commands).

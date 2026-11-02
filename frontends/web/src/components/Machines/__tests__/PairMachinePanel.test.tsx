@@ -86,7 +86,8 @@ afterEach(() => vi.clearAllMocks());
 describe("pairing by code", () => {
   it("shows the start command with nothing to paste into it", () => {
     render(<PairMachinePanel />);
-    expect(screen.getByText(/reliant daemon start/)).toBeInTheDocument();
+    // More than one: the folded no-code hint repeats the command.
+    expect(screen.getAllByText(/reliant daemon start/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/--token/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Generate token/i })).not.toBeInTheDocument();
   });
@@ -144,6 +145,27 @@ describe("pairing by code", () => {
     expect(await screen.findByText(/That code signs in the Reliant CLI, not a machine/)).toBeInTheDocument();
     expect(screen.queryByText(/Approve machine/)).not.toBeInTheDocument();
     expect(mockDecide).not.toHaveBeenCalled();
+  });
+
+  // The silent case: a machine whose CLI is signed in to ANOTHER account
+  // connects there on `daemon start` and prints no code, so this panel would
+  // wait forever. The hint names the way out — sign out, start again.
+  it("tells a person with no code how to sign the machine out and retry", () => {
+    render(<PairMachinePanel mode="bootstrap" />);
+    const hint = screen.getByTestId("pair-no-code-hint");
+    expect(hint).toHaveTextContent(/Not seeing a code\?/);
+    expect(hint).toHaveTextContent(/another account/);
+    expect(hint).toHaveTextContent(/reliant auth logout/);
+    expect(hint).toHaveTextContent(/reliant daemon start/);
+  });
+
+  it("drops the no-code hint once a code has been found", async () => {
+    const user = userEvent.setup();
+    render(<PairMachinePanel />);
+    await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Approve machine build-box.local?")).toBeInTheDocument();
+    expect(screen.queryByTestId("pair-no-code-hint")).not.toBeInTheDocument();
   });
 
   it("starts from a code the CLI's link carried", () => {
@@ -224,5 +246,6 @@ describe("a deployment with no control plane", () => {
     render(<PairMachinePanel />);
     expect(screen.getByTestId("pair-token-fallback")).toHaveTextContent(/reliant daemon start --token/);
     expect(screen.queryByLabelText("Pairing code")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pair-no-code-hint")).not.toBeInTheDocument();
   });
 });

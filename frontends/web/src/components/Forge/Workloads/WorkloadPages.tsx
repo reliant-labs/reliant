@@ -16,7 +16,7 @@ import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
-import { useCloudEnvStatus, useCloudEnvStatuses, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
 import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
@@ -38,6 +38,12 @@ import type { StripEnv } from "./workloadModel";
 function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
   const { roster, forgeProject } = useForgeConsole();
   const names = usePromoterNames(forgeProject);
+  // The declared workloads matter only where nothing is placed to observe
+  // (an unplaced env with declared services and no telemetry is "Unobserved"),
+  // so only those environments' shapes are fetched.
+  const shapes = useEnvironmentShapes(
+    roster.envs.map(({ live }) => (live && live.kind !== "local" && live.declared && !isPlacedKind(live.kind) ? live.id : ""))
+  );
   const envs = useMemo(
     () =>
       roster.envs
@@ -54,12 +60,12 @@ function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
               promotedBy: promoterOf(live, names),
               preview: live.kind === "preview",
               placed: isPlacedKind(live.kind),
-              declared: (live.declaredShape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
+              declared: (shapes.get(live.id)?.shape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
             },
           ];
         })
         .sort((a, b) => Number(a.preview) - Number(b.preview) || (a.name === "prod" ? -1 : b.name === "prod" ? 1 : a.name.localeCompare(b.name))),
-    [roster.envs, names]
+    [roster.envs, names, shapes]
   );
   return { envs, loading: roster.isLoading || roster.resolvingName };
 }
@@ -231,6 +237,9 @@ export function WorkloadPage() {
     }),
     [restart, runState, live, envName]
   );
+  // Whether the render declares this workload, for an unplaced env only: the
+  // declared shape is fetched for this one environment.
+  const shape = useEnvironmentShape(live && !placed && live.declared ? live.id : null);
   const hosted = useMemo<HostedObservation | null>(
     () => (placed ? { workload: status.data?.workloads.find((w) => w.name === name) ?? null, loading: status.isLoading } : null),
     [placed, status.data, status.isLoading, name]
@@ -287,7 +296,7 @@ export function WorkloadPage() {
         actions={actions}
         hosted={hosted}
         rollback={rollback}
-        declaredInRender={!placed && (live.declaredShape?.workloads ?? []).some((workload) => workload.name === name)}
+        declaredInRender={!placed && (shape.data?.workloads ?? []).some((workload) => workload.name === name)}
       />
       {dialog}
     </div>

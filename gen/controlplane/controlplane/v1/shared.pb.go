@@ -273,37 +273,47 @@ func (OwnerType) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{3}
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 type DaemonSize int32
 
 const (
 	DaemonSize_DAEMON_SIZE_UNSPECIFIED DaemonSize = 0
-	DaemonSize_DAEMON_SIZE_SMALL       DaemonSize = 1 // 500m/2 CPU, 2Gi/4Gi RAM
-	DaemonSize_DAEMON_SIZE_MEDIUM      DaemonSize = 2 // 1/4 CPU, 4Gi/8Gi RAM
-	DaemonSize_DAEMON_SIZE_LARGE       DaemonSize = 3 // 2/8 CPU, 8Gi/16Gi RAM
-	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 4 // 4/16 CPU, 16Gi/32Gi RAM
-	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 5 // 8/32 CPU, 32Gi/64Gi RAM
+	DaemonSize_DAEMON_SIZE_S1          DaemonSize = 6  // 1 vCPU, 2 GiB
+	DaemonSize_DAEMON_SIZE_S2          DaemonSize = 7  // 1 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_M           DaemonSize = 8  // 2 vCPU, 4 GiB
+	DaemonSize_DAEMON_SIZE_L           DaemonSize = 9  // 4 vCPU, 8 GiB
+	DaemonSize_DAEMON_SIZE_XL          DaemonSize = 10 // 8 vCPU, 16 GiB
+	DaemonSize_DAEMON_SIZE_2XL         DaemonSize = 11 // 15 vCPU, 32 GiB
+	DaemonSize_DAEMON_SIZE_3XL         DaemonSize = 12 // 30 vCPU, 64 GiB
 )
 
 // Enum value maps for DaemonSize.
 var (
 	DaemonSize_name = map[int32]string{
-		0: "DAEMON_SIZE_UNSPECIFIED",
-		1: "DAEMON_SIZE_SMALL",
-		2: "DAEMON_SIZE_MEDIUM",
-		3: "DAEMON_SIZE_LARGE",
-		4: "DAEMON_SIZE_XL",
-		5: "DAEMON_SIZE_2XL",
+		0:  "DAEMON_SIZE_UNSPECIFIED",
+		6:  "DAEMON_SIZE_S1",
+		7:  "DAEMON_SIZE_S2",
+		8:  "DAEMON_SIZE_M",
+		9:  "DAEMON_SIZE_L",
+		10: "DAEMON_SIZE_XL",
+		11: "DAEMON_SIZE_2XL",
+		12: "DAEMON_SIZE_3XL",
 	}
 	DaemonSize_value = map[string]int32{
 		"DAEMON_SIZE_UNSPECIFIED": 0,
-		"DAEMON_SIZE_SMALL":       1,
-		"DAEMON_SIZE_MEDIUM":      2,
-		"DAEMON_SIZE_LARGE":       3,
-		"DAEMON_SIZE_XL":          4,
-		"DAEMON_SIZE_2XL":         5,
+		"DAEMON_SIZE_S1":          6,
+		"DAEMON_SIZE_S2":          7,
+		"DAEMON_SIZE_M":           8,
+		"DAEMON_SIZE_L":           9,
+		"DAEMON_SIZE_XL":          10,
+		"DAEMON_SIZE_2XL":         11,
+		"DAEMON_SIZE_3XL":         12,
 	}
 )
 
@@ -1995,8 +2005,13 @@ type DaemonPricing struct {
 	// month (730 hours), running or suspended, in cents, as an exact decimal
 	// string (never a float: it is money).
 	StorageCentsPerGibMonth string `protobuf:"bytes,4,opt,name=storage_cents_per_gib_month,json=storageCentsPerGibMonth,proto3" json:"storage_cents_per_gib_month,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Immutable accepted exchange/rate version, independent of retail merchandising.
+	PricingVersion string `protobuf:"bytes,5,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
+	// Candidate catalog is staged only; false until all routes are commissioned.
+	ActivationReady      bool   `protobuf:"varint,6,opt,name=activation_ready,json=activationReady,proto3" json:"activation_ready,omitempty"`
+	ActivationHoldReason string `protobuf:"bytes,7,opt,name=activation_hold_reason,json=activationHoldReason,proto3" json:"activation_hold_reason,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DaemonPricing) Reset() {
@@ -2050,12 +2065,40 @@ func (x *DaemonPricing) GetStorageCentsPerGibMonth() string {
 	return ""
 }
 
+func (x *DaemonPricing) GetPricingVersion() string {
+	if x != nil {
+		return x.PricingVersion
+	}
+	return ""
+}
+
+func (x *DaemonPricing) GetActivationReady() bool {
+	if x != nil {
+		return x.ActivationReady
+	}
+	return false
+}
+
+func (x *DaemonPricing) GetActivationHoldReason() string {
+	if x != nil {
+		return x.ActivationHoldReason
+	}
+	return ""
+}
+
 // DaemonSizePrice is one size's row of DaemonPricing.
 type DaemonSizePrice struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Size  string                 `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
-	// Small-daemon-hours this size burns per wall-clock hour.
+	// Deprecated integer multiplier cannot represent exact cost-weight fractions.
+	//
+	// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
 	Multiplier int64 `protobuf:"varint,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
+	// Exact rational num/den; not retail-price credit or a runtime billing multiplier.
+	CostWeight string `protobuf:"bytes,5,opt,name=cost_weight,json=costWeight,proto3" json:"cost_weight,omitempty"`
+	RouteId    string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// Canonical exact rational cents per running hour (num/den).
+	ExactHourlyPriceCents string `protobuf:"bytes,7,opt,name=exact_hourly_price_cents,json=exactHourlyPriceCents,proto3" json:"exact_hourly_price_cents,omitempty"`
 	// Overage price per wall-clock hour at this size, in cents, as an exact
 	// decimal string: multiplier × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
@@ -2103,11 +2146,33 @@ func (x *DaemonSizePrice) GetSize() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
 func (x *DaemonSizePrice) GetMultiplier() int64 {
 	if x != nil {
 		return x.Multiplier
 	}
 	return 0
+}
+
+func (x *DaemonSizePrice) GetCostWeight() string {
+	if x != nil {
+		return x.CostWeight
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetRouteId() string {
+	if x != nil {
+		return x.RouteId
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetExactHourlyPriceCents() string {
+	if x != nil {
+		return x.ExactHourlyPriceCents
+	}
+	return ""
 }
 
 func (x *DaemonSizePrice) GetHourlyPriceCents() string {
@@ -3809,6 +3874,283 @@ func (x *GitRepo) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// PanelResultColumn is one result column, in result order.
+type PanelResultColumn struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The Postgres type, e.g. "int8", "timestamptz", "text".
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// A number: drawn as a value (a series point or a row cell).
+	Numeric bool `protobuf:"varint,3,opt,name=numeric,proto3" json:"numeric,omitempty"`
+	// A date or time: it can be the time axis.
+	Time          bool `protobuf:"varint,4,opt,name=time,proto3" json:"time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PanelResultColumn) Reset() {
+	*x = PanelResultColumn{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PanelResultColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PanelResultColumn) ProtoMessage() {}
+
+func (x *PanelResultColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PanelResultColumn.ProtoReflect.Descriptor instead.
+func (*PanelResultColumn) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PanelResultColumn) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PanelResultColumn) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *PanelResultColumn) GetNumeric() bool {
+	if x != nil {
+		return x.Numeric
+	}
+	return false
+}
+
+func (x *PanelResultColumn) GetTime() bool {
+	if x != nil {
+		return x.Time
+	}
+	return false
+}
+
+// PanelResultPoint is one point of a series.
+type PanelResultPoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Time  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	Value float64                `protobuf:"fixed64,2,opt,name=value,proto3" json:"value,omitempty"`
+	// Always false for a Postgres panel; kept so the shape matches TimePoint.
+	Partial bool `protobuf:"varint,3,opt,name=partial,proto3" json:"partial,omitempty"`
+	// No value at this point (NULL): a gap, not a zero. `value` is 0 and must be
+	// ignored.
+	Null          bool `protobuf:"varint,4,opt,name=null,proto3" json:"null,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PanelResultPoint) Reset() {
+	*x = PanelResultPoint{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PanelResultPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PanelResultPoint) ProtoMessage() {}
+
+func (x *PanelResultPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PanelResultPoint.ProtoReflect.Descriptor instead.
+func (*PanelResultPoint) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PanelResultPoint) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *PanelResultPoint) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *PanelResultPoint) GetPartial() bool {
+	if x != nil {
+		return x.Partial
+	}
+	return false
+}
+
+func (x *PanelResultPoint) GetNull() bool {
+	if x != nil {
+		return x.Null
+	}
+	return false
+}
+
+// PanelResultSeries is one series: one numeric column for one group.
+type PanelResultSeries struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Label string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	// Group column -> value for this series. Empty without group columns.
+	Group         map[string]string   `protobuf:"bytes,2,rep,name=group,proto3" json:"group,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Points        []*PanelResultPoint `protobuf:"bytes,3,rep,name=points,proto3" json:"points,omitempty"`
+	Value         float64             `protobuf:"fixed64,4,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PanelResultSeries) Reset() {
+	*x = PanelResultSeries{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PanelResultSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PanelResultSeries) ProtoMessage() {}
+
+func (x *PanelResultSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PanelResultSeries.ProtoReflect.Descriptor instead.
+func (*PanelResultSeries) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PanelResultSeries) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *PanelResultSeries) GetGroup() map[string]string {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
+func (x *PanelResultSeries) GetPoints() []*PanelResultPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+func (x *PanelResultSeries) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+// PanelResultRow is one result row of a panel that is not a time series.
+type PanelResultRow struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Group map[string]string      `protobuf:"bytes,1,rep,name=group,proto3" json:"group,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// One per entry of the response's columns. Values whose zero-based index is
+	// in missing_value_indexes MUST be ignored (NULL, not zero).
+	Values              []float64 `protobuf:"fixed64,2,rep,packed,name=values,proto3" json:"values,omitempty"`
+	MissingValueIndexes []uint32  `protobuf:"varint,3,rep,packed,name=missing_value_indexes,json=missingValueIndexes,proto3" json:"missing_value_indexes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *PanelResultRow) Reset() {
+	*x = PanelResultRow{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PanelResultRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PanelResultRow) ProtoMessage() {}
+
+func (x *PanelResultRow) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PanelResultRow.ProtoReflect.Descriptor instead.
+func (*PanelResultRow) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *PanelResultRow) GetGroup() map[string]string {
+	if x != nil {
+		return x.Group
+	}
+	return nil
+}
+
+func (x *PanelResultRow) GetValues() []float64 {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+func (x *PanelResultRow) GetMissingValueIndexes() []uint32 {
+	if x != nil {
+		return x.MissingValueIndexes
+	}
+	return nil
+}
+
 var File_controlplane_v1_shared_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_shared_proto_rawDesc = "" +
@@ -3947,16 +4289,23 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\fmachine_size\x18$ \x01(\tR\vmachineSize\x124\n" +
 	"\x16machine_included_hours\x18% \x01(\x03R\x14machineIncludedHours\x12?\n" +
 	"\x1cmachine_included_storage_gib\x18& \x01(\x03R\x19machineIncludedStorageGibJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x1fdaemon_compute_included_minutesR\x1fdaemon_overage_per_minute_cents\"\xd1\x01\n" +
+	"\x10\vJ\x04\b\v\x10\fR\x1fdaemon_compute_included_minutesR\x1fdaemon_overage_per_minute_cents\"\xdb\x02\n" +
 	"\rDaemonPricing\x126\n" +
 	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12 \n" +
 	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\x12<\n" +
-	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonthJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x94\x01\n" +
+	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonth\x12'\n" +
+	"\x0fpricing_version\x18\x05 \x01(\tR\x0epricingVersion\x12)\n" +
+	"\x10activation_ready\x18\x06 \x01(\bR\x0factivationReady\x124\n" +
+	"\x16activation_hold_reason\x18\a \x01(\tR\x14activationHoldReasonJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x8d\x02\n" +
 	"\x0fDaemonSizePrice\x12\x12\n" +
-	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1e\n" +
+	"\x04size\x18\x01 \x01(\tR\x04size\x12\"\n" +
 	"\n" +
-	"multiplier\x18\x02 \x01(\x03R\n" +
-	"multiplier\x12,\n" +
+	"multiplier\x18\x02 \x01(\x03B\x02\x18\x01R\n" +
+	"multiplier\x12\x1f\n" +
+	"\vcost_weight\x18\x05 \x01(\tR\n" +
+	"costWeight\x12\x19\n" +
+	"\broute_id\x18\x06 \x01(\tR\arouteId\x127\n" +
+	"\x18exact_hourly_price_cents\x18\a \x01(\tR\x15exactHourlyPriceCents\x12,\n" +
 	"\x12hourly_price_cents\x18\x03 \x01(\tR\x10hourlyPriceCents\x12\x1f\n" +
 	"\vstorage_gib\x18\x04 \x01(\x03R\n" +
 	"storageGib\"\x87\x03\n" +
@@ -4162,7 +4511,34 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\aprivate\x18\x05 \x01(\bR\aprivate\x12\x1a\n" +
 	"\blanguage\x18\x06 \x01(\tR\blanguage\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*\\\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"i\n" +
+	"\x11PanelResultColumn\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
+	"\anumeric\x18\x03 \x01(\bR\anumeric\x12\x12\n" +
+	"\x04time\x18\x04 \x01(\bR\x04time\"\x86\x01\n" +
+	"\x10PanelResultPoint\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value\x12\x18\n" +
+	"\apartial\x18\x03 \x01(\bR\apartial\x12\x12\n" +
+	"\x04null\x18\x04 \x01(\bR\x04null\"\xf9\x01\n" +
+	"\x11PanelResultSeries\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12C\n" +
+	"\x05group\x18\x02 \x03(\v2-.controlplane.v1.PanelResultSeries.GroupEntryR\x05group\x129\n" +
+	"\x06points\x18\x03 \x03(\v2!.controlplane.v1.PanelResultPointR\x06points\x12\x14\n" +
+	"\x05value\x18\x04 \x01(\x01R\x05value\x1a8\n" +
+	"\n" +
+	"GroupEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd8\x01\n" +
+	"\x0ePanelResultRow\x12@\n" +
+	"\x05group\x18\x01 \x03(\v2*.controlplane.v1.PanelResultRow.GroupEntryR\x05group\x12\x16\n" +
+	"\x06values\x18\x02 \x03(\x01R\x06values\x122\n" +
+	"\x15missing_value_indexes\x18\x03 \x03(\rR\x13missingValueIndexes\x1a8\n" +
+	"\n" +
+	"GroupEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\\\n" +
 	"\n" +
 	"DaemonType\x12\x1b\n" +
 	"\x17DAEMON_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -4186,15 +4562,18 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\tOwnerType\x12\x1a\n" +
 	"\x16OWNER_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fOWNER_TYPE_USER\x10\x01\x12\x1b\n" +
-	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\x98\x01\n" +
+	"\x17OWNER_TYPE_ORGANIZATION\x10\x02*\xf5\x01\n" +
 	"\n" +
 	"DaemonSize\x12\x1b\n" +
-	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11DAEMON_SIZE_SMALL\x10\x01\x12\x16\n" +
-	"\x12DAEMON_SIZE_MEDIUM\x10\x02\x12\x15\n" +
-	"\x11DAEMON_SIZE_LARGE\x10\x03\x12\x12\n" +
-	"\x0eDAEMON_SIZE_XL\x10\x04\x12\x13\n" +
-	"\x0fDAEMON_SIZE_2XL\x10\x05*s\n" +
+	"\x17DAEMON_SIZE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S1\x10\x06\x12\x12\n" +
+	"\x0eDAEMON_SIZE_S2\x10\a\x12\x11\n" +
+	"\rDAEMON_SIZE_M\x10\b\x12\x11\n" +
+	"\rDAEMON_SIZE_L\x10\t\x12\x12\n" +
+	"\x0eDAEMON_SIZE_XL\x10\n" +
+	"\x12\x13\n" +
+	"\x0fDAEMON_SIZE_2XL\x10\v\x12\x13\n" +
+	"\x0fDAEMON_SIZE_3XL\x10\f\"\x04\b\x01\x10\x05*\x11DAEMON_SIZE_SMALL*\x12DAEMON_SIZE_MEDIUM*\x11DAEMON_SIZE_LARGE*s\n" +
 	"\x0eDaemonDiskMode\x12 \n" +
 	"\x1cDAEMON_DISK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bDAEMON_DISK_MODE_PERSISTENT\x10\x01\x12\x1e\n" +
@@ -4240,7 +4619,7 @@ func file_controlplane_v1_shared_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_controlplane_v1_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_controlplane_v1_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_controlplane_v1_shared_proto_goTypes = []any{
 	(DaemonType)(0),               // 0: controlplane.v1.DaemonType
 	(DaemonStatus)(0),             // 1: controlplane.v1.DaemonStatus
@@ -4279,80 +4658,90 @@ var file_controlplane_v1_shared_proto_goTypes = []any{
 	(*ManagedReliantAccess)(nil),  // 34: controlplane.v1.ManagedReliantAccess
 	(*ReliantOverview)(nil),       // 35: controlplane.v1.ReliantOverview
 	(*GitRepo)(nil),               // 36: controlplane.v1.GitRepo
-	nil,                           // 37: controlplane.v1.Daemon.EnvEntry
-	(*timestamppb.Timestamp)(nil), // 38: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 39: google.protobuf.Struct
+	(*PanelResultColumn)(nil),     // 37: controlplane.v1.PanelResultColumn
+	(*PanelResultPoint)(nil),      // 38: controlplane.v1.PanelResultPoint
+	(*PanelResultSeries)(nil),     // 39: controlplane.v1.PanelResultSeries
+	(*PanelResultRow)(nil),        // 40: controlplane.v1.PanelResultRow
+	nil,                           // 41: controlplane.v1.Daemon.EnvEntry
+	nil,                           // 42: controlplane.v1.PanelResultSeries.GroupEntry
+	nil,                           // 43: controlplane.v1.PanelResultRow.GroupEntry
+	(*timestamppb.Timestamp)(nil), // 44: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 45: google.protobuf.Struct
 }
 var file_controlplane_v1_shared_proto_depIdxs = []int32{
 	3,  // 0: controlplane.v1.Daemon.owner_type:type_name -> controlplane.v1.OwnerType
 	0,  // 1: controlplane.v1.Daemon.daemon_type:type_name -> controlplane.v1.DaemonType
 	1,  // 2: controlplane.v1.Daemon.status:type_name -> controlplane.v1.DaemonStatus
 	11, // 3: controlplane.v1.Daemon.resources:type_name -> controlplane.v1.ResourceRequirements
-	38, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
-	38, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
-	38, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
-	38, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
+	44, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
+	44, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
+	44, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
 	4,  // 8: controlplane.v1.Daemon.size:type_name -> controlplane.v1.DaemonSize
-	38, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	38, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	38, // 11: controlplane.v1.Daemon.last_vm_crash_at:type_name -> google.protobuf.Timestamp
+	44, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	44, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	44, // 11: controlplane.v1.Daemon.last_vm_crash_at:type_name -> google.protobuf.Timestamp
 	2,  // 12: controlplane.v1.Daemon.lifecycle_phase:type_name -> controlplane.v1.DaemonLifecyclePhase
 	6,  // 13: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
 	13, // 14: controlplane.v1.Daemon.disk:type_name -> controlplane.v1.DaemonDisk
-	37, // 15: controlplane.v1.Daemon.env:type_name -> controlplane.v1.Daemon.EnvEntry
+	41, // 15: controlplane.v1.Daemon.env:type_name -> controlplane.v1.Daemon.EnvEntry
 	5,  // 16: controlplane.v1.Daemon.disk_mode:type_name -> controlplane.v1.DaemonDiskMode
 	10, // 17: controlplane.v1.DaemonDisk.state:type_name -> controlplane.v1.DaemonDiskState
 	6,  // 18: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
-	38, // 19: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
-	38, // 20: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	38, // 21: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	39, // 22: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
-	38, // 23: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
-	38, // 24: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 19: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
+	44, // 20: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	44, // 21: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 22: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
+	44, // 23: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
+	44, // 24: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 25: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
 	19, // 26: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
 	22, // 27: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
 	8,  // 28: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
-	38, // 29: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
+	44, // 29: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
 	20, // 30: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
 	23, // 31: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
 	7,  // 32: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
-	38, // 33: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
-	38, // 34: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
-	38, // 35: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
-	38, // 36: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 37: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
-	38, // 38: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
-	38, // 39: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 40: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
-	38, // 41: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
-	38, // 42: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
-	38, // 43: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
-	38, // 44: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 45: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
-	38, // 46: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
-	38, // 47: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 33: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
+	44, // 34: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
+	44, // 35: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
+	44, // 36: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 37: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
+	44, // 38: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
+	44, // 39: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 40: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
+	44, // 41: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
+	44, // 42: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
+	44, // 43: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
+	44, // 44: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 45: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
+	44, // 46: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
+	44, // 47: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
 	16, // 48: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
 	28, // 49: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
 	29, // 50: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
 	30, // 51: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
 	9,  // 52: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
-	38, // 53: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
-	38, // 54: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
-	38, // 55: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
-	38, // 56: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
-	38, // 57: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
-	38, // 58: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
-	38, // 59: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
-	38, // 60: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 53: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
+	44, // 54: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
+	44, // 55: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
+	44, // 56: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
+	44, // 57: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
+	44, // 58: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
+	44, // 59: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
+	44, // 60: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
 	25, // 61: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
 	34, // 62: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	38, // 63: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
-	64, // [64:64] is the sub-list for method output_type
-	64, // [64:64] is the sub-list for method input_type
-	64, // [64:64] is the sub-list for extension type_name
-	64, // [64:64] is the sub-list for extension extendee
-	0,  // [0:64] is the sub-list for field type_name
+	44, // 63: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 64: controlplane.v1.PanelResultPoint.time:type_name -> google.protobuf.Timestamp
+	42, // 65: controlplane.v1.PanelResultSeries.group:type_name -> controlplane.v1.PanelResultSeries.GroupEntry
+	38, // 66: controlplane.v1.PanelResultSeries.points:type_name -> controlplane.v1.PanelResultPoint
+	43, // 67: controlplane.v1.PanelResultRow.group:type_name -> controlplane.v1.PanelResultRow.GroupEntry
+	68, // [68:68] is the sub-list for method output_type
+	68, // [68:68] is the sub-list for method input_type
+	68, // [68:68] is the sub-list for extension type_name
+	68, // [68:68] is the sub-list for extension extendee
+	0,  // [0:68] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_shared_proto_init() }
@@ -4371,7 +4760,7 @@ func file_controlplane_v1_shared_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_shared_proto_rawDesc), len(file_controlplane_v1_shared_proto_rawDesc)),
 			NumEnums:      11,
-			NumMessages:   27,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

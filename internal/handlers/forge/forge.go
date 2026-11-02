@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/version"
 )
@@ -227,10 +230,11 @@ const (
 	forgeErrCommandTimedOutMarker = "forge command timed out"
 )
 
-// daemon forwards a forge.* command to the caller's daemon, mapping every
-// failure onto a loud Connect error (daemoncmd).
-func (s *Service) daemon() daemoncmd.Service {
-	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: s.deps.Router})
+// daemon forwards a forge.* command to the machine holding the project's
+// checkout (forgeTarget), mapping every failure onto a loud Connect error
+// (daemoncmd).
+func (s *Service) daemon(t forgeTarget) daemoncmd.Service {
+	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: repopkg.OnDaemon(s.deps.Router, t.checkout.DaemonID)})
 }
 
 // forgeReportReply mirrors daemonruntime.forgeReportResponse.
@@ -269,14 +273,90 @@ func (r forgeReportReply) reportJSON() string {
 	return string(r.Report)
 }
 
-// forgeProjectPath resolves a project id to its path on the DAEMON's
-// filesystem, enforcing that the caller owns it.
-func (s *Service) forgeProjectPath(ctx context.Context, projectID, userID string) (string, error) {
+// forgeTarget is where one forge.* command runs: the caller's project, and
+// its checkout on the machine chosen to run the command.
+type forgeTarget struct {
+	project  *db.Project
+	checkout daemonplacement.Checkout
+}
+
+// path is the project's path ON THE MACHINE the command is pinned to.
+func (t forgeTarget) path() string { return t.checkout.Path }
+
+// forgeTarget resolves a project id to the machine a forge.* command runs on
+// and the project's path THERE, enforcing that the caller owns the project.
+//
+// THE MACHINE AND THE PATH COME FROM ONE project_daemons ROW. projects.path is
+// where the project was created, on whichever machine created it — a Mac
+// path for a project made on the owner's laptop. Sending it to whatever
+// machine default resolution picked is how the forge console asked a cloud
+// machine for "/Users/<owner>/src/control-plane" and reported "forge project
+// dir does not exist". daemonplacement.ProjectCheckout picks the machine the
+// way the project's chats and package commands are placed, and every command
+// is then pinned to it (daemon), so the path always names a directory on the
+// machine that receives it.
+//
+// The API server never looks at a filesystem here: which machine holds which
+// checkout is the record those machines reported (create, clone, and the
+// reconcile every daemon runs on connect).
+func (s *Service) forgeTarget(ctx context.Context, projectID, userID string) (forgeTarget, error) {
 	project, err := s.forgeProject(ctx, projectID, userID)
 	if err != nil {
-		return "", err
+		return forgeTarget{}, err
 	}
-	return project.Path, nil
+	checkout, err := daemonplacement.ProjectCheckout(ctx, s.deps.Repo, s.deps.Router, userID, project.ID)
+	var missing *daemonplacement.NoCheckoutError
+	switch {
+	case errors.As(err, &missing):
+		return forgeTarget{}, s.noCheckoutError(ctx, project, missing)
+	case err != nil:
+		return forgeTarget{}, svcerr.WithCause(svcerr.Internal("failed to resolve the machine holding the project"), err)
+	}
+	return forgeTarget{project: project, checkout: checkout}, nil
+}
+
+// noCheckoutError is the answer when none of the caller's machines holds the
+// project: FailedPrecondition (retrying cannot put a checkout on a machine),
+// with a sentence saying what to do and a ProjectCheckoutMissing detail the
+// web can act on — the same detail the Files tab uses for a project that is
+// not on the machine it asked.
+//
+// A clone still landing is said as such (it fixes itself), a failed one with
+// its reason, and otherwise the user is told to put the project on a machine.
+// Never a path: there is no machine on which any path would be true.
+func (s *Service) noCheckoutError(ctx context.Context, project *db.Project, missing *daemonplacement.NoCheckoutError) error {
+	detail := &reliantv1.ProjectCheckoutMissing{
+		ProjectId: project.ID,
+		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
+	}
+	if project.RemoteURL != nil {
+		detail.RemoteUrl = strings.TrimSpace(*project.RemoteURL)
+	}
+	name := strconv.Quote(project.Name)
+
+	var msg string
+	switch {
+	case len(missing.Cloning) > 0:
+		row := missing.Cloning[0]
+		detail.State = reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING
+		detail.DaemonId, detail.Path = row.DaemonID, row.Path
+		msg = fmt.Sprintf("%s is still being cloned onto %s; forge can read it once the clone finishes",
+			name, daemonplacement.MachineName(ctx, s.deps.Repo, row.DaemonID))
+	case len(missing.Failed) > 0:
+		row := missing.Failed[0]
+		detail.State = reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONE_FAILED
+		detail.DaemonId, detail.Path, detail.InstallError = row.DaemonID, row.Path, row.InstallError
+		msg = fmt.Sprintf("cloning %s onto %s failed", name, daemonplacement.MachineName(ctx, s.deps.Repo, row.DaemonID))
+		if reason := strings.TrimSpace(row.InstallError); reason != "" {
+			msg += " (" + reason + ")"
+		}
+		msg += ": clone it again to use forge with it"
+	case detail.RemoteUrl != "":
+		msg = fmt.Sprintf("%s is not checked out on any of your machines, so forge has nothing to read: clone it onto a machine to use forge with it", name)
+	default:
+		msg = fmt.Sprintf("%s is not on any of your connected machines, so forge has nothing to read: connect the machine that holds its folder", name)
+	}
+	return svcerr.WithDetail(svcerr.WithCause(svcerr.FailedPrecondition(msg), missing), detail)
 }
 
 // forgeProject resolves a project id to its row, enforcing that the caller
@@ -373,20 +453,54 @@ func forgeEnvArg(env string) (string, error) {
 // and is returned as a Connect error.
 func (s *Service) forgeDispatch(
 	ctx context.Context,
-	userID, commandType string,
+	userID string,
+	target forgeTarget,
+	commandType string,
 	payload any,
 	timeoutMs int32,
 	readsCluster bool,
 ) (reply forgeReportReply, unreachableReason string, err error) {
-	if err := s.daemon().Dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
+	if err := s.daemon(target).Dispatch(ctx, userID, commandType, payload, &reply, timeoutMs); err != nil {
 		if readsCluster && isForgeClusterReadTimeout(err) {
 			// Nobody answered in time on a path whose whole job is reading a
 			// remote cluster. Report UNKNOWN, not broken.
 			return forgeReportReply{}, forgeTimeoutReason(commandType, timeoutMs), nil
 		}
-		return forgeReportReply{}, "", remapForgeDispatchError(commandType, err)
+		return forgeReportReply{}, "", s.dispatchError(ctx, target, commandType, err)
 	}
 	return reply, "", nil
+}
+
+// dispatchError maps a failed forge.* dispatch: a checkout the machine no
+// longer has is said in terms of that machine (checkoutGoneError); anything
+// else is remapForgeDispatchError's.
+func (s *Service) dispatchError(ctx context.Context, target forgeTarget, commandType string, err error) error {
+	if strings.Contains(forgeDaemonText(err), forgeErrProjectDirNotExistMarker) {
+		return s.checkoutGoneError(ctx, target, err)
+	}
+	return remapForgeDispatchError(commandType, err)
+}
+
+// checkoutGoneError is the answer when the machine that reported a checkout
+// of the project no longer has its directory: moved or deleted since the
+// machine last reconciled. NotFound with the machine named and a
+// ProjectCheckoutMissing detail, rather than the daemon's bare "forge project
+// dir does not exist: <path>", which reads as a server bug and does not say
+// which machine looked.
+func (s *Service) checkoutGoneError(ctx context.Context, target forgeTarget, cause error) error {
+	detail := &reliantv1.ProjectCheckoutMissing{
+		ProjectId: target.project.ID,
+		DaemonId:  target.checkout.DaemonID,
+		Path:      target.checkout.Path,
+		State:     reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT,
+	}
+	if target.project.RemoteURL != nil {
+		detail.RemoteUrl = strings.TrimSpace(*target.project.RemoteURL)
+	}
+	msg := fmt.Sprintf("%s's checkout at %s is missing on %s (moved or deleted?): clone it there again, or open it on a machine that has it",
+		strconv.Quote(target.project.Name), target.checkout.Path,
+		daemonplacement.MachineName(ctx, s.deps.Repo, target.checkout.DaemonID))
+	return svcerr.WithDetail(svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, msg), cause), detail)
 }
 
 // remapForgeDispatchError reclassifies the two forge-specific failures the
@@ -558,11 +672,10 @@ func (s *Service) GetTopology(
 	if err != nil {
 		return nil, err
 	}
-	project, err := s.forgeProject(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
-	path := project.Path
 
 	// --verify is what turns this from a local file read into a fleet of
 	// cluster round trips, so it selects both the budget and whether a
@@ -578,13 +691,13 @@ func (s *Service) GetTopology(
 		Verify      bool     `json:"verify,omitempty"`
 		Envs        []string `json:"envs,omitempty"`
 		OrgID       string   `json:"org_id,omitempty"`
-	}{ProjectPath: path, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.topology", payload, timeout, verify)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.topology", payload, timeout, verify)
 	if err != nil {
 		return nil, err
 	}
-	s.rememberForgeProjectName(ctx, project, userID, reply)
+	s.rememberForgeProjectName(ctx, target.project, userID, reply)
 
 	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
@@ -605,7 +718,7 @@ func (s *Service) VerifyEnv(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -614,9 +727,9 @@ func (s *Service) VerifyEnv(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +767,7 @@ func (s *Service) ListSecrets(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -663,12 +776,12 @@ func (s *Service) ListSecrets(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, OrgID: req.Msg.GetOrgId()}
 
 	// readsCluster=false: secret presence is resolved from the declaration and
 	// the provider's metadata, not by reading cluster workloads, so a timeout
 	// here is a real failure rather than a reachability verdict.
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.secret_list", payload, forgeSecretListTimeoutMs, false)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.secret_list", payload, forgeSecretListTimeoutMs, false)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +805,7 @@ func (s *Service) GetEnvStatus(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -701,9 +814,9 @@ func (s *Service) GetEnvStatus(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +852,7 @@ func (s *Service) GetEnvShape(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -748,9 +861,9 @@ func (s *Service) GetEnvShape(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, "forge.env_shape", payload, forgeEnvStatusTimeoutMs, true)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_shape", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +952,7 @@ func (s *Service) PlanPromote(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -849,10 +962,10 @@ func (s *Service) PlanPromote(
 		Env         string `json:"env"`
 		Release     string `json:"release"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, Release: release, OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, Release: release, OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(
-		ctx, userID, "forge.promote_plan", payload, forgePromotePlanTimeoutMs, false)
+		ctx, userID, target, "forge.promote_plan", payload, forgePromotePlanTimeoutMs, false)
 	if err != nil {
 		return nil, err
 	}
@@ -913,7 +1026,7 @@ func (s *Service) ApplyPromote(
 			"expects to replace", env))
 	}
 
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -926,7 +1039,7 @@ func (s *Service) ApplyPromote(
 		ExpectUnbound          bool   `json:"expect_unbound,omitempty"`
 		OrgID                  string `json:"org_id,omitempty"`
 	}{
-		ProjectPath:            path,
+		ProjectPath:            target.path(),
 		Env:                    env,
 		Release:                release,
 		ExpectedCurrentRelease: expected,
@@ -941,8 +1054,8 @@ func (s *Service) ApplyPromote(
 	// a timeout as "unknown" — a promote that timed out may or may not have
 	// written, and calling that a reachability verdict would hide it.
 	var reply forgePromoteReply
-	if err := s.daemon().Dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
-		return nil, remapForgeDispatchError("forge.promote_apply", err)
+	if err := s.daemon(target).Dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
+		return nil, s.dispatchError(ctx, target, "forge.promote_apply", err)
 	}
 
 	// THE GUARD REFUSED: nothing was written. Fail closed.
@@ -1206,7 +1319,7 @@ func (s *Service) PlanDeploy(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1216,10 +1329,10 @@ func (s *Service) PlanDeploy(
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
 
 	reply, unreachable, err := s.forgeDispatch(
-		ctx, userID, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
+		ctx, userID, target, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1257,7 +1370,7 @@ func (s *Service) StartDeployPlan(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1267,16 +1380,16 @@ func (s *Service) StartDeployPlan(
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
-	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
+	}{ProjectPath: target.path(), Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
 
 	// Dispatched directly, and WITHOUT the reachability escape hatch, for the
 	// same reason StartDeploy is: a start that timed out may or may not have
 	// got a build underway, and reporting that as "cluster unknown" would file
 	// a possibly-running job under a diagnosis of the network.
 	var reply forgeDeployStartReply
-	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
+	if err := s.daemon(target).Dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
 		forgeDeployStartTimeoutMs); err != nil {
-		return nil, remapForgeDispatchError("forge.deploy_plan_start", err)
+		return nil, s.dispatchError(ctx, target, "forge.deploy_plan_start", err)
 	}
 
 	if reply.Refused != nil {
@@ -1386,7 +1499,7 @@ func (s *Service) StartDeploy(
 		}
 	}
 
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1403,7 +1516,7 @@ func (s *Service) StartDeploy(
 		CheckoutPath            string   `json:"checkout_path,omitempty"`
 		OrgID                   string   `json:"org_id,omitempty"`
 	}{
-		ProjectPath:             path,
+		ProjectPath:             target.path(),
 		Env:                     env,
 		ExpectedDeclaredContext: expectedContext,
 		ExpectedCurrentRelease:  expectedRelease,
@@ -1422,8 +1535,8 @@ func (s *Service) StartDeploy(
 	// "cluster unknown" would file a possibly-live deploy under a diagnosis of
 	// the network.
 	var reply forgeDeployStartReply
-	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
-		return nil, remapForgeDispatchError("forge.deploy_start", err)
+	if err := s.daemon(target).Dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
+		return nil, s.dispatchError(ctx, target, "forge.deploy_start", err)
 	}
 
 	// THE GUARD REFUSED: nothing was applied and no job exists. Fail closed.
@@ -1486,8 +1599,11 @@ func (s *Service) GetDeployStatus(
 	}
 	// The project is resolved even though the daemon keys jobs by handle alone:
 	// it is what enforces that the caller owns the project whose daemon is being
-	// asked, and it is how the request reaches the right daemon at all.
-	if _, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID); err != nil {
+	// asked, and it is how the request reaches the right daemon at all — the
+	// job registry is in memory on the machine that started the deploy, which
+	// is the machine forgeTarget pinned the start to.
+	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1496,8 +1612,8 @@ func (s *Service) GetDeployStatus(
 	}{Handle: handle}
 
 	var reply forgeDeployStatusReply
-	if err := s.daemon().Dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
-		return nil, remapForgeDispatchError("forge.deploy_status", err)
+	if err := s.daemon(target).Dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
+		return nil, s.dispatchError(ctx, target, "forge.deploy_status", err)
 	}
 
 	// Forge's refusal, when it raised one. Carried as a FIELD rather than as

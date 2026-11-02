@@ -23,7 +23,7 @@ type fakeMachines struct {
 func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, error) {
 	return []MachineSummary{
 		{ID: "cicd-id", Name: "cicd", Type: "managed", State: "suspended", Size: "xl"},
-		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "large"},
+		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "xl"},
 	}, nil
 }
 func (f *fakeMachines) StartMachine(_ context.Context, user, id string, unattended bool) error {
@@ -178,5 +178,5 @@ func TestListMachinesMarksTheRunsOwnMachine(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "cicd (id cicd-id), managed, suspended, xl")
-	require.Contains(t, resp.Content, "default (id default-id), managed, ready, large — this run executes on it")
+	require.Contains(t, resp.Content, "default (id default-id), managed, ready, xl — this run executes on it")
 }

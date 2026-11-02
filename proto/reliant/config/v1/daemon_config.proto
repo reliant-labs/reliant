@@ -221,6 +221,18 @@ message DaemonConfig {
     description: "Comma-separated commands queued behind the machine's heavy slots"
   }];
 
+  // The CPUs each command run under a heavy slot may use, exported to it as
+  // GOMAXPROCS and UV_THREADPOOL_SIZE unless it sets its own
+  // (internal/heavyjob). 0 (unset) derives it from the slot pool:
+  // max(2, 2*CPUs/slots), 8 on 32 CPUs and 8 slots.
+  int32 heavy_share = 28 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_HEAVY_SHARE"
+      description: "CPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+
   // Let the fetch tool reach this machine's own localhost and private network
   // (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
   // fetch is usually auto-approved and a fetched page can steer the next fetch,

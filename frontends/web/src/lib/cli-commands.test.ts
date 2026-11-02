@@ -260,3 +260,22 @@ describe('only variables the target binary actually reads are emitted', () => {
     expect(authServeCommand()).toBe('reliant auth serve');
   });
 });
+
+// The CLI signs in once per server and `auth logout` forgets only the server
+// it resolves. A bare command on a dev stack would sign out of the build's
+// default server and leave the dev sign-in — the one in the way — intact.
+describe('authLogoutCommand', () => {
+  it('names this deployment\'s server outside a baked build', async () => {
+    setEnv({ CLI_DEFAULTS_BAKED: undefined, API_URL: 'http://localhost:3091' });
+    const { authLogoutCommand } = await load();
+    expect(authLogoutCommand()).toBe(
+      'RELIANT_SERVER_URL=http://localhost:3091 reliant auth logout',
+    );
+  });
+
+  it('renders bare in a production build', async () => {
+    setEnv({ CLI_DEFAULTS_BAKED: 'true' });
+    const { authLogoutCommand } = await load();
+    expect(authLogoutCommand()).toBe('reliant auth logout');
+  });
+});

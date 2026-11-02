@@ -228,7 +228,11 @@ type WhoAmIResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// user_id is the account the credential acts as — the same id the gateway
 	// returns in RegistrationAck.user_id once a daemon connects.
-	UserId        string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// account_email is that account's email, as the token authority knows it
+	// when asked (so it is current, however the credential was minted). Empty
+	// when the authority names none: self-hosted, or an older control plane.
+	AccountEmail  string `protobuf:"bytes,2,opt,name=account_email,json=accountEmail,proto3" json:"account_email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -266,6 +270,13 @@ func (*WhoAmIResponse) Descriptor() ([]byte, []int) {
 func (x *WhoAmIResponse) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+func (x *WhoAmIResponse) GetAccountEmail() string {
+	if x != nil {
+		return x.AccountEmail
 	}
 	return ""
 }
@@ -2811,8 +2822,13 @@ type RegistrationAck struct {
 	RequestedProjectPaths []string               `protobuf:"bytes,2,rep,name=requested_project_paths,json=requestedProjectPaths,proto3" json:"requested_project_paths,omitempty"` // "send me config for these"
 	DaemonId              string                 `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`                                          // Gateway-assigned daemon identity (from PAT binding or newly generated)
 	UserId                string                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                                // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// account_email is user_id's account email, from the token authority at
+	// connect (WhoAmIResponse.account_email). The daemon names it in its
+	// connected banner, so a machine signed in as the wrong person is obvious.
+	// Empty when the authority names none.
+	AccountEmail  string `protobuf:"bytes,5,opt,name=account_email,json=accountEmail,proto3" json:"account_email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegistrationAck) Reset() {
@@ -2869,6 +2885,13 @@ func (x *RegistrationAck) GetDaemonId() string {
 func (x *RegistrationAck) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+func (x *RegistrationAck) GetAccountEmail() string {
+	if x != nil {
+		return x.AccountEmail
 	}
 	return ""
 }
@@ -5275,9 +5298,10 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x1dreliant/v1/tools_daemon.proto\x12\n" +
 	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x0f\n" +
-	"\rWhoAmIRequest\")\n" +
+	"\rWhoAmIRequest\"N\n" +
 	"\x0eWhoAmIResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\"\xf4\t\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12#\n" +
+	"\raccount_email\x18\x02 \x01(\tR\faccountEmail\"\xf4\t\n" +
 	"\rDaemonMessage\x128\n" +
 	"\bregister\x18\x01 \x01(\v2\x1a.reliant.v1.DaemonRegisterH\x00R\bregister\x12?\n" +
 	"\rtool_response\x18\x02 \x01(\v2\x18.reliant.v1.ToolResponseH\x00R\ftoolResponse\x12;\n" +
@@ -5488,12 +5512,13 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"e\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x124\n" +
-	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\x9b\x01\n" +
+	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\xc0\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x126\n" +
 	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\x12\x1b\n" +
 	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\x12\x17\n" +
-	"\auser_id\x18\x04 \x01(\tR\x06userId\"]\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\x12#\n" +
+	"\raccount_email\x18\x05 \x01(\tR\faccountEmail\"]\n" +
 	"\x19LoadProjectConfigsRequest\x12!\n" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12\x1d\n" +
 	"\n" +

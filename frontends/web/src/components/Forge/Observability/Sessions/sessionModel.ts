@@ -7,7 +7,7 @@
  */
 
 import type { ObsSearch } from "../obsSearch";
-import type { RumScope, SessionSummary, TimelineEntry, TimelineKind } from "@/services/controlPlane/observability/rumTypes";
+import { RRWEB_FULL_SNAPSHOT, RRWEB_META, type RrwebEvent, type RumScope, type SessionSummary, type TimelineEntry, type TimelineKind } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
 /** The scope a RumService call carries: no attribute filters (RumScope has none). */
@@ -33,6 +33,86 @@ export function isLive(session: Pick<SessionSummary, "endedMs">, now: number = D
  * dropped) or has not finished arriving.
  */
 export const PARTIAL_GAP_MS = 30_000;
+
+/**
+ * Where playback of `events` can start: the Meta event (it carries the
+ * viewport rrweb sizes the page by) just before the first full snapshot, else
+ * the snapshot itself; -1 when there is no full snapshot.
+ *
+ * Events before it belong to no page rrweb can draw. They are usually the last
+ * few events of the PREVIOUS session: the recorder stamps a batch with the
+ * session id current when it uploads (up to 5 s later), so at a session
+ * boundary the old session's tail is stored under the new one.
+ */
+export function recordingStart(events: readonly RrwebEvent[]): number {
+  const snapshot = events.findIndex((e) => e.type === RRWEB_FULL_SNAPSHOT);
+  if (snapshot < 0) return -1;
+  for (let i = snapshot - 1; i >= 0; i--) {
+    if (events[i].type === RRWEB_META) return i;
+  }
+  return snapshot;
+}
+
+/**
+ * Why a session has no replay, as far as its summary can tell. A session with
+ * no page view and no interaction saw only background requests: nothing was on
+ * screen for the recorder (which captures nothing in a hidden window). Anything
+ * else could be any of the recorder's reasons, so they are named together.
+ */
+export function noReplayReason(session: Pick<SessionSummary, "pageViews" | "interactions">): string {
+  if (session.pageViews === 0 && session.interactions === 0) {
+    return "Nothing was on screen to record: the session saw no page view or interaction, only background requests, as a window in the background does.";
+  }
+  return "The recorder didn't capture it: the session was outside the app's replay sample, replay is off for this app, or its window stayed in the background.";
+}
+
+/**
+ * Sessions whose replay this tab has opened and found unplayable (no full
+ * snapshot, or a snapshot with nothing after it). The list only knows that a
+ * session has replay events, not whether they can be played, so it marks these
+ * from what the player learned. Held for the tab's session.
+ */
+const UNPLAYABLE_KEY = "obs.sessions.unplayable";
+const UNPLAYABLE_MAX = 500;
+let unplayable: Set<string> | null = null;
+
+function unplayableSet(): Set<string> {
+  if (unplayable) return unplayable;
+  unplayable = new Set();
+  try {
+    const raw = window.sessionStorage.getItem(UNPLAYABLE_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(ids)) for (const id of ids) if (typeof id === "string") unplayable.add(id);
+  } catch {
+    // No storage: remembered for this page only.
+  }
+  return unplayable;
+}
+
+export function noteReplayUnplayable(sessionId: string): void {
+  const ids = unplayableSet();
+  if (ids.has(sessionId)) return;
+  ids.add(sessionId);
+  try {
+    window.sessionStorage.setItem(UNPLAYABLE_KEY, JSON.stringify([...ids].slice(-UNPLAYABLE_MAX)));
+  } catch {
+    // Not persisted: still known for this page.
+  }
+}
+
+export function isReplayKnownUnplayable(sessionId: string): boolean {
+  return unplayableSet().has(sessionId);
+}
+
+/** Tests only: forget what the player learned. */
+export function resetReplayVerdictsForTests(): void {
+  unplayable = null;
+  try {
+    window.sessionStorage.removeItem(UNPLAYABLE_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
 
 /** A playback position: `1:05`, `1:02:09`. */
 export function formatOffset(ms: number): string {

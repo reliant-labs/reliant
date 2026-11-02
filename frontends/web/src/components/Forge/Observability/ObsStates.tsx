@@ -233,6 +233,37 @@ export function ObsNoEnvironments({ topic }: { topic: ObsTopic }) {
   );
 }
 
+/**
+ * The project's environments could not be READ (the roster's control-plane
+ * read failed). Not ObsNoEnvironments: an unread list says nothing about
+ * whether the project has any, and telling the reader to deploy one would send
+ * them after a problem they do not have. The page's CloudNotice says why.
+ */
+export function ObsEnvironmentsUnread({ onRetry, retrying }: { onRetry: () => void; retrying?: boolean }) {
+  return (
+    <StateFrame
+      testId="obs-environments-unread"
+      icon={<AlertTriangle className="h-4 w-4" />}
+      title="Telemetry shows once this project's environments load"
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          loading={retrying}
+          disabled={retrying}
+          leftIcon={<RefreshCw className="h-3 w-3" />}
+          data-testid="obs-environments-retry"
+        >
+          Try again
+        </Button>
+      }
+    >
+      <p>Telemetry is read per environment, and the list of them didn&apos;t arrive.</p>
+    </StateFrame>
+  );
+}
+
 /** Apps are selected but none of them has an environment recorded: there is nothing to read (and nothing is queried). */
 export function ObsNoAppEnvironments({ apps }: { apps: readonly string[] }) {
   const names = apps.join(", ");

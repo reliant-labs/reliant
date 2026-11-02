@@ -112,6 +112,8 @@ export type LegOutcome =
   /** Confirmed at Stripe, but the webhook has not granted it yet. */
   | { status: "unconfirmed" };
 
+import { MachineSaleConsent } from "./MachineSaleConsent";
+
 export interface OnboardingCheckoutProps {
   lines: CheckoutLine[];
   /** The compute plan to subscribe to. Absent when compute is covered. */
@@ -131,6 +133,11 @@ export interface OnboardingCheckoutProps {
 }
 
 export function OnboardingCheckout(props: OnboardingCheckoutProps) {
+  if (props.computePlanId && props.lines.some(line => line.kind === "compute" && !line.covered)) return <div className="space-y-4"><MachineSaleConsent planId={props.computePlanId}>{monthlyPriceCents => <OnboardingCheckoutBody {...props} omitCoupon lines={monthlyPriceCents === undefined ? props.lines : props.lines.map(line => line.kind === "compute" && !line.covered ? { ...line, amountCents: monthlyPriceCents, detail: "Versioned monthly price shown in the accepted machine terms" } : line)} />}</MachineSaleConsent><RedeemCouponForm variant="open" size="sm" onRedeemed={() => props.onRedeemed()} /></div>;
+  return <OnboardingCheckoutBody {...props} />;
+}
+
+function OnboardingCheckoutBody(props: OnboardingCheckoutProps & { omitCoupon?: boolean }) {
   const { lines, className } = props;
 
   const owed = lines.filter((line) => !line.covered);
@@ -279,7 +286,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
       {/* Set apart by a rule and a recess, not by a tint — the same treatment
           the compute checkout's coupon section gets. See the elevation note in
           forge-ui/card.tsx for why `bg-muted` is not it. */}
-      <section className="space-y-2 border-t border-border bg-background p-5">
+      {!props.omitCoupon && <section className="space-y-2 border-t border-border bg-background p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code
         </h3>
@@ -292,7 +299,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
           size="sm"
           onRedeemed={() => props.onRedeemed()}
         />
-      </section>
+      </section>}
     </div>
   );
 }

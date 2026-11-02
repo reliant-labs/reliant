@@ -73,10 +73,10 @@ func ChatUpdatesSince(ctx context.Context, db orm.Context, chatID string, sinceS
 
 // SnapshotHeadsSQL is LatestNonMessageUpdatesPerEntity's statement, exported
 // so the partial-index tests (internal/db/snapshot_heads_index_test.go) read
-// exactly what runs. It takes one parameter, the chat id, in four places.
+// exactly what runs. It takes one parameter, the chat id, in five places.
 //
 //	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (not snapshot state at all)
-//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekeyed)
+//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekey_heads)
 //	5 = WORKFLOW_STATUS, 9 = NODE_EXECUTION            (workflow state: not in a snapshot; WorkflowNodeHeadsSQL)
 //	20 = AGENT_MESSAGES_DRAINED                        (live-only)
 //
@@ -101,6 +101,13 @@ func ChatUpdatesSince(ctx context.Context, db orm.Context, chatID string, sinceS
 // The skip scan's list must stay EQUAL to the heads index's predicate: a
 // superset still lets the planner use it, but every probe then rechecks each
 // index entry on the heap and walks past the excluded ones.
+//
+// The re-keyed half (THREAD, QUESTION) is a second skip scan, over
+// SnapshotRekeyKeySQL through idx_chat_updates_snapshot_rekey_heads: one
+// probe per key, landing on that key's newest row. It used to read every
+// thread and question update the chat ever wrote and DISTINCT ON them; those
+// rows are scattered over the table, so on a cold cache each was a random heap
+// read (prod: 2,142 blocks to keep 457 rows, 1.86s of the chat open).
 const SnapshotHeadsSQL = `
 		WITH RECURSIVE heads AS (
 			(SELECT entity_id, sequence_number
@@ -120,19 +127,21 @@ const SnapshotHeadsSQL = `
 				 LIMIT 1) nxt
 		),
 		rekeyed AS (
-			SELECT DISTINCT ON (dedup_key) id, sequence_number
-			FROM (
-				SELECT
-					id,
-					sequence_number,
-					CASE
-						WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
-						ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
-					END AS dedup_key
-				FROM chat_updates
-				WHERE chat_id = $1 AND update_type IN (3, 18)
-			) k
-			ORDER BY dedup_key, sequence_number DESC
+			(SELECT (` + SnapshotRekeyKeySQL + `) AS dedup_key, sequence_number
+			   FROM chat_updates
+			  WHERE chat_id = $1 AND update_type IN (3, 18)
+			  ORDER BY (` + SnapshotRekeyKeySQL + `), sequence_number DESC
+			  LIMIT 1)
+			UNION ALL
+			SELECT nxt.dedup_key, nxt.sequence_number
+			  FROM rekeyed r
+			  CROSS JOIN LATERAL (
+				SELECT (` + SnapshotRekeyKeySQL + `) AS dedup_key, sequence_number
+				  FROM chat_updates
+				 WHERE chat_id = $1 AND update_type IN (3, 18)
+				   AND (` + SnapshotRekeyKeySQL + `) > r.dedup_key
+				 ORDER BY (` + SnapshotRekeyKeySQL + `), sequence_number DESC
+				 LIMIT 1) nxt
 		)
 		SELECT
 			cu.id,
@@ -150,6 +159,14 @@ const SnapshotHeadsSQL = `
 		JOIN chat_updates cu ON cu.chat_id = $1 AND cu.sequence_number = picked.sequence_number
 		ORDER BY cu.sequence_number
 	`
+
+// SnapshotRekeyKeySQL is the key a THREAD or QUESTION update is deduplicated
+// by in the snapshot: a thread by its payload's `thread` (else its entity), a
+// question by its id without the trailing "-<n>". It is also the key column of
+// idx_chat_updates_snapshot_rekey_heads, written there character for
+// character: the planner matches an expression index only to the same
+// expression, so the two must not drift (TestSnapshotHeadsQueryMatchesPartialIndex).
+const SnapshotRekeyKeySQL = `CASE WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id))) ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id) END`
 
 // LatestNonMessageUpdatesPerEntity returns, for each entity of a chat, its
 // newest non-message update, in sequence order — the chat snapshot's update

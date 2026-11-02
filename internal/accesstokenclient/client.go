@@ -71,6 +71,9 @@ type introspectResponse struct {
 	// AllScopes marks a daemon credential: Scopes is the control plane's
 	// resolution of "every scope", against ITS catalog.
 	AllScopes bool `json:"allScopes"`
+	// ActingUserEmail is the acting user's email, read from control-plane's
+	// users row at introspection. Absent from an older control plane.
+	ActingUserEmail string `json:"actingUserEmail"`
 }
 
 // wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
@@ -94,16 +97,32 @@ func wildcardScopes(raw []string) fat.Set {
 // Introspect resolves a presented token, uncached. A token that is not even
 // shaped like an `rlat_` is refused locally without a round trip.
 func (c *Client) Introspect(ctx context.Context, token string) (*fat.Principal, error) {
+	a, err := c.IntrospectAccount(ctx, token)
+	return a.Principal, err
+}
+
+// IntrospectAccount is Introspect plus the acting user's email, in the same
+// single round trip. The email is "" from a control plane that predates it.
+func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
 	if !fat.HasFormat(token) {
-		return nil, ErrInactive
+		return auth.AccessTokenAccount{}, ErrInactive
 	}
 	var out introspectResponse
 	if err := c.call(ctx, "Introspect", map[string]any{"token": token}, &out); err != nil {
-		return nil, err
+		return auth.AccessTokenAccount{}, err
 	}
 	if !out.Active {
-		return nil, ErrInactive
+		return auth.AccessTokenAccount{}, ErrInactive
 	}
+	p, err := out.principal()
+	if err != nil {
+		return auth.AccessTokenAccount{}, err
+	}
+	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
+}
+
+// principal maps an active introspection onto forge's principal.
+func (out introspectResponse) principal() (*fat.Principal, error) {
 	scopes := wildcardScopes(out.Scopes)
 	if !out.AllScopes {
 		var err error

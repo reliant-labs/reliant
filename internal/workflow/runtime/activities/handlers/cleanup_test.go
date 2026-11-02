@@ -128,11 +128,11 @@ func TestCleanupActivity_CancelsApprovals(t *testing.T) {
 	// Verify approval status changed
 	a1, err := repo.GetApproval(ctx, approval1.ID)
 	require.NoError(t, err)
-	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), a1.Status)
+	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), a1.Status)
 
 	a2, err := repo.GetApproval(ctx, approval2.ID)
 	require.NoError(t, err)
-	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), a2.Status)
+	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), a2.Status)
 }
 
 // TestCleanupActivity_NoApprovals verifies cleanup handles case with no approvals
@@ -367,7 +367,7 @@ func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
 	// Verify pending approval is cancelled
 	pa, err := repo.GetApproval(ctx, pendingApproval.ID)
 	require.NoError(t, err)
-	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), pa.Status)
+	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), pa.Status)
 
 	// Verify approved approval is unchanged
 	aa, err := repo.GetApproval(ctx, approvedApproval.ID)

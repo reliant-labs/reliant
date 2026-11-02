@@ -79,5 +79,5 @@ func daemonGuards(cfg *config.DaemonConfig) daemonruntime.Guards {
 	if commands == nil {
 		commands = []string{}
 	}
-	return daemonruntime.Guards{Disk: disk, HeavyCommands: commands}
+	return daemonruntime.Guards{Disk: disk, HeavyCommands: commands, HeavyShare: int(cfg.GetHeavyShare())}
 }
