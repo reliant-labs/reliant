@@ -28,9 +28,9 @@ var (
 // loginAs stores token as the CLI login for server, signed in as account.
 func loginAs(t *testing.T, server, token string, account cliauth.Account) {
 	t.Helper()
-	_, err := cliauth.Store(server, cliauth.Session{
-		Credential: credentials.Credential{Token: token, TokenPrefix: token, CreatedAt: fixtureTime},
-		Account:    account,
+	_, err := cliauth.Store(server, credentials.Credential{
+		Token: token, TokenPrefix: token, CreatedAt: fixtureTime,
+		AccountID: account.ID, AccountEmail: account.Email,
 	})
 	require.NoError(t, err)
 }

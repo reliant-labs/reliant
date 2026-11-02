@@ -1,10 +1,6 @@
 package cliauth
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/credentials"
@@ -48,78 +44,32 @@ func TestAccountFromToken(t *testing.T) {
 
 // The account a login signed in as is kept with it, and only with it: a login
 // replaced by something that did not record an account reads as unknown, never
-// as whoever signed in before.
-func TestAdapter_RecordsTheLoginsAccount(t *testing.T) {
+// The account a login signed in as rides on its credential in forge's file,
+// and only there: a login stored without one reads as unknown, never as
+// whoever signed in before.
+func TestAdapter_KeepsTheLoginsAccountOnItsCredential(t *testing.T) {
 	const server = "https://api.example.com"
-	home := t.TempDir()
-	svc := New(Deps{Dirs: credentials.Dirs{ForgeHome: home}})
+	svc := New(Deps{Dirs: credentials.Dirs{ForgeHome: t.TempDir()}})
 	alice := Account{ID: "ext-alice", Email: "alice@example.test"}
 
-	path, err := svc.Store(server, Session{Credential: credentials.Credential{Token: "rlat_alice"}, Account: alice})
-	if err != nil {
+	if _, err := svc.Store(server, credentials.Credential{Token: "rlat_alice", AccountID: alice.ID, AccountEmail: alice.Email}); err != nil {
 		t.Fatal(err)
 	}
-	if s, _, err := svc.LookupSession(server); err != nil || s.Account != alice || s.Token != "rlat_alice" {
-		t.Fatalf("after login: %+v %v", s, err)
+	if c, _, err := svc.Lookup(server); err != nil || AccountOf(c) != alice || c.Token != "rlat_alice" {
+		t.Fatalf("after login: %+v %v", c, err)
 	}
 	// Another server's login is its own.
-	if _, err := svc.Store("https://other.example.com", Session{Credential: credentials.Credential{Token: "rlat_bob"}}); err != nil {
+	if _, err := svc.Store("https://other.example.com", credentials.Credential{Token: "rlat_bob"}); err != nil {
 		t.Fatal(err)
 	}
-	if s, _, _ := svc.LookupSession(server); s.Account != alice {
-		t.Fatalf("another server's login changed this one's account: %+v", s.Account)
+	if c, _, _ := svc.Lookup(server); AccountOf(c) != alice {
+		t.Fatalf("another server's login changed this one's account: %+v", AccountOf(c))
 	}
-
-	// Replaced behind the record's back (an older reliant): unknown.
-	if err := credentials.Store(path, server, ClientID, credentials.Credential{Token: "rlat_someone"}); err != nil {
+	// A login whose account the control plane did not name replaces it.
+	if _, err := svc.Store(server, credentials.Credential{Token: "rlat_someone"}); err != nil {
 		t.Fatal(err)
 	}
-	if s, _, err := svc.LookupSession(server); err != nil || s.Account.Known() {
-		t.Fatalf("a login the record does not describe must be unknown: %+v %v", s.Account, err)
-	}
-
-	// A login whose account the control plane did not name clears it.
-	if _, err := svc.Store(server, Session{Credential: credentials.Credential{Token: "rlat_alice"}, Account: alice}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.Store(server, Session{Credential: credentials.Credential{Token: "rlat_alice"}}); err != nil {
-		t.Fatal(err)
-	}
-	if s, _, _ := svc.LookupSession(server); s.Account.Known() {
-		t.Fatalf("an unnamed login kept the previous account: %+v", s.Account)
-	}
-
-	// Logout forgets it, and the record file goes with the last record.
-	if _, err := svc.Store(server, Session{Credential: credentials.Credential{Token: "rlat_alice"}, Account: alice}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := svc.Remove(server); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(home, accountsFileName)); !os.IsNotExist(err) {
-		t.Fatalf("the record file outlived its last record: %v", err)
-	}
-}
-
-// The record never holds a usable copy of the token.
-func TestAccountRecord_HoldsNoToken(t *testing.T) {
-	home := t.TempDir()
-	svc := New(Deps{Dirs: credentials.Dirs{ForgeHome: home}})
-	if _, err := svc.Store("https://api.example.com", Session{
-		Credential: credentials.Credential{Token: "rlat_SECRETSECRETSECRET"},
-		Account:    Account{ID: "ext-1"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile(filepath.Join(home, accountsFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "SECRET") {
-		t.Fatalf("the record holds the token:\n%s", raw)
-	}
-	info, err := os.Stat(filepath.Join(home, accountsFileName))
-	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
-		t.Fatalf("record file mode: %v %v", info.Mode(), err)
+	if c, _, err := svc.Lookup(server); err != nil || AccountOf(c).Known() {
+		t.Fatalf("an unnamed login kept the previous account: %+v %v", AccountOf(c), err)
 	}
 }
