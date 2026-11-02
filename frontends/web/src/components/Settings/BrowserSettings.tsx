@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Globe, Save, Check, ExternalLink } from "lucide-react";
-import Button from "@/components/forge-ui/button";
+import { Globe, Check, ExternalLink } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
 import {
   FALLBACK_BROWSER_PAGE,
@@ -10,33 +9,46 @@ import {
 import { cn } from "../../lib/utils";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
+/** The homepage as stored: a bare domain gets https://. */
+function normalizeHomepage(value: string): string {
+  const url = value.trim();
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("about:")) return url;
+  return "https://" + url;
+}
+
+/**
+ * Settings → Built-in browser. Every control saves itself, like the rest of
+ * settings: the checkbox when it flips, the homepage when the field loses
+ * focus or Enter is pressed. A toast confirms each save.
+ */
 export function BrowserSettings() {
   const { data: browserPrefs, isPending: isLoading } = useBrowserPreferences();
   const { mutateAsync: updateBrowserPrefs } = useUpdateBrowserPreferences();
   // The homepage field's edit, until saved; null shows the stored page.
   const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const defaultPage = pageDraft ?? (browserPrefs.defaultPage || FALLBACK_BROWSER_PAGE);
+  const storedPage = browserPrefs.defaultPage || FALLBACK_BROWSER_PAGE;
+  const defaultPage = pageDraft ?? storedPage;
   const openLinksInApp = browserPrefs.openLinksInApp;
 
-  const handleSave = async () => {
+  const saveHomepage = async () => {
+    if (pageDraft === null || isSaving) return;
+    const urlToSave = normalizeHomepage(pageDraft);
+    // An emptied field, or no change, keeps the stored page.
+    if (!urlToSave || urlToSave === storedPage) {
+      setPageDraft(null);
+      return;
+    }
     setIsSaving(true);
     try {
-      // Normalize the URL - add https:// if no protocol
-      let urlToSave = defaultPage.trim();
-      if (!urlToSave.startsWith('http://') && !urlToSave.startsWith('https://') && !urlToSave.startsWith('about:')) {
-        urlToSave = 'https://' + urlToSave;
-      }
-
       await updateBrowserPrefs({ defaultPage: urlToSave });
-
       // The field now shows the stored (normalized) URL
       setPageDraft(null);
-
-      toast.success("Browser settings saved");
+      toast.success("Homepage saved");
     } catch (error) {
-      console.error("Failed to save browser settings:", error);
-      toast.error("Failed to save browser settings");
+      console.error("Failed to save browser homepage:", error);
+      toast.error("Couldn't save the homepage");
     } finally {
       setIsSaving(false);
     }
@@ -68,7 +80,7 @@ export function BrowserSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Web browser"
+        title="Built-in browser"
         description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Choose where links open and which page new browser tabs start on."
       />
 
@@ -81,11 +93,11 @@ export function BrowserSettings() {
               type="checkbox"
               checked={openLinksInApp}
               onChange={handleToggleOpenLinksInApp}
-              className="sr-only"
+              className="peer sr-only"
             />
             <div
               className={cn(
-                "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
+                "w-5 h-5 rounded border-2 transition-all flex items-center justify-center peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
                 openLinksInApp
                   ? "border-primary bg-primary"
                   : "border-border bg-background"
@@ -113,32 +125,36 @@ export function BrowserSettings() {
       {/* Default Page Setting */}
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium mb-2 block">
+          <label htmlFor="browser-homepage" className="text-sm font-medium mb-2 block">
             Default homepage
           </label>
-          <p className="text-xs text-muted-foreground mb-3">
-            The page that opens when you create a new browser tab. You can enter a domain (e.g., "github.com") or a full URL.
+          <p id="browser-homepage-hint" className="text-xs text-muted-foreground mb-3">
+            The page that opens when you create a new browser tab. You can enter a domain (e.g., "github.com") or a full URL. It saves when you leave the field or press Enter.
           </p>
           <div className="flex items-center gap-3">
             <div className="flex-1 relative">
-              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
               <input
+                id="browser-homepage"
+                aria-describedby="browser-homepage-hint"
                 type="url"
                 value={defaultPage}
                 onChange={(e) => setPageDraft(e.target.value)}
+                onBlur={() => void saveHomepage()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void saveHomepage();
+                  } else if (e.key === "Escape" && pageDraft !== null) {
+                    e.preventDefault();
+                    setPageDraft(null);
+                  }
+                }}
+                aria-busy={isSaving}
                 placeholder="https://www.google.com"
                 className="w-full pl-10 pr-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
               />
             </div>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              variant="primary"
-              size="sm"
-              leftIcon={<Save className="w-4 h-4" />}
-            >
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
           </div>
         </div>
       </div>

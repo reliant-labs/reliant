@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
 import Button from "@/components/forge-ui/button";
+import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard, Globe } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
 import {
@@ -450,6 +451,7 @@ export function KeyboardShortcutsSettings() {
   const { shortcuts, resetAllShortcuts, initializeShortcuts, isLoading } =
     useShortcutsStore();
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   useEffect(() => {
     initializeShortcuts();
@@ -497,7 +499,7 @@ export function KeyboardShortcutsSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Keyboard Shortcuts"
+        title="Keyboard shortcuts"
         description="See every shortcut in Reliant and change the ones that clash with your habits or other apps. Click the edit button on a row, then press the new key combination."
       />
 
@@ -512,7 +514,8 @@ export function KeyboardShortcutsSettings() {
       <div className="flex items-center justify-between gap-4">
         <div className="relative flex-1 max-w-sm">
           <input
-            type="text"
+            type="search"
+            aria-label="Search shortcuts"
             placeholder="Search shortcuts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -524,25 +527,29 @@ export function KeyboardShortcutsSettings() {
           <Button
             variant="outline"
             size="sm"
-            onClick={async () => {
-              if (
-                window.confirm(
-                  "Reset all shortcuts to defaults? This cannot be undone."
-                )
-              ) {
-                try {
-                  await resetAllShortcuts();
-                  toast.success("All shortcuts reset to defaults");
-                } catch {
-                  toast.error("Failed to reset shortcuts");
-                }
-              }
-            }}
+            onClick={() => setConfirmingReset(true)}
             rightIcon={<RotateCcw />}
           >
-            Reset All
+            Reset all
           </Button>
         )}
+        <ConfirmationDialog
+          open={confirmingReset}
+          title="Reset all shortcuts?"
+          description="Every shortcut you changed goes back to its default. This can't be undone."
+          confirmLabel="Reset all shortcuts"
+          variant="warning"
+          onConfirm={async () => {
+            setConfirmingReset(false);
+            try {
+              await resetAllShortcuts();
+              toast.success("All shortcuts reset to defaults");
+            } catch {
+              toast.error("Failed to reset shortcuts");
+            }
+          }}
+          onCancel={() => setConfirmingReset(false)}
+        />
       </div>
 
       {/* Shortcuts List */}

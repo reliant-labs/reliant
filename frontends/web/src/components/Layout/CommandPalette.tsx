@@ -24,6 +24,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { useShortcutHost } from "../../hooks/useShortcutHost";
 import type { SettingsSection } from "../../routeSchemas";
+import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 
 interface Command {
   id: string;
@@ -230,7 +231,8 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         icon: <Code className="w-4 h-4" />,
         category: "settings",
         keywords: ["debug", "dev", "advanced"],
-        available: pathname !== "/settings/developer",
+        // Same rule as the settings nav: dev builds only.
+        available: pathname !== "/settings/developer" && showDeveloperSettings(),
         action: goTo('developer'),
       },
       {

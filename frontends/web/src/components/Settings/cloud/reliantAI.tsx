@@ -30,6 +30,7 @@ import {
 
 import { cn } from "../../../lib/utils";
 import Button from "@/components/forge-ui/button";
+import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import DataTable from "@/components/forge-ui/data_table";
 import {
   Card,
@@ -172,6 +173,8 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
     return () => { live.current = false; };
   }, []);
   const [createOpen, setCreateOpen] = useState(false);
+  // The key a Revoke or Rotate is waiting on the user to confirm.
+  const [confirming, setConfirming] = useState<{ action: "revoke" | "rotate"; key: LLMKey } | null>(null);
   const [revealedKey, setRevealedKey] = useState<{
     name: string;
     secret: string;
@@ -231,18 +234,12 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
       ? (overviewQ.error as Error).message || "Failed to load Reliant AI data."
       : "";
 
-  const handleRevoke = (key: LLMKey) => {
-    if (!confirm(`Revoke "${key.name}"? This cannot be undone.`)) return;
-    revokeMut.mutate(key.id);
-  };
+  const handleRevoke = (key: LLMKey) => setConfirming({ action: "revoke", key });
+  const handleRotate = (key: LLMKey) => setConfirming({ action: "rotate", key });
 
-  const handleRotate = async (key: LLMKey) => {
-    if (
-      !confirm(
-        `Rotate "${key.name}"? A new secret is issued immediately; update your integrations.`,
-      )
-    )
-      return;
+  const revoke = (key: LLMKey) => revokeMut.mutate(key.id);
+
+  const rotate = async (key: LLMKey) => {
     const operation = ++secretOperation.current;
     const res = await rotateMut.mutateAsync({ keyId: key.id });
     if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
@@ -528,6 +525,27 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
           />
         </>
       )}
+      <ConfirmationDialog
+        open={confirming !== null}
+        title={
+          confirming?.action === "rotate" ? `Rotate "${confirming.key.name}"?` : `Revoke "${confirming?.key.name ?? ""}"?`
+        }
+        description={
+          confirming?.action === "rotate"
+            ? "A new secret is issued immediately and the old one stops working. Update your integrations with the new one."
+            : "Anything using this key stops working at once. This can't be undone."
+        }
+        confirmLabel={confirming?.action === "rotate" ? "Rotate key" : "Revoke key"}
+        variant={confirming?.action === "rotate" ? "warning" : "danger"}
+        onConfirm={() => {
+          const pending = confirming;
+          setConfirming(null);
+          if (!pending) return;
+          if (pending.action === "revoke") revoke(pending.key);
+          else void rotate(pending.key);
+        }}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }
@@ -617,7 +635,7 @@ interface LLMKeysCardProps {
     budgetDuration?: string;
   }) => Promise<void>;
   onRevoke: (key: LLMKey) => void;
-  onRotate: (key: LLMKey) => Promise<void>;
+  onRotate: (key: LLMKey) => void;
 }
 
 function LLMKeysCard({

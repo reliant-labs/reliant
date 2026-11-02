@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { FolderGit2, Monitor } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { Monitor } from "lucide-react";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useSettingsClose } from "../../hooks/useSettingsClose";
 import { useProjectStore } from "../../store/projectStore";
@@ -9,6 +8,8 @@ import { ArchivedWorktreesPanel } from "../Worktrees/ArchivedWorktreesPanel";
 import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
 import { workspaceChip } from "../Worktrees/workspaceStyles";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { SettingsProjectScope } from "./SettingsProjectScope";
+import { SettingsTabPanel, SettingsTabs } from "./SettingsTabs";
 import { WorktreeSettings } from "./WorktreeSettings";
 import { machineDisplayName } from "@/lib/machineName";
 import { useWorktreeList, useArchivedWorktreeList } from "../../hooks/worktree-queries";
@@ -19,7 +20,8 @@ type BranchesTab = "active" | "archived" | "settings";
  * Settings → Branches. A branch here is the git worktree of the current
  * project that a branched chat works in; this page lists them (active and
  * archived), drills into one, and holds the cleanup defaults applied when
- * archiving. It was called "Workspaces", which collided with the product's
+ * archiving. The project is the header's scope picker (SettingsProjectScope).
+ * It was called "Workspaces", which collided with the product's
  * other workspace (a cloud workspace); its id was `workspaces` and
  * /settings/workspaces redirects here.
  *
@@ -72,11 +74,7 @@ export function BranchesSection() {
           description="Each branched chat works in its own git worktree, so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
           meta={
             <>
-              <span className={workspaceChip} title="Branches are listed for the open project">
-                <FolderGit2 className="h-3 w-3" aria-hidden="true" />
-                <span className="sr-only">Project:</span>
-                {currentProject?.name ?? "No project open"}
-              </span>
+              <SettingsProjectScope hint="Branches are listed for this project" />
               {activeDaemon && (
                 <span className={workspaceChip} title="The machine these worktrees live on">
                   <Monitor className="h-3 w-3" aria-hidden="true" />
@@ -98,44 +96,16 @@ export function BranchesSection() {
           />
         ) : (
           <>
-            <div
-              role="tablist"
-              aria-label="Branch views"
-              className="mb-4 flex gap-1 border-b border-border"
-            >
-              {tabs.map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    id={`workspaces-tab-${tab.id}`}
-                    aria-selected={isActive}
-                    aria-controls={`workspaces-panel-${tab.id}`}
-                    data-testid={`workspaces-tab-${tab.id}`}
-                    onClick={() => selectTab(tab.id)}
-                    className={cn(
-                      "-mb-px inline-flex items-center gap-1.5 rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      isActive
-                        ? "border-primary font-medium text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {tab.label}
-                    {typeof tab.count === "number" && (
-                      <span className="text-xs tabular-nums text-muted-foreground">{tab.count}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <SettingsTabs
+              tabs={tabs.map((tab) => ({ ...tab, testId: `workspaces-tab-${tab.id}` }))}
+              value={activeTab}
+              onChange={selectTab}
+              idPrefix="branches"
+              ariaLabel="Branch views"
+              className="mb-4"
+            />
 
-            <div
-              role="tabpanel"
-              id={`workspaces-panel-${activeTab}`}
-              aria-labelledby={`workspaces-tab-${activeTab}`}
-            >
+            <SettingsTabPanel idPrefix="branches" tab={activeTab}>
               {activeTab === "active" && (
                 <WorktreesPanel
                   paddingClass=""
@@ -151,7 +121,7 @@ export function BranchesSection() {
                   <WorktreeSettings />
                 </div>
               )}
-            </div>
+            </SettingsTabPanel>
           </>
         )}
     </div>

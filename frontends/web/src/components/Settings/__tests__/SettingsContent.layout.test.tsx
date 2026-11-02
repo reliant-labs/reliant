@@ -13,6 +13,7 @@ vi.mock("../AISettings", () => ({ AISettings: () => <div data-testid="section">a
 vi.mock("../AboutSection", () => ({ AboutSection: () => <div data-testid="section">about</div> }));
 vi.mock("../DeveloperSettings", () => ({ DeveloperSettings: () => <div data-testid="section">developer</div> }));
 vi.mock("../AppearanceSettings", () => ({ AppearanceSettings: () => <div data-testid="section">appearance</div> }));
+vi.mock("../ChatEditorSettings", () => ({ ChatEditorSettings: () => <div data-testid="section">chat-editor</div> }));
 vi.mock("../KeyboardShortcutsSettings", () => ({ KeyboardShortcutsSettings: () => <div data-testid="section">shortcuts</div> }));
 vi.mock("../AccountSettings", () => ({ AccountSettings: () => <div data-testid="section">account</div> }));
 vi.mock("../PrivacySettings", () => ({ PrivacySettings: () => <div data-testid="section">privacy</div> }));

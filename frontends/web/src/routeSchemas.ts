@@ -299,6 +299,10 @@ export const SETTINGS_SECTION_IDS = [
   "automations",
   "browser",
   "appearance",
+  // Chat, transcript and editor display: response streaming, spawn and
+  // tool-call display, the workflow viewer, the file browser and the code
+  // editor. Split out of Appearance, which keeps theme, scheme and fonts.
+  "chat-editor",
   "notifications",
   "privacy",
   "mcp",
@@ -345,6 +349,9 @@ export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>>
   machine: "machines",
   worktrees: "branches",
   providers: "ai",
+  editor: "chat-editor",
+  chat: "chat-editor",
+  "web-browser": "browser",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
@@ -379,9 +386,25 @@ export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as cons
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
-export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
-  return tab === "invoices" || tab === "limits" ? "usage" : (tab ?? "overview");
+export function resolveBillingTab(tab?: SettingsTab): VisibleBillingTab {
+  if (tab === "invoices" || tab === "limits") return "usage";
+  return (VISIBLE_BILLING_TABS as readonly string[]).includes(tab ?? "") ? (tab as VisibleBillingTab) : "overview";
 }
+
+/**
+ * Settings → AI providers' tabs, addressable like Billing's so a link (or a
+ * refresh) can land on "Models" rather than always on Providers.
+ */
+export const AI_SETTINGS_TAB_IDS = ["providers", "models", "local"] as const;
+export type AISettingsTab = (typeof AI_SETTINGS_TAB_IDS)[number];
+
+export function resolveAISettingsTab(tab?: SettingsTab): AISettingsTab {
+  return (AI_SETTINGS_TAB_IDS as readonly string[]).includes(tab ?? "") ? (tab as AISettingsTab) : "providers";
+}
+
+/** Every `?tab=` a settings section accepts; each section resolves its own. */
+export const SETTINGS_TAB_IDS = [...BILLING_TAB_IDS, ...AI_SETTINGS_TAB_IDS] as const;
+export type SettingsTab = (typeof SETTINGS_TAB_IDS)[number];
 
 /**
  * Search params for `/settings` and `/settings/$section`.
@@ -394,7 +417,7 @@ export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
  * subscription against the server rather than asserting it.
  */
 export const settingsSearchSchema = z.object({
-  tab: z.enum(BILLING_TAB_IDS).optional(),
+  tab: z.enum(SETTINGS_TAB_IDS).optional(),
   checkout: z.enum(["success", "cancelled"]).optional(),
   // Which plan the user was buying, so the return state can check the right one
   // against the server. Named `planId` and NOT `plan` on purpose: `/` and

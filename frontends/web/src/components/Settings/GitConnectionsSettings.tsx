@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Github, Loader2, Plus, RefreshCw, Trash2, X, Cloud } from "lucide-react";
 import Button from "@/components/forge-ui/button";
+import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import { gitService } from "../../services/controlPlane/git";
 import type {
   GitAppInstallation,
@@ -108,6 +109,7 @@ export function GitConnectionsSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [connectingOAuth, setConnectingOAuth] = useState(false);
 
   const [adding, setAdding] = useState(false);
@@ -206,9 +208,7 @@ export function GitConnectionsSettings() {
   };
 
   const handleDisconnect = async () => {
-    if (!window.confirm("Disconnect GitHub? Reliant will lose access to your repos.")) {
-      return;
-    }
+    setConfirmingDisconnect(false);
     setDisconnecting(true);
     setError(null);
     try {
@@ -320,8 +320,10 @@ export function GitConnectionsSettings() {
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={handleDisconnect}
+                onClick={() => setConfirmingDisconnect(true)}
                 disabled={disconnecting}
+                aria-label="Disconnect GitHub"
+                title="Disconnect GitHub"
               >
                 {disconnecting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -329,6 +331,14 @@ export function GitConnectionsSettings() {
                   <Trash2 className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
+              <ConfirmationDialog
+                open={confirmingDisconnect}
+                title="Disconnect GitHub?"
+                description="Reliant loses access to your repositories: agents can't clone private repos or push until you connect again."
+                confirmLabel="Disconnect GitHub"
+                onConfirm={() => void handleDisconnect()}
+                onCancel={() => setConfirmingDisconnect(false)}
+              />
             </div>
           </div>
 

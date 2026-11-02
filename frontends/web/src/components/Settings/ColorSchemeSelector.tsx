@@ -134,22 +134,42 @@ export function ColorSchemeSelector() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold mb-1">Color Scheme</h3>
+        <h3 className="text-sm font-semibold mb-1">Color scheme</h3>
         <p className="text-xs text-muted-foreground">
           Choose the accent color for your interface
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {COLOR_SCHEMES.map((scheme) => {
+      {/* A radiogroup: one tab stop (the chosen scheme), arrows move and
+          select, and the choice is aria-checked rather than only a border. */}
+      <div role="radiogroup" aria-label="Color scheme" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {COLOR_SCHEMES.map((scheme, index) => {
           const isSelected = selectedScheme === scheme.id;
 
           return (
             <button
               key={scheme.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => setSelectedScheme(scheme.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = (index + step + COLOR_SCHEMES.length) % COLOR_SCHEMES.length;
+                setSelectedScheme(COLOR_SCHEMES[next].id);
+                const group = event.currentTarget.parentElement;
+                group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              }}
               className={cn(
-                "relative p-4 rounded-lg border-2 transition-all text-left",
+                "relative p-4 rounded-lg border-2 transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Options are insets in their panel: no shadow, the border
                 // and an accent wash say which is chosen.
                 isSelected
