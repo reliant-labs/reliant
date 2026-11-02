@@ -87,7 +87,11 @@ Run `task test:web:e2e` for the full browser lane, or
 `task test:web:e2e -- e2e/mobile-responsive.spec.ts` for the focused guardrail.
 The task builds the renderer, installs Chromium **and WebKit**, forces production
 preview mode, and selects the four projects. CI supplies `PLAYWRIGHT_DEPS=--with-deps`
-for Linux system dependencies. `task test:e2e` is the Go story suite, not this lane.
+for Linux system dependencies. CI runs the lane as two parallel jobs,
+`task test:web:e2e:desktop` (the Chromium project) and
+`task test:web:e2e:responsive` (the three touch projects), so the desktop suite
+never waits on WebKit's system-package install. `task test:e2e` is the Go story
+suite, not this lane.
 The CI path selector already includes all `frontends/web/` implementation, E2E,
 helper and config changes; changes to the Taskfile or browser job select all lanes.
 

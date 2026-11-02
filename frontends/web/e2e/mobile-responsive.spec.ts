@@ -19,7 +19,7 @@ for (const route of ['/m/new', '/m/chats/chat_a']) {
     // Start compact even in the desktop project, then exercise wide/short windows.
     await page.setViewportSize(responsiveViewports.phone);
     await page.goto(route);
-    const composer = page.getByRole('textbox', { name: route === '/m/new' ? 'What do you want to do?' : /Ask Reliant/ });
+    const composer = page.getByRole('textbox', { name: 'Message the agent', exact: true });
     await expect(composer).toBeEditable();
     const draft = 'Keep this draft while rotating and opening chat options.';
     await composer.fill(draft);

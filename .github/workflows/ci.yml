@@ -476,13 +476,20 @@ jobs:
           if-no-files-found: ignore
 
   playwright:
-    name: E2E Frontend (Playwright)
+    name: E2E Frontend (Playwright, ${{ matrix.suite }})
     needs: lanes
     if: needs.lanes.outputs.playwright == 'true'
     # Not ubuntu-latest: it resolves to ubuntu 26.04, which Playwright 1.58
     # refuses at `playwright install --with-deps`.
     runs-on: ubuntu-24.04
+    # Two parallel jobs, split by install cost (Taskfile test:web:e2e:desktop
+    # and :responsive): WebKit's apt packages alone once took 6.5 minutes,
+    # which pushed the combined lane past this budget.
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [desktop, responsive]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
@@ -494,13 +501,15 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
+          # Per suite: the desktop job installs Chromium only.
+          key: playwright-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
-      # Includes required production-route responsive assertions in Chromium
-      # touch and WebKit phone/tablet; installs both engines and Linux deps.
-      - name: Desktop and responsive browser guardrails
-        run: task test:web:e2e PLAYWRIGHT_DEPS=--with-deps
+      # desktop: the Chromium suite (which also runs the responsive journeys
+      # with mouse input). responsive: the required production-route
+      # assertions in Chromium touch and WebKit phone/tablet.
+      - name: Browser guardrails (${{ matrix.suite }})
+        run: task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
       - name: Save Playwright browsers (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
@@ -510,7 +519,7 @@ jobs:
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.suite }}
           path: |
             frontends/web/playwright-report
             frontends/web/test-results

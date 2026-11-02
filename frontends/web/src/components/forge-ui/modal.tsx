@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { dialogOpener } from "../../lib/dialogOpener";
 
 /**
  * Modal — a dialog over the page: header (title, description, header
@@ -15,8 +16,9 @@ import { createPortal } from "react-dom";
  *     open menu calls preventDefault). Only the TOP dialog responds when
  *     dialogs stack; the one underneath keeps its focus trap off until the
  *     top one closes.
- *   - Closing returns focus to whatever had it before the dialog opened. If
- *     that element is gone (the menu item that opened the dialog unmounted),
+ *   - Closing returns focus to the control that opened it, or else to whatever
+ *     had focus before the dialog opened (`dialogOpener`). If that element is
+ *     gone (the menu item that opened the dialog unmounted),
  *     `fallbackFocus` decides where focus goes instead.
  *   - The page behind does not scroll. The lock is counted, so a nested
  *     dialog closing does not unlock the page under the one still open.
@@ -172,12 +174,7 @@ export default function Modal({
     openStack.push(id);
     lockScroll();
 
-    // <body> is not an opener: focus falls back to it when the focused
-    // element unmounts in the same render that opens the dialog (a menu
-    // item that closes its menu), so treat it as "the opener is gone".
-    const active = document.activeElement;
-    const previouslyFocused =
-      active instanceof HTMLElement && active !== document.body ? active : null;
+    const previouslyFocused = dialogOpener();
     const panel = panelRef.current;
     if (panel && !panel.contains(document.activeElement)) {
       const initial =
@@ -195,7 +192,8 @@ export default function Modal({
         onCloseRef.current();
         return;
       }
-      if (e.key !== "Tab") return;
+      // A control that uses Tab itself (an editor indenting) already said so.
+      if (e.key !== "Tab" || e.defaultPrevented) return;
       const focusable = Array.from(
         panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
       );
@@ -204,21 +202,21 @@ export default function Modal({
         panelRef.current.focus();
         return;
       }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
       const active = document.activeElement;
       // A dialog stacked above this one that is not a forge Modal (an image
       // viewer, a command palette) owns its own Tab order.
       const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
       if (owner && owner !== panelRef.current) return;
-      const inside = panelRef.current.contains(active);
-      if (e.shiftKey && (!inside || active === first || active === panelRef.current)) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && (!inside || active === last)) {
-        e.preventDefault();
-        first?.focus();
-      }
+      // The trap moves focus on every Tab rather than only wrapping at the
+      // ends: Safari's default Tab order skips links, so letting the browser
+      // advance would carry focus past a trailing link and out of the dialog.
+      e.preventDefault();
+      const index = focusable.indexOf(active as HTMLElement);
+      const next =
+        index === -1
+          ? e.shiftKey ? focusable.length - 1 : 0
+          : (index + (e.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+      focusable[next]!.focus();
     }
     document.addEventListener("keydown", onKeyDown);
 
