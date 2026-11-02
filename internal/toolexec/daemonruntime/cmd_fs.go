@@ -52,6 +52,10 @@ func init() {
 type fsReadFileRequest struct {
 	Path string               `json:"path"`
 	Opts *daemon.ReadFileOpts `json:"opts,omitempty"`
+	// ViewerRoot is set by the file viewer (internal/handlers/file_system) to
+	// the workspace root of the request: such a read refuses credential stores
+	// (daemonpolicy.DenyViewerRead).
+	ViewerRoot string `json:"viewer_root,omitempty"`
 }
 
 func handleFSReadFile(ctx context.Context, payload []byte) ([]byte, error) {
@@ -66,6 +70,9 @@ func handleFSReadFile(ctx context.Context, payload []byte) ([]byte, error) {
 	// have been swapped in. A no-op for unconfined callers.
 	path, err := daemonpolicy.ResolveFile(ctx, req.Path)
 	if err != nil {
+		return nil, err
+	}
+	if err := denyViewerRead(path, req.ViewerRoot); err != nil {
 		return nil, err
 	}
 
@@ -83,6 +90,8 @@ func handleFSReadFile(ctx context.Context, payload []byte) ([]byte, error) {
 type fsReadBinaryFileRequest struct {
 	Path     string `json:"path"`
 	MaxBytes int64  `json:"max_bytes"`
+	// ViewerRoot: see fsReadFileRequest.
+	ViewerRoot string `json:"viewer_root,omitempty"`
 }
 
 type fsReadBinaryFileResponse struct {
@@ -105,6 +114,9 @@ func handleFSReadBinaryFile(ctx context.Context, payload []byte) ([]byte, error)
 		return nil, err
 	}
 	req.Path = resolved
+	if err := denyViewerRead(req.Path, req.ViewerRoot); err != nil {
+		return nil, err
+	}
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -424,6 +436,8 @@ func handleFSPatchFile(ctx context.Context, payload []byte) ([]byte, error) {
 
 type fsStatRequest struct {
 	Path string `json:"path"`
+	// ViewerRoot: see fsReadFileRequest.
+	ViewerRoot string `json:"viewer_root,omitempty"`
 }
 
 func handleFSStat(ctx context.Context, payload []byte) ([]byte, error) {
@@ -443,6 +457,9 @@ func handleFSStat(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Path = resolved
+	if err := denyViewerRead(req.Path, req.ViewerRoot); err != nil {
+		return nil, err
+	}
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -1137,6 +1154,8 @@ func isGitRepo(path string) bool {
 
 type fsPreviewInfoRequest struct {
 	Path string `json:"path"`
+	// ViewerRoot: see fsReadFileRequest.
+	ViewerRoot string `json:"viewer_root,omitempty"`
 }
 
 type fsPreviewInfoResponse struct {
@@ -1171,6 +1190,9 @@ func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Path = resolved
+	if err := denyViewerRead(req.Path, req.ViewerRoot); err != nil {
+		return nil, err
+	}
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -1287,4 +1309,14 @@ func handleFSCopy(ctx context.Context, payload []byte) ([]byte, error) {
 		Destination: req.Destination,
 	}
 	return json.Marshal(resp)
+}
+
+// denyViewerRead applies the file viewer's credential guard to a read the
+// viewer made (root is its workspace); any other caller sends no root and is
+// not affected.
+func denyViewerRead(path, root string) error {
+	if root == "" {
+		return nil
+	}
+	return daemonpolicy.DenyViewerRead(path, root)
 }

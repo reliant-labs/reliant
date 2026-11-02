@@ -808,13 +808,13 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Env) > 0 || credentials == daemonpolicy.CredentialsNone {
+	switch {
+	case credentials == daemonpolicy.CredentialsNone:
+		cmd.Env = daemonpolicy.WithoutCredentials(os.Environ(), req.Env) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
+	case len(req.Env) > 0:
 		cmd.Env = os.Environ() //nolint:forbidigo // passes this process environment to a child process; not configuration
 		for k, v := range req.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-		if credentials == daemonpolicy.CredentialsNone {
-			cmd.Env = daemonpolicy.WithoutCredentials(cmd.Env)
 		}
 	}
 
