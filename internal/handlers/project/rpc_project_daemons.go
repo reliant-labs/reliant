@@ -214,6 +214,9 @@ func (s *Service) healProjectDir(ctx context.Context, userID, daemonID, path str
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
+	if s.deps.Router == nil {
+		return fmt.Errorf("daemon command fs.mkdir: %w", errNoDaemonRouter)
+	}
 	if _, err := s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, daemonID, "fs.mkdir", payload, 30_000); err != nil {
 		return fmt.Errorf("daemon command fs.mkdir: %w", err)
 	}

@@ -239,7 +239,8 @@ so it cannot disagree with a local run:
   changed-tests` names every Test function the diff adds or edits (by
   function, in files that build without tags); `task test:flake`
   (`scripts/test-flake.sh`) runs them with `-short -count=3`. A test that fails
-  on a repeat is a flake: fix it at the root, never by re-running.
+  on a repeat is a flake: delete it (rewrite it as a new deterministic test if
+  it is worth having), never re-run it.
 - **`CI result`** is the run's single verdict: green when every job that ran
   passed, and the tier's gate ran. On a PR a lane the change does not reach is
   skipped, which is fine; off a PR every lane but the contract must have run.

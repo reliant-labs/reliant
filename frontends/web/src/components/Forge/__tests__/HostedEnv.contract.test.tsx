@@ -55,7 +55,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "cloud",
     project: "acme",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v2.0.0",
     releaseProvenance: null,
@@ -170,7 +170,7 @@ describe("a hosted row on the Overview", () => {
       liveEnv({
         release: "",
         provenance: "",
-        declaredShape: { kind: "persistent", workloads: [], secrets: [], domains: [], clusters: [] },
+        declared: true,
       }),
     ]);
     expect(screen.getByTestId("env-row-cloud").textContent).toMatch(/declared, not built/i);

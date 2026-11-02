@@ -197,6 +197,7 @@ func (t *Tree) Release() {
 	if t == nil {
 		return
 	}
+	t.forget()
 	t.closeFD()
 	if t.dir == "" {
 		return
@@ -225,4 +226,31 @@ func (l *Limiter) sweep(all bool) {
 			_ = os.Remove(dir)
 		}
 	}
+}
+
+// processIdentity reads pid's process group and start time (fields 5 and 22
+// of /proc/<pid>/stat), which /proc shows for an undumpable process too.
+func processIdentity(pid int) (pgid int, start uint64, ok bool) {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return 0, 0, false
+	}
+	// The comm may hold spaces and parentheses: fields start after the last ')'.
+	pos := bytes.LastIndexByte(data, ')')
+	if pos < 0 {
+		return 0, 0, false
+	}
+	fields := strings.Fields(string(data[pos+1:]))
+	if len(fields) < 20 {
+		return 0, 0, false
+	}
+	pgid, err = strconv.Atoi(fields[2])
+	if err != nil {
+		return 0, 0, false
+	}
+	start, err = strconv.ParseUint(fields[19], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return pgid, start, true
 }

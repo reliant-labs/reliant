@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Save, Check, ExternalLink } from "lucide-react";
+import { Globe, Save } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { toast } from "../../lib/toast-manager";
 import {
@@ -7,7 +7,6 @@ import {
   useBrowserPreferences,
   useUpdateBrowserPreferences,
 } from "../../hooks/settings-queries";
-import { cn } from "../../lib/utils";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function BrowserSettings() {
@@ -17,7 +16,6 @@ export function BrowserSettings() {
   const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const defaultPage = pageDraft ?? (browserPrefs.defaultPage || FALLBACK_BROWSER_PAGE);
-  const openLinksInApp = browserPrefs.openLinksInApp;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -42,21 +40,6 @@ export function BrowserSettings() {
     }
   };
 
-  // The checkbox flips at once and back if the server refuses.
-  const handleToggleOpenLinksInApp = async () => {
-    const newValue = !openLinksInApp;
-    try {
-      await updateBrowserPrefs({ openLinksInApp: newValue });
-      toast.success(newValue
-        ? "Links will open in Reliant's browser"
-        : "Links will open in your system browser"
-      );
-    } catch (error) {
-      console.error("Failed to save link preference:", error);
-      toast.error("Failed to save preference");
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -69,47 +52,10 @@ export function BrowserSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Web browser"
-        description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Choose where links open and which page new browser tabs start on."
+        description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Links to your dev servers (localhost, and your cloud machine's previews) open here; other links open in your default browser."
       />
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-6">
-      {/* Link Opening Preference */}
-      <div className="space-y-4">
-        <label className="flex items-start gap-3 cursor-pointer group hover:bg-foreground/5 p-3 rounded-lg transition-colors -mx-3">
-          <div className="relative flex items-center justify-center mt-0.5">
-            <input
-              type="checkbox"
-              checked={openLinksInApp}
-              onChange={handleToggleOpenLinksInApp}
-              className="sr-only"
-            />
-            <div
-              className={cn(
-                "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
-                openLinksInApp
-                  ? "border-primary bg-primary"
-                  : "border-border bg-background"
-              )}
-            >
-              {openLinksInApp && (
-                <Check className="w-3.5 h-3.5 text-primary-foreground" strokeWidth={3} />
-              )}
-            </div>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <ExternalLink className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                Open links in Reliant
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              When enabled, clicked links open in Reliant's built-in browser. When disabled, links open in your system's default browser.
-            </p>
-          </div>
-        </label>
-      </div>
-
       {/* Default Page Setting */}
       <div className="space-y-4">
         <div>

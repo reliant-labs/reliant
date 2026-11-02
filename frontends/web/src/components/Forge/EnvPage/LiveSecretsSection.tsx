@@ -56,6 +56,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   useDeleteManagedSecret,
   useDestroyManagedSecret,
+  useEnvironmentShape,
   useInvalidateManagedSecrets,
   useManagedSecretVersions,
   useManagedSecrets,
@@ -165,9 +166,13 @@ export function LiveSecretsSection({
    * `provider` comes from the shape's own secrets. forge's providers and the
    * shape's are the same vocabulary, so `hosted` means the managed store here
    * exactly as it does in forge's report.
+   *
+   * The shape is fetched for this one environment (GetEnvironmentShape); the
+   * Live roster carries only whether it exists.
    */
+  const shapeQuery = useEnvironmentShape(env?.declared ? env.id : null);
+  const shape = shapeQuery.data;
   const declared: ForgeSecretsReport | null = useMemo(() => {
-    const shape = env?.declaredShape;
     if (!shape) return null;
     return {
       env: env?.name,
@@ -182,7 +187,7 @@ export function LiveSecretsSection({
         declared_by: secret.declaredBy.map((workload) => ({ workload })),
       })),
     };
-  }, [env?.declaredShape, env?.name]);
+  }, [shape, env?.name]);
 
   const availability =
     managed.data?.availability ?? (target.kind === "none" ? target.availability : "unreachable");
@@ -297,7 +302,7 @@ export function LiveSecretsSection({
         availability={availability}
         report={declared}
         managed={managed.data?.secrets ?? []}
-        isLoading={managed.isLoading && !managed.data}
+        isLoading={(managed.isLoading && !managed.data) || shapeQuery.isLoading}
         selectedName={selectedSecret}
         onSelect={onSelectSecret}
         versions={versions.data?.versions ?? []}

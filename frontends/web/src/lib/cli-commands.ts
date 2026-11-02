@@ -162,6 +162,19 @@ export function daemonStartCommand(): string {
 }
 
 /**
+ * `reliant auth logout` for the server this deployment uses. The CLI keeps
+ * one sign-in per server and logs out of the one it resolves, so outside a
+ * baked build the command names RELIANT_SERVER_URL — a bare one would sign
+ * out of the build's default server and leave this one's sign-in in place.
+ */
+export function authLogoutCommand(): string {
+  const server = isNonProd() ? getServerURL() : "";
+  return server
+    ? `RELIANT_SERVER_URL=${server} reliant auth logout`
+    : "reliant auth logout";
+}
+
+/**
  * True when the rendered command still contains a placeholder the user must
  * replace by hand. The UI should say so rather than presenting the command as
  * ready to paste.

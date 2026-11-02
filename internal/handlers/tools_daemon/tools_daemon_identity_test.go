@@ -188,7 +188,14 @@ func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
 	resp, err := svc.WhoAmI(ctx, connect.NewRequest(&reliantv1.WhoAmIRequest{}))
 	require.NoError(t, err)
 	require.Equal(t, "user-B", resp.Msg.GetUserId())
+	require.Empty(t, resp.Msg.GetAccountEmail(), "an authority that named no email names none here")
 	require.Empty(t, repo.owners, "WhoAmI must not register or touch any daemon row")
+
+	// The email the token authority named for the credential's account.
+	resp, err = svc.WhoAmI(context.WithValue(ctx, auth.UserEmailContextKey, "b@example.com"),
+		connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	require.NoError(t, err)
+	require.Equal(t, "b@example.com", resp.Msg.GetAccountEmail())
 
 	_, err = svc.WhoAmI(context.Background(), connect.NewRequest(&reliantv1.WhoAmIRequest{}))
 	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err),

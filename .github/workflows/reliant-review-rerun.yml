@@ -1,0 +1,65 @@
+name: Reliant review re-run
+
+# Keeps a head pr-review passed from being held out of the merge queue by its
+# own stale `Reliant review` runs (scripts/ci-review-rerun.sh has the why). The
+# green run of the check heals its head itself (its last step); this workflow
+# covers the two cases that step cannot see:
+#
+# - a run that started before the marker and ends red after every green run
+#   has already looked: each completed run of the check triggers this, and it
+#   waits for runs still in flight before re-running the red ones;
+# - a pull request whose runs use an older definition of the check (the
+#   definition comes from the pull request's merge commit, so a branch cut
+#   before a fix keeps the bug until it is rebased): `workflow_run` and
+#   `schedule` always run THIS file from main, and the schedule sweeps every
+#   open pull request, so a stuck one heals without anyone touching it.
+#
+# Not a required check, and never red over a head that has not passed: it
+# re-runs only the check's pull-request runs on a head the gate passes now,
+# one at a time. Merge-group runs are never touched.
+on:
+  workflow_run:
+    workflows: [Reliant review]
+    types: [completed]
+  schedule:
+    - cron: "7,27,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write # re-run the check's red verdicts
+
+jobs:
+  rerun:
+    name: Re-run a passed head's red review verdicts
+    # A re-run's own completion (attempt > 1) was started by a healer, which
+    # is already waiting on it.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event != 'merge_group' && github.event.workflow_run.run_attempt == 1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: re-run red verdicts on passed heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PRS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/review"
+          mkdir -p "${dir}"
+          for s in ci-review-rerun.sh ci-review-marker.sh; do
+            gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/${s}?ref=main" > "${dir}/${s}"
+          done
+          if [ "${EVENT_NAME}" != workflow_run ]; then
+            bash "${dir}/ci-review-rerun.sh" sweep
+            exit 0
+          fi
+          # A fork's run lists no pull request; a fork's head never passes.
+          [ -n "${PRS}" ] || { echo "run on ${HEAD_SHA} names no pull request of this repository"; exit 0; }
+          for pr in ${PRS}; do
+            bash "${dir}/ci-review-rerun.sh" pr "${pr}" "${HEAD_SHA}"
+          done

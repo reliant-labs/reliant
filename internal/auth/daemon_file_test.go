@@ -268,6 +268,44 @@ func TestDaemonCredentials_SubSurvivesRewrite(t *testing.T) {
 	}
 }
 
+// TestDeleteDaemonCredentialsForServer_RemovesEveryAccountAtTheOrigin pins
+// what `reliant auth logout` relies on: signing the machine out of a server
+// leaves NO account's PAT there. Deleting only the default would hand the next
+// no-flag `daemon start` the remaining account — the silent wrong-account
+// connection a new user hit when onboarding on a machine that still held the
+// previous user's credential. Other origins are untouched.
+func TestDeleteDaemonCredentialsForServer_RemovesEveryAccountAtTheOrigin(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const origin = "http://localhost:8090"
+	const other = "http://localhost:9090"
+	mustWrite(t, &DaemonCredentials{PAT: "rlnt_pat_alice", ServerURL: origin, Sub: "user-alice"})
+	mustWrite(t, &DaemonCredentials{PAT: "rlnt_pat_bob", ServerURL: origin + "/api", Sub: "user-bob"})
+	mustWrite(t, &DaemonCredentials{PAT: "rlnt_pat_other", ServerURL: other, Sub: "user-alice"})
+
+	removed, err := DeleteDaemonCredentialsForServer(origin + "/grpc")
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	// Default (the most recent write, bob) first, then the rest.
+	if len(removed) != 2 || removed[0].Sub != "user-bob" || removed[1].Sub != "user-alice" {
+		t.Fatalf("removed: got %+v, want bob then alice", removed)
+	}
+	for _, sub := range []string{"", "user-alice", "user-bob"} {
+		if got, err := ReadDaemonCredentials(origin, sub); err != nil || got != nil {
+			t.Fatalf("account %q survived the server sign-out: %+v (err %v)", sub, got, err)
+		}
+	}
+	if got := mustRead(t, other, ""); got.PAT != "rlnt_pat_other" {
+		t.Fatalf("another server's credential was disturbed: %+v", got)
+	}
+
+	// Nothing left: a second sign-out reports nothing and is not an error.
+	if removed, err := DeleteDaemonCredentialsForServer(origin); err != nil || removed != nil {
+		t.Fatalf("second delete: got %+v, %v; want nil, nil", removed, err)
+	}
+}
+
 func mustWrite(t *testing.T, creds *DaemonCredentials) {
 	t.Helper()
 	if err := WriteDaemonCredentials(creds); err != nil {

@@ -28,17 +28,22 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  actions: write # re-run this head's earlier red verdicts (the last step)
 
-# One verdict per pull request (or merge group) at a time: the newest event wins.
-concurrency:
-  group: reliant-review-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
-  cancel-in-progress: true
+# NO concurrency group. A cancelled run is NOT inert: GitHub holds a required
+# check red while any check suite's newest run of it is cancelled ("Required
+# status check \"Reliant review\" is cancelled", enqueuePullRequest,
+# 2026-11-01). The pipeline adds three or four labels within a second of a pass,
+# each a `labeled` run, and a shared group cancelled all but the last: the
+# pull_request_review suite's run was left cancelled, auto-merge sat armed and
+# BLOCKED, and the PR never entered the queue. Each run takes seconds and is
+# idempotent, so every event keeps its own verdict.
 
 jobs:
   reliant-review:
     name: Reliant review
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 15
     steps:
       - name: pr-review passed this exact head
         env:
@@ -56,3 +61,33 @@ jobs:
           else
             bash "${gate}" pr "${PR}"
           fi
+      # A green verdict does not supersede a red or cancelled one: each event's
+      # run is its own check suite, and GitHub holds the required check red
+      # while any suite's newest run of it is red or cancelled. The run on
+      # `opened`/`labeled` before pr-review posts its marker is red by design,
+      # so without this every reviewed pull request sat BLOCKED with
+      # auto-merge armed and never entered the queue (forge #1603,
+      # 2026-11-01). So a green verdict re-runs this head's earlier red and
+      # cancelled ones, ONE AT A TIME (scripts/ci-review-rerun.sh): a branch
+      # cut before this workflow lost its concurrency group still runs that
+      # definition, whose re-runs cancel each other when started together.
+      # A re-run (attempt > 1) heals nothing, so re-runs never cascade.
+      # reliant-review-rerun.yml covers what this step cannot see: a run that
+      # ends red after it looked, and heads whose runs predate it. Best-effort:
+      # this step never turns the verdict red. The script is read from the
+      # run's own commit, not main: it can only re-run this same check, whose
+      # gate is still read from main.
+      - name: re-run this head's earlier red verdicts
+        if: github.event_name != 'merge_group' && github.run_attempt == 1
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          heal="${RUNNER_TEMP}/ci-review-rerun.sh"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY}/contents/scripts/ci-review-rerun.sh?ref=${GITHUB_SHA}" > "${heal}"
+          bash "${heal}" pr "${PR}" "${HEAD_SHA}" "${RUN_ID}"

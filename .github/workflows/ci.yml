@@ -12,10 +12,9 @@ name: CI
 #                                     and "CI result", green in about a minute,
 #                                     which is what lets GitHub enqueue the PR
 #                                     once pr-review passes it
-#   merge_group                       task ci:merge   the merge tier: what the
-#                                     diff can affect, -short, ~10 min, plus
-#                                     the path lanes; the run that decides
-#                                     the merge
+#   merge_group                       NOT HERE: merge-queue.yml, one job,
+#                                     `task ci:merge -- --queue`, five-minute
+#                                     budget (owner, 2026-11-01)
 #   push to main, schedule, dispatch  task release:gate  the whole suite plus
 #                                     every lane, recorded per sha; never
 #                                     blocks a merge, gates every release
@@ -32,9 +31,11 @@ name: CI
 #
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
-# control-plane contract. The merge queue (and a `ci:run` pull request) runs
-# those its paths reach; main runs all of them. They stay in the queue because
-# the release-gate record does not include them.
+# control-plane contract. A `ci:run` pull request runs those its paths reach;
+# main runs all of them, and the release record (`Release gate`) is written
+# only when the release build, Playwright and the electron smoke passed, so a
+# release is never cut over them. The merge queue runs none of them: they do
+# not fit its five-minute budget (merge-queue.yml).
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
@@ -45,10 +46,7 @@ on:
   # "CI result". `ci:run` is read on the next push (an empty commit will do).
   pull_request:
     branches: [main]
-  # GitHub's native merge queue: each queued PR is gated, as the merge tier,
-  # over main plus the entries ahead of it. "CI result" is the required check,
-  # and this is the run of it that decides the merge.
-  merge_group:
+  # No merge_group: the merge queue's "CI result" is merge-queue.yml's.
   push:
     branches: [main]
   schedule:
@@ -57,17 +55,18 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-# A PR: a new push obsoletes the run in progress. Main: every commit gets its
-# OWN group, so no run of main is ever cancelled, in progress or pending; runs
-# pipeline (owner, 2026-10-29: "prefer to pipeline releases than cancel"). A
-# shared group keeps only ONE pending run, so each push silently cancelled the
-# queued verdict of the commit before it, and the release tags the newest
-# commit with a green record (release-tag.sh --commit). A dispatch groups by
-# its ref.
+# A PR: a new push obsoletes the run in progress. Main: the run in progress
+# always finishes, and a newer push SUPERSEDES the pending one (owner,
+# 2026-11-01). Every push to main shares one group with cancel-in-progress
+# false, and GitHub keeps at most one pending run per group, cancelling the
+# older one when a newer one queues; so a burst of merges costs the run in
+# progress plus one run of the newest commit. The release tags the newest
+# commit with a green record (release-tag.sh --commit), and gate-health passes
+# over a superseded (cancelled) run. The event is part of the group, so the
+# daily schedule and a dispatch never supersede a push run, nor it them.
 concurrency:
-  group: ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && format('main-{0}', github.sha) || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-# (A merge group's ref is unique per queue entry, so it never shares a group.)
 
 permissions:
   contents: read
@@ -107,12 +106,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           PUSH_BEFORE: ${{ github.event.before }}
-          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
-          if [ "${EVENT_NAME}" = merge_group ]; then
-            base=${GROUP_BASE}
-          elif [ "${EVENT_NAME}" = pull_request ]; then
+          if [ "${EVENT_NAME}" = pull_request ]; then
             if [ "$(git rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]; then base=$(git rev-parse HEAD^1)
             else base=$(git merge-base "origin/${BASE_REF}" HEAD); fi
           elif [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
@@ -129,7 +125,7 @@ jobs:
         run: |
           set -euo pipefail
           case "${EVENT_NAME}" in
-            pull_request|merge_group) task ci:lanes -- --base "${BASE}" ;;
+            pull_request) task ci:lanes -- --base "${BASE}" ;;
             # The control-plane contract judges what a push changed here.
             push) task ci:lanes -- --full --base "${BASE}" ;;
             *) task ci:lanes -- --full ;;
@@ -160,18 +156,18 @@ jobs:
         run: |
           set -euo pipefail
           case "${EVENT_NAME}" in
-            pull_request|merge_group) task ci:migration-order ;;
+            pull_request) task ci:migration-order ;;
             *)
               if [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then base=${PUSH_BEFORE}
               else base=$(git rev-parse HEAD^); fi
               task ci:migration-order BASE="${base}" ;;
           esac
 
-  # ── The merge tier (the merge queue; a ci:run pull request) ───────────────
+  # ── The merge tier on a ci:run pull request (the queue: merge-queue.yml) ──
   merge-gate:
     name: Merge gate
     needs: lanes
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run'))
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run')
     runs-on: ubuntu-latest
     # The slowest green run was 25 min (a 208-file proto change). A runner that
     # dies holds the job, and the merge queue's entry, until this fires.
@@ -225,7 +221,7 @@ jobs:
   release-gate:
     name: Release gate (${{ matrix.label }})
     needs: lanes
-    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -325,8 +321,8 @@ jobs:
   # name `Release gate`, the verdict gate-health and main-health key on.
   release-record:
     name: Release gate
-    needs: [lanes, release-gate]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+    needs: [lanes, release-gate, web-bundle, playwright, electron-package]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -342,6 +338,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      # The path lanes are release blockers (the merge queue does not run
+      # them): no record for a commit whose release build, Playwright or
+      # electron smoke did not pass, so release:tag refuses it.
+      - name: The path lanes passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          bad=$(jq -r 'to_entries[] | select(.key == "web-bundle" or .key == "playwright" or .key == "electron-package") | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
+          if [ -n "${bad}" ]; then echo "::error::release blockers that did not pass (no record is written):"; echo "${bad}"; exit 1; fi
       - uses: actions/download-artifact@v4
         with:
           pattern: release-gate-part-*
@@ -534,7 +540,7 @@ jobs:
   # and a red here would keep the PR out of the queue it guards.
   review-marker:
     name: Review marker
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -547,24 +553,15 @@ jobs:
       - name: pr-review passed every head
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
-          GROUP_REF: ${{ github.event.merge_group.head_ref }}
-          GROUP_SHA: ${{ github.event.merge_group.head_sha }}
-        run: |
-          if [ "${EVENT_NAME}" = merge_group ]; then
-            scripts/ci-review-marker.sh group "${GROUP_REF}" "${GROUP_SHA}"
-          else
-            scripts/ci-review-marker.sh pr "${PR}" || echo "::notice::the merge queue will require pr-review's pass marker on this exact head"
-          fi
+        run: scripts/ci-review-marker.sh pr "${PR}" || echo "::notice::the merge queue will require pr-review's pass marker on this exact head"
 
   # ── One verdict ───────────────────────────────────────────────────────────
   # Green only when every job that ran passed. On an unlabelled PR only the
   # review marker runs (REVIEW FIRST), so this is green within a minute and
-  # GitHub can enqueue the PR once pr-review passes it. In the merge queue and
-  # on a ci:run PR a lane the change does not reach is skipped, which is fine,
-  # but the merge gate must have run; in the queue the review marker must have
-  # passed too. Off a PR every lane runs (scripts/ci-lanes.sh --full), so a
+  # GitHub can enqueue the PR once pr-review passes it. On a ci:run PR a lane
+  # the change does not reach is skipped, which is fine, but the merge gate
+  # must have run. (The merge queue's CI result is merge-queue.yml's.) Off a PR every lane runs (scripts/ci-lanes.sh --full), so a
   # skip there is a broken `if:`, never a pass: everything but the merge gate
   # and the review marker (merge tier only), go-cache (only a push runs it)
   # and cp-contract (only a change to the vendored contract does) must have
@@ -590,13 +587,10 @@ jobs:
             echo "review first: the merge tier runs in the merge queue (label ci:run and push to run it here)"
             exit 0
           fi
-          merge_tier=$([ "${EVENT_NAME}" = pull_request ] || [ "${EVENT_NAME}" = merge_group ] && echo true || echo false)
+          merge_tier=$([ "${EVENT_NAME}" = pull_request ] && echo true || echo false)
           gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-record)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
-          if [ "${EVENT_NAME}" = merge_group ] && [ "$(jq -r '."review-marker".result' <<< "${RESULTS}")" != success ]; then
-            bad="${bad}"$'\n'"review-marker: pr-review has not passed every head in this merge group"
-          fi
           if [ "${merge_tier}" != true ]; then
             skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "review-marker" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"

@@ -575,6 +575,11 @@ function RulesTab({
 }) {
   const off = environments.filter(observabilityOff);
   const open = rules.find((r) => r.key === selected);
+  // The rules come from each environment's declared shape, fetched per
+  // environment: until they arrive, "none declared" would be a guess.
+  if (rules.length === 0 && environments.some((env) => env.declaredPending)) {
+    return <ObsLoadingRows testId="obs-rules-loading" />;
+  }
   if (rules.length === 0) {
     const env = environments[0]?.name ?? "<env>";
     return (

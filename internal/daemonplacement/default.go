@@ -51,40 +51,60 @@ type Installs interface {
 // The error is the router's: toolexec.ErrNoDaemon when the user has no
 // machine at all.
 func ProjectDefaultDaemonID(ctx context.Context, repo Installs, machines Machines, userID, projectID string) (string, error) {
-	installed, err := installedDaemonIDs(ctx, repo, userID, projectID)
+	installs, err := userInstalls(ctx, repo, userID, projectID)
 	if err != nil {
 		return "", err
 	}
-	def, defErr := machines.PlacementDaemonID(ctx, userID, "")
+	installed := installed(installs)
 	if len(installed) == 0 {
-		return def, defErr
+		return machines.PlacementDaemonID(ctx, userID, "")
 	}
-	if defErr == nil {
-		for _, id := range installed {
-			if id == def {
-				return def, nil
+	return preferredInstall(ctx, machines, userID, installed).DaemonID, nil
+}
+
+// preferredInstall picks, among installs (non-empty, oldest first), the one
+// a project's work goes to: the router's default when it is one of them, else
+// the first the router can place, else the first. ProjectDefaultDaemonID and
+// ProjectCheckout both choose by it, so "which machine" and "which checkout"
+// cannot name different machines.
+func preferredInstall(ctx context.Context, machines Machines, userID string, installs []*core.ProjectDaemon) *core.ProjectDaemon {
+	if def, err := machines.PlacementDaemonID(ctx, userID, ""); err == nil {
+		for _, row := range installs {
+			if row.DaemonID == def {
+				return row
 			}
 		}
 	}
-	for _, id := range installed {
-		if placed, err := machines.PlacementDaemonID(ctx, userID, id); err == nil {
-			return placed, nil
+	for _, row := range installs {
+		if _, err := machines.PlacementDaemonID(ctx, userID, row.DaemonID); err == nil {
+			return row
 		}
 	}
-	return installed[0], nil
+	return installs[0]
 }
 
-// installedDaemonIDs lists, oldest install first, the user's machines the
-// project is installed on. A machine another user owns, or one that no longer
-// exists, is not the user's to run on.
-func installedDaemonIDs(ctx context.Context, repo Installs, userID, projectID string) ([]string, error) {
+// installed keeps the rows whose clone has landed.
+func installed(rows []*core.ProjectDaemon) []*core.ProjectDaemon {
+	var out []*core.ProjectDaemon
+	for _, row := range rows {
+		if row.InstallState == core.ProjectInstallInstalled {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// userInstalls lists, oldest install first, the project's install rows on
+// the user's own machines, in any state. A machine another user owns, or one
+// that no longer exists, is not the user's to run on.
+func userInstalls(ctx context.Context, repo Installs, userID, projectID string) ([]*core.ProjectDaemon, error) {
 	rows, err := repo.ListProjectDaemonsForProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list project installs %s: %w", projectID, err)
 	}
-	var ids []string
+	var out []*core.ProjectDaemon
 	for _, row := range rows {
-		if row.InstallState != core.ProjectInstallInstalled {
+		if row == nil {
 			continue
 		}
 		daemon, err := repo.GetDaemon(ctx, row.DaemonID)
@@ -94,9 +114,9 @@ func installedDaemonIDs(ctx context.Context, repo Installs, userID, projectID st
 		if err != nil || daemon == nil || daemon.UserID != userID {
 			continue
 		}
-		ids = append(ids, row.DaemonID)
+		out = append(out, row)
 	}
-	return ids, nil
+	return out, nil
 }
 
 // Registry is what PinTarget reads.
