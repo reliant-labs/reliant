@@ -3,6 +3,9 @@ package cmd
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -71,6 +74,28 @@ func TestDaemonGuards_BackgroundIdleReap(t *testing.T) {
 	// The runtime's own zero value (an entry point that sets no Guards) is
 	// the default, not off.
 	assert.Equal(t, shell.DefaultIdleReap, daemonruntime.Guards{}.IdleReapWindow())
+}
+
+// What production daemons run with. Neither of the two ways a daemon is
+// started outside dev overrides background_idle_reap — a workspace pod gets
+// only the env control-plane's workspace operator sets (none of the guard
+// settings), and Electron spawns it with backend-manager.js's env — so both
+// run the schema default. That default is written three times (the proto,
+// the KCL schema rendered from it, and shell.DefaultIdleReap); this pins the
+// rendered one and the Electron spawn to the runtime's.
+func TestDaemonGuards_BackgroundIdleReapProductionDefault(t *testing.T) {
+	schema, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "kcl", "config_gen.k"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`(?m)^\s+background_idle_reap: str = "([^"]*)"$`).FindSubmatch(schema)
+	require.NotNil(t, m, "config_gen.k's DaemonConfig declares background_idle_reap")
+	rendered, err := time.ParseDuration(string(m[1]))
+	require.NoError(t, err)
+	assert.Equal(t, shell.DefaultIdleReap, rendered, "the KCL schema's default is the runtime's")
+
+	electron, err := os.ReadFile(filepath.Join("..", "..", "..", "electron", "src", "backend-manager.js"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(electron), "RELIANT_BACKGROUND_IDLE_REAP",
+		"Electron's daemon runs the default; an override there must be a decision, and this test updated with it")
 }
 
 func TestDaemonGuards_HeavyCommandsReplaceOrClearTheDefault(t *testing.T) {
