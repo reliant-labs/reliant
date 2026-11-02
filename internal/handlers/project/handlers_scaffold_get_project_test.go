@@ -72,6 +72,13 @@ func (stalledDaemon) SendDaemonCommand(ctx context.Context, _, _ string, _ []byt
 	return nil, ctx.Err()
 }
 
+// SendDaemonCommandToDaemon stalls too: the check is pinned to the machine
+// holding the checkout.
+func (stalledDaemon) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ string, _ []byte, _ int32) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // Prod (2026-10-31/11-01): GetProject waited out the client's whole 10s
 // deadline on project.check_git, and the client then failed the read. The
 // check refreshes a cached flag; a daemon that does not answer in its budget

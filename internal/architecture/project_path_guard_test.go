@@ -72,7 +72,7 @@ var projectPathAllowed = map[string]struct {
 	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
 	"internal/handlers/project/project.go:projectToProto":                              {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
-	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {5, reasonHeal},
+	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {6, reasonHeal},
 	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {4, reasonProbe},
 	"internal/repo/adopt.go:NoReposMessage":                                            {1, reasonMessage},
 
@@ -92,7 +92,7 @@ var projectPathAllowed = map[string]struct {
 	"internal/llm/tools/project_analyzer.go:Execute":                                                {2, reasonRuntimeDebt},
 	"internal/llm/tools/worktree_tool.go:handleDelete":                                              {1, reasonRuntimeDebt},
 	"internal/rctx/context.go:WorkingDir":                                                           {1, reasonRuntimeDebt},
-	"internal/repo/adopt.go:AdoptFromDaemon":                                                        {4, reasonRuntimeDebt},
+	"internal/repo/adopt.go:AdoptFromDaemon":                                                        {6, reasonRuntimeDebt},
 	"internal/workflow/runtime/activities/handlers/call_llm.go:streamLLMResponse":                   {1, reasonRuntimeDebt},
 	"internal/workflow/runtime/activities/handlers/execute_tools.go:buildToolRequest":               {1, reasonRuntimeDebt},
 	"internal/workflow/runtime/activities/handlers/execute_tools.go:loadWorktreeInfo":               {2, reasonRuntimeDebt},
