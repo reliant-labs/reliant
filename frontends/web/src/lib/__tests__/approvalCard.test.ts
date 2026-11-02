@@ -25,6 +25,21 @@ describe("parseApprovalCard", () => {
     expect(card.grantsPower).toBe(true);
   });
 
+  it("reads an activation approval in the plain-text form older servers wrote as standing power", () => {
+    // Pending approvals stored before the card, and an older server during a
+    // rollout, carry this title. It must never join an "Approve all".
+    for (const operation of ["create_trigger_activation", "update_trigger_activation", "enable_trigger"]) {
+      const legacy = [
+        "Approval: A new activation is new standing power.",
+        "Machine: laptop (id d_1)",
+        `Operation: ${operation}`,
+        "Run as user: u_1; integration identity: owner",
+        'Activation: {"name":"pr"}',
+      ].join("\n");
+      expect(approvalGrantsPower(legacy), operation).toBe(true);
+    }
+  });
+
   it("reads a one-sentence approval as its lead alone", () => {
     const card = parseApprovalCard("Deploy to production?");
     expect(card).toEqual({ lead: "Deploy to production?", rows: [], notes: [], details: [], grantsPower: false });

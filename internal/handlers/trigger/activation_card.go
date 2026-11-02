@@ -169,7 +169,42 @@ func (c activationCard) actsOn() string {
 	return out
 }
 
+// repoList is the repositories the activation is LIMITED to: its source's
+// match filters, which every event must satisfy. Workflow inputs are not a
+// limit — an input named repo need not constrain anything the workflow does,
+// and an event mapping overrides it per event — so they are never listed
+// here, and never put a repository in the lead (inputRepos).
 func (c activationCard) repoList() []string {
+	var config map[string]any
+	_ = json.Unmarshal(c.Row.Config, &config)
+	var values []any
+	for _, key := range []string{"match", "match_any"} {
+		if scope, ok := config[key].(map[string]any); ok {
+			for _, k := range repoKeys {
+				if v, ok := scope[k]; ok {
+					values = append(values, v)
+				}
+			}
+		}
+	}
+	return discloseRepos(values...)
+}
+
+// inputRepos are the repositories the effective workflow inputs name: what a
+// run starts with, not a boundary on it.
+func (c activationCard) inputRepos() []string {
+	var values []any
+	for _, k := range repoKeys {
+		if v, ok := c.Inputs[k]; ok {
+			values = append(values, v)
+		}
+	}
+	return discloseRepos(values...)
+}
+
+// discloseRepos flattens repository values (a string, a comma list, or a
+// list of either) into distinct disclosed names, in order.
+func discloseRepos(values ...any) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(value any) {
@@ -203,21 +238,8 @@ func (c activationCard) repoList() []string {
 			}
 		}
 	}
-	var config map[string]any
-	_ = json.Unmarshal(c.Row.Config, &config)
-	for _, key := range []string{"match", "match_any"} {
-		if scope, ok := config[key].(map[string]any); ok {
-			for _, k := range repoKeys {
-				if v, ok := scope[k]; ok {
-					add(v)
-				}
-			}
-		}
-	}
-	for _, k := range repoKeys {
-		if v, ok := c.Inputs[k]; ok {
-			add(v)
-		}
+	for _, v := range values {
+		add(v)
 	}
 	return out
 }
@@ -225,6 +247,10 @@ func (c activationCard) repoList() []string {
 func (c activationCard) repositories() string {
 	if repos := c.repoList(); len(repos) > 0 {
 		return strings.Join(repos, ", ")
+	}
+	var named []string
+	if inputs := c.inputRepos(); len(inputs) > 0 {
+		named = append(named, "its inputs name "+strings.Join(inputs, ", "))
 	}
 	var steps []string
 	seen := map[string]bool{}
@@ -239,7 +265,14 @@ func (c activationCard) repositories() string {
 		}
 	}
 	if len(steps) > 0 {
-		return "Not limited by this activation; its steps name " + strings.Join(steps, ", ")
+		named = append(named, "its steps name "+strings.Join(steps, ", "))
+	}
+	if len(named) > 0 {
+		out := "Not limited by this activation; " + strings.Join(named, ", and ")
+		if c.Row.Kind != core.TriggerKindSchedule {
+			out += "; events are not limited to them"
+		}
+		return out
 	}
 	if c.Row.Kind == core.TriggerKindSchedule {
 		return "Not limited by this activation: its steps choose"

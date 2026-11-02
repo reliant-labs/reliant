@@ -108,6 +108,30 @@ func TestActivationCardWithoutNamedReposSaysWhoChooses(t *testing.T) {
 	require.Contains(t, body, "\nConnection: Your default connection, chosen when it runs\n")
 }
 
+// An input named repo is where a run starts, not a boundary: the workflow
+// need not honour it, and an event mapping overrides it per event. Only the
+// source's match filters limit the activation, so an unfiltered event trigger
+// with a default repo input neither leads with that repo nor lists it as the
+// Repositories it is limited to.
+func TestActivationCardDoesNotPresentInputsAsALimit(t *testing.T) {
+	card := prReviewCard()
+	card.Row.Config = []byte(`{"integration":"github","events":["pull_request.opened"]}`)
+	card.Inputs = map[string]any{"repo": "acme/safe"}
+	card.Summary = nil
+	body, _ := cardParts(t, card.String())
+	lead, _, _ := strings.Cut(body, "\n")
+	require.Contains(t, lead, " in this project: ", lead)
+	require.NotContains(t, lead, "acme/safe")
+	require.Contains(t, body, "\nRepositories: Not limited by this activation; its inputs name acme/safe; events are not limited to them\n")
+
+	// The match filter is the limit, whatever the inputs say.
+	card.Row.Config = []byte(`{"integration":"github","events":["pull_request.opened"],"match":{"repo":"acme/shopfront"}}`)
+	body, _ = cardParts(t, card.String())
+	lead, _, _ = strings.Cut(body, "\n")
+	require.Contains(t, lead, " for acme/shopfront: ")
+	require.Contains(t, body, "\nRepositories: acme/shopfront\n")
+}
+
 func TestActivationCardOperationVerbs(t *testing.T) {
 	for op, verb := range map[string]string{tools.ToolCreateTriggerActivation: "Turn on ", tools.ToolUpdateTriggerActivation: "Change ", tools.ToolEnableTrigger: "Turn back on "} {
 		card := prReviewCard()

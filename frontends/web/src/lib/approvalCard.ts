@@ -43,6 +43,16 @@ export interface ApprovalCard {
 
 const ROW = /^([A-Z][A-Za-z ]{1,40}): (.+)$/;
 
+/**
+ * An activation operation's technical line. Every activation approval carries
+ * one, in this card's details and in the plain-text title servers wrote
+ * before it ("Approval: …\nMachine: …\nOperation: create_trigger_activation"),
+ * which pending approvals and an older server still return. Reading either
+ * as standing power is the conservative direction: a line that wrongly
+ * matches only keeps an approval out of "Approve all".
+ */
+const ACTIVATION_OPERATION = /^Operation: (create_trigger_activation|update_trigger_activation|enable_trigger)\b/m;
+
 export function parseApprovalCard(title: string): ApprovalCard {
   const separator = `\n\n${DETAILS_HEADING}\n`;
   const at = title.indexOf(separator);
@@ -56,7 +66,7 @@ export function parseApprovalCard(title: string): ApprovalCard {
     if (match) rows.push({ label: match[1], value: match[2] });
     else notes.push(line);
   }
-  return { lead, rows, notes, details, grantsPower: at >= 0 };
+  return { lead, rows, notes, details, grantsPower: at >= 0 || ACTIVATION_OPERATION.test(title) };
 }
 
 function splitLines(text: string): string[] {
