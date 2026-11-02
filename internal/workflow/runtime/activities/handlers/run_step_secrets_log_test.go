@@ -56,7 +56,7 @@ func TestRunStepLogsAndErrorsAreMaskedOnTransportFailures(t *testing.T) {
 			repo := setupTestRepo(t)
 			chatID := createTestChat(t, repo)
 			exec := &mockRunExecutor{responses: []mockRunResponse{{exitCode: -1, err: transportErr}}}
-			a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+			a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 			// A machine that is not coming back, with a fake clock so the wait is instant.
 			clock := newFakeClock()
 			wait := defaultMachineWait()

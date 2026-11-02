@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,9 +27,7 @@ const outboxSecret = "stg_live/secret+value&k=1"
 // a gateway session whose sends are captured.
 func newShellDaemon(t *testing.T) (*daemonClient, string) {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("-short: runs a real shell; runs in the full lane")
-	}
+	testkit.Slow(t, "runs a real shell against an on-disk result outbox")
 	dir := filepath.Join(t.TempDir(), "outbox")
 	local := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{
 		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
@@ -121,6 +120,42 @@ func TestShellResultWithNoMaskValuesIsUnchanged(t *testing.T) {
 	req := maskedShellRequest(t, "req-plain", `echo "visible=$TRADER_KEY"`, map[string]string{"TRADER_KEY": outboxSecret}, nil)
 	d.executeTool(nil, req)
 	assert.Contains(t, toolResponse(t, d).Content, `visible=stg_live/secret+value\u0026k=1`, "the shell tool JSON-encodes stdout")
+}
+
+// A user's "move to background" for a secret-bearing command is not honoured:
+// adopted, its output would sit in the background manager's buffer, unmasked,
+// for shell_output to read. The command finishes in the foreground and its
+// (masked) result is the reply.
+func TestSecretBearingCommandIsNotAdoptedIntoTheBackground(t *testing.T) {
+	d, _ := newShellDaemon(t)
+	req := maskedShellRequest(t, "req-adopt", `sleep 1; echo "key=$TRADER_KEY"`,
+		map[string]string{"TRADER_KEY": outboxSecret}, []string{outboxSecret})
+	// Asked before the command starts, so the first poll sees it.
+	d.markToolExecutionBackgrounded(req.RequestId, req.ToolCallId)
+
+	d.executeTool(nil, req)
+
+	resp := toolResponse(t, d)
+	assert.NotContains(t, resp.Content, outboxSecret)
+	assert.Contains(t, resp.Content, "key=", "the command ran to completion in the foreground")
+	assert.NotContains(t, resp.Content, "process_id", "the command was adopted into the background")
+}
+
+// A secret equal to a field name of the shell envelope masks the output but
+// leaves the envelope, and so the exit code, intact across the wire.
+func TestSecretNamedLikeAnEnvelopeFieldKeepsTheVerdict(t *testing.T) {
+	d, _ := newShellDaemon(t)
+	req := maskedShellRequest(t, "req-envelope", `echo "$K"; exit 3`,
+		map[string]string{"K": "exit_code"}, []string{"exit_code", "stdout"})
+	d.executeTool(nil, req)
+	resp := toolResponse(t, d)
+	var shell struct {
+		Stdout   string `json:"stdout"`
+		ExitCode int    `json:"exit_code"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(resp.Content), &shell), resp.Content)
+	assert.Equal(t, 3, shell.ExitCode, resp.Content)
+	assert.NotContains(t, shell.Stdout, "exit_code")
 }
 
 // The mask values travel in the server-built context map only. A model cannot

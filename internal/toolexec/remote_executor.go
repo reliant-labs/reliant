@@ -395,6 +395,27 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 // input never reaches the context map.
 const SecretMaskContextKey = "secret_mask"
 
+// CapabilitySecretMask is the capability a daemon registers when it masks
+// SecretMaskContextKey's values out of a result before it stores or sends it,
+// and refuses to background a command carrying them. The server sends a
+// secret-bearing command only to a machine that advertises it: an older
+// daemon ignores the mask and would write an echoed secret to its result
+// outbox. Not a tool name; the "feature:" prefix keeps it apart from them.
+const CapabilitySecretMask = "feature:secret_mask/v1"
+
+// HasMaskValues reports whether a server-built context map lists values to
+// mask (SecretMaskContextKey), in either the in-process ([]string) or the
+// JSON-decoded ([]interface{}) form.
+func HasMaskValues(contextMap map[string]interface{}) bool {
+	switch v := contextMap[SecretMaskContextKey].(type) {
+	case []string:
+		return len(v) > 0
+	case []interface{}:
+		return len(v) > 0
+	}
+	return false
+}
+
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,
 // from server-side fields only; a model's tool input never reaches it.

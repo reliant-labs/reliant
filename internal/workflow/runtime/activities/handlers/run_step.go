@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,6 +90,9 @@ type ExecuteRunStepActivity struct {
 	// router resolves a run node's machine named by name, type or labels to
 	// the machine whose checkout the command runs in (WithDaemonRouter).
 	router toolexec.DaemonRouter
+	// capabilities reads whether a secret-bearing command's machine masks
+	// them (WithMachineCapabilities).
+	capabilities MachineCapabilities
 }
 
 // WithSecretResolver lets a run step export the workflow's declared secrets to
@@ -97,6 +101,63 @@ type ExecuteRunStepActivity struct {
 func (a *ExecuteRunStepActivity) WithSecretResolver(r SecretResolver) *ExecuteRunStepActivity {
 	a.secrets = r
 	return a
+}
+
+// MachineCapabilities reads what a machine advertised when it registered
+// (daemons.capabilities, a JSON array).
+type MachineCapabilities interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// WithMachineCapabilities lets a run step that uses secrets check its machine
+// masks them (requireSecretMasking). Without it such a step is refused.
+func (a *ExecuteRunStepActivity) WithMachineCapabilities(m MachineCapabilities) *ExecuteRunStepActivity {
+	a.capabilities = m
+	return a
+}
+
+// requireSecretMasking resolves the machine execCtx's command goes to, pins
+// the command to it, and returns "" when that machine advertises
+// toolexec.CapabilitySecretMask, else the refusal to fail the step with. An
+// older daemon ignores the mask and writes an echoed secret to its result
+// outbox, so anything it cannot be shown to support is refused.
+func (a *ExecuteRunStepActivity) requireSecretMasking(ctx context.Context, execCtx *RunExecutorContext) string {
+	const refusal = "Error: this step uses the workflow's secrets, and "
+	if a.capabilities == nil {
+		return refusal + "this worker cannot check that the machine masks them, so the command was not sent."
+	}
+	daemonID := ""
+	if execCtx.DaemonSelector != nil {
+		daemonID = execCtx.DaemonSelector.ID
+	}
+	if daemonID == "" {
+		if a.router == nil {
+			return refusal + "its machine could not be determined, so the command was not sent."
+		}
+		id, err := toolexec.ResolveDaemonIDForSelector(ctx, a.router, execCtx.UserID, execCtx.DaemonSelector)
+		if err != nil || id == "" {
+			return refusal + "its machine could not be determined, so the command was not sent."
+		}
+		daemonID = id
+	}
+	d, err := a.capabilities.GetDaemon(ctx, daemonID)
+	if err != nil || d == nil || !advertises(d.Capabilities, toolexec.CapabilitySecretMask) {
+		return refusal + "machine " + shortMachineID(daemonID) + " runs a Reliant too old to keep them out of its stored results. Update Reliant on that machine and run the step again; the command was not sent."
+	}
+	execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: daemonID}
+	return ""
+}
+
+// advertises reports whether a daemon's JSON capability list names want.
+func advertises(capsJSON *string, want string) bool {
+	if capsJSON == nil {
+		return false
+	}
+	var caps []string
+	if json.Unmarshal([]byte(*capsJSON), &caps) != nil {
+		return false
+	}
+	return slices.Contains(caps, want)
 }
 
 // WithDaemonRouter lets a run node that names its machine by name, type or
@@ -233,6 +294,18 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		refusal := missingRefusal(err)
 		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds()}, nil
+	}
+
+	// A command that will carry secrets goes only to a machine that masks
+	// them before it stores its result (toolexec.CapabilitySecretMask), and
+	// is pinned to that machine, so the one checked is the one it runs on.
+	// Checked before anything is resolved: a machine that cannot mask never
+	// receives a value, or the command.
+	if len(input.SecretRefs) > 0 {
+		if refusal := a.requireSecretMasking(ctx, &execCtx); refusal != "" {
+			return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+				Duration: time.Since(startTime).Milliseconds()}, nil
+		}
 	}
 
 	// Declared secrets: resolved here, inside the attempt, and exported to the

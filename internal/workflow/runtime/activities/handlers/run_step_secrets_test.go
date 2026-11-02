@@ -77,7 +77,7 @@ func TestRunStepExportsDeclaredSecretsAsEnvironmentVariables(t *testing.T) {
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "ok", exitCode: 0}}}
 	resolver := traderResolver()
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(resolver)
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(resolver)
 
 	out := executeRun(t, a, runSecretInput(chatID, `curl -H "X-API-Key: `+stepsecrets.Marker("TRADER_KEY")+`" https://x.example/`))
 
@@ -99,7 +99,7 @@ func TestRunStepExportsEveryDeclaredSecretEvenWithoutAPlaceholder(t *testing.T) 
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "ok"}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 	executeRun(t, a, runSecretInput(chatID, `curl -H "X-API-Key: $TRADER_KEY" https://x.example/`))
 	require.Len(t, exec.calls, 1)
 	assert.Equal(t, `curl -H "X-API-Key: $TRADER_KEY" https://x.example/`, exec.calls[0].command)
@@ -115,7 +115,7 @@ func TestRunStepMasksEveryOutputIncludingEncodedForms(t *testing.T) {
 	stdout := "key=" + stagingKey + "\nb64=" + base64.StdEncoding.EncodeToString([]byte(stagingKey)) + "\nurl=" + url.QueryEscape(stagingKey)
 	stderr := "json=" + string(jsonForm) + " raw64=" + base64.RawURLEncoding.EncodeToString([]byte(stagingKey))
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: stdout, stderr: stderr, exitCode: 3}, {exitCode: 0}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 
 	in := runSecretInput(chatID, "env")
 	in.LogFile = "/tmp/secret-logs/out.log"
@@ -146,7 +146,7 @@ func TestRunStepInputAndResultCarryNoValue(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "echoed " + stagingKey}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 
 	in := runSecretInput(chatID, `deploy --key `+stepsecrets.Marker("TRADER_KEY"))
 	rawIn, err := json.Marshal(in)
@@ -165,7 +165,7 @@ func TestRunStepErrorsAreMasked(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{err: errors.New("daemon said " + stagingKey)}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(a.Execute)
@@ -182,7 +182,7 @@ func TestRunStepShowsTheControllersDenialAndDoesNotRun(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "must not run"}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(&fakeResolver{err: &stepsecrets.DeniedError{Reason: fix}})
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(&fakeResolver{err: &stepsecrets.DeniedError{Reason: fix}})
 
 	out := executeRun(t, a, runSecretInput(chatID, "echo hi"))
 	assert.Equal(t, -1, out.ExitCode)
@@ -194,7 +194,7 @@ func TestRunStepWithoutAResolverRefusesRatherThanRunWithoutSecrets(t *testing.T)
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "must not run"}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec)
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine)
 
 	out := executeRun(t, a, runSecretInput(chatID, "echo hi"))
 	assert.Equal(t, -1, out.ExitCode)
@@ -209,7 +209,7 @@ func TestRunStepWithoutSecretsIsUnchanged(t *testing.T) {
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "hello"}}}
 	resolver := traderResolver()
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(resolver)
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(resolver)
 
 	out := executeRun(t, a, ExecuteRunStepInput{WorkflowID: "wf-1", ChatID: chatID, StepID: "s", Command: "echo ${HOME} {{ not a secret }}"})
 	assert.Equal(t, "hello", out.Stdout)
@@ -225,7 +225,7 @@ func TestRunStepChatUpdateShowsThePlaceholderAndMasksOutput(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	exec := &mockRunExecutor{responses: []mockRunResponse{{stdout: "token " + stagingKey}}}
-	a := NewExecuteRunStepActivity(repo, nil, exec).WithSecretResolver(traderResolver())
+	a := NewExecuteRunStepActivity(repo, nil, exec).WithMachineCapabilities(maskingMachine).WithSecretResolver(traderResolver())
 	executeRun(t, a, runSecretInput(chatID, "deploy --key "+stepsecrets.Marker("TRADER_KEY")))
 
 	updates := chatUpdatesOfType(t, repo, chatID, "run_output")

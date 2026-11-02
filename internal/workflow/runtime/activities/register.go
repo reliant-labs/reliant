@@ -206,6 +206,10 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor).
 		WithSecretResolver(deps.SecretResolver).
 		WithDaemonRouter(deps.DaemonRouter)
+	if deps.Repo != nil {
+		// A run step that uses secrets runs only on a machine that masks them.
+		runStep = runStep.WithMachineCapabilities(deps.Repo)
+	}
 	if deps.DaemonRouter != nil {
 		// A command that never reached its machine watches the machine while
 		// it waits, as wait_for_machine does.
