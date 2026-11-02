@@ -88,7 +88,7 @@ export function ObservabilityLimits({ limits, orgId, save, reload }: {
   return <Card>
     <CardHeader title="Spend cap & usage alerts" description="Owners and admins can edit; members can view." />
     <p className="text-sm">{limits.spendCapCents === 0n ? "No overage" : `Cap at ${dollars(limits.spendCapCents)} per month`}</p>
-    <p className="mt-2 text-sm text-muted-foreground">At the cap we stop charging and keep only errors and metrics until the 1st. A Stripe subscription is required for overage.</p>
+    <p className="mt-2 text-sm text-muted-foreground">At the cap we stop charging and keep only errors and metrics until the 1st. Add a payment method to allow overage.</p>
     <p className="mt-2 text-xs text-muted-foreground">Already charged: {dollars(limits.bounds?.chargedThisPeriodCents ?? 0n)}. Lowering the cap cannot undo already charged amounts; the server raises a lower request to that amount this month.</p>
     <p className="mt-2 text-xs text-muted-foreground">Self-serve cap: {dollars(limits.bounds?.minCents ?? 0n)}–{dollars(limits.bounds?.maxCents ?? 100000n)}. Default: {dollars(limits.bounds?.defaultCents ?? 5000n)}. No uncapped overage.</p>
     {!editing && <>
@@ -109,7 +109,7 @@ export function ObservabilityLimits({ limits, orgId, save, reload }: {
       </fieldset>
       <button type="button" className="text-sm text-primary underline" onClick={cancel}>Cancel</button>
     </form>}
-    <p className="mt-3 text-xs text-muted-foreground">Usage threshold and cap-reached notices are wired to email organization owners and admins via Resend. Delivery has not been live-tested. Selecting recipients, Slack channels or webhooks for these notices is not supported.</p>
+    <p className="mt-3 text-xs text-muted-foreground">Usage and cap-reached alerts are emailed to your organization’s owners and admins.</p>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
     {conflict && <button type="button" className="mt-2 text-primary underline" disabled={pending === "reload"} onClick={() => void reloadLatest()}>Reload latest limits</button>}
     {limits.updatedAt && <p className="mt-3 text-xs text-muted-foreground">Last changed {at(limits.updatedAt)} by {limits.updatedByEmail || "system"}.</p>}

@@ -198,7 +198,7 @@ export function WalletTopupCheckout({
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">
-          Have a coupon? Redeem it here — it covers this in full, and no card is
+          Have a coupon? Redeem it here. If it covers the full amount, no card is
           needed.
         </p>
         {/* "open", not "collapsed": on this page redeeming is a first-class way

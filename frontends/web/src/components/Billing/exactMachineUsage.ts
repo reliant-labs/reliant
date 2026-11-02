@@ -1,25 +1,34 @@
-import { compareRational, displayRatio, divideRational, formatRational, parseRational, rational } from "@/lib/exact-rational";
-import { measuredMachineUsage, overageWeightedSeconds, type DaemonUsageLike } from "./daemonUsage";
+import { compareRational, displayRatio, parseRational } from "@/lib/exact-rational";
+import { hoursAt, measuredMachineUsage, overageWeightedSeconds, type DaemonUsageLike, type HoursReference } from "./daemonUsage";
 
-/** Chart geometry is approximate; all balance arithmetic stays rational until this boundary. */
-export function exactUsageDisplay(usage: DaemonUsageLike | undefined, referenceWeight?: string) {
+/**
+ * Chart geometry is approximate; all balance arithmetic stays rational until this boundary.
+ *
+ * Hours are ONE unit everywhere: hours of the plan's own machine size, the
+ * unit a customer bought ("160 hours a month"). The server keeps balances in
+ * versioned weighted seconds; `reference` is the plan's size and its exact
+ * cost weight, which turns them back into that size's hours. Without a
+ * reference the labels are null — a weighted figure printed as "hours" would
+ * be a different, larger number than the one on the price list.
+ */
+export function exactUsageDisplay(usage: DaemonUsageLike | undefined, reference?: HoursReference | null) {
   if (!usage || !measuredMachineUsage(usage)) return null;
   const included = parseRational(usage.allowanceWeightedSeconds)!;
   const used = parseRational(usage.consumedWeightedSeconds)!;
+  const grant = parseRational(usage.grantRemainingWeightedSeconds)!;
   const overage = overageWeightedSeconds(usage);
   if (!overage) return null;
   const fraction = displayRatio(used, included);
-  const reference = parseRational(referenceWeight);
-  const hours = (amount: typeof included) => {
-    const seconds = reference ? divideRational(amount, reference) : amount;
-    return seconds ? formatRational(divideRational(seconds, rational(3600n)!)!, 1, "floor") : "unavailable";
-  };
-  const unit = reference ? "equivalent h at plan size" : "weighted h";
+  const includedHours = hoursAt(included, reference);
+  const usedHours = hoursAt(used, reference);
+  const grantHours = hoursAt(grant, reference);
   return {
-    includedLabel: `${hours(included)} ${unit} included`,
-    usedLabel: `≈ ${hours(used)} ${unit}`,
-    grantLabel: `${hours(parseRational(usage.grantRemainingWeightedSeconds)!)} ${unit}`,
-    hasGrant: parseRational(usage.grantRemainingWeightedSeconds)!.numerator > 0n,
+    includedLabel: includedHours === null ? null : `${includedHours} hours included`,
+    usedLabel: usedHours === null ? null : `${usedHours} hours`,
+    /** "62 of 160 hours used" — the one-line summary. */
+    usedOfIncludedLabel: usedHours === null || includedHours === null ? null : `${usedHours} of ${includedHours} hours used`,
+    grantLabel: grantHours === null ? null : `${grantHours} hours`,
+    hasGrant: grant.numerator > 0n,
     fraction,
     // Capacity values are normalized dimensionless geometry, never billable quantities.
     capacity: {

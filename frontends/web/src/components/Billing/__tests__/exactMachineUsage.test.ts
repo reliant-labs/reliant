@@ -7,18 +7,30 @@ describe("versioned weighted machine display", () => {
     expect(measuredMachineUsage({ usageMeasured: true, bySize: [] })).toBe(false);
     expect(exactUsageDisplay({ ...usage, billingHoldReason: "route unknown" })).toBeNull();
     expect(exactUsageDisplay({ ...usage, remainingWeightedSeconds: "NaN" })).toBeNull();
-    expect(exactUsageDisplay(usage)?.includedLabel).toBe("160.0 weighted h included");
+    // Without the plan's own size there is no honest hour figure to print.
+    expect(exactUsageDisplay(usage)?.includedLabel).toBeNull();
+  });
+  it("speaks hours at the plan's own size, one unit everywhere", () => {
+    const sized = { ...usage, consumedWeightedSeconds: "223200/1" };
+    const display = exactUsageDisplay(sized, { size: "s1", weight: "1/1" });
+    expect(display?.includedLabel).toBe("160 hours included");
+    expect(display?.usedLabel).toBe("62 hours");
+    expect(display?.usedOfIncludedLabel).toBe("62 of 160 hours used");
+    for (const label of [display?.includedLabel, display?.usedLabel, display?.usedOfIncludedLabel]) {
+      expect(label).not.toMatch(/weighted|equivalent|\.0\b/);
+    }
   });
   it("converts selected-size equivalents by exact weights, independent of retail rates", () => {
     expect(equivalentHours(usage, "207341557/145891252", "allowanceWeightedSeconds")).toBe("112.5");
-    expect(burnLabel(usage)).toContain("≈ 112.5 h left at the current");
+    expect(burnLabel(usage)).toBe("≈ 112.5 hours left at the current rate");
     expect(hoursRanOut({ ...usage, remainingWeightedSeconds: "0/1" }, false)).toBe(true);
     expect(hoursRanOut({ ...usage, remainingWeightedSeconds: "1/999999999" }, false)).toBe(false);
   });
   it("labels partial measured windows and never projects a bill from one", () => {
     const partial = { ...usage, periodStart: { seconds: 100n }, measuredFrom: { seconds: 200n } };
-    expect(usageWindowLabel(partial)).toContain("earlier use this period is not shown");
-    expect(usageWindowLabel(partial)).not.toContain("this billing period");
+    expect(usageWindowLabel(partial)).toContain("Earlier use this period isn't shown");
+    expect(usageWindowLabel(partial)).not.toContain("this billing period.");
+    expect(usageWindowLabel(usage)).not.toMatch(/do not assume|measurement window/);
     expect(projectedBillLabel({ ...partial, projectedPeriodTotalCents: "6900/1" })).toBeNull();
   });
 });
