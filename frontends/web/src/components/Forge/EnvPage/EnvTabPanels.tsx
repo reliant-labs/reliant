@@ -19,6 +19,8 @@ import Link from "@/components/forge-ui/link";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
+import type { ProjectCheckoutMissing } from "@/gen/reliant/v1/filesystem_pb";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 import { frontendsOf } from "@/services/forge/frontends";
@@ -31,6 +33,7 @@ import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/Fro
 import { formatTimestamp } from "../Overview/EnvironmentTable";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
+import { CheckoutMissing } from "./CheckoutMissing";
 import { DaemonNeeded } from "./DaemonNeeded";
 import { EnvDomains } from "./EnvDomains";
 import { LiveSecretsSection } from "./LiveSecretsSection";
@@ -96,6 +99,10 @@ export interface OverviewTabProps {
   cloudStatusLoading?: boolean;
   /** The Domains screen, where "Add a domain" lands. */
   domainsHref?: string;
+  /** Topology's ProjectCheckoutMissing, when that is why the daemon side failed. */
+  checkoutMissing?: ProjectCheckoutMissing | null;
+  /** The Reliant project's name, for the checkout-missing sentence. */
+  projectName?: string;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -129,6 +136,12 @@ export function OverviewTab(props: OverviewTabProps) {
             />
           ) : props.daemon === "loading" ? (
             <SkeletonLoader variant="form-field" />
+          ) : props.daemon === "no-checkout" && props.checkoutMissing ? (
+            <CheckoutMissing
+              missing={props.checkoutMissing}
+              projectName={props.projectName}
+              what={`the shape forge renders for ${envName}, which registering records`}
+            />
           ) : (
             <DaemonNeeded
               what={`the shape forge renders for ${envName}, which registering records`}
@@ -346,6 +359,7 @@ export function RunningTab({
   onRetry,
   retrying,
   projectName,
+  checkoutMissing,
 }: {
   envName: string;
   daemon: DaemonSide;
@@ -355,8 +369,24 @@ export function RunningTab({
   onRetry: () => void;
   retrying: boolean;
   projectName?: string;
+  /** Topology's ProjectCheckoutMissing, when that is why the daemon side failed. */
+  checkoutMissing?: ProjectCheckoutMissing | null;
 }) {
-  if (daemon === "offline" || daemon === "disabled" || (envStatusError && !envStatus)) {
+  // Not on a machine that could answer: say so, with the remedy — never
+  // "your daemon isn't answering", which a retry cannot fix.
+  const missing = projectCheckoutMissing(envStatusError) ?? (daemon === "no-checkout" ? checkoutMissing : null);
+  if (missing) {
+    return (
+      <CheckoutMissing
+        missing={missing}
+        projectName={projectName}
+        what={`what forge env up is running for ${envName}`}
+        onRetry={onRetry}
+        retrying={retrying}
+      />
+    );
+  }
+  if (daemon === "offline" || daemon === "no-checkout" || daemon === "disabled" || (envStatusError && !envStatus)) {
     return (
       <DaemonNeeded
         what={`what forge env up is running for ${envName} on your machine`}

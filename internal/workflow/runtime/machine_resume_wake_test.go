@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -123,6 +125,38 @@ func (m *fakeMachine) resumeWake(_ context.Context, in map[string]interface{}) (
 	m.wakes++
 	m.event("wake:woke")
 	return map[string]interface{}{"ready": true, "woke": true}, nil
+}
+
+// As in preflight, the resume wake hands each slice the run of Failed reports
+// the previous one returned, and drops it once a slice stops returning it.
+func TestWakeMachineForResume_CarriesTheFailedRunBetweenSlices(t *testing.T) {
+	t.Parallel()
+
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+	env.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		wakeMachineForResume(ctx, ctx, map[string]interface{}{"chat_id": "c1"}, nil, false)
+		return nil
+	}, workflow.RegisterOptions{Name: "resumeWakeSlices"})
+	env.RegisterActivityWithOptions(func(map[string]interface{}) (map[string]interface{}, error) { return nil, nil },
+		activity.RegisterOptions{Name: "MachineResumeWake"})
+	const since = "2026-10-30T18:21:03Z"
+	results := []map[string]interface{}{
+		{"waiting": true, "failed_since": since},
+		{"waiting": true, "failed_since": since},
+		{"waiting": true},
+		{"ready": true},
+	}
+	var got []interface{}
+	env.OnActivity("MachineResumeWake", mock.Anything, mock.Anything).
+		Return(func(in map[string]interface{}) (map[string]interface{}, error) {
+			got = append(got, in["failed_since"])
+			return results[len(got)-1], nil
+		})
+
+	env.ExecuteWorkflow("resumeWakeSlices")
+
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, []interface{}{nil, since, since, nil}, got)
 }
 
 type MachineResumeWakeSuite struct {

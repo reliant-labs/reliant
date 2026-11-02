@@ -41,10 +41,15 @@ func (s *Service) GetProjectGitInfo(
 		}), nil
 	}
 
-	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
 	if err != nil {
 		return nil, err
 	}
+	target, err := s.checkout(ctx, userID, project, "see its git status")
+	if err != nil {
+		return nil, err
+	}
+	repoPath := target.Join(repoRel)
 
 	// Route all git operations through daemon
 	var gitInfo struct {
@@ -58,7 +63,7 @@ func (s *Service) GetProjectGitInfo(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
+	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
 		return nil, daemonerr.Error("get git info", err)
 	}
 
@@ -99,10 +104,20 @@ func (s *Service) GetProjectGitBranches(
 		}), nil
 	}
 
-	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
 	if err != nil {
 		return nil, err
 	}
+	// A branch picker with nothing to read lists no branches, as it does
+	// for a daemon that cannot answer.
+	target, err := s.checkout(ctx, userID, project, "see its git status")
+	if err != nil {
+		logging.InfoContext(ctx, "No checkout to list git branches from", "error", err, "projectID", project.ID)
+		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
+			Branches: []*reliantv1.GitBranch{},
+		}), nil
+	}
+	repoPath := target.Join(repoRel)
 
 	// Route branch listing through daemon
 	type daemonBranch struct {
@@ -117,7 +132,7 @@ func (s *Service) GetProjectGitBranches(
 	var branchResp struct {
 		Branches []daemonBranch `json:"branches"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_branches", map[string]string{"path": repoPath}, &branchResp); err != nil {
+	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.git_branches", map[string]string{"path": repoPath}, &branchResp); err != nil {
 		logging.ErrorContext(ctx, "Failed to get git branches via daemon", "error", err, "projectID", project.ID)
 		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
@@ -167,14 +182,15 @@ func (s *Service) GetProjectChanges(
 		}), nil
 	}
 
-	if project.Path == "" {
-		return nil, svcerr.InvalidArgument("project has no path configured")
-	}
-
-	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
 	if err != nil {
 		return nil, err
 	}
+	target, err := s.checkout(ctx, userID, project, "see its git status")
+	if err != nil {
+		return nil, err
+	}
+	repoPath := target.Join(repoRel)
 
 	// Route git changes through daemon
 	type daemonFileChange struct {
@@ -190,8 +206,8 @@ func (s *Service) GetProjectChanges(
 		Files      []daemonFileChange `json:"files"`
 		TotalFiles int32              `json:"total_files"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_changes", map[string]string{"path": repoPath}, &changesResp); err != nil {
-		logging.ErrorContext(ctx, "Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", project.Path)
+	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.git_changes", map[string]string{"path": repoPath}, &changesResp); err != nil {
+		logging.ErrorContext(ctx, "Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", repoPath)
 		return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
 			Branch:     "",
 			Files:      []*reliantv1.FileChange{},
@@ -234,7 +250,7 @@ func (s *Service) InitializeGitRepo(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
-	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
+	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "is_git_repo", project.IsGitRepo)
 
 	// Check if already a git repository
 	if project.IsGitRepo {
@@ -251,6 +267,12 @@ func (s *Service) InitializeGitRepo(
 		return nil, svcerr.InvalidArgument(err.Error())
 	}
 
+	// git init runs on the machine holding the checkout, at its path there.
+	target, err := s.checkout(ctx, userID, project, "initialize git in it")
+	if err != nil {
+		return nil, err
+	}
+
 	// Route git init through daemon (handles path existence check, adopting
 	// an existing .git left behind by a previously failed init, and init)
 	var initResp struct {
@@ -263,12 +285,12 @@ func (s *Service) InitializeGitRepo(
 		GitignorePatterns []string `json:"gitignore_patterns"`
 		InitialCommit     bool     `json:"initial_commit"`
 	}{
-		Path:              project.Path,
+		Path:              target.Path,
 		InitialBranch:     initialBranch,
 		GitignorePatterns: req.Msg.GitignorePatterns,
 		InitialCommit:     req.Msg.InitialCommit,
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", initPayload, &initResp); err != nil {
+	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.init_git_repo", initPayload, &initResp); err != nil {
 		return nil, daemonerr.Error("initialize git repository", err)
 	}
 	if !initResp.Success {

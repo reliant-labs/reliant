@@ -99,14 +99,19 @@ func (s *outboundStream) abort() {
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID      string
-	daemonID    string
-	name        string
-	hostname    string
-	platform    string
-	labels      map[string]string
-	daemonType  string // "local" or "cloud"
-	connectedAt time.Time
+	userID     string
+	daemonID   string
+	name       string
+	hostname   string
+	platform   string
+	labels     map[string]string
+	daemonType string // "local" or "cloud"
+	// boundCredential: the connection was made with a credential bound to
+	// this daemon id, or dialed in by the gateway for a pod the control
+	// plane named. An unbound credential may never supersede such a
+	// connection (rejectReservedDaemon), even if the reserved row is gone.
+	boundCredential bool
+	connectedAt     time.Time
 	// lastActivity is when anything last happened on this connection in
 	// EITHER direction — a message read, a message sent, an LLM call the
 	// control plane attributed to the user (TouchDaemonsForUser). It answers

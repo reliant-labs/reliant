@@ -9,6 +9,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
 const (
@@ -26,20 +28,29 @@ type mcpManagerRuntime interface {
 // mcpManagerForUser returns an mcpManagerRuntime that proxies through the daemon
 // for the given user. MCP servers run on the user's machine (tools daemon), so
 // all runtime operations are dispatched via daemon commands.
-func (s *Service) mcpManagerForUser(userID string) mcpManagerRuntime {
-	proxy := newDaemonMCPProxy(s.deps.Router, userID)
+// mcpManagerFor runs a project's MCP servers on the machine holding its
+// checkout (the one its chats run on), never on whichever machine default
+// resolution picks: the server config it starts from lives under that
+// checkout.
+func (s *Service) mcpManagerFor(userID string, checkout projectcheckout.Target) mcpManagerRuntime {
+	proxy := s.mcpProxy(userID, checkout)
 	proxy.onChange = func() { s.statuses.invalidateUser(userID) }
 	return proxy
+}
+
+// mcpProxy is the daemon proxy pinned to the checkout's machine.
+func (s *Service) mcpProxy(userID string, checkout projectcheckout.Target) *daemonMCPProxy {
+	return newDaemonMCPProxy(checkout.Pinned(s.deps.Router), userID)
 }
 
 // serverStatus is the project's MCP server status as the daemon last reported
 // it, or nil when it is not known (no machine, or one too slow to answer in
 // time). It never waits on the daemon for long: see mcpStatusCache.
-func (s *Service) serverStatus(ctx context.Context, userID, projectPath string) *daemonMCPServerStatus {
+func (s *Service) serverStatus(ctx context.Context, userID string, checkout projectcheckout.Target) *daemonMCPServerStatus {
 	if s.deps.Router == nil || s.statuses == nil {
 		return nil
 	}
-	return s.statuses.get(ctx, userID, projectPath)
+	return s.statuses.get(ctx, userID, checkout)
 }
 
 // applyServerStatus fills in a server's runtime state from the daemon's
@@ -119,19 +130,32 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 	return svcerr.WrapOr(err, svcerr.Internal("database error"))
 }
 
-func (s *Service) getProjectPath(ctx context.Context, projectID string, userID string) (string, error) {
+// projectCheckout resolves the project to the machine holding its checkout
+// and its path there (projectcheckout.Resolve), enforcing that the caller
+// owns it. MCP config, server processes and their status all live under
+// that checkout, on that machine — never at projects.path, the creating
+// machine's path.
+func (s *Service) projectCheckout(ctx context.Context, projectID string, userID string) (projectcheckout.Target, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", svcerr.InvalidArgument("project_id is required")
+		return projectcheckout.Target{}, svcerr.InvalidArgument("project_id is required")
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
-	if svcerr.IsNotFound(err) || (err == nil && (project == nil || strings.TrimSpace(project.Path) == "")) {
-		return "", svcerr.NotFound("project")
+	if svcerr.IsNotFound(err) || (err == nil && project == nil) {
+		return projectcheckout.Target{}, svcerr.NotFound("project")
 	}
 	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
+		return projectcheckout.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-
-	return project.Path, nil
+	// A nil interface, not a typed nil, when there is no router: Resolve
+	// then names the OLDEST INSTALL, which is not the placement machine (the
+	// one the project's chats are placed on). That is enough for the
+	// read-only config this answers with no router; the sends check for the
+	// router and refuse without one.
+	var machines daemonplacement.Machines
+	if s.deps.Router != nil {
+		machines = s.deps.Router
+	}
+	return projectcheckout.Resolve(ctx, s.deps.Repo, machines, userID, project, "manage its MCP servers")
 }
 
 func normalizeScope(scope reliantv1.ConfigScope) reliantv1.ConfigScope {

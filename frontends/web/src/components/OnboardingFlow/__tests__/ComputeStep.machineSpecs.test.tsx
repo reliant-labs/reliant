@@ -284,18 +284,17 @@ describe("ComputeStep — every size says what it gives you", () => {
    * The free option answers the same question, honestly.
    *
    * It cannot promise a figure — the machine is the user's and we do not
-   * provision it — but a blank spec column beside four filled ones reads as an
+   * provision it — but a blank detail line beside four filled ones reads as an
    * option with nothing to offer, which is the demotion the owner asked to
-   * remove. Naming the trade-off is both truthful and more useful than
-   * silence.
+   * remove. Saying what machine it is, in a few words, fills the slot.
    */
-  it("describes the free option's compute in the user's own terms", () => {
+  it("describes the free option's machine in the user's own terms", () => {
     renderStep();
 
     const local = screen.getByRole("button", {
       name: /use your own computer/i,
     });
-    expect(local).toHaveTextContent(/CPU and memory it already has/i);
+    expect(local).toHaveTextContent(/your laptop or server/i);
     // Still on the same price axis as the paid rows — the property the
     // one-list layout exists to preserve.
     expect(within(local).getByText(/free/i)).toBeInTheDocument();
@@ -335,18 +334,15 @@ describe("ComputeStep — every size says what it gives you", () => {
    *
    * That makes this a structural assertion, not a styling one. The free row
    * and the priced rows must be SIBLINGS in one list that the heading
-   * introduces. Asserted by walking from the heading to the element it labels
-   * and requiring both rows inside it, so restyling is free but re-dividing
-   * the list is not.
+   * labels. Asserted by finding the group the heading names and requiring
+   * both rows inside it, so restyling is free but re-dividing the list is not.
    */
   it("makes the free option a row in the machine list, under the heading", () => {
     renderStep();
 
-    const heading = screen.getByText(/choose your machine/i);
-    const list = heading.nextElementSibling as HTMLElement | null;
-    expect(list).not.toBeNull();
+    const list = screen.getByRole("group", { name: /choose your machine/i });
 
-    const rows = within(list as HTMLElement);
+    const rows = within(list);
     const local = rows.getByRole("button", { name: /use your own computer/i });
     const small = rows.getByRole("button", { name: /^M / });
 
@@ -372,6 +368,9 @@ describe("ComputeStep — every size says what it gives you", () => {
 
     expect(screen.queryByText(/in the cloud/i)).toBeNull();
     expect(screen.queryByText(/^or use a machine we host$/i)).toBeNull();
+    // ...and the step itself asks its question once. It used to stack a page
+    // heading over a micro-heading saying the same thing at another size.
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
   });
 
   /**
@@ -433,8 +432,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     // Last thing on the step: after the machine list, and outside the box
     // that holds the options — it is the consequence of choosing, not one of
     // the choices.
-    const heading = screen.getByText(/choose your machine/i);
-    const list = heading.nextElementSibling as HTMLElement;
+    const list = screen.getByRole("group", { name: /choose your machine/i });
     expect(
       list.compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

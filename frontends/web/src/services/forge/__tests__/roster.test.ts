@@ -12,7 +12,7 @@ function live(name: string, kind: LiveEnv["kind"]): LiveEnv {
     name,
     project: "control-plane",
     kind,
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "",
     releaseProvenance: null,

@@ -413,7 +413,12 @@ export function useStartChat() {
   });
 }
 
-export function useDeleteChat() {
+/**
+ * Delete an ARCHIVED chat for good. The server refuses a chat that is not
+ * archived, so this can never quietly archive instead; archiving is
+ * useArchiveChat. Callers confirm first: there is no undo.
+ */
+export function usePermanentlyDeleteChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => chatActions.deleteChat(chatId),

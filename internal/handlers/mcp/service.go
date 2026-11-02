@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -65,8 +66,8 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	s := &Service{deps: deps}
-	s.statuses = newMCPStatusCache(func(ctx context.Context, userID, projectPath string) (*daemonMCPServerStatus, error) {
-		return newDaemonMCPProxy(s.deps.Router, userID).serverStatus(ctx, projectPath)
+	s.statuses = newMCPStatusCache(func(ctx context.Context, userID string, checkout projectcheckout.Target) (*daemonMCPServerStatus, error) {
+		return s.mcpProxy(userID, checkout).serverStatus(ctx, checkout.Path)
 	})
 	return s, nil
 }

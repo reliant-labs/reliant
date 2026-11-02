@@ -303,12 +303,17 @@ func TestCreateWorktree_NoMachineChatWithRequestedMachine_NeverWakes(t *testing.
 	chatID := f.noMachineChat(t)
 	machine := asleepMachineB
 
-	_, err := f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
 		ProjectId: f.projectID, Name: "nm-" + uuid.NewString()[:8], Branch: "nm-branch",
 		ChatId: &chatID, DaemonId: &machine,
 	}))
 	if err != nil {
 		assert.False(t, machinewake.IsWaking(err), "got %v", err)
+	} else {
+		// The checkouts are made in the background, after the response: they
+		// must not wake the machine either. Wait for them to settle (the
+		// machine is asleep, so they fail) before looking.
+		awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 	}
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake a machine, even one it names")
 }

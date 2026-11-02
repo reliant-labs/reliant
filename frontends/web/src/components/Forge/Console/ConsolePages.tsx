@@ -33,6 +33,8 @@ import { SecretsMatrix } from "../Secrets/SecretsMatrix";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
+import { DeployStatusUnread, deployStatusUnread } from "./DeployStatusUnread";
 import { DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
@@ -126,16 +128,17 @@ function NothingDeployed({ what, about }: { what: string; about: string }) {
       icon={<Rocket className="h-4 w-4" />}
       title="Nothing deployed yet"
       about={about}
+      agent={<DeployWithAgentButton env={null} />}
       steps={[
         {
           text: "Deploy an environment through Reliant from your checkout. It builds, cuts a release and deploys it.",
-          command: "forge env deploy <env>",
+          command: "reliant forge env deploy <env>",
         },
       ]}
       docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
     >
       <p>
-        An environment has {what} once a release is promoted to it. A local environment (forge env up) runs your working tree and
+        An environment has {what} once a release is promoted to it. A local environment (reliant forge env up) runs your working tree and
         records none.
       </p>
     </GettingStarted>
@@ -243,7 +246,10 @@ export function ActivityPage() {
               <ActivityFeed scope={feedScope} subject={forgeProject} empty="Nothing recorded yet." testId="activity-stream-feed" />
             </Panel>
           )}
-          {envs.length === 0 && !scoped && (
+          {envs.length === 0 && !scoped && deployStatusUnread(roster.live) && (
+            <DeployStatusUnread state={deployStatusUnread(roster.live)!} testId="activity-unread" />
+          )}
+          {envs.length === 0 && !scoped && !deployStatusUnread(roster.live) && (
             <NothingDeployed
               what="activity"
               about="Activity is everything that changed in this project: each promotion and rollback, what the platform observed after it, and what people and agents did."

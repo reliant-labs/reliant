@@ -32,6 +32,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { useNavigate } from "@tanstack/react-router";
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
@@ -136,9 +137,11 @@ function ResolveName({
           knows of
           {topology.data?.kind === "not-forge-project"
             ? ": there is no forge.yaml in it."
-            : topology.error
-              ? ", and its daemon could not be asked."
-              : "."}{" "}
+            : projectCheckoutMissing(topology.error)
+              ? ", and it isn't checked out on any of your machines that could read its forge.yaml."
+              : topology.error
+                ? ", and its daemon could not be asked."
+                : "."}{" "}
           Choose another, or deploy this one with forge to see it here.
         </>
       }

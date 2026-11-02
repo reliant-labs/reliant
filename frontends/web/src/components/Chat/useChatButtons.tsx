@@ -77,7 +77,7 @@ export function useChatButtons({
         tooltip="Queue message for the agent's next turn (Enter)"
         testId="queue-send-button"
         compact={compact}
-        className="h-7 w-7 p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
+        className="w-[32px] p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
       >
         <CornerDownLeft className="h-4 w-4" />
       </ChatButton>
@@ -93,7 +93,7 @@ export function useChatButtons({
           tooltip={effectiveStreaming ? "Stop generation (Esc)" : "Send message (Enter)"}
           testId={effectiveStreaming ? undefined : "send-button"}
           compact={compact}
-          className={`h-7 w-7 p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          className={`w-[32px] p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
             stableStreaming
               ? "bg-[var(--chat-button-bg)] text-destructive-ink border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
               : canSend && !disabled

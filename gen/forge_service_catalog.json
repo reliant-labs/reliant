@@ -33469,6 +33469,11 @@
               "Name": "user_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "account_email",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ]
         },
@@ -34488,6 +34493,10 @@
             {
               "name": "user_id",
               "kind": "string"
+            },
+            {
+              "name": "account_email",
+              "kind": "string"
             }
           ],
           "reliant.v1.ReportToolResultRequest": [
@@ -34877,6 +34886,10 @@
           "reliant.v1.WhoAmIResponse": [
             {
               "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_email",
               "kind": "string"
             }
           ]
@@ -46212,7 +46225,7 @@
     {
       "consumer": "DaemonAuth",
       "field": "Tokens",
-      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenIntrospector",
+      "interface": "github.com/reliant-labs/reliant/internal/auth.AccessTokenAccountIntrospector",
       "methods": [],
       "candidates": [
         "TokenAuthority"

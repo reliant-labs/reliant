@@ -1183,6 +1183,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		ClearProviderPins: rtx.ClearProviderPins,
 		Descendant:        rtx.Descendant,
 		PresetModelTags:   rtx.PresetModelTags,
+		ChatModel:         chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen: rtx.ThreadModelChosen,
 		ThreadID:          thread,
 		Routing:           a.routing,
 		Failover:          rtx.Failover,
@@ -1878,6 +1880,9 @@ streamLoop:
 	if driverErrored {
 		a.collectUsageAfterStreamError(eventChan, streamState)
 	}
+	// The request ends here: the bookkeeping below, and the ledger writes of
+	// any request the driver retried, are not part of its latency.
+	llmLatencyMs := streamState.retries.finish().Sub(llmCallStart).Milliseconds()
 
 	// A cancelled stream closes the channel without a further event, so the
 	// backoff marker would otherwise outlive the call that opened it and report a
@@ -1892,7 +1897,6 @@ streamLoop:
 		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
 	}
 
-	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
 	usageErr := streamErr
 	if streamInterrupted {
 		usageErr = nil

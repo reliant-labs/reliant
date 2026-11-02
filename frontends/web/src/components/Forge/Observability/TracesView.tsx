@@ -12,6 +12,11 @@
  * With a group-by, the server also answers the RED summary per group, drawn
  * as a comparison table above the list: prod against staging, one version
  * against the next. Choosing a group narrows to it (adds its filters).
+ *
+ * Above the list, the latency chart plots the same loaded traces, one dot
+ * each (traceScatter/TraceLatencyChart). Brushing a region of it narrows the
+ * list to the traces inside; the region is page state, not URL state, since
+ * it selects among the traces loaded so far.
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -26,7 +31,7 @@ import {
   useTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { AlertCircle, ArrowDown, ArrowUp, Search } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, Search, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
@@ -43,6 +48,8 @@ import { filterParam, formatFilterToken, groupLabel, type FilterToken } from "./
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
+import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
+import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -137,6 +144,17 @@ function TraceList({
   const redGroups = traces.data?.pages[0]?.redGroups ?? [];
   const filterError = traces.error && obsErrorKind(traces.error) === "invalid" ? obsErrorMessage(traces.error) : null;
   const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration;
+  const points = useMemo(() => pointsOf(rows), [rows]);
+  // The brushed region belongs to the filters it was drawn over: new filters
+  // load other traces, and a region kept across them would select nothing.
+  const [selection, setSelection] = useState<{ filters: TraceFilters; region: TraceRegion } | null>(null);
+  const region = selection?.filters === filters ? selection.region : null;
+  const visibleRows = useMemo(() => {
+    if (!region) return rows;
+    const inside = new Set(points.filter((p) => inRegion(p, region)).map((p) => p.traceId));
+    return rows.filter((row) => inside.has(row.traceId));
+  }, [rows, points, region]);
+  const failed = !!traces.error && !traces.data && !filterError;
 
   return (
     <div className="space-y-3" data-testid="obs-traces">
@@ -165,12 +183,26 @@ function TraceList({
           }}
         />
       )}
+      <TraceLatencyChart
+        status={traces.isLoading ? "loading" : failed ? "error" : "ready"}
+        points={points}
+        window={traces.data?.pages[0]?.window ?? null}
+        complete={!traces.hasNextPage}
+        total={red?.traceCount ?? null}
+        filtered={filtered}
+        region={region}
+        onRegion={(next) => setSelection(next ? { filters, region: next } : null)}
+        onOpen={(traceId) => navigate({ trace: traceId, span: undefined })}
+      />
       {traces.data && <ObsAsOf updatedAt={traces.dataUpdatedAt} />}
+      {region && rows.length > 0 && (
+        <RegionBar region={region} shown={visibleRows.length} loaded={rows.length} onClear={() => setSelection(null)} />
+      )}
       {traces.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-traces-loading" />
         </Card>
-      ) : traces.error && !traces.data && !filterError ? (
+      ) : failed ? (
         <ObsError error={traces.error} subject={subject} onRetry={() => void traces.refetch()} retrying={traces.isFetching} />
       ) : rows.length === 0 && !filterError ? (
         <ObsNoData
@@ -180,9 +212,17 @@ function TraceList({
           onWiden={() => navigate({ range: "7d" })}
           onClearFilters={() => navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined })}
         />
+      ) : region && visibleRows.length === 0 ? (
+        <Card className="text-center" data-testid="obs-trace-region-empty">
+          <p className="text-sm font-medium text-ink">No loaded traces fall in the selected region</p>
+          <p className="mt-1 text-xs text-ink-muted">Drag a larger region on the chart, or clear the selection to see every loaded trace.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setSelection(null)}>
+            Clear selection
+          </Button>
+        </Card>
       ) : rows.length > 0 ? (
         <TraceTable
-          traces={rows}
+          traces={visibleRows}
           subject={subject}
           hasMore={!!traces.hasNextPage}
           loadingMore={traces.isFetchingNextPage}
@@ -196,6 +236,30 @@ function TraceList({
 
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
+
+/** What the brushed region is, how many loaded traces it keeps, and the way out of it. */
+function RegionBar({ region, shown, loaded, onClear }: { region: TraceRegion; shown: number; loaded: number; onClear: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs"
+      data-testid="obs-trace-region"
+    >
+      <span className="text-ink">
+        <span className="font-medium tabular-nums">
+          {formatCount(shown)} of {formatCount(loaded)}
+        </span>{" "}
+        loaded traces started {formatTimestamp(region.startMs)} to {formatTimestamp(region.endMs)} and took{" "}
+        <span className="tabular-nums">
+          {formatDuration(region.minMs)} to {formatDuration(region.maxMs)}
+        </span>
+      </span>
+      <Button variant="ghost" size="sm" onClick={onClear} leftIcon={<X className="h-3.5 w-3.5" />} data-testid="obs-trace-region-clear">
+        Clear selection
+      </Button>
+    </div>
+  );
+}
 
 type RedGroupRow = { label: string; group: Record<string, string>; red: TraceRed };
 
