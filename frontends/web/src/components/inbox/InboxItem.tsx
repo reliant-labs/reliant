@@ -311,17 +311,19 @@ interface BatchMember {
  *
  * A batch is one chat's, so one BatchApprove (or BatchDeny) decides it. The
  * server skips any approval decided elsewhere in the meantime and refuses only
- * when none was left, which reads here as "Already handled".
+ * when none of the submitted ones was left, which reads here as "Already
+ * handled" for those alone: an approval left out of the request (an
+ * old-format activation) is still waiting, so its row stays.
  */
 export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismissAll }: InboxApprovalBatchProps) {
-  const [handled, setHandled] = useState(false);
+  // The rows the server said were already decided: shown as such, then removed.
+  const [handled, setHandled] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<ApprovalBatchPlan<BatchMember> | null>(null);
   const queryClient = useQueryClient();
   const approve = useBatchApprove();
   const deny = useBatchDeny();
   const first = items[0]!;
-  const itemIds = useMemo(() => items.map((item) => item.itemId), [items]);
   const plan = useMemo(
     () =>
       planApprovalBatch(
@@ -340,9 +342,12 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
 
   useEffect(() => {
     if (!handled) return;
-    const timer = window.setTimeout(() => removeInboxItems(itemIds, queryClient), ALREADY_HANDLED_MS);
+    const timer = window.setTimeout(() => {
+      removeInboxItems(handled, queryClient);
+      setHandled(null);
+    }, ALREADY_HANDLED_MS);
     return () => window.clearTimeout(timer);
-  }, [handled, itemIds, queryClient]);
+  }, [handled, queryClient]);
 
   const act = async (verb: "approve" | "deny", members: BatchMember[]) => {
     setBusy(true);
@@ -355,7 +360,7 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
         queryClient,
       );
     } catch (error) {
-      if (isAlreadyResolvedError(error)) setHandled(true);
+      if (isAlreadyResolvedError(error)) setHandled(members.map((m) => m.itemId));
       else toast.error(`Could not ${verb} them`, { description: errorText(error) });
     } finally {
       setBusy(false);
@@ -366,6 +371,7 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
   const batchId = first.payload.case === "approval" ? first.payload.value.batchId : "";
   const count = plan.together.length;
   const apart = plan.apart.length;
+  const waiting = handled ? items.filter((item) => !handled.includes(item.itemId)) : items;
   return (
     <li className="relative" data-testid={`inbox-approval-batch-${batchId}`}>
       <div className="group/row flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2 transition-colors hover:bg-muted/40 focus-within:bg-muted/40">
@@ -419,9 +425,9 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
           {!handled && <DismissButton label={`Dismiss ${items.length} approvals for ${subjectName(first)}`} onClick={() => onDismissAll(items)} />}
         </div>
       </div>
-      {!handled && (
+      {waiting.length > 0 && (
         <ul aria-label={`Approvals for ${subjectName(first)}`} className="divide-y divide-border/60 border-t border-border/60">
-          {items.map((item) => (
+          {waiting.map((item) => (
             <InboxItem
               key={item.itemId}
               item={item}

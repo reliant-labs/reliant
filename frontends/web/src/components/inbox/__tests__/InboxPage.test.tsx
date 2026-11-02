@@ -19,7 +19,6 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
-  InboxApprovalSchema,
   type HeldWorktreeSchema,
   InboxApprovalSchema,
   InboxAutomationFailingSchema,
@@ -379,6 +378,24 @@ describe("InboxPage item kinds", () => {
     const batch = await screen.findByTestId("inbox-approval-batch-b");
     await userEvent.click(within(batch).getByRole("button", { name: "Deny all 2" }));
     expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+  });
+
+  it("when the approvals it sent were already decided, an approval left out of the batch stays", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nOperation: enable_trigger";
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?"), batched("l-1", legacy)]);
+    mocks.batchApprove.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+    // Only what was sent is handled: the old-format activation is still waiting.
+    expect(within(batch).queryByTestId("inbox-item-approval:r-1")).toBeNull();
+    expect(within(batch).getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
+    respond([batched("l-1", legacy)]);
+    await waitFor(() => expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("inbox-item-approval:r-1")).toBeNull(), { timeout: 4000 });
+    expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
   });
 
   it("an approval already handled elsewhere says so instead of erroring", async () => {
