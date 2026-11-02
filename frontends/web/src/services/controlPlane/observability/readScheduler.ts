@@ -28,17 +28,19 @@
  *  1. A read that starts takes one of the browser's shared slots first
  *     (crossTabSlots: OBS_READ_CONCURRENCY Web Locks every same-origin tab
  *     draws on), so the browser as a whole stays under the server's cap.
+ *     Without Web Locks the limit is per tab instead (crossTabSlots
+ *     perTabGate, reported once): each tab holds its own cap, no more.
  *  2. A hidden page starts nothing new. The tab being read goes first, rather
  *     than queueing behind every dashboard opened in a background tab; a
  *     hidden page's reads start when it is shown. Reads already running finish.
  */
 
-import { browserSlotGate, passThroughGate, type SlotGate } from "./crossTabSlots";
+import { browserSlotGate, perTabGate, type SlotGate } from "./crossTabSlots";
 
 /** control-plane's per-user, per-org concurrent-read cap (obsratelimit.DefaultMaxInFlight). */
 export const SERVER_READ_CAP = 6;
 
-/** At or below the server's cap, for the whole browser (crossTabSlots); the difference is headroom for the user's other devices. */
+/** At or below the server's cap, for the whole browser (crossTabSlots; per tab without Web Locks); the difference is headroom for the user's other devices. */
 export const OBS_READ_CONCURRENCY = 4;
 
 interface Entry {
@@ -64,7 +66,7 @@ export const documentVisibility: PageVisibility = {
 };
 
 export interface ReadSchedulerOptions {
-  /** The browser-wide slots a starting read takes (crossTabSlots). Default: none, the page queue alone. */
+  /** The browser-wide slots a starting read takes (crossTabSlots). Default: perTabGate, this scheduler's own cap alone. */
   gate?: SlotGate;
   /** Default: always visible. */
   visibility?: PageVisibility;
@@ -79,7 +81,7 @@ export class ReadScheduler {
 
   constructor(maxConcurrent: number = OBS_READ_CONCURRENCY, options: ReadSchedulerOptions = {}) {
     this.maxConcurrent = Math.max(1, maxConcurrent);
-    this.gate = options.gate ?? passThroughGate;
+    this.gate = options.gate ?? perTabGate;
     this.visibility = options.visibility;
     // Shown again: start what waited while the page was hidden.
     this.visibility?.onChange(() => this.pump());

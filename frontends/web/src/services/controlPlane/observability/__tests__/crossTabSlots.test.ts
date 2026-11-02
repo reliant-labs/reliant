@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { browserSlotGate, lockSlotGate, OBS_READ_LOCK_PREFIX, passThroughGate, type LockRequester } from "../crossTabSlots";
+import { browserSlotGate, lockSlotGate, OBS_READ_LOCK_PREFIX, perTabGate, resetPerTabReportForTests, type LockRequester } from "../crossTabSlots";
 import { OBS_READ_CONCURRENCY, ReadScheduler, type PageVisibility } from "../readScheduler";
 
 /**
@@ -120,10 +120,53 @@ describe("lockSlotGate", () => {
     await expect(gate.run(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
     expect(await gate.run(async () => "next")).toBe("next");
   });
+});
 
-  it("falls back to the page queue alone where the platform has no Web Locks", async () => {
-    // jsdom has no navigator.locks, like an old browser.
-    expect(browserSlotGate(OBS_READ_CONCURRENCY)).toBe(passThroughGate);
+describe("browserSlotGate without Web Locks: a per-tab limit", () => {
+  beforeEach(() => resetPerTabReportForTests());
+
+  it("uses the browser-wide lock slots where the platform has Web Locks, and reports nothing", () => {
+    const warn = vi.fn();
+    expect(browserSlotGate(OBS_READ_CONCURRENCY, { locks: new FakeLocks(), warn })).not.toBe(perTabGate);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the per-tab gate and says so once per page, not on every scheduler", () => {
+    const warn = vi.fn();
+    expect(browserSlotGate(OBS_READ_CONCURRENCY, { locks: undefined, warn })).toBe(perTabGate);
+    expect(browserSlotGate(OBS_READ_CONCURRENCY, { locks: undefined, warn })).toBe(perTabGate);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/limited per tab \(4 at a time\), not across tabs/);
+  });
+
+  it("is what jsdom gets: it has no navigator.locks, like an old browser", () => {
+    expect(browserSlotGate(OBS_READ_CONCURRENCY)).toBe(perTabGate);
+  });
+
+  it("holds each tab to its own cap, and no more: tabs together are not limited", async () => {
+    const tabs = Array.from({ length: 2 }, () =>
+      new ReadScheduler(OBS_READ_CONCURRENCY, { gate: browserSlotGate(OBS_READ_CONCURRENCY, { locks: undefined, warn: () => {} }) })
+    );
+    const release = deferred();
+    const running = [0, 0];
+    const reads = tabs.flatMap((tab, t) =>
+      Array.from({ length: OBS_READ_CONCURRENCY + 2 }, () =>
+        tab.run(async () => {
+          running[t]!++;
+          await release.promise;
+          return "ok";
+        })
+      )
+    );
+    // The per-tab gate starts a read as soon as its tab admits it: no waiting to observe.
+    expect(running).toEqual([OBS_READ_CONCURRENCY, OBS_READ_CONCURRENCY]);
+    expect(tabs.map((tab) => tab.stats)).toEqual([
+      { running: OBS_READ_CONCURRENCY, queued: 2 },
+      { running: OBS_READ_CONCURRENCY, queued: 2 },
+    ]);
+
+    release.resolve("go");
+    expect(await Promise.all(reads)).toHaveLength(2 * (OBS_READ_CONCURRENCY + 2));
   });
 });
 
