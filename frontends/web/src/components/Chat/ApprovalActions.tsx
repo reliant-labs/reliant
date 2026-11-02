@@ -58,7 +58,7 @@ export function ApprovalActions({
         aria-label={approveName}
         aria-keyshortcuts={showShortcut ? `${shortcutKey === "⌘" ? "Meta" : "Control"}+Enter` : undefined}
         className={cn(
-          "flex items-center justify-center gap-2 rounded font-medium bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+          "flex items-center justify-center gap-2 rounded font-medium bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
           size,
         )}
       >
@@ -75,7 +75,7 @@ export function ApprovalActions({
         disabled={disabled}
         aria-label={denyName}
         className={cn(
-          "rounded border border-border bg-background font-medium text-destructive-ink transition-colors hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+          "rounded border border-border bg-background font-medium text-destructive-ink transition-colors hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
           size,
         )}
       >

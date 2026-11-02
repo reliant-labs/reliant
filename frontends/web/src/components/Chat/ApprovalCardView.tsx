@@ -44,7 +44,7 @@ export function ApprovalCardView({ title, hideLead, className }: ApprovalCardVie
       )}
       {card.details.length > 0 && (
         <details className="group rounded-md border border-border/60 bg-background">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
             <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" aria-hidden="true" />
             Technical details
           </summary>
