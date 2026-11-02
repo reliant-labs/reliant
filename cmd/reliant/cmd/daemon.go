@@ -270,6 +270,13 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 				creds.GatewayURL = gwURL
 				persistDaemonCredentials(creds)
 			}
+			// Say so: a saved credential prints no pairing code, and a person
+			// whose Add machine sheet is waiting for one — a new user on a
+			// machine still signed in as someone else — otherwise sees only
+			// "connected", as an account that is not theirs.
+			if !nonInteractive {
+				fmt.Fprint(cmd.OutOrStdout(), savedSignInNotice(creds, conn))
+			}
 			return creds, nil
 		}
 	} else if !nonInteractive {
@@ -286,6 +293,19 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
 	return creds, nil
+}
+
+// savedSignInNotice is what `daemon start` prints before connecting with a
+// credential saved by an earlier sign-in: that it is doing so, which is why no
+// pairing code follows, and how to sign in as someone else instead.
+func savedSignInNotice(creds *auth.DaemonCredentials, conn *connection) string {
+	saved := "Using the daemon sign-in saved on this machine"
+	if !creds.RegisteredAt.IsZero() {
+		saved += " on " + creds.RegisteredAt.Local().Format("2 Jan 2006")
+	}
+	return fmt.Sprintf("%s, so there is no pairing code to approve.\n"+
+		"Not you? Run 'reliant auth logout%s', then 'reliant daemon start%s' again.\n",
+		saved, conn.serverFlagHint(), conn.serverFlagHint())
 }
 
 // daemonCredentialPollInterval is how often a non-interactive daemon with no
@@ -599,7 +619,7 @@ After registering, run 'reliant daemon start' to connect.`,
 				fmt.Fprintln(cmd.OutOrStdout(), "Daemon is already registered")
 				fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
 				fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", creds.ServerURL)
-				fmt.Fprintf(cmd.OutOrStdout(), "\nTo re-register, delete the credentials file and run this command again.\n")
+				fmt.Fprintf(cmd.OutOrStdout(), "\nTo re-register, run 'reliant auth logout%s' and then this command again.\n", conn.serverFlagHint())
 				return nil
 			}
 
@@ -746,7 +766,8 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register').
+     earlier 'daemon start' or 'reliant daemon register'). It says so before
+     connecting; 'reliant auth logout' removes it, to sign in as someone else.
   3. Otherwise it pairs the machine: it prints a short code and a link, and
      you approve "this machine" in the Reliant app — on the link, or by typing
      the code into the Add machine window. Nothing has to reach back to this

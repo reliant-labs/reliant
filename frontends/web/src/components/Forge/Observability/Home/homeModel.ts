@@ -49,8 +49,16 @@ export function alertService(alert: Pick<AlertInstance, "labels">): string | und
  * One row per service (per environment, when every environment is in
  * scope). Its status is its workload's server-side verdict; a service with no
  * workload telemetry is degraded when its error rate is high or an alert about
- * it is firing, healthy otherwise. Reliant's own operator telemetry is not a
- * service of the project and is left out.
+ * it is firing, healthy otherwise.
+ *
+ * Every service is kept, operator data included. The overview is read scoped
+ * to the project's environments, so a row here carries one of the project's
+ * environment ids: it IS a process of the project. `operatorData` only says
+ * the process stamps `reliant.source=platform` (or daemon/gateway), which is
+ * exactly what the platform's own project (control-plane, in tenant zero)
+ * does for every one of its processes — dropping those rows emptied its
+ * Process health ("No process sent telemetry") while admin-server and the
+ * rest were sending spans.
  */
 export function serviceRows(
   services: readonly ServiceHealth[],
@@ -59,7 +67,6 @@ export function serviceRows(
   envNameOf: (id: string) => string | undefined
 ): ServiceRow[] {
   return services
-    .filter((s) => !s.operatorData)
     .map((health) => {
       const env = health.group[ENV_KEY] ?? null;
       const workload = workloads.find((w) => w.workload === health.name && (env === null || w.envName === env)) ?? null;

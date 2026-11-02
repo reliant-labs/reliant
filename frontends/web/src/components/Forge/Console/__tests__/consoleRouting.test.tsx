@@ -371,9 +371,9 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/domains", { env: "prod" });
   });
 
-  it("lands a view that is not a nav entry on the first view", async () => {
+  it("lands a view that is not a nav entry on the first view, Dashboards", async () => {
     const router = renderAt("/forge/p/alpha/observability/heatmaps?env=e2e");
-    await landsOn(router, "/forge/p/alpha/observability/graph", { env: "e2e" });
+    await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
   });
 
   it("lands the retired Observability home on the Overview, which carries its strip", async () => {

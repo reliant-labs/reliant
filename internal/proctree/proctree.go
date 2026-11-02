@@ -33,13 +33,24 @@
 // Windows, a cgroup that is not delegated — and never stop a command from
 // starting: a broken limiter must never stop work.
 //
+// A tree whose leader is credsandbox's init is also entered in
+// internal/procledger for its lifetime, with the paths it holds: the init is
+// undumpable, and the ledger is how a workspace retirement knows what it holds
+// open without reading its descriptors (reliant#1998).
+//
 //forge:exclude-contract: one concrete policy over exec.Cmd values and the daemon's own cgroup v2 subtree; local /proc and /sys only, no second implementation
 package proctree
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"sync"
+
+	"github.com/reliant-labs/reliant/internal/credsandbox"
+	"github.com/reliant-labs/reliant/internal/procledger"
 )
 
 // DefaultPidsMax is the per-command process limit where cgroups allow one: well
@@ -126,6 +137,12 @@ type Tree struct {
 	dir   string // the command's cgroup, "" when it has none
 	fd    int    // the cgroup directory, open until the command starts; -1 when none
 	pid   int
+	// footprint is what the tree's leader holds, for a credsandbox init
+	// (accountedFootprint); nil for any other command, whose leader /proc can
+	// show.
+	footprint []string
+	// accounted is the ledger entry made at Started, until Release forgets it.
+	accounted *procledger.Process
 }
 
 // Prepare readies cmd, which must not have been started, to run as a bounded
@@ -136,6 +153,9 @@ type Tree struct {
 func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	t := &Tree{l: l, owner: owner, fd: -1}
 	setProcessGroup(cmd)
+	if credsandbox.IsInit(cmd) {
+		t.footprint, _ = accountedFootprint(cmd)
+	}
 	if l == nil || l.root == "" {
 		return t
 	}
@@ -163,7 +183,75 @@ func (t *Tree) Started(pid int) {
 	if t.l != nil && t.l.nproc > 0 {
 		t.limitNproc()
 	}
+	t.account()
 	register(t)
+}
+
+// account enters a credsandbox init in the ledger. The child is not reaped
+// until the caller's Wait, so the pid read here is still this process's, and
+// its start time pins the entry to it.
+func (t *Tree) account() {
+	if t.footprint == nil {
+		return
+	}
+	pgid, start, ok := processIdentity(t.pid)
+	if !ok {
+		return
+	}
+	p := procledger.Process{Pid: t.pid, Pgid: pgid, Start: start, Paths: t.footprint}
+	procledger.Record(p)
+	t.accounted = &p
+}
+
+// forget drops the ledger entry once the command is done with.
+func (t *Tree) forget() {
+	if t != nil && t.accounted != nil {
+		procledger.Forget(t.accounted.Pid, t.accounted.Start)
+		t.accounted = nil
+	}
+}
+
+// accountedFootprint lists every path a credsandbox init started by cmd holds:
+// its working directory, its executable and each file on its descriptors, in
+// the resolved form /proc reports. ok is false when one of those cannot be
+// named, and the init then goes unaccounted: a retirement holds for it.
+func accountedFootprint(cmd *exec.Cmd) (paths []string, ok bool) {
+	dir := cmd.Dir
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, false
+		}
+		dir = wd
+	}
+	named := []string{dir, cmd.Path}
+	files := slices.Clone(cmd.ExtraFiles)
+	for _, std := range []any{cmd.Stdin, cmd.Stdout, cmd.Stderr} {
+		if f, isFile := std.(*os.File); isFile {
+			files = append(files, f)
+		}
+	}
+	for _, f := range files {
+		if f == nil {
+			continue
+		}
+		name := f.Name()
+		// os.Pipe's ends are "|0" and "|1": no path at all.
+		if name == "|0" || name == "|1" {
+			continue
+		}
+		named = append(named, name)
+	}
+	for _, name := range named {
+		if !filepath.IsAbs(name) {
+			return nil, false
+		}
+		if resolved, err := filepath.EvalSymlinks(name); err == nil {
+			name = resolved
+		}
+		paths = append(paths, filepath.Clean(name))
+	}
+	return paths, true
 }
 
 // Cgroup is the tree's cgroup directory, "" when it has none.

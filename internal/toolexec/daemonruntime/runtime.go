@@ -59,16 +59,19 @@ const (
 )
 
 type daemonClient struct {
-	// identityMu guards daemonID and userID: a registration ack on a new
-	// stream writes them while calls still running from a draining stream
-	// read them (gateway_session.go).
+	// identityMu guards daemonID, userID and accountEmail: a registration
+	// ack on a new stream writes them while calls still running from a
+	// draining stream read them (gateway_session.go).
 	identityMu sync.RWMutex
 	daemonID   string
 	daemonName string
 	userID     string
-	hostname   string
-	platform   string
-	cwd        string
+	// accountEmail is userID's email as the gateway last named it
+	// (RegistrationAck.account_email); "" when it named none.
+	accountEmail string
+	hostname     string
+	platform     string
+	cwd          string
 	// serverURL is the API server origin these credentials belong to. Used
 	// as the per-origin key into ~/.reliant/daemon.json when persisting the
 	// server-assigned daemonID after registration. Empty in server mode.
@@ -195,6 +198,29 @@ func (d *daemonClient) currentUserID() string {
 	return d.userID
 }
 
+// recordAccount takes the account a registration ack names. The email is
+// replaced along with the id, never kept from an earlier ack: a stale email
+// beside a new account would name the wrong person. An ack naming no account
+// changes nothing.
+func (d *daemonClient) recordAccount(ack *reliantv1.RegistrationAck) {
+	if ack.GetUserId() == "" {
+		return
+	}
+	d.identityMu.Lock()
+	d.userID = ack.GetUserId()
+	d.accountEmail = strings.TrimSpace(ack.GetAccountEmail())
+	d.identityMu.Unlock()
+}
+
+// currentAccount is the account the gateway last said this daemon serves, as
+// the connected banner names it: its email when the gateway named one, else
+// its user id.
+func (d *daemonClient) currentAccount() (userID, email string) {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.userID, d.accountEmail
+}
+
 // projectSnapshot builds the config snapshot for projectPath.
 func (d *daemonClient) projectSnapshot(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	if d.buildSnapshot != nil {
@@ -230,6 +256,9 @@ type Guards struct {
 	// HeavyCommands are the heavy-command patterns. Nil is
 	// heavyjob.DefaultCommands; empty declares nothing heavy by pattern.
 	HeavyCommands []string
+	// HeavyShare is the CPUs each slotted command may use; zero derives
+	// it from the slot pool (heavyjob.DefaultShare).
+	HeavyShare int
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -492,6 +521,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
+		Share:    guards.HeavyShare,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.
@@ -825,8 +855,7 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Fprintf(logging.Notices(), "\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
-		fmt.Fprintf(logging.Notices(), "    Press Ctrl+C to disconnect.\n\n")
+		fmt.Fprint(logging.Notices(), connectedNotice(d.currentAccount()))
 	case daemonstate.StreamAwaitingCredentials:
 		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
@@ -844,6 +873,24 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 			fmt.Fprintf(logging.Notices(), "  ! Disconnected: %s\n", detail)
 		}
 	}
+}
+
+// connectedNotice is the connected banner. It names the account the gateway
+// says the credential acts as, so a daemon that connected as someone other
+// than the person at the keyboard does not look like a success for them: by
+// email (RegistrationAck.account_email, which the gateway reads from the token
+// authority at connect) when the gateway named one, else by user id
+// (RegistrationAck.user_id; a self-hosted gateway or an older control plane
+// names no email). No account named, no account claimed.
+func connectedNotice(userID, email string) string {
+	headline := "Daemon connected — you can head back to Reliant and start working."
+	switch {
+	case email != "":
+		headline = "Connected as " + email + " — head back to Reliant to start working."
+	case userID != "":
+		headline = "Connected as account " + userID + " — head back to Reliant to start working."
+	}
+	return "\n  ✓ " + headline + "\n\n    Press Ctrl+C to disconnect.\n\n"
 }
 
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
@@ -1274,6 +1321,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			if s != nil {
 				d.activateSession(s)
 			}
+			// The account first: the connected notice names it, so a daemon
+			// running on another person's saved credential says so.
+			d.recordAccount(m.RegistrationAck)
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {
@@ -1297,11 +1347,6 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.
 				d.persistDaemonID(m.RegistrationAck.DaemonId)
-			}
-			if m.RegistrationAck.UserId != "" {
-				d.identityMu.Lock()
-				d.userID = m.RegistrationAck.UserId
-				d.identityMu.Unlock()
 			}
 			// Watchers start here, in stream order, so a later
 			// Watch/UnwatchProjectConfigs for the same path cannot be

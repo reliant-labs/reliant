@@ -20,7 +20,7 @@ tools daemon, authenticating, and working with workflows.
 |---------|-------------|
 | [`reliant auth`](#reliant-auth) | Manage authentication |
 | [`reliant auth login`](#reliant-auth-login) | Log in to a Reliant server |
-| [`reliant auth logout`](#reliant-auth-logout) | Forget the login for the resolved server |
+| [`reliant auth logout`](#reliant-auth-logout) | Sign this machine out of the resolved server |
 | [`reliant auth serve`](#reliant-auth-serve) | Start a local OAuth helper server |
 | [`reliant auth status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`reliant auth token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
@@ -390,7 +390,7 @@ reliant auth
 | Command | Description |
 |---------|-------------|
 | [`login`](#reliant-auth-login) | Log in to a Reliant server |
-| [`logout`](#reliant-auth-logout) | Forget the login for the resolved server |
+| [`logout`](#reliant-auth-logout) | Sign this machine out of the resolved server |
 | [`serve`](#reliant-auth-serve) | Start a local OAuth helper server |
 | [`status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
@@ -458,11 +458,23 @@ reliant auth login [flags]
 
 ### reliant auth logout
 
-Forget the login for the resolved server
+Sign this machine out of the resolved server
 
-Removes the resolved server's entry from the shared credentials file. Every
-other entry (other servers, and forge's logins) is untouched. The token stays
-valid server-side until it expires or you revoke it in the web app.
+Signs this machine out of the resolved server. It removes the CLI's login
+from the shared credentials file, and every daemon sign-in saved for that
+server in ~/.reliant/daemon.json, so the next 'reliant daemon start' pairs the
+machine again (it prints a code to approve in the Reliant app) instead of
+quietly connecting as whoever signed in last. Other servers' entries, and
+forge's own logins, are untouched.
+
+A daemon that is already running stays connected, as the account it started
+with, until it is stopped; logout names any it finds and how to stop them. The
+desktop app has its own sign-in: the next time it starts its daemon it saves a
+new daemon sign-in for whoever is signed in to the app. On a Reliant cloud
+machine the daemon's sign-in belongs to the platform and is left alone.
+
+The tokens stay valid server-side until they expire or you revoke them under
+Settings → Access Tokens in the app.
 
 ```
 reliant auth logout
@@ -713,7 +725,8 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register').
+     earlier 'daemon start' or 'reliant daemon register'). It says so before
+     connecting; 'reliant auth logout' removes it, to sign in as someone else.
   3. Otherwise it pairs the machine: it prints a short code and a link, and
      you approve "this machine" in the Reliant app — on the link, or by typing
      the code into the Add machine window. Nothing has to reach back to this

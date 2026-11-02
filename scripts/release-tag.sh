@@ -85,7 +85,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --dry-run            Print exactly what would happen, create and push nothing"
             echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
             echo "  --rc                 With --commit: the commit heads an RC branch (release/vX.Y.Z-rc.N) whose"
-            echo "                       parent is on main; its gate is that commit's 'Release gate' job on Actions"
+            echo "                       parent is on main; its gate is its green release-gate record (the RC"
+            echo "                       train publishes it), else that commit's 'Release gate' job on Actions"
             exit 0
             ;;
         *)
@@ -265,16 +266,26 @@ if [[ "$SKIP_RELEASE_GATE" == "true" ]]; then
     # this branch --rc silently ignored it (v1.8.14-rc.4, 2026-10-31: test-only reds).
     echo -e "${YELLOW}⚠️  --skip-release-gate: tagging ${RELEASE_COMMIT:0:9} WITHOUT a green release-gate record. Say so in the release notes.${NC}" >&2
 elif [[ -n "$RC_BRANCH" ]]; then
-    # An RC commit's gate ran on Actions (ci.yml dispatched at the RC branch); its record is
-    # published as a note only on main, so the verdict is the run's "Release gate" job.
-    echo -e "${YELLOW}🔎 Checking the Release gate job for ${RELEASE_COMMIT:0:9} (--rc)...${NC}"
-    GATE=$(gh run list -R reliant-labs/reliant --workflow ci.yml --commit "$RELEASE_COMMIT" --limit 20 \
-        --json databaseId,event --jq '[.[] | select(.event == "workflow_dispatch" or .event == "push")] | sort_by(.databaseId) | last | .databaseId // empty' 2>/dev/null || true)
-    JOB=""
-    [[ -z "$GATE" ]] || JOB=$(gh run view "$GATE" -R reliant-labs/reliant --json jobs --jq '[.jobs[] | select(.name == "Release gate")][0].conclusion // empty' 2>/dev/null || true)
-    if [[ "$JOB" != "success" ]]; then
-        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9}'s Release gate job is '${JOB:-absent}' (run ${GATE:-none})${NC}" >&2
-        exit 1
+    # An RC commit's gate is its release-gate record: the RC train runs the gate on its own
+    # machine and publishes the record as the commit's note (control-plane
+    # scripts/rc/rl-gate.sh, owner 2026-11-02), the same record a main commit gets. The
+    # train's fallback dispatches ci.yml at the RC branch, which publishes a record only
+    # on main, so that verdict is the run's "Release gate" job.
+    echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9} (--rc)...${NC}"
+    set +e
+    "$(dirname "$0")/release-gate.sh" check "$RELEASE_COMMIT"
+    GATE_RC=$?
+    set -e
+    if [[ "$GATE_RC" != 0 ]]; then
+        echo -e "${YELLOW}🔎 No green release-gate record; checking the Release gate job on Actions...${NC}"
+        GATE=$(gh run list -R reliant-labs/reliant --workflow ci.yml --commit "$RELEASE_COMMIT" --limit 20 \
+            --json databaseId,event --jq '[.[] | select(.event == "workflow_dispatch" or .event == "push")] | sort_by(.databaseId) | last | .databaseId // empty' 2>/dev/null || true)
+        JOB=""
+        [[ -z "$GATE" ]] || JOB=$(gh run view "$GATE" -R reliant-labs/reliant --json jobs --jq '[.jobs[] | select(.name == "Release gate")][0].conclusion // empty' 2>/dev/null || true)
+        if [[ "$JOB" != "success" ]]; then
+            echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} has no green release-gate record, and its Release gate job is '${JOB:-absent}' (run ${GATE:-none})${NC}" >&2
+            exit 1
+        fi
     fi
 else
     echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9}...${NC}"
