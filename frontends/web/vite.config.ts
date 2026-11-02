@@ -8,6 +8,7 @@ import { versionJson } from "./vite-plugin-version-json";
 import { cspPlugin } from "./vite-plugin-csp";
 import { speedscopeStatic } from "./vite-plugin-speedscope";
 import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
+import { securityTxt } from "./vite-plugin-security-txt";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -76,7 +77,9 @@ export default defineConfig({
   // Unset, it does nothing and public/config.js (`forge generate`) is served.
   // preloadGeistLatin (build-only) preloads the default UI face's hashed
   // Latin file; see vite-plugin-preload-fonts.ts.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), preloadGeistLatin()],
+  // securityTxt (build-only) emits dist/.well-known/security.txt naming the
+  // security and abuse contacts; see vite-plugin-security-txt.ts.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), preloadGeistLatin(), securityTxt()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
