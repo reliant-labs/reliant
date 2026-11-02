@@ -53,7 +53,7 @@ function liveEnv(id: string, name: string, kind: LiveEnvKind): LiveEnv {
     name,
     project: "control-plane",
     kind,
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "",
     releaseProvenance: null,

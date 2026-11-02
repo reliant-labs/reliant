@@ -29,7 +29,8 @@ name: Merge queue
 #
 # THE BUDGET is measured, not hoped for: the last step compares the run's wall
 # time with 300s and, when it is over, says so on the run and on one rolling
-# `pipeline:slo` issue. It does not fail the group: a slow runner is not the
+# `pipeline:slo` issue (a warning; the step is continue-on-error and always
+# exits 0). It does not fail the group: a slow runner is not the
 # change's fault, and ejecting it would cost every entry behind it a rebuild.
 on:
   merge_group:
@@ -86,33 +87,41 @@ jobs:
           if-no-files-found: ignore
       - name: Five-minute budget
         if: always()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BUDGET: "300"
+        # Report-only: this step must NEVER fail the group (a slow runner is
+        # not the change's fault), so every failure inside it is swallowed and
+        # it always exits 0.
         run: |
-          set -uo pipefail
-          now=$(date +%s)
-          created=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" -q .created_at)
-          c=$(date -d "${created}" +%s)
-          wall=$(( now - c )) queue=$(( JOB_T0 - c )) run=$(( now - JOB_T0 ))
-          line="merge-queue wall ${wall}s = ${queue}s waiting for a runner + ${run}s running (budget ${BUDGET}s); ${GROUP_REF}"
-          echo "### ${line}" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${wall}" -le "${BUDGET}" ]; then echo "${line}"; exit 0; fi
-          echo "::error title=Merge queue over its ${BUDGET}s budget::${line}"
-          title="Merge queue CI over its 5-minute budget"
-          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          gh label create pipeline:slo --color B60205 --description "A pipeline SLO is breached" >/dev/null 2>&1 || true
-          issue=$(gh issue list --state open --label pipeline:slo --search "in:title \"${title}\"" --json number,updatedAt -q '.[0] | "\(.number) \(.updatedAt)"' 2>/dev/null || true)
-          if [ -z "${issue}" ]; then
-            gh issue create --label pipeline:slo --title "${title}" --body "$(printf '%s\n\n%s\n\n%s' \
-              "The merge queue's CI (.github/workflows/merge-queue.yml) has a five-minute wall-time budget, runner queue included (owner, 2026-11-01). This run was over it:" \
-              "- ${line} ([run](${url}))" \
-              "A large runner-queue share is a runner-capacity problem (the org's 20-job cap; self-hosted runners), not a test one. A large run share means a phase outgrew the tier: move it to the release gate. Further breaches are added as comments, at most one an hour.")" || true
-          else
-            # At most one comment an hour: one per group would bury the signal.
-            last=$(date -d "${issue#* }" +%s)
-            if [ $(( now - last )) -ge 3600 ]; then
-              gh issue comment "${issue%% *}" --body "- ${line} ([run](${url}))" || true
+          report() {
+            now=$(date +%s)
+            created=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" -q .created_at) || return 0
+            c=$(date -d "${created}" +%s) || return 0
+            wall=$(( now - c )) queue=$(( JOB_T0 - c )) run=$(( now - JOB_T0 ))
+            line="merge-queue wall ${wall}s = ${queue}s waiting for a runner + ${run}s running (budget ${BUDGET}s); ${GROUP_REF}"
+            echo "### ${line}" >> "$GITHUB_STEP_SUMMARY"
+            if [ "${wall}" -le "${BUDGET}" ]; then echo "${line}"; return 0; fi
+            echo "::warning title=Merge queue over its ${BUDGET}s budget::${line}"
+            title="Merge queue CI over its 5-minute budget"
+            url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh label create pipeline:slo --color B60205 --description "A pipeline SLO is breached" >/dev/null 2>&1
+            issue=$(gh issue list --state open --label pipeline:slo --search "in:title \"${title}\"" --json number,updatedAt -q '.[0] // empty | "\(.number) \(.updatedAt)"' 2>/dev/null)
+            if [ -z "${issue}" ]; then
+              gh issue create --label pipeline:slo --title "${title}" --body "$(printf '%s\n\n%s\n\n%s' \
+                "The merge queue's CI (.github/workflows/merge-queue.yml) has a five-minute wall-time budget, runner queue included (owner, 2026-11-01). This run was over it:" \
+                "- ${line} ([run](${url}))" \
+                "A large runner-queue share is a runner-capacity problem (the org's 20-job cap; self-hosted runners), not a test one. A large run share means a phase outgrew the tier: move it to the release gate. Further breaches are added as comments, at most one an hour.")" >/dev/null
+              return 0
             fi
-          fi
+            # At most one comment an hour: one per group would bury the signal.
+            last=$(date -d "${issue#* }" +%s 2>/dev/null) || return 0
+            if [ $(( now - last )) -ge 3600 ]; then
+              gh issue comment "${issue%% *}" --body "- ${line} ([run](${url}))" >/dev/null
+            fi
+            return 0
+          }
+          report || true
+          exit 0

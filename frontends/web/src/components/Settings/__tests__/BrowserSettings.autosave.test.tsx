@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ update: vi.fn(async () => {}), success: vi.fn() }));
 vi.mock("../../../hooks/settings-queries", () => ({
   FALLBACK_BROWSER_PAGE: "https://www.google.com",
-  useBrowserPreferences: () => ({ data: { defaultPage: "https://example.com", openLinksInApp: true }, isPending: false }),
+  useBrowserPreferences: () => ({ data: { defaultPage: "https://example.com" }, isPending: false }),
   useUpdateBrowserPreferences: () => ({ mutateAsync: mocks.update }),
 }));
 vi.mock("../../../lib/toast-manager", () => ({ toast: { success: mocks.success, error: vi.fn() } }));
