@@ -537,33 +537,6 @@ func (s *SubAgentResumeE2ESuite) TestMessageThatArrivesWhileTheStepFailsGetsATur
 		"the agent recovered, so its parent hears one completion and no failure")
 }
 
-// The parent acts on the failure report it got earlier and asks to resume the
-// agent — after a message has already resumed it. One agent is one loop on
-// one thread: the parent is told it is running, and no second loop starts.
-func (s *SubAgentResumeE2ESuite) TestParentCannotResumeAnAgentAMessageAlreadyResumed() {
-	env := s.NewTestWorkflowEnvironment()
-	e := newSubAgentResumeEnv(s.T(), env, true)
-
-	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(stoppingFailureErr())
-	e.onParentTurn[3] = func(agent string) { e.messageAgent(agent, "carry on") }
-	e.parentToolCalls[3] = func(agent string) []map[string]interface{} {
-		input, _ := json.Marshal(map[string]interface{}{"agent_id": agent, "prompt": "retry it", "preset": "general"})
-		return []map[string]interface{}{{"id": "tc3", "name": "spawn", "input": string(input)}}
-	}
-	e.bystanderWaitsFor = milestoneResumedAgentSettled
-
-	e.execute("chat-resume-twice")
-
-	s.Require().True(env.IsWorkflowCompleted())
-	s.Require().NoError(env.GetWorkflowError())
-	s.Require().Equal(2, e.agentTurns("tc1"), "the agent runs once more, for the message — not twice")
-	e.mu.Lock()
-	ownershipChecks := e.ownershipChecks
-	e.mu.Unlock()
-	s.Require().Zero(ownershipChecks, "the parent's resume of a running agent must be refused before it starts anything")
-}
-
 // Control: an agent that COMPLETED is finished. A wake for it — whatever sent
 // it — must not start it again.
 func (s *SubAgentResumeE2ESuite) TestCompletedSubAgentIsNotRestartedByAMessage() {

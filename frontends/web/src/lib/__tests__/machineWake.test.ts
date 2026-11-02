@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WAKE_MAX_MS, WAKE_SUSPENDED_GRACE_MS, presentMachineStatus } from "../machineWake";
+import { CAPACITY_WAIT_DETAIL, WAKE_MAX_MS, WAKE_SUSPENDED_GRACE_MS, presentMachineStatus } from "../machineWake";
 
 const T0 = 1_000_000;
 const PREPARING = "Preparing your workspace image. This is the last slow step.";
@@ -38,5 +38,17 @@ describe("presentMachineStatus", () => {
     expect(presentMachineStatus("suspended", "Sleeping after 30 idle minutes", undefined)).toEqual({
       wakeFinished: false,
     });
+  });
+
+  it("presents a capacity wait as its own state, in the customer's words", () => {
+    const operator = "Waiting for capacity: machines of this size are temporarily unavailable. Your workspace starts by itself as soon as capacity frees up.";
+    const shown = presentMachineStatus("pending", operator, undefined);
+    expect(shown.waitingForCapacity).toBe(true);
+    expect(shown.label).toBe("Waiting for capacity");
+    expect(shown.progress).toBe(CAPACITY_WAIT_DETAIL);
+    expect(shown.progress).not.toMatch(/workspace/i);
+    // Only a starting machine waits for capacity.
+    expect(presentMachineStatus("failed", operator, undefined).waitingForCapacity).toBeUndefined();
+    expect(presentMachineStatus("pending", PREPARING, undefined).waitingForCapacity).toBeUndefined();
   });
 });

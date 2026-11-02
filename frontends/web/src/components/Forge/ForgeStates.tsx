@@ -73,7 +73,7 @@ const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNo
     body: (
       <>
         Every environment is declared in the repo.{" "}
-        <code className="font-mono text-ink">forge env deploy</code> records the release,
+        <code className="font-mono text-ink">reliant forge env deploy</code> records the release,
         applies it and waits until it is healthy. Domains, secrets and promotions are managed here.
       </>
     ),

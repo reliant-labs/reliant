@@ -146,3 +146,105 @@ func TestDescribe_DoesNotShedARowBeingRestored(t *testing.T) {
 	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(time.Hour, &runningStore{})
 	assert.Equal(t, map[string]int64{"restoring": 0}, shedAsks(t, s, store, false))
 }
+
+// adoptingStore records which machine claimed a row, as the real store does.
+type adoptingStore struct {
+	*fakeStore
+	adopted map[string]string
+}
+
+func (a *adoptingStore) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.adopted[id] = daemonID
+	a.rows[id].Worktree.DaemonID = &daemonID
+	return daemonID, nil
+}
+
+// An archived row with no machine on record (a legacy row, or one whose
+// machine was removed) is kept, with its own reason, but still asked of every
+// connected machine — only as a find, archived with no fence, which no daemon
+// removes. The machine that has its folder claims it, and it is due again at
+// once to be settled through that machine's checkout; a machine without the
+// folder changes nothing.
+func TestSweep_AnArchivedRowWithNoMachineIsClaimedByTheMachineThatHasIt(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		answer  worktreereclaim.Outcome
+		claimed bool
+	}{
+		{"the machine has its folder", worktreereclaim.OutcomeHeld, true},
+		{"the machine does not", worktreereclaim.OutcomeGone, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := &adoptingStore{fakeStore: newFakeStore("d"), adopted: map[string]string{}}
+			wt := store.add("orphan", true, nil)
+			wt.DaemonID = nil
+			store.rows["orphan"].ProjectPath = "" // no owner, so no owner checkout
+			sender := &scriptSender{seen: map[string]worktreereclaim.Worktree{}, answer: func(w worktreereclaim.Worktree) worktreereclaim.Result {
+				r := worktreereclaim.Result{ID: w.ID, Outcome: tc.answer}
+				if tc.answer == worktreereclaim.OutcomeHeld {
+					r.Reason, r.Detail = worktreereclaim.ReasonUnverified, "the request carried no archive fence"
+				}
+				return r
+			}}
+			require.NoError(t, New(store, sender).Sweep(context.Background()))
+
+			sent, ok := sender.seen["orphan"]
+			require.True(t, ok, "asked of the connected machine")
+			assert.Equal(t, worktreereclaim.StateArchived, sent.State)
+			assert.Empty(t, sent.Fence, "a find: no daemon removes an archived workspace sent without a fence")
+			assert.False(t, sent.Remove)
+
+			cur, err := store.GetWorktree(context.Background(), "orphan")
+			require.NoError(t, err)
+			if tc.claimed {
+				assert.Equal(t, "d", store.adopted["orphan"])
+				require.NotNil(t, cur.CleanupMetadata)
+				assert.Empty(t, cur.CleanupMetadata.HeldReason, "claimed: due again, to be settled through its machine's checkout")
+				return
+			}
+			assert.Empty(t, store.adopted)
+			require.NotNil(t, cur.CleanupMetadata)
+			assert.Equal(t, string(worktreereclaim.ReasonNoMachine), cur.CleanupMetadata.HeldReason)
+			assert.NotContains(t, cur.CleanupMetadata.HeldDetail, "clone the project onto that machine",
+				"no machine is on record, so the copy never names one")
+		})
+	}
+}
+
+// A row whose machine has no installed checkout of the project on record
+// (the store lists it with no project path) is never removed and never
+// probed: every one of those steps runs git in the project's repository, and
+// the sweep does not guess one. The archived row is held with the reason; the
+// live one is only locked, its checkouts carrying no repository path.
+func TestDescribe_NoCheckoutOnRecordIsKeptAndOnlyLocked(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore("d")
+	store.add("archived", true, nil)
+	store.add("live", false, nil)
+	for _, c := range store.rows {
+		c.ProjectPath = ""
+	}
+	rs := &runningStore{running: map[string]bool{}}
+	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(time.Hour, rs)
+	cands, err := store.ListWorktreesForReclaim(context.Background())
+	require.NoError(t, err)
+
+	req, holds := s.describe(context.Background(), cands, nil, false, s.runActivity(context.Background(), cands))
+	require.Len(t, holds, 1)
+	assert.Equal(t, "archived", holds[0].cand.Worktree.ID)
+	assert.Equal(t, worktreereclaim.ReasonNoCheckout, holds[0].reason)
+	require.Len(t, req.Worktrees, 1, "the archived row is not sent to be removed")
+	live := req.Worktrees[0]
+	assert.Equal(t, "live", live.ID)
+	assert.False(t, live.ProbeIdle)
+	assert.False(t, live.ProbeLanded)
+	assert.Zero(t, live.ShedAfterSeconds)
+	assert.Zero(t, live.ProbeRecoverableAfterSeconds)
+	for _, c := range live.Checkouts {
+		assert.Empty(t, c.RepoPath, "no repository path is guessed")
+	}
+}

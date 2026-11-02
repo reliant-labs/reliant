@@ -105,6 +105,25 @@ func RecordProjectDaemonQueued(ctx context.Context, db orm.Context, projectID, d
 		Set("install_state = EXCLUDED.install_state").
 		Set("install_error = ''").
 		Set("install_request_id = EXCLUDED.install_request_id").
+		// An installing row's cloned_at is when its clone was queued (an
+		// insert's default, and re-stamped here for a re-clone), so the
+		// connect reconcile can tell a clone whose outcome was lost.
+		Set("cloned_at = NOW()").
+		Exec(ctx)
+	return err
+}
+
+// FailProjectDaemonInstall settles a clone that is still installing as
+// failed, with installErr as the reason: the connect reconcile's answer to a
+// clone whose outcome was lost. A row that settled meanwhile is left alone,
+// and install_request_id is kept so a late outcome still finds the row.
+func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) error {
+	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+		Set("install_state = ?", core.ProjectInstallFailed).
+		Set("install_error = ?", installErr).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Where("install_state = ?", core.ProjectInstallInstalling).
 		Exec(ctx)
 	return err
 }

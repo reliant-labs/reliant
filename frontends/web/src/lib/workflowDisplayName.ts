@@ -1,9 +1,8 @@
 import { getCachedWorkflows, useCachedWorkflows } from "../hooks/workflow-queries";
 
-/** Strip protocol prefixes from a workflow reference. */
+/** Strip the scheme from a workflow reference: "builtin://agent", "project://triage". */
 export function stripWorkflowRefPrefix(ref: string): string {
-  if (ref.startsWith("builtin://")) return ref.slice("builtin://".length);
-  return ref;
+  return ref.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
 }
 
 /** "forge-one-shot" -> "Forge One Shot". */

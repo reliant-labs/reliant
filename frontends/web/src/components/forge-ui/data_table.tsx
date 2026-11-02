@@ -264,7 +264,10 @@ export default function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className={flush ? "" : "overflow-hidden rounded-lg border border-border bg-surface"}>
-      <div className="overflow-x-auto">
+      {/* relative: the visually hidden header labels (sr-only) are absolutely
+          positioned, and with no positioned ancestor inside the scroller they
+          escaped it — at 390px the whole page scrolled sideways. */}
+      <div className="relative overflow-x-auto">
         <table
           className={`min-w-full border-collapse ${layout === "fixed" ? "w-full table-fixed" : ""} ${
             stacked ? STACK.table : ""

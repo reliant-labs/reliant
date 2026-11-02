@@ -273,6 +273,16 @@ export interface PanelResult {
   bucketSeconds?: number;
   /** sql time series: "UTC" when the points are calendar dates (labelled as that date, never converted); absent for instants. */
   bucketTimezone?: string;
+  /** heatmap panels: the non-empty cells, by time then value. */
+  heatmap?: HeatmapCellResult[];
+}
+
+/** One heatmap cell: the events whose value fell in [low, high) in the bucket starting at `timeSec`. */
+export interface HeatmapCellResult {
+  timeSec: number;
+  low: number;
+  high: number;
+  count: number;
 }
 
 /** One statement a panel compiles to: SQL with {name:Type} placeholders and the parameter values. */
@@ -383,8 +393,27 @@ export interface SeriesIntent {
 
 /** traces | metrics | logs */
 export type Signal = string;
-/** number | line | table | bar | heatmap | sql | search | funnel | issues | sessions */
+/** number | line | table | bar | heatmap | sql | search | funnel | issues | sessions | postgres | text — any other string is a kind a newer forge added, drawn as "not yet". */
 export type PanelKind = string;
+
+/**
+ * How a line, bar, number or sql panel is drawn (forge dashspec Display). It
+ * never changes the query. A style this console does not know is drawn as the
+ * kind's default, so a spec from a newer forge still renders.
+ */
+export interface PanelDisplay {
+  /** line/sql: line | area | bars; bar: bar | pie | donut; number: stat | gauge; sql also: funnel. */
+  style?: string;
+  /** Stack the series (area or bars; a bar panel's bars). */
+  stack?: boolean;
+  /** A bar panel's bars along the y axis. */
+  horizontal?: boolean;
+  /** A gauge's scale; min defaults to 0, max to 1 for a percent panel. */
+  min?: number;
+  max?: number;
+  /** Series (or slices) drawn before the rest fold into "Other". */
+  topN?: number;
+}
 
 /**
  * What a funnel panel draws (forge.Funnel): product event names in order,
@@ -424,6 +453,10 @@ export interface Panel {
   sql?: string;
   /** sql panels only: the narrowest bucket the statement produces ("1d"); a window shorter than it is widened. */
   minStep?: string;
+  /** text panels only: Markdown, drawn with no query. */
+  markdown?: string;
+  /** How the panel's data is drawn; absent is the kind's default. */
+  display?: PanelDisplay;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;

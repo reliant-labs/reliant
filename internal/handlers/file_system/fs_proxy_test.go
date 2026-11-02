@@ -293,6 +293,13 @@ func seedFSProxyProject(t *testing.T) (*db.Repo, string, string) {
 		Path:   base,
 		UserID: fsProxyTestUser,
 	}))
+	// The checkout is on the machines the test routers resolve to by default
+	// (toolexectest.Stub, machineRecordingRouter): the Files tab scopes to
+	// the request machine's own project_daemons row.
+	for _, machine := range []string{"test-daemon-id", "default"} {
+		require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: machine, UserID: fsProxyTestUser}))
+		require.NoError(t, repo.UpsertProjectDaemon(context.Background(), projectID, machine, base, nil))
+	}
 	return repo, projectID, base
 }
 

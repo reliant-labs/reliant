@@ -26,14 +26,14 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
+import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
-import { verdictLabel } from "@/services/forge/topology";
 
 import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
-import { LiveLink, verdictTone } from "./appParts";
+import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
 
 export function AppsPage() {
@@ -102,6 +102,7 @@ function AppsTable({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const rows = useMemo<AppRow[]>(() => apps.map((app) => ({ name: app.name, app })), [apps]);
+  const firing = useFiringByEnv();
 
   // A just-claimed app is brought into view once its row exists.
   const highlightedListed = !!highlighted && apps.some((app) => app.name === highlighted);
@@ -132,7 +133,7 @@ function AppsTable({
       width: "26%",
       className: "truncate max-lg:hidden",
       headerClassName: "max-lg:hidden",
-      render: (_, { app }) => <EnvsCell app={app} />,
+      render: (_, { app }) => <EnvsCell app={app} firing={firing} />,
     },
     {
       key: "deployed",
@@ -191,12 +192,12 @@ function SiteCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolea
 }
 
 /** Each long-lived environment's health, prod first; previews are counted. */
-function EnvsCell({ app }: { app: AppSummary }) {
+function EnvsCell({ app, firing }: { app: AppSummary; firing: ReadonlyMap<string, number> }) {
   if (app.envs.length === 0 && app.previews === 0) return <span className="text-ink-muted">—</span>;
   return (
     <span className="inline-flex items-center gap-3">
       {app.envs.map((env) => (
-        <EnvChip key={env.id} env={env} />
+        <EnvChip key={env.id} env={env} firing={firing.get(env.id) ?? 0} />
       ))}
       {app.previews > 0 && (
         <span className="text-xs text-ink-muted">
@@ -207,7 +208,18 @@ function EnvsCell({ app }: { app: AppSummary }) {
   );
 }
 
-function EnvChip({ env }: { env: AppEnv }) {
+/** Firing alerts by control-plane environment id: what makes a converged environment not "Healthy". */
+function useFiringByEnv(): ReadonlyMap<string, number> {
+  const org = useObservabilityOrg();
+  const alerts = useAlerts(org.orgId);
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const alert of alerts.data ?? []) if (alert.state === "firing") counts.set(alert.envId, (counts.get(alert.envId) ?? 0) + 1);
+    return counts;
+  }, [alerts.data]);
+}
+
+function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
   if (env.loading) {
     return (
       <span className="inline-flex items-center gap-1.5 text-ink-muted" data-testid={`app-env-${env.name}`}>
@@ -216,11 +228,20 @@ function EnvChip({ env }: { env: AppEnv }) {
       </span>
     );
   }
-  const facts = [verdictLabel(env.verdict), env.release || "not deployed yet"].join(" · ");
+  const health = envHealth(env.verdict, firing);
+  const facts = [health.label, env.release || "not deployed yet"].join(" · ");
   return (
-    <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict}>
-      <Status tone={verdictTone(env.verdict)} label={env.name} size="sm" />
-      <span className="sr-only">: {facts}</span>
+    <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict} data-firing={firing || undefined}>
+      <Status tone={health.tone} label={env.name} size="sm" />
+      {health.alerting ? (
+        <span className="ml-1 text-xs text-ink-muted" data-testid={`app-env-${env.name}-alerts`}>
+          <span className="sr-only">: </span>
+          {health.label}
+          <span className="sr-only"> · {env.release || "not deployed yet"}</span>
+        </span>
+      ) : (
+        <span className="sr-only">: {facts}</span>
+      )}
     </span>
   );
 }

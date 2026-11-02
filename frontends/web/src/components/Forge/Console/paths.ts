@@ -68,8 +68,13 @@ export const APPS_PATH = "/apps";
  */
 export const ORG_USAGE_PATH = "/settings/billing";
 
-/** The Observability sub-pages that are nav entries. */
-export const OBS_NAV_VIEWS = ["graph", "rpc", "errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
+/**
+ * The Observability sub-pages that are nav entries, in nav order. The first is
+ * where Observability opens (its nav row, its breadcrumb, an unknown view's
+ * redirect): Dashboards, the page that answers "how is it doing". The service
+ * graph is the least-visited view, so it is last.
+ */
+export const OBS_NAV_VIEWS = ["dashboards", "rpc", "errors", "sessions", "logs", "traces", "metrics", "profiles", "alerts", "graph"] as const;
 export type ObsNavView = (typeof OBS_NAV_VIEWS)[number];
 
 export const OBS_NAV_LABELS: Record<ObsNavView, string> = {

@@ -1121,8 +1121,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project: %w", err)
 	}
-	projectPath := project.Path
-
 	// Load worktree path if applicable
 	var worktreePath string
 	// worktreeDaemonID is the daemon that physically owns this worktree's
@@ -1140,11 +1138,25 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to load worktree %s for chat %s thread %s: %w", *effectiveWorktree, chat.ID, thread, err)
 		}
-		worktreePath = worktree.Path
-		if worktree.DaemonID != nil {
-			worktreeDaemonID = *worktree.DaemonID
+		// The main worktree row mirrors projects.path, the creating
+		// machine's: the main checkout is resolved on this turn's machine.
+		if worktree.IsMain {
+			// Bound to the main row: the main checkout, routed like it.
+			worktreeThreadBound = false
+		} else {
+			worktreePath = worktree.Path
+			if worktree.DaemonID != nil {
+				worktreeDaemonID = *worktree.DaemonID
+			}
 		}
 	}
+
+	// The project's checkout on the machine this turn's tools run on (routed
+	// as ExecuteTools routes them), for the prompt's working directory. A
+	// machine with no checkout leaves it unset; the tools say why.
+	projectPath := resolveCallCheckout(ctx, a.repo, a.machines, project,
+		toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, chatDaemonSelector(chat, rtx.DaemonSelector))),
+		worktreePath == "").main.Path
 
 	// Determine working directory (prefer worktree path over project path)
 	workingDir := projectPath
@@ -1183,6 +1195,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		ClearProviderPins: rtx.ClearProviderPins,
 		Descendant:        rtx.Descendant,
 		PresetModelTags:   rtx.PresetModelTags,
+		ChatModel:         chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen: rtx.ThreadModelChosen,
 		ThreadID:          thread,
 		Routing:           a.routing,
 		Failover:          rtx.Failover,
@@ -1878,6 +1892,9 @@ streamLoop:
 	if driverErrored {
 		a.collectUsageAfterStreamError(eventChan, streamState)
 	}
+	// The request ends here: the bookkeeping below, and the ledger writes of
+	// any request the driver retried, are not part of its latency.
+	llmLatencyMs := streamState.retries.finish().Sub(llmCallStart).Milliseconds()
 
 	// A cancelled stream closes the channel without a further event, so the
 	// backoff marker would otherwise outlive the call that opened it and report a
@@ -1892,7 +1909,6 @@ streamLoop:
 		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
 	}
 
-	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
 	usageErr := streamErr
 	if streamInterrupted {
 		usageErr = nil

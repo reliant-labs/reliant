@@ -303,3 +303,31 @@ func TestResumedFireRelaunchesOnTheRecordedSnapshot(t *testing.T) {
 	assert.Equal(t, recorded.Definition.CatalogPin, calls[0].Spec.CatalogPin, "relaunched on the recorded snapshot")
 	assert.Equal(t, recorded.Definition, calls[0].Event.Definition)
 }
+
+// A pool-bound trigger names no machine of its own; its runs read the pool's
+// agreed catalog through the member bindPoolCatalog chose
+// (Trigger.CatalogDaemonID). Its firing describes and pins that member's
+// catalog, not the union, where another machine's newer copy of the file
+// would win.
+func TestPoolBoundFiringPinsTheAgreedMembersCatalog(t *testing.T) {
+	p := newProvenanceProject(t)
+	other, host := uuid.NewString(), "laptop"
+	require.NoError(t, p.repo.UpsertDaemon(p.ctx, &db.Daemon{ID: other, UserID: p.userID, Hostname: &host}))
+	newer := strings.Replace(provenanceWorkflow, "args: {title: ok}", "args: {title: newer}", 1)
+	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "release", Name: "release", RelativePath: provenancePath, YAMLContent: newer}})
+	require.NoError(t, err)
+	_, err = p.repo.SyncProjectConfigSnapshot(p.ctx, &db.ProjectConfigRecord{
+		ProjectID: p.projectID, DaemonID: other, ProjectWorkflowsJSON: wj, PushedAt: time.UnixMilli(5000).UTC(),
+	}, false)
+	require.NoError(t, err)
+
+	bound := *p.schedule
+	bound.DaemonID, bound.MachinePoolID, bound.CatalogDaemonID = "", "pool-1", p.daemonID
+	def, err := p.workflows().FiringDefinition(p.ctx, &bound)
+	require.NoError(t, err)
+	p.assertProvenance(t, def, provenanceWorkflow)
+	pinned, found, err := p.repo.GetPinnedProjectCatalog(p.ctx, def.CatalogPin)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, p.daemonID, pinned.DaemonID, "pinned from the agreed member, not the union")
+}

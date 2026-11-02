@@ -301,6 +301,18 @@ export function formatSizeLabel(size: string): string {
   return SIZE_DISPLAY_LABELS[size.toLowerCase()] ?? size;
 }
 
+/**
+ * A plan's customer-facing name: the machine size it sells ("M"), as the
+ * price list names it — not the catalog's product name ("Compute M"). Falls
+ * back to the catalog name with any "Compute " prefix dropped when the plan
+ * names no size this client can label.
+ */
+export function planDisplayName(plan: { name: string; structuredLimits?: { machineSize?: string } }): string {
+  const size = plan.structuredLimits?.machineSize;
+  if (size && SIZE_DISPLAY_LABELS[size.toLowerCase()]) return SIZE_DISPLAY_LABELS[size.toLowerCase()];
+  return (plan.name ?? "").replace(/^Compute\s+/i, "");
+}
+
 export function formatAllowedSizes(sizes: string[]): string {
   if (sizes.length === 0) return "—";
   const labeled = sizes

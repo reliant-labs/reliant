@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   ComputeOverageControl,
+  overageRateLabel,
   choiceFromState,
   suggestedLimitCents,
 } from '@/components/Settings/cloud/ComputeOverageControl'
@@ -131,7 +132,8 @@ describe('ComputeOverageControl', () => {
 
   it('shows per-size server hourly rates, never a flat minute estimate', () => {
     renderControl({ enabled: true, budgetCents: 2000n })
-    expect(screen.getAllByText(/m: \$0.13\/hr/)).toHaveLength(2)
+    expect(screen.getAllByText(/M \$0.13\/hr/)).toHaveLength(2)
+    expect(screen.queryByText(/\bm: /)).not.toBeInTheDocument()
     expect(screen.queryByText(/extra minutes/)).not.toBeInTheDocument()
     expect(screen.getByText(/disk beyond it is billed running or suspended/)).toBeInTheDocument()
   })
@@ -163,5 +165,25 @@ describe('ComputeOverageControl', () => {
   it('says prices are unavailable rather than inventing a rate', () => {
     renderControl({ pricing: undefined })
     expect(screen.getAllByText(/prices unavailable/)).toHaveLength(2)
+  })
+})
+
+describe('overageRateLabel', () => {
+  const pricing = {
+    pricingVersion: 'v',
+    storageCentsPerGibMonth: '25',
+    placeholder: false,
+    sizes: [
+      { size: 's1', hourlyPriceCents: '20', exactHourlyPriceCents: '20', storageGib: 30 },
+      { size: 'm', hourlyPriceCents: '30', exactHourlyPriceCents: '30', storageGib: 50 },
+      { size: '3xl', hourlyPriceCents: '380', exactHourlyPriceCents: '380', storageGib: 300 },
+    ],
+  }
+  it('lists only the sizes the plan can run, by tier name', () => {
+    expect(overageRateLabel(pricing, ['s1', 'm'])).toBe('S1 $0.20/hr · M $0.30/hr')
+    expect(overageRateLabel(pricing)).toBe('S1 $0.20/hr · M $0.30/hr · 3XL $3.80/hr')
+  })
+  it('refuses a partial list rather than omit a price', () => {
+    expect(overageRateLabel({ ...pricing, pricingVersion: undefined }, ['m'])).toBe('prices unavailable')
   })
 })

@@ -320,9 +320,9 @@ describe("the machine list", () => {
     // $23 / $47 / $91 exist in no table the client ever had. Each is the
     // CHEAPEST plan that runs that size — Alpha runs m, Beta adds l,
     // Gamma adds xl — which is the whole of "size and plan are one axis".
-    expect(machineRow("M")).toHaveTextContent("$23.00/mo");
-    expect(machineRow("L")).toHaveTextContent("$47.00/mo");
-    expect(machineRow("XL")).toHaveTextContent("$91.00/mo");
+    expect(machineRow("M")).toHaveTextContent("$23/mo");
+    expect(machineRow("L")).toHaveTextContent("$47/mo");
+    expect(machineRow("XL")).toHaveTextContent("$91/mo");
   });
 
   /**
@@ -334,21 +334,25 @@ describe("the machine list", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    expect(machineRow("M")).toHaveTextContent("4 GB RAM · 2 CPU");
-    expect(machineRow("L")).toHaveTextContent("8 GB RAM · 4 CPU");
-    expect(machineRow("XL")).toHaveTextContent("16 GB RAM · 8 CPU");
+    expect(machineRow("M")).toHaveTextContent("2 vCPU · 4 GB RAM");
+    expect(machineRow("L")).toHaveTextContent("4 vCPU · 8 GB RAM");
+    expect(machineRow("XL")).toHaveTextContent("8 vCPU · 16 GB RAM");
   });
 
   /**
    * A plan row is the machine's name, its spec and the monthly price — nothing
    * else. Hours, rates, disk and fees are not repeated per row.
    */
-  it("puts nothing but name, spec and monthly price on a row", async () => {
+  it("puts no hours claim, GiB or suspension terms on a row", async () => {
     const user = userEvent.setup();
     await openPlans(user);
 
+    // The only per-row rate is the overage price ("$0.30/hr after included
+    // hours") when the server priced the size; the hours a plan includes are
+    // the footnote's, said once.
     for (const size of ["M", "L", "XL"]) {
-      expect(machineRow(size)).not.toHaveTextContent(/hrs|hours|\/hr|GiB|suspended|included|shared|overage|small-daemon/i);
+      expect(machineRow(size)).not.toHaveTextContent(/hrs|GiB|suspended|shared|small-daemon/i);
+      expect(machineRow(size)).not.toHaveTextContent(/\d+ hours included/i);
     }
   });
 
@@ -401,7 +405,7 @@ describe("the plan the user is already on", () => {
     await openPlans(user);
 
     expect(machineRow("XL")).toBeEnabled();
-    expect(machineRow("XL")).toHaveTextContent("$91.00/mo");
+    expect(machineRow("XL")).toHaveTextContent("$91/mo");
   });
 });
 

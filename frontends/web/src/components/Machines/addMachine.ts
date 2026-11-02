@@ -73,7 +73,7 @@ export function cloudMachineRows(
   return rows.sort((a, b) => order.indexOf(a.size) - order.indexOf(b.size));
 }
 
-/** The row to start on: the caller's suggestion, else Small, else the first. */
+/** The row to start on: the caller's suggestion, else M, else the first. */
 export function defaultRow(rows: CloudMachineRow[], suggested?: DaemonSizeName): CloudMachineRow | undefined {
   return rows.find((r) => r.size === suggested) ?? rows.find((r) => r.size === "m") ?? rows[0];
 }
@@ -81,7 +81,7 @@ export function defaultRow(rows: CloudMachineRow[], suggested?: DaemonSizeName):
 /**
  * The name a new machine gets unless the person types one: derived from the
  * repository when there is one ("api-server"), else from the size
- * ("cloud-small"), and suffixed until it is free on the account.
+ * ("cloud-m"), and suffixed until it is free on the account.
  */
 export function defaultMachineName(
   size: DaemonSizeName,

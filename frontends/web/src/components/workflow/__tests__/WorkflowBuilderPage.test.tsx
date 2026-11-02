@@ -11,7 +11,7 @@
  */
 import { StrictMode, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -68,17 +68,22 @@ vi.mock("../WorkflowBuilder", () => ({
   WorkflowBuilder: (props: {
     initialWorkflow?: { name?: string };
     onSave: (workflow: { name: string }) => Promise<unknown>;
+    onBack?: () => void;
   }) => (
     <div data-testid="builder-stub">
       <span data-testid="builder-workflow">{props.initialWorkflow?.name ?? ""}</span>
       <button type="button" onClick={() => void props.onSave({ ...props.initialWorkflow, name: "renamed-flow" })}>
         save renamed
       </button>
+      <button type="button" onClick={() => props.onBack?.()}>
+        back
+      </button>
     </div>
   ),
 }));
 
 import { WorkflowPage } from "../WorkflowPage";
+import { builderReturnState } from "../../../lib/routeParent";
 
 function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -91,6 +96,12 @@ function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
       path: "/workflows/library",
       component: () => <div data-testid="at-library" />,
     }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/workflows/library/$workflowName",
+      component: () => <div data-testid="at-workflow-page" />,
+    }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <div data-testid="at-chat" /> }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
@@ -198,5 +209,55 @@ describe("Rename, then save", () => {
     // The editor loads past the cache: its version gates the save.
     expect(mocks.fetchWorkflow).toHaveBeenCalledWith("proj-1", { name: "old-flow" }, { fresh: true });
     expect(mocks.saveWorkflow).toHaveBeenCalledWith("proj-1", expect.objectContaining({ name: "renamed-flow" }), 1, undefined, "d1", undefined);
+  });
+});
+
+// Opened from a chat's workflow viewer, Back returns to the chat, not to the
+// workflow's page the user never visited (#624).
+describe("Back", () => {
+  function serveWorkflows() {
+    mocks.fetchWorkflow.mockImplementation(async (_projectId: string, { name }: { name: string }) => ({
+      workflow: { name },
+      draftId: "d1",
+      version: 1,
+      status: "draft",
+      source: "user",
+      validationErrors: [],
+    }));
+  }
+
+  it("returns to the chat the builder was opened from, even after a rename", async () => {
+    serveWorkflows();
+    mocks.saveWorkflow.mockResolvedValue({ success: true, message: "", isValid: true, validationErrors: [], id: "d1", slug: "renamed-flow", version: 2, status: "draft" });
+    const router = renderAt("/?chat=c1");
+    expect(await screen.findByTestId("at-chat")).toBeInTheDocument();
+
+    // What the chat's workflow viewer does on Edit.
+    await act(() =>
+      router.navigate({
+        to: "/workflow/$workflowName",
+        params: { workflowName: "old-flow" },
+        state: builderReturnState(router.state.location.href),
+      } as never),
+    );
+    expect(await screen.findByTestId("builder-workflow")).toHaveTextContent("old-flow");
+    // A save that renames replaces the URL; where Back goes must survive it.
+    await userEvent.click(screen.getByRole("button", { name: "save renamed" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/renamed-flow"));
+
+    await userEvent.click(screen.getByRole("button", { name: "back" }));
+
+    await waitFor(() => expect(router.state.location.href).toBe("/?chat=c1"));
+    expect(screen.getByTestId("at-chat")).toBeInTheDocument();
+  });
+
+  it("steps back to the workflow's page when the entry recorded nowhere", async () => {
+    serveWorkflows();
+    const router = renderAt("/workflow/old-flow");
+    expect(await screen.findByTestId("builder-workflow")).toHaveTextContent("old-flow");
+
+    await userEvent.click(screen.getByRole("button", { name: "back" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library/old-flow"));
   });
 });

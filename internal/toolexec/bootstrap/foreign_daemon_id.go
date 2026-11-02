@@ -62,11 +62,23 @@ func IsForeignDaemonIDError(err error) bool {
 // The suffix sorts by time and is made unique, so repeated recoveries never
 // overwrite an earlier one.
 func SetAsideDaemonID(dataDir string) (string, error) {
+	return setAsideDaemonIDAs(dataDir, "foreign")
+}
+
+// SetAsideReservedDaemonID is SetAsideDaemonID for an id the gateway refused
+// as reserved for daemon-bound credentials (IsReservedDaemonIDError): the
+// set-aside file says "reserved", not "foreign", because the id is this
+// account's own machine.
+func SetAsideReservedDaemonID(dataDir string) (string, error) {
+	return setAsideDaemonIDAs(dataDir, "reserved")
+}
+
+func setAsideDaemonIDAs(dataDir, why string) (string, error) {
 	if strings.TrimSpace(dataDir) == "" {
 		return "", fmt.Errorf("cannot set aside daemon id: no data directory")
 	}
 	src := DaemonIDPath(dataDir)
-	base := src + ".foreign-" + time.Now().UTC().Format("20060102T150405Z")
+	base := src + "." + why + "-" + time.Now().UTC().Format("20060102T150405Z")
 	dst := base
 	for i := 2; ; i++ {
 		if _, err := os.Lstat(dst); errors.Is(err, os.ErrNotExist) {

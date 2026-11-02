@@ -20,7 +20,10 @@ inputs:
     description: Install ripgrep (internal/llm/tools shells out to rg and skips its tests without it)
     default: "false"
   free-disk:
-    description: Delete the runner's preinstalled toolchains this repo never uses, for the gates' compiles
+    description: >-
+      Delete the runner's preinstalled toolchains this repo never uses, for the gates' compiles:
+      "true" waits for it (~100s); "background" starts it and moves on (the merge queue's
+      five-minute budget), so the space frees while the caches restore
     default: "false"
   buf:
     description: Put go.mod's buf on PATH (forge lint's buf-lint lane refuses to run without it)
@@ -52,6 +55,16 @@ runs:
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
           /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
         df -h / | tail -1
+    # The same deletion without waiting for it: ~100s of rm, most of it the
+    # Android SDK's small files, while the caches below restore. Output goes
+    # to /dev/null so the step does not wait on the pipe; the runner reaps the
+    # process when the job ends.
+    - name: Free runner disk (background)
+      if: inputs.free-disk == 'background'
+      shell: bash
+      run: |
+        df -h / | tail -1
+        sudo sh -c 'rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL' >/dev/null 2>&1 </dev/null &
 
     # Taskfile.yml needs Task 3.38+ (`if:` on a task call).
     - name: Install Task

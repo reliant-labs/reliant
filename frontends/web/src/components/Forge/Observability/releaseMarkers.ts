@@ -48,7 +48,7 @@ export function describePromotion(p: Promotion): string {
   return p.kind === "rollback" ? `${p.envName} rolled back to ${version}${commit}${who}` : `${version}${commit} promoted to ${p.envName}${who}`;
 }
 
-/** Promotions as chart markers: the version, with the environment when more than one is in view; a rollback in the warning tone. */
+/** Promotions as chart markers: the version, with the environment when more than one is in view; a rollback in the warning tone, a promotion in the axis ink (not a series colour). */
 export function toChartMarkers(promotions: readonly Promotion[], withEnv: boolean): ChartMarker[] {
   return promotions.map((p) => {
     const version = p.version || p.releaseId.slice(0, 12);
@@ -57,7 +57,7 @@ export function toChartMarkers(promotions: readonly Promotion[], withEnv: boolea
       timeSec: Math.round(p.promotedAtMs / 1000),
       label: withEnv ? `${p.envName} ${short}` : short,
       description: describePromotion(p),
-      tone: p.kind === "rollback" ? "warning" : "primary",
+      tone: p.kind === "rollback" ? ("warning" as const) : undefined,
     };
   });
 }

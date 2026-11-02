@@ -150,10 +150,8 @@ func (a *LoadWorkflowActivity) pinCatalog(ctx context.Context, wfCtx *workflowCo
 
 // workflowContext holds the resolved context needed for workflow loading
 type workflowContext struct {
-	userID       string
-	projectID    string
-	projectPath  string
-	worktreePath string
+	userID    string
+	projectID string
 	// draftRoot is the one workflow that may be loaded from an unfinished
 	// draft: the root of a builder test run. Empty for every other chat.
 	draftRoot string
@@ -178,7 +176,10 @@ func (c *workflowContext) sourceOptions() workflowsource.Options {
 	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, ProjectFirst: c.projectFirst, DraftRoot: c.draftRoot, CatalogPin: c.catalogPin}
 }
 
-// resolveWorkflowContext resolves user, project, and path from a chat ID
+// resolveWorkflowContext resolves whose workflows, in which project and on
+// which machine, a chat's refs resolve against. It resolves no directory: the
+// run's working directory is the project's checkout on the machine that runs
+// each call, resolved at dispatch.
 func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatID string) (*workflowContext, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID is empty")
@@ -205,26 +206,6 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	}
 	if !chat.NoMachine && chat.ActiveDaemonID != nil {
 		wfCtx.daemonID = *chat.ActiveDaemonID
-	}
-
-	if chat.ProjectID == "" {
-		return wfCtx, nil
-	}
-
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	if project != nil {
-		wfCtx.projectPath = project.Path
-	}
-
-	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		worktree, wtErr := a.repo.GetWorktree(ctx, *chat.WorktreeID)
-		if wtErr == nil && worktree != nil {
-			wfCtx.worktreePath = worktree.Path
-		}
 	}
 
 	return wfCtx, nil

@@ -204,6 +204,7 @@ func (h *IdempotencyTestHelper) CreateTestProjectWithPath(ctx context.Context, p
 	}
 	err := h.repo.CreateProject(ctx, project)
 	require.NoError(h.t, err)
+	installTestCheckout(h.t, h.repo, projectID, userID, projectPath)
 	return project
 }
 

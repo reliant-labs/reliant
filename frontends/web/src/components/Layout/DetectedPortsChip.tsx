@@ -3,10 +3,11 @@ import Tooltip from "../forge-ui/tooltip";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 import { type CSSProperties } from "react";
 
+import { daemonPreviewQuery } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { previewUrlForPort } from "../../lib/dev-preview";
 import { openExternalLink } from "../../lib/open-link";
 import {
-  getDaemon,
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
@@ -50,13 +51,11 @@ export function DetectedPortsChip() {
   const ports = livePorts ?? activeDaemon?.detectedPorts?.map(Number) ?? [];
 
   const daemonId = activeDaemon?.daemonId ?? "";
-  const daemonPreviewQueryKey = ["controlPlane", "daemonPreview", daemonId] as const;
+  const previewQuery = daemonPreviewQuery(daemonId);
+  const daemonPreviewQueryKey = previewQuery.queryKey;
   const { data: daemonInfo } = useQuery({
-    queryKey: daemonPreviewQueryKey,
-    queryFn: () => getDaemon(daemonId),
+    ...previewQuery,
     enabled: Boolean(daemonId) && ports.length > 0,
-    staleTime: 5 * 60_000, // the URL shape is static per daemon
-    retry: 1,
   });
   const urlTemplate = daemonInfo?.workspaceBaseDomain;
 
@@ -98,7 +97,7 @@ export function DetectedPortsChip() {
   if (!activeDaemon || ports.length === 0) return null;
 
   const previewUrl = (port: number): string =>
-    urlTemplate ? urlTemplate.replace("{port}", String(port)) : `http://localhost:${port}`;
+    urlTemplate ? previewUrlForPort(urlTemplate, port) : `http://localhost:${port}`;
 
   const openPort = (port: number) => {
     void openExternalLink(previewUrl(port));

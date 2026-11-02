@@ -28,6 +28,9 @@
  *     twice.
  *   - A trigger whose workflow is listed nowhere (its file was removed from
  *     the repository) still gets a row, so it can be turned off or removed.
+ *     One whose workflow is there but failed to load is not "not found": it
+ *     belongs to that definition's Failed to load entry (invalidTriggers),
+ *     and is not listed a second time as a row.
  */
 
 import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
@@ -38,7 +41,8 @@ import { automationUnits, unitsNeedingYou, type AutomationUnit } from "@/lib/aut
 import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import type { LibrarySortKey, WorkflowsShowKey } from "@/routeSchemas";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
-import { workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { readyMadeToOffer } from "./readyMade";
+import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
 
 /** A definition, and the project it belongs to when it is a project's own. */
 export interface ListedWorkflow {
@@ -111,10 +115,18 @@ export interface WorkflowsView {
   noWorkflowsOfYourOwn: boolean;
   /** Definitions that failed to load, after search and filter. */
   invalid: InvalidWorkflow[];
+  /** The triggers in scope that run each definition that failed to load, by invalidWorkflowKey. */
+  invalidTriggers: Map<string, Trigger[]>;
   /** Hidden built-ins a person can run directly, not offered in the composer. Shown collapsed. */
   buildingBlocks: WorkflowListRow[];
   /** The search or filter left nothing, though the list is not empty. */
   noMatches: boolean;
+  /**
+   * Ready-made automations (readyMade.ts) not yet on in scope, offered above
+   * the table. Empty while a search or filter narrows the list: they are an
+   * invitation, not a result.
+   */
+  readyMade: WorkflowListRow[];
 }
 
 export const NEEDS_YOU_LABEL = "Needs you";
@@ -129,6 +141,14 @@ function matches(query: string, ...fields: (string | undefined)[]): boolean {
 }
 
 const refKey = (ref: string) => normalizeWorkflowRef(ref).trim().toLowerCase();
+
+/** A ref without its scheme: "project://Triage" and "triage" are one workflow. */
+const slugKey = (ref: string) => stripWorkflowRefPrefix(ref).trim().toLowerCase();
+
+/** Identifies a definition that failed to load. */
+export function invalidWorkflowKey(workflow: Pick<InvalidWorkflow, "source" | "path" | "name">): string {
+  return `${workflow.source}:${workflow.path}:${workflow.name}`;
+}
 
 /** A placeholder definition for triggers whose workflow is listed nowhere. */
 function missingWorkflow(ref: string): WorkflowResponse {
@@ -207,6 +227,18 @@ export function workflowsView({
   const ordered = [...workflows].sort((a, b) => Number(!a.projectId) - Number(!b.projectId));
   const allRows = new Map(ordered.map((listed) => [listed, toRow(listed, triggersOf(listed))]));
 
+  // A trigger of a definition that failed to load is that definition's, not
+  // an orphan: its file is there, it does not parse.
+  const invalidTriggers = new Map<string, Trigger[]>();
+  for (const broken of invalid) {
+    const isBuiltin = broken.source === "builtin";
+    const mine = triggers.filter(
+      (t) => !claimed.has(t.id) && t.workflow.startsWith("builtin://") === isBuiltin && slugKey(t.workflow) === slugKey(broken.name),
+    );
+    for (const t of mine) claimed.add(t.id);
+    if (mine.length > 0) invalidTriggers.set(invalidWorkflowKey(broken), mine);
+  }
+
   const orphans: WorkflowListRow[] = [];
   if (complete) {
     const byRef = new Map<string, Trigger[]>();
@@ -274,8 +306,10 @@ export function workflowsView({
     rows: sections.flatMap((section) => section.rows),
     noWorkflowsOfYourOwn: sections.some((section) => section.key === "yours" && section.rows.length === 0),
     invalid: visibleInvalid,
+    invalidTriggers,
     buildingBlocks,
     noMatches: narrowed && shown === 0 && workflows.length + invalid.length + orphans.length > 0,
+    readyMade: narrowed ? [] : readyMadeToOffer([...visible].sort(byName)),
   };
 }
 
