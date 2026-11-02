@@ -226,6 +226,88 @@ func TestReapIdle_UseBetweenScanAndKillSparesTheProcess(t *testing.T) {
 	require.Equal(t, "running", process.StatusSafe())
 }
 
+// The final look and the commitment to kill are one step, which output,
+// touches and verdicts cannot interleave with: a touch that arrives while a
+// reap is being claimed waits for the claim, and lands after the process is
+// committed to being stopped, not between the look and the kill.
+func TestReapIdle_ClaimHoldsOffUseUntilCommitted(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	process := startQuiet(t, m, StartProcessOptions{ChatID: "chat-done"})
+	clock.Advance(5 * time.Hour)
+	claimedAt := clock.Now()
+	m.RecordChatVerdicts(map[string]ChatVerdict{process.ID: {}})
+
+	touched, verdict := make(chan struct{}), make(chan struct{})
+	duringReapClaim = func(p *BackgroundProcess) {
+		go func() { m.Touch(p.ID); close(touched) }()
+		go func() { m.RecordChatVerdicts(map[string]ChatVerdict{p.ID: {Running: true}}); close(verdict) }()
+		select {
+		case <-touched:
+			t.Error("a touch completed inside the reap claim")
+		case <-verdict:
+			t.Error("a verdict was recorded inside the reap claim")
+		case <-time.After(50 * time.Millisecond):
+		}
+		clock.Advance(time.Minute) // so a touch after the claim is visible as later
+	}
+	t.Cleanup(func() { duringReapClaim = nil })
+
+	require.Equal(t, []string{process.ID}, m.ReapIdle(reapTestConfig), "committed: the late touch does not undo it")
+	<-touched
+	<-verdict
+	require.Equal(t, "killed", process.StatusSafe())
+	require.True(t, m.ReapOutlook(process).LastActive.After(claimedAt), "the touch landed, after the claim")
+
+	// Claimed once: a second path (the workspace being removed) finds nothing to do.
+	require.Zero(t, m.StopProcessesUnder(process.WorkingDir, "its workspace was removed"))
+}
+
+// An adopted command's own writers fill its buffers without the manager's
+// lock. Reaping it while it writes must not race those writers (run under
+// -race): the reap's note reaches the stderr buffer only once the command has
+// stopped writing.
+func TestReap_AdoptedCommandStillWritingDoesNotRace(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	dir := t.TempDir()
+	activity := NewOutputActivity(clock.Now)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("bash", "-c", `while true; do echo out; echo err >&2; sleep 0.001; done`)
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = activity.Writer(&stdout), activity.Writer(&stderr)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	waitCh := make(chan error, 1)
+	go func() { waitCh <- cmd.Wait() }()
+	process, err := m.AdoptRunningProcess(AdoptRunningProcessOptions{
+		Cmd: cmd, Command: "chatty", WorkingDir: dir, ChatID: "chat-1", StartTime: clock.Now(),
+		StdoutBuf: &stdout, StderrBuf: &stderr, WaitErrCh: waitCh, Activity: activity,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, m.StopProcessesUnder(dir, "its workspace was removed"))
+	require.Equal(t, "killed", process.StatusSafe())
+	<-process.done
+	require.Contains(t, stderr.String(), "[reliant] Stopped this background process: its workspace was removed.")
+}
+
+// A connector's touch reaches only its own processes; a first-party one, all.
+func TestTouchForGrant(t *testing.T) {
+	m, clock := newReapTestManager(t)
+	mine := startQuiet(t, m, StartProcessOptions{ChatID: "c", GrantID: "grant-1"})
+	theirs := startQuiet(t, m, StartProcessOptions{ChatID: "c"})
+	started := clock.Now()
+
+	clock.Advance(time.Hour)
+	m.TouchForGrant("grant-1", mine.ID, theirs.ID, "never-started")
+	require.Equal(t, clock.Now(), m.ReapOutlook(mine).LastActive)
+	require.Equal(t, started, m.ReapOutlook(theirs).LastActive, "a connector cannot touch the user's process")
+
+	clock.Advance(time.Hour)
+	m.Touch(theirs.ID)
+	require.Equal(t, clock.Now(), m.ReapOutlook(theirs).LastActive)
+}
+
 // The server's word goes stale: once it stops repeating that the chat has
 // ended (it is unreachable, or stopped polling), the reaper does nothing.
 // Unknown is not finished.

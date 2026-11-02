@@ -4,7 +4,6 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
-	"runtime"
 	"testing"
 	"time"
 
@@ -118,35 +117,20 @@ func TestHandleExecBGStatus_RecordsChatStateFromTheServerOnly(t *testing.T) {
 	}
 }
 
-// exec.bg_touch is an agent using a process: it resets the idle time, and a
-// connector's reaches only its own processes.
-func TestHandleExecBGTouch_ResetsIdleTimeWithinTheCallersGrant(t *testing.T) {
+// exec.bg_touch confines a connector to its own processes: its touch leaves
+// the user's process as idle as it was. (That a touch resets idle time, with
+// a fake clock: shell.TestTouchForGrant.)
+func TestHandleExecBGTouch_ConnectorCannotTouchTheUsersProcess(t *testing.T) {
 	t.Parallel()
 	mgr := shell.GetBackgroundManager()
 	process := startSleeper(t)
 	before := mgr.ReapOutlook(process).LastActive
-	touch := func(ctx context.Context) time.Time {
-		t.Helper()
-		payload, _ := json.Marshal(daemon.TouchProcessesRequest{ProcessIDs: []string{process.ID, "never-started"}})
-		if _, err := handleExecBGTouch(ctx, payload); err != nil {
-			t.Fatalf("handleExecBGTouch: %v", err)
-		}
-		return mgr.ReapOutlook(process).LastActive
+	payload, _ := json.Marshal(daemon.TouchProcessesRequest{ProcessIDs: []string{process.ID, "never-started"}})
+	ctx := daemonpolicy.NewContext(context.Background(), &daemonpolicy.Policy{GrantID: "grant-1"})
+	if _, err := handleExecBGTouch(ctx, payload); err != nil {
+		t.Fatalf("handleExecBGTouch: %v", err)
 	}
-
-	// The clock may not have ticked since the start: wait until it has, so
-	// a touch that works is distinguishable from one that did nothing.
-	deadline := time.Now().Add(10 * time.Second)
-	for !time.Now().UTC().After(before) {
-		if time.Now().After(deadline) {
-			t.Fatal("the clock never moved past the process start")
-		}
-		runtime.Gosched()
-	}
-	if got := touch(daemonpolicy.NewContext(context.Background(), &daemonpolicy.Policy{GrantID: "grant-1"})); !got.Equal(before) {
+	if got := mgr.ReapOutlook(process).LastActive; !got.Equal(before) {
 		t.Fatalf("a connector touched a first-party process: last active %v -> %v", before, got)
-	}
-	if got := touch(context.Background()); !got.After(before) {
-		t.Fatalf("touch did not reset the idle time: last active %v -> %v", before, got)
 	}
 }
