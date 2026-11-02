@@ -60,8 +60,10 @@ export function AccountSettings() {
     }
   }, [authError, clearAuthError])
 
+  // Signing out loses nothing — the account and everything in it are still
+  // there at the next sign-in — so it asks nothing and is not styled as a
+  // destructive action. Delete account, below, is the destructive one.
   const handleSignOut = async () => {
-    if (!confirm('Are you sure you want to sign out?')) return
     setIsSigningOut(true)
     try {
       await signOut()
@@ -73,7 +75,7 @@ export function AccountSettings() {
       navigate({ to: '/auth', search: { redirect: undefined } })
     } catch (error) {
       console.error('Sign out failed:', error)
-      alert('Failed to sign out. Please try again.')
+      setAccountError("Couldn't sign out. Please try again.")
     } finally {
       setIsSigningOut(false)
     }
@@ -142,13 +144,13 @@ export function AccountSettings() {
 
         <div className="border-t border-border/40 pt-4">
           <Button
-            variant="danger"
-            size="xs"
+            variant="secondary"
+            size="sm"
             onClick={handleSignOut}
             disabled={isSigningOut}
-            leftIcon={<LogOut className="w-3 h-3" />}
+            leftIcon={<LogOut className="w-3.5 h-3.5" />}
           >
-            {isSigningOut ? 'Signing out...' : 'Sign Out'}
+            {isSigningOut ? 'Signing out…' : 'Sign out'}
           </Button>
         </div>
       </div>
@@ -163,9 +165,9 @@ export function AccountSettings() {
         </div>
         <Button
           variant="danger"
-          size="xs"
+          size="sm"
           onClick={() => setIsDeleteDialogOpen(true)}
-          leftIcon={<Trash2 className="w-3 h-3" />}
+          leftIcon={<Trash2 className="w-3.5 h-3.5" />}
         >
           Delete account
         </Button>

@@ -1,17 +1,17 @@
 import { useMemo, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import Button from "@/components/forge-ui/button";
-import { cn } from "../../lib/utils";
+import { resolveAISettingsTab, type AISettingsTab, type SettingsTab } from "../../routeSchemas";
 import { useProviderStatuses } from "../../hooks/settings-queries";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { ModelPreferences } from "./ModelPreferences";
 import { ToolPreferences } from "./ToolPreferences";
 import { LocalModelsSection } from "./LocalModelsSection";
 import { ProvidersSection } from "./providers/ProvidersSection";
+import { SettingsTabPanel, SettingsTabs, type SettingsTabItem } from "./SettingsTabs";
 
-type AITab = "providers" | "models" | "local";
-
-const TABS: Array<{ id: AITab; label: string }> = [
+const TABS: ReadonlyArray<SettingsTabItem<AISettingsTab>> = [
   { id: "providers", label: "Providers" },
   { id: "models", label: "Models" },
   { id: "local", label: "Local & custom" },
@@ -41,12 +41,24 @@ function useProviderRows() {
  *                     both answer "which model does X use";
  *   - Local & custom  models on your machines, and custom endpoints.
  *
+ * The tab is the URL's `?tab=` (providers | models | local), so "Default
+ * models" can be linked to and survives a refresh.
+ *
  * Reliant's managed keys and spend live in Billing ("Reliant AI"), linked from
  * the Reliant provider card. Response streaming is a chat preference and lives
- * in Appearance.
+ * in Chat & editor.
  */
 export function AISettings() {
-  const [tab, setTab] = useState<AITab>("providers");
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { tab?: SettingsTab };
+  const tab = resolveAISettingsTab(search.tab);
+  const setTab = (next: AISettingsTab) => {
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, tab: next === "providers" ? undefined : next }),
+      replace: true,
+    });
+  };
   const [pickerOpen, setPickerOpen] = useState(false);
   const providers = useProviderRows();
 
@@ -71,27 +83,9 @@ export function AISettings() {
         }
         className="mb-4 border-b-0 pb-0"
       />
-      <div role="tablist" aria-label="AI settings" className="mb-6 flex gap-1 border-b border-border">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              tab === t.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SettingsTabs tabs={TABS} value={tab} onChange={setTab} idPrefix="ai-settings" ariaLabel="AI settings" className="mb-6" />
 
-      <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)?.label} data-onboarding="ai-providers-settings">
+      <SettingsTabPanel idPrefix="ai-settings" tab={tab} data-onboarding="ai-providers-settings">
         {tab === "providers" ? (
           <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
         ) : tab === "models" ? (
@@ -109,7 +103,7 @@ export function AISettings() {
         ) : (
           <LocalModelsSection />
         )}
-      </div>
+      </SettingsTabPanel>
     </>
   );
 }
