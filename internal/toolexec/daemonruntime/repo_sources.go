@@ -44,16 +44,21 @@ func discoverRepoSources(ctx context.Context, projectPath string) []string {
 	}
 	repoSourcesMu.Unlock()
 
-	found, err := repo.Discover(ctx, projectPath, 0)
+	found, err := repo.Discover(ctx, projectPath, repo.Options{})
 	if err != nil {
 		return nil
 	}
-	sources := make([]string, 0, len(found))
-	for _, f := range found {
+	sources := make([]string, 0, len(found.Repos))
+	for _, f := range found.Repos {
 		if f.RelativePath == "" || f.RelativePath == "." {
 			continue
 		}
 		sources = append(sources, f.RelativePath)
+	}
+	// A partial scan is used, not remembered: the next read scans again
+	// rather than missing a repo for the whole TTL.
+	if found.Truncated {
+		return sources
 	}
 
 	repoSourcesMu.Lock()

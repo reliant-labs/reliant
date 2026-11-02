@@ -246,12 +246,30 @@ func TestTriggerWithNoSourceParses(t *testing.T) {
 	assert.Nil(t, wf.GetTriggers()[0].GetSource())
 }
 
-// Inputs whose values are not strings (a number, a bool) are accepted as
-// their literal text; the template system reads them as literals.
-func TestTriggerInputScalarsKeepTheirText(t *testing.T) {
-	wf, err := ParseWorkflow([]byte("name: w\ntriggers:\n  - name: a\n    webhook: {}\n    inputs: {limit: 10, dry_run: true}\n"))
+// Bug 5b73a559: `asap: 'true'` (text) and `asap: true` (a boolean) both became
+// the text "true", so nothing could tell the author's boolean from a quoted
+// string. A bare boolean or number keeps its type as the expression that yields
+// it; quoted text, and a number not written canonically, stays text.
+func TestTriggerInputScalarsKeepTheirYAMLType(t *testing.T) {
+	src := "name: w\ntriggers:\n  - name: a\n    webhook: {}\n    inputs:\n" +
+		"      limit: 10\n      dry_run: true\n      ratio: 0.5\n" +
+		"      quoted_bool: 'true'\n      quoted_int: \"10\"\n      version: 1.10\n      padded: 007\n      ref: main\n"
+	wf, err := ParseWorkflow([]byte(src))
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"limit": "10", "dry_run": "true"}, wf.GetTriggers()[0].GetInputs())
+	assert.Equal(t, map[string]string{
+		"limit": "{{ 10 }}", "dry_run": "{{ true }}", "ratio": "{{ 0.5 }}",
+		"quoted_bool": "true", "quoted_int": "10", "version": "1.10", "padded": "007", "ref": "main",
+	}, wf.GetTriggers()[0].GetInputs())
+
+	// And it is written back as the author wrote it.
+	out, err := MarshalWorkflow(wf)
+	require.NoError(t, err)
+	for _, line := range []string{"limit: 10\n", "dry_run: true\n", "ratio: 0.5\n", "quoted_bool: \"true\"\n", "quoted_int: \"10\"\n", "version: \"1.10\"\n", "ref: main\n"} {
+		assert.Contains(t, string(out), line)
+	}
+	again, err := ParseWorkflow(out)
+	require.NoError(t, err)
+	assert.Equal(t, wf.GetTriggers()[0].GetInputs(), again.GetTriggers()[0].GetInputs())
 }
 
 func TestMarshalTriggersIsDeterministic(t *testing.T) {

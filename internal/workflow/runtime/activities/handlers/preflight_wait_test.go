@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,23 +231,130 @@ func TestPreflightWait_HardWakeErrorFailsWithCause(t *testing.T) {
 		"the message waits for a machine to connect rather than being dropped")
 }
 
-// A machine that failed to start is not coming up however long the run
-// waits — the prod workspace crash-looped for hours. The wait ends at once,
-// naming the control plane's reason, and the message stays queued for the
-// machine instead of being dropped with the run.
+// The queue records the machine the run waited for, so delivery waits for
+// that machine — not the user's default one, which may well be up (prod,
+// 2026-10-26: a workflow naming a machine that never connected was delivered,
+// failed here and re-queued ~10k times).
+func TestPreflightWait_QueueRecordsTheMachineTheRunWaitedFor(t *testing.T) {
+	t.Parallel()
+
+	router := &waitFakeRouter{wakeErr: errors.New("no daemon available: the machine this request asked for is not connected")}
+	a, repo, chatID := newWaitFixture(t, false, router)
+
+	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5,
+		DaemonSelector: &activitytypes.DaemonSelector{Name: "cicd"}})
+	require.Error(t, err)
+
+	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	assert.Equal(t, chatID, queued[0].ChatID)
+	require.NotNil(t, queued[0].Machine)
+	assert.Equal(t, db.QueuedMachine{Name: "cicd"}, *queued[0].Machine)
+
+	// A deliverer's claim and requeue keeps the machine.
+	_, err = repo.SetChatQueuedForMachine(context.Background(), chatID, false)
+	require.NoError(t, err)
+	_, err = repo.SetChatQueuedForMachine(context.Background(), chatID, true)
+	require.NoError(t, err)
+	queued, err = repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.NotNil(t, queued[0].Machine)
+	assert.Equal(t, "cicd", queued[0].Machine.Name)
+}
+
+// A machine whose failure to start has held is not coming up however long the
+// run waits — the prod workspace crash-looped for hours. The first check that
+// finds it has held ends the wait, naming the control plane's reason, and the
+// message stays queued for the machine instead of being dropped with the run.
 func TestPreflightWait_FailedMachineEndsTheWaitAndQueuesTheMessage(t *testing.T) {
 	t.Parallel()
 
 	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{}}
 	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "tools-daemon exited with code 1."})
 	a, repo, chatID := newWaitFixture(t, false, router)
+	failedSince := time.Now().Add(-3 * time.Minute)
 
-	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
+	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5, FailedSince: &failedSince})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Your machine failed to start: tools-daemon exited with code 1.")
 	assert.Contains(t, err.Error(), queuedForMachineNote)
-	assert.NotContains(t, repo.got(), true, "a failed machine never parks the run")
+	assert.NotContains(t, repo.got(), true, "a machine that stayed failed never parks the run")
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+}
+
+// runPreflightSlices runs one preflight slice per state, the way the workflow
+// does: each slice gets the Failed run the previous one returned. It stops at
+// the first slice that does not report Waiting and returns that slice's
+// result, every Waiting slice's FailedSince, and its error.
+func runPreflightSlices(t *testing.T, a *PreflightDaemonCheckActivity, router *machineStateRouter, chatID string, states ...toolexec.MachineState) (PreflightDaemonCheckOutput, []*time.Time, error) {
+	t.Helper()
+	var failedSince *time.Time
+	var runs []*time.Time
+	for _, state := range states {
+		router.set(state)
+		router.online.Store(state.Exists && !state.Failed && !state.Starting && !state.Suspended)
+		out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, FailedSince: failedSince})
+		if err != nil || !out.Waiting {
+			return out, runs, err
+		}
+		failedSince = out.FailedSince
+		runs = append(runs, out.FailedSince)
+	}
+	t.Fatal("the machine was still not ready after every state")
+	return PreflightDaemonCheckOutput{}, nil, nil
+}
+
+// A Failed report the control plane recovers from is not the end of the run.
+// Prod 2026-10-30 18:21: a resumed machine read Failed for 17s while its
+// previous pod finished terminating, every run waiting for it ended with
+// "Your machine failed to start", and the machine connected 44s later on its
+// own. The run now waits through it and gets its machine.
+func TestPreflightWait_TransientFailedKeepsWaiting(t *testing.T) {
+	t.Parallel()
+
+	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}}
+	a, repo, chatID := newWaitFixture(t, false, router)
+	failed := toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "tools-daemon exited with code 1"}
+
+	out, runs, err := runPreflightSlices(t, a, router, chatID,
+		failed, failed,
+		toolexec.MachineState{DaemonID: "d1", Exists: true, Starting: true},
+		toolexec.MachineState{DaemonID: "d1", Exists: true})
+
+	require.NoError(t, err, "a Failed report that did not hold never ends the run")
+	assert.True(t, out.DaemonAvailable)
+	require.Len(t, runs, 3)
+	require.NotNil(t, runs[0], "the first Failed look starts the run")
+	require.NotNil(t, runs[1])
+	assert.True(t, runs[0].Equal(*runs[1]), "the next slice carries the same run on")
+	assert.Nil(t, runs[2], "a machine that left Failed clears it")
+	assert.NotEqual(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+}
+
+// A Failed report that holds across slices ends the wait once it has held for
+// the settle window, and queues the message, as a failed machine always did.
+func TestPreflightWait_PersistentFailedEndsOnceItHolds(t *testing.T) {
+	t.Parallel()
+
+	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}}
+	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "out of capacity"})
+	a, repo, chatID := newWaitFixture(t, false, router)
+	a.failedSettle = 50 * time.Millisecond
+
+	first, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID})
+	require.NoError(t, err, "the first Failed look is not believed")
+	require.True(t, first.Waiting)
+	require.NotNil(t, first.FailedSince)
+
+	time.Sleep(60 * time.Millisecond)
+	_, err = runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, FailedSince: first.FailedSince})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Your machine failed to start: out of capacity")
+	assert.Contains(t, err.Error(), queuedForMachineNote)
 	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
 }
 
@@ -333,7 +443,7 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 	a, repo, chatID := newWaitFixture(t, false, router)
 
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{
-		ChatID: chatID, DaemonSelector: &toolexec.DaemonSelector{ID: "daemon-b"}})
+		ChatID: chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: "daemon-b"}})
 	require.NoError(t, err)
 	assert.True(t, out.Waiting)
 	assert.False(t, out.DaemonAvailable)
@@ -345,7 +455,24 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 	// Once B itself attaches, the wait ends.
 	router.onlineIDs.Store("daemon-b", true)
 	out, err = runPreflight(t, a, PreflightDaemonCheckInput{
-		ChatID: chatID, DaemonSelector: &toolexec.DaemonSelector{ID: "daemon-b"}})
+		ChatID: chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: "daemon-b"}})
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
+}
+
+// A run whose machine is offline or gone fails as a user error, so it
+// crosses the activity boundary benign and its failure is logged at INFO, not
+// raised as an issue (prod: ~9.5k ERROR records from one offline machine). A
+// wake that failed for a reason of ours stays a server fault.
+func TestPreflightTerminalErrors_OfflineIsAUserErrorOursIsNot(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(errPreflightNoDaemon(nil)))
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(errPreflightNoDaemon(
+		svcerr.WithMessage(toolexec.ErrNoDaemon, "no daemon available: the machine this request asked for is not connected"))))
+	assert.Equal(t, svcerr.ClassServer, errclass.Classify(errPreflightNoDaemon(errors.New("control plane ResumeDaemon(d1): internal"))))
+
+	removed := svcerr.WithClass(errors.New("This chat's machine was removed"), svcerr.ClassUser)
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(keepClass(removed, errors.New("removed. queued"))))
+	assert.Equal(t, svcerr.ClassServer, errclass.Classify(keepClass(errors.New("Your machine failed to start"), errors.New("failed. queued"))))
 }

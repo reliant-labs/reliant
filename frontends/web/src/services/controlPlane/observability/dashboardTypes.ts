@@ -72,8 +72,13 @@ export interface DashboardWorkspaceInfo {
 
 /** One row of the index. Never a full spec. */
 export interface DashboardSummary {
-  /** Absent/standard: spec renderer; organization-costs: canonical billing view. */
-  viewKind?: "standard" | "organization-costs";
+  /**
+   * Absent/standard: spec renderer. The rest are typed built-in views:
+   * organization-costs, organization-usage and organization-billing over
+   * control-plane BillingService; llm-usage over reliant's own usage
+   * (clientBuiltins.ts).
+   */
+  viewKind?: "standard" | "organization-costs" | "organization-usage" | "organization-billing" | "llm-usage";
   ref: DashboardRef;
   source: DashboardSource;
   title: string;
@@ -90,6 +95,14 @@ export interface DashboardSummary {
   workspace: DashboardWorkspaceInfo | null;
   /** Templates: "generated" or "platform". */
   category: string;
+  /**
+   * The page group the spec declares (overview, services, jobs, product,
+   * platform, releases, custom), defaulted by the server. Absent from a
+   * control plane that predates it: the page infers one (dashboardGroups.ts).
+   */
+  group?: string;
+  /** The spec's tags (lowercase, at most eight); search matches them. */
+  tags?: string[];
 }
 
 export interface DashboardIndex {

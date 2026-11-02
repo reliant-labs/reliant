@@ -12,7 +12,7 @@
  *
  *   /forge-metrics-preview                     p95 checkout.latency, its detail open
  *   /forge-metrics-preview?blank=1             nothing picked yet
- *   …&case=cap|read-only|conflict|in-flight|not-set-up|no-telemetry|nothing-yet|loading
+ *   …&case=cap|read-only|conflict|not-set-up|no-telemetry|nothing-yet|loading
  *   …&env=all|staging|dev     …&range=24h     …&compare=period
  *   …&dark=1&scheme=pure-black
  *
@@ -50,7 +50,6 @@ const CASES: { id: string; label: string; options: ExplorerFixtureOptions & { lo
   { id: "cap", label: "series cap and warnings", options: { seriesTotal: 1204, warnings: ["mixed_bounds", "step_raised"] } },
   { id: "read-only", label: "member, not admin", options: { dashboardsReadOnly: true } },
   { id: "conflict", label: "dashboard saved meanwhile (twice)", options: { saveConflicts: 2 } },
-  { id: "in-flight", label: "too many queries in flight", options: { inFlight: true } },
   { id: "not-set-up", label: "observability not set up", options: { failWith: Code.FailedPrecondition } },
   { id: "no-telemetry", label: "nothing sent in the window", options: { empty: true } },
   { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },

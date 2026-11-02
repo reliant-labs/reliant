@@ -49,7 +49,7 @@ interface TriggerCardProps {
 }
 
 const linkClass =
-  "font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
+  "font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * A scheduled slot, as "Tue 6 Oct, 09:00 (Europe/London)". Rendered in the
@@ -192,7 +192,7 @@ export function TriggerCard({
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
             aria-controls={detailsId}
-            className="ml-auto inline-flex items-center gap-1 rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="ml-auto inline-flex items-center gap-1 rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {expanded ? "Hide what it ran with" : "Show what it ran with"}
             <ChevronDown
@@ -225,6 +225,14 @@ export function TriggerCard({
           <dd className="text-foreground">
             <KeyValues entries={flattenInputs(start.params)} />
           </dd>
+          {event?.definition && (
+            <>
+              <dt>Definition</dt>
+              <dd className="break-words font-mono text-foreground" data-testid="trigger-card-definition">
+                {event.definition}
+              </dd>
+            </>
+          )}
         </dl>
       )}
     </CardInset>

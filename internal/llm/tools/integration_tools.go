@@ -325,6 +325,7 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 	if ctx == nil {
 		return NewTextErrorResponse("no execution context"), nil
 	}
+	params = stampOwningChat(t.manifest.GetId(), t.action.GetId(), params, rc.ChatID)
 	who := actingidentity.From(ctx)
 	site := httpaction.CallSite{
 		RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID,

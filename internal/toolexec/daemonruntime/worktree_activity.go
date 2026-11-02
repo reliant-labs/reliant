@@ -223,9 +223,10 @@ func (l *WorktreeRecoveryLease) Release() {
 }
 func recoveryLifecycleCommand(name string) bool {
 	switch name {
-	case "worktree.recovery_finalize":
-		// The trusted finalizer acquires scoped admission itself. No network,
-		// capture or restore command may race this short removal window.
+	case "worktree.recovery_finalize", "worktree.reconcile":
+		// Trusted reclamation acquires scoped admission itself for shedding or
+		// finalization. Ordinary admission here would veto its own lease.
+		// Reclaimer path/row locks serialize other lifecycle mutations.
 		return true
 	default:
 		return false

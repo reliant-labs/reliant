@@ -43,7 +43,7 @@ type DaemonAuth struct{ serverkit.Authenticator }
 // NewDaemonAuth builds the daemon audience's authenticator over tokens, which
 // resolves daemons' credentials (uncached: a revoked daemon credential is
 // refused on its next connect).
-func NewDaemonAuth(tokens auth.AccessTokenIntrospector) (*DaemonAuth, error) {
+func NewDaemonAuth(tokens auth.AccessTokenAccountIntrospector) (*DaemonAuth, error) {
 	interceptor, err := interceptors.NewDaemonAuthInterceptor(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("daemon auth: %w", err)

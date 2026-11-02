@@ -9,7 +9,7 @@
  * event, from a trace, and from a dashboard's sessions panel.
  */
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -20,6 +20,7 @@ import { FIXTURE_LIVE_SESSION, FIXTURE_STORY_SESSION } from "../../__fixtures__/
 import { ENV_PLACE, PROJECT_PLACE, renderPanel } from "../../__tests__/obsTestUtils";
 import { PanelBody } from "../../Dashboards/PanelBody";
 import { FakeReplayer } from "./fakeReplayer";
+import { noteReplayUnplayable, resetReplayVerdictsForTests } from "../sessionModel";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/obsMocks")).obsMocks.virtual());
@@ -30,7 +31,11 @@ type ListReq = { envIds: string[]; hasError: boolean; hasReplay: boolean; userId
 const listCalls = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([rpc]) => rpc === "ListSessions").map(([, req]) => req as ListReq);
 const rowIds = () => screen.getAllByTestId(/^obs-session-sess-/).map((row) => row.getAttribute("data-testid")!.replace("obs-session-", ""));
 
-beforeEach(() => FakeReplayer.reset());
+beforeEach(() => {
+  FakeReplayer.reset();
+  resetReplayVerdictsForTests();
+});
+afterEach(() => vi.useRealTimers());
 
 describe("the session list", () => {
   it("lists the scope's sessions newest first, the live one on top", async () => {
@@ -42,6 +47,31 @@ describe("the session list", () => {
     expect(ids).toHaveLength(25);
     expect(listCalls(onCall)[0]).toMatchObject({ hasError: false, hasReplay: false, userId: "", pathContains: "" });
     expect(within(screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`)).getByText("replay")).toBeInTheDocument();
+  });
+
+  it("dims sessions without a playable replay and says why each has none", async () => {
+    const api = createFixtureApi();
+    const all = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 25 })).sessions;
+    const unrecorded = all.find((s) => !s.hasReplay)!;
+    const opened = all.find((s) => s.hasReplay && s.sessionId !== FIXTURE_STORY_SESSION && s.sessionId !== FIXTURE_LIVE_SESSION)!;
+    // The player found this one's replay unplayable earlier in the tab.
+    noteReplayUnplayable(opened.sessionId);
+    renderPanel(api, { view: "sessions", range: "24h" }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+
+    const story = screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`);
+    expect(story).toHaveAttribute("data-replay", "playable");
+    expect(story.className).not.toMatch(/opacity-60/);
+
+    const none = screen.getByTestId(`obs-session-${unrecorded.sessionId}`);
+    expect(none).toHaveAttribute("data-replay", "none");
+    expect(none.className).toMatch(/opacity-60/);
+    expect(screen.getByTestId(`obs-session-no-replay-${unrecorded.sessionId}`)).toHaveAttribute("title", expect.stringMatching(/recorder didn't capture it/));
+
+    const incomplete = screen.getByTestId(`obs-session-${opened.sessionId}`);
+    expect(incomplete).toHaveAttribute("data-replay", "unplayable");
+    expect(within(incomplete).queryByText("replay")).not.toBeInTheDocument();
+    expect(screen.getByTestId(`obs-session-replay-incomplete-${opened.sessionId}`)).toHaveTextContent("replay incomplete");
   });
 
   it("names each session by its frontend and start time, with the id as copyable metadata", async () => {
@@ -114,7 +144,13 @@ describe("the session list", () => {
 });
 
 describe("one session", () => {
-  it("opens from the list into its header, masked replay and timeline", async () => {
+  // The fixture's event timestamps are epoch milliseconds taken from the clock, so a
+  // clock whose timestamps contain "4242" must not read as a leaked card number.
+  it.each([
+    ["the current clock", undefined],
+    ["a clock whose timestamps contain the card digits", 1793344242000 + 6 * 60_000],
+  ])("opens from the list into its header, masked replay and timeline (%s)", async (_name, pinnedNow) => {
+    if (pinnedNow !== undefined) vi.useFakeTimers({ toFake: ["Date"], now: pinnedNow });
     const harness = renderPanel(createFixtureApi(), { view: "sessions", range: "24h" }, PROJECT_PLACE);
     await screen.findByTestId("obs-sessions-list");
     await userEvent.setup().click(screen.getByTestId(`obs-session-open-${FIXTURE_STORY_SESSION}`));
@@ -129,7 +165,7 @@ describe("one session", () => {
     await waitFor(() => expect(screen.getByTestId("replay-player")).toHaveAttribute("data-state", "ready"));
     expect(screen.getByTestId("replay-masked-badge")).toBeInTheDocument();
     // The fixture recording is masked as recorded: no readable page text reaches the Replayer.
-    const recorded = JSON.stringify(FakeReplayer.last().events);
+    const recorded = recordedText(FakeReplayer.last().events);
     expect(recorded).not.toMatch(/Checkout|Pay now|4242/);
     expect(recorded).toContain("********");
 
@@ -168,6 +204,8 @@ describe("one session", () => {
     const unrecorded = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 100 })).sessions.find((s) => !s.hasReplay)!;
     renderPanel(api, { view: "sessions", session: unrecorded.sessionId }, PROJECT_PLACE);
     expect(await screen.findByTestId("session-no-replay")).toHaveTextContent("No replay was recorded for this session.");
+    // With page views, the summary cannot say which of the recorder's reasons it was: all are named.
+    expect(screen.getByTestId("session-no-replay")).toHaveTextContent(/replay sample, replay is off for this app, or its window stayed in the background/);
     expect(await screen.findByTestId("session-timeline")).toBeInTheDocument();
     // No empty replay panel beside it: the timeline takes the width.
     expect(screen.queryByTestId("session-replay")).not.toBeInTheDocument();
@@ -240,6 +278,14 @@ describe("links into a session", () => {
     expect(screen.getByTestId("obs-panel-session-sess-nameless").textContent).toMatch(/^Unknown app · Mar 9, 2024, 14:32$/);
   });
 });
+
+/** Every string the recording carries (page text, attributes, CSS), never its numbers: timestamps are not page content. */
+function recordedText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(recordedText).join("\n");
+  if (value && typeof value === "object") return Object.values(value).map(recordedText).join("\n");
+  return "";
+}
 
 function emptyResult(): PanelResult {
   return { series: [], rows: [], columns: [], funnelSteps: [], issues: [], sessions: [] } as unknown as PanelResult;

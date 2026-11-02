@@ -86,6 +86,33 @@ func ValidateActivationParamsWith(declared map[string]*reliantv1.Input, mapped m
 	return out
 }
 
+// ValidateTriggerInputValues checks the values one event produced through a
+// trigger's inputs mapping against the workflow's inputs, by the rule every
+// launch applies (InputValue and validateProtoInputType): what fails here is
+// what a firing of that event would be refused for. An undeclared name is
+// left to the static check, and only plain value inputs are checked, as
+// validateTriggerInputType does. It returns one message per problem, in name
+// order.
+func ValidateTriggerInputValues(declared map[string]*reliantv1.Input, values map[string]any, types ValueTypes) []string {
+	vt := typesOrDefault(types)
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var problems []string
+	for _, name := range names {
+		input := declared[name]
+		if input == nil || values[name] == nil || !isSuppliedByParams(input) {
+			continue
+		}
+		if err := validateProtoInputType(name, values[name], input, vt); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	return problems
+}
+
 // isSuppliedByParams reports whether an activation's params are where input's
 // value comes from: a plain value, not a model, message, preset, group or
 // tools input.

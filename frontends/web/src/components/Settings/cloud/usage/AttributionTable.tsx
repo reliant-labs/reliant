@@ -50,7 +50,7 @@ export function AttributionTable({
         row.deploymentId ? (
           (deploymentNames?.get(row.deploymentId) ?? row.deploymentId)
         ) : (
-          <span className="text-ink-muted">Cluster floor (no deployment)</span>
+          <span className="text-ink-muted">Not tied to a deployment</span>
         ),
     },
     {
@@ -60,9 +60,11 @@ export function AttributionTable({
       render: (_, { row }) =>
         row.environmentId ? (environmentNames?.get(row.environmentId) ?? row.environmentId) : "—",
     },
-    { key: "cpu", header: "CPU (vCPU-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.cpuDisplay) },
-    { key: "memory", header: "Memory (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.memoryDisplay) },
+    { key: "cpu", header: "CPU requested (vCPU-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.cpuDisplay) },
+    { key: "memory", header: "Memory requested (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.memoryDisplay) },
     { key: "storage", header: "Storage (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.storageDisplay) },
+    { key: "egress", header: "Egress (GB)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.egressDisplay) },
+    { key: "sites", header: "Extra static sites (site-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.staticSiteHours) },
     { key: "accrued", header: "Accrued", numeric: true, className: "font-medium", render: (_, { row }) => formatCents(row.accruedCents) },
   ];
 

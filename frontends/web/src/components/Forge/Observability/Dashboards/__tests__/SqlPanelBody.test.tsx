@@ -187,3 +187,31 @@ describe("SQL shared states", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
+
+describe("SQL time series: the window asked for and the bucket's calendar", () => {
+  const day = Date.UTC(2026, 9, 29) / 1000;
+  const hour = { startMs: Date.UTC(2026, 9, 29, 18, 11, 39), endMs: Date.UTC(2026, 9, 29, 19, 11, 39) };
+  const series = (n: number) => ({ label: "runs", group: { outcome: "success" }, timestamps: [day], values: [n], value: null });
+  const lastChart = () => vi.mocked(UPlotChart).mock.calls.at(-1)![0];
+
+  it("hands the chart the window, so one bucket is one dot placed in it", () => {
+    // The audit's case: 53 runs in the last hour, bucketed per day, one point.
+    render(<PanelBody panel={panel("workflows-by-outcome")} query={ready(result({ series: [series(53)], window: hour, bucketSeconds: 86_400, bucketTimezone: "UTC" }))} />);
+    expect(screen.getByTestId("sql-chart")).toBeInTheDocument();
+    expect(lastChart().window).toEqual({ startSec: hour.startMs / 1000, endSec: hour.endMs / 1000 });
+  });
+
+  it("marks a Date-bucketed result as UTC calendar days with the server's bucket width, and an instant series as neither", () => {
+    render(<PanelBody panel={panel("workflows-by-outcome")} query={ready(result({ series: [series(53)], window: hour, bucketSeconds: 86_400, bucketTimezone: "UTC" }))} />);
+    expect(lastChart().calendar).toEqual({ timezone: "UTC", bucketSeconds: 86_400 });
+
+    render(<PanelBody panel={panel("events-by-step")} query={ready(result({ series: [series(5)], window: hour, bucketSeconds: 120 }))} />);
+    expect(lastChart().calendar).toBeUndefined();
+    expect(lastChart().window).toBeDefined();
+  });
+
+  it("leaves the chart on its data extent when the answer carries no window", () => {
+    render(<PanelBody panel={panel("old")} query={ready(result({ series: [series(5)] }))} />);
+    expect(lastChart().window).toBeUndefined();
+  });
+});

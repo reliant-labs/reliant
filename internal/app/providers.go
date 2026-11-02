@@ -51,9 +51,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
+	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -414,24 +417,44 @@ type TemporalClient struct {
 }
 
 // TemporalClientDeps is the server, and the boot context the first dial
-// waits under.
+// waits under. NATS carries the stop nudges the client publishes.
 type TemporalClientDeps struct {
 	Ctx          context.Context
 	Temporal     *configv1.TemporalConfig
 	PayloadStore *claimcheck.PostgresStore
+	NATS         *NATSConn
+}
+
+// stopSignals are the signals that stop running activities of the workflow
+// they are sent to: a pause, an interrupt of a thread, a cancel of a spawned
+// thread. A successful one is nudged to the workers (stopnudge), so the
+// activities it cancels stop within a second instead of a heartbeat window.
+var stopSignals = []string{
+	v2workflow.SignalPause,
+	wfruntime.InterruptThreadSignalName,
+	threadcancel.SignalName,
 }
 
 // NewTemporalClient dials Temporal. A server that is not up YET is a wait,
 // not a crash: the first dial retries with backoff (serverkit.RetryConnect),
 // and /readyz names "temporal" as pending meanwhile.
 func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
+	return newTemporalClient(d, temporal.NewExternalClient)
+}
+
+// dialTemporalFunc connects the SDK client. Production dials
+// (temporal.NewExternalClient); a test passes a lazy client, so it builds the
+// process's client, decorators included, without a Temporal server.
+type dialTemporalFunc func(context.Context, temporal.ExternalClientConfig) (client.Client, error)
+
+func newTemporalClient(d TemporalClientDeps, dial dialTemporalFunc) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
-		dialed, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
+		dialed, err := dial(ctx, temporal.ExternalClientConfig{
 			Host:         host,
 			Port:         port,
 			Namespace:    namespace,
@@ -445,6 +468,11 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
+	}
+	// Every stop this process requests (pause, interrupt, cancel, terminate,
+	// reset) is also nudged to the workers running the workflow's activities.
+	if d.NATS != nil {
+		c = stopnudge.Wrap(c, d.NATS.Conn, stopSignals...)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
 	return &TemporalClient{Client: c, Namespace: namespace}, nil

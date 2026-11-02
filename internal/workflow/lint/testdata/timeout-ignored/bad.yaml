@@ -1,0 +1,10 @@
+name: fixture
+entry: [review]
+nodes:
+# Reads as "the review takes at most 45 minutes"; bounds nothing.
+- id: review
+  type: workflow
+  ref: builtin://autopilot-agent
+  timeout: 45m
+  args:
+    max_turns: 40

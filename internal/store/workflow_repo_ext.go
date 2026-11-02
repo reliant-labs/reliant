@@ -51,7 +51,7 @@ func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflo
 		OwnerUserID:     w.OwnerUserID,
 	}
 	_, err := db.Bun().NewInsert().Model(row).
-		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt, WorkflowFieldStartFailedAt).
+		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt, WorkflowFieldStartFailedAt, WorkflowFieldFailureDetail).
 		On("CONFLICT (id) DO NOTHING").
 		Returning("NULL").
 		Exec(ctx)
@@ -201,7 +201,11 @@ func setWorkflowStatus(q *bun.UpdateQuery, status core.WorkflowStatus) *bun.Upda
         WHEN ?0 = 3 AND ?1 <> 3 THEN NOW()
         WHEN ?0 IN (1, 2) THEN NULL
         ELSE completed_at
-    END`, status.State, status.StopReason)
+    END`, status.State, status.StopReason).
+		// A row that is live again belongs to a new run of the chat (its
+		// root workflow id is reused), which has not failed: the last run's
+		// reason must not read as this one's.
+		Set(`failure_detail = CASE WHEN ?0 IN (1, 2) THEN NULL ELSE failure_detail END`, status.State)
 }
 
 // UpdateWorkflowStatus moves a workflow to status. A missing workflow is
@@ -351,6 +355,22 @@ func SetWorkflowOutcome(ctx context.Context, db orm.Context, id, outcome string)
 	}
 	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
 		Set("outcome = ?", stored).
+		Where("id = ?", id).
+		Exec(ctx)
+	return requireOneRow(res, err, "workflow")
+}
+
+// SetWorkflowFailureDetail records why the run failed, on the run (see
+// core.Workflow.FailureDetail). It is written in the transaction that writes
+// the FAILED status; the next status that makes the row live again clears it
+// (setWorkflowStatus). A missing workflow is svcerr.NotFound.
+func SetWorkflowFailureDetail(ctx context.Context, db orm.Context, id, detail string) error {
+	var stored *string
+	if detail != "" {
+		stored = &detail
+	}
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("failure_detail = ?", stored).
 		Where("id = ?", id).
 		Exec(ctx)
 	return requireOneRow(res, err, "workflow")
@@ -557,6 +577,7 @@ func workflowToCore(row *Workflow) *core.Workflow {
 		WorkerStoppedAt: row.WorkerStoppedAt,
 		StartFailedAt:   row.StartFailedAt,
 		Outcome:         row.Outcome,
+		FailureDetail:   row.FailureDetail,
 		OwnerUserID:     row.OwnerUserID,
 	}
 	if row.State != nil {

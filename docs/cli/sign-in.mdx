@@ -62,9 +62,30 @@ listing projects: unauthenticated: invalid or expired token
   hint: the credential must belong to that server — re-authenticate with 'reliant auth login'
 ```
 
+## One account per computer
+
+Your CLI login and the daemon credential are separate tokens, approved separately, so they could belong to two different people. Each one records the account it signed in as, and the CLI keeps them to the same account:
+
+- `reliant auth login` names the account it signed in as, and removes a saved daemon credential of any other account for that server. It says which one it removed, and names any daemon still running as that account with the command that stops it.
+- `reliant daemon start` uses only the daemon credential of the account you are logged in to the CLI as. If the saved one belongs to someone else, it says so and prints a pairing code to approve as you, rather than connecting as them. A pairing approved as anyone else is refused.
+- `reliant auth status` shows the account, without asking the server.
+
+```text
+$ reliant auth login
+…
+Logged in to https://api.reliantapi.com (default — no --server flag and no RELIANT_SERVER_URL)
+  Account:     ada@example.com
+  …
+  Removed this machine's daemon sign-in for bob@example.com: it was another account. The next 'reliant daemon start' pairs this machine as ada@example.com.
+```
+
+A login or daemon credential saved by an older version has no account recorded. The CLI asks the server whose daemon credential it is the first time it needs to know, and logging in again records the CLI login's. Until then it is left alone rather than treated as someone else's.
+
 ## Sign out
 
-`reliant auth logout` removes this server's login from the credentials file and forgets any Forge tokens exchanged from it. Two things are unchanged. The token itself stays valid on the server until it expires or you revoke it (see below). And a running daemon keeps working, because it uses its own daemon credential.
+`reliant auth logout` signs this computer out of the server. It removes the server's login from the credentials file, forgets any Forge tokens exchanged from it, and removes every daemon sign-in saved for that server in `~/.reliant/daemon.json`. The next `reliant daemon start` then prints a pairing code to approve in Reliant instead of connecting as whoever signed in last, which is what you want when someone else is about to use this computer with their own account.
+
+Some things are unchanged. A daemon that is already running stays connected as its account until you stop it; `logout` names each one it finds, with the `reliant daemon stop --data-dir …` command that stops it. The desktop app keeps its own sign-in, and saves a new daemon sign-in for whoever is signed in to it the next time it starts its daemon. On a Reliant cloud machine the daemon's sign-in is left alone, because Reliant manages it. And the tokens themselves stay valid on the server until they expire or you revoke them (see below).
 
 ## Sign in where there is no browser
 

@@ -14,7 +14,9 @@ import (
 )
 
 // TestApprovalResolveActivity_Timeout creates a pending approval, then resolves it
-// with status "timeout" and verifies the DB record is updated to denied.
+// with status "timeout" and verifies the DB record is EXPIRED with its reason,
+// and that the close is announced on the chat feed: clients rebuild a chat's
+// approvals from it, and an unannounced close stayed on screen as pending.
 func TestApprovalResolveActivity_Timeout(t *testing.T) {
 	t.Parallel()
 
@@ -62,10 +64,22 @@ func TestApprovalResolveActivity_Timeout(t *testing.T) {
 	// Verify the approval was updated to denied status in the DB
 	approval, err := h.Repo().GetApproval(ctx, approvalID)
 	require.NoError(t, err)
-	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), approval.Status,
-		"Timeout should map to DENIED status")
+	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), approval.Status,
+		"Timeout should map to EXPIRED status")
+	require.NotNil(t, approval.DenialReason, "the reason is recorded")
 	require.NotNil(t, approval.ActionTaken)
 	assert.Equal(t, "timeout", *approval.ActionTaken)
 	require.NotNil(t, approval.ResolvedAt,
 		"ResolvedAt should be set after resolving")
+
+	updates, err := h.Repo().GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+	announced := false
+	for _, u := range updates {
+		if u.EntityID == approvalID && u.UpdateType == db.UpdateTypeApproval {
+			assert.Contains(t, string(u.Data), `"status":"expired"`)
+			announced = true
+		}
+	}
+	assert.True(t, announced, "the expiry must be announced on the chat feed")
 }

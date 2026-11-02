@@ -1,0 +1,13 @@
+name: fixture
+automation_only: true
+triggers:
+- name: queued
+  integration:
+    integration: github
+    events: [pull_request.labeled]
+    match: {repository: acme/app, label: 'merge:queue'}
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: done}

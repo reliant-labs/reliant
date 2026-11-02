@@ -47,7 +47,25 @@ func Stamp(rep, prev *reliantv1.DiskReport, now time.Time) *reliantv1.DiskReport
 	default:
 		cp.GuardSinceMs = cp.ReportedAtMs
 	}
+	// And the process guard's refusal episode: one long spell near the
+	// process limit is one inbox item.
+	if p := cp.GetProcesses(); p != nil {
+		switch {
+		case !p.RefusingHeavy:
+			p.RefusingSinceMs = 0
+		case prev.GetProcesses().GetRefusingSinceMs() > 0:
+			p.RefusingSinceMs = prev.GetProcesses().GetRefusingSinceMs()
+		default:
+			p.RefusingSinceMs = cp.ReportedAtMs
+		}
+	}
 	return cp
+}
+
+// RefusingForProcesses reports whether the machine is refusing background
+// heavy commands for being near its process limit.
+func RefusingForProcesses(rep *reliantv1.DiskReport) bool {
+	return rep.GetProcesses().GetRefusingHeavy()
 }
 
 // Guarding reports whether the daemon's disk guard is acting on any volume:
@@ -164,6 +182,15 @@ func Signature(rep *reliantv1.DiskReport) string {
 		fstep := max(v.FilesTotal/100, 1)
 		fmt.Fprintf(&b, "%s|%d|%d|%d|%s;", UrgentVolumeSignature(v), v.TotalBytes, v.FreeBytes/step, v.FilesFree/fstep, strings.Join(v.Paths, ","))
 	}
+	// The process count only in 5%-of-the-limit steps, and its largest tree
+	// while refusing: the stored report names the trees the inbox shows.
+	if p := rep.GetProcesses(); p != nil {
+		step := max(p.Limit/20, 1)
+		fmt.Fprintf(&b, "procs|%t|%d|%d", p.RefusingHeavy, p.Count/step, p.Limit)
+		if p.RefusingHeavy && len(p.Top) > 0 {
+			fmt.Fprintf(&b, "|%s|%d", p.Top[0].Command, p.Top[0].Tasks/step)
+		}
+	}
 	return b.String()
 }
 
@@ -179,6 +206,9 @@ func UrgentSignature(rep *reliantv1.DiskReport) string {
 	for _, v := range rep.Volumes {
 		b.WriteString(UrgentVolumeSignature(v))
 		b.WriteByte(';')
+	}
+	if RefusingForProcesses(rep) {
+		b.WriteString("procs-refusing")
 	}
 	return b.String()
 }

@@ -69,7 +69,7 @@ func startDrainGateway(t *testing.T) (*drainGateway, string, string) {
 // newTestDaemonListener builds the daemon listener on a loopback port,
 // authenticating against tokens and serving svc as the gateway's daemon route
 // set does.
-func newTestDaemonListener(t *testing.T, tokens auth.AccessTokenIntrospector, svc *tools_daemon.Service) *DaemonListener {
+func newTestDaemonListener(t *testing.T, tokens auth.AccessTokenAccountIntrospector, svc *tools_daemon.Service) *DaemonListener {
 	t.Helper()
 	listener, err := NewDaemonListener(DaemonListenerDeps{BindAddress: "127.0.0.1", Chain: newTestDaemonChain(t, tokens), Routes: toolsDaemonRoutes(svc)})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func newTestDaemonListener(t *testing.T, tokens auth.AccessTokenIntrospector, sv
 }
 
 // newTestDaemonChain is the daemon chain over tokens.
-func newTestDaemonChain(t *testing.T, tokens auth.AccessTokenIntrospector) *DaemonChain {
+func newTestDaemonChain(t *testing.T, tokens auth.AccessTokenAccountIntrospector) *DaemonChain {
 	t.Helper()
 	daemonAuth, err := NewDaemonAuth(tokens)
 	require.NoError(t, err)

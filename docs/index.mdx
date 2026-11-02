@@ -1,9 +1,26 @@
 ---
 title: "Reliant"
-description: "The agentic development environment with programmable workflows"
+description: "Reliant runs the agents; Forge is the foundation they build and ship on"
 ---
 
-Reliant is an agentic development environment (ADE). Like Cursor or Claude Code, it lets you chat with AI agents that read, write, and run code in your project. Unlike them, Reliant adds **programmable workflows** — multi-step, multi-agent processes defined in YAML that reduce the human in the loop and produce higher quality code more consistently.
+Reliant and Forge are a pair. **Reliant is the harness**: agents that do the work, workflows that make them reliable, and machines they run on. **Forge is the foundation**: the Go and React app those agents build and run, with tests, deploys and monitoring in place from the first commit. Use Reliant on its own to work in any codebase, or use both to go from a prompt to an app running on a URL.
+
+<CardGroup cols={2}>
+  <Card title="Run agents with Reliant" icon="bot" href="/getting-started/quick-start">
+    Chat with agents that read, write and run code in your project, then automate repeatable processes as workflows. Sign in, pick a machine and a model, and run your first workflow.
+  </Card>
+  <Card title="Build and ship apps with Forge" icon="rocket" href="/forge/quick-start">
+    Go from a prompt to a deployed app: Go services and a React frontend with a database, environments, hosting and observability already set up.
+  </Card>
+</CardGroup>
+
+## How they fit together
+
+Reliant is an agentic development environment (ADE). Like Cursor or Claude Code, it lets you chat with AI agents that read, write, and run code in your project. Unlike them, Reliant adds **programmable workflows**: multi-step, multi-agent processes defined in YAML that reduce the human in the loop and produce higher quality code more consistently. Its servers run the agents, and a [machine](/machines/overview) you choose, your own computer or a Reliant cloud machine, does the hands-on work with your code.
+
+[Forge](/forge/overview) is what those agents build on. A forge project has a fixed, well-known structure, so an agent does not have to invent how an app is configured, tested, deployed or monitored. It runs `forge scaffold` and gets a service, a database table and a frontend page; `forge env up dev` and gets a running stack; `forge env deploy staging` and gets a release on [Reliant hosting](/forge/hosting) with a managed Postgres and a URL; and `forge obs check` to find out whether the release is healthy. Forge is built into the `reliant` binary, so `reliant forge …` works wherever Reliant does, already signed in as you.
+
+The two meet in a few places. The **Build an App** workflow scopes an app with you and scaffolds it as a Forge project. **Move to Forge** ports an existing codebase into one. The **Apps** and **Observability** areas of the Reliant app show the releases, environments, logs, traces and alerts of what you deploy. And a workflow can call a deployed Forge app's API, so an agent decides while the app holds the data and enforces the rules.
 
 ## Why workflows matter
 
@@ -108,16 +125,29 @@ Workflows are YAML files that live in `.reliant/workflows/` inside your reposito
 - **Consistency** — Everyone on the team runs the same processes
 - **Rollback** — Revert a broken workflow like any other commit
 
+## Forge: what you get
+
+Forge gives every project, from the first commit, the things that usually get bolted on late: structured logs, traces and metrics on every boundary, a Postgres schema with generated data access, linters and tests, CI, and `dev`, `staging` and `prod` environments. Deploying is one command to Reliant hosting, which runs your services, workers and jobs with a managed Postgres, publishes frontends as static sites behind a CDN, and supports custom domains. A landing page or docs site with no backend is a complete Forge project too. See the [Forge overview](/forge/overview) for the full picture and [Hosting on Reliant](/forge/hosting) for what it runs; current plans and prices are on the [pricing page](https://reliantlabs.io/pricing).
+
 ## Get started
 
 <CardGroup cols={3}>
   <Card title="Install Reliant" icon="download" href="/getting-started/installation">
     macOS, Linux, or Windows
   </Card>
-  <Card title="Quick Start" icon="play" href="/getting-started/quick-start">
+  <Card title="Reliant quick start" icon="play" href="/getting-started/quick-start">
     Chat + your first workflow in 5 minutes
   </Card>
+  <Card title="Forge quick start" icon="rocket" href="/forge/quick-start">
+    A prompt to a deployed URL
+  </Card>
   <Card title="Key Concepts" icon="graduation-cap" href="/getting-started/concepts">
-    The essential terms you need
+    The essential terms, for Reliant and Forge
+  </Card>
+  <Card title="Forge overview" icon="layers" href="/forge/overview">
+    What Forge is and what you get
+  </Card>
+  <Card title="Hosting & pricing" icon="cloud" href="/forge/hosting">
+    What Reliant hosting runs
   </Card>
 </CardGroup>

@@ -71,7 +71,19 @@ export interface MachineStatusPresentation {
   progress?: string;
   /** Whether a recorded wake is over and should be forgotten. */
   wakeFinished: boolean;
+  /**
+   * The machine is queued for capacity rather than starting: no machine of
+   * its size is free. A wait the user can act on (pick a smaller size, or
+   * cancel), not routine progress, so it is shown as its own state.
+   */
+  waitingForCapacity?: boolean;
 }
+
+/** The control plane's capacity-wait message (operators/workspace/provisioning_detail.go). */
+const CAPACITY_WAIT = /^waiting for capacity\b/i;
+
+/** What the capacity wait means for the user, replacing the operator's sentence. */
+export const CAPACITY_WAIT_DETAIL = "No machine of this size is free right now. It starts by itself as soon as one is, or you can choose a smaller size.";
 
 /**
  * What to say about a machine's status, given whether the user woke it.
@@ -102,5 +114,8 @@ export function presentMachineStatus(
     }
   }
 
+  if (status === "pending" && message && CAPACITY_WAIT.test(message)) {
+    return { label: "Waiting for capacity", progress: CAPACITY_WAIT_DETAIL, wakeFinished: false, waitingForCapacity: true };
+  }
   return { progress: status === "pending" ? message : undefined, wakeFinished: false };
 }

@@ -25,8 +25,9 @@ func (s *Service) SetChatDaemon(
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Get chat and verify ownership
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	// Get chat and verify ownership: the row is enough here, the response
+	// re-reads the whole chat after the write.
+	chat, err := s.deps.Repo.GetChatRowWithUserCheck(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -38,6 +39,13 @@ func (s *Service) SetChatDaemon(
 	if req.Msg.DaemonId != "" {
 		if err := daemonchoice.Validate(ctx, s.deps.Repo, userID, chat.ProjectID, req.Msg.DaemonId); err != nil {
 			return nil, err
+		}
+		// A chat in a branch workspace cannot move off the machine that
+		// holds the checkout.
+		if chat.WorktreeID != nil {
+			if err := s.checkWorkspaceMachine(ctx, userID, *chat.WorktreeID, req.Msg.DaemonId); err != nil {
+				return nil, err
+			}
 		}
 		daemonID = &req.Msg.DaemonId
 	}

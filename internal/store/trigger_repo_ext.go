@@ -66,6 +66,7 @@ type namedTrigger struct {
 	ProjectName  string `bun:"project_name"`
 	DaemonName   string `bun:"daemon_name"`
 	MachineState string `bun:"machine_state"`
+	PoolName     string `bun:"machine_pool_name"`
 }
 
 func (n *namedTrigger) toCore() (*core.Trigger, error) {
@@ -74,6 +75,7 @@ func (n *namedTrigger) toCore() (*core.Trigger, error) {
 		return nil, err
 	}
 	t.ProjectName, t.DaemonName, t.MachineState = n.ProjectName, n.DaemonName, n.MachineState
+	t.MachinePoolName = n.PoolName
 	return t, nil
 }
 
@@ -84,7 +86,9 @@ func (n *namedTrigger) toCore() (*core.Trigger, error) {
 var namedTriggerSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 	COALESCE(p.name, '')::text AS project_name,
 	COALESCE(NULLIF(d.name, ''), d.hostname, '')::text AS daemon_name,
+	COALESCE(mp.name, '')::text AS machine_pool_name,
 	CASE WHEN t.no_machine THEN 'none'
+	     WHEN t.machine_pool_id IS NOT NULL THEN 'pool'
 	     WHEN d.id IS NULL THEN 'removed'
 	     WHEN EXISTS (SELECT 1 FROM daemon_attachment a WHERE a.daemon_id = d.id
 	       AND a.user_id = t.user_id AND a.last_stream_activity > now() - interval '90 seconds') THEN 'connected'
@@ -95,6 +99,7 @@ var namedTriggerSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 FROM triggers t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id
+LEFT JOIN machine_pools mp ON mp.id = t.machine_pool_id
 `
 
 // GetTrigger returns the trigger with its project and daemon display names,
@@ -170,7 +175,7 @@ var triggerDefinitionColumns = []string{
 	TriggerFieldWorkflow, TriggerFieldPresets, TriggerFieldParams, TriggerFieldMessage,
 	TriggerFieldConfig, TriggerFieldDaemonID, TriggerFieldNotifyOnComplete,
 	TriggerFieldFilter, TriggerFieldConnectionID, TriggerFieldWorkflowTrigger, TriggerFieldNoMachine,
-	TriggerFieldActingIdentity,
+	TriggerFieldMachinePoolID, TriggerFieldActingIdentity,
 }
 
 // ReplaceTrigger rewrites a trigger's definition and stamps updated_at, or
@@ -403,6 +408,10 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 		daemonID := t.DaemonID
 		row.DaemonID = &daemonID
 	}
+	if t.MachinePoolID != "" {
+		poolID := t.MachinePoolID
+		row.MachinePoolID = &poolID
+	}
 	return row, nil
 }
 
@@ -443,6 +452,9 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	}
 	if row.DaemonID != nil {
 		t.DaemonID = *row.DaemonID
+	}
+	if row.MachinePoolID != nil {
+		t.MachinePoolID = *row.MachinePoolID
 	}
 	return t, nil
 }

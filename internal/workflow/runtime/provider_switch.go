@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 const (
@@ -131,6 +132,45 @@ func rememberPresetModel(inputs map[string]interface{}) {
 func presetModelTags(inputs map[string]interface{}) []string {
 	selector, _ := inputs[inputKeyPresetModel].(map[string]interface{})
 	return stringList(selector["tags"])
+}
+
+// chatModel is the chat's own model: the root thread's model input, which the
+// chat's picker writes and validates against the bound provider. A descendant
+// whose own model the bound provider cannot serve runs on it
+// (RuntimeContext.ChatModel). nil when the run has no model input.
+func (t *ChildWorkflowTracker) chatModel() *types.ModelChoice {
+	if t == nil {
+		return nil
+	}
+	return modelChoice(t.rootInputs["model"])
+}
+
+// threadChoseModel reports whether the user set thread's model themselves (a
+// thread-scoped model edit). That choice is never replaced by the chat's
+// model: a thread the bound provider cannot run on it holds for the user.
+func (t *ChildWorkflowTracker) threadChoseModel(thread string) bool {
+	if t == nil {
+		return false
+	}
+	_, chosen := t.threadInputOverrides[thread]["model"]
+	return chosen
+}
+
+// modelChoice reads a model input value: an id string, or a selector map.
+func modelChoice(value interface{}) *types.ModelChoice {
+	var choice types.ModelChoice
+	switch v := value.(type) {
+	case string:
+		choice.ID = v
+	case map[string]interface{}:
+		choice.ID, _ = v["id"].(string)
+		choice.Tags = stringList(v["tags"])
+		choice.Providers = stringList(v["providers"])
+	}
+	if choice.ID == "" && len(choice.Tags) == 0 {
+		return nil
+	}
+	return &choice
 }
 
 // durableLookupKey marks the chat-wide stopped-agent lookup in flight among

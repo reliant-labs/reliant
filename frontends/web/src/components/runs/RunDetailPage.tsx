@@ -150,7 +150,7 @@ function RunNotFound() {
         <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
         <Link
           to="/workflows/runs"
-          className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           All runs
         </Link>

@@ -240,6 +240,7 @@ func populateCELNamespaces() {
 		Fields: []CELField{
 			{Name: "id", Type: "string", Description: "Workflow execution ID (unique per run)"},
 			{Name: "name", Type: "string", Description: "Workflow definition name"},
+			{Name: "chat_id", Type: "string", Description: "The chat the run belongs to; its page is /workflows/runs/<chat_id>, so a run can link to itself (a GitHub check run's details_url)"},
 			{Name: "run_id", Type: "string", Description: "Workflow run ID (Temporal run ID)"},
 			{Name: "path", Type: "string", Description: "Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's project.path. Reading it in a run with no project directory is an error, not \"\"; test with has(workflow.path)"},
 			{Name: "worktree_path", Type: "string", Description: "The chat's worktree, when the current scope runs in it (empty in the project's main checkout)"},

@@ -117,7 +117,7 @@ export function WhenField({
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
-            className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {integration?.integration ? "Choose another event" : "Choose the event"}
           </button>
@@ -161,7 +161,7 @@ export function WhenField({
           ) : (
             <p className={hintClass}>Your default {integration.integration} account is used.</p>
           )}
-          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} allowApp={integration.integration === "github"} />
+          <ActingIdentityField value={actingIdentity} onChange={onActingIdentityChange} />
           <OnlyFromControl
             integration={integration.integration}
             filter={when.event?.filter ?? ""}

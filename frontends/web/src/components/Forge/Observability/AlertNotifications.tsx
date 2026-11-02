@@ -65,7 +65,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
             type="button"
             onClick={() => mark.mutate([])}
             disabled={mark.isPending}
-            className="inline-flex items-center gap-1 rounded-sm text-xs text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            className="inline-flex items-center gap-1 rounded-sm text-xs text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
             data-testid="obs-notifications-mark-all"
           >
             <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -91,7 +91,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
             setOpen(false);
             onOpenAlerts();
           }}
-          className="rounded-sm text-xs text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-sm text-xs text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-notifications-open-alerts"
         >
           See what is firing

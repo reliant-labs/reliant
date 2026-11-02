@@ -48,7 +48,10 @@ func (s *Service) CreateProject(
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
 	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); err == nil && existing != nil {
-		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, existing.Path); verr != nil {
+		// The row was found BY this path, so the path asked about is the
+		// one the caller named — on the machine the request runs on.
+		machine := s.requestMachine(ctx, userID, existing.ID, req.Msg.Path)
+		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, req.Msg.Path, machine); verr != nil {
 			return nil, verr
 		}
 		return nil, svcerr.AlreadyExists("a project already exists at this path")
@@ -114,9 +117,17 @@ func (s *Service) CreateProject(
 		Discovered       []discoveredRepo `json:"discovered"`
 		HasForge         bool             `json:"has_forge"`
 		ForgeProjectName string           `json:"forge_project_name"`
+		Truncated        bool             `json:"truncated"`
+		TruncatedReason  string           `json:"truncated_reason"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
 		logging.WarnContext(ctx, "Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+	} else if discoverResp.Truncated {
+		// The repos found are registered; the rest are adopted the first time
+		// a workspace needs them (repo.AdoptFromDaemon), which says so if its
+		// own scan is cut short too.
+		logging.WarnContext(ctx, "Repo discovery scanned part of the new project", "reason", discoverResp.TruncatedReason,
+			"found", len(discoverResp.Discovered), "path", req.Msg.Path)
 	}
 	isGitRepo := len(discoverResp.Discovered) > 0
 

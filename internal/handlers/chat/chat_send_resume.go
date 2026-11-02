@@ -209,12 +209,21 @@ func (s *Service) resurrectGhostWorkflow(
 		}
 	}
 
-	initialData := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	// Place the chat on its machine before its inputs are built: they are
+	// read from that machine's catalog (presets, input schema), the same one
+	// the run's own loads resolve against once it is pinned. Building first
+	// read the union for a chat with no pin yet, then ran another machine's
+	// definition.
+	s.chatPinner().Pin(ctx, chat)
+	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 
 	// Validate workflow inputs before starting, and before anything of the
 	// send is written — a refused send leaves nothing behind (see
 	// liveRunStateUpdate).
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
 	if presetsChanged {
@@ -228,7 +237,7 @@ func (s *Service) resurrectGhostWorkflow(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
-	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
+	modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
 	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
@@ -248,8 +257,7 @@ func (s *Service) resurrectGhostWorkflow(
 
 	// Note: Message was already saved above before ghost recovery
 
-	// Inject session daemon if set on chat
-	s.chatPinner().Pin(ctx, chat)
+	// Inject the session daemon the chat was pinned to above.
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{

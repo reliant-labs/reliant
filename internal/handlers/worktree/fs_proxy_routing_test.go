@@ -174,8 +174,11 @@ func TestFileSystemProxy_ChatInOwnedWorktree_ReadsFromOwner(t *testing.T) {
 	f.assertBrowsedOn(t, "daemon-b")
 }
 
-// The chat's pin beats its worktree's owner, as it does for the chat's tools.
-func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
+// An owned worktree's checkout is on its owner and nowhere else, so its files
+// come from there even for a chat pinned to another machine (a row from before
+// StartChat refused that combination). Reading the chat's machine reported the
+// workspace as removed.
+func TestFileSystemProxy_WorktreeOwnerBeatsAMismatchedChatPin(t *testing.T) {
 	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
@@ -184,7 +187,7 @@ func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
 	chatID := f.chat(t, f.userID, "daemon-c", wt.ID)
 
 	require.NoError(t, f.browse(t, &wt.ID, &chatID))
-	f.assertBrowsedOn(t, "daemon-c")
+	f.assertBrowsedOn(t, "daemon-b")
 }
 
 // Without a chat, an owned worktree is read from its owner: no other machine
@@ -305,8 +308,10 @@ func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
 
 	project, err := f.repo.GetProject(context.Background(), f.projectID)
 	require.NoError(t, err)
-	// The handler scopes the tree with filepreview.ResolveBasePath.
-	base, err := filepreview.ResolveBasePath(f.ctx, f.repo, f.projectID, nil, &chatID)
+	// The handler scopes the tree with filepreview.ResolveBasePath; the main
+	// checkout stands in for the request machine's own.
+	mainCheckout := func(context.Context) (string, error) { return project.Path, nil }
+	base, err := filepreview.ResolveBasePath(f.ctx, f.repo, f.projectID, nil, &chatID, mainCheckout)
 	require.NoError(t, err)
 	assert.Equal(t, project.Path, base, "another project's chat must not scope this project's tree to its worktree")
 }

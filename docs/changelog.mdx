@@ -13,6 +13,64 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.15" description="November 1, 2026">
+### Rename machines, see each chat's project, faster inbox reads
+
+Machines can be renamed, the sidebar shows which project each chat is in, the new-chat pickers only offer pairs that work, inbox and workflow reads do less work, and the Temporal worker no longer crash-loops at boot.
+
+#### Added
+
+- **machines: rename a machine from Settings -\> Machines, the CLI, or DaemonRegistryService.RenameMachine** [#1974](https://github.com/reliant-labs/reliant/pull/1974)
+- **web: the sidebar shows which project each chat is in** [#1975](https://github.com/reliant-labs/reliant/pull/1975)
+- **web: the new-chat pickers never offer a project/machine pair that fails** [#1976](https://github.com/reliant-labs/reliant/pull/1976)
+- **tracing: RPC server spans carry chat.id, workflow.id and thread.id** [#1982](https://github.com/reliant-labs/reliant/pull/1982)
+
+#### Changed
+
+- **chat: GetWorkflowExecutions' save probe keys the loop scope, not filters it** [#1979](https://github.com/reliant-labs/reliant/pull/1979)
+- **inbox: ListInbox reuses workflow-tree verdicts instead of re-validating every activation on every read** [#1981](https://github.com/reliant-labs/reliant/pull/1981)
+- **deps: pin forge 820b3ef — trace filters by span attribute, forge.ExternalDatabase** [#1984](https://github.com/reliant-labs/reliant/pull/1984)
+- **pin: forge v1.0.12 — merge-friendly generated output, release_dependencies fix, ExternalDatabase, obs attribute filter** [#1989](https://github.com/reliant-labs/reliant/pull/1989)
+
+#### Fixed
+
+- **cli: reliant github token|gh load CLIConfig instead of failing before they run** [#1978](https://github.com/reliant-labs/reliant/pull/1978)
+- **worker: build the Temporal worker on the SDK client under stopnudge's decorator (worker crash-looped at boot)** [#1983](https://github.com/reliant-labs/reliant/pull/1983)
+- **release-tag: --skip-release-gate is honoured with --rc (it was silently ignored)** [#1987](https://github.com/reliant-labs/reliant/pull/1987)
+
+</Update>
+
+<Update label="v1.8.14" description="October 30, 2026">
+### Faster chat lists, steadier workflow streams
+
+- **Read chat and inbox lists more efficiently** Chat and inbox reads probe activity per chat instead of hashing every user's rows, reducing database work.
+- **Keep streaming through a slow heartbeat** A slow workflow heartbeat RPC no longer kills a running model stream.
+- **Archive chats without leaving queued work behind** Archiving a chat drops its queued delivery and stops its run under the run-control lock.
+- **Share filesystem watchers across worktrees** Worktree activity observers share one inotify instance and release deleted worktrees.
+- **Distinguish expected errors from product issues** Expected conditions are reported as user errors rather than being filed as issues.
+</Update>
+
+<Update label="v1.8.13" description="October 30, 2026">
+### Dashboards together, workflows on the right machine
+
+- **Explore dashboards from one hub** The dashboards Overview hub and grouped list bring your dashboards together. Panels queue within the server's read limit and offer Retry when a request fails.
+- **Use the workflow catalog a run started with** Runs load workflow definitions from their original catalog. Automations use the project's workflow rather than a same-named account workflow, and skills, memories and MCP configuration stay scoped to each machine.
+- **Select the intended machine** A daemon: shorthand containing a machine ID now selects that machine correctly.
+- **More accurate usage analytics** Page visits and completed model calls are recorded again, and workflow events correctly identify child runs.
+</Update>
+
+<Update label="v1.8.12" description="October 30, 2026">
+### A cleaner chat list and steadier machines
+
+- **Keep automation runs out of the chat list** Runs started by automations, agents and the CLI no longer crowd the chat list. Each chat records where it came from, and only the conversations you start appear there.
+- **Refresh chat lists without request storms** Streaming updates are coalesced into one list refresh, and a superseded chat-list request is cancelled instead of racing the new one.
+- **Load long chats faster** A new index on messages makes counting a chat's messages an index-only read.
+- **Run workflows from the machine's own catalog** A run loads its workflow, child workflows and presets from the catalog of the machine it runs on, so a machine's local changes apply to its own runs.
+- **See each repository's state from the daemon** Daemons report every repository's branch, commit and uncommitted changes with each snapshot.
+- **See forge-applied rollout slots separately** The Rollout tab groups slots that Forge applies apart from the rest.
+- **Reliant Forge v1.0.6** The embedded `reliant forge` moves to v1.0.6 plus the environment validation fix: the service catalog no longer records source lines, and environments have no arbitrary entry-count limit.
+</Update>
+
 <Update label="v1.8.11" description="October 29, 2026">
 ### Faster chats and clearer workflow failures
 

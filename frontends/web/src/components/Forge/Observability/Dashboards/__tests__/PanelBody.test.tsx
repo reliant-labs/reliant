@@ -81,8 +81,8 @@ describe("states", () => {
     expect(screen.getByTestId("obs-panel-unsupported")).toHaveTextContent('unknown field "span.colour"');
     rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable) }} />);
     expect(screen.getByTestId("obs-panel-error")).toBeInTheDocument();
-    rerender(<PanelBody panel={{ ...line, kind: "heatmap" }} query={ready(answer(line))} />);
-    expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("heatmap");
+    rerender(<PanelBody panel={{ ...line, kind: "scatter" }} query={ready(answer(line))} />);
+    expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("scatter");
   });
 
   it("keeps the last panel result on quota exhaustion, and shows a neutral wait when none loaded", () => {
@@ -95,6 +95,34 @@ describe("states", () => {
     expect(screen.getByTestId("obs-error-over-quota")).toHaveAttribute("role", "status");
     expect(screen.getByTestId("obs-error-over-quota")).toHaveTextContent("Will load at");
     expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
+  });
+
+  it("says it is waiting for capacity, not that it failed, while the server's cap refuses it and it retries", () => {
+    const cap = new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted, { "x-forge-error-reason": "in_flight_limit" });
+    const { rerender } = render(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 2, failureReason: cap }} />);
+    expect(screen.getByTestId("obs-panel-waiting")).toHaveTextContent("Queued…");
+    expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
+    // A different failure being retried is still just loading.
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 1, failureReason: new ConnectError("down", Code.Unavailable) }} />);
+    expect(screen.queryByTestId("obs-panel-waiting")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Loading")).toBeInTheDocument();
+  });
+
+  it("offers Retry on every failure that is not a deliberate answer, and Retry reads this panel again", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    const { rerender } = render(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted), refetch }} />);
+    expect(screen.getByTestId("obs-panel-error")).toHaveTextContent("This panel couldn't be loaded. too many observability queries in flight; retry shortly");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable), refetch }} />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable), refetch, isFetching: true }} />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
+    // A panel the server cannot compile is not helped by asking again.
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("unknown field", Code.InvalidArgument), refetch }} />);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
   it("draws a metric with no data in the scope as empty, naming the metric and where", () => {
@@ -117,7 +145,7 @@ describe("states", () => {
     const onDrill = vi.fn();
     const grouped: Panel = { ...line, groupBy: ["span.name"] };
     const { rerender } = render(<PanelBody panel={grouped} query={ready(answer(grouped))} links={{ onDrill }} />);
-    await user.click(within(screen.getByTestId("obs-panel-legend")).getAllByRole("button")[0]);
+    await user.click(within(screen.getByTestId("obs-panel-legend")).getByRole("button", { name: "Open orders.v1.OrdersService/CreateOrder in the explorer" }));
     expect(onDrill).toHaveBeenLastCalledWith(expect.objectContaining({ group: { "span.name": "orders.v1.OrdersService/CreateOrder" } }), expect.anything());
     const table: Panel = { ...grouped, kind: "table" };
     rerender(<PanelBody panel={table} query={ready(answer(table))} links={{ onDrill }} />);

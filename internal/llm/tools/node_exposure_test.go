@@ -59,6 +59,35 @@ func TestNodeOutputSchemaReflectsToolOutput(t *testing.T) {
 	}
 }
 
+// TestRunToolsAreNodeExposed pins the run hand-off an automation draws: read a
+// run's state, then message it. Their structured output is what the next
+// node routes on (state, waiting; delivered).
+func TestRunToolsAreNodeExposed(t *testing.T) {
+	for tool, fields := range map[string][]string{
+		ToolGetRun:    {"run_id", "state", "waiting", "last_active_at", "working_threads"},
+		ToolSendToRun: {"run_id", "delivered", "state", "message_id"},
+	} {
+		if !IsNodeExposedTool(tool) {
+			t.Fatalf("%s should be node-exposed", tool)
+		}
+		schema := NodeOutputSchema(tool)
+		if schema == nil || schema.Properties == nil {
+			t.Fatalf("expected an output schema for %s", tool)
+		}
+		for _, field := range fields {
+			if _, ok := schema.Properties.Get(field); !ok {
+				t.Errorf("%s output schema missing field %q", tool, field)
+			}
+		}
+	}
+	// start_run and control_run create or stop work; they stay agent-only.
+	for _, tool := range []string{ToolStartRun, ToolControlRun} {
+		if IsNodeExposedTool(tool) {
+			t.Errorf("%s must not be node-exposed", tool)
+		}
+	}
+}
+
 // TestNodeOutputSchemaAbsentForUnexposedTool ensures the schema lookup follows
 // the opt-in rather than the registry.
 func TestNodeOutputSchemaAbsentForUnexposedTool(t *testing.T) {

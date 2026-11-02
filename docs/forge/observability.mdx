@@ -155,7 +155,7 @@ The platform keeps telemetry for these periods:
 | Session replays | 14 days |
 | Product events (funnels) | Up to 90 days without a paid compute subscription; up to 400 days with one, bounded by the environment's declaration |
 
-Each organization includes **10 GiB of ingestion per UTC calendar month**, shared across its projects and environments, then **$0.25/GB** with retention included. The pricing label GB means GiB (2³⁰ bytes). Ingestion is measured uncompressed after sampling and filtering, not as compressed disk space. **Settings → Billing & usage → Usage & limits → Observability** separates cumulative monthly ingestion from a timestamped snapshot of what's stored now.
+Each organization includes **10 GiB of ingestion per UTC calendar month**, shared across its projects and environments, then billed per GB at the rate on the [pricing page](https://reliantlabs.io/pricing), with retention included. The pricing label GB means GiB (2³⁰ bytes). Ingestion is measured uncompressed after sampling and filtering, not as compressed disk space. **Settings → Billing & usage → Usage & limits → Observability** separates cumulative monthly ingestion from a timestamped snapshot of what's stored now.
 
 Overage requires an in-force Stripe compute subscription, not just a saved card or wallet credit. The default $50 monthly observability cap limits the chargeable ledger even while gateway enforcement catches up. At a funded cap, the gateway keeps ERROR+ logs, error-status spans and metrics, and drops profiles and other logs/spans. Without a qualifying subscription, reduced collection starts at 10 GiB and becomes stricter at 15 GiB; no overage is charged.
 

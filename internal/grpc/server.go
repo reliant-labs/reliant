@@ -95,8 +95,10 @@ type APIHTTPRoutesDeps struct {
 type APIHTTPRoutesStore interface {
 	attachment.Repository
 	mcpserver.AttachmentReader
-	// The terminal websocket's checkouts (terminal.WithTerminalCheckouts).
+	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
@@ -234,6 +236,10 @@ var corsExposedHeaders = []string{
 	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
 	// so the deploy panel says which grant to ask for without parsing prose.
 	"X-Forge-Error-Scopes",
+	// How long a refusal (resource_exhausted, unavailable) asks the caller to
+	// wait, when the typed RetryInfo detail is absent: the dashboard panel
+	// scheduler's fallback (services/controlPlane/observability/errors.ts).
+	"Retry-After",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An
@@ -424,7 +430,7 @@ const maxConcurrentStreams = 1000
 // holds the connection open indefinitely.
 //
 // ReadTimeout is none: over HTTP/2 it is a deadline on each stream's request
-// body, so it would cut every bidi stream (StreamTerminal, ConnectDaemon) at
+// body, so it would cut every bidi stream (ConnectDaemon, the streaming rpcs) at
 // the same mark. There is no WriteTimeout either, for the same reason on the
 // response side; serverkit's write-stall guard bounds a write to a peer that
 // stopped reading instead.

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
@@ -109,6 +111,16 @@ type WorkflowProvenance struct {
 	// Repo is the git state of the repo the file is in, nil when the machine
 	// did not report one (an older daemon, or not a git checkout).
 	Repo *SyncedRepoState
+	// ContentHash is DefinitionHash of this machine's copy: which version of
+	// the file it holds.
+	ContentHash string
+}
+
+// DefinitionHash is the version of a workflow definition: the hex SHA-256 of
+// its bytes, the same value `sha256sum` prints for the file.
+func DefinitionHash(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
 }
 
 // Describe is the provenance for display: "machine cicd at

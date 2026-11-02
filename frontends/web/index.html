@@ -10,10 +10,8 @@
          mobile surface pads with resolves to 0, and a notched phone in
          landscape or a home-screen web app draws under the notch. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Bundled UI + code typefaces. Preloaded so the first paint uses them
-         instead of flashing the platform fallback (@font-face lives in index.css). -->
-    <link rel="preload" href="/fonts/Inter-roman.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/JetBrainsMono-variable.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The default UI face (Geist, Latin subset) is preloaded by the build:
+         its file name is content-hashed (vite-plugin-preload-fonts.ts). -->
     <title>Reliant</title>
     <!--
       Runtime configuration for THIS environment: config.js assigns

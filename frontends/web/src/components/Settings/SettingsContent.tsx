@@ -12,12 +12,14 @@ import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, type ReactNode } from "react";
 import { PromptsSettings } from "./PromptsSettings";
 import { PresetsSettings } from "./PresetsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { ProjectsSection } from "./ProjectsSection";
+import { AutomationSettings } from "./AutomationSettings";
 
 // Cloud settings sections are lazy-loaded so they code-split out of the main
 // SettingsContent chunk — they're only fetched when the user opens a cloud
@@ -87,6 +89,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <MemberPermissions />;
       case "git-connections":
         return <GitConnectionsSettings />;
+      case "integrations":
+        return <IntegrationsSettings />;
       case "developer":
         return <DeveloperSettings />;
       case "projects":
@@ -95,6 +99,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <PresetsSettings />;
       case "branches":
         return <BranchesSection />;
+      case "automations":
+        return <AutomationSettings />;
       case "billing":
       case "machines": {
         const CloudSection = activeSection === "billing" ? BillingSection : MachinesSection;

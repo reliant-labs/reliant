@@ -74,7 +74,7 @@ export function SettingsPage() {
             type="button"
             onClick={dismissNotFound}
             aria-label="Dismiss notice"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

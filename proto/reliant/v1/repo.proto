@@ -62,6 +62,12 @@ message DiscoverReposRequest {
 
 message DiscoverReposResponse {
   repeated Repo discovered = 1;  // repos found on disk (not yet persisted)
+  // truncated is set when the machine's scan stopped before covering the
+  // project (its entry budget or deadline): discovered is then what it found
+  // until then, and truncated_reason says why ("it ran out of time"). Show the
+  // list as partial; never present it, or an empty one, as the whole answer.
+  bool truncated = 2;
+  string truncated_reason = 3;
 }
 
 message ListReposRequest {

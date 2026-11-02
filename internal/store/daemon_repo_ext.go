@@ -40,6 +40,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -63,23 +64,28 @@ type DaemonExtra struct {
 // UpsertDaemonRegistration records a daemon's own registration (hostname,
 // platform, capabilities, project paths, type), keeping a stored value the
 // registration leaves nil. It reports whether a row was written: the
-// conflict branch only fires for the row's own owner, so a registration
-// naming another user's daemon writes nothing — in one statement, with no
-// read-then-write window.
+// conflict branch only fires for the row's own owner, and only when the
+// write's credential may claim the row (d.RequiresBoundToken, or a row not
+// reserved for bound credentials). So a registration naming another user's
+// daemon, or an unbound credential naming a reserved one, writes nothing — in
+// one statement, with no read-then-write window. A reservation is only ever
+// added, never cleared.
 func UpsertDaemonRegistration(ctx context.Context, db orm.Context, d *core.Daemon, createdAt, now time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`
 		INSERT INTO daemons (
-			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, created_at, updated_at
-		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, requires_bound_token, created_at, updated_at
+		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 		ON CONFLICT(id) DO UPDATE SET
 			hostname = COALESCE(excluded.hostname, daemons.hostname),
 			platform = COALESCE(excluded.platform, daemons.platform),
 			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
 			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
 			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
+			requires_bound_token = daemons.requires_bound_token OR excluded.requires_bound_token,
 			updated_at = excluded.updated_at
-		WHERE daemons.user_id = excluded.user_id`,
-		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, createdAt, now,
+		WHERE daemons.user_id = excluded.user_id
+		  AND (excluded.requires_bound_token OR NOT daemons.requires_bound_token)`,
+		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, d.RequiresBoundToken, createdAt, now,
 	).Exec(ctx)
 	return rowsWritten(res, err)
 }
@@ -143,10 +149,15 @@ func ListDaemonsByUserID(ctx context.Context, db orm.Context, userID string) ([]
 // ordering guarantee, so an event older than the stored one is dropped here,
 // in SQL, across every replica and retry. A lifecycle event that omits size
 // or OOM data is reporting a phase change, not clearing them.
+//
+// It also reserves the id for daemon-bound credentials: the control plane
+// reports a lifecycle only for a managed machine, whose own credential is
+// always bound to it.
 func ApplyDaemonLifecycle(ctx context.Context, db orm.Context, lc core.DaemonLifecycleUpdate) (bool, error) {
 	res, err := db.Bun().NewRaw(`
 		UPDATE daemons
 		SET
+			requires_bound_token = true,
 			lifecycle_phase = ?0,
 			size = COALESCE(NULLIF(?1, ''), size),
 			last_status_message = ?2,
@@ -331,7 +342,42 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		LastStatusChangedAt: row.LastStatusChangedAt,
 		LastOOMKilledAt:     row.LastOomKilledAt,
 		OOMKillCount:        row.OomKillCount,
+		Labels:              daemonLabels(row.Labels),
+		IsDefault:           row.IsDefault,
+		RequiresBoundToken:  row.RequiresBoundToken,
 	}
+}
+
+// SetDefaultDaemon makes daemonID the user's one default machine, or clears
+// the user's default when daemonID is "". It reports false, writing nothing,
+// when daemonID is not one of the user's machines.
+//
+// It must run in a transaction: the user's rows are locked first, so two
+// concurrent sets for one user serialize instead of colliding on
+// daemons_one_default_per_user. updated_at is left alone — it orders the
+// daemon list and records the machine's own registration, not this choice.
+func SetDefaultDaemon(ctx context.Context, db orm.Context, userID, daemonID string) (bool, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT id FROM daemons WHERE user_id = ? FOR UPDATE`, userID).Scan(ctx, &ids); err != nil {
+		return false, fmt.Errorf("locking daemons of user %s: %w", userID, err)
+	}
+	if daemonID != "" && !slices.Contains(ids, daemonID) {
+		return false, nil
+	}
+	if _, err := db.Bun().NewRaw(
+		`UPDATE daemons SET is_default = false WHERE user_id = ? AND is_default AND id <> ?`, userID, daemonID,
+	).Exec(ctx); err != nil {
+		return false, fmt.Errorf("clearing default daemon of user %s: %w", userID, err)
+	}
+	if daemonID == "" {
+		return true, nil
+	}
+	if _, err := db.Bun().NewRaw(
+		`UPDATE daemons SET is_default = true WHERE id = ? AND user_id = ? AND NOT is_default`, daemonID, userID,
+	).Exec(ctx); err != nil {
+		return false, fmt.Errorf("setting default daemon %s: %w", daemonID, err)
+	}
+	return true, nil
 }
 
 // rowsWritten reports whether a write touched a row.

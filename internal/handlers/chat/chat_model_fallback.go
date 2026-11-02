@@ -7,6 +7,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -27,15 +28,15 @@ import (
 //
 // It returns every move it made, announced or not: the chat's selection records
 // them, so what the composer shows is what runs.
-func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []launch.ModelSubstitution {
+func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID string, chat *db.Chat, workflowName, workflowID, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []launch.ModelSubstitution {
 	var news []launch.ModelSubstitution
-	moved := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, inputs)
+	moved := s.moveUnservableModels(ctx, userID, chat, workflowName, workflowID, inputs)
 	for _, sub := range moved {
 		if isNews == nil || isNews(topLevelInput(sub.Input)) {
 			news = append(news, sub)
 		}
 	}
-	s.postModelFallbackNotices(ctx, chatID, workflowID, thread, news)
+	s.postModelFallbackNotices(ctx, chat.ID, workflowID, thread, news)
 	return moved
 }
 
@@ -43,14 +44,15 @@ func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chat
 // moves every unservable model input in inputs, in place, and returns what it
 // moved. It tells no one; the caller posts the notices once the run that will
 // use the inputs is known to be getting them.
-func (s *Service) moveUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, inputs map[string]interface{}) []launch.ModelSubstitution {
+func (s *Service) moveUnservableModels(ctx context.Context, userID string, chat *db.Chat, workflowName, workflowID string, inputs map[string]interface{}) []launch.ModelSubstitution {
+	chatID := chat.ID
 	// An ordinary send cannot authorize spending on a different provider.
 	// Bound chats keep their explicit binding; an unservable selector holds
 	// visibly at its model-call boundary until the user edits the root picker.
 	if s.chatProvider(ctx, chatID) != "" {
 		return nil
 	}
-	subs := s.launcher().SubstituteUnservableModels(ctx, userID, workflowName, projectID, inputs)
+	subs := s.launcher().SubstituteUnservableModels(ctx, userID, chat, workflowName, inputs)
 	for _, sub := range subs {
 		logging.InfoContext(ctx, "Send moved a model input off a provider that cannot serve it",
 			"chatID", chatID, "workflowID", workflowID, "input", sub.Input, "from", sub.From, "to", sub.To)
@@ -88,13 +90,13 @@ func (s *Service) postModelFallbackNotices(ctx context.Context, chatID, workflow
 // it changes what the run is using (see fallBackFromUnservableModels' isNews).
 //
 // The third result is every move, announced or not, for the chat's selection.
-func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, sent, runInputs map[string]interface{}) (map[string]interface{}, []launch.ModelSubstitution, []launch.ModelSubstitution) {
+func (s *Service) resumeInputUpdate(ctx context.Context, userID string, chat *db.Chat, workflowName, workflowID string, sent, runInputs map[string]interface{}) (map[string]interface{}, []launch.ModelSubstitution, []launch.ModelSubstitution) {
 	update := make(map[string]interface{}, len(sent))
 	for key, value := range sent {
 		update[key] = value
 	}
 	var notices, moves []launch.ModelSubstitution
-	sentMoves := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, update)
+	sentMoves := s.moveUnservableModels(ctx, userID, chat, workflowName, workflowID, update)
 	moves = append(moves, sentMoves...)
 	for _, sub := range sentMoves {
 		key := topLevelInput(sub.Input)
@@ -110,7 +112,7 @@ func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, project
 				held[key] = value
 			}
 		}
-		heldMoves := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, held)
+		heldMoves := s.moveUnservableModels(ctx, userID, chat, workflowName, workflowID, held)
 		moves = append(moves, heldMoves...)
 		for _, sub := range heldMoves {
 			key := topLevelInput(sub.Input)

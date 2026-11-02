@@ -206,6 +206,7 @@ export async function createWorktree(data: CreateWorktreeInput, qc: QueryClient 
           copyFiles: data.copy_files ?? [],
           force: data.force ?? false,
           sourceWorktreeId: data.source_worktree_id,
+          daemonId: data.daemon_id,
         }),
       { onWaking: announceMachineWaking },
     );
@@ -233,7 +234,7 @@ export async function createWorktree(data: CreateWorktreeInput, qc: QueryClient 
 
 /** Track a git checkout Reliant did not make, and select it. */
 export async function importWorktree(
-  data: { path: string; name?: string; project_id: string; repo_id: string; confirm_move: boolean },
+  data: { path: string; name?: string; project_id: string; repo_id: string; confirm_move: boolean; daemon_id?: string },
   qc: QueryClient = appQueryClient,
 ): Promise<Worktree> {
   try {
@@ -243,6 +244,7 @@ export async function importWorktree(
       name: data.name,
       repoId: data.repo_id,
       confirmMove: data.confirm_move,
+      daemonId: data.daemon_id,
     });
     if (!response.worktree) throw new Error("No worktree in response");
 
@@ -262,8 +264,12 @@ export async function importWorktree(
 }
 
 /** Remove git's records of worktrees whose directories are gone. */
-export async function pruneWorktrees(projectId: string, qc: QueryClient = appQueryClient): Promise<StaleWorktree[]> {
-  const response = await client.pruneWorktrees({ projectId });
+export async function pruneWorktrees(
+  projectId: string,
+  qc: QueryClient = appQueryClient,
+  daemonId?: string,
+): Promise<StaleWorktree[]> {
+  const response = await client.pruneWorktrees({ projectId, daemonId });
   void qc.invalidateQueries({ queryKey: worktreeServiceKeys.all });
   return response.pruned.map(staleFromProto);
 }

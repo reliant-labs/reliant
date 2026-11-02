@@ -50,3 +50,18 @@ func terminateGracefully(proc *os.Process) error {
 	}
 	return nil
 }
+
+// killGroup SIGKILLs the child's process group, then the child itself (Kill
+// is a harmless ErrProcessDone once Wait has reaped it).
+//
+// The group is signalled only while one of members — recorded before the
+// leader could be reaped — is still alive in it: that proves the id was never
+// released, so it cannot name a later, unrelated group (GroupMember). Where
+// members cannot be read (no /proc: macOS) nothing proves it, and only the
+// child is killed; the group already had its SIGTERM.
+func killGroup(proc *os.Process, members []GroupMember) {
+	if proc.Pid > 0 && GroupOwned(proc.Pid, members) {
+		_ = syscall.Kill(-proc.Pid, syscall.SIGKILL)
+	}
+	_ = proc.Kill()
+}

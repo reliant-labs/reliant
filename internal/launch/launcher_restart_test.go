@@ -313,3 +313,36 @@ func TestLaunchDraftWorkflowStaysAValidationError(t *testing.T) {
 	assert.Contains(t, validation.Reason, "is a draft")
 	assert.NotErrorIs(t, err, ErrInternal)
 }
+
+// A trigger's launch committed its chat and event against catalog snapshot
+// A, then the Temporal start failed. A push lands, and the retry's caller
+// resolves (and pins) the new catalog B. The recorded launch restarts on A:
+// the event names A's definition, and the run must execute A.
+func TestLaunchRetryRestartsOnTheRecordedCatalogPin(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{failRootStarts: 1}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	pinA, err := repo.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: projectID, UserID: launchTestUserID})
+	require.NoError(t, err)
+
+	chatID := uuid.NewString()
+	ev := Event{
+		Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID,
+		Definition: &core.TriggerEventDefinition{Workflow: "builtin://agent", Source: "builtin", CatalogPin: pinA},
+	}
+	spec := Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, NewChatID: chatID,
+		Workflow: "builtin://agent", Params: mockModelParams(t), Messages: userSeed("scheduled"),
+		CatalogPin: pinA,
+	}
+	_, err = launcher.Launch(ctx, ev, spec)
+	require.ErrorIs(t, err, ErrInternal)
+
+	retry := spec
+	retry.CatalogPin = "b-" + pinA // what a retry resolving the live catalog after a push would pin
+	_, err = launcher.Launch(ctx, ev, retry)
+	require.NoError(t, err)
+	root := starter.lastRootInput(t)
+	require.NotNil(t, root.ExecContext)
+	assert.Equal(t, pinA, root.ExecContext.CatalogPin, "the recorded launch restarts on the snapshot its event names")
+}

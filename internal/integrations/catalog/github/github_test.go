@@ -1069,9 +1069,14 @@ var minimal = map[string]map[string]any{
 	"labels.list":             {"owner": "acme", "repo": "app"},
 	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
 	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
+	"pr.merge":                {"owner": "acme", "repo": "app", "pull_number": 1, "action": "disable_auto"},
 	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comments.list": {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comment.reply": {"owner": "acme", "repo": "app", "pull_number": 1, "comment_id": 5, "body": "b"},
+
+	"check_run.create": {"owner": "acme", "repo": "app", "name": "Reliant review", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
+	"check_run.update": {"owner": "acme", "repo": "app", "check_run_id": 1, "status": "in_progress"},
+	"check_run.list":   {"owner": "acme", "repo": "app", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
 }
 
 // Every action in the manifest is covered by these tests: adding one without

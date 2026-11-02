@@ -1,0 +1,13 @@
+type: object
+properties:
+  id: { type: integer, description: The check run's id, for check_run.update. }
+  node_id: { type: [string, "null"] }
+  html_url: { type: [string, "null"] }
+  name: { type: string }
+  head_sha: { type: string }
+  status: { type: string, description: "queued, in_progress or completed." }
+  conclusion: { type: [string, "null"], description: Set once the run is completed. }
+  details_url: { type: [string, "null"] }
+  external_id: { type: [string, "null"] }
+  started_at: { type: [string, "null"] }
+  completed_at: { type: [string, "null"] }

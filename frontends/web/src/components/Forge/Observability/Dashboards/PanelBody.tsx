@@ -6,37 +6,51 @@
  * list's sparklines and the panel drawer's live preview render, so a panel
  * looks the same wherever it is.
  *
- *   line      uPlot, one line per series × group; release markers from the
- *             nearest ObsChartMarkersProvider; alert-firing bands; with a
- *             comparison, each series again, dashed, from the earlier window.
- *   number    the headline figure (one per series × group), with the change
- *             against the comparison when one is on.
+ *   line      uPlot (SeriesChart): one line, area or bar series per series ×
+ *             group (display.style, display.stack), coloured from the chart
+ *             palette with errors in danger, a legend of swatches and figures
+ *             that highlights and isolates, the top N with the rest as
+ *             "Other"; release markers from the nearest
+ *             ObsChartMarkersProvider; alert-firing bands; with a comparison,
+ *             each series again, dashed, from the earlier window.
+ *   number    the headline figure (one per series × group), its sparkline
+ *             when the server sent one, the change against the comparison
+ *             when one is on; or a gauge (display.style: gauge).
+ *   bar       bars per group (upright, horizontal, stacked) or a pie or donut
+ *             (CategoryChart).
+ *   heatmap   time across, value buckets up, events per cell (HeatmapChart).
  *   table     one row per group, one column per series.
- *   sql       response-shaped: time series, rows, or ungrouped aggregate figures.
+ *   sql       response-shaped: time series, rows, or ungrouped aggregate
+ *             figures; its rows as a funnel with display.style: funnel.
  *   search    a list of rows, which is what Logs and Traces do: a way in.
+ *   text      the author's Markdown, with no query (TextPanel).
  *   funnel    product events in order: how many journeys reached each step,
- *             of the first, and of the previous (C7, windowFunnel).
+ *             of the first, and the drop-off between (FunnelChart).
  *   issues    errors grouped by distinct stack, most events first.
  *   sessions  browser sessions, newest first, with what each hit.
+ *
+ * A kind or a display style a newer forge added is never an error here: an
+ * unknown kind says it is not drawn yet, an unknown style draws the kind's
+ * default (the query is the kind's either way).
  *
  * Every state is drawn here too — loading, empty, a panel the server cannot
  * compile (InvalidArgument names why), a failure — so no surface invents its
  * own.
  */
 
-import type React from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, RefreshCw } from "lucide-react";
 
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { isInFlightLimit, obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import { ObsWillLoad } from "../ObsStates";
-import type { Panel, PanelResult, Series, Unit } from "@/services/controlPlane/observability/types";
+import { DRAWN_KINDS } from "../obsdashSpec";
+import type { Panel, PanelResult, Unit } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
 import { attributeLabel } from "../attributes";
@@ -44,17 +58,15 @@ import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
 import { sessionTitle } from "../Sessions/sessionModel";
+import { CategoryChart } from "./CategoryChart";
+import { FunnelChart, funnelFromRows } from "./FunnelChart";
+import { HeatmapChart } from "./HeatmapChart";
+import { pointOf, TimeSeriesChart, type DrillTarget } from "./SeriesChart";
+import { CHART_PALETTE, DANGER_PALETTE, intentOf, seriesKey, seriesLabel, tokenColor } from "./seriesModel";
+import { TextPanel } from "./TextPanel";
 
-/** The way out of a panel into the explorers: what a series or row is, as a filter. */
-export interface DrillTarget {
-  /** The panel's title, for the menu's heading. */
-  panel: string;
-  /** The series' label, or the row's first value. */
-  label: string;
-  /** group-by field → value of the series or row. */
-  group: Record<string, string>;
-  signal: string;
-}
+export type { DrillTarget } from "./SeriesChart";
+export { alignShifted, alignTo, seriesLabel, unionTimestamps } from "./seriesModel";
 
 export interface PanelLinks {
   /** Opens one trace (an issue's sample). */
@@ -71,6 +83,34 @@ export interface PanelQuery {
   data: PanelResult | undefined;
   isLoading: boolean;
   error: unknown;
+  /** The failures of the current fetch so far: above zero while it waits to retry. */
+  failureCount?: number;
+  /** The failure being retried. */
+  failureReason?: unknown;
+  isFetching?: boolean;
+  /** Reads this panel again, and only this panel. Given, every failure offers it. */
+  refetch?: () => unknown;
+}
+
+/** The server refused the read for its concurrent-read cap and the panel is waiting its turn to ask again. */
+function waitingForCapacity(query: PanelQuery): boolean {
+  return query.isLoading && !query.error && (query.failureCount ?? 0) > 0 && isInFlightLimit(query.failureReason);
+}
+
+function RetryButton({ query }: { query: PanelQuery }) {
+  if (!query.refetch) return null;
+  return (
+    <button
+      type="button"
+      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => void query.refetch?.()}
+      disabled={query.isFetching}
+      data-testid="obs-panel-retry"
+    >
+      <RefreshCw className="h-3 w-3" aria-hidden="true" />
+      Retry
+    </button>
+  );
 }
 
 export interface PanelBodyProps {
@@ -90,11 +130,21 @@ export interface PanelBodyProps {
 
 export function PanelBody({ panel, query, compare, groupBy, bands, links, height, compact = false }: PanelBodyProps) {
   if (panel.kind === "search") return <SearchLink panel={panel} href={links?.searchHref?.(panel)} />;
-  if (!KNOWN_KINDS.has(panel.kind)) {
+  if (panel.kind === "text") return <TextPanel markdown={panel.markdown ?? ""} compact={compact} />;
+  if (!DRAWN_KINDS.has(panel.kind)) {
     return (
       <PanelNote testId="obs-panel-unknown-kind">
         This console doesn&apos;t draw <span className="font-mono">{panel.kind || "(no kind)"}</span> panels yet.
       </PanelNote>
+    );
+  }
+  if (waitingForCapacity(query)) {
+    if (compact) return <p className="text-xs text-ink-muted" title="Queued…">…</p>;
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-panel-waiting">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        Queued…
+      </p>
     );
   }
   if (query.isLoading) {
@@ -111,9 +161,10 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       );
     }
     return (
-      <p className="text-xs text-danger-ink" role="alert" data-testid="obs-panel-error">
-        This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}
-      </p>
+      <div role="alert" data-testid="obs-panel-error">
+        <p className="text-xs text-danger-ink">This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}</p>
+        <RetryButton query={query} />
+      </div>
     );
   }
   const data = query.data;
@@ -142,9 +193,11 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   const keys = panel.kind === "sql"
     ? [...new Set([...data.rows, ...data.series].flatMap((row) => Object.keys(row.group)))]
     : groupBy?.length ? groupBy : (panel.groupBy ?? []);
+  const sqlFunnel = panel.kind === "sql" && panel.display?.style === "funnel" ? funnelFromRows(data) : null;
   const kind = panel.kind === "sql"
-    ? data.series.length > 0 ? "line" : sqlAggregate(data) ? "number" : "table"
+    ? sqlFunnel ? "sql-funnel" : data.series.length > 0 ? "line" : sqlAggregate(data) ? "number" : "table"
     : panel.kind;
+  const chartHeight = height ?? (compact ? 28 : Math.max((panel.height || 7) * 28 - 92, 120));
   const truncated = data.truncated && !compact ? (
     <p className="mt-2 text-xs text-ink-muted">
       {panel.kind === "sql"
@@ -174,7 +227,23 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
         </>
       );
     case "funnel":
-      return <FunnelSteps data={data} compact={compact} />;
+      return <FunnelChart steps={data.funnelSteps} compact={compact} />;
+    case "sql-funnel":
+      return <FunnelChart steps={sqlFunnel ?? []} compact={compact} label={data.columns[0] ?? "journeys"} />;
+    case "bar":
+      return (
+        <>
+          <CategoryChart panel={panel} data={data} unit={unit} keys={keys} onDrill={links?.onDrill} height={chartHeight} compact={compact} />
+          {truncated}
+        </>
+      );
+    case "heatmap":
+      return (
+        <>
+          <HeatmapChart cells={data.heatmap ?? []} unit={unit} height={chartHeight} compact={compact} label={panel.title} stepSeconds={data.stepSeconds} window={data.window} />
+          {truncated}
+        </>
+      );
     case "issues":
       return (
         <>
@@ -192,7 +261,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     default:
       return (
         <>
-          <LineChart
+          <TimeSeriesChart
             panel={panel}
             data={data}
             unit={unit}
@@ -200,7 +269,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
             compare={compare}
             bands={bands}
             onDrill={links?.onDrill}
-            height={height ?? (compact ? 28 : Math.max((panel.height || 7) * 28 - 92, 120))}
+            height={chartHeight}
             compact={compact}
           />
           {truncated}
@@ -209,7 +278,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   }
 }
 
-const KNOWN_KINDS = new Set(["line", "number", "table", "sql", "search", "funnel", "issues", "sessions"]);
+
 
 /** A single numeric-only row is an aggregate; never collapse multiple rows or groups. */
 function sqlAggregate(data: PanelResult): boolean {
@@ -258,6 +327,8 @@ export function hasData(panel: Pick<Panel, "kind">, result: PanelResult): boolea
       return result.funnelSteps.some((step) => step.count > 0);
     case "issues":
       return result.issues.length > 0;
+    case "heatmap":
+      return (result.heatmap ?? []).some((cell) => cell.count > 0);
     case "sessions":
       return result.sessions.length > 0;
     default:
@@ -271,133 +342,6 @@ const UNITS: readonly string[] = ["", "count", "ms", "bytes", "percent", "s"];
 export function unitOf(panel: Panel, result: PanelResult): Unit {
   if (panel.unit) return panel.unit;
   return (UNITS.includes(result.unit) ? result.unit : "") as Unit;
-}
-
-/** "api — requests", "api" for a ratio's per-group series, or the series' own label ungrouped. */
-export function seriesLabel(series: Series, panel: Panel, keys: string[] = []): string {
-  const group = Object.keys(series.group).length ? groupLabel(series.group, keys.filter((k) => k in series.group)) : "";
-  if (!group) return series.label;
-  // SQL may return several numeric columns for each group without declaring
-  // panel.series. Keep their response labels, even when one is named "ratio".
-  if (panel.kind !== "sql" && (series.label === "ratio" || panel.series.length <= 1)) return group;
-  return `${group} — ${series.label}`;
-}
-
-/** Every bucket any series has — a grouped panel's series can each skip buckets they had no rows in. */
-export function unionTimestamps(series: { timestamps: number[] }[]): number[] {
-  const all = new Set<number>();
-  series.forEach((s) => s.timestamps.forEach((t) => all.add(t)));
-  return [...all].sort((a, b) => a - b);
-}
-
-/** A series on the shared x axis, a missing bucket as a gap (null). */
-export function alignTo(timestamps: number[], series: { timestamps: number[]; values: (number | null)[] }): (number | null)[] {
-  const byTime = new Map(series.timestamps.map((t, i) => [t, series.values[i] ?? null]));
-  return timestamps.map((t) => byTime.get(t) ?? null);
-}
-
-/**
- * A comparison series moved forward by `offsetSec` onto the current axis:
- * each current bucket takes the shifted bucket nearest it (within half a
- * step), so two windows whose buckets do not start on the same second still
- * line up.
- */
-export function alignShifted(timestamps: number[], series: { timestamps: number[]; values: (number | null)[] }, offsetSec: number): (number | null)[] {
-  if (timestamps.length === 0) return [];
-  const step = timestamps.length > 1 ? timestamps[1] - timestamps[0] : 60;
-  const shifted = series.timestamps.map((t) => t + offsetSec);
-  return timestamps.map((t) => {
-    let best = -1;
-    let distance = Infinity;
-    for (let i = 0; i < shifted.length; i++) {
-      const d = Math.abs(shifted[i] - t);
-      if (d < distance) {
-        distance = d;
-        best = i;
-      }
-    }
-    return best >= 0 && distance <= step / 2 ? (series.values[best] ?? null) : null;
-  });
-}
-
-/** Where a click happened, or — from the keyboard, which has no pointer — the element's bottom-left corner. */
-function pointOf(event: React.MouseEvent | React.KeyboardEvent): { x: number; y: number } {
-  if ("clientX" in event && (event.clientX || event.clientY)) return { x: event.clientX, y: event.clientY };
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  return { x: rect.left, y: rect.bottom };
-}
-
-const groupKey = (group: Record<string, string>) =>
-  Object.keys(group)
-    .sort()
-    .map((k) => `${k}=${group[k]}`)
-    .join("\u0000");
-
-function LineChart({
-  panel,
-  data,
-  unit,
-  keys,
-  compare,
-  bands,
-  onDrill,
-  height,
-  compact,
-}: {
-  panel: Panel;
-  data: PanelResult;
-  unit: Unit;
-  keys: string[];
-  compare?: PanelBodyProps["compare"];
-  bands?: readonly ChartBand[];
-  onDrill?: PanelLinks["onDrill"];
-  height: number;
-  compact: boolean;
-}) {
-  const timestamps = unionTimestamps(data.series);
-  const current = data.series.map((s) => ({ label: seriesLabel(s, panel, keys), values: alignTo(timestamps, s), source: s }));
-  const previous = compare?.query.data?.series ?? [];
-  const compared = current.flatMap((c, index) => {
-    const match = previous.find((p) => p.label === c.source.label && groupKey(p.group) === groupKey(c.source.group));
-    if (!match) return [];
-    return [{ label: `${c.label} (${compare!.label})`, values: alignShifted(timestamps, match, compare!.offsetSec), dashed: true, toneIndex: index }];
-  });
-  const tones = ["primary", "secondary", "success", "warning", "destructive", "muted"] as const;
-  return (
-    <div>
-      <UPlotChart
-        height={height}
-        timestamps={timestamps}
-        series={[
-          ...current.map((c, index) => ({ label: c.label, values: c.values, tone: tones[index % tones.length] })),
-          ...compared.map((c) => ({ label: c.label, values: c.values, dashed: true, tone: tones[c.toneIndex % tones.length] })),
-        ]}
-        unit={unit}
-        label={panel.title}
-        compact={compact}
-        bands={bands}
-        // The drill-down legend below names the series; uPlot's would repeat them.
-        legend={!compact && !onDrill}
-      />
-      {!compact && onDrill && current.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="obs-panel-legend">
-          {current.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              onClick={(event) => onDrill({ panel: panel.title, label: c.label, group: c.source.group, signal: panel.signal }, pointOf(event))}
-              className="inline-flex max-w-full items-center gap-1.5 truncate rounded text-xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              title={`Drill into ${c.label}`}
-            >
-              {c.label}
-              <ArrowRight className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-            </button>
-          ))}
-          {compare && <span className="text-xs text-ink-muted">dashed: {compare.label}</span>}
-        </div>
-      )}
-    </div>
-  );
 }
 
 /** "▲ 18ms vs previous period" — neutral: whether up is good depends on the figure, which the spec does not say. */
@@ -430,18 +374,45 @@ function NumberFigures({
   compact: boolean;
 }) {
   const many = data.series.length > 1;
+  const gauge = panel.display?.style === "gauge" && !compact;
   return (
-    <dl className={cn("grid gap-3", many ? "grid-cols-[repeat(auto-fill,minmax(7rem,1fr))]" : "grid-cols-1")} data-testid="obs-panel-number">
+    <dl
+      className={cn("grid gap-3", many ? (gauge ? "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(7rem,1fr))]") : "grid-cols-1")}
+      data-testid="obs-panel-number"
+      data-style={gauge ? "gauge" : "stat"}
+    >
       {data.series.map((s, index) => {
-        const before = compare?.series.find((p) => p.label === s.label && groupKey(p.group) === groupKey(s.group))?.value ?? null;
+        const before = compare?.series.find((p) => seriesKey(p) === seriesKey(s))?.value ?? null;
         const change = compareLabel ? describeChange(s.value, before, unit, compareLabel) : null;
+        const label = seriesLabel(s, panel, keys);
+        const thresholds = intentOf(s, panel)?.thresholds;
+        // The server sends an ungrouped number's trend with it; two points make a line.
+        const trend = !compact && !gauge && s.values.filter((v) => v !== null).length > 1;
         return (
           <div key={`${s.label}-${index}`} className="min-w-0">
-            <dt className={many ? "truncate text-xs text-ink-muted" : "sr-only"}>{seriesLabel(s, panel, keys)}</dt>
-            <dd className={cn("font-semibold tabular-nums text-ink", compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatValue(s.value, unit)}</dd>
+            <dt className={many ? "truncate text-xs text-ink-muted" : "sr-only"}>{label}</dt>
+            {gauge ? (
+              <dd>
+                <Gauge value={s.value} unit={unit} min={panel.display?.min} max={panel.display?.max} thresholds={thresholds} label={label} />
+              </dd>
+            ) : (
+              <dd className={cn("font-semibold tabular-nums", gradeInk(s.value, thresholds), compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatValue(s.value, unit)}</dd>
+            )}
             {change && (
-              <dd className="text-xs text-ink-muted" data-testid="obs-panel-change">
+              <dd className={cn("text-xs text-ink-muted", gauge && "text-center")} data-testid="obs-panel-change">
                 {change}
+              </dd>
+            )}
+            {trend && (
+              <dd className="mt-1" data-testid="obs-panel-sparkline">
+                <UPlotChart
+                  height={many ? 24 : 36}
+                  timestamps={s.timestamps}
+                  series={[{ label, values: s.values, color: CHART_PALETTE[0] }]}
+                  unit={unit}
+                  label={`${label}, over the window`}
+                  compact
+                />
               </dd>
             )}
           </div>
@@ -450,6 +421,69 @@ function NumberFigures({
     </dl>
   );
 }
+
+type Grade = "good" | "fair" | "poor";
+
+/** Core Web Vitals' grading: at or below good is good, above poor is poor, between needs improvement. */
+function gradeOf(value: number | null, thresholds?: { good: number; poor: number }): Grade | null {
+  if (value === null || !thresholds) return null;
+  if (value <= thresholds.good) return "good";
+  if (value > thresholds.poor) return "poor";
+  return "fair";
+}
+
+function gradeInk(value: number | null, thresholds?: { good: number; poor: number }): string {
+  switch (gradeOf(value, thresholds)) {
+    case "good":
+      return "text-success-ink";
+    case "fair":
+      return "text-warning-ink";
+    case "poor":
+      return "text-danger-ink";
+    default:
+      return "text-ink";
+  }
+}
+
+const GRADE_TOKEN: Record<Grade, string> = { good: "--success", fair: "--warning", poor: DANGER_PALETTE[0] };
+
+/**
+ * A half-dial from min to max: the arc filled to the value, in the series'
+ * threshold grade when it has thresholds, else the palette's first colour. A
+ * conic gradient masked to a ring — no hand-drawn arc. Without a max, a
+ * percent panel's scale is 0 to 1 (forge requires a max otherwise).
+ */
+function Gauge({ value, unit, min = 0, max, thresholds, label }: { value: number | null; unit: Unit; min?: number; max?: number; thresholds?: { good: number; poor: number }; label: string }) {
+  const top = max ?? (unit === "percent" ? 1 : Math.max(value ?? 0, 1));
+  const span = top - min;
+  const fraction = value === null || !(span > 0) ? 0 : Math.min(Math.max((value - min) / span, 0), 1);
+  const grade = gradeOf(value, thresholds);
+  const fill = tokenColor(grade ? GRADE_TOKEN[grade] : CHART_PALETTE[0]);
+  const track = "hsl(var(--foreground) / 0.08)";
+  const degrees = fraction * 180;
+  return (
+    <div className="mx-auto w-full max-w-[11rem]" data-testid="obs-panel-gauge" role="meter" aria-label={label} aria-valuemin={min} aria-valuemax={top} aria-valuenow={value ?? undefined} aria-valuetext={formatValue(value, unit)}>
+      <div className="relative aspect-[2/1] w-full overflow-hidden">
+        <div
+          className="absolute inset-x-0 top-0 aspect-square w-full rounded-full"
+          style={{
+            background: `conic-gradient(from 270deg, ${fill} 0deg ${degrees}deg, ${track} ${degrees}deg 180deg, transparent 180deg)`,
+            mask: GAUGE_MASK,
+            WebkitMask: GAUGE_MASK,
+          }}
+          aria-hidden="true"
+        />
+        <span className={cn("absolute inset-x-0 bottom-0 text-center text-xl font-semibold tabular-nums", gradeInk(value, thresholds))}>{formatValue(value, unit)}</span>
+      </div>
+      <div className="mt-0.5 flex justify-between text-2xs tabular-nums text-ink-muted" aria-hidden="true">
+        <span>{formatValue(min, unit)}</span>
+        <span>{formatValue(top, unit)}</span>
+      </div>
+    </div>
+  );
+}
+
+const GAUGE_MASK = "radial-gradient(circle closest-side, transparent 68%, black 69%)";
 
 /** One row per group, one column per series. A latency column is milliseconds whatever the panel's unit. */
 type PanelTableRow = { row: PanelResult["rows"][number]; index: number };
@@ -535,54 +569,6 @@ function SearchLink({ panel, href }: { panel: Panel; href?: string }) {
 }
 
 // ── The browser kinds (C7) ──────────────────────────────────────────────────
-
-/**
- * Funnel: one row per step — the event, how many journeys reached it, a bar
- * against the first step, and the drop from the step before. The biggest
- * drop is called out, since that is the question a funnel answers.
- */
-function FunnelSteps({ data, compact }: { data: PanelResult; compact: boolean }) {
-  const steps = data.funnelSteps;
-  let worst = -1;
-  steps.forEach((step, index) => {
-    if (index === 0) return;
-    if (worst < 0 || step.rateFromPrevious < steps[worst].rateFromPrevious) worst = index;
-  });
-  const overall = steps.length > 1 ? steps[steps.length - 1].rateFromFirst : 1;
-  return (
-    <div data-testid="obs-panel-funnel">
-      {!compact && (
-        <p className="mb-3 text-xs text-ink-muted">
-          <span className="font-medium tabular-nums text-ink">{formatPercent(overall)}</span> of {formatCount(steps[0]?.count ?? 0)} journeys
-          finished
-          {worst > 0 && (
-            <>
-              {" "}
-              · the biggest drop is into <span className="font-mono text-ink">{steps[worst].event}</span> ({formatPercent(1 - steps[worst].rateFromPrevious)} drop off)
-            </>
-          )}
-        </p>
-      )}
-      <ol className="space-y-2">
-        {(compact ? steps.slice(0, 3) : steps).map((step, index) => (
-          <li key={`${step.event}-${index}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1" data-step={step.event}>
-            <span className="truncate text-xs text-ink">
-              <span className="mr-1.5 tabular-nums text-ink-muted">{index + 1}</span>
-              <span className="font-mono">{step.event}</span>
-            </span>
-            <span className="text-right text-xs tabular-nums text-ink">
-              {formatCount(step.count)}
-              {index > 0 && !compact && <span className={cn("ml-2 text-ink-muted", index === worst && "text-warning-ink")}>{formatPercent(step.rateFromPrevious)} of previous</span>}
-            </span>
-            <span className="col-span-2 block h-1.5 overflow-hidden rounded-full bg-ink/5" aria-hidden="true">
-              <span className="block h-full rounded-full bg-ink/40" style={{ width: `${Math.max(step.rateFromFirst * 100, step.count > 0 ? 1 : 0)}%` }} />
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
 
 /** Issues: one row per distinct stack — what, where, how often, since when, and a sample trace. */
 type PanelIssueRow = { issue: PanelResult["issues"][number] };

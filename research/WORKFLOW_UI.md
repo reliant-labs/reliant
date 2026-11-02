@@ -922,7 +922,7 @@ pinned in `chatStore` regardless of list membership.
 
 | Event | Interactive chat | Automation run |
 |---|---|---|
-| Completed | unread + OS notification (unchanged) | **none**. Recorded in Runs. Opt-in per automation: "Notify me when it finishes". |
+| Completed | unread + OS notification (unchanged) | **none**. Recorded in Runs. Opt-in per automation: "Notify me when a run succeeds" (unread + OS notification). **Never an Inbox item**, opted in or not (owner, 2026-10-31): the Inbox is what needs the person, and a later success resolves the automation's failure item. |
 | Failed | (unchanged) | Inbox item + OS notification, **deduplicated per automation**: the first failure notifies; consecutive failures bump the count on one Inbox item ("Failed 3 times in a row"). |
 | Needs input (pre-#404 questions, approvals with a notify policy) | (unchanged) | Inbox item + OS notification. |
 | Daemon pending at fire time | n/a | Inbox item, once per automation per machine episode. |

@@ -123,7 +123,7 @@ nodes:
 	}))
 
 	service := &Service{deps: Deps{Repo: repo}}
-	validationErrors := service.launcher().ValidateWorkflowInputs(ctx, "test-user", "required-param-workflow", "", map[string]interface{}{})
+	validationErrors := service.launcher().ValidateChatWorkflowInputs(ctx, "test-user", &db.Chat{ProjectID: ""}, "required-param-workflow", map[string]interface{}{})
 
 	require.NotEmpty(t, validationErrors)
 	require.Contains(t, validationErrors[0].Error(), "required input 'prompt' is not provided")

@@ -64,10 +64,11 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.WAITING_FOR_MACHINE]: "Waiting for a machine",
   [InboxItemKind.AUTOMATION_FAILING]: "Failing or broken automations",
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
-  [InboxItemKind.RUN_FINISHED]: "Finished runs",
   [InboxItemKind.STORAGE]: "Storage",
   [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
+  [InboxItemKind.AUTOMATION_RUN_PAUSED]: "Paused automation runs",
+  [InboxItemKind.AUTOMATION_DEFINITION_BROKEN]: "Broken workflow definitions",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */
@@ -181,7 +182,7 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
                 type="button"
                 onClick={() => setScope("all")}
                 className={cn(
-                  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   TOUCH_TARGET,
                 )}
               >
@@ -222,7 +223,7 @@ function ScopeToggle({
       onClick={() => onChange(value)}
       title={title}
       className={cn(
-        "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm",
         scope === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
       )}
@@ -262,7 +263,7 @@ function SectionCard({
             type="button"
             onClick={onDismissAll}
             className={cn(
-              "rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              "rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               TOUCH_TARGET,
             )}
           >

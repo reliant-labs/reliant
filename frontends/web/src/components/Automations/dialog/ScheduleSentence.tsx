@@ -215,7 +215,7 @@ export function ScheduleSentence({
             matches.{" "}
             <button
               type="button"
-              className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-expanded={examplesOpen}
               aria-controls={id("cron-examples")}
               onClick={() => setExamplesOpen((o) => !o)}
@@ -229,7 +229,7 @@ export function ScheduleSentence({
                 <li key={example.cron} className="flex items-baseline gap-3">
                   <button
                     type="button"
-                    className="font-mono text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="font-mono text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => onChange({ cronText: example.cron })}
                   >
                     {example.cron}

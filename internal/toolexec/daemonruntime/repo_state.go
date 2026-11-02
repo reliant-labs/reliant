@@ -256,7 +256,7 @@ func reliantDirDirty(ctx context.Context, dir string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, repoStateDirtyTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "status", "--porcelain", "--untracked-files=all", "--", ".reliant")
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0") //nolint:forbidigo // passes this process environment to a git child; not configuration
 	out, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("git status .reliant: %w", err)

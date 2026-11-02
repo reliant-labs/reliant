@@ -81,6 +81,12 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
+// chat whose run is pending or active.
+func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
+	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
+}
+
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
 	return store.ListChats(ctx, r.ORM(), filters)
 }
@@ -916,7 +922,7 @@ func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Appro
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
 func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
 	var resolvedAt *time.Time
-	if status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED) || status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED) {
+	if status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
 		now := time.Now()
 		resolvedAt = &now
 	}
@@ -1097,6 +1103,24 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
+// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+// daemon's clones queued while it was away, now that it has connected.
+func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
+}
+
+// FailProjectDaemonInstall settles a clone still installing as failed: one
+// whose outcome was lost.
+func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+}
+
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1126,6 +1150,11 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 // immutable once the row exists.
 var ErrDaemonOwnedByAnotherUser = svcerr.PermissionDenied("daemon is owned by another user")
 
+// ErrDaemonRequiresBoundToken is returned when an unbound write (a daemon
+// connecting with a login token) names an id its owner's row reserves for
+// daemon-bound credentials (Daemon.RequiresBoundToken).
+var ErrDaemonRequiresBoundToken = svcerr.PermissionDenied("daemon id is reserved for daemon-bound credentials")
+
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
 		return fmt.Errorf("daemon cannot be nil")
@@ -1145,10 +1174,16 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
-	// The conflict branch only fires for the row's own owner, so a conflict
-	// against a different owner writes nothing — in a single statement, with
-	// no read-then-write window.
+	// The conflict branch only fires for the row's own owner, and for an
+	// unbound write only on a row not reserved for bound credentials, so
+	// either refusal writes nothing — in a single statement, with no
+	// read-then-write window. The read below only names which refusal it
+	// was; it decides nothing.
 	if !wrote {
+		if existing, getErr := store.GetDaemon(ctx, r.ORM(), daemon.ID); getErr == nil &&
+			existing.UserID == daemon.UserID && existing.RequiresBoundToken && !daemon.RequiresBoundToken {
+			return fmt.Errorf("%w: daemon %s", ErrDaemonRequiresBoundToken, daemon.ID)
+		}
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
 	return nil
@@ -1186,6 +1221,27 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 		return false, fmt.Errorf("failed to apply daemon lifecycle for %s: %w", lc.DaemonID, err)
 	}
 	return applied, nil
+}
+
+// SetDefaultDaemon makes daemonID the user's default machine, replacing any
+// previous one; "" clears it. A machine the user does not own (or that does
+// not exist) is svcerr.NotFound, and nothing changes.
+func (r *Repo) SetDefaultDaemon(ctx context.Context, userID, daemonID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	// ReadCommitted: store.SetDefaultDaemon locks the user's rows first, and
+	// that lock is what makes the clear-then-set correct.
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		owned, err := store.SetDefaultDaemon(txCtx, r.ORM(), userID, daemonID)
+		if err != nil {
+			return fmt.Errorf("failed to set default daemon for user %s: %w", userID, err)
+		}
+		if !owned {
+			return svcerr.NotFound("daemon")
+		}
+		return nil
+	})
 }
 
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
@@ -1711,9 +1767,18 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
+// archived row that still has no machine on record.
+func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("worktree ID cannot be empty")
+	}
+	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
+}
+
+func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
-		return fmt.Errorf("worktree and daemon IDs cannot be empty")
+		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
@@ -2695,6 +2760,11 @@ func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
+// SetWorkflowFailureDetail records why a run failed, on the run.
+func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
+	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
+}
+
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
 // Designed to be called from the activity wrapper so that any Temporal activity
@@ -3214,12 +3284,12 @@ func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
-func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
 
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {

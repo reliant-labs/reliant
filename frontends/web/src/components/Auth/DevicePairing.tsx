@@ -173,7 +173,7 @@ export function DevicePairing() {
       <>
         <div className="space-y-2 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Icon className="h-6 w-6 text-primary" />
+            <Icon className="h-6 w-6 text-primary-ink" />
           </div>
           <h1 className="text-xl font-semibold">{copy.title(machine.hostname)}</h1>
           <p className="text-sm text-muted-foreground">

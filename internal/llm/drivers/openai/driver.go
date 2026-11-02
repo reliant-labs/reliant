@@ -487,20 +487,12 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 					// This can happen with OpenRouter when the stream is interrupted
 					logging.WarnContext(ctx, "Stream ended without completion choices but has content - treating as interrupted stream", "content_length", len(currentContent))
 					// Send an error event to trigger retry
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("stream interrupted: incomplete response from OpenRouter"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("stream interrupted: incomplete response from OpenRouter"), o.usage(acc.ChatCompletion))
 					return
 				} else {
 					// No content and no choices - completely empty response
 					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("empty response from OpenRouter"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("empty response from OpenRouter"), o.usage(acc.ChatCompletion))
 					return
 				}
 
@@ -528,11 +520,15 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			// If there is an error we are going to see if we can retry the call
 			wait, retry, retryErr := o.retryDecision(attempts, err)
 			if !retry {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-				close(eventChan)
+				// Out of retries, or not retryable: what this last request
+				// billed goes out after the error, or the ledger loses it.
+				llm.EndStreamWithError(eventChan, retryErr, o.usage(acc.ChatCompletion))
 				return
 			}
 			logging.WarnContext(ctx, "OpenAI stream request failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode, "reason", wait.Reason)
+			// The attempt's accumulator is dropped with it; what it billed goes
+			// out on the wait, so the usage ledger counts this request too.
+			wait.Usage = llm.FailedAttemptUsage(o.usage(acc.ChatCompletion))
 			select {
 			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 			case <-ctx.Done():

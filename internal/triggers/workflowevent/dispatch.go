@@ -98,17 +98,18 @@ func (d *Dispatcher) WithWorkflows(workflows triggers.WorkflowResolver) *Dispatc
 	return d
 }
 
-// specOf is a trigger's effective spec: an activation's from its workflow's
-// declaration, read now; an ad hoc trigger's from its row.
-func (d *Dispatcher) specOf(ctx context.Context, t *core.Trigger) (Spec, error) {
+// specIn is a trigger's effective spec: an activation's from its workflow's
+// declaration, read through workflows (the dispatcher's, or that bound to a
+// firing's catalog snapshot); an ad hoc trigger's from its row.
+func (d *Dispatcher) specIn(ctx context.Context, workflows triggers.WorkflowResolver, t *core.Trigger) (Spec, error) {
 	if t.WorkflowTrigger == nil || *t.WorkflowTrigger == "" {
 		return SpecOf(t)
 	}
-	if d.workflows == nil {
+	if workflows == nil {
 		return Spec{}, &triggers.DeclarationError{Workflow: t.Workflow, Name: *t.WorkflowTrigger,
 			Reason: "this server cannot read declared triggers"}
 	}
-	decl, err := triggers.ResolveDeclaration(ctx, d.workflows, t)
+	decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
 	if err != nil {
 		return Spec{}, err
 	}
@@ -153,7 +154,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
 			continue
 		}
-		spec, err := d.specOf(ctx, trigger)
+		// A retry of a dispatch that already launched this firing resumes
+		// it against the definition it recorded: its declaration, admission
+		// and run read that snapshot, whatever was pushed since.
+		recorded, err := d.launchedDefinition(ctx, trigger, ev)
+		if err != nil {
+			retryable = append(retryable, err)
+			continue
+		}
+		spec, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, recorded), trigger)
 		if err != nil {
 			var declErr *triggers.DeclarationError
 			switch {
@@ -164,13 +173,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 				if prev, prevErr := SpecOf(trigger); prevErr == nil && !prev.Source.Matches(ev.WorkflowName, ev.Outcome) {
 					continue
 				}
-				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, declErr.Error())
+				def, defErr := triggers.DefinitionOf(ctx, d.workflows, trigger)
+				if defErr != nil {
+					retryable = append(retryable, defErr)
+					continue
+				}
+				detail := declErr.Error()
+				if def.Broken() {
+					detail = triggers.RefusalDetail(def)
+				}
+				res, recErr := d.record(ctx, trigger, ev, nil, def, core.TriggerEventFailed, detail)
 				results, retryable = appendResult(results, retryable, res, recErr)
 			case trigger.WorkflowTrigger != nil:
 				// The workflow could not be READ: retry the dispatch.
 				retryable = append(retryable, fmt.Errorf("resolve trigger %s: %w", trigger.ID, err))
 			default:
-				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
+				res, recErr := d.record(ctx, trigger, ev, nil, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
 				results, retryable = appendResult(results, retryable, res, recErr)
 			}
 			continue
@@ -188,7 +206,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			}
 			chainLoaded = true
 		}
-		res, err := d.fire(ctx, trigger, spec, ev, chain)
+		res, err := d.fire(ctx, trigger, spec, ev, chain, recorded)
 		results, retryable = appendResult(results, retryable, res, err)
 	}
 	return results, errors.Join(retryable...)
@@ -206,40 +224,106 @@ func appendResult(results []Result, errs []error, res *Result, err error) ([]Res
 
 // fire applies the loop guards and the filter to one matching trigger, then
 // launches.
-func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage) (*Result, error) {
+//
+// recorded is the definition an earlier attempt of this firing launched
+// against (launchedDefinition), nil for a first attempt.
+func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage, recorded *core.TriggerEventDefinition) (*Result, error) {
+	if recorded != nil {
+		// Resuming a recorded launch: spec was read in its snapshot, and the
+		// launcher restarts it on the same one (launch.Launcher.startRecorded).
+		next := chain.Extend(trigger.ID, ev.ChatID)
+		launchEv := d.buildEvent(trigger, ev, next)
+		launchEv.Definition = recorded
+		scope := triggers.ActivationScope(ctx, d.repo, trigger, spec.Declaration, triggerRoot(launchEv))
+		launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild the recorded launch of trigger %s: %w", trigger.ID, err)
+		}
+		launchSpec.CatalogPin = recorded.CatalogPin
+		return d.launch(ctx, trigger, ev, chain, recorded, launchEv, launchSpec)
+	}
+	// Which definition this firing resolves rides on its event row; a broken
+	// one refuses it before any guard or filter (triggers.Firer.Fire).
+	def, err := triggers.DefinitionOf(ctx, d.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if def.Broken() {
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, triggers.RefusalDetail(def))
+	}
+	if def != nil && def.CatalogPin != "" {
+		// The declaration this firing runs is the one in the snapshot it
+		// recorded and launches on, not the live one it was matched by.
+		pinned, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, def), trigger)
+		var declErr *triggers.DeclarationError
+		switch {
+		case errors.As(err, &declErr):
+			return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, declErr.Error())
+		case err != nil:
+			return nil, fmt.Errorf("resolve trigger %s in its pinned catalog: %w", trigger.ID, err)
+		case !pinned.Source.Matches(ev.WorkflowName, ev.Outcome):
+			// The definition that would run does not listen to this event.
+			return nil, nil
+		}
+		spec = pinned
+	}
 	if reason, blocked := chain.Blocked(trigger.ID); blocked {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, reason)
 	}
 
 	// An activation that is not set up cannot launch (its run would fail its
 	// first input check), and its filter reads the params that are missing.
 	if issues := triggers.SetupIssues(spec.Declaration, trigger); len(issues) > 0 {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, triggers.SetupDetail(issues))
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, triggers.SetupDetail(issues))
 	}
 
 	next := chain.Extend(trigger.ID, ev.ChatID)
 	launchEv := d.buildEvent(trigger, ev, next)
+	launchEv.Definition = def
 
 	// The filter sees exactly what the launched run would see as `trigger`,
 	// and the activation it fires for.
 	scope := triggers.ActivationScope(ctx, d.repo, trigger, spec.Declaration, triggerRoot(launchEv))
 	pass, err := d.filter(spec.Filter, scope)
 	if err != nil {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, "filter error: "+err.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, "filter error: "+err.Error())
 	}
 	if !pass {
 		reason := "filter did not match"
 		if gap := triggers.OwnerIdentityGap(spec.Filter, scope); gap != "" {
 			reason += ": " + gap + ". Filter: " + spec.Filter
 		}
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, reason)
 	}
 
 	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
 	if err != nil {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, err.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, err.Error())
 	}
+	if def != nil {
+		launchSpec.CatalogPin = def.CatalogPin
+	}
+	return d.launch(ctx, trigger, ev, chain, def, launchEv, launchSpec)
+}
 
+// launchedDefinition is the definition an earlier attempt of t's firing for
+// ev recorded when it already launched (its chat committed), nil otherwise.
+func (d *Dispatcher) launchedDefinition(ctx context.Context, t *core.Trigger, ev *core.RunEvent) (*core.TriggerEventDefinition, error) {
+	prior, err := d.repo.GetTriggerEventByDedupe(ctx, runevents.TriggerEventKind, dedupeKey(t.ID, ev.ID))
+	switch {
+	case errors.Is(err, core.ErrTriggerEventNotFound):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("load trigger %s's earlier firing for run event %s: %w", t.ID, ev.ID, err)
+	case prior.Outcome != core.TriggerEventLaunched:
+		return nil, nil
+	}
+	return prior.Definition, nil
+}
+
+// launch starts launchSpec and turns the launcher's answer into the firing's
+// result, recording a verdict that can never launch.
+func (d *Dispatcher) launch(ctx context.Context, trigger *core.Trigger, ev *core.RunEvent, chain lineage.Lineage, def *core.TriggerEventDefinition, launchEv launch.Event, launchSpec launch.Spec) (*Result, error) {
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)
 	switch {
 	case launchErr == nil:
@@ -256,7 +340,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// Retrying cannot fix a spec that can never launch; record why.
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, launchErr.Error())
+		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, launchErr.Error())
 	}
 	return nil, fmt.Errorf("launch trigger %s for run event %s: %w", trigger.ID, ev.ID, launchErr)
 }
@@ -369,6 +453,7 @@ func (d *Dispatcher) record(
 	trigger *core.Trigger,
 	ev *core.RunEvent,
 	chain lineage.Lineage,
+	def *core.TriggerEventDefinition,
 	outcome core.TriggerEventOutcome,
 	detail string,
 ) (*Result, error) {
@@ -384,6 +469,7 @@ func (d *Dispatcher) record(
 		Sender:        launchEv.Sender,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
+		Definition:    def,
 		CreatedAt:     d.now().UTC(),
 	}
 	created, err := d.repo.CreateTriggerEvent(ctx, row)

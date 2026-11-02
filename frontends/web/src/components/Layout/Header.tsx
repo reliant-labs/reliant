@@ -31,10 +31,11 @@ import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
+import { BrandMark } from "../icons/BrandMark";
 
 interface HeaderProps {
-  // Controls logo size in the app bar for tasteful variations
-  logoSize?: "sm" | "md" | "lg" | "xl"; // sm:16px, md:20px, lg:24px, xl:28px
+  /** Home (`/`). When set, the header leads with the Reliant mark linking there. */
+  onNavigateHome?: () => void;
   // Whether this header is aligned to the window's left edge (traffic lights on macOS)
   // If false, we assume it's aligned to the content area (e.g., to the right of a vertical nav)
   windowAligned?: boolean;
@@ -59,6 +60,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
   (
     {
       windowAligned = true,
+      onNavigateHome,
       onNavigateToSettings,
       onNavigateToWorktrees,
       onNavigateToSettingsSection: _onNavigateToSettingsSection,
@@ -158,6 +160,30 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       >
         {/* Left side */}
         <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: trafficLightPadding }}>
+
+          {/* The brand mark: the one place the signed-in shell says whose app
+              this is. After the macOS traffic lights (trafficLightPadding), a
+              link home. A real <a href> so a modifier-click opens a new tab;
+              a plain click stays in the SPA. `no-color`: the global link color
+              rule would otherwise tint it (the mark carries its own colors). */}
+          {onNavigateHome && (
+            <Tooltip content="Home" side="bottom" delay={300}>
+              <a
+                href="/"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                  e.preventDefault();
+                  onNavigateHome();
+                }}
+                className="no-color header-icon-btn flex items-center justify-center rounded p-1"
+                aria-label="Reliant home"
+                data-testid="header-home-mark"
+                style={noDragRegionStyle}
+              >
+                <BrandMark className="h-5 w-5" />
+              </a>
+            </Tooltip>
+          )}
 
           {/* Toggle Chat Sidebar button */}
           {onToggleChatSidebar && (

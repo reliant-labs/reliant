@@ -30,7 +30,7 @@ function Selection() {
   }}>
     {selected ? <DashboardView project={FIXTURE_PROJECT} dashRef={builtin.ref} env="unrecorded" environments={[]} search={{ service: "worker", range: "7d", rpcMethod: "Get" }} onSearch={() => undefined} onEnvChange={() => undefined} navigateTo={navigateTo}
       hrefs={{ dashboard, list: "#dashboards", release: () => "#release", trace: () => "#trace", workload: () => "#workload", logs: () => "#logs", traces: () => "#traces" }} />
-      : <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={() => undefined} hrefs={{ dashboard, release: () => "#release" }} navigateTo={navigateTo} />}
+      : <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={() => undefined} hrefs={{ dashboard }} navigateTo={navigateTo} />}
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<QueryClientProvider client={client}><ObservabilityApiProvider api={api}><Selection /></ObservabilityApiProvider></QueryClientProvider>);

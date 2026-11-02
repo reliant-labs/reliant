@@ -13,6 +13,7 @@
  * to spare is not news.
  */
 
+import { COMPOSER_CONTROL } from "./composerControl";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSurface } from "@/lib/surfaceContext";
@@ -84,7 +85,8 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
         onClick={() => setOpen((v) => !v)}
         onFocus={compact ? undefined : show}
         className={cn(
-          "flex h-6 max-w-[16rem] items-center rounded-full border px-2.5 text-2xs font-medium transition-colors",
+          "flex max-w-[16rem] items-center rounded-full border px-2.5 text-2xs font-medium transition-colors",
+          COMPOSER_CONTROL,
           compact && "min-h-[28px]",
           TONE[state.kind],
         )}

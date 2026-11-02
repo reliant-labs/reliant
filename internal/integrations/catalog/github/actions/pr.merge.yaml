@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.merge
+display_name: Merge, queue or arm a pull request
+summary: Arm or disarm auto-merge, leave the merge queue, or merge a pull request at an exact head.
+description: >-
+  For workflows only (an action node), never an agent tool: merging is a
+  pipeline's decision, made after a review of an exact head. action
+  enable_auto arms auto-merge (GitHub merges, or queues, when the
+  requirements pass); disable_auto disarms it; dequeue takes the pull
+  request out of the merge queue; merge merges it now, or joins the merge
+  queue when its base branch requires one. enable_auto and merge need
+  match_head_commit, the full sha of the head that was reviewed: if the
+  head is anything else nothing changes and the call fails, so a push after
+  the review is never merged. An enable_auto on a pull request that is
+  already mergeable merges (or queues) it now, as gh pr merge --auto does.
+  disable_auto and dequeue on a pull request with nothing to undo succeed
+  with changed false. Returns the pull request's number, id, node id and
+  URL, the head sha and the state it was left in.
+keywords: [pull request, pr, merge, auto-merge, merge queue, enqueue, dequeue, squash]
+placement: server
+mutates: true
+executor: go:github.pr_merge
+tool:
+  expose: false
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number, action]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    action:
+      type: string
+      enum: [enable_auto, disable_auto, dequeue, merge]
+      title: Action
+      description: >-
+        enable_auto arms auto-merge; disable_auto disarms it; dequeue leaves the
+        merge queue; merge merges now (or joins the required merge queue).
+    match_head_commit:
+      type: string
+      pattern: "^[0-9a-f]{40}$"
+      title: Expected head
+      description: >-
+        The full sha of the head that was reviewed. Required for enable_auto and
+        merge: any other head and nothing changes.
+      examples: ["6dcb09b5b57875f334f61aebed695e2e4193db5e"]
+    method:
+      type: string
+      enum: [squash, merge, rebase]
+      default: squash
+      title: Merge method
+      description: How the pull request is merged (ignored by a merge queue, which uses its own).
+    connection: { $ref: ../schemas/connection.yaml }
+output:
+  schema:
+    type: object
+    properties:
+      number: { type: integer }
+      id: { type: [integer, "null"] }
+      node_id: { type: string }
+      html_url: { type: string }
+      head_sha: { type: string }
+      action: { type: string, enum: [enable_auto, disable_auto, dequeue, merge] }
+      state:
+        type: string
+        enum: [auto_merge_enabled, auto_merge_disabled, dequeued, queued, merged, unchanged]
+        description: What the call left it in; unchanged when there was nothing to do.
+      changed: { type: boolean, description: The call changed the pull request. }

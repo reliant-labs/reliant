@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/claimable/v1/claimable.proto.
  */
 export const file_services_claimable_v1_claimable: GenFile = /*@__PURE__*/
-  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0ItABCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZSJNChlDbGFpbWFibGVVbmF2YWlsYWJsZUNhdXNlEgwKBGNvZGUYASABKAkSEQoJY29tcG9uZW50GAIgASgJEg8KB21lc3NhZ2UYAyABKAkiewodR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVzcG9uc2USEQoJY2hhbGxlbmdlGAEgASgJEhcKD2RpZmZpY3VsdHlfYml0cxgCIAEoDRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCImCg9HZXRDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkilwIKEEdldENsYWltUmVzcG9uc2USLgoFc3RhdGUYASABKA4yHy5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlU3RhdGUSEQoJY2xhaW1hYmxlGAIgASgIEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEhEKCWhvc3RuYW1lcxgFIAMoCRIuCgpleHBpcmVzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY2xhaW1lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiLgoXT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkiWwoYT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMiKwoUQ29tcGxldGVDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkiegoVQ29tcGxldGVDbGFpbVJlc3BvbnNlEg4KBm9yZ19pZBgBIAEoCRISCgpjbGFpbV9wYXRoGAIgASgJEhEKCWhvc3RuYW1lcxgDIAMoCRIqCgVob2xkcxgEIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lIb2xkKsQBCg5DbGFpbWFibGVTdGF0ZRIfChtDTEFJTUFCTEVfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRDTEFJTUFCTEVfU1RBVEVfTElWRRABEh0KGUNMQUlNQUJMRV9TVEFURV9TVVNQRU5ERUQQAhIbChdDTEFJTUFCTEVfU1RBVEVfQ0xBSU1FRBADEh4KGkNMQUlNQUJMRV9TVEFURV9UQUtFTl9ET1dOEAQSGwoXQ0xBSU1BQkxFX1NUQVRFX0VYUElSRUQQBTKnCAoQQ2xhaW1hYmxlU2VydmljZRLeAQoUU3RhcnRDbGFpbWFibGVEZXBsb3kSLC5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLlN0YXJ0Q2xhaW1hYmxlRGVwbG95UmVzcG9uc2UiaaK7GGUIADphOl90aGUgY2FsbGVyIGlzIGFuIGFub255bW91cyBtYWNoaW5lIHdpdGggbm8gYWNjb3VudCB5ZXQ7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBJ+ChVHZXRDbGFpbWFibGVDaGFsbGVuZ2USLS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdBouLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXNwb25zZSIGorsYAggAEocBChhHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHkSMC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5UmVxdWVzdBoxLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZSIGorsYAggAElcKCEdldENsYWltEiAuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbVJlc3BvbnNlIgaiuxgCCAAS1wEKEE9wZW5DbGFpbVNlc3Npb24SKC5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlIm6iuxhqCAA6ZjpkdGhlIGNhbGxlciBob2xkcyBvbmx5IHRoZSBjbGFpbSB0b2tlbiBhbmQgaXMgbm90IHlldCBhIHVzZXI7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBKYAQoNQ29tcGxldGVDbGFpbRIlLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVzcG9uc2UiOKK7GDQIATowCgVjbGFpbRIWCgNvcmcSD3Jlc3BvbnNlLm9yZ19pZCIPcmVzcG9uc2Uub3JnX2lkGlqCtRhWChBDbGFpbWFibGVTZXJ2aWNlEgUxLjAuMBo7Tm8tc2lnbnVwIGRlcGxveXMgdGhhdCBhIGh1bWFuIGNhbiBjbGFpbSBiZWZvcmUgdGhleSBleHBpcmVC2QEKE2NvbS5jb250cm9scGxhbmUudjFCDkNsYWltYWJsZVByb3RvUAFaVWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9jbGFpbWFibGUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0IoICCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIwCgZsaW1pdHMYBSABKAsyIC5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlTGltaXRzItADCg9DbGFpbWFibGVMaW1pdHMSGAoQbWF4X3N0YXRpY19zaXRlcxgBIAEoBRIdChVtYXhfc3RhdGljX3N0b3JlZF9taWIYAiABKAUSFAoMbWF4X3NlcnZpY2VzGAMgASgFEhQKDG1heF9yZXBsaWNhcxgEIAEoBRIaChJtYXhfbWlncmF0aW9uX2pvYnMYBSABKAUSHwoXd29ya2xvYWRfY3B1X21pbGxpY29yZXMYBiABKAUSGwoTd29ya2xvYWRfbWVtb3J5X21pYhgHIAEoBRImCh53b3JrbG9hZF9lcGhlbWVyYWxfc3RvcmFnZV9taWIYCCABKAUSFQoNbWF4X2RhdGFiYXNlcxgJIAEoBRIaChJkYXRhYmFzZV9pbnN0YW5jZXMYCiABKAUSHwoXZGF0YWJhc2VfY3B1X21pbGxpY29yZXMYCyABKAUSGwoTZGF0YWJhc2VfbWVtb3J5X21pYhgMIAEoBRIcChRkYXRhYmFzZV9zdG9yYWdlX21pYhgNIAEoBRIgChhkYXRhYmFzZV9tYXhfY29ubmVjdGlvbnMYDiABKAUSJQodZGF0YWJhc2VfZGVjbGFyZWRfc3RvcmFnZV9naWIYDyABKAUiTQoZQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIMCgRjb2RlGAEgASgJEhEKCWNvbXBvbmVudBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInsKHUdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlEhEKCWNoYWxsZW5nZRgBIAEoCRIXCg9kaWZmaWN1bHR5X2JpdHMYAiABKA0SLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiJgoPR2V0Q2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpcCChBHZXRDbGFpbVJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8uY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVN0YXRlEhEKCWNsYWltYWJsZRgCIAEoCBIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIRCglob3N0bmFtZXMYBSADKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLcHVyZ2VfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNsYWltZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIi4KF09wZW5DbGFpbVNlc3Npb25SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIlsKGE9wZW5DbGFpbVNlc3Npb25SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDImoKCEZyZWVTaXRlEhUKDWRlcGxveW1lbnRfaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEgwKBG5hbWUYBSABKAkSCwoDdXJsGAYgASgJInsKFkZyZWVTaXRlQ2hvaWNlUmVxdWlyZWQSMAoNZXhpc3Rpbmdfc2l0ZRgBIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZRIvCgxjbGFpbWVkX3NpdGUYAiABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUiXwoUQ29tcGxldGVDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkSMgoJZnJlZV9zaXRlGAIgASgOMh8uY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlQ2hvaWNlIi4KF0dldENsYWltRnJlZVNpdGVSZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpYBChhHZXRDbGFpbUZyZWVTaXRlUmVzcG9uc2USFwoPY2hvaWNlX3JlcXVpcmVkGAEgASgIEjAKDWV4aXN0aW5nX3NpdGUYAiABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUSLwoMY2xhaW1lZF9zaXRlGAMgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlIucBChVDb21wbGV0ZUNsYWltUmVzcG9uc2USDgoGb3JnX2lkGAEgASgJEhIKCmNsYWltX3BhdGgYAiABKAkSEQoJaG9zdG5hbWVzGAMgAygJEioKBWhvbGRzGAQgAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUhvbGQSOwoRZnJlZV9zaXRlX291dGNvbWUYBSABKA4yIC5jb250cm9scGxhbmUudjEuRnJlZVNpdGVPdXRjb21lEi4KC3BhdXNlZF9zaXRlGAYgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlKsQBCg5DbGFpbWFibGVTdGF0ZRIfChtDTEFJTUFCTEVfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRDTEFJTUFCTEVfU1RBVEVfTElWRRABEh0KGUNMQUlNQUJMRV9TVEFURV9TVVNQRU5ERUQQAhIbChdDTEFJTUFCTEVfU1RBVEVfQ0xBSU1FRBADEh4KGkNMQUlNQUJMRV9TVEFURV9UQUtFTl9ET1dOEAQSGwoXQ0xBSU1BQkxFX1NUQVRFX0VYUElSRUQQBSpvCg5GcmVlU2l0ZUNob2ljZRIgChxGUkVFX1NJVEVfQ0hPSUNFX1VOU1BFQ0lGSUVEEAASHAoYRlJFRV9TSVRFX0NIT0lDRV9DTEFJTUVEEAESHQoZRlJFRV9TSVRFX0NIT0lDRV9FWElTVElORxACKqoBCg9GcmVlU2l0ZU91dGNvbWUSIQodRlJFRV9TSVRFX09VVENPTUVfVU5TUEVDSUZJRUQQABIhCh1GUkVFX1NJVEVfT1VUQ09NRV9OT19DT05GTElDVBABEicKI0ZSRUVfU0lURV9PVVRDT01FX0NMQUlNRURfU0lURV9MSVZFEAISKAokRlJFRV9TSVRFX09VVENPTUVfRVhJU1RJTkdfU0lURV9MSVZFEAMy+gkKEENsYWltYWJsZVNlcnZpY2US3gEKFFN0YXJ0Q2xhaW1hYmxlRGVwbG95EiwuY29udHJvbHBsYW5lLnYxLlN0YXJ0Q2xhaW1hYmxlRGVwbG95UmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5TdGFydENsYWltYWJsZURlcGxveVJlc3BvbnNlImmiuxhlCAA6YTpfdGhlIGNhbGxlciBpcyBhbiBhbm9ueW1vdXMgbWFjaGluZSB3aXRoIG5vIGFjY291bnQgeWV0OyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQSfgoVR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlEi0uY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUNoYWxsZW5nZVJlcXVlc3QaLi5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVzcG9uc2UiBqK7GAIIABKHAQoYR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5EjAuY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUF2YWlsYWJpbGl0eVJlcXVlc3QaMS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5UmVzcG9uc2UiBqK7GAIIABJXCghHZXRDbGFpbRIgLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbVJlcXVlc3QaIS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1SZXNwb25zZSIGorsYAggAEtcBChBPcGVuQ2xhaW1TZXNzaW9uEiguY29udHJvbHBsYW5lLnYxLk9wZW5DbGFpbVNlc3Npb25SZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLk9wZW5DbGFpbVNlc3Npb25SZXNwb25zZSJuorsYaggAOmY6ZHRoZSBjYWxsZXIgaG9sZHMgb25seSB0aGUgY2xhaW0gdG9rZW4gYW5kIGlzIG5vdCB5ZXQgYSB1c2VyOyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQSmAEKDUNvbXBsZXRlQ2xhaW0SJS5jb250cm9scGxhbmUudjEuQ29tcGxldGVDbGFpbVJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuQ29tcGxldGVDbGFpbVJlc3BvbnNlIjiiuxg0CAE6MAoFY2xhaW0SFgoDb3JnEg9yZXNwb25zZS5vcmdfaWQiD3Jlc3BvbnNlLm9yZ19pZBLQAQoQR2V0Q2xhaW1GcmVlU2l0ZRIoLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbUZyZWVTaXRlUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbUZyZWVTaXRlUmVzcG9uc2UiZ6K7GGMIATpfOl1hIHJlYWQgb2YgdGhlIGNsYWltIHByZXZpZXcgZm9yIHRoZSBzaWduZWQtaW4gY2FsbGVyOyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQaWoK1GFYKEENsYWltYWJsZVNlcnZpY2USBTEuMC4wGjtOby1zaWdudXAgZGVwbG95cyB0aGF0IGEgaHVtYW4gY2FuIGNsYWltIGJlZm9yZSB0aGV5IGV4cGlyZULZAQoTY29tLmNvbnRyb2xwbGFuZS52MUIOQ2xhaW1hYmxlUHJvdG9QAVpVZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsYWltYWJsZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.StartClaimableDeployRequest
@@ -226,6 +226,16 @@ export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaim
    * @generated from field: repeated controlplane.v1.ClaimableUnavailableCause compute_causes = 4;
    */
   computeCauses: ClaimableUnavailableCause[];
+
+  /**
+   * The anonymous plan's caps: the numbers admission and the operators
+   * enforce. forge reads them here rather than compiling its own copy, so
+   * its checks and the platform's cannot disagree. Set whether or not a
+   * deploy is available.
+   *
+   * @generated from field: controlplane.v1.ClaimableLimits limits = 5;
+   */
+  limits?: ClaimableLimits | undefined;
 };
 
 /**
@@ -234,6 +244,112 @@ export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaim
  */
 export const GetClaimableAvailabilityResponseSchema: GenMessage<GetClaimableAvailabilityResponse> = /*@__PURE__*/
   messageDesc(file_services_claimable_v1_claimable, 5);
+
+/**
+ * ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
+ * cap and zero means none allowed. "Per workload" holds for the service and,
+ * separately, its migration job: each runs with request = limit (no burst).
+ *
+ * @generated from message controlplane.v1.ClaimableLimits
+ */
+export type ClaimableLimits = Message<"controlplane.v1.ClaimableLimits"> & {
+  /**
+   * Static sites, and what the site may store (live copy and archives).
+   *
+   * @generated from field: int32 max_static_sites = 1;
+   */
+  maxStaticSites: number;
+
+  /**
+   * @generated from field: int32 max_static_stored_mib = 2;
+   */
+  maxStaticStoredMib: number;
+
+  /**
+   * Services (one replica each, no autoscaling) and pre-rollout migration
+   * jobs. No other workload kind is admitted.
+   *
+   * @generated from field: int32 max_services = 3;
+   */
+  maxServices: number;
+
+  /**
+   * @generated from field: int32 max_replicas = 4;
+   */
+  maxReplicas: number;
+
+  /**
+   * @generated from field: int32 max_migration_jobs = 5;
+   */
+  maxMigrationJobs: number;
+
+  /**
+   * Per workload: CPU and memory request = limit, and scratch disk.
+   *
+   * @generated from field: int32 workload_cpu_millicores = 6;
+   */
+  workloadCpuMillicores: number;
+
+  /**
+   * @generated from field: int32 workload_memory_mib = 7;
+   */
+  workloadMemoryMib: number;
+
+  /**
+   * @generated from field: int32 workload_ephemeral_storage_mib = 8;
+   */
+  workloadEphemeralStorageMib: number;
+
+  /**
+   * Managed Postgres: how many, and each one's own server (it is not a
+   * database on a shared server): instances, CPU and memory request = limit,
+   * provisioned storage (WAL included) and max_connections. No backups.
+   *
+   * @generated from field: int32 max_databases = 9;
+   */
+  maxDatabases: number;
+
+  /**
+   * @generated from field: int32 database_instances = 10;
+   */
+  databaseInstances: number;
+
+  /**
+   * @generated from field: int32 database_cpu_millicores = 11;
+   */
+  databaseCpuMillicores: number;
+
+  /**
+   * @generated from field: int32 database_memory_mib = 12;
+   */
+  databaseMemoryMib: number;
+
+  /**
+   * @generated from field: int32 database_storage_mib = 13;
+   */
+  databaseStorageMib: number;
+
+  /**
+   * @generated from field: int32 database_max_connections = 14;
+   */
+  databaseMaxConnections: number;
+
+  /**
+   * The largest storage_gib a ManagedDatabase may declare (its spec counts
+   * whole GiB); the platform provisions database_storage_mib whatever it
+   * declares.
+   *
+   * @generated from field: int32 database_declared_storage_gib = 15;
+   */
+  databaseDeclaredStorageGib: number;
+};
+
+/**
+ * Describes the message controlplane.v1.ClaimableLimits.
+ * Use `create(ClaimableLimitsSchema)` to create a new message.
+ */
+export const ClaimableLimitsSchema: GenMessage<ClaimableLimits> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 6);
 
 /**
  * ClaimableUnavailableCause is one reason claimable deploys, or their compute,
@@ -273,7 +389,7 @@ export type ClaimableUnavailableCause = Message<"controlplane.v1.ClaimableUnavai
  * Use `create(ClaimableUnavailableCauseSchema)` to create a new message.
  */
 export const ClaimableUnavailableCauseSchema: GenMessage<ClaimableUnavailableCause> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 6);
+  messageDesc(file_services_claimable_v1_claimable, 7);
 
 /**
  * GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
@@ -318,7 +434,7 @@ export type GetClaimableChallengeResponse = Message<"controlplane.v1.GetClaimabl
  * Use `create(GetClaimableChallengeResponseSchema)` to create a new message.
  */
 export const GetClaimableChallengeResponseSchema: GenMessage<GetClaimableChallengeResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 7);
+  messageDesc(file_services_claimable_v1_claimable, 8);
 
 /**
  * @generated from message controlplane.v1.GetClaimRequest
@@ -335,7 +451,7 @@ export type GetClaimRequest = Message<"controlplane.v1.GetClaimRequest"> & {
  * Use `create(GetClaimRequestSchema)` to create a new message.
  */
 export const GetClaimRequestSchema: GenMessage<GetClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 8);
+  messageDesc(file_services_claimable_v1_claimable, 9);
 
 /**
  * GetClaimResponse is preview metadata for the claim page. It carries no
@@ -397,7 +513,7 @@ export type GetClaimResponse = Message<"controlplane.v1.GetClaimResponse"> & {
  * Use `create(GetClaimResponseSchema)` to create a new message.
  */
 export const GetClaimResponseSchema: GenMessage<GetClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 9);
+  messageDesc(file_services_claimable_v1_claimable, 10);
 
 /**
  * @generated from message controlplane.v1.OpenClaimSessionRequest
@@ -414,7 +530,7 @@ export type OpenClaimSessionRequest = Message<"controlplane.v1.OpenClaimSessionR
  * Use `create(OpenClaimSessionRequestSchema)` to create a new message.
  */
 export const OpenClaimSessionRequestSchema: GenMessage<OpenClaimSessionRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 10);
+  messageDesc(file_services_claimable_v1_claimable, 11);
 
 /**
  * OpenClaimSessionResponse is a Supabase GoTrue session for the anonymous
@@ -446,7 +562,84 @@ export type OpenClaimSessionResponse = Message<"controlplane.v1.OpenClaimSession
  * Use `create(OpenClaimSessionResponseSchema)` to create a new message.
  */
 export const OpenClaimSessionResponseSchema: GenMessage<OpenClaimSessionResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 11);
+  messageDesc(file_services_claimable_v1_claimable, 12);
+
+/**
+ * One static site, named for a person deciding which to keep.
+ *
+ * @generated from message controlplane.v1.FreeSite
+ */
+export type FreeSite = Message<"controlplane.v1.FreeSite"> & {
+  /**
+   * @generated from field: string deployment_id = 1;
+   */
+  deploymentId: string;
+
+  /**
+   * @generated from field: string org_id = 2;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string project = 3;
+   */
+  project: string;
+
+  /**
+   * The environment's name and the deployment's.
+   *
+   * @generated from field: string env = 4;
+   */
+  env: string;
+
+  /**
+   * @generated from field: string name = 5;
+   */
+  name: string;
+
+  /**
+   * The platform URL (with scheme); empty until one is allocated.
+   *
+   * @generated from field: string url = 6;
+   */
+  url: string;
+};
+
+/**
+ * Describes the message controlplane.v1.FreeSite.
+ * Use `create(FreeSiteSchema)` to create a new message.
+ */
+export const FreeSiteSchema: GenMessage<FreeSite> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 13);
+
+/**
+ * FreeSiteChoiceRequired is the error detail (svcerr.WithDetail) on a
+ * FailedPrecondition/claimable_free_site_choice_required refusal.
+ *
+ * @generated from message controlplane.v1.FreeSiteChoiceRequired
+ */
+export type FreeSiteChoiceRequired = Message<"controlplane.v1.FreeSiteChoiceRequired"> & {
+  /**
+   * The caller's site that holds their free slot now.
+   *
+   * @generated from field: controlplane.v1.FreeSite existing_site = 1;
+   */
+  existingSite?: FreeSite | undefined;
+
+  /**
+   * The site the claim would add.
+   *
+   * @generated from field: controlplane.v1.FreeSite claimed_site = 2;
+   */
+  claimedSite?: FreeSite | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.FreeSiteChoiceRequired.
+ * Use `create(FreeSiteChoiceRequiredSchema)` to create a new message.
+ */
+export const FreeSiteChoiceRequiredSchema: GenMessage<FreeSiteChoiceRequired> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 14);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimRequest
@@ -456,6 +649,14 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
    * @generated from field: string claim_token = 1;
    */
   claimToken: string;
+
+  /**
+   * Which site keeps the free slot when the caller already has a free site.
+   * Ignored (and may be unset) when they do not.
+   *
+   * @generated from field: controlplane.v1.FreeSiteChoice free_site = 2;
+   */
+  freeSite: FreeSiteChoice;
 };
 
 /**
@@ -463,7 +664,55 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
  * Use `create(CompleteClaimRequestSchema)` to create a new message.
  */
 export const CompleteClaimRequestSchema: GenMessage<CompleteClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 12);
+  messageDesc(file_services_claimable_v1_claimable, 15);
+
+/**
+ * @generated from message controlplane.v1.GetClaimFreeSiteRequest
+ */
+export type GetClaimFreeSiteRequest = Message<"controlplane.v1.GetClaimFreeSiteRequest"> & {
+  /**
+   * @generated from field: string claim_token = 1;
+   */
+  claimToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GetClaimFreeSiteRequest.
+ * Use `create(GetClaimFreeSiteRequestSchema)` to create a new message.
+ */
+export const GetClaimFreeSiteRequestSchema: GenMessage<GetClaimFreeSiteRequest> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 16);
+
+/**
+ * @generated from message controlplane.v1.GetClaimFreeSiteResponse
+ */
+export type GetClaimFreeSiteResponse = Message<"controlplane.v1.GetClaimFreeSiteResponse"> & {
+  /**
+   * True when claiming now needs a free_site choice.
+   *
+   * @generated from field: bool choice_required = 1;
+   */
+  choiceRequired: boolean;
+
+  /**
+   * Set when choice_required.
+   *
+   * @generated from field: controlplane.v1.FreeSite existing_site = 2;
+   */
+  existingSite?: FreeSite | undefined;
+
+  /**
+   * @generated from field: controlplane.v1.FreeSite claimed_site = 3;
+   */
+  claimedSite?: FreeSite | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.GetClaimFreeSiteResponse.
+ * Use `create(GetClaimFreeSiteResponseSchema)` to create a new message.
+ */
+export const GetClaimFreeSiteResponseSchema: GenMessage<GetClaimFreeSiteResponse> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 17);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimResponse
@@ -497,6 +746,24 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
    * @generated from field: repeated controlplane.v1.DeployHold holds = 4;
    */
   holds: DeployHold[];
+
+  /**
+   * Path "membership" only: what the claim did about the caller's one free
+   * static slot. This is what happened, which can differ from what was asked
+   * when the situation changed between the choice and the claim.
+   *
+   * @generated from field: controlplane.v1.FreeSiteOutcome free_site_outcome = 5;
+   */
+  freeSiteOutcome: FreeSiteOutcome;
+
+  /**
+   * The site that is paused because of it (the other one holds the slot). Unset
+   * unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
+   * it runs again when the person subscribes or deletes the other site.
+   *
+   * @generated from field: controlplane.v1.FreeSite paused_site = 6;
+   */
+  pausedSite?: FreeSite | undefined;
 };
 
 /**
@@ -504,7 +771,7 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
  * Use `create(CompleteClaimResponseSchema)` to create a new message.
  */
 export const CompleteClaimResponseSchema: GenMessage<CompleteClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 13);
+  messageDesc(file_services_claimable_v1_claimable, 18);
 
 /**
  * ClaimableState is the lifecycle of one claimable deploy
@@ -559,6 +826,79 @@ export enum ClaimableState {
  */
 export const ClaimableStateSchema: GenEnum<ClaimableState> = /*@__PURE__*/
   enumDesc(file_services_claimable_v1_claimable, 0);
+
+/**
+ * Which site keeps the claimer's one free static slot.
+ *
+ * @generated from enum controlplane.v1.FreeSiteChoice
+ */
+export enum FreeSiteChoice {
+  /**
+   * @generated from enum value: FREE_SITE_CHOICE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The claimed site is live; the caller's existing free site is paused.
+   *
+   * @generated from enum value: FREE_SITE_CHOICE_CLAIMED = 1;
+   */
+  CLAIMED = 1,
+
+  /**
+   * The caller's existing free site stays live; the claimed site is claimed but
+   * paused.
+   *
+   * @generated from enum value: FREE_SITE_CHOICE_EXISTING = 2;
+   */
+  EXISTING = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.FreeSiteChoice.
+ */
+export const FreeSiteChoiceSchema: GenEnum<FreeSiteChoice> = /*@__PURE__*/
+  enumDesc(file_services_claimable_v1_claimable, 1);
+
+/**
+ * What a membership claim did about the free slot.
+ *
+ * @generated from enum controlplane.v1.FreeSiteOutcome
+ */
+export enum FreeSiteOutcome {
+  /**
+   * @generated from enum value: FREE_SITE_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Nothing was paused: the caller had no other free site, or the situation
+   * changed since they chose (the other site was deleted, or they subscribed).
+   *
+   * @generated from enum value: FREE_SITE_OUTCOME_NO_CONFLICT = 1;
+   */
+  NO_CONFLICT = 1,
+
+  /**
+   * The claimed site is live; paused_site is the caller's other site.
+   *
+   * @generated from enum value: FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE = 2;
+   */
+  CLAIMED_SITE_LIVE = 2,
+
+  /**
+   * The caller's other site is live; paused_site is the claimed site.
+   *
+   * @generated from enum value: FREE_SITE_OUTCOME_EXISTING_SITE_LIVE = 3;
+   */
+  EXISTING_SITE_LIVE = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.FreeSiteOutcome.
+ */
+export const FreeSiteOutcomeSchema: GenEnum<FreeSiteOutcome> = /*@__PURE__*/
+  enumDesc(file_services_claimable_v1_claimable, 2);
 
 /**
  * === ClaimableService ===
@@ -702,8 +1042,24 @@ export const ClaimableService: GenService<{
    *
    * Path "upgrade": the caller IS the anonymous user, now upgraded in place
    * (same user id, now with an email). Path "membership": the caller is a
-   * different, existing user who joins the anonymous org as owner (off until
-   * users belong to more than one org in practice, design §9 M1).
+   * different, existing user. In the claim's own transaction they become an
+   * owner member of the anonymous org and organizations.owner_id moves to
+   * them (this is the only way an org's owner changes; there is no general
+   * transfer). The anonymous user and its sign-in identity are then retired.
+   * The org is one more org the caller belongs to; it is not made their
+   * default.
+   *
+   * FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
+   * (docs/orgs.md). If the caller already has one and the claimed deploy brings
+   * another, the claim needs to know which keeps the slot: set free_site to
+   * FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
+   * is refused (FailedPrecondition, claimable_free_site_choice_required, with a
+   * FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
+   * is no default. The choice is re-checked inside the claim's transaction: if
+   * the other site is gone or the caller subscribed meanwhile, the real state is
+   * applied and the response's free_site_outcome says what happened. To keep
+   * both sites, subscribe first (the claim link stays valid); no choice is
+   * needed afterwards.
    *
    * Completion is ONE compare-and-set on the claimable_deploys row; the first
    * completion wins. It revokes the CLI's token.
@@ -714,6 +1070,19 @@ export const ClaimableService: GenService<{
     methodKind: "unary";
     input: typeof CompleteClaimRequestSchema;
     output: typeof CompleteClaimResponseSchema;
+  },
+  /**
+   * GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
+   * claiming would put a second site on their one free slot, and names both
+   * sites. GetClaim cannot say: it is public and does not know who is asking.
+   * Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+   *
+   * @generated from rpc controlplane.v1.ClaimableService.GetClaimFreeSite
+   */
+  getClaimFreeSite: {
+    methodKind: "unary";
+    input: typeof GetClaimFreeSiteRequestSchema;
+    output: typeof GetClaimFreeSiteResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_claimable_v1_claimable, 0);

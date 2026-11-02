@@ -65,6 +65,13 @@ const SOURCE_OF_WIRE: Record<WireSource, DashboardSource | null> = {
   [WireSource.BUILTIN]: "builtin",
 };
 
+/** A view kind this client does not know reads as a spec dashboard, as an older client would. */
+const VIEW_KIND_OF_WIRE: Partial<Record<WireViewKind, DashboardSummary["viewKind"]>> = {
+  [WireViewKind.ORGANIZATION_COSTS]: "organization-costs",
+  [WireViewKind.ORGANIZATION_USAGE]: "organization-usage",
+  [WireViewKind.ORGANIZATION_BILLING]: "organization-billing",
+};
+
 /** A release ref is sent as GENERATED: the server resolves a release dashboard by key whichever of the two it is. */
 const WIRE_OF_KIND: Record<DashboardKind, WireSource> = {
   release: WireSource.GENERATED,
@@ -89,9 +96,12 @@ function mapRef(ref: WireRef | undefined, source: DashboardSource): DashboardRef
 function mapSummary(s: WireSummary): DashboardSummary {
   const source = SOURCE_OF_WIRE[s.source] ?? SOURCE_OF_WIRE[s.ref?.source ?? WireSource.UNSPECIFIED] ?? "workspace";
   return {
+    // An older server sends neither (proto3 defaults): absent, so the page infers the group.
+    group: s.group || undefined,
+    tags: s.tags.length ? [...s.tags] : undefined,
     ref: mapRef(s.ref, source),
     source,
-    viewKind: s.viewKind === WireViewKind.ORGANIZATION_COSTS ? "organization-costs" : undefined,
+    viewKind: VIEW_KIND_OF_WIRE[s.viewKind],
     title: s.title,
     description: s.description,
     readOnly: s.readOnly,

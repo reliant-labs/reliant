@@ -111,6 +111,10 @@ message StreamProcessOutputRequest {
   string process_id = 1;
   // If true, skip sending existing output and only stream new lines
   bool new_only = 2;
+  // The machine the process runs on (a package command's
+  // PackageProcess.daemon_id). Unset streams from the default machine. It
+  // must be one of the caller's machines; another is not found.
+  optional string daemon_id = 3;
 }
 
 // ProcessOutputEvent represents a single output event in the stream

@@ -246,6 +246,8 @@ enum DashboardSource {
 enum DashboardViewKind {
   DASHBOARD_VIEW_KIND_UNSPECIFIED = 0;
   DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS = 1;
+  DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE = 2;
+  DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING = 3;
 }
 
 // DashboardRef addresses one dashboard.
@@ -319,6 +321,9 @@ message DashboardSummary {
   // Templates: "generated" (derived from what forge generates) or "platform".
   string category = 12;
   // ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
+  // ORGANIZATION_USAGE and ORGANIZATION_BILLING call
+  // BillingService.ListOrganizationUsage (and the cost summary) for the "Spend
+  // and usage" and "Billing and infrastructure" views.
   // Such a view has no SQL panel spec and cannot be copied into one.
   DashboardViewKind view_kind = 13;
   // The list section the dashboard is shown under: one of overview, services,

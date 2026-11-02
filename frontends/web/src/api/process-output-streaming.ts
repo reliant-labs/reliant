@@ -89,6 +89,7 @@ export interface ProcessOutputCallbacks {
  */
 export class ProcessOutputStreamingService {
   private processId: string;
+  private readonly daemonId: string | undefined;
   private callbacks: ProcessOutputCallbacks;
   private abortController: AbortController | null = null;
   private isIntentionallyClosed = false;
@@ -103,9 +104,14 @@ export class ProcessOutputStreamingService {
   private completed = false;
   private connectedAt = 0;
 
-  constructor(processId: string, callbacks: ProcessOutputCallbacks) {
+  /**
+   * @param daemonId The machine the process runs on (a package process's
+   *   daemon_id); unset streams from the default machine.
+   */
+  constructor(processId: string, callbacks: ProcessOutputCallbacks, daemonId?: string) {
     this.processId = processId;
     this.callbacks = callbacks;
+    this.daemonId = daemonId;
   }
 
   /**
@@ -142,6 +148,7 @@ export class ProcessOutputStreamingService {
       const request = create(StreamProcessOutputRequestSchema, {
         processId: this.processId,
         newOnly: this.newOnly,
+        daemonId: this.daemonId,
       });
 
       logger.info(`${LOG_PREFIX} Connecting to gRPC stream`, {

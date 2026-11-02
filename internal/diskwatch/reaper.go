@@ -265,7 +265,8 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		goCacheDue = lastGo.IsZero() || now.Sub(lastGo) >= cfg.GoCacheInterval
 	}
 	if !fullDue && !goCacheDue {
-		return false
+		// Between cache passes, the slower worktree reap (worktreereap.go).
+		return w.worktreeReapTick(ctx)
 	}
 	if !w.tryAcquireReaper() {
 		return false

@@ -19,12 +19,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -63,18 +62,46 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 // Every client reaches these RPCs with a project id (frontends/web/src/api/fileSystem.ts
 // returns early when there is no current project), so nothing legitimate
 // depended on the passthrough.
-func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
+//
+// The base is a branch worktree's path, or else the project's main checkout ON
+// THE MACHINE the request runs on (target): projects.path is the creating
+// machine's path. A machine with no checkout is projectcheckout's refusal,
+// whose ProjectCheckoutMissing detail the Files tab renders with its action.
+//
+// resolvedOn is the machine the main checkout was resolved on, so a request
+// left to default resolution is pinned to the machine whose path it carries;
+// "" when a branch worktree scoped it.
+func (s *Service) requireProjectBase(ctx context.Context, userID, projectID string, worktreeID *string, chatID *string, target machinewake.Target) (basePath, resolvedOn string, err error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
+		return "", "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
 	}
-	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
+	mainCheckout := func(ctx context.Context) (string, error) {
+		project, err := s.deps.Repo.GetProject(ctx, projectID)
+		if err != nil {
+			return "", err
+		}
+		// A request left to default resolution is resolved on the machine
+		// that resolution names, so the path is that machine's checkout.
+		machine := target.DaemonID
+		if machine == "" && !target.NoMachine && s.deps.Router != nil {
+			machine, _ = s.deps.Router.ResolveDaemonID(ctx, userID)
+		}
+		machines, _ := s.deps.Router.(daemonplacement.Machines)
+		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, machine, "browse its files")
+		if err != nil {
+			return "", err
+		}
+		resolvedOn = checkout.DaemonID
+		return checkout.Path, nil
+	}
+	basePath, err = filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID, mainCheckout)
 	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
+		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
 	if strings.TrimSpace(basePath) == "" {
-		return "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
+		return "", "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
 	}
-	return basePath, nil
+	return basePath, resolvedOn, nil
 }
 
 // workspaceScope is where a workspace-scoped request acts: the directory it
@@ -92,13 +119,19 @@ type workspaceScope struct {
 // here, so a file tree, a preview and a save of the same file cannot land on
 // different machines.
 func (s *Service) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
-	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
-	if err != nil {
-		return workspaceScope{}, err
-	}
 	target, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
 	if err != nil {
 		return workspaceScope{}, err
+	}
+	basePath, resolvedOn, err := s.requireProjectBase(ctx, userID, projectID, worktreeID, chatID, target)
+	if err != nil {
+		return workspaceScope{}, err
+	}
+	if target.DaemonID == "" && !target.NoMachine && resolvedOn != "" {
+		// The path is that machine's: every command of the request goes
+		// there, not to a second default resolution that could pick another
+		// (the tree, a preview and a delete all scope through here).
+		target.DaemonID = resolvedOn
 	}
 	return workspaceScope{basePath: basePath, target: target}, nil
 }
@@ -108,63 +141,29 @@ func (s *Service) resolveScope(ctx context.Context, userID, projectID string, wo
 // request was made for a chat that has no machine: such a request must never
 // wake one (see machinewake).
 //
-// The files exist on one machine. For a request made for a chat (chat_id) it
-// is the chat's machine: its pinned daemon, else its worktree's owner
-// (daemonplacement.ChatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
-// Files tab and the preview must show the files the chat's tools read and
-// write. Default resolution picks the user's default machine instead, which is
-// the wrong disk for any chat on another machine, main checkout included.
-//
-// A request that names a worktree some machine owns, other than the chat's
-// own, is about that worktree, and goes to its owner: no other machine has the
-// checkout. Without a chat, an owned worktree goes to its owner too. Anything
-// else (the main checkout, legacy rows that record no owner) keeps default
-// resolution.
+// The files exist on one machine, and daemonplacement.WorkspaceDaemon names
+// it: an owned worktree's owner, else the chat's machine (the precedence
+// ExecuteTools routes the chat's tools by), else default resolution. The Files
+// tab, the preview and the terminal share that one rule, so they cannot show
+// two different disks.
 func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
-	var worktree *db.Worktree
-	if worktreeID != nil && *worktreeID != "" {
-		wt, err := s.deps.Repo.GetWorktree(ctx, *worktreeID)
-		switch {
-		case errors.Is(err, core.ErrWorktreeNotFound):
-			// A missing row means "no owner", as it does for tool routing.
-		case err != nil:
-			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
-		default:
-			worktree = wt
-		}
-	}
-	owner := daemonplacement.WorktreeOwner(worktree)
-
-	if chatID == nil || *chatID == "" {
-		return machinewake.Target{DaemonID: owner}, nil
-	}
-	chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, projectID, deref(worktreeID), deref(chatID))
 	switch {
-	case errors.Is(err, core.ErrChatNotFound):
-		// The UI can still name a chat it has just deleted. Degrade to the
-		// routing a request without a chat gets rather than fail the tree.
-		return machinewake.Target{DaemonID: owner}, nil
-	case err != nil:
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	case chat.UserID != userID:
+	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")
-	case chat.ProjectID != projectID:
-		// A chat from another project says nothing about this project's
-		// files. It is stale UI context (a project switch racing the tree),
-		// and ResolveBasePath ignores it the same way.
-		return machinewake.Target{DaemonID: owner}, nil
+	case errors.Is(err, daemonplacement.ErrForeignWorkspace):
+		return machinewake.Target{}, svcerr.NotFound("worktree")
+	case err != nil:
+		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
-	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
-		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return machinewake.Target{DaemonID: ws.DaemonID, NoMachine: ws.NoMachine}, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
 	}
-	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
-	if err != nil {
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	}
-	if daemonID != "" {
-		return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
-	}
-	return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return *s
 }
 
 // resolve turns a client path into the absolute, confined path the daemon

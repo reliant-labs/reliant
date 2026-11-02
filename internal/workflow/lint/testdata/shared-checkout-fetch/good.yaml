@@ -1,0 +1,19 @@
+name: fixture
+entry: [count]
+nodes:
+# Reads the shared checkout's objects only: the fetch lands in this run's
+# private refs, with no tags.
+- id: count
+  type: run
+  timeout: 5m
+  args:
+    credentials: inherit
+    command: |
+      ns="refs/pipeline/count-{{ workflow.id }}"
+      git fetch -q --no-tags --refmap= origin "+refs/heads/main:$ns/main" "+refs/tags/v1.0.0:$ns/base"
+      git rev-list --count "$ns/base..$ns/main"
+- id: done
+  type: save_message
+  args: {role: assistant, content: '{{ nodes.count.stdout }} (exit {{ nodes.count.exit_code }})'}
+edges:
+- {from: count, default: done}

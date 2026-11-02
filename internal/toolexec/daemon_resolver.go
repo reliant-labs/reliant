@@ -3,6 +3,7 @@ package toolexec
 
 import (
 	"context"
+	"slices"
 	"time"
 )
 
@@ -18,10 +19,33 @@ type DaemonInfo struct {
 
 // DaemonSelector specifies criteria for selecting daemons.
 type DaemonSelector struct {
-	ID     string            // exact daemon ID
-	Name   string            // match by name
+	ID string // exact daemon ID
+	// Name is what a caller calls the machine: its id, the name its owner gave
+	// it, or its hostname. A workflow's `daemon:` shorthand lands here whether
+	// the author wrote a name or a machine id, so matching tries the id first
+	// (resolveNameAsID) and only then the name.
+	Name   string
 	Type   string            // "local", "cloud", "any"
 	Labels map[string]string // match by labels
+}
+
+// resolveNameAsID returns the selector a Name means among the daemons isID
+// recognises: when Name is exactly one of their ids (and no ID is set), the
+// selector picks that daemon by id; otherwise it is returned unchanged and
+// Name matches by name. An id outranks a name because it cannot be ambiguous:
+// a machine named after another machine's id must not capture its requests.
+//
+// Without this, `daemon: e164d47d-…` in a workflow — a machine id, written
+// where the shorthand was documented to accept one — matched no daemon by
+// name, so every run's preflight failed and the queued delivery redelivered
+// it every few seconds (prod 2026-10-29).
+func resolveNameAsID(selector *DaemonSelector, isID func(string) bool) *DaemonSelector {
+	if selector == nil || selector.ID != "" || selector.Name == "" || !isID(selector.Name) {
+		return selector
+	}
+	byID := *selector
+	byID.ID, byID.Name = selector.Name, ""
+	return &byID
 }
 
 // DaemonResolver resolves available daemons for a user given a selector.
@@ -53,6 +77,9 @@ func (r *ConnectedDaemonResolver) ResolveDaemons(_ context.Context, userID strin
 	if selector == nil {
 		return all, nil
 	}
+	selector = resolveNameAsID(selector, func(id string) bool {
+		return slices.ContainsFunc(all, func(d DaemonInfo) bool { return d.DaemonID == id })
+	})
 
 	var filtered []DaemonInfo
 	for _, d := range all {

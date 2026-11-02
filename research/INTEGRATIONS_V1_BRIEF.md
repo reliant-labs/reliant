@@ -100,9 +100,9 @@ Salesforce, Stripe, Shopify, Jira, Linear, Calendar, Typeform, Calendly.
   `TriggerInfo{Kind, TriggerID, EventID, OccurredAt, Payload}` →
   `trigger.payload.*` in every node.
 - The Automations UI is `web/src/components/Automations/`.
-- `triggers.notify_on_complete` plus the inbox `RunFinished` kind already
-  record run completion for the inbox; a workflow-event trigger source
-  builds on that signal.
+- `triggers.notify_on_complete` records run completion as an unread mark
+  and OS notification (never an Inbox item); a workflow-event trigger
+  source builds on run completion.
 
 **Public ingress:** the reliant api-server serves `PUBLIC_URL` (env.k). The
 OAuth callback `<PUBLIC_URL>/integrations/oauth/<provider>/callback` is

@@ -1,6 +1,8 @@
 /**
- * Regression: a chat created by `reliant workflow run` must appear in the
- * sidebar.
+ * Regression: a chat started with no worktree_id must appear in the sidebar.
+ * (A `reliant workflow run` start is now a cli.run run, listed in Runs until
+ * adopted; once adopted it lists here like any chat, so the grouping below
+ * still applies to it.)
  *
  * The CLI sends no worktree_id, and chats used to persist with worktree_id
  * NULL. The sidebar groups by worktree and drops chats whose worktree does not
@@ -85,7 +87,8 @@ vi.mock("../../hooks/chat-queries", () => ({
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),

@@ -132,6 +132,16 @@ describe('mobilePathFor', () => {
     expect(mobilePathFor('/settings/environments/m_1')).toBe('/m/daemons')
   })
 
+  it('keeps the way back when a billing visit has one (the claim page sends people here to subscribe)', () => {
+    expect(mobilePathFor('/settings/billing', 'tab=plans&from=claim&returnTo=%2Fclaim')).toBe(
+      '/m/settings?section=billing&returnTo=%2Fclaim',
+    )
+    // No way back, or one that leaves the app: the plain settings list, as before.
+    expect(mobilePathFor('/settings/billing', 'tab=plans')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/billing', 'returnTo=%2F%2Fevil.example')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/billing', 'returnTo=https%3A%2F%2Fevil.example')).toBe('/m/settings')
+  })
+
   it('lands everything without a twin on the chat list', () => {
     for (const pathname of ['/', '/project/abc', '/workflow/new']) {
       expect(mobilePathFor(pathname), pathname).toBe('/m/chats')

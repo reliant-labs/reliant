@@ -39,6 +39,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -57,6 +58,9 @@ type Event struct {
 	// Origin is trigger.origin, resolved at intake. nil for a source with no
 	// attribution.
 	Origin *core.TriggerOrigin
+	// Definition is which workflow definition the firing resolved, recorded
+	// on its event row. nil for a start that records none.
+	Definition *core.TriggerEventDefinition
 }
 
 // SeedMessage is one message written to the root thread before the run starts.
@@ -94,6 +98,14 @@ type Spec struct {
 	// generated id.
 	ClientMessageID string
 
+	// CatalogPin is the workflow catalog snapshot (db.Repo.PinProjectCatalog)
+	// this launch was decided against: a trigger pins the catalog when it
+	// fires, records the definition it read there, and launches on the same
+	// snapshot, so admission, inputs and every load of the run read exactly
+	// that definition. Empty resolves against the live catalog and pins it
+	// when the run first loads.
+	CatalogPin string
+
 	// DaemonID is the daemon every tool call in this run executes on. It
 	// becomes the chat's ActiveDaemonID, which the launcher injects as
 	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.
@@ -106,6 +118,14 @@ type Spec struct {
 	// with a node that cannot run without one (a shell `run`, a
 	// `create_worktree`, …) is refused here. Mutually exclusive with DaemonID.
 	NoMachine bool
+
+	// MachinePool records that a machine pool placed this run: DaemonID is
+	// the member it chose (empty when resuming a launch whose chat is already
+	// pinned). It becomes the chat's MachinePoolID, which is how the pool
+	// counts its members' live runs, and the run's inputs.machine_pool, so a
+	// workflow can address every member (sync-checkouts). Requires DaemonID
+	// on a new chat; mutually exclusive with NoMachine.
+	MachinePool *PoolPlacement
 
 	// Unattended sets inputs.unattended: no human will answer questions or
 	// approvals, so the run must not block on one, and it is withheld the
@@ -153,6 +173,21 @@ type Spec struct {
 	// PrepareExecution records the immutable workflow ID in the SAME launch
 	// transaction, before Temporal may accept it or the activation disappears.
 	PrepareExecution func(ctx context.Context, eventID, workflowID string) error
+}
+
+// PoolPlacement is the pool a run was placed by, and its members as
+// placement saw them.
+type PoolPlacement struct {
+	ID      string
+	Name    string
+	Members []PoolMember
+}
+
+// PoolMember is one member of a PoolPlacement.
+type PoolMember struct {
+	ID    string
+	Name  string
+	State string
 }
 
 // Result is what Launch produced.
@@ -210,6 +245,11 @@ func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
 func (e *DeclinedError) TxOutcome() {}
 
 var _ db.TxOutcome = (*DeclinedError)(nil)
+
+// ErrorClass implements svcerr.Classed: a guard declining a launch ("waiting
+// for workflow capacity") is the system working, never a fault, wherever the
+// error surfaces. TxOutcome only quiets the transaction ladder's own log.
+func (e *DeclinedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.
@@ -337,7 +377,7 @@ type TriggerEventStore interface {
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
 	// as pending; claimed=false means another launch got it first.
-	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (claimed bool, err error)
 }
 
 // WorkflowStore is the root workflow row a launch starts.
@@ -350,6 +390,15 @@ type WorkflowStore interface {
 	// root left PENDING, so the start is no longer the caller's to make.
 	MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error)
 	ClaimWorkflowStart(ctx context.Context, id string) (bool, error)
+}
+
+// PinnedWorkflowResolver is a WorkflowResolver that also serves a pinned
+// catalog scope (workflowsource.PinnedStore), which resolution asks for by
+// assertion when a scope carries a catalog pin. The per-request resolver
+// (requestResolver) is one, memoizing pins across one ListTriggers (#2008).
+type PinnedWorkflowResolver interface {
+	WorkflowResolver
+	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
 }
 
 // WorkflowResolver looks up the workflow definition and presets a spec names.
@@ -373,7 +422,11 @@ type WorkflowResolver interface {
 }
 
 // ProjectLookup resolves the project, worktrees and settings a launch runs in.
+//
+// Installs is each machine's checkout of a project (project_daemons): a
+// chat's main checkout is its machine's, never projects.path.
 type ProjectLookup interface {
+	daemonplacement.Installs
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

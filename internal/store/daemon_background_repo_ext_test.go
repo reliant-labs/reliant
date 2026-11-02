@@ -59,7 +59,7 @@ func TestDaemonQueries(t *testing.T) {
 	}
 
 	// Lifecycle: newest wins; an omitted size keeps the stored one.
-	lc := core.DaemonLifecycleUpdate{DaemonID: "d1", Phase: "ready", Size: "large", StatusMessage: "up", ChangedAt: base, OOMKillCount: 2}
+	lc := core.DaemonLifecycleUpdate{DaemonID: "d1", Phase: "ready", Size: "xl", StatusMessage: "up", ChangedAt: base, OOMKillCount: 2}
 	if applied, err := store.ApplyDaemonLifecycle(ctx, env.ORM, lc); err != nil || !applied {
 		t.Fatalf("ApplyDaemonLifecycle = %v, %v", applied, err)
 	}
@@ -73,7 +73,7 @@ func TestDaemonQueries(t *testing.T) {
 		t.Fatalf("Repo.ApplyDaemonLifecycle = %v, %v", applied, err)
 	}
 	got, _ = store.GetDaemon(ctx, env.ORM, "d1")
-	if *got.LifecyclePhase != "suspended" || *got.Size != "large" || got.OOMKillCount != 2 || got.LastOOMKilledAt == nil || got.LastStatusMessage != "" {
+	if *got.LifecyclePhase != "suspended" || *got.Size != "xl" || got.OOMKillCount != 2 || got.LastOOMKilledAt == nil || got.LastStatusMessage != "" {
 		t.Fatalf("after lifecycle = %+v", got)
 	}
 

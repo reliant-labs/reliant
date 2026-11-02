@@ -10,13 +10,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
 // MachineResumeWakeInput is one slice of a resuming run's wake.
 type MachineResumeWakeInput struct {
-	ChatID         string                   `json:"chat_id" reliant:"-"`
-	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"`
+	ChatID string `json:"chat_id" reliant:"-"`
+	// DaemonSelector is the run's selector; Session marks the chat's pin,
+	// which yields to the chat's workspace owner as it does for tools.
+	DaemonSelector *activitytypes.DaemonSelector `json:"daemon_selector,omitempty"`
 	// ToolNames are the tool calls the step about to run makes, when it is an
 	// execute_tools step. A batch none of whose tools touch the machine wakes
 	// nothing. ToolsKnown false means the step needs the machine whatever it
@@ -29,6 +32,11 @@ type MachineResumeWakeInput struct {
 	// Final marks the workflow's last slice: the chat's waiting marker is
 	// cleared even if the machine is still not up, because the step runs now.
 	Final bool `json:"final,omitempty"`
+	// FailedSince is the start of the machine's unbroken run of Failed
+	// reports that earlier slices saw (the previous slice's output); nil when
+	// the last one saw none. As in preflight, a Failed report is believed
+	// only once it has held for machinefailure.Settle, longer than a slice.
+	FailedSince *time.Time `json:"failed_since,omitempty"`
 }
 
 // MachineResumeWakeOutput says how the slice ended.
@@ -42,6 +50,9 @@ type MachineResumeWakeOutput struct {
 	// NotComing: the machine will not attach by waiting (removed, failed to
 	// start, or the wake was refused). The step runs anyway and reports it.
 	NotComing string `json:"not_coming,omitempty"`
+	// FailedSince, on a Waiting slice, is the start of the machine's current
+	// run of Failed reports, for the workflow to pass to the next slice.
+	FailedSince *time.Time `json:"failed_since,omitempty"`
 }
 
 // MachineResumeWakeActivity wakes a run's machine before its first machine
@@ -64,6 +75,9 @@ type MachineResumeWakeActivity struct {
 	// pollInterval is how often a slice re-checks the machine; zero means
 	// preflightPollInterval. Tests shrink it.
 	pollInterval time.Duration
+	// failedSettle is how long a Failed report must hold before the wake
+	// believes it; zero means machinefailure.Settle. Tests shrink it.
+	failedSettle time.Duration
 }
 
 // NewMachineResumeWakeActivity creates a MachineResumeWakeActivity.
@@ -95,10 +109,9 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
 	// A resumed run can still carry the snapshot from before its chat was
-	// pinned. Check/wake the same machine its commands and tools will use.
-	if input.DaemonSelector == nil {
-		input.DaemonSelector = toolDaemonSelector("", chatDaemonSelector(chat, nil))
-	}
+	// pinned, or a pin from before its chat moved to its workspace's machine.
+	// Check/wake the same machine its commands and tools will use.
+	selector := runMachineSelector(ctx, a.repo, chat, input.DaemonSelector)
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return MachineResumeWakeOutput{}, fmt.Errorf("loading project for the resume wake: %w", err)
@@ -111,14 +124,16 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	userID := project.UserID
 	exitCtx := context.WithoutCancel(ctx)
 
-	if online, err := router.IsDaemonOnline(ctx, userID, input.DaemonSelector); err != nil || online {
+	if online, err := router.IsDaemonOnline(ctx, userID, selector); err != nil || online {
 		// Up — or the check itself failed, which the step's own call
 		// reports better than a guess here.
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
 
 	out := MachineResumeWakeOutput{}
-	if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
+	settle := settleOrDefault(a.failedSettle)
+	failedSince, notComing := machineNotComing(ctx, router, userID, selector, timeOrZero(input.FailedSince), settle)
+	if notComing != nil {
 		return MachineResumeWakeOutput{Ready: true, NotComing: notComing.Error()}, nil
 	}
 	if waker, ok := router.(toolexec.RunWaker); ok {
@@ -127,7 +142,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
 			ctx = automationcred.Allow(ctx)
 		}
-		res, wakeErr := waker.WakeForRun(ctx, userID, input.DaemonSelector)
+		res, wakeErr := waker.WakeForRun(ctx, userID, selector)
 		switch {
 		case wakeErr == nil:
 			out.Woke = res.Resumed
@@ -156,9 +171,11 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		case <-ctx.Done():
 			a.setBlocked(exitCtx, input.ChatID, false)
 			out.Waiting = true
+			out.FailedSince = timeOrNil(failedSince)
 			return out, nil
 		case <-deadline.C:
-			if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
+			failedSince, notComing = machineNotComing(ctx, router, userID, selector, failedSince, settle)
+			if notComing != nil {
 				a.setBlocked(exitCtx, input.ChatID, false)
 				return MachineResumeWakeOutput{Ready: true, Woke: out.Woke, NotComing: notComing.Error()}, nil
 			}
@@ -166,10 +183,11 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 				a.setBlocked(exitCtx, input.ChatID, false)
 			}
 			out.Waiting = true
+			out.FailedSince = timeOrNil(failedSince)
 			return out, nil
 		case <-ticker.C:
 		}
-		if up, upErr := router.IsDaemonOnline(ctx, userID, input.DaemonSelector); upErr == nil && up {
+		if up, upErr := router.IsDaemonOnline(ctx, userID, selector); upErr == nil && up {
 			a.setBlocked(exitCtx, input.ChatID, false)
 			out.Ready = true
 			return out, nil

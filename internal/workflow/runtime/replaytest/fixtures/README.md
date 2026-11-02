@@ -78,6 +78,7 @@ that shape.
 | `2026-10-22-ask-user-blocks-by-default` | `ask_user_yields_to_message.json` at `cbc5221a`: an ask_user call with no flag, recorded when that meant blocking — no `ask-user-async` marker, `QuestionCreate` then the 24h timer | `askUserIsAsync` (`runtime/ask_user_async.go`): `ask-user-async/<tool call>` answers `DefaultVersion`, which blocks |
 | `2026-10-23-capacity-wake-ignored` | Every fixture at `a84e40ac`, plus `capacity_wake_ignored_while_paused.json` and `capacity_wake_ignored.json`: a capacity wake (`signal.usage_limit.retry`) that lands while the root is self-paused on spent credit, or with a sub-agent stopped on it, is never read — no usage-limit wait started the listener — and only `signal.resume` (or nothing) moves the run | `capacityWakeChangeID` (`runtime/capacity_wake.go`), asked at run start |
 | `2026-10-11-integration-action-approval` | `action_approval.json` at `14f6aff7`: an attended turn's mutating integration action asks first (`ApprovalCreate`, a timer, `signal.approval.*`), is denied, and `ExecuteTools` refuses it — the prompt #664 removed | `actionApprovalRemovedChangeID` (`runtime/action_approval_legacy.go`) |
+| `2026-10-30-bookkeeping-regular-activities` | Every fixture at the commit before local bookkeeping: `ActivityLoadWorkflow`, `LoadPresetParams` and `WorkflowCheckpoint` scheduled as regular activities | `bookkeepingLocalGate` (`runtime/bookkeeping_local.go`), asked at the run's first definition load |
 
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.

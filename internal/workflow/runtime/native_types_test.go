@@ -26,11 +26,12 @@ func TestNativeTypeValidation(t *testing.T) {
 		{"workflow.path", "workflow.path", false},
 		{"workflow.branch", "workflow.branch", false},
 		{"workflow.mode", "workflow.mode", false},
+		// The run's own chat, for a link to its page (/workflows/runs/<chat_id>).
+		{"workflow.chat_id", "workflow.chat_id", false},
 		{"iter.iteration", "iter.iteration", false},
 
 		// Invalid field access - should fail at compile time
 		{"workflow.typo - undefined field", "workflow.typo", true},
-		{"workflow.chat_id - not exposed", "workflow.chat_id", true},
 		{"iter.previous - dynamic iter namespace allows unknown fields", "iter.previous", false},
 		{"iter.index - available for parallel loop context", "iter.index", false},
 		{"iter.item - available for parallel loop context", "iter.item", false},

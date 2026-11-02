@@ -1,7 +1,7 @@
 // Package runtime input processing utilities.
 //
 // This file contains runtime utilities for processing workflow inputs:
-// - Type coercion (coerceToType)
+// - Putting values in their declared type's form (coerceInputValue)
 // - Default value application (ApplyDefaults)
 //
 // For validation, see validate.go.
@@ -9,116 +9,13 @@
 package runtime
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
-// coerceToInt64 converts various numeric types to int64 for CEL compatibility.
-func coerceToInt64(value interface{}) (interface{}, bool) {
-	switch v := value.(type) {
-	case int:
-		return int64(v), true
-	case int64:
-		return v, true
-	case int32:
-		return int64(v), true
-	case float64:
-		// Only coerce if it's a whole number
-		if v == float64(int64(v)) {
-			return int64(v), true
-		}
-		return value, false
-	case float32:
-		if float64(v) == float64(int64(v)) {
-			return int64(v), true
-		}
-		return value, false
-	case string:
-		// Use strconv.ParseInt for strict integer parsing
-		// This correctly rejects strings like "42.5" (unlike fmt.Sscanf)
-		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
-			return i, true
-		}
-		return value, false
-	default:
-		return value, false
-	}
-}
-
-// coerceToFloat64 converts various numeric types to float64.
-func coerceToFloat64(value interface{}) (interface{}, bool) {
-	switch v := value.(type) {
-	case float64:
-		return v, true
-	case float32:
-		return float64(v), true
-	case int:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case string:
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f, true
-		}
-		return value, false
-	default:
-		return value, false
-	}
-}
-
-// coerceToBool converts various types to bool.
-func coerceToBool(value interface{}) (interface{}, bool) {
-	switch v := value.(type) {
-	case bool:
-		return v, true
-	case string:
-		switch strings.ToLower(v) {
-		case "true", "1", "yes":
-			return true, true
-		case "false", "0", "no":
-			return false, true
-		}
-		return value, false
-	case int:
-		return v != 0, true
-	case int64:
-		return v != 0, true
-	case float64:
-		return v != 0, true
-	default:
-		return value, false
-	}
-}
-
-// coerceToString converts various types to string.
-func coerceToString(value interface{}) (interface{}, bool) {
-	switch v := value.(type) {
-	case string:
-		return v, true
-	case int:
-		return strconv.Itoa(v), true
-	case int64:
-		return strconv.FormatInt(v, 10), true
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64), true
-	case bool:
-		if v {
-			return "true", true
-		}
-		return "false", true
-	default:
-		return fmt.Sprintf("%v", v), true
-	}
-}
-
-// ApplyDefaults applies default values from proto input schemas to inputs and coerces
-// all values to their declared schema types.
+// ApplyDefaults applies default values from proto input schemas to inputs and puts
+// every value that fits its declared type in that type's form (coerceInputValue).
 // This should be called after validation to fill in missing optional fields
 // and ensure type consistency for CEL evaluation.
 //
@@ -223,50 +120,14 @@ func applyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 	return result
 }
 
-// coerceToType coerces a value based on a type string.
+// coerceInputValue puts a value in the form a run holds an input of its
+// declared type in, by the one rule admission and validation also apply
+// (validation.InputValue): a whole number becomes an int64 for an integer, a
+// boolean or number becomes its text for a string. It never parses text: a
+// string where a boolean or number is declared is left as it is, for
+// validation to refuse.
 func coerceInputValue(value interface{}, input *reliantv1.Input) (interface{}, bool) {
-	if input == nil {
-		return value, false
-	}
-
-	if enumCfg := input.GetEnumInput(); enumCfg != nil && enumCfg.GetMulti() {
-		switch enumValue := value.(type) {
-		case []interface{}:
-			return enumValue, true
-		case []string:
-			items := make([]interface{}, len(enumValue))
-			for index, item := range enumValue {
-				items[index] = item
-			}
-			return items, true
-		default:
-			return value, false
-		}
-	}
-
-	// An integration input's value is whatever its type's schema says (a string
-	// for nearly every type), already shaped by validation; coercing it by the
-	// dotted type name would find no type and leave it as is, so say so.
-	if model.IsIntegrationInput(input) {
-		return value, true
-	}
-
-	return coerceToType(value, model.GetInputType(input))
-}
-
-func coerceToType(value interface{}, typeName string) (interface{}, bool) {
-	switch typeName {
-	case "integer":
-		return coerceToInt64(value)
-	case "number":
-		return coerceToFloat64(value)
-	case "boolean":
-		return coerceToBool(value)
-	case "string", "enum", "message":
-		return coerceToString(value)
-	default:
-		return value, false
-	}
+	return validation.InputValue(value, input)
 }
 
 // inputZeroValue is the value a declared input is bound to at run time when the

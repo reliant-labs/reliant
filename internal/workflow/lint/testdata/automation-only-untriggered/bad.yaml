@@ -1,0 +1,7 @@
+name: fixture
+automation_only: true
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: done}

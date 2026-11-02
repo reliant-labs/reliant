@@ -268,7 +268,7 @@ export function ToolsSelector({
     if (isLikelyExpression(token)) {
       return "bg-amber-500/10 text-amber-700 border-amber-500/20";
     }
-    return "bg-primary/10 text-primary border-primary/20";
+    return "bg-primary/10 text-primary-ink border-primary/20";
   };
 
   return (
@@ -281,7 +281,7 @@ export function ToolsSelector({
               type="button"
               onClick={selectAll}
               disabled={!canInteract}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
+              className="text-xs text-primary-ink hover:underline disabled:opacity-50"
             >
               Select all tools
             </button>
@@ -290,7 +290,7 @@ export function ToolsSelector({
               type="button"
               onClick={clearAll}
               disabled={!canInteract}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
+              className="text-xs text-primary-ink hover:underline disabled:opacity-50"
             >
               Clear
             </button>
@@ -372,7 +372,7 @@ export function ToolsSelector({
                         className={cn(
                           "text-xs px-2 py-1 rounded border transition-colors",
                           selected
-                            ? "bg-primary/10 text-primary border-primary/30"
+                            ? "bg-primary/10 text-primary-ink border-primary/30"
                             : "bg-background hover:bg-accent border-border",
                         )} aria-label={expr.description}>
                         {expr.token}
@@ -428,9 +428,9 @@ export function ToolsSelector({
                       className="w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide bg-muted/30 sticky top-0 flex items-center gap-2 hover:bg-muted/50 transition-colors"
                     >
                       {selectionState === "all" ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                        <CheckSquare className="w-3.5 h-3.5 text-primary-ink" />
                       ) : selectionState === "some" ? (
-                        <MinusSquare className="w-3.5 h-3.5 text-primary" />
+                        <MinusSquare className="w-3.5 h-3.5 text-primary-ink" />
                       ) : (
                         <Square className="w-3.5 h-3.5 text-muted-foreground" />
                       )}
@@ -463,7 +463,7 @@ export function ToolsSelector({
                                 </div>
                               )}
                             </div>
-                            {isSelected && <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />}
+                            {isSelected && <Check className="w-4 h-4 text-primary-ink flex-shrink-0 mt-0.5" />}
                           </div>
                         </button>
                       );

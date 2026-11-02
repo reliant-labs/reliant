@@ -281,7 +281,7 @@ describe("DeclaredAutomationForm: set up", () => {
     expect(sentRequest().actingIdentity).toBe(ActingIdentity.OWNER);
   });
 
-  it.each([false, true])("new mixed GitHub/schedule/Slack setup leaves source defaults to the server (explicit owner: %s)", async (chooseOwner) => {
+  it.each([false, true])("new mixed GitHub/schedule/Slack setup shows the bot default and leaves it to the server (explicit owner: %s)", async (chooseOwner) => {
     const user = userEvent.setup();
     enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true }));
     const slack = { ...prOpened, name: "slack", source: { case: "integration", value: { integration: "slack", events: ["message.channels"] } } } as unknown as DeclaredTrigger;
@@ -289,12 +289,26 @@ describe("DeclaredAutomationForm: set up", () => {
     await machineReady();
     fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "Triage" } });
     fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "bug" } });
-    expect(screen.getByText(/New GitHub triggers default to Reliant bot/)).toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: /Reliant bot/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/New automations write to GitHub as Reliant bot/)).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Reliant bot/ })).toBeChecked();
     if (chooseOwner) await user.click(screen.getByRole("radio", { name: /You/ }));
     await user.click(screen.getByRole("button", { name: "Turn on" }));
     await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
     expect(sentRequest().actingIdentity).toBe(chooseOwner ? ActingIdentity.OWNER : ActingIdentity.UNSPECIFIED);
+  });
+
+  it("a schedule-only workflow still offers the GitHub identity, and choosing You sends OWNER", async () => {
+    const user = userEvent.setup();
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true }));
+    render([nightly]);
+    await machineReady();
+    fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "Triage" } });
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "bug" } });
+    expect(screen.getByTestId("section-identity")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /You/ }));
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().actingIdentity).toBe(ActingIdentity.OWNER);
   });
 
   it("turns every trigger on with one request, then says it is on and what happens next", async () => {
@@ -477,7 +491,7 @@ describe("DeclaredAutomationForm: set up", () => {
   it("words the notification as what it adds: failures always notify (O7)", async () => {
     render([nightly]);
     expect(await screen.findByRole("switch", { name: "Notify me when a run succeeds" })).toBeInTheDocument();
-    expect(screen.getByText("Failures always notify you, once per streak.")).toBeInTheDocument();
+    expect(screen.getByText("A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.")).toBeInTheDocument();
   });
 
   it("names the trigger it was opened from, and turns the whole set on together", async () => {
@@ -526,6 +540,20 @@ describe("DeclaredAutomationForm: finish setup and settings (O2)", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
     expect(sentRequest().actingIdentity).toBe(ActingIdentity.UNSPECIFIED);
+  });
+
+  it("a schedule-only workflow's stored identity can be changed in settings", async () => {
+    const user = userEvent.setup();
+    listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [activation("nightly", { params: { label: "bug" } })] }));
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true }));
+    render([nightly]);
+    await screen.findByRole("heading", { name: "Triage in Reliant" });
+    await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue("bug"));
+    expect(screen.getByRole("radio", { name: /Reliant bot/ })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: /You/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().actingIdentity).toBe(ActingIdentity.OWNER);
   });
 
   it("finish: prefills what was chosen, says what changed, and focuses the missing field", async () => {

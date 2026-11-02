@@ -227,17 +227,20 @@ so it cannot disagree with a local run:
   `verify-bundle.mjs`; Playwright (`task test:web:e2e`) on `frontends/web/`
   changes that are not unit tests; the electron package (`task
   build:electron:smoke`) on `electron/` or the web build config; and the
-  vendored control-plane contract (`task contract:controlplane:check`) on
-  `proto-vendor/controlplane/`. Off a pull request every lane runs, except the
-  control-plane contract, which judges only a push that changed what it checks
-  (a nightly would only report that control-plane moved, control-plane's own
-  gate to catch). A change to CI itself (`ci.yml`, `.github/actions/`,
+  vendored control-plane contract (`task contract:controlplane:check`: the tree
+  is the export of the control-plane commit its `SOURCE` declares, and that
+  commit is on control-plane main) on `proto-vendor/controlplane/`. Off a pull
+  request every lane runs, except the control-plane contract, which judges only
+  a push that changed what it checks. control-plane moving ahead is never a
+  failure here: `.github/workflows/cp-contract-drift.yml` keeps one
+  `cp-contract:drift` issue open while main's copy lags. A change to CI itself (`ci.yml`, `.github/actions/`,
   `ci-lanes.sh`, `Taskfile.yml`) runs every lane.
 - **New and changed tests run three times.** `tools/test-affected
   changed-tests` names every Test function the diff adds or edits (by
   function, in files that build without tags); `task test:flake`
   (`scripts/test-flake.sh`) runs them with `-short -count=3`. A test that fails
-  on a repeat is a flake: fix it at the root, never by re-running.
+  on a repeat is a flake: delete it (rewrite it as a new deterministic test if
+  it is worth having), never re-run it.
 - **`CI result`** is the run's single verdict: green when every job that ran
   passed, and the tier's gate ran. On a PR a lane the change does not reach is
   skipped, which is fine; off a PR every lane but the contract must have run.

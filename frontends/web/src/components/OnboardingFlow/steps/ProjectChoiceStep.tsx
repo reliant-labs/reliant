@@ -210,7 +210,7 @@ function ChoiceCard({
       <div
         className={cn(
           "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
-          primary ? "bg-primary/20 text-primary ring-1 ring-primary/30" : "bg-muted text-foreground",
+          primary ? "bg-primary/20 text-primary-ink ring-1 ring-primary/30" : "bg-muted text-foreground",
         )}
       >
         {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : icon}
@@ -219,7 +219,7 @@ function ChoiceCard({
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold text-foreground">{title}</span>
           {tag && (
-            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary">
+            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary-ink">
               {tag}
             </span>
           )}

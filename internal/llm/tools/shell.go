@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // ShellParams defines the parameters for the unified shell tool.
@@ -177,10 +178,85 @@ func (s *shellTool) clock() time.Time {
 }
 
 const (
-	DefaultShellTimeout  = 1 * time.Minute
-	MaxShellTimeout      = 10 * time.Minute
+	DefaultShellTimeout = 1 * time.Minute
+	// MaxShellTimeout caps a MODEL's foreground shell call. Longer work goes
+	// to run_in_background, where the agent can watch it.
+	MaxShellTimeout = 10 * time.Minute
+	// MaxRunStepTimeout caps a workflow `run` node's command
+	// (rctx.ToolContext.RunStep), which is bounded by the node's declared
+	// timeout instead of MaxShellTimeout. Workflow validation refuses a
+	// literal timeout: above it at load, so the two must be one value.
+	MaxRunStepTimeout    = model.MaxRunStepTimeout
 	MaxShellOutputLength = 16000
 )
+
+// ShellTimeoutUnit is the duration one unit of a shell call's `timeout`
+// stands for: a millisecond, as the JSON schema says. Every cap above is
+// compared in those units, so scaling this one value scales the whole
+// decision at once.
+//
+// A var only so a test can shrink the clock — a "30-minute" run step against
+// the "10-minute" model cap, in about a second. Production never reassigns it.
+var ShellTimeoutUnit = time.Millisecond
+
+// shellTimeoutMs is the foreground timeout one shell call runs under, in the
+// units of ShellParams.Timeout (milliseconds), and whether the call asked for
+// more than its cap allowed.
+//
+// A model's call is capped at MaxShellTimeout. A workflow run step (runStep,
+// which only the server sets — see rctx.ToolContext.RunStep) runs for the
+// timeout its node declared, up to MaxRunStepTimeout. A non-positive request
+// gets DefaultShellTimeout.
+func shellTimeoutMs(requested int, runStep bool) (timeoutMs int, capped bool) {
+	if requested <= 0 {
+		return int(DefaultShellTimeout.Milliseconds()), false
+	}
+	limit := int(MaxShellTimeout.Milliseconds())
+	if runStep {
+		limit = int(MaxRunStepTimeout.Milliseconds())
+	}
+	if requested > limit {
+		return limit, true
+	}
+	return requested, false
+}
+
+// shellTimeoutPhrase renders a timeout in milliseconds as people say it in a
+// sentence: "30-minute", "12-hour", "1m30s".
+func shellTimeoutPhrase(timeoutMs int) string {
+	d := time.Duration(timeoutMs) * time.Millisecond
+	switch {
+	case d >= time.Hour && d%time.Hour == 0:
+		return fmt.Sprintf("%d-hour", d/time.Hour)
+	case d >= time.Minute && d%time.Minute == 0:
+		return fmt.Sprintf("%d-minute", d/time.Minute)
+	case d%time.Second == 0:
+		return fmt.Sprintf("%d-second", d/time.Second)
+	default:
+		return d.String()
+	}
+}
+
+// shellTimeoutMessage explains a foreground command its timeout stopped,
+// naming the timeout that applied and, when the call asked for more, the cap
+// that cut it — so a stopped command never reads as anything else (a machine
+// sleep, a crash).
+func shellTimeoutMessage(runStep bool, timeoutMs, requestedMs int, capped bool) string {
+	if runStep {
+		msg := fmt.Sprintf("step exceeded its %s timeout and was stopped", shellTimeoutPhrase(timeoutMs))
+		if capped {
+			msg += fmt.Sprintf(" (its node declared a %s timeout, above the %s cap on a run step)",
+				shellTimeoutPhrase(requestedMs), shellTimeoutPhrase(int(MaxRunStepTimeout.Milliseconds())))
+		}
+		return msg
+	}
+	msg := "Command was aborted before completion"
+	if capped {
+		msg += fmt.Sprintf(": it reached the %s foreground limit, shorter than the %s timeout it asked for. Run longer commands with run_in_background",
+			shellTimeoutPhrase(timeoutMs), shellTimeoutPhrase(requestedMs))
+	}
+	return msg
+}
 
 // bannedShellCommands are commands that are not allowed to be executed
 var bannedShellCommands = []string{
@@ -409,15 +485,12 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		return NewTextErrorResponse(refusal), nil
 	}
 
-	// params.Timeout is in milliseconds per the JSON schema
-	maxTimeoutMs := int(MaxShellTimeout.Milliseconds())
-	defaultTimeoutMs := int(DefaultShellTimeout.Milliseconds())
-
-	if params.Timeout > maxTimeoutMs {
-		params.Timeout = maxTimeoutMs
-	} else if params.Timeout <= 0 {
-		params.Timeout = defaultTimeoutMs
-	}
+	// params.Timeout is in milliseconds per the JSON schema. Whether the
+	// model's cap applies is the server's call (rctx.RunStep), never the
+	// input's.
+	requestedTimeout := params.Timeout
+	var timeoutCapped bool
+	params.Timeout, timeoutCapped = shellTimeoutMs(params.Timeout, rctx.RunStep)
 
 	chatID := rctx.ChatID
 	if chatID == "" {
@@ -455,16 +528,17 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	req := &daemon.RunCommandRequest{
 		Command:     params.Command,
 		WorkingDir:  workingDir,
-		Env:         params.Env,
-		TimeoutMs:   params.Timeout,
+		Env:         withChatEnv(params.Env, rctx.ChatID),
+		TimeoutMs:   int(time.Duration(params.Timeout) * ShellTimeoutUnit / time.Millisecond),
 		Credentials: credentials,
 		Heavy:       params.Heavy,
+		ChatID:      chatID,
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
 		// so the neutral assignments keep it from failing open. A caller's own
 		// env cannot restore a credential: the daemon strips them again.
-		req.Env = neutralCredentialEnv(params.Env)
+		req.Env = neutralCredentialEnv(req.Env)
 	}
 
 	// Handle background execution
@@ -551,7 +625,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 			stderr += "\n"
 		}
 		// At the END of stderr, which head+tail truncation always keeps.
-		stderr += "Command was aborted before completion"
+		stderr += shellTimeoutMessage(rctx.RunStep, params.Timeout, requestedTimeout, timeoutCapped)
 	}
 
 	// Apply the caps AND fit the JSON-encoded result into the global output
@@ -724,6 +798,31 @@ func shouldRunInBackground(command string) bool {
 	}
 
 	return true
+}
+
+// ChatIDEnv names the chat a shell command runs for. Every command a chat runs
+// carries it, so what the command makes can say whose it is: a pull request
+// opened from the shell embeds `<!-- reliant-chat: $RELIANT_CHAT_ID -->`
+// (github__pr_create adds the marker itself), and automations that react to
+// the pull request later (control-plane's pr-fix) hand their news to that
+// chat before starting anyone else.
+const ChatIDEnv = "RELIANT_CHAT_ID"
+
+// withChatEnv is the request env with ChatIDEnv set to chatID, unless the
+// caller set it. own is never modified.
+func withChatEnv(own map[string]string, chatID string) map[string]string {
+	if chatID == "" {
+		return own
+	}
+	if _, set := own[ChatIDEnv]; set {
+		return own
+	}
+	env := make(map[string]string, len(own)+1)
+	for k, v := range own {
+		env[k] = v
+	}
+	env[ChatIDEnv] = chatID
+	return env
 }
 
 // neutralCredentialEnv is a request env for a credentials-none command: the

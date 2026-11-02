@@ -668,7 +668,6 @@ function ChatMessageComponent({
             <ToolExecutionGroup
               executions={otherTools}
               messageId={message.id}
-              defaultCollapsed={true}
               chatId={chatId || undefined}
               showRichContent={true}
               onSelectThread={onSelectThread}
@@ -764,7 +763,7 @@ function ChatMessageComponent({
         }}
         aria-label={copied ? "Copied" : "Copy message"}
         className={cn(
-          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
           revealedControl,
           copied && "text-success-ink"
         )}
@@ -794,7 +793,7 @@ function ChatMessageComponent({
         aria-label="Branch from message"
         data-contextual-tip="branch-button"
         className={cn(
-          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
           revealedControl,
           isOptimistic && "cursor-not-allowed opacity-50"
         )}

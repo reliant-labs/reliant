@@ -93,8 +93,10 @@ func (DashboardSource) EnumDescriptor() ([]byte, []int) {
 type DashboardViewKind int32
 
 const (
-	DashboardViewKind_DASHBOARD_VIEW_KIND_UNSPECIFIED        DashboardViewKind = 0
-	DashboardViewKind_DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS DashboardViewKind = 1
+	DashboardViewKind_DASHBOARD_VIEW_KIND_UNSPECIFIED          DashboardViewKind = 0
+	DashboardViewKind_DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS   DashboardViewKind = 1
+	DashboardViewKind_DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE   DashboardViewKind = 2
+	DashboardViewKind_DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING DashboardViewKind = 3
 )
 
 // Enum value maps for DashboardViewKind.
@@ -102,10 +104,14 @@ var (
 	DashboardViewKind_name = map[int32]string{
 		0: "DASHBOARD_VIEW_KIND_UNSPECIFIED",
 		1: "DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS",
+		2: "DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE",
+		3: "DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING",
 	}
 	DashboardViewKind_value = map[string]int32{
-		"DASHBOARD_VIEW_KIND_UNSPECIFIED":        0,
-		"DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS": 1,
+		"DASHBOARD_VIEW_KIND_UNSPECIFIED":          0,
+		"DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS":   1,
+		"DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE":   2,
+		"DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING": 3,
 	}
 )
 
@@ -460,6 +466,9 @@ type DashboardSummary struct {
 	// Templates: "generated" (derived from what forge generates) or "platform".
 	Category string `protobuf:"bytes,12,opt,name=category,proto3" json:"category,omitempty"`
 	// ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
+	// ORGANIZATION_USAGE and ORGANIZATION_BILLING call
+	// BillingService.ListOrganizationUsage (and the cost summary) for the "Spend
+	// and usage" and "Billing and infrastructure" views.
 	// Such a view has no SQL panel spec and cannot be copied into one.
 	ViewKind DashboardViewKind `protobuf:"varint,13,opt,name=view_kind,json=viewKind,proto3,enum=controlplane.v1.DashboardViewKind" json:"view_kind,omitempty"`
 	// The list section the dashboard is shown under: one of overview, services,
@@ -2371,10 +2380,12 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\x15DASHBOARD_SOURCE_REPO\x10\x02\x12\x1e\n" +
 	"\x1aDASHBOARD_SOURCE_WORKSPACE\x10\x03\x12\x1d\n" +
 	"\x19DASHBOARD_SOURCE_TEMPLATE\x10\x04\x12\x1c\n" +
-	"\x18DASHBOARD_SOURCE_BUILTIN\x10\x05*d\n" +
+	"\x18DASHBOARD_SOURCE_BUILTIN\x10\x05*\xbe\x01\n" +
 	"\x11DashboardViewKind\x12#\n" +
 	"\x1fDASHBOARD_VIEW_KIND_UNSPECIFIED\x10\x00\x12*\n" +
-	"&DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS\x10\x012\x96\n" +
+	"&DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS\x10\x01\x12*\n" +
+	"&DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE\x10\x02\x12,\n" +
+	"(DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING\x10\x032\x96\n" +
 	"\n" +
 	"\x10DashboardService\x12a\n" +
 	"\x0eListDashboards\x12&.controlplane.v1.ListDashboardsRequest\x1a'.controlplane.v1.ListDashboardsResponse\x12[\n" +

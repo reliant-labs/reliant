@@ -65,7 +65,6 @@ import {
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
-import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
 import {
   isCheckoutIdentityRequired,
   useCreateComputeSubscriptionIntent,
@@ -85,6 +84,9 @@ const SETTLE_POLL_MS = 2_000;
 // compute step renders the same prices WITHOUT a card. Re-exported so the
 // existing importers of this module keep working.
 export type { ComputePlanOption };
+
+import { MachineSaleConsent } from "./MachineSaleConsent";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 export interface ComputeSubscriptionCheckoutProps {
   plans: ComputePlanOption[];
@@ -176,12 +178,12 @@ export function ComputeSubscriptionCheckout({
           Pay with card
         </h3>
         {selected ? (
-          <SubscriptionPaymentForm
-            plan={selected}
+          <MachineSaleConsent planId={selected.planId}>{monthlyPriceCents => <SubscriptionPaymentForm
+            plan={monthlyPriceCents === undefined ? selected : { ...selected, monthlyPriceCents }}
             confirmSettlement={confirmSettlement}
             onSettled={() => setSettled(true)}
             renderIdentityRequired={renderIdentityRequired}
-          />
+          />}</MachineSaleConsent>
         ) : (
           /* An empty catalog is OUR problem, and the copy has to say so.
              It once read "No plans are available in this setup. Go back and
@@ -218,7 +220,7 @@ export function ComputeSubscriptionCheckout({
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">
-          Have a coupon? Redeem it here — it covers this in full, and no card is
+          Have a coupon? Redeem it here. If it covers the full amount, no card is
           needed.
         </p>
         <RedeemCouponForm
@@ -547,7 +549,7 @@ function ConfirmSubscriptionForm({
           ? "Confirming…"
           : phase.kind === "confirming"
             ? "Processing…"
-            : `Subscribe — ${formatCentsAsDollars(plan.monthlyPriceCents)}/mo`}
+            : `Subscribe — ${formatPrice(plan.monthlyPriceCents)}/mo`}
       </button>
     </form>
   );
@@ -573,8 +575,8 @@ function Notice({
   const iconTones = {
     error: "text-destructive-ink",
     muted: "text-muted-foreground",
-    pending: "text-primary",
-    success: "text-primary",
+    pending: "text-primary-ink",
+    success: "text-primary-ink",
   } as const;
 
   return (

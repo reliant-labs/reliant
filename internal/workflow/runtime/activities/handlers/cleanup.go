@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -94,39 +93,17 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 
 	logging.DebugContext(ctx, "[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
 
-	// Cancel each pending approval
+	// Cancel each pending approval: the run that would act on it is ending.
+	// ResolvePendingApproval keeps a decision that got there first and
+	// announces the close on the chat feed.
 	cancelledCount := 0
 	for _, approval := range pendingApprovals {
-		// Update status to cancelled
-		err := a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-			// Update approval status (nil for actionTaken since this is a system cancellation)
-			if err := a.repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), nil, nil, nil); err != nil {
-				return fmt.Errorf("failed to update approval status: %w", err)
-			}
-
-			// Emit chat_update for UI notification
-			updateData := map[string]interface{}{
-				"update_type":   "approval",
-				"id":            approval.ID,
-				"approval_type": approval.ApprovalType,
-				"entity_id":     approval.EntityID,
-				"status":        "cancelled",
-				"title":         approval.Title,
-				"resolved_at":   time.Now().UTC().Format(time.RFC3339),
-			}
-
-			updateDataJSON, err := json.Marshal(updateData)
-			if err != nil {
-				return fmt.Errorf("failed to marshal chat_update data: %w", err)
-			}
-
-			if err := a.repo.CreateChatUpdate(txCtx, input.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
-				return fmt.Errorf("failed to create chat_update: %w", err)
-			}
-
-			return nil
-		})
-
+		closed, err := a.repo.ResolvePendingApproval(ctx, approval.ID,
+			int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED),
+			"The run waiting on this request ended; nothing was approved.", "run_ended")
+		if err == nil && !closed {
+			continue
+		}
 		if err != nil {
 			logging.ErrorContext(ctx, "[Cleanup] Failed to cancel approval", "approvalID", approval.ID, "error", err)
 			// Continue with other approvals even if one fails

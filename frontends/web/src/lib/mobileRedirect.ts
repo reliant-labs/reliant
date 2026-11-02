@@ -98,7 +98,7 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
  * twin maps to it; everything else still lands on the chat list, the mobile
  * home. A run IS a chat, so a run link opens that chat.
  */
-export function mobilePathFor(pathname: string): string {
+export function mobilePathFor(pathname: string, search = ""): string {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/inbox" || path.startsWith("/inbox/")) return "/m/inbox";
 
@@ -114,6 +114,16 @@ export function mobilePathFor(pathname: string): string {
   if (path === "/workflows" || path.startsWith("/workflows/")) return "/m/workflows";
 
   if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return "/m/daemons";
+  // Billing on a phone is a screen inside /m/settings. A visit that has a way
+  // back (the claim page sends people here to subscribe) keeps it: the mobile
+  // twin opens on billing and offers the same return.
+  if (path === "/settings/billing") {
+    const q = new URLSearchParams(search);
+    const returnTo = q.get("returnTo");
+    if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+      return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
+    }
+  }
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
 
   return "/m/chats";

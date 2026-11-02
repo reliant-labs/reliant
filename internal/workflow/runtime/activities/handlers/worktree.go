@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -134,6 +135,15 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to resolve daemon for worktree: %w", err)
 	}
 
+	// The project's checkout on that machine: the source of every repo the
+	// worktree checks out. A machine without one cannot host the worktree;
+	// the error says which machines can, or how to put the project here.
+	checkout, err := projectcheckout.On(ctx, a.repo, chat.UserID, project, ownerDaemonID, "create a workspace from it")
+	if err != nil {
+		// The refusal keeps its class: a user error crosses as Benign.
+		return CreateWorktreeOutput{}, err
+	}
+
 	// Enumerate the project's nested repos. A standalone-repo project has
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
 	// shape continues to work without changes here.
@@ -146,7 +156,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		// (a project cloned onto a cloud machine, a manual `git init`), so
 		// adopt what actually exists on the machine the worktree goes on —
 		// not the user's default, which may not have the checkout.
-		repos, err = repopkg.AdoptFromDaemon(ctx, a.repo, repopkg.OnDaemon(a.daemonRouter, ownerDaemonID), project)
+		repos, err = repopkg.AdoptFromDaemon(ctx, a.repo, repopkg.OnDaemon(a.daemonRouter, ownerDaemonID), project, checkout.Path)
 		if err != nil {
 			// The machine could not answer; that is not "no repos", and a
 			// retry may find it connected.
@@ -154,7 +164,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		}
 	}
 	if len(repos) == 0 {
-		return CreateWorktreeOutput{}, errors.New(repopkg.NoReposMessage(project))
+		return CreateWorktreeOutput{}, errors.New(repopkg.NoReposMessage(checkout.Path))
 	}
 
 	// Resolve args
@@ -190,6 +200,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 	createReq := workspacecreate.Request{
 		Project:       project,
+		Checkout:      checkout.Path,
 		Repos:         repos,
 		Name:          name,
 		Branch:        branch,
@@ -348,12 +359,20 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 		return DeleteWorktreeOutput{}, fmt.Errorf("worktree '%s' not found", input.Name)
 	}
 	// The checkouts exist only on the worktree's owner; tearing them down
-	// anywhere else deletes nothing and strands them there. A row with no
-	// recorded owner keeps default resolution.
+	// anywhere else deletes nothing and strands them there.
 	ownerDaemonID := ""
 	if worktree.DaemonID != nil {
 		ownerDaemonID = *worktree.DaemonID
 	}
+	// The repos the checkouts were made from are the project's checkout ON
+	// THE OWNER (projects.path is the creating machine's). A legacy row with
+	// no recorded owner resolves the project's placed machine.
+	checkout, err := projectcheckout.ForMachine(ctx, a.repo, machinesOf(a.daemonRouter), chat.UserID, project, ownerDaemonID, "delete its workspaces")
+	if err != nil {
+		// The refusal keeps its class: a user error crosses as Benign.
+		return DeleteWorktreeOutput{}, err
+	}
+	ownerDaemonID = checkout.DaemonID
 
 	// Enumerate the project's nested repos. A standalone-repo project has
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
@@ -371,7 +390,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 		deleteResp, err := sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
 			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",
 			worktreeDeleteDaemonRequest{
-				ProjectPath:  project.Path,
+				ProjectPath:  checkout.Path,
 				WorktreePath: worktree.Path,
 			}, 30_000,
 		)
@@ -388,7 +407,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 	// on individual failures. A leaked git worktree registration is recoverable
 	// (`git worktree prune`); blocking the whole teardown on one repo is not.
 	for _, repo := range repos {
-		repoPath := filepath.Join(project.Path, repo.RelativePath)
+		repoPath := checkout.Join(repo.RelativePath)
 		checkoutPath := filepath.Join(worktree.Path, repo.RelativePath)
 		resp, err := sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
 			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",

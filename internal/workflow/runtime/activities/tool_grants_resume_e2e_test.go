@@ -251,7 +251,7 @@ func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo 
 		require.NoError(t, err)
 		env.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	}
-	env.RegisterActivityWithOptions(func(context.Context, map[string]string) (v2.LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(context.Context, types.LoadWorkflowInput) (v2.LoadedWorkflow, error) {
 		return v2.LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) (map[string]interface{}, error) {

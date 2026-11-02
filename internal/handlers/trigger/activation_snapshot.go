@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -19,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const maxApprovalDependencies = 64
@@ -36,11 +38,15 @@ type activationSnapshot struct {
 	// Summary contains only structural counts and tool declaration categories,
 	// never a prompt, expression, input value, command or graph literal.
 	Summary []string
-	bytes   int
+	// Capabilities are the powers the closure uses (activation_capabilities.go):
+	// what the approval policy compares before and after a change. The row's
+	// own identity and machine are added by the caller.
+	Capabilities automationpolicy.Capabilities
+	bytes        int
 }
 
 func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.TriggerDefinition, wf *pb.Workflow) (*activationSnapshot, error) {
-	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}}
+	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}, Capabilities: automationpolicy.Capabilities{}}
 	bindings, err := s.deps.Repo.ListSettingsByKey(ctx, user, "tool.bindings.%")
 	if err != nil {
 		return nil, svcerr.Wrap(err)
@@ -53,6 +59,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				return nil, svcerr.Wrap(err)
 			}
 			snap.Connection = c
+			snap.Capabilities.Add(connectionCapabilities(c)...)
 		}
 	}
 	// Raw values only enter the memory-only digest, never its safe summary.
@@ -89,7 +96,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		if w := loaded[key]; w != nil {
 			return w, nil
 		} // cycle detection: fingerprint once, no recursive expansion
-		w, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, user, ref, def.ProjectId)
+		w, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), ref)
 		if err != nil {
 			return nil, refusedPrecondition("Could not resolve a referenced workflow for approval")
 		}
@@ -272,6 +279,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				}
 				for _, node := range w.GetNodes() {
 					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k, tainted)...)
+					snap.Capabilities.Add(nodeCapabilities(node, values, k, tainted)...)
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {
@@ -294,23 +302,13 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					var childRef string
 					var childPresets map[string]string
 					if a := node.GetWorkflow(); a != nil && a.GetInline() == nil {
-						// The thread config (mode, injected message) grants nothing
-						// and routinely reads node outputs, which do not exist before
-						// a run; only the fields that pick the child and its inputs
-						// must resolve. The whole node is still fingerprinted.
-						a = proto.Clone(a).(*pb.SubWorkflowArgs)
-						a.Thread = nil
-						if referencesTaintedIn(&pb.SubWorkflowArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
-							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
-						}
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
-						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
+						var args map[string]*structpb.Value
+						var err error
+						childRef, childPresets, args, err = resolveChildSelection("Workflow", node.GetId(), a.GetRef(), a.GetPresets(), a.GetArgs(), values, k, tainted)
 						if err != nil {
-							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
+							return err
 						}
-						a = resolved.(*pb.SubWorkflowArgs)
-						childRef = model.CelStringValue(a.GetRef())
-						childPresets = a.GetPresets()
+						snap.Summary = append(snap.Summary, childDirectoryDisclosure(a.GetProject(), tainted)...)
 						params := map[string]any{}
 						groups := make([]string, 0, len(childPresets))
 						for group := range childPresets {
@@ -330,7 +328,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 								params[name] = v
 							}
 						}
-						for name, v := range a.GetArgs() {
+						for name, v := range args {
 							params[name] = v.AsInterface()
 						}
 						if childRef != "" {
@@ -357,29 +355,24 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 					}
 					if a := node.GetLoop(); a != nil && a.GetInline() == nil {
-						if referencesTaintedIn(&pb.LoopArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
-							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
-						}
-						a = proto.Clone(a).(*pb.LoopArgs)
-						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
-						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
+						ref, loopPresets, args, err := resolveChildSelection("Loop", node.GetId(), a.GetRef(), a.GetPresets(), a.GetArgs(), values, k, tainted)
 						if err != nil {
-							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
+							return err
 						}
-						a = resolved.(*pb.LoopArgs)
-						if ref := model.CelStringValue(a.GetRef()); ref != "" {
+						snap.Summary = append(snap.Summary, childDirectoryDisclosure(a.GetProject(), tainted)...)
+						if ref != "" {
 							if _, err := load(ref); err != nil {
 								return err
 							}
 						}
 						params := map[string]any{}
-						groups := make([]string, 0, len(a.GetPresets()))
-						for group := range a.GetPresets() {
+						groups := make([]string, 0, len(loopPresets))
+						for group := range loopPresets {
 							groups = append(groups, group)
 						}
 						sort.Strings(groups)
 						for _, group := range groups {
-							name := a.GetPresets()[group]
+							name := loopPresets[group]
 							if name != "" {
 								p, err := loadPreset(name)
 								if err != nil {
@@ -393,10 +386,10 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 								params[name] = v
 							}
 						}
-						for name, v := range a.GetArgs() {
+						for name, v := range args {
 							params[name] = v.AsInterface()
 						}
-						if ref := model.CelStringValue(a.GetRef()); ref != "" {
+						if ref != "" {
 							if err := addContext(ref, params); err != nil {
 								return err
 							}
@@ -415,12 +408,12 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						// Resolve privilege-bearing CEL with the runtime's evaluator, not a
 						// bespoke parser. Runtime/event-dependent values that cannot resolve
 						// are refused rather than silently omitted from the approval.
-						if referencesTaintedIn(&pb.ToolsConfig{PreloadedTools: tc.GetPreloadedTools(), LoadableTools: tc.GetLoadableTools(), Permission: tc.GetPermission(), Spawn: tc.GetSpawn()}, tainted) {
-							return refusedPrecondition("Tool privileges depend on runtime/event values; activation approval requires fixed privilege choices")
+						if field := taintedField(&pb.ToolsConfig{PreloadedTools: tc.GetPreloadedTools(), LoadableTools: tc.GetLoadableTools(), Permission: tc.GetPermission(), Spawn: tc.GetSpawn()}, tainted); field != "" {
+							return refusedPrecondition(fmt.Sprintf("Agent node %q: tools_config.%s depends on a node output, the trigger event or another run-time value; activation approval requires fixed privilege choices", node.GetId(), field))
 						}
 						resolved, err := wfcel.ResolveCELFields(tc, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
-							return refusedPrecondition("Tool privileges depend on runtime/event values; activation approval requires fixed privilege choices")
+							return refusedPrecondition(fmt.Sprintf("Agent node %q: tools_config does not resolve from the activation's inputs; activation approval requires fixed privilege choices", node.GetId()))
 						}
 						tc = resolved.(*pb.ToolsConfig)
 						declarations := model.CelStringListValue(tc.GetPreloadedTools())
@@ -537,4 +530,59 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	snap.Summary = unique
 	snap.Summary = append(snap.Summary, fmt.Sprintf("%d workflow definitions; %d resolved presets; %d effective inputs. Input/preset values and graph literals withheld. Later workflow edits remain live (not a permanently frozen execution).", len(snap.Workflows), len(snap.Presets), len(snap.EffectiveInputs)))
 	return snap, nil
+}
+
+// childDirectoryDisclosure says when a child's working directory is chosen at
+// run time (`project: {path: '{{ nodes.checkout.path }}'}`). It is not
+// resolved at approval: it moves the child within the activation's machine,
+// whose authority is disclosed already, and picks no workflow or privilege.
+func childDirectoryDisclosure(project *pb.ProjectConfig, tainted map[string]bool) []string {
+	if project == nil || !referencesTaintedIn(project, tainted) {
+		return nil
+	}
+	return []string{"Child workflow working directory: chosen at run time on the activation's machine (dynamic/unbounded)"}
+}
+
+// resolveChildSelection resolves what a workflow or loop node hands its child:
+// the child workflow, its presets and its arguments, against the approval's
+// inputs. Only those fields pick the child and its inputs, so only they are
+// resolved; the node's other config (thread, project, loop items and while)
+// routinely reads node outputs and grants nothing. The whole node is still
+// fingerprinted.
+//
+// The ref and presets choose a dependency, so they must be fixed now: one that
+// reads a tainted input or a run-time value is refused (referencesTainted),
+// never approved for whatever it would resolve to today. An argument that
+// reads one is not refused: it reaches the child as the sentinel
+// (maskTaintedArgs), where it is tainted in turn, so a child input it feeds is
+// disclosed as dynamic, or refused wherever it would choose a privilege. An
+// argument that reads only fixed inputs must resolve.
+//
+// Refusals name the node and the field (declared names, never a value).
+func resolveChildSelection(kind, nodeID string, ref *pb.CelString, presets map[string]string, args map[string]*structpb.Value, values map[string]any, identity string, tainted map[string]bool) (string, map[string]string, map[string]*structpb.Value, error) {
+	selection := &pb.SubWorkflowArgs{Ref: ref, Presets: presets}
+	if field := taintedField(selection, tainted); field != "" {
+		return "", nil, nil, refusedPrecondition(fmt.Sprintf("%s node %q: %s depends on a node output, the trigger event or another run-time value, but a child workflow and its presets must resolve before activation approval", kind, nodeID, field))
+	}
+	eval := runtime.NewCELContextBuilder().WithWorkflow("", identity).WithInputs(values)
+	resolved, err := wfcel.ResolveCELFields(selection, eval)
+	if err != nil {
+		return "", nil, nil, refusedPrecondition(fmt.Sprintf("%s node %q: ref/presets do not resolve from the activation's inputs, but a child workflow and its presets must resolve before activation approval", kind, nodeID))
+	}
+	selection = resolved.(*pb.SubWorkflowArgs)
+	masked := maskTaintedArgs(args, tainted)
+	names := make([]string, 0, len(masked))
+	for name := range masked {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make(map[string]*structpb.Value, len(masked))
+	for _, name := range names {
+		arg, err := wfcel.ResolveCELFields(&pb.SubWorkflowArgs{Args: map[string]*structpb.Value{name: masked[name]}}, eval)
+		if err != nil {
+			return "", nil, nil, refusedPrecondition(fmt.Sprintf("%s node %q: args.%s does not resolve from the activation's inputs, but child inputs that read only inputs must resolve before activation approval", kind, nodeID, name))
+		}
+		out[name] = arg.(*pb.SubWorkflowArgs).GetArgs()[name]
+	}
+	return model.CelStringValue(selection.GetRef()), selection.GetPresets(), out, nil
 }

@@ -344,7 +344,8 @@ export type LaunchKind =
   | "webhook"
   | "integration"
   | "workflow_event"
-  | "manual.run";
+  | "manual.run"
+  | "cli.run";
 
 /** What the "Started by" line can name. Every field is optional. */
 export interface LaunchContext {
@@ -465,6 +466,9 @@ export function launchKindDisplay(
       };
     case "builder.test":
       return { kind, shortLabel: "Test", startedByLine: "Test run from the builder" };
+    case "cli.run":
+      // `reliant workflow run`: a script, or an agent shelling out.
+      return { kind, shortLabel: "CLI", startedByLine: "Started from the command line" };
     case "manual.run":
       return {
         kind,

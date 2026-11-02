@@ -265,13 +265,14 @@ func TestFileSystemProxy_AsleepChatMachine_WakesThenServes(t *testing.T) {
 }
 
 // Default resolution finds the user's machine suspended: the same wake, for
-// the machine resolution would have picked.
+// the machine whose checkout resolution picked (the call is pinned to it, so
+// that is the machine it wakes).
 func TestFileSystemProxy_AsleepDefaultMachine_Wakes(t *testing.T) {
 	f := newAsleepFixture(t, placementDefaultDaemon)
 
 	err := f.getTree(nil, nil)
 	requireWaking(t, err, placementDefaultDaemon)
-	require.Equal(t, []asleepWake{{userID: f.userID, daemonID: "", jwt: "user-jwt"}}, f.router.wakeCalls())
+	require.Equal(t, []asleepWake{{userID: f.userID, daemonID: placementDefaultDaemon, jwt: "user-jwt"}}, f.router.wakeCalls())
 
 	f.router.wakeUp(placementDefaultDaemon)
 	require.NoError(t, f.getTree(nil, nil))
@@ -293,6 +294,29 @@ func TestFileSystemProxy_NoMachineChat_NeverWakes(t *testing.T) {
 	assert.False(t, machinewake.IsWaking(err), "got %v", err)
 
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake anything")
+}
+
+// Naming a machine for a no-machine chat's new workspace does not wake it
+// either: the requested-machine path carries the chat's NoMachine like the
+// placement path does, so an asleep machine is reported, never resumed.
+func TestCreateWorktree_NoMachineChatWithRequestedMachine_NeverWakes(t *testing.T) {
+	f := newAsleepFixture(t, asleepMachineB)
+	chatID := f.noMachineChat(t)
+	machine := asleepMachineB
+
+	resp, err := f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		ProjectId: f.projectID, Name: "nm-" + uuid.NewString()[:8], Branch: "nm-branch",
+		ChatId: &chatID, DaemonId: &machine,
+	}))
+	if err != nil {
+		assert.False(t, machinewake.IsWaking(err), "got %v", err)
+	} else {
+		// The checkouts are made in the background, after the response: they
+		// must not wake the machine either. Wait for them to settle (the
+		// machine is asleep, so they fail) before looking.
+		awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+	}
+	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake a machine, even one it names")
 }
 
 // A machine that is not the caller's, by the record here, is never woken for

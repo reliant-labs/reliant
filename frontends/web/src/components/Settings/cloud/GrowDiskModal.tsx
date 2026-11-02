@@ -161,7 +161,7 @@ export function GrowDiskModal({
             {!atCeiling && (
               <>
                 {" "}Larger disks need a bigger compute plan.{" "}
-                <button type="button" onClick={onSeePlans} className="font-medium text-primary hover:underline">
+                <button type="button" onClick={onSeePlans} className="font-medium text-primary-ink hover:underline">
                   See plans
                 </button>
               </>
@@ -240,7 +240,7 @@ export function GrowDiskModal({
             {storageDenied && !atCeiling && (
               <>
                 {" "}
-                <button type="button" onClick={onSeePlans} className="font-medium text-primary hover:underline">
+                <button type="button" onClick={onSeePlans} className="font-medium text-primary-ink hover:underline">
                   See plans
                 </button>
               </>

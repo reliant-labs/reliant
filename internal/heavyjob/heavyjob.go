@@ -34,6 +34,27 @@
 //
 // Light commands never wait: they are not rewritten at all.
 //
+// A slot bounds how many heavy commands run, not how wide each one runs, and
+// left alone every one assumes the whole machine: a Go build or test run under
+// a slot on a 32 CPU machine ran at GOMAXPROCS=31, so `go test ./...` fanned
+// out ~31 packages, each compile, link and test binary 16–57 threads — 600+
+// threads per heavy job, several thousand for eight of them, against a thread
+// limit (RLIMIT_NPROC counts threads) every agent's processes share. So a
+// slotted command gets its share of the CPUs, DefaultShare:
+// max(2, 2*CPUs/slots) — 8 on 32 CPUs / 8 slots — with CPUs and slots from
+// the pool's own capacity (forge/pkg/hostslot: the cgroup quota or affinity,
+// and FORGE_HEAVY_SLOTS or the machine default). The wrapper exports it to the
+// command as GOMAXPROCS and UV_THREADPOOL_SIZE, each only when the command's
+// environment does not set it already: a command that asks for its own
+// (`GOMAXPROCS=16 go test ./...`) gets it, and GOFLAGS is never touched — the
+// go command's -p defaults to its own GOMAXPROCS, which the share already
+// bounds. The knob is the daemon's RELIANT_HEAVY_SHARE (Config.Share, passed
+// to the wrapper as --share): a fixed share for every slotted command, 0 for
+// the derived one. The wrapper itself runs on one P — Prepare starts it with
+// GOMAXPROCS=1 and hands it the command's own GOMAXPROCS to restore for the
+// command — so a command waiting for a slot costs a handful of threads, not
+// the 15–19 a waiter at the machine's width holds.
+//
 //forge:exclude-contract: one concrete policy over exec.Cmd values (classify, rewrite) plus the slot wrapper this binary runs as; the slots themselves are forge/pkg/hostslot, and there is no second implementation to substitute
 package heavyjob
 
@@ -104,10 +125,19 @@ type Config struct {
 	// WrapperArg. Nil resolves os.Executable(). Tests point it at their own
 	// test binary.
 	Self []string
+	// Share is the CPUs each slotted command runs on (see the package
+	// doc); zero derives it, DefaultShare, from the pool's capacity.
+	Share int
 	// Admission, when set, may refuse a heavy command before it starts
 	// (internal/diskguard refuses them on a nearly full disk). It is asked
 	// whether or not the slots are on.
 	Admission Admission
+	// BackgroundAdmission, when set, may refuse a heavy command started in
+	// the background (internal/procguard refuses them when the machine is
+	// near its process limit). Foreground heavy commands are not asked: the
+	// agent waits on those, so they cannot pile up the way background ones
+	// did on 2026-10-30.
+	BackgroundAdmission Admission
 }
 
 // Admission decides whether a heavy command may start now.
@@ -136,8 +166,9 @@ func (e *RefusedError) Error() string {
 // Admission before any starts. A nil *Gate does neither, so callers outside a
 // daemon need no special case.
 type Gate struct {
-	patterns  []pattern
-	admission Admission
+	patterns    []pattern
+	admission   Admission
+	bgAdmission Admission
 	// self is the wrapper command; nil when heavy commands run unqueued
 	// (unqueued says why).
 	self     []string
@@ -148,6 +179,9 @@ type Gate struct {
 	// derives identically).
 	slots    string
 	capacity hostslot.Capacity
+	// share is Config.Share passed to the wrapper ("" when it derives the
+	// share itself).
+	share string
 }
 
 // New builds a Gate. When heavy commands cannot be queued here — the limit is
@@ -165,13 +199,17 @@ func New(cfg Config) (*Gate, error) {
 		commands = DefaultCommands
 	}
 	g := &Gate{
-		patterns:  parsePatterns(commands),
-		admission: cfg.Admission,
-		dir:       hostslot.Options{Env: cfg.Env}.BaseDir(),
-		capacity:  capy,
+		patterns:    parsePatterns(commands),
+		admission:   cfg.Admission,
+		bgAdmission: cfg.BackgroundAdmission,
+		dir:         hostslot.Options{Env: cfg.Env}.BaseDir(),
+		capacity:    capy,
 	}
 	if _, ok := lookup(cfg.Env, hostslot.SlotsEnv(hostslot.Heavy)); ok {
 		g.slots = strconv.Itoa(capy.Slots)
+	}
+	if cfg.Share > 0 {
+		g.share = strconv.Itoa(cfg.Share)
 	}
 	switch self := cfg.Self; {
 	case capy.Unlimited:
@@ -210,6 +248,9 @@ type Job struct {
 	// words are (a project script that builds everything, say). There is
 	// no way to declare a command light: the patterns are the floor.
 	Declared bool
+	// Background is a command started in the background (run_in_background),
+	// which Config.BackgroundAdmission is also asked about.
+	Background bool
 }
 
 // label is what the slot records as this job's command.
@@ -257,6 +298,11 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
 			return true, &RefusedError{Command: job.label(), Reason: why}
 		}
 	}
+	if job.Background && g.bgAdmission != nil {
+		if why := g.bgAdmission.HeavyRefusal(); why != "" {
+			return true, &RefusedError{Command: job.label(), Reason: why}
+		}
+	}
 	if g.self == nil || cmd == nil || cmd.Process != nil || cmd.Err != nil || len(cmd.Args) == 0 {
 		return true, nil
 	}
@@ -270,10 +316,23 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
 	if g.slots != "" {
 		args = append(args, "--slots", g.slots)
 	}
+	if g.share != "" {
+		args = append(args, "--share", g.share)
+	}
+	// The wrapper starts on one P: set after it starts, a binary this size
+	// has already grown its threads in package init. The command's own
+	// GOMAXPROCS ("" for none) goes to the wrapper, which restores it.
+	env := cmd.Env
+	if env == nil {
+		env = os.Environ() //nolint:forbidigo // the environment the command would inherit, passed on to it; not configuration
+	}
+	own, _ := lookup(env, gomaxprocsVar)
+	args = append(args, "--child-gomaxprocs", own)
 	args = append(args, "--", cmd.Path)
 	args = append(args, cmd.Args[1:]...)
 	cmd.Path = g.self[0]
 	cmd.Args = append([]string{g.self[0]}, args...)
+	cmd.Env = append(env[:len(env):len(env)], gomaxprocsVar+"=1")
 	return true, nil
 }
 

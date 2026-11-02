@@ -157,6 +157,32 @@ func TestWaitForDaemon_CapExhaustionSetsFinalAndFails(t *testing.T) {
 	require.Less(t, len(finals), 100, "hours of waiting stay a bounded number of checks (got %d)", len(finals))
 }
 
+// A Failed report is believed only once it has held for longer than any one
+// check, so the run of Failed reports a check returns is handed to the next
+// check — and dropped once a check stops returning it (the machine left
+// Failed), so a later failure starts over.
+func TestWaitForDaemon_CarriesTheFailedRunBetweenChecks(t *testing.T) {
+	env := newPreflightWaitEnv(t)
+	const since = "2026-10-30T18:21:03Z"
+	results := []map[string]interface{}{
+		{"waiting": true, "failed_since": since},
+		{"waiting": true, "failed_since": since},
+		{"waiting": true},
+		{"daemon_available": true},
+	}
+	var got []interface{}
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).
+		Return(func(in map[string]interface{}) (map[string]interface{}, error) {
+			got = append(got, in["failed_since"])
+			return results[len(got)-1], nil
+		})
+
+	env.ExecuteWorkflow(preflightWaitWorkflow)
+
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, []interface{}{nil, since, since, nil}, got)
+}
+
 func TestWaitForDaemon_CancelDuringWait(t *testing.T) {
 	env := newPreflightWaitEnv(t)
 	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).

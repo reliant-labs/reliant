@@ -158,10 +158,12 @@ func seedMultiRepoProject(t *testing.T, repo *db.Repo, userID string, relPaths .
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
+	projectPath := t.TempDir()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
-		ID: projectID, UserID: userID, Name: "Multi Repo", Path: t.TempDir(),
+		ID: projectID, UserID: userID, Name: "Multi Repo", Path: projectPath,
 		IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
+	installProject(t, repo, projectID, userID, projectPath, testMachines...)
 	for _, rel := range relPaths {
 		require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
 			ID: uuid.New().String(), ProjectID: projectID, Name: filepath.Base(rel),

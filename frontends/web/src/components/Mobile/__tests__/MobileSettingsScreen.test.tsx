@@ -10,6 +10,13 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
+let routeSearch: Record<string, string> = {};
+const navigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigate,
+  useSearch: () => routeSearch,
+}));
+
 let hasControlPlane = true;
 vi.mock("../../../services/controlPlane/config", () => ({
   get hasControlPlane() {
@@ -34,7 +41,12 @@ vi.mock("../MobileAISettingsScreen", () => ({
   ),
 }));
 vi.mock("../MobileBillingScreen", () => ({
-  MobileBillingScreen: () => <div>billing-section</div>,
+  MobileBillingScreen: ({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) => (
+    <div>
+      <button onClick={onBack}>{backLabel ?? "back-from-billing"}</button>
+      billing-section
+    </div>
+  ),
 }));
 vi.mock("../MobileGitHubScreen", () => ({
   MobileGitHubScreen: () => <div>github-section</div>,
@@ -69,6 +81,8 @@ function renderMobile() {
 }
 
 beforeEach(() => {
+  routeSearch = {};
+  navigate.mockReset();
   hasControlPlane = true;
 });
 
@@ -162,5 +176,22 @@ describe("MobileSettingsScreen", () => {
     );
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
     expect(screen.queryByText("AI providers")).not.toBeInTheDocument();
+  });
+});
+
+describe("MobileSettingsScreen opened with a way back (the claim page's Subscribe)", () => {
+  it("opens on billing and its back control returns to where the person came from", async () => {
+    routeSearch = { section: "billing", returnTo: "/claim" };
+    renderMobile();
+    expect(screen.getByText("billing-section")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Back to your claim" }));
+    expect(navigate).toHaveBeenCalledWith({ href: "/claim" });
+  });
+
+  it("ignores a way back that leaves the app, and falls back to the list", async () => {
+    routeSearch = { section: "billing", returnTo: "//evil.example/x" };
+    renderMobile();
+    await userEvent.click(screen.getByRole("button", { name: "back-from-billing" }));
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

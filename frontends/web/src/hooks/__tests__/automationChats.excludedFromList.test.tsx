@@ -135,13 +135,13 @@ beforeEach(() => {
 afterEach(() => setTransport(null));
 
 describe("project chat list", () => {
-  it("asks the server to exclude automation chats", async () => {
+  it("asks for the project's chat list (the server leaves runs out)", async () => {
     listChats.mockResolvedValue(create(ListChatsResponseSchema, { chats: [], total: 0 }));
 
     await chatActions.listChats("proj-1");
 
     expect(listChats).toHaveBeenCalledTimes(1);
-    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1", sidebarOnly: true });
+    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1" });
   });
 });
 

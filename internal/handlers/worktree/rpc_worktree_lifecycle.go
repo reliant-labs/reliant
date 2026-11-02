@@ -104,7 +104,7 @@ func (s *Service) DeleteWorktree(
 	// knowingly. A permanent delete and a branch delete still reach the machine
 	// from here, so wake an asleep one first; the client retries.
 	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
-		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: daemonplacement.WorktreeOwner(worktree)}, project.Path); err != nil {
+		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: daemonplacement.WorktreeOwner(worktree)}, worktree.Path); err != nil {
 			return nil, err
 		}
 	}
@@ -118,7 +118,13 @@ func (s *Service) DeleteWorktree(
 		// (or it never existed). Otherwise the directory stays locked with
 		// reliant's reason forever and nothing will ever clean it up.
 		if worktree.Path != "" && project != nil && s.deps.Settler != nil {
-			meta := s.deps.Settler.SettleBlocking(ctx, userID, &core.ReclaimCandidate{Worktree: worktree, OwnerUserID: userID, ProjectPath: project.Path})
+			// The settle runs git in the owner's checkout of the project; an
+			// owner without one cannot remove the directory, and says why.
+			checkout, err := s.checkoutOn(ctx, userID, project, daemonplacement.WorktreeOwner(worktree), "delete this workspace permanently")
+			if err != nil {
+				return nil, err
+			}
+			meta := s.deps.Settler.SettleBlocking(ctx, userID, &core.ReclaimCandidate{Worktree: worktree, OwnerUserID: userID, ProjectPath: checkout.Path})
 			if meta == nil || !meta.DirectoryDeleted {
 				reason := "the machine has not removed its directory yet"
 				if meta != nil && meta.HeldReason != "" {
@@ -128,8 +134,10 @@ func (s *Service) DeleteWorktree(
 			}
 		}
 		deletedBranch := false
-		if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), project.Path, worktree.Branch)
+		if req.Msg.DeleteGitBranch && worktree.Branch != "" {
+			if checkout := s.ownerCheckout(ctx, userID, project, worktree); checkout != "" {
+				deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), checkout, worktree.Branch)
+			}
 		}
 		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete worktree"))
@@ -151,9 +159,7 @@ func (s *Service) DeleteWorktree(
 
 	// Archive associated chats
 	s.archiveWorktreeChats(ctx, userID, worktree)
-	if project != nil {
-		s.settleArchived(ctx, userID, worktree, project.Path)
-	}
+	s.settleArchived(ctx, userID, worktree, s.ownerCheckout(ctx, userID, project, worktree))
 
 	return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
 		Message:           "Worktree and associated chats archived successfully",
@@ -206,9 +212,7 @@ func (s *Service) ArchiveWorktree(
 
 	// Archive associated chats
 	s.archiveWorktreeChats(ctx, userID, worktree)
-	if project != nil {
-		s.settleArchived(ctx, userID, worktree, project.Path)
-	}
+	s.settleArchived(ctx, userID, worktree, s.ownerCheckout(ctx, userID, project, worktree))
 
 	return connect.NewResponse(&reliantv1.ArchiveWorktreeResponse{
 		Message: "Worktree and associated chats archived successfully",
@@ -322,6 +326,30 @@ func (s *Service) storeCleanupMetadata(ctx context.Context, worktreeID string, d
 	}
 }
 
+// archiveWorktreeChat archives one chat of an archived worktree and cancels
+// its run (best-effort), under the chat's run-control lock — the lock every
+// path that starts a run for the chat holds while it decides to (a send,
+// ContinueQueued's delivery of a message queued for the machine,
+// ResumePausedForMachine), as the chat service's archiveChat does. A delivery
+// therefore either finishes starting its run before the archive, and the
+// cancel stops it, or reads the chat as archived and drops the message.
+// Without the lock a delivery that read the chat a moment earlier could
+// start a run after the cancel. A lock that cannot be had is logged and the
+// archive proceeds unserialized, as runs.Service.LockRunControl does.
+func (s *Service) archiveWorktreeChat(ctx context.Context, chat *db.Chat) {
+	if release, err := s.deps.Repo.LockChatRunControl(ctx, chat.ID); err != nil {
+		logging.WarnContext(ctx, "Could not take the run-control lock; archiving the chat unserialized", "error", err, "chatID", chat.ID)
+	} else {
+		defer release()
+	}
+	if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
+		logging.WarnContext(ctx, "Failed to archive chat", "error", err, "chatID", chat.ID)
+	}
+	if workflowID := chat.MainThreadID(); workflowID != "" && s.deps.Temporal != nil {
+		_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
+	}
+}
+
 func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
 	chats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
 		UserID:          userID,
@@ -336,13 +364,7 @@ func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, workt
 
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
-			// Cancel workflow if running (best-effort)
-			if workflowID := chat.MainThreadID(); workflowID != "" && s.deps.Temporal != nil {
-				_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
-			}
-			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
-				logging.WarnContext(ctx, "Failed to archive chat", "error", err, "chatID", chat.ID)
-			}
+			s.archiveWorktreeChat(ctx, chat)
 		}
 	}
 }
@@ -410,6 +432,12 @@ func (s *Service) RecreateWorktree(
 			"cannot recreate '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
 	}
 
+	// The repos the workspace is rebuilt from are the owner's checkout.
+	checkout, err := s.checkoutOn(ctx, userID, project, daemonplacement.WorktreeOwner(worktree), "recreate its workspaces")
+	if err != nil {
+		return nil, err
+	}
+
 	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
 	// git repository, so rebuilding it means one `git worktree add` per nested
 	// repo, each in its own repository, under <workspace>/<relative path>.
@@ -425,7 +453,7 @@ func (s *Service) RecreateWorktree(
 	var recreateRepos []recreateRepo
 	for _, repo := range repos {
 		recreateRepos = append(recreateRepos, recreateRepo{
-			RepoPath: filepath.Join(project.Path, repo.RelativePath),
+			RepoPath: checkout.Join(repo.RelativePath),
 			Rel:      filepath.ToSlash(repo.RelativePath),
 			Branch:   worktree.Branch,
 		})
@@ -447,8 +475,8 @@ func (s *Service) RecreateWorktree(
 	if worktree.CleanupMetadata != nil {
 		savedRefs = worktree.CleanupMetadata.SnapshotRefs
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.recreate", map[string]any{
-		"project_path":  project.Path,
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, checkout.DaemonID, "worktree.recreate", map[string]any{
+		"project_path":  checkout.Path,
 		"worktree_path": worktree.Path,
 		"branch":        worktree.Branch,
 		"worktree_id":   worktree.ID,
@@ -534,6 +562,10 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 	if worktree.Path == "" {
 		return nil, svcerr.FailedPrecondition("this workspace was never created on disk; create a new one instead")
 	}
+	checkout, err := s.checkoutOn(ctx, userID, project, daemonplacement.WorktreeOwner(worktree), "recreate its workspaces")
+	if err != nil {
+		return nil, err
+	}
 	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
@@ -543,11 +575,11 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 		Repair:       true,
 		WorktreeID:   worktree.ID,
 		Branch:       worktree.Branch,
-		Repos:        toolexec.WorkspaceReposOf(project.Path, repos),
-		FallbackPath: project.Path,
+		Repos:        toolexec.WorkspaceReposOf(checkout.Path, repos),
+		FallbackPath: checkout.Path,
 	}
 	var resp toolexec.WorkspaceEnsureResponse
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, checkout.DaemonID, toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}

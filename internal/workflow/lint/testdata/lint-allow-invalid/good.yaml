@@ -1,0 +1,8 @@
+name: fixture
+entry: [build]
+nodes:
+# lint:allow run-exit-code-unread — the build's result is read from the artifact it uploads
+- id: build
+  type: run
+  timeout: 5m
+  args: {command: make build}

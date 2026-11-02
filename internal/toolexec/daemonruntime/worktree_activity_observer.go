@@ -16,7 +16,6 @@ var runtimeActivity struct {
 	sync.Mutex
 	ctx      context.Context
 	observer *worktreereclaim.ActivityObserver
-	roots    map[string]bool
 	err      error
 }
 
@@ -26,13 +25,18 @@ func initializeWorktreeActivity(ctx context.Context, dataDir string) {
 	defer runtimeActivity.Unlock()
 	runtimeActivity.ctx = ctx
 	runtimeActivity.observer = observer
-	runtimeActivity.roots = map[string]bool{}
 	runtimeActivity.err = err
 }
 
-// ObserveWorktreeRecovery starts a workspace's daemon-lifetime observer once and
+// ObserveWorktreeRecovery starts a workspace's observer when none is running and
 // returns fresh evidence. It never revives state from another daemon process.
 // The command ctx limits inventory; watcher lifetime is the runtime's ctx.
+//
+// An observation ends on its own when its coverage is lost (a watcher
+// overflow) or its workspace is deleted, releasing its inotify watches, so
+// "not running" is asked of the observer, not remembered here: a remembered
+// root was never observed again after an overflow, and a deleted one held
+// its watcher until the daemon exited.
 func ObserveWorktreeRecovery(ctx context.Context, root string) (worktreereclaim.RecoveryActivity, error) {
 	canonical, err := canonicalAdmissionPath(root)
 	if err != nil {
@@ -49,11 +53,8 @@ func ObserveWorktreeRecovery(ctx context.Context, root string) (worktreereclaim.
 		return worktreereclaim.RecoveryActivity{}, errors.New("daemon activity observer unavailable")
 	}
 	observer := runtimeActivity.observer
-	if !runtimeActivity.roots[canonical] {
+	if !observer.Running(canonical) {
 		err = observer.Start(runtimeActivity.ctx, canonical)
-		if err == nil {
-			runtimeActivity.roots[canonical] = true
-		}
 	}
 	runtimeActivity.Unlock()
 	if err != nil {

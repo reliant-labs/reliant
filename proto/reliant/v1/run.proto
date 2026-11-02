@@ -239,6 +239,13 @@ message Run {
   // its own. Filled by the cross-cutting list like title above. An archived
   // run is history, still listed when the request asks for archived runs.
   bool archived = 23;
+
+  // FailureDetail is why a FAILED run failed: the error it ended with,
+  // recorded on the run with its status. It is the only account of a run
+  // that failed before any node ran (input validation, a definition that
+  // would not load), which has no node attempt to carry the error. Empty
+  // for a run that did not fail.
+  string failure_detail = 24;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run

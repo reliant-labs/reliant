@@ -38,10 +38,11 @@ import Button from "../../forge-ui/button";
 import Modal from "../../forge-ui/modal";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { workflowSummary } from "@/lib/workflowSummary";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../../workflow/run/runFormStyles";
 import { countRunInputs, type RunWorkflowValue } from "../../workflow/run/runWorkflowValues";
-import { ActingIdentityField } from "../ActingIdentityField";
+import { ActingIdentityField, defaultActingIdentity } from "../ActingIdentityField";
 import { buildDaemonChoices, NO_MACHINE, noMachineBlockerFor } from "../daemonChoices";
 import { scheduleFromForm, serverErrorField, validateScheduleForm } from "../scheduleForm";
 import { validateTimezone } from "../timezone";
@@ -138,12 +139,13 @@ export function InlineAutomationForm({
   const whenTouched = useRef(false);
   const [connectionId, setConnectionId] = useState(trigger?.connectionId ?? "");
   const [notify, setNotify] = useState(trigger?.notifyOnComplete ?? initialPrefill?.notifyOnComplete ?? false);
-  // Keep a stored or explicit actor; only an untouched new GitHub source defaults to the bot.
+  // Keep a stored or explicit actor; an untouched new automation defaults to the bot.
   const [chosenIdentity, setActingIdentity] = useState<ActingIdentityKey | undefined>(trigger?.actingIdentity);
-  const actingIdentity = chosenIdentity ?? (when.kind === "integration" && when.event && integrationOf(when.event)?.integration === "github" ? "app" : "owner");
+  const actingIdentity = chosenIdentity ?? defaultActingIdentity(when.kind === "integration" && !!when.event && integrationOf(when.event)?.integration === "github");
   const [assumptions, setAssumptions] = useState(initialPrefill?.assumptions ?? []);
   const [inputsOpen, setInputsOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || trigger?.actingIdentity === "app");
+  // Open when a stored identity differs from what a new automation would get.
+  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || (!!trigger?.actingIdentity && trigger.actingIdentity !== defaultActingIdentity(false)));
   const [serverErrors, setErrors] = useState<FieldErrors>({});
   const [blurred, setBlurred] = useState<Partial<Record<keyof FieldErrors, boolean>>>({});
   const blurField = (key: keyof FieldErrors) => setBlurred((prev) => ({ ...prev, [key]: true }));
@@ -160,6 +162,10 @@ export function InlineAutomationForm({
 
   const library = useWorkflowLibrary(projectId || undefined);
   const listed = useMemo(() => (library.data?.workflows ?? []).filter((w) => w.status !== "draft"), [library.data]);
+  // What the picker offers: not the hidden built-ins, which are steps inside
+  // other workflows (the Workflows list folds them into Building blocks). One
+  // already chosen still shows, as the current value.
+  const pickable = useMemo(() => listed.filter((w) => !(w.source === "builtin" && w.isHidden)), [listed]);
   const listing = listed.find((w) => triggerRunsWorkflow({ workflow: w.name }, workflow));
   const workflowName = workflow ? (listing ? workflowDisplayName(listing) : (workflowTitle ?? normalizeWorkflowRef(workflow))) : "";
   const noMachineBlocker = useMemo(() => noMachineBlockerFor(listed, workflow), [listed, workflow]);
@@ -376,7 +382,7 @@ export function InlineAutomationForm({
   }
 
   const title = isEdit ? "Edit automation" : "New automation";
-  const showWritesAsInAdvanced = when.kind !== "integration" && (!!workflow || actingIdentity === "app");
+  const showWritesAsInAdvanced = when.kind !== "integration";
   const primaryLabel = isEdit ? "Save changes" : when.kind === "webhook" ? "Create and show URL" : "Create";
 
   return (
@@ -408,7 +414,7 @@ export function InlineAutomationForm({
             <button
               type="button"
               onClick={() => setEditingName(true)}
-              className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={`Name: ${shownName || "derived from when and what"}. Rename`}
               data-testid="automation-name"
             >
@@ -477,7 +483,7 @@ export function InlineAutomationForm({
                       <button
                         type="button"
                         onClick={() => onUseWorkflow!(w.name, workflowDisplayName(w), projectId)}
-                        className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        className="rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Use it
                       </button>
@@ -491,7 +497,7 @@ export function InlineAutomationForm({
             <button
               type="button"
               onClick={onBackToDeclared}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Use the workflow's own triggers instead
             </button>
@@ -519,10 +525,10 @@ export function InlineAutomationForm({
                 aria-describedby={fid("workflow-hint")}
               >
                 <option value="">Agent (your default)</option>
-                {workflow && !listed.some((w) => triggerRunsWorkflow({ workflow: w.name }, workflow)) && (
+                {workflow && !pickable.some((w) => triggerRunsWorkflow({ workflow: w.name }, workflow)) && (
                   <option value={workflow}>{workflowName}</option>
                 )}
-                {listed
+                {pickable
                   .slice()
                   .sort((a, b) => workflowDisplayName(a).localeCompare(workflowDisplayName(b)))
                   .map((w) => (
@@ -532,7 +538,7 @@ export function InlineAutomationForm({
                   ))}
               </select>
               <p id={fid("workflow-hint")} className={hintClass}>
-                {workflow ? (listing?.description ?? "Its steps run each time.") : "Your default agent and its tools. Pick a workflow for a fixed set of steps."}
+                {workflow ? (workflowSummary(listing?.description) || "Its steps run each time.") : "Your default agent and its tools. Pick a workflow for a fixed set of steps."}
               </p>
             </div>
           )}
@@ -665,7 +671,7 @@ export function InlineAutomationForm({
               className="forge-ui"
             />
           </div>
-          <p className={hintClass}>Failures always notify you, once per streak.</p>
+          <p className={hintClass}>A desktop notification, never an Inbox item. Failures always notify you, once per streak, and stay in your Inbox until a run succeeds.</p>
         </div>
 
         {(when.kind === "schedule" || showWritesAsInAdvanced) && (

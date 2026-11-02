@@ -34,7 +34,9 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
   useComputeSubscription: () => query(state.sub),
   useWalletOverview: () => query(state.wallet),
   useComputeUsage: () => query(state.usage),
-  usePlans: () => query({ plans: [] }),
+  // The price list's own weights turn weighted seconds into hours at the
+  // plan's size (L here), the one hour unit every screen speaks.
+  usePlans: () => query({ plans: [], daemonPricing: { pricingVersion: "test-version", sizes: [{ size: "m", costWeight: "1/2" }, { size: "l", costWeight: "1/1" }] } }),
   useCreateCheckoutSession: () => mutation(),
   useCreateWalletTopupSession: () => mutation(),
   isCheckoutIdentityRequired: () => false,
@@ -65,17 +67,19 @@ beforeEach(() => {
         productId: "prod_compute",
         priceCents: 4700n,
         structuredLimits: {
-          allowedDaemonSizes: ["small", "medium"],
-          includedSmallDaemonHours: 41n,
+          allowedDaemonSizes: ["m", "l"],
+          machineIncludedHours: 41n,
         },
       },
     },
   };
   state.usage = {
-    includedSmallDaemonSeconds: 147600,
-    usedSmallDaemonSeconds: 43200,
-    remainingSmallDaemonSeconds: 104400,
-    runningMultiplier: 0,
+    pricingVersion: "test-version",
+    allowanceWeightedSeconds: "147600/1",
+    consumedWeightedSeconds: "43200/1",
+    remainingWeightedSeconds: "104400/1",
+    grantRemainingWeightedSeconds: "0/1",
+    runningCostWeightSum: "0/1",
     estimatedOverageCostCents: 0,
     bySize: [],
     grantedSmallDaemonSecondsRemaining: 0,
@@ -134,8 +138,9 @@ describe("the phone distinguishes the two products too", () => {
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
     expect(compute.getByText("Beta")).toBeInTheDocument();
-    expect(compute.getByText(/12\.0 h/)).toBeInTheDocument();
-    expect(compute.getByText(/41 h/)).toBeInTheDocument();
+    expect(compute.getByText(/^12 hours used$/)).toBeInTheDocument();
+    expect(compute.getByText(/^41 hours included$/)).toBeInTheDocument();
+    expect(compute.queryByText(/weighted|equivalent/i)).toBeNull();
     expect(compute.queryByText("$18.40")).toBeNull();
   });
 
@@ -154,7 +159,7 @@ describe("the phone distinguishes the two products too", () => {
           priceCents: 4700n,
           structuredLimits: {
             allowedDaemonSizes: [],
-            includedSmallDaemonHours: 0n,
+            machineIncludedHours: 0n,
           },
         },
       },
@@ -192,10 +197,12 @@ describe("the phone distinguishes the two products too", () => {
    */
   it("withholds hours used when the server did not measure", () => {
     state.usage = {
-      includedSmallDaemonSeconds: 147600,
-      usedSmallDaemonSeconds: 0,
-      remainingSmallDaemonSeconds: 147600,
-      runningMultiplier: 0,
+      pricingVersion: "test-version",
+      allowanceWeightedSeconds: "147600/1",
+      consumedWeightedSeconds: "0/1",
+      remainingWeightedSeconds: "147600/1",
+      grantRemainingWeightedSeconds: "0/1",
+      runningCostWeightSum: "0/1",
       estimatedOverageCostCents: 0,
       bySize: [],
       grantedSmallDaemonSecondsRemaining: 0,
@@ -204,16 +211,18 @@ describe("the phone distinguishes the two products too", () => {
     renderScreen();
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
-    expect(compute.queryByText(/0\.0 h used/i)).toBeNull();
+    expect(compute.queryByText(/^0 hours used$/i)).toBeNull();
     expect(compute.getByText(/usage unavailable/i)).toBeInTheDocument();
   });
 
   it("still prints 0.0 h used for a genuine zero", () => {
     state.usage = {
-      includedSmallDaemonSeconds: 147600,
-      usedSmallDaemonSeconds: 0,
-      remainingSmallDaemonSeconds: 147600,
-      runningMultiplier: 0,
+      pricingVersion: "test-version",
+      allowanceWeightedSeconds: "147600/1",
+      consumedWeightedSeconds: "0/1",
+      remainingWeightedSeconds: "147600/1",
+      grantRemainingWeightedSeconds: "0/1",
+      runningCostWeightSum: "0/1",
       estimatedOverageCostCents: 0,
       bySize: [],
       grantedSmallDaemonSecondsRemaining: 0,
@@ -222,7 +231,7 @@ describe("the phone distinguishes the two products too", () => {
     renderScreen();
 
     const compute = within(screen.getByRole("region", { name: /^compute$/i }));
-    expect(compute.getByText(/0\.0 h used/i)).toBeInTheDocument();
+    expect(compute.getByText(/^0 hours used$/i)).toBeInTheDocument();
     expect(compute.queryByText(/usage unavailable/i)).toBeNull();
   });
 

@@ -30,7 +30,7 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
-import { useDashboardIndex } from "@/hooks/dashboard-queries";
+import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -180,6 +180,14 @@ export function ConsoleLayout() {
       ? dashboards.data?.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title
       : undefined;
 
+  // The open dashboard's own scope (the same cached read the page makes): a
+  // platform dashboard is not per environment, and the control must not imply it is.
+  const openDashboard = useDashboard(
+    org.orgId,
+    page.kind === "dashboard" && page.dashKind !== "builtin" ? { kind: page.dashKind, projectId: forgeProject, key: page.key } : null
+  );
+  const platformWide = openDashboard.data?.spec.scope === "platform";
+
   const [collapsed, setCollapsed] = useState(() => readRail());
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -226,6 +234,7 @@ export function ConsoleLayout() {
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
       scope={scope}
+      platformWide={platformWide}
       onEnvChange={setEnv}
       user={user}
       collapsed={collapsed}

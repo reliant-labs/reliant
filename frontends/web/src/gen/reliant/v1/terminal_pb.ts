@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/terminal.proto.
  */
 export const file_reliant_v1_terminal: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3Rlcm1pbmFsLnByb3RvEgpyZWxpYW50LnYxInUKD1Rlcm1pbmFsU2Vzc2lvbhIKCgJpZBgBIAEoCRITCgt3b3JraW5nX2RpchgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgJEhMKC2xhc3RfYWN0aXZlGAQgASgJEhAKA3BpZBgFIAEoBUgAiAEBQgYKBF9waWQiHQobTGlzdFRlcm1pbmFsU2Vzc2lvbnNSZXF1ZXN0IlwKHExpc3RUZXJtaW5hbFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5yZWxpYW50LnYxLlRlcm1pbmFsU2Vzc2lvbhINCgV0b3RhbBgCIAEoBSIxChtDbG9zZVRlcm1pbmFsU2Vzc2lvblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSJAChxDbG9zZVRlcm1pbmFsU2Vzc2lvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSLwAQoTVGVybWluYWxTdHJlYW1JbnB1dBIzCgZjcmVhdGUYASABKAsyIS5yZWxpYW50LnYxLlRlcm1pbmFsQ3JlYXRlUmVxdWVzdEgAEi0KBGRhdGEYAiABKAsyHS5yZWxpYW50LnYxLlRlcm1pbmFsRGF0YUlucHV0SAASMQoGcmVzaXplGAMgASgLMh8ucmVsaWFudC52MS5UZXJtaW5hbFJlc2l6ZUlucHV0SAASOQoNY2xvc2Vfc2Vzc2lvbhgEIAEoCzIgLnJlbGlhbnQudjEuVGVybWluYWxDbG9zZVJlcXVlc3RIAEIHCgVpbnB1dCIsChVUZXJtaW5hbENyZWF0ZVJlcXVlc3QSEwoLd29ya2luZ19kaXIYASABKAkiNQoRVGVybWluYWxEYXRhSW5wdXQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRkYXRhGAIgASgMIkUKE1Rlcm1pbmFsUmVzaXplSW5wdXQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRjb2xzGAIgASgNEgwKBHJvd3MYAyABKA0iKgoUVGVybWluYWxDbG9zZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSLoAQoUVGVybWluYWxTdHJlYW1PdXRwdXQSNQoHY3JlYXRlZBgBIAEoCzIiLnJlbGlhbnQudjEuVGVybWluYWxTZXNzaW9uQ3JlYXRlZEgAEi4KBGRhdGEYAiABKAsyHi5yZWxpYW50LnYxLlRlcm1pbmFsRGF0YU91dHB1dEgAEjMKBmNsb3NlZBgDIAEoCzIhLnJlbGlhbnQudjEuVGVybWluYWxTZXNzaW9uQ2xvc2VkSAASKgoFZXJyb3IYBCABKAsyGS5yZWxpYW50LnYxLlRlcm1pbmFsRXJyb3JIAEIICgZvdXRwdXQiOQoWVGVybWluYWxTZXNzaW9uQ3JlYXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEgsKA3BpZBgCIAEoBSI2ChJUZXJtaW5hbERhdGFPdXRwdXQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRkYXRhGAIgASgMIj4KFVRlcm1pbmFsU2Vzc2lvbkNsb3NlZBISCgpzZXNzaW9uX2lkGAEgASgJEhEKCWV4aXRfY29kZRgCIAEoBSI0Cg1UZXJtaW5hbEVycm9yEhIKCnNlc3Npb25faWQYASABKAkSDwoHbWVzc2FnZRgCIAEoCTLqAwoPVGVybWluYWxTZXJ2aWNlEmMKDExpc3RTZXNzaW9ucxInLnJlbGlhbnQudjEuTGlzdFRlcm1pbmFsU2Vzc2lvbnNSZXF1ZXN0GigucmVsaWFudC52MS5MaXN0VGVybWluYWxTZXNzaW9uc1Jlc3BvbnNlIgASvgEKDENsb3NlU2Vzc2lvbhInLnJlbGlhbnQudjEuQ2xvc2VUZXJtaW5hbFNlc3Npb25SZXF1ZXN0GigucmVsaWFudC52MS5DbG9zZVRlcm1pbmFsU2Vzc2lvblJlc3BvbnNlIluiuxhXOlU6U2Nsb3NlcyBhIHRlcm1pbmFsIHNlc3Npb24gb24gdGhlIGRhZW1vbjogaW50ZXJhY3RpdmUgdHJhbnNwb3J0LCBub3QgcHJvamVjdCBoaXN0b3J5ErABCg5TdHJlYW1UZXJtaW5hbBIfLnJlbGlhbnQudjEuVGVybWluYWxTdHJlYW1JbnB1dBogLnJlbGlhbnQudjEuVGVybWluYWxTdHJlYW1PdXRwdXQiV6K7GFM6UTpPdGVybWluYWwgSS9PIHRvIGFuZCBmcm9tIHRoZSBkYWVtb246IGludGVyYWN0aXZlIHRyYW5zcG9ydCwgbm90IHByb2plY3QgaGlzdG9yeSgBMAFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("ChlyZWxpYW50L3YxL3Rlcm1pbmFsLnByb3RvEgpyZWxpYW50LnYxInUKD1Rlcm1pbmFsU2Vzc2lvbhIKCgJpZBgBIAEoCRITCgt3b3JraW5nX2RpchgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgJEhMKC2xhc3RfYWN0aXZlGAQgASgJEhAKA3BpZBgFIAEoBUgAiAEBQgYKBF9waWQiHQobTGlzdFRlcm1pbmFsU2Vzc2lvbnNSZXF1ZXN0IlwKHExpc3RUZXJtaW5hbFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5yZWxpYW50LnYxLlRlcm1pbmFsU2Vzc2lvbhINCgV0b3RhbBgCIAEoBSJXChtDbG9zZVRlcm1pbmFsU2Vzc2lvblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIWCglkYWVtb25faWQYAiABKAlIAIgBAUIMCgpfZGFlbW9uX2lkIkAKHENsb3NlVGVybWluYWxTZXNzaW9uUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJMrcCCg9UZXJtaW5hbFNlcnZpY2USYwoMTGlzdFNlc3Npb25zEicucmVsaWFudC52MS5MaXN0VGVybWluYWxTZXNzaW9uc1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RUZXJtaW5hbFNlc3Npb25zUmVzcG9uc2UiABK+AQoMQ2xvc2VTZXNzaW9uEicucmVsaWFudC52MS5DbG9zZVRlcm1pbmFsU2Vzc2lvblJlcXVlc3QaKC5yZWxpYW50LnYxLkNsb3NlVGVybWluYWxTZXNzaW9uUmVzcG9uc2UiW6K7GFc6VTpTY2xvc2VzIGEgdGVybWluYWwgc2Vzc2lvbiBvbiB0aGUgZGFlbW9uOiBpbnRlcmFjdGl2ZSB0cmFuc3BvcnQsIG5vdCBwcm9qZWN0IGhpc3RvcnlCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
 
 /**
  * TerminalSession represents an active terminal session
@@ -114,6 +114,15 @@ export type CloseTerminalSessionRequest = Message<"reliant.v1.CloseTerminalSessi
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
+
+  /**
+   * The machine the session runs on, as the terminal websocket's "init"
+   * reported it. A session lives on one machine; unset sends the close to the
+   * default machine, which knows only its own sessions.
+   *
+   * @generated from field: optional string daemon_id = 2;
+   */
+  daemonId?: string | undefined;
 };
 
 /**
@@ -148,272 +157,9 @@ export const CloseTerminalSessionResponseSchema: GenMessage<CloseTerminalSession
   messageDesc(file_reliant_v1_terminal, 4);
 
 /**
- * TerminalStreamInput is the client-to-server message for the StreamTerminal RPC.
- *
- * @generated from message reliant.v1.TerminalStreamInput
- */
-export type TerminalStreamInput = Message<"reliant.v1.TerminalStreamInput"> & {
-  /**
-   * @generated from oneof reliant.v1.TerminalStreamInput.input
-   */
-  input: {
-    /**
-     * Create new session
-     *
-     * @generated from field: reliant.v1.TerminalCreateRequest create = 1;
-     */
-    value: TerminalCreateRequest;
-    case: "create";
-  } | {
-    /**
-     * Send input to session
-     *
-     * @generated from field: reliant.v1.TerminalDataInput data = 2;
-     */
-    value: TerminalDataInput;
-    case: "data";
-  } | {
-    /**
-     * Resize terminal
-     *
-     * @generated from field: reliant.v1.TerminalResizeInput resize = 3;
-     */
-    value: TerminalResizeInput;
-    case: "resize";
-  } | {
-    /**
-     * Close session
-     *
-     * @generated from field: reliant.v1.TerminalCloseRequest close_session = 4;
-     */
-    value: TerminalCloseRequest;
-    case: "closeSession";
-  } | { case: undefined; value?: undefined };
-};
-
-/**
- * Describes the message reliant.v1.TerminalStreamInput.
- * Use `create(TerminalStreamInputSchema)` to create a new message.
- */
-export const TerminalStreamInputSchema: GenMessage<TerminalStreamInput> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 5);
-
-/**
- * @generated from message reliant.v1.TerminalCreateRequest
- */
-export type TerminalCreateRequest = Message<"reliant.v1.TerminalCreateRequest"> & {
-  /**
-   * @generated from field: string working_dir = 1;
-   */
-  workingDir: string;
-};
-
-/**
- * Describes the message reliant.v1.TerminalCreateRequest.
- * Use `create(TerminalCreateRequestSchema)` to create a new message.
- */
-export const TerminalCreateRequestSchema: GenMessage<TerminalCreateRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 6);
-
-/**
- * @generated from message reliant.v1.TerminalDataInput
- */
-export type TerminalDataInput = Message<"reliant.v1.TerminalDataInput"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: bytes data = 2;
-   */
-  data: Uint8Array;
-};
-
-/**
- * Describes the message reliant.v1.TerminalDataInput.
- * Use `create(TerminalDataInputSchema)` to create a new message.
- */
-export const TerminalDataInputSchema: GenMessage<TerminalDataInput> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 7);
-
-/**
- * @generated from message reliant.v1.TerminalResizeInput
- */
-export type TerminalResizeInput = Message<"reliant.v1.TerminalResizeInput"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: uint32 cols = 2;
-   */
-  cols: number;
-
-  /**
-   * @generated from field: uint32 rows = 3;
-   */
-  rows: number;
-};
-
-/**
- * Describes the message reliant.v1.TerminalResizeInput.
- * Use `create(TerminalResizeInputSchema)` to create a new message.
- */
-export const TerminalResizeInputSchema: GenMessage<TerminalResizeInput> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 8);
-
-/**
- * @generated from message reliant.v1.TerminalCloseRequest
- */
-export type TerminalCloseRequest = Message<"reliant.v1.TerminalCloseRequest"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-};
-
-/**
- * Describes the message reliant.v1.TerminalCloseRequest.
- * Use `create(TerminalCloseRequestSchema)` to create a new message.
- */
-export const TerminalCloseRequestSchema: GenMessage<TerminalCloseRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 9);
-
-/**
- * TerminalStreamOutput is the server-to-client message for the StreamTerminal RPC.
- *
- * @generated from message reliant.v1.TerminalStreamOutput
- */
-export type TerminalStreamOutput = Message<"reliant.v1.TerminalStreamOutput"> & {
-  /**
-   * @generated from oneof reliant.v1.TerminalStreamOutput.output
-   */
-  output: {
-    /**
-     * @generated from field: reliant.v1.TerminalSessionCreated created = 1;
-     */
-    value: TerminalSessionCreated;
-    case: "created";
-  } | {
-    /**
-     * @generated from field: reliant.v1.TerminalDataOutput data = 2;
-     */
-    value: TerminalDataOutput;
-    case: "data";
-  } | {
-    /**
-     * @generated from field: reliant.v1.TerminalSessionClosed closed = 3;
-     */
-    value: TerminalSessionClosed;
-    case: "closed";
-  } | {
-    /**
-     * @generated from field: reliant.v1.TerminalError error = 4;
-     */
-    value: TerminalError;
-    case: "error";
-  } | { case: undefined; value?: undefined };
-};
-
-/**
- * Describes the message reliant.v1.TerminalStreamOutput.
- * Use `create(TerminalStreamOutputSchema)` to create a new message.
- */
-export const TerminalStreamOutputSchema: GenMessage<TerminalStreamOutput> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 10);
-
-/**
- * @generated from message reliant.v1.TerminalSessionCreated
- */
-export type TerminalSessionCreated = Message<"reliant.v1.TerminalSessionCreated"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: int32 pid = 2;
-   */
-  pid: number;
-};
-
-/**
- * Describes the message reliant.v1.TerminalSessionCreated.
- * Use `create(TerminalSessionCreatedSchema)` to create a new message.
- */
-export const TerminalSessionCreatedSchema: GenMessage<TerminalSessionCreated> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 11);
-
-/**
- * @generated from message reliant.v1.TerminalDataOutput
- */
-export type TerminalDataOutput = Message<"reliant.v1.TerminalDataOutput"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: bytes data = 2;
-   */
-  data: Uint8Array;
-};
-
-/**
- * Describes the message reliant.v1.TerminalDataOutput.
- * Use `create(TerminalDataOutputSchema)` to create a new message.
- */
-export const TerminalDataOutputSchema: GenMessage<TerminalDataOutput> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 12);
-
-/**
- * @generated from message reliant.v1.TerminalSessionClosed
- */
-export type TerminalSessionClosed = Message<"reliant.v1.TerminalSessionClosed"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: int32 exit_code = 2;
-   */
-  exitCode: number;
-};
-
-/**
- * Describes the message reliant.v1.TerminalSessionClosed.
- * Use `create(TerminalSessionClosedSchema)` to create a new message.
- */
-export const TerminalSessionClosedSchema: GenMessage<TerminalSessionClosed> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 13);
-
-/**
- * @generated from message reliant.v1.TerminalError
- */
-export type TerminalError = Message<"reliant.v1.TerminalError"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: string message = 2;
-   */
-  message: string;
-};
-
-/**
- * Describes the message reliant.v1.TerminalError.
- * Use `create(TerminalErrorSchema)` to create a new message.
- */
-export const TerminalErrorSchema: GenMessage<TerminalError> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_terminal, 14);
-
-/**
- * TerminalService provides terminal session management and streaming.
+ * TerminalService provides terminal session management. Terminal I/O itself is
+ * the websocket at /api/v2/terminal/ws (internal/handlers/terminal
+ * TerminalWSHandler), which routes to the machine holding the workspace.
  *
  * @generated from service reliant.v1.TerminalService
  */
@@ -437,16 +183,6 @@ export const TerminalService: GenService<{
     methodKind: "unary";
     input: typeof CloseTerminalSessionRequestSchema;
     output: typeof CloseTerminalSessionResponseSchema;
-  },
-  /**
-   * StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
-   *
-   * @generated from rpc reliant.v1.TerminalService.StreamTerminal
-   */
-  streamTerminal: {
-    methodKind: "bidi_streaming";
-    input: typeof TerminalStreamInputSchema;
-    output: typeof TerminalStreamOutputSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_terminal, 0);

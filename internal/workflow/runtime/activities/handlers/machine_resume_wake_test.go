@@ -127,6 +127,61 @@ func TestMachineResumeWake_ARefusedWakeLetsTheStepRun(t *testing.T) {
 	assert.Empty(t, repo.got(), "nothing to wait for, so the chat never shows a wait")
 }
 
+// A resumed machine that reads Failed for a moment (its previous pod still
+// terminating, prod 2026-10-30) is waited for like any machine coming up: the
+// step gets its machine instead of a "failed to start" it would only report.
+func TestMachineResumeWake_TransientFailedIsWaitedOut(t *testing.T) {
+	t.Parallel()
+
+	router := newRunWakeRouter()
+	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "tools-daemon exited with code 1"})
+	a, repo, chatID := newResumeWakeFixture(t, router)
+
+	out := runResumeWake(t, a, MachineResumeWakeInput{ChatID: chatID, WaitSeconds: 30})
+
+	assert.Equal(t, MachineResumeWakeOutput{Ready: true, Woke: true}, out)
+	assert.Equal(t, []bool{true, false}, repo.got(), "the chat shows the wait, then clears it")
+}
+
+// A Failed report that has held across slices is believed: the step runs and
+// reports it, without another wake.
+func TestMachineResumeWake_PersistentFailedEndsTheWake(t *testing.T) {
+	t.Parallel()
+
+	router := newRunWakeRouter()
+	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "out of capacity"})
+	a, repo, chatID := newResumeWakeFixture(t, router)
+	failedSince := time.Now().Add(-3 * time.Minute)
+
+	out := runResumeWake(t, a, MachineResumeWakeInput{ChatID: chatID, WaitSeconds: 30, FailedSince: &failedSince})
+
+	assert.True(t, out.Ready)
+	assert.Contains(t, out.NotComing, "Your machine failed to start: out of capacity")
+	assert.Zero(t, router.runWakes.Load())
+	assert.Empty(t, repo.got())
+}
+
+// A slice that ends with the machine still reporting Failed hands the run of
+// Failed reports to the next slice, which carries it on.
+func TestMachineResumeWake_SliceCarriesTheFailedRun(t *testing.T) {
+	t.Parallel()
+
+	router := newRunWakeRouter()
+	router.attachAfter = 1 << 30
+	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true})
+	a, _, chatID := newResumeWakeFixture(t, router)
+
+	first := runResumeWake(t, a, MachineResumeWakeInput{ChatID: chatID})
+	require.True(t, first.Waiting)
+	require.Empty(t, first.NotComing)
+	require.NotNil(t, first.FailedSince)
+
+	second := runResumeWake(t, a, MachineResumeWakeInput{ChatID: chatID, FailedSince: first.FailedSince})
+	require.True(t, second.Waiting)
+	require.NotNil(t, second.FailedSince)
+	assert.True(t, first.FailedSince.Equal(*second.FailedSince))
+}
+
 // A machine still coming up when the slice ends leaves the chat waiting for
 // the workflow's next slice — except on the final one, which clears it
 // because the step runs now.

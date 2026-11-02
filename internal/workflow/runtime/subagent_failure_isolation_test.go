@@ -143,8 +143,8 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		return map[string]interface{}{"success": true}, nil
 	}
 
-	register("ActivityLoadWorkflow", func(_ context.Context, in map[string]string) (LoadedWorkflow, error) {
-		if def, ok := e.workflowYAMLs[in["workflow_name"]]; ok {
+	register("ActivityLoadWorkflow", func(_ context.Context, in types.LoadWorkflowInput) (LoadedWorkflow, error) {
+		if def, ok := e.workflowYAMLs[in.WorkflowName]; ok {
 			parsed, err := wfyaml.ParseWorkflow([]byte(def))
 			if err != nil {
 				return LoadedWorkflow{}, err
@@ -154,7 +154,10 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		}
 		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	})
-	for _, name := range []string{"WorkflowCheckpoint", "ThreadStatus", "Cleanup", "LookupStoppedSubAgent"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	for _, name := range []string{"ThreadStatus", "Cleanup", "LookupStoppedSubAgent"} {
 		register(name, ok)
 	}
 	register("EmitStreamFinalized", func(_ context.Context, _ types.EmitStreamFinalizedInput) (types.EmitStreamFinalizedOutput, error) {
@@ -240,7 +243,7 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 	register("ValidateThreadOwnership", func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
 		return map[string]interface{}{"valid": true}, nil
 	})
-	register("LoadPresetParams", func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	register("LoadPresetParams", func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
 		return map[string]interface{}{}, nil
 	})
 	register("ExecuteTools", func(_ context.Context, _ types.ActivityInput) (map[string]interface{}, error) {

@@ -471,13 +471,16 @@ func TestQuarantine_MultiCheckoutIsRemovedOneAtATimeAndRestoredOnChange(t *testi
 	// A process that FOLLOWED the move (an open file, a cwd) writes into the
 	// quarantined copy of the second checkout while it is being re-checked.
 	// (A writer that only knows the old path gets ENOENT; see the test above.)
-	calls := 0
+	written := false
 	f.r.Cwds = func(context.Context) ([]string, error) {
-		calls++
-		if calls == 4 {
+		if !written {
 			entries, _ := os.ReadDir(filepath.Join(f.root, ".reclaim", "qm"))
 			for _, e := range entries {
-				_ = os.WriteFile(filepath.Join(f.root, ".reclaim", "qm", e.Name(), "late.txt"), []byte("x"), 0o644)
+				if e.IsDir() {
+					write(t, filepath.Join(f.root, ".reclaim", "qm", e.Name(), "late.txt"), "x")
+					written = true
+					break
+				}
 			}
 		}
 		return nil, nil

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -16,23 +14,19 @@ import (
 	"connectrpc.com/connect"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
-	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
-// These tests pin one invariant for every server-side terminal transport:
-// a connection that creates a daemon terminal session closes that session
-// when the connection ends, however it ends.
+// These tests pin one invariant of the terminal websocket: a connection that
+// creates a daemon terminal session closes that session when the connection
+// ends, however it ends.
 //
-// Neither transport can reattach to an existing session — every connection
+// A connection cannot reattach to an existing session — every connection
 // sends terminal.create — so a session outliving its connection is
 // unreachable. Before this was enforced, each dropped WebSocket (reload,
 // sleep, API restart, network blip) left a login shell and its PTY alive on
@@ -50,10 +44,6 @@ type terminalCommandRouter struct {
 
 	mu       sync.Mutex
 	commands []recordedDaemonCommand
-
-	// output, when set, is the session's output; nil is a session that
-	// produces none and never exits.
-	output chan *toolexec.TerminalOutputEvent
 }
 
 type recordedDaemonCommand struct {
@@ -87,9 +77,6 @@ func (r *terminalCommandRouter) SendDaemonCommand(ctx context.Context, _ string,
 }
 
 func (r *terminalCommandRouter) SubscribeTerminalOutput(context.Context, string, string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
-	if r.output != nil {
-		return r.output, func() {}, nil
-	}
 	// Never closed: the session produces no output and never exits, so only
 	// the connection ending can end the handler.
 	return make(chan *toolexec.TerminalOutputEvent), func() {}, nil
@@ -168,94 +155,6 @@ func TestTerminalWS_ClosesDaemonSessionOnCleanClientClose(t *testing.T) {
 	require.NoError(t, conn.WriteMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")))
 
-	requireSingleClose(t, router)
-}
-
-// startStreamTerminal serves the terminal Service over h2c (bidi streaming
-// needs HTTP/2) with the test user injected, and opens a stream on it that
-// has already received "created".
-func startStreamTerminal(t *testing.T, router *terminalCommandRouter) *connect.BidiStreamForClient[reliantv1.TerminalStreamInput, reliantv1.TerminalStreamOutput] {
-	t.Helper()
-	routes := http.NewServeMux()
-	NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})).Register(routes) // the production mount
-	// Streams.Install is the listener's edge: the abortable request body
-	// StreamTerminal stops its input pump with (serverkit.AbortReceive).
-	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, terminalTestUserID)
-		routes.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.StartTLS()
-	t.Cleanup(srv.Close)
-
-	client := reliantv1connect.NewTerminalServiceClient(srv.Client(), srv.URL)
-	stream := client.StreamTerminal(context.Background())
-	require.NoError(t, stream.Send(&reliantv1.TerminalStreamInput{
-		Input: &reliantv1.TerminalStreamInput_Create{Create: &reliantv1.TerminalCreateRequest{WorkingDir: "/tmp"}},
-	}))
-	first, err := stream.Receive()
-	require.NoError(t, err)
-	require.Equal(t, "daemon-session-1", first.GetCreated().GetSessionId())
-	return stream
-}
-
-func TestStreamTerminal_ClosesDaemonSessionWhenClientHangsUp(t *testing.T) {
-	router := newTerminalCommandRouter()
-	stream := startStreamTerminal(t, router)
-
-	// Hang up without sending CloseSession.
-	require.NoError(t, stream.CloseRequest())
-	require.NoError(t, stream.CloseResponse())
-
-	requireSingleClose(t, router)
-}
-
-func TestStreamTerminal_ClosesDaemonSessionOnceOnExplicitClose(t *testing.T) {
-	router := newTerminalCommandRouter()
-	stream := startStreamTerminal(t, router)
-
-	// An explicit CloseSession must still close exactly once — the
-	// connection-scoped close must not double up with it.
-	require.NoError(t, stream.Send(&reliantv1.TerminalStreamInput{
-		Input: &reliantv1.TerminalStreamInput_CloseSession{CloseSession: &reliantv1.TerminalCloseRequest{}},
-	}))
-
-	requireSingleClose(t, router)
-	require.NoError(t, stream.CloseRequest())
-	require.NoError(t, stream.CloseResponse())
-}
-
-// A session that exits ends its stream, even while the browser — still
-// connected — sends nothing. The input pump sits in Receive, which neither the
-// output pump finishing nor a cancelled context wakes; the handler used to
-// wait there for the browser's next keystroke, holding the stream (and a
-// drain) open with nothing left on it.
-func TestStreamTerminal_EndsWhenTheSessionExitsWhileTheClientIsSilent(t *testing.T) {
-	router := newTerminalCommandRouter()
-	router.output = make(chan *toolexec.TerminalOutputEvent, 1)
-	stream := startStreamTerminal(t, router)
-	t.Cleanup(func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
-	})
-
-	router.output <- &toolexec.TerminalOutputEvent{SessionID: "daemon-session-1", Closed: true, ExitCode: 3}
-	closed, err := stream.Receive()
-	require.NoError(t, err)
-	require.Equal(t, int32(3), closed.GetClosed().GetExitCode())
-
-	ended := make(chan error, 1)
-	go func() {
-		_, err := stream.Receive()
-		ended <- err
-	}()
-	select {
-	case err := <-ended:
-		require.ErrorIs(t, err, io.EOF, "the stream must end cleanly once the session has exited")
-	case <-time.After(5 * time.Second):
-		t.Fatal("StreamTerminal stayed open after its session exited, waiting on a silent client")
-	}
 	requireSingleClose(t, router)
 }
 

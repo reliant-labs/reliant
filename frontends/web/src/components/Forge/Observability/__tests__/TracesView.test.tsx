@@ -38,7 +38,8 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ q: "GetOrder", errors: true, minDuration: "500ms" });
     await waitFor(() =>
       expect(listTraces).toHaveBeenLastCalledWith(
-        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 })
+        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 }),
+        expect.objectContaining({ signal: expect.anything() })
       )
     );
   });
@@ -83,11 +84,11 @@ describe("trace waterfall", () => {
       expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
         envIds: ["env-prod"],
         window: { startMs: now - 60 * 60_000, endMs: now },
-      }));
+      }), expect.objectContaining({ signal: expect.anything() }));
       await user.selectOptions(screen.getByTestId("obs-range"), "15m");
       await waitFor(() => expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
         window: { startMs: now - 15 * 60_000, endMs: now },
-      })));
+      }), expect.objectContaining({ signal: expect.anything() })));
       expect(getTrace).toHaveBeenCalledTimes(2);
     } finally { clock.mockRestore(); }
   });

@@ -234,6 +234,20 @@ type RunCommandRequest struct {
 	// heavy slots like the commands the daemon recognizes by itself (see
 	// internal/heavyjob). There is no way to declare a command light.
 	Heavy bool `json:"heavy,omitempty"`
+	// WorktreeID tags a background process with the workspace it was started
+	// for (a package command from the Commands panel), so exec.bg_list can
+	// report it and the workspace's process list can find it. Empty for an
+	// agent's own background commands.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand marks a process the Commands panel starts, so exec.bg_list
+	// reports it as a package command whether or not it names a workspace
+	// (a path-only RunCommand has none). An agent's commands never set it.
+	PackageCommand bool `json:"package_command,omitempty"`
+	// ChatID is the agent (chat or sub-agent thread) whose tool call runs the
+	// command. The daemon attributes the command's processes to it, so a
+	// machine near its process limit can say whose they are
+	// (internal/procguard). Informational only: it grants nothing.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.
@@ -281,6 +295,17 @@ type OutputOpts struct {
 	TailLines int `json:"tail_lines,omitempty"`
 	// Regex filters output to lines matching this pattern. Cannot be combined with TailLines.
 	Regex string `json:"regex,omitempty"`
+	// Lines asks for the whole output as ProcessOutput.Lines, each line with
+	// the stream it came from, instead of Output. Offset, Limit, TailLines and
+	// Regex do not apply. The Commands panel colours stderr.
+	Lines bool `json:"lines,omitempty"`
+}
+
+// ProcessOutputLine is one line of a background process's output.
+type ProcessOutputLine struct {
+	// Stream is "stdout" or "stderr".
+	Stream string `json:"stream"`
+	Text   string `json:"text"`
 }
 
 // ProcessOutput is a slice of output from a background process.
@@ -293,6 +318,9 @@ type ProcessOutput struct {
 	NextOffset int `json:"next_offset"`
 	// TotalBytes is the total output size available.
 	TotalBytes int `json:"total_bytes"`
+	// Lines is the whole output, line by line, when OutputOpts.Lines asked
+	// for it.
+	Lines []ProcessOutputLine `json:"lines,omitempty"`
 }
 
 // PortInfo describes a network port a background process is listening on.
@@ -334,6 +362,14 @@ type ProcessInfo struct {
 	// env-aware proxied preview URL (empty for a fully-local/in-process daemon,
 	// whose loopback is already reachable by the user).
 	DaemonID string `json:"daemon_id,omitempty"`
+	// WorkingDir is the directory the process runs in.
+	WorkingDir string `json:"working_dir,omitempty"`
+	// WorktreeID is the workspace the process was started for
+	// (RunCommandRequest.WorktreeID); empty for an agent's own commands.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand is RunCommandRequest.PackageCommand: a Commands-panel
+	// process, listed by the panel even with no workspace.
+	PackageCommand bool `json:"package_command,omitempty"`
 }
 
 // ProcessStatusRequest is the payload of exec.bg_status: which background

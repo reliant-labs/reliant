@@ -13,12 +13,13 @@ import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
+  type HeldWorktreeSchema,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -35,7 +36,7 @@ import {
   needsSetupItem,
   questionItem,
   renderInboxAt,
-  runFinishedItem,
+  runPausedItem,
   storageItem,
   waitingItem,
 } from "./inboxTestUtils";
@@ -43,6 +44,7 @@ import {
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
   cleanupStorage: vi.fn(),
+  forgetStorageWorktree: vi.fn(),
   clearMachineCaches: vi.fn(),
   dismissInboxItem: vi.fn(),
   restoreInboxItem: vi.fn(),
@@ -108,6 +110,7 @@ beforeEach(() => {
       // The Inbox is on InboxService's generated hooks.
       "InboxService.ListInbox": (req) => mocks.listInbox(req),
       "InboxService.CleanupStorage": (req) => mocks.cleanupStorage(req),
+      "InboxService.ForgetStorageWorktree": (req) => mocks.forgetStorageWorktree(req),
       "InboxService.DismissInboxItem": (req) => mocks.dismissInboxItem(req),
       "InboxService.RestoreInboxItem": (req) => mocks.restoreInboxItem(req),
       "ApprovalService.Approve": (req) => {
@@ -267,11 +270,13 @@ describe("InboxPage item kinds", () => {
     expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1");
   });
 
-  it("a finished run opens its run", async () => {
-    respond([runFinishedItem()]);
+  it("a paused automation run says what paused it and opens the run", async () => {
+    respond([runPausedItem()]);
     const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+    const row = await screen.findByTestId("inbox-item-automation_run_paused:chat-1@20261030T082500.000000");
+    expect(within(row).getByLabelText("Automation run paused")).toBeInTheDocument();
+    expect(within(row).getByText("Paused: machine e164d47d did not answer the gate command")).toBeInTheDocument();
+    expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
@@ -283,6 +288,18 @@ describe("InboxPage item kinds", () => {
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
+  });
+
+  it("an approval that expired says what happened to it", async () => {
+    respond([approvalItem()]);
+    const message = "This request expired: No one answered before the request's time limit; nothing was approved.";
+    mocks.approve.mockRejectedValue(
+      new ConnectError(message, Code.FailedPrecondition, { "x-forge-error-reason": "approval_not_pending" }),
+    );
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    expect(await within(row).findByText(message)).toBeInTheDocument();
   });
 });
 
@@ -443,6 +460,38 @@ describe("InboxPage states", () => {
 
 
 describe("InboxPage storage item", () => {
+  it("a machine near its process limit names the largest process trees by the agent that started each", async () => {
+    respond([
+      storageItem(
+        { itemId: "storage:d-1:procs:1760000000000" },
+        {
+          diskLow: false,
+          volumes: [],
+          held: [],
+          processes: {
+            count: 5_400n,
+            limit: 7_650n,
+            refusingHeavy: true,
+            top: [
+              { chatId: "a32b6a3d-0000", chatTitle: "Release gate under 1h", command: "bash scripts/ci-gate.sh all", tasks: 4_950n, tracked: true },
+              { chatId: "", command: "nohup /tmp/blitz/gate.sh 1631", tasks: 300n },
+            ],
+          },
+        },
+      ),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:procs:1760000000000");
+    expect(within(row).getByText("MacBook processes")).toBeInTheDocument();
+    expect(
+      within(row).getByText(
+        /5,400 of 7,650 processes \(71%\) · heavy background commands paused · Release gate under 1h: `bash scripts\/ci-gate\.sh all` 4,950 · untracked: `nohup \/tmp\/blitz\/gate\.sh 1631` 300/,
+      ),
+    ).toBeInTheDocument();
+    // Nothing to free or clean up: the disk is fine.
+    expect(within(row).queryByRole("button", { name: "Free up space" })).not.toBeInTheDocument();
+  });
+
   it("names the volume that is full and what fills it, and what it kept, under its own heading", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
@@ -550,14 +599,14 @@ describe("InboxPage storage item", () => {
   });
 
   it("while a clean-up runs, Clean up is disabled and says so", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
   });
 
   it("when nothing is removable, Clean up is disabled and explains why", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const button = within(row).getByRole("button", { name: "Clean up" });
@@ -578,5 +627,57 @@ describe("InboxPage storage item", () => {
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+  });
+});
+
+// Archived workspaces whose machine was removed: no machine is on record, so
+// nothing can clean them up, and once no connected machine has the folder
+// they would sit here for good. Forget drops the record and deletes nothing.
+describe("InboxPage workspaces with no machine", () => {
+  const unowned = (held: MessageInitShape<typeof HeldWorktreeSchema>[], online = true) =>
+    storageItem({ itemId: "storage::kept" }, { daemonId: "", daemonName: "", diskLow: false, volumes: [], online, held });
+  const gone = {
+    worktreeId: "wt-gone",
+    name: "old-spike",
+    projectName: "reliant",
+    path: "/home/workspace/.reliant/worktrees/reliant/old-spike",
+    reason: "no-machine-on-record",
+    forgettable: true,
+  };
+  const unchecked = { ...gone, worktreeId: "wt-unchecked", name: "unchecked", forgettable: false };
+
+  it("Forget lists what will be forgotten, says nothing is deleted, and forgets only those", async () => {
+    mocks.forgetStorageWorktree.mockResolvedValue({});
+    respond([unowned([gone, unchecked])]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    expect(within(row).getByText("Workspaces with no machine")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Forget" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Nothing is\s+deleted from any disk/)).toBeInTheDocument();
+    const list = within(dialog).getByRole("list", { name: "Workspaces to forget" });
+    expect(within(list).getByText("old-spike")).toBeInTheDocument();
+    expect(within(list).queryByText("unchecked")).not.toBeInTheDocument();
+    const notYet = within(dialog).getByRole("list", { name: "Workspaces that cannot be forgotten yet" });
+    expect(within(notYet).getByText(/a connected machine has not been checked/)).toBeInTheDocument();
+    expect(mocks.forgetStorageWorktree).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Forget 1 workspace" }));
+    await waitFor(() => expect(mocks.forgetStorageWorktree).toHaveBeenCalledTimes(1));
+    expect(mocks.forgetStorageWorktree.mock.calls[0][0]).toMatchObject({ worktreeId: "wt-gone" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("with no machine connected nothing can be checked, so Forget is disabled and says why", async () => {
+    respond([unowned([unchecked], false)]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    const button = within(row).getByRole("button", { name: "Forget" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/connect a machine/i));
+    expect(within(row).getByText(/no machine connected to check/)).toBeInTheDocument();
+    expect(within(row).queryByText(/offline/)).not.toBeInTheDocument();
   });
 });

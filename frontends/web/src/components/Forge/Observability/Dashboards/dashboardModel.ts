@@ -20,6 +20,7 @@ import type { Dashboard, Panel } from "@/services/controlPlane/observability/typ
 import { RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import type { ChartBand } from "../charts/UPlotChart";
+import { GROUP_LABELS, groupOf, type DashboardGroup } from "./dashboardGroups";
 
 // ── Index ────────────────────────────────────────────────────────────────────
 
@@ -58,12 +59,23 @@ export interface IndexFilter {
   q?: string;
   source?: SourceFilter;
   owner?: string;
+  /** One page group (dashboardGroups.ts). */
+  group?: DashboardGroup;
+}
+
+/**
+ * What a search matches: the title, description, key (so a workload name),
+ * the tags and the group's name — across every group at once.
+ */
+function searchText(d: DashboardSummary): string {
+  return [d.title, d.description, d.ref.key, ...(d.tags ?? []), GROUP_LABELS[groupOf(d)]].join("\u0000").toLowerCase();
 }
 
 export function filterIndex(dashboards: readonly DashboardSummary[], filter: IndexFilter): DashboardSummary[] {
   const q = (filter.q ?? "").trim().toLowerCase();
   return dashboards.filter((d) => {
-    if (q && !`${d.title}\u0000${d.description}\u0000${d.ref.key}`.toLowerCase().includes(q)) return false;
+    if (q && !searchText(d).includes(q)) return false;
+    if (filter.group && groupOf(d) !== filter.group) return false;
     if (filter.source === "release" && d.ref.kind !== "release") return false;
     if (filter.source === "workspace" && d.ref.kind !== "workspace") return false;
     if (filter.owner && ownerOf(d) !== filter.owner) return false;
@@ -159,6 +171,8 @@ export interface DashboardSearch {
   alerts?: boolean;
   compare?: CompareMode;
   refresh?: RefreshInterval;
+  /** An org-scoped dashboard's picked environments, as `project/env` names; absent: every environment of the org. */
+  orgEnvs?: string[];
   /** Full screen, for a wall display. */
   tv?: boolean;
   /** Open a workspace dashboard's older version (read-only). */

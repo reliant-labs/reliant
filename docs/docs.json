@@ -19,7 +19,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Docs",
+        "tab": "Reliant",
         "groups": [
           {
             "group": "Get started",
@@ -70,7 +70,6 @@
               "cli/sign-in",
               "cli/run-a-machine",
               "cli/workflows",
-              "cli/forge",
               "cli/previews",
               "cli/scripting"
             ]
@@ -104,6 +103,7 @@
               "workflows/patterns",
               "workflows/routing",
               "workflows/testing",
+              "workflows/lint",
               "examples/workflow-snippets",
               "guides/self-improvement"
             ]
@@ -116,21 +116,6 @@
               "settings/memories",
               "features/skills",
               "settings/mcp-servers"
-            ]
-          },
-          {
-            "group": "Build & host with Forge",
-            "pages": [
-              "forge/overview",
-              "forge/project-anatomy",
-              "forge/adding-features",
-              "forge/environments-and-deploys",
-              "forge/hosting",
-              "forge/secrets",
-              "forge/custom-domains",
-              "forge/sign-in",
-              "forge/observability",
-              "forge/troubleshooting"
             ]
           },
           {
@@ -165,6 +150,48 @@
               "architecture/distributed",
               "changelog",
               "license-faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Forge",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "forge/overview",
+              "forge/quick-start"
+            ]
+          },
+          {
+            "group": "Build",
+            "pages": [
+              "forge/project-anatomy",
+              "forge/adding-features"
+            ]
+          },
+          {
+            "group": "Deploy & host",
+            "pages": [
+              "forge/environments-and-deploys",
+              "forge/hosting",
+              "forge/secrets",
+              "forge/custom-domains",
+              "forge/sign-in"
+            ]
+          },
+          {
+            "group": "Operate",
+            "pages": [
+              "forge/observability",
+              "forge/troubleshooting"
+            ]
+          },
+          {
+            "group": "Forge CLI",
+            "pages": [
+              "cli/forge"
             ]
           }
         ]

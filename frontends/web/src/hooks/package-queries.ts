@@ -87,6 +87,12 @@ export interface PackageProcess {
   start_time: string;
   end_time?: string;
   exit_code?: number;
+  /**
+   * The machine the process runs on — the one holding its workspace. Its
+   * logs, output stream and kill go there. Absent for a process the default
+   * machine runs, and for one known only from a stream event.
+   */
+  daemon_id?: string;
 }
 
 export interface OutputLine {
@@ -134,6 +140,7 @@ export function packageProcessFromProto(proto: ProtoPackageProcess): PackageProc
     start_time: proto.startTime,
     end_time: proto.endTime,
     exit_code: proto.exitCode,
+    daemon_id: proto.daemonId || undefined,
   };
 }
 
@@ -147,14 +154,19 @@ function packageProcessToProto(process: PackageProcess): ProtoPackageProcess {
     startTime: process.start_time,
     endTime: process.end_time,
     exitCode: process.exit_code,
+    daemonId: process.daemon_id ?? "",
   });
 }
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
-/** The commands a worktree (or, with none, a project directory) offers. */
-export function usePackageCommands(worktreeId?: string, path?: string) {
-  const query = useListCommands({ worktreeId, path }, { enabled: !!(worktreeId || path) });
+/**
+ * The commands a worktree (or, with none, a project directory) offers.
+ * `chatId` is the chat the panel is beside: for the main checkout, the server
+ * asks that chat's machine, as the Files tab and terminal do.
+ */
+export function usePackageCommands(worktreeId?: string, path?: string, chatId?: string) {
+  const query = useListCommands({ worktreeId, path, chatId: chatId || undefined }, { enabled: !!(worktreeId || path) });
   const response = query.data;
   const data = useMemo<ListCommandsResponse | undefined>(
     () =>
@@ -181,9 +193,9 @@ export function usePackageProcesses(worktreeId?: string) {
 // Module-level, so React Query re-maps only when the response changes.
 const packageProcessesOf = (response: ListPackageProcessesResponse) => response.processes.map(packageProcessFromProto);
 
-/** A process's captured logs, fetched while `processId` is set. */
-export function useProcessLogs(processId: string | null) {
-  const query = useGetPackageProcessLogs({ processId: processId ?? "" }, { enabled: !!processId });
+/** A process's captured logs, read from its machine, fetched while `processId` is set. */
+export function useProcessLogs(processId: string | null, daemonId?: string) {
+  const query = useGetPackageProcessLogs({ processId: processId ?? "", daemonId }, { enabled: !!processId });
   const response = query.data;
   const data = useMemo<ProcessLogsResponse | undefined>(
     () =>
@@ -215,6 +227,8 @@ export function useCommandFavorites(projectId: string | undefined) {
 export interface RunCommandInput {
   worktreeId?: string;
   path?: string;
+  /** The chat the panel is beside; picks the machine for the main checkout. */
+  chatId?: string;
   commandName: string;
   packageType: PackageType;
   /** The directory to run from (the command's working_dir). */
@@ -227,6 +241,7 @@ export function runCommandRequest(input: RunCommandInput) {
   return {
     worktreeId: input.worktreeId,
     path: input.path,
+    chatId: input.chatId || undefined,
     commandName: input.commandName,
     packageType: STRING_TO_PACKAGE_TYPE[input.packageType] ?? ProtoPackageType.MAKEFILE,
     env: input.env ?? {},
@@ -237,7 +252,10 @@ export function runCommandRequest(input: RunCommandInput) {
 /** Run a command (`mutateAsync(runCommandRequest(...))`); refetches the process lists. */
 export const useRunCommand = useRunCommandRpc;
 
-/** Stop a process a command started (`mutateAsync({ processId })`); refetches the process lists. */
+/**
+ * Stop a process a command started (`mutateAsync({ processId, daemonId })`,
+ * daemonId being the process's machine); refetches the process lists.
+ */
 export const useKillPackageProcess = useKillPackageProcessRpc;
 
 /**
@@ -285,11 +303,23 @@ function patchList(worktreeId: string | undefined, update: (processes: ProtoPack
  * A process started, finished or failed. One a list already holds takes the
  * event's status, exit code and end time; an unknown one is added. Lists that
  * were never fetched are left alone: their first fetch is current.
+ *
+ * An unknown process the event does not place on a machine is not added: its
+ * logs and kill go to the machine the row names, and a row naming none would
+ * send them to the default machine. The lists are refetched instead, and the
+ * server's answer says where each process runs.
  */
 export function upsertPackageProcess(process: PackageProcess): void {
+  let unplaced = false;
   patchList(process.worktree_id, (processes) => {
     const index = processes.findIndex((p) => p.id === process.id);
-    if (index < 0) return [packageProcessToProto(process), ...processes];
+    if (index < 0) {
+      if (!process.daemon_id) {
+        unplaced = true;
+        return processes;
+      }
+      return [packageProcessToProto(process), ...processes];
+    }
     const existing = processes[index]!;
     const next = [...processes];
     next[index] = create(PackageProcessSchema, {
@@ -297,7 +327,11 @@ export function upsertPackageProcess(process: PackageProcess): void {
       status: process.status,
       exitCode: process.exit_code,
       endTime: process.end_time,
+      daemonId: existing.daemonId || (process.daemon_id ?? ""),
     });
     return next;
   });
+  // The empty request is a prefix of every list's key, so this refetches the
+  // per-worktree lists too.
+  if (unplaced) void queryClient.invalidateQueries({ queryKey: packageCommandsServiceKeys.listProcesses({}) });
 }

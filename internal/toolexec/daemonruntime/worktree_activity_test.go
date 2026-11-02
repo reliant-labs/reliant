@@ -223,7 +223,7 @@ func TestRecoveryAggregateSiblingCheckoutsFencesSetAndLatestActivity(t *testing.
 }
 
 func TestRecoveryAdmissionOnlyExactLifecycleExemptions(t *testing.T) {
-	for _, name := range []string{"worktree.recovery_finalize"} {
+	for _, name := range []string{"worktree.recovery_finalize", "worktree.reconcile"} {
 		if !recoveryLifecycleCommand(name) {
 			t.Fatal(name)
 		}

@@ -100,7 +100,7 @@ function SecretField({ label, value, testId }: { label: string; value: string; t
           spellCheck={false}
           autoComplete="off"
           onFocus={(event) => event.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-md border border-border/60 bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-ink focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          className="min-w-0 flex-1 rounded-md border border-border/60 bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-ink focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <Button
           variant="outline"

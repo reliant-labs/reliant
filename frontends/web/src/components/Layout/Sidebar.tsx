@@ -32,6 +32,7 @@ import {
   SortDesc,
   Bell,
   GitBranch,
+  Folder,
   MessageSquare,
   Search,
   Settings,
@@ -41,10 +42,10 @@ import {
   MessageCircleQuestion,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
-import { useChat, useChatListWithWorkspaces, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
+import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
 import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
-import { isAdoptedAutomation, isAutomationLaunch, withOpenChatPinned } from "../../lib/sidebarChatList";
+import { isAdoptedAutomation, isRun, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
@@ -61,11 +62,14 @@ import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { ProjectMark } from "./ProjectMark";
 import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import Tooltip from "../forge-ui/tooltip";
 import Button from "@/components/forge-ui/button";
+import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
+import { createPortal } from "react-dom";
 import ContextMenu from "../forge-ui/context_menu";
 import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
@@ -77,8 +81,8 @@ import {
 } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import DropdownMenu from "../forge-ui/dropdown_menu";
-import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
+import { CHAT_ROW_CHIP_CLASS, chatRowChip, type ChatRowChip } from "./chatRowStatus";
 import {
   useActivityStore,
   activityToDotState,
@@ -89,7 +93,7 @@ import {
 import { archiveWorktree } from "../../hooks/worktree-actions";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring";
 const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";
 const CHAT_HEADER_ACTION_TOOLTIP_CLASS = "flex shrink-0";
 
@@ -191,7 +195,7 @@ function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut
       className={cn(
         "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
         "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-        "focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "focus:outline-none focus:ring-2 focus:ring-ring",
         "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
       )}
       data-testid={testId}
@@ -221,6 +225,11 @@ interface ArchivedChatGroup {
   worktreeId?: string; // Original worktree ID if available
   chats: ChatWithActivity[];
   isWorktreeArchived: boolean; // True if the worktree itself is archived
+  /**
+   * Set when the group is a whole project (All projects): `worktreeName` is
+   * then the project's name, and each row names its own workspace.
+   */
+  projectId?: string;
 }
 
 interface ChatWithActivity extends Chat {
@@ -237,6 +246,40 @@ interface ChatWithActivity extends Chat {
 /** The navigation store's rule, so keyboard triage walks the list as sorted. */
 const chatNeedsAttention = (chat: ChatWithActivity) =>
   activityNeedsAttention(chat.liveActivity, chat.unread);
+
+/** A chat with no title yet. Not "New chat": that is the button above the list. */
+const UNTITLED_CHAT = "Untitled chat";
+
+/**
+ * Up/Down (and Home/End) move focus between chat rows, in the order they are
+ * drawn, across groups. Enter or Space on a row opens it (it is a button).
+ */
+function onChatListKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+  const target = event.target as HTMLElement;
+  if (!target.matches("[data-chat-row]")) return;
+  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-chat-row]"));
+  const index = rows.indexOf(target);
+  if (index === -1) return;
+  let next: number;
+  switch (event.key) {
+    case "ArrowDown":
+      next = Math.min(rows.length - 1, index + 1);
+      break;
+    case "ArrowUp":
+      next = Math.max(0, index - 1);
+      break;
+    case "Home":
+      next = 0;
+      break;
+    case "End":
+      next = rows.length - 1;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  rows[next]?.focus();
+}
 
 // Shared utility - avoids duplicate definitions in ChatItem/ArchivedChatItem
 function getRelativeTime(timestamp: string): string {
@@ -263,8 +306,13 @@ interface ChatItemProps {
   inGroup?: boolean;
   editingChatId: string | null;
   editingTitle: string;
+  /** Out of a group (the flat list): the chat's project, when the list spans several. */
+  projectName?: string;
+  /** Out of a group: the chat's workspace branch, when it is worth naming. */
   workspaceBranch?: string;
   activeChatId: string | null;
+  /** The one row in the tab order (the open chat, else the first). */
+  isTabStop?: boolean;
   onChatClick: (chat: ChatWithActivity) => void;
   onContextMenu: (e: React.MouseEvent, chat: ChatWithActivity) => void;
   onEditingTitleChange: (title: string) => void;
@@ -278,8 +326,10 @@ const ChatItem = memo(function ChatItem({
   inGroup = false,
   editingChatId,
   editingTitle: propsEditingTitle,
+  projectName,
   workspaceBranch,
   activeChatId,
+  isTabStop = false,
   onChatClick,
   onContextMenu,
   onEditingTitleChange,
@@ -288,85 +338,35 @@ const ChatItem = memo(function ChatItem({
   onArchiveChat,
 }: ChatItemProps) {
   const isActive = activeChatId === chat.id;
-  // Needs-input, the run dot and unread are separate indicators: a chat can
-  // need an answer while other agents keep running, and either is a different
-  // thing from having unread messages.
+  // Needs-input, the run status and unread are separate indicators: a chat
+  // can need an answer while other agents keep running, and either is a
+  // different thing from having unread messages.
   const { needsInput, status: runStatus, unread } = chatListIndicators({
     activity: chat.liveActivity,
     workingThreads: chat.liveWorkingThreads,
     unread: chat.unread,
   });
-  const chatTitle = chat.title || "New chat";
+  const chip = chatRowChip({ needsInput, status: runStatus });
+  const chatTitle = chat.title || UNTITLED_CHAT;
   const isEditing = editingChatId === chat.id;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
-  return (
-    <div
-      data-chat-id={chat.id}
-      className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left font-sans text-xs transition-all duration-150",
-        isActive
-          ? "border-primary bg-primary/10 text-foreground font-semibold"
-          : needsInput
-            ? "border-warning/40 bg-warning/5 text-foreground hover:bg-warning/10"
-            : runStatus
-              ? "border-success/30 bg-success/5 text-foreground hover:bg-success/10"
-              : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
-        "active:scale-[0.99]"
-      )}
-      onClick={() => onChatClick(chat)}
-      onContextMenu={(e) => onContextMenu(e, chat)}
-    >
+  const content = (
+    <>
       {unread && (
-        <Tooltip content="Unread messages" side="top" delay={300} triggerClassName="block">
-          <div
-            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
-            data-testid={`chat-unread-dot-${chat.id}`}
-            role="img"
-            aria-label="Unread messages"
-          />
-        </Tooltip>
+        <span
+          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
+          data-testid={`chat-unread-dot-${chat.id}`}
+          role="img"
+          aria-label="Unread messages"
+        />
       )}
 
-      {needsInput && (
-        <div
-          className="relative flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
-          data-testid={`chat-needs-input-${chat.id}`}
-          data-activity-state={chat.activityState}
-        >
-          <Tooltip content={needsInput.label} side="left" delay={300}>
-            <span role="img" aria-label={needsInput.label} className="flex">
-              <MessageCircleQuestion className="h-3.5 w-3.5 text-warning-ink" aria-hidden="true" />
-              {/* Agents still running beside the question: the running dot,
-                  tucked into the glyph's corner. The label above says it. */}
-              {runStatus && (
-                <span
-                  className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full bg-success ring-2 ring-card animate-pulse motion-reduce:animate-none"
-                  data-testid={`chat-needs-input-running-${chat.id}`}
-                  aria-hidden="true"
-                />
-              )}
-            </span>
-          </Tooltip>
-        </div>
-      )}
-
-      {!needsInput && runStatus && (
-        <div 
-          className="flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
-          data-testid={`chat-activity-dot-${chat.id}`}
-          data-activity-state={chat.activityState}
-        >
-          <Tooltip content={runStatus.label} side="left" delay={300}>
-            <RunStatusDot status={runStatus} size="lg" />
-          </Tooltip>
-        </div>
-      )}
-
-      <div className={cn("flex-1 min-w-0 transition-all duration-200")}>
+      <span className="flex-1 min-w-0">
         {isEditing ? (
           <input
             type="text"
+            aria-label="Chat title"
             value={propsEditingTitle}
             onChange={(e) => onEditingTitleChange(e.target.value)}
             onKeyDown={(e) => {
@@ -381,50 +381,91 @@ const ChatItem = memo(function ChatItem({
             onBlur={() => onSaveRename(chat.id)}
             onClick={(e) => e.stopPropagation()}
             autoFocus
-            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
           />
         ) : (
-          <div className="flex min-w-0 items-center gap-1.5">
-            {isAutomationLaunch(chat.launchKind) && <AutomationOriginGlyph chat={chat} />}
-            <div className="truncate group-hover:text-foreground transition-colors duration-200">
+          <span className="flex min-w-0 items-center gap-1.5">
+            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
+            <span className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>
               {chatTitle}
-            </div>
-          </div>
-        )}
-        {!inGroup && workspaceBranch && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <GitBranch className="w-2.5 h-2.5 text-muted-foreground/60" />
-            <span className="text-2xs text-muted-foreground/60 truncate max-w-[120px]">
-              {workspaceBranch}
             </span>
-          </div>
+          </span>
         )}
-      </div>
+        {!inGroup && (projectName || workspaceBranch) && (
+          <ChatWhere chatId={chat.id} projectName={projectName} workspaceBranch={workspaceBranch} />
+        )}
+      </span>
 
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {chip && <ChatStatusChip chatId={chat.id} chip={chip} activityState={chat.activityState} runningBeside={!!needsInput && !!runStatus} />}
+    </>
+  );
+
+  return (
+    <div
+      data-chat-id={chat.id}
+      className={cn(
+        "group relative flex w-full items-center gap-1 overflow-hidden rounded-md border-l-2 border-transparent font-sans text-xs transition-colors duration-150",
+        // Only "needs you" tints a row; running and failed say so in their
+        // chip. Green is for success, and no row is painted for one.
+        isActive
+          ? "border-primary bg-primary/10 text-foreground font-semibold"
+          : needsInput
+            ? "border-warning/40 bg-warning/5 text-foreground hover:bg-warning/10"
+            : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
+      )}
+      onContextMenu={(e) => onContextMenu(e, chat)}
+    >
+      {isEditing ? (
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5">{content}</div>
+      ) : (
+        // The row's primary action is a real button: focusable, announced
+        // with its status, and Up/Down move between rows (the list's keydown
+        // handler). Only one row is in the tab order.
+        <button
+          type="button"
+          data-chat-row
+          tabIndex={isTabStop ? 0 : -1}
+          aria-current={isActive ? "true" : undefined}
+          onClick={() => onChatClick(chat)}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99]"
+        >
+          {content}
+        </button>
+      )}
+
+      {/* Hover-only, and out of the layout until then (hidden, not
+          invisible): an invisible button still takes the title's width. */}
+      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
         <Tooltip content="More options" side="left" delay={300} type="label">
           <button
             type="button"
             aria-haspopup="menu"
+            aria-label={`More options for ${chatTitle}`}
             onClick={(e) => onContextMenu(e, chat)}
-            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
+            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MoreVertical className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
           </button>
         </Tooltip>
       </div>
 
-      <div className="flex-shrink-0 relative flex items-center justify-center min-w-[2rem]">
-        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
+      <div className="flex-shrink-0 relative mr-1 flex items-center justify-center min-w-[2rem]">
+        <time
+          dateTime={chat.updatedAt || chat.createdAt}
+          title={new Date(chat.updatedAt || chat.createdAt).toLocaleString()}
+          className="text-xs text-muted-foreground transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0"
+        >
           {relativeTime}
-        </span>
+        </time>
         <Tooltip content="Archive chat" side="left" delay={300}>
           <button
+            type="button"
+            aria-label={`Archive ${chatTitle}`}
             onClick={(e) => {
               e.stopPropagation();
               onArchiveChat(chat.id);
             }}
-            className="opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center"
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Archive className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
           </button>
@@ -434,20 +475,122 @@ const ChatItem = memo(function ChatItem({
   );
 });
 
+/**
+ * A row's status as a word in a chip. The testids are the indicators the
+ * activity tests pin: needs-input (with the "agents still running" dot when
+ * work continues beside the question) and the run status.
+ */
+function ChatStatusChip({
+  chatId,
+  chip,
+  activityState,
+  runningBeside,
+}: {
+  chatId: string;
+  chip: ChatRowChip;
+  activityState: string;
+  runningBeside: boolean;
+}) {
+  const attention = chip.tone === "attention";
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-2xs font-medium leading-4",
+        CHAT_ROW_CHIP_CLASS[chip.tone],
+      )}
+      data-testid={attention ? `chat-needs-input-${chatId}` : `chat-activity-dot-${chatId}`}
+      data-activity-state={activityState}
+      data-tone={chip.tone}
+    >
+      <span role="img" aria-label={chip.detail ?? chip.label} className="inline-flex items-center gap-1">
+        {attention ? (
+          <MessageCircleQuestion className="h-3 w-3" aria-hidden="true" />
+        ) : (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              chip.tone === "running"
+                ? "bg-primary animate-pulse motion-reduce:animate-none"
+                : chip.tone === "failed"
+                  ? "bg-destructive"
+                  : "bg-muted-foreground",
+            )}
+          />
+        )}
+        <span aria-hidden="true">{chip.label}</span>
+      </span>
+      {/* Agents still running beside the question. The label above says it. */}
+      {runningBeside && (
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse motion-reduce:animate-none"
+          data-testid={`chat-needs-input-running-${chatId}`}
+          aria-hidden="true"
+        />
+      )}
+    </span>
+  );
+}
+
+/**
+ * A row's "where", under its title when no header above it says so: the
+ * project first (a folder glyph and its name, the stronger of the two), then
+ * the workspace branch. Real text, so a screen reader hears it with the title.
+ */
+function ChatWhere({
+  chatId,
+  projectName,
+  workspaceBranch,
+}: {
+  chatId: string;
+  projectName?: string;
+  workspaceBranch?: string;
+}) {
+  return (
+    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+      {projectName && (
+        <span className="flex min-w-0 items-center gap-1" data-testid={`chat-project-${chatId}`}>
+          <Folder className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+          <span className="truncate font-medium text-foreground/70">{projectName}</span>
+        </span>
+      )}
+      {workspaceBranch && (
+        <span className="flex min-w-0 items-center gap-1">
+          <GitBranch className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{workspaceBranch}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 // --- Extracted ArchivedChatItem (module-level for stable identity + React.memo) ---
 
 interface ArchivedChatItemProps {
   chat: ChatWithActivity;
   activeChatId: string | null;
+  /** The one row in the tab order (the open chat, else the first). */
+  isTabStop?: boolean;
+  /** The chat's project, when no header above the row names it. */
+  projectName?: string;
+  /** The chat's workspace, when no header above the row names it. */
+  workspaceName?: string;
 }
 
-const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: ArchivedChatItemProps) {
+const ArchivedChatItem = memo(function ArchivedChatItem({
+  chat,
+  activeChatId,
+  isTabStop = false,
+  projectName,
+  workspaceName,
+}: ArchivedChatItemProps) {
   const chatId = chat.id;
-  const chatTitle = chat.title || "New chat";
+  const chatTitle = chat.title || UNTITLED_CHAT;
   const isActive = activeChatId === chatId;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
-  const deleteChatMutation = useDeleteChat();
+  const deleteChatMutation = usePermanentlyDeleteChat();
   const unarchiveMutation = useUnarchiveChat();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const handleViewChat = () => {
     // The chat may be in another project: openChat moves the context there.
@@ -458,58 +601,96 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
     unarchiveMutation.mutate(chatId);
   };
 
-  const handleDelete = () => {
-    deleteChatMutation.mutate(chatId);
+  // Deleting an archived chat is permanent, so it asks first — it used to be
+  // one click on a hover icon, with no confirmation and no undo.
+  const handleDelete = async () => {
+    try {
+      await deleteChatMutation.mutateAsync(chatId);
+      setConfirmingDelete(false);
+      toast.success(`Deleted "${chatTitle}"`);
+    } catch (error) {
+      setConfirmingDelete(false);
+      void toast.error(error);
+    }
   };
 
   return (
     <div
       data-chat-id={chatId}
       className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left font-sans text-xs transition-all duration-150",
+        "group relative flex w-full items-center gap-1 overflow-hidden rounded-md border-l-2 border-transparent font-sans text-xs transition-colors duration-150",
         isActive
           ? "border-primary bg-primary/10 text-foreground font-semibold"
           : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
-        "active:scale-[0.99]"
       )}
-      onClick={handleViewChat}
     >
-      <div className="flex-1 min-w-0 transition-all duration-200">
-        <div className="truncate group-hover:text-foreground transition-colors duration-200">
-          {chatTitle}
-        </div>
-      </div>
+      <button
+        type="button"
+        data-chat-row
+        tabIndex={isTabStop ? 0 : -1}
+        aria-current={isActive ? "true" : undefined}
+        onClick={handleViewChat}
+        className="flex min-w-0 flex-1 cursor-pointer flex-col items-stretch rounded-md px-2.5 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.99]"
+      >
+        <span className="truncate group-hover:text-foreground transition-colors duration-200" title={chatTitle}>{chatTitle}</span>
+        {(projectName || workspaceName) && (
+          <ChatWhere chatId={chatId} projectName={projectName} workspaceBranch={workspaceName} />
+        )}
+      </button>
 
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div className="hidden flex-shrink-0 group-hover:block group-focus-within:block">
         <Tooltip content="Restore chat" side="left" delay={300}>
           <button
+            type="button"
+            aria-label={`Restore ${chatTitle}`}
             onClick={(e) => {
               e.stopPropagation();
               handleRestore();
             }}
-            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
+            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <RotateCcw className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
           </button>
         </Tooltip>
       </div>
 
-      <div className="flex-shrink-0 relative flex items-center justify-center min-w-[2rem]">
-        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
+      <div className="flex-shrink-0 relative mr-1 flex items-center justify-center min-w-[2rem]">
+        <time
+          dateTime={chat.updatedAt || chat.createdAt}
+          title={new Date(chat.updatedAt || chat.createdAt).toLocaleString()}
+          className="text-xs text-muted-foreground transition-opacity duration-200 group-hover:opacity-0 group-focus-within:opacity-0"
+        >
           {relativeTime}
-        </span>
-        <Tooltip content="Delete chat" side="left" delay={300}>
+        </time>
+        <Tooltip content="Delete permanently" side="left" delay={300}>
           <button
+            type="button"
+            aria-label={`Delete ${chatTitle} permanently`}
+            aria-haspopup="dialog"
             onClick={(e) => {
               e.stopPropagation();
-              handleDelete();
+              setConfirmingDelete(true);
             }}
-            className="opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center"
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Trash2 className="w-3 h-3 text-destructive hover:text-destructive/80 transition-colors duration-200" />
           </button>
         </Tooltip>
       </div>
+
+      {/* Portalled: a row clips its overflow, and the list scrolls. */}
+      {confirmingDelete && createPortal(
+      <ConfirmationDialog
+        open={confirmingDelete}
+        title={`Delete "${chatTitle}" permanently?`}
+        description="The chat and all of its messages are deleted for good. This can't be undone. Restore it instead to keep it."
+        confirmLabel="Delete permanently"
+        loading={deleteChatMutation.isPending}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirmingDelete(false)}
+      />,
+      document.body,
+      )}
     </div>
   );
 });
@@ -534,7 +715,21 @@ interface WorktreeGroupComponentProps {
     message: string;
     onClick?: () => void;
   };
+  /**
+   * Inside a project section (All projects): the workspace is the level
+   * under the project, so its header is a quiet branch label, not a second
+   * heading that outweighs the project's.
+   */
+  nested?: boolean;
+  /**
+   * No header at all: the project's main workspace when it is the project's
+   * only one, whose chats then sit directly under the project.
+   */
+  hideHeader?: boolean;
 }
+
+/** A workspace header's hover-only action: no box at all until the header is hovered or focused. */
+const HEADER_HOVER_ACTION = "hidden group-hover/header:inline-flex group-focus-within/header:inline-flex";
 
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   id: _id,
@@ -551,26 +746,41 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   onArchiveWorktree,
   onContextMenu,
   emptyState,
+  nested = false,
+  hideHeader = false,
 }: WorktreeGroupComponentProps) {
+  if (hideHeader) {
+    return (
+      <div className="space-y-0.5" data-testid="sidebar-workspace-chats">
+        {chats.map((chat) => (
+          <div key={chat.id}>{renderChat(chat)}</div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="mb-1">
       {/* Worktree Container */}
       <div
         className={cn(
           "overflow-hidden rounded-md transition-all duration-150",
-          hasActiveChat
-            ? "bg-primary/10"
-            : "bg-transparent hover:bg-muted/30"
+          nested
+            ? "bg-transparent"
+            : hasActiveChat
+              ? "bg-foreground/5"
+              : "bg-transparent hover:bg-muted/30"
         )}
       >
         {/* Header */}
         <div
-          className="group/header flex h-8 w-full items-center gap-1"
+          className={cn("group/header flex w-full items-center gap-1", nested ? "h-7" : "h-8")}
           onContextMenu={(e) => onContextMenu?.(e)}
         >
           <button
+            type="button"
             onClick={onToggle}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left transition-all duration-150"
+            aria-expanded={isExpanded}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="flex h-4 w-4 shrink-0 items-center justify-center">
               {icon}
@@ -579,9 +789,14 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
               <div
                 className={cn(
-                  "min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide",
-                  hasActiveChat ? "text-primary" : "text-muted-foreground"
+                  "min-w-0 flex-1 truncate text-xs",
+                  // Sentence case, one weight: a group label, not a heading
+                  // that shouts. The active group is foreground, not the
+                  // accent, so it does not read as a link.
+                  "font-medium",
+                  hasActiveChat ? "text-foreground" : "text-muted-foreground"
                 )}
+                title={title}
               >
                 {title}
               </div>
@@ -603,52 +818,63 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             <span
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-2xs font-medium",
-                hasActiveChat ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                hasActiveChat ? "bg-primary/10 text-primary-ink" : "bg-muted text-muted-foreground"
               )}
             >
               {chatCount}
             </span>
           )}
 
-          {/* New Chat Button - shows on hover */}
+          {/* New Chat and Archive show on hover or focus, and take no width
+              until then (hidden, not opacity-0): at the default sidebar width
+              two invisible buttons left a workspace's name ~87px. */}
           {onNewChat && (
             <Tooltip
               content="New chat in this workspace"
               side="left"
               delay={300}
+              triggerClassName={HEADER_HOVER_ACTION}
             >
               <button
+                type="button"
+                aria-label={`New chat in ${title}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onNewChat();
                 }}
-                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
+                className="flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
             </Tooltip>
           )}
 
-          {/* Archive Workspace Button - shows on hover */}
           {onArchiveWorktree && (
             <Tooltip
               content="Archive this workspace"
               side="left"
               delay={300}
+              triggerClassName={HEADER_HOVER_ACTION}
             >
               <button
+                type="button"
+                aria-label={`Archive ${title}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onArchiveWorktree();
                 }}
-                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
+                className="flex-shrink-0 rounded p-1 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
             </Tooltip>
           )}
 
+          {/* The same toggle as the title, for the mouse: one tab stop is enough. */}
           <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
             onClick={onToggle}
             className="flex flex-shrink-0 items-center rounded p-1 transition-all duration-150 hover:bg-muted/60"
           >
@@ -662,7 +888,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
         {/* Chats List */}
         {isExpanded && chats.length > 0 && (
-          <div className="space-y-0.5 pb-1 pt-0.5 pl-6">
+          <div className={cn("space-y-0.5 pb-1 pt-0.5", nested ? "pl-4" : "pl-6")}>
             {chats.map((chat) => (
               <div key={chat.id}>{renderChat(chat)}</div>
             ))}
@@ -705,7 +931,12 @@ function SidebarComponent({
   const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
   const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
   const { projects } = useProjects();
-  const { data: chatList } = useChatListWithWorkspaces(projectFilterId);
+  const {
+    data: chatList,
+    isPending: chatListPending,
+    isError: chatListFailed,
+    refetch: refetchChatList,
+  } = useChatListWithWorkspaces(projectFilterId);
   const newChatShortcut = useShortcutLabel("newChat");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
@@ -715,6 +946,8 @@ function SidebarComponent({
     () => (projectFilterId ? projects.filter((p) => p.id === projectFilterId) : projects),
     [projects, projectFilterId],
   );
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const projectNameOf = useCallback((projectId: string) => projectNames.get(projectId), [projectNames]);
   // Get active chat from navigation store
   const activeChatId = useChatStore((state) => state.activeChatId);
   // The open chat stays in the list even when the server left it out (§6.2
@@ -735,7 +968,9 @@ function SidebarComponent({
       }),
     [listedChats, openedChat, activeChatId, projectFilterId, releasedChatId],
   );
-  const listedChatIds = useMemo(() => new Set(listedChats.map((chat) => chat.id)), [listedChats]);
+  // The rows the list renders: a run counted here has its own row, so the
+  // automation pill does not count it again.
+  const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
   // ONE condition: the experimental gate. While the forge UI is unreleased this
   // is off in a packaged build, so the entry does not exist for anyone who has
   // not opted in.
@@ -765,7 +1000,7 @@ function SidebarComponent({
   }, []);
 
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
-  const deleteChatMutation = useDeleteChat();
+  const archiveChatMutation = useArchiveChat();
   const renameChatMutation = useRenameChat();
   const markUnreadMutation = useMarkUnread();
   const unarchiveMutation = useUnarchiveChat();
@@ -912,10 +1147,25 @@ function SidebarComponent({
     // Create flat list for flat view mode
     const flatList = sortChatList(activeWorktreeChats);
 
-    // Group archived chats by worktree_name (similar to active chats grouping)
+    // Group archived chats by project across projects, as the active list
+    // does (two projects' "main" workspaces used to merge into one group
+    // that named neither), and by workspace within one project.
     const archivedGroupsMap = new Map<string, ArchivedChatGroup>();
 
     archivedList.forEach((chat) => {
+      if (!projectFilterId) {
+        const groupKey = `project:${chat.projectId}`;
+        if (!archivedGroupsMap.has(groupKey)) {
+          archivedGroupsMap.set(groupKey, {
+            worktreeName: projectNames.get(chat.projectId) ?? "Project",
+            chats: [],
+            isWorktreeArchived: false,
+            projectId: chat.projectId,
+          });
+        }
+        archivedGroupsMap.get(groupKey)!.chats.push(chat);
+        return;
+      }
       // Use worktree_name from archived chat metadata, or worktree_id, or fallback to "Unknown Workspace"
       const groupKey = chat.worktreeName || chat.worktreeId || "unknown";
       const displayName = chat.worktreeName || "Unknown Workspace";
@@ -957,7 +1207,24 @@ function SidebarComponent({
     mainWorktrees,
     projectFilterId,
     scopedProjects,
+    projectNames,
   ]);
+
+  // The one chat row in the tab order: the open chat when the list shows it,
+  // else the first row. Up/Down (onChatListKeyDown) move between rows; Tab
+  // leaves the list rather than walking every chat.
+  const tabStopChatId = useMemo(() => {
+    const ordered =
+      chatListTab === "archived"
+        ? filteredArchivedChats
+        : viewMode === "flat"
+          ? flatList
+          : (projectFilterId ? activeGroups : projectGroups.flatMap((group) => group.workspaces)).flatMap(
+              (group) => group.chats,
+            );
+    if (activeChatId && ordered.some((chat) => chat.id === activeChatId)) return activeChatId;
+    return ordered[0]?.id ?? null;
+  }, [chatListTab, filteredArchivedChats, viewMode, flatList, projectFilterId, activeGroups, projectGroups, activeChatId]);
 
   // The global New chat: the filter's project, else the open chat's, else the
   // last one used (openNewChat).
@@ -1030,7 +1297,7 @@ function SidebarComponent({
         return;
       }
 
-      const currentTitle = chat.title || "New chat";
+      const currentTitle = chat.title || UNTITLED_CHAT;
 
       // Update state immediately - React will batch these updates
       setEditingChatId(chatId);
@@ -1043,7 +1310,7 @@ function SidebarComponent({
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return;
 
-    const currentTitle = chat.title || "New chat";
+    const currentTitle = chat.title || UNTITLED_CHAT;
     const newTitle = editingTitle.trim();
 
     if (newTitle && newTitle !== currentTitle) {
@@ -1051,7 +1318,7 @@ function SidebarComponent({
         await renameChatMutation.mutateAsync({ chatId, title: newTitle });
       } catch (error) {
         console.error("Failed to rename chat:", error);
-        alert("Failed to rename chat. Please try again.");
+        void toast.error(error);
       }
     }
 
@@ -1114,12 +1381,14 @@ function SidebarComponent({
     return [
       { items: menuItems },
       {
+        // Archive, as the row's own button does, with the same Undo. It was
+        // labelled "Delete" in red while it archived; deleting for good is
+        // only offered on an archived chat, behind a confirmation.
         items: [
           {
-            label: "Delete",
-            icon: <Trash2 className="w-4 h-4" />,
-            onClick: () => deleteChatMutation.mutate(chatId),
-            variant: "danger",
+            label: "Archive",
+            icon: <Archive className="w-4 h-4" />,
+            onClick: () => void handleArchiveChat(chatId),
           },
         ],
       },
@@ -1167,7 +1436,12 @@ function SidebarComponent({
   );
 
   const handleArchiveChat = useCallback(async (chatId: string) => {
-    await deleteChatMutation.mutateAsync(chatId);
+    try {
+      await archiveChatMutation.mutateAsync(chatId);
+    } catch (error) {
+      void toast.error(error);
+      return;
+    }
     toast.notify("Chat archived", {
       action: {
         label: "Undo",
@@ -1176,7 +1450,7 @@ function SidebarComponent({
         },
       },
     });
-  }, [deleteChatMutation, unarchiveMutation]);
+  }, [archiveChatMutation, unarchiveMutation]);
 
   // Reveal the active chat (switch tab, expand its group, scroll it into view)
   // when the selection changes — e.g. via keyboard navigation.
@@ -1293,12 +1567,18 @@ function SidebarComponent({
 
   // Memoized icon to avoid new JSX reference each render
   const worktreeIcon = useMemo(
-    () => <FolderGit2 className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />,
+    () => <FolderGit2 className="w-3.5 h-3.5 text-primary-ink/80 flex-shrink-0" />,
+    []
+  );
+  const nestedWorktreeIcon = useMemo(
+    () => <GitBranch className="w-3 h-3 text-muted-foreground flex-shrink-0" aria-hidden="true" />,
     []
   );
 
+  // `layout`: a workspace inside a project section is nested under it, and
+  // the project's only workspace, its main one, has no header of its own.
   const renderWorktreeGroup = useCallback(
-    (group: ChatGroup) => {
+    (group: ChatGroup, layout: { nested?: boolean; hideHeader?: boolean } = {}) => {
       // Handle main branch (no worktree) special case
       const isNoWorktree = group.worktreeId.startsWith("no-worktree");
       const isExpanded = isNoWorktree
@@ -1353,7 +1633,9 @@ function SidebarComponent({
           id={group.worktreeId}
           title={group.worktreeBranch}
           subtitle={null}
-          icon={worktreeIcon}
+          icon={layout.nested ? nestedWorktreeIcon : worktreeIcon}
+          nested={layout.nested}
+          hideHeader={layout.hideHeader}
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
@@ -1365,6 +1647,7 @@ function SidebarComponent({
               editingChatId={editingChatId}
               editingTitle={editingTitle}
               activeChatId={activeChatId}
+              isTabStop={chat.id === tabStopChatId}
               onChatClick={handleChatClick}
               onContextMenu={handleChatContextMenu}
               onEditingTitleChange={setEditingTitle}
@@ -1385,9 +1668,11 @@ function SidebarComponent({
       expandedWorktreeGroups,
       isNoWorktreeExpanded,
       activeChatId,
+      tabStopChatId,
       editingChatId,
       editingTitle,
       worktreeIcon,
+      nestedWorktreeIcon,
       handleChatClick,
       handleChatContextMenu,
       handleSaveRename,
@@ -1400,54 +1685,91 @@ function SidebarComponent({
 
   // A project section of the All projects view: the project's name, its chat
   // count, New chat in this project, and its workspace groups.
+  //
+  // The project is the strongest level of the list, so which project a chat
+  // is in reads at a glance: a project mark and the name at body size, a
+  // header that stays pinned while its chats scroll under it, and a guide
+  // line down the chats it holds. Its workspaces are quiet branch labels
+  // under it, and a project whose only workspace is main lists its chats
+  // directly: a "main" header under every project said nothing.
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
     const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
     const hasActiveChat = group.chats.some((chat) => chat.id === activeChatId);
     const toggle = () =>
       setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
+    const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
+    const mainWorkspace = onlyMain ? group.workspaces[0] : undefined;
     return (
       <section
         key={group.projectId}
         aria-label={group.projectName}
         data-testid={`sidebar-project-${group.projectId}`}
       >
-        <div className="group/project flex h-7 items-center gap-1">
+        <div
+          className="group/project sticky top-0 z-10 -mx-1 flex h-8 items-center gap-1 bg-card px-1"
+          data-testid={`sidebar-project-header-${group.projectId}`}
+          // The main workspace's header is folded into the project's, so its
+          // actions are here.
+          onContextMenu={
+            mainWorkspace && !mainWorkspace.worktreeId.startsWith("no-worktree")
+              ? (e) => handleWorktreeContextMenu(e, mainWorkspace.worktreeId)
+              : undefined
+          }
+        >
           <button
             type="button"
             onClick={toggle}
             aria-expanded={isExpanded}
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-semibold transition-colors",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              hasActiveChat ? "text-primary" : "text-foreground/80 hover:text-foreground",
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left text-sm font-semibold transition-colors",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              hasActiveChat ? "text-primary-ink" : "text-foreground",
             )}
           >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
+            <ProjectMark name={group.projectName} active={hasActiveChat} />
             <span className="min-w-0 truncate">{group.projectName}</span>
+            {isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
           </button>
           {group.chats.length > 0 && (
             <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
               {group.chats.length}
             </span>
           )}
-          <Tooltip content="New chat in this project" side="left" delay={300}>
+          <Tooltip
+            content="New chat in this project"
+            side="left"
+            delay={300}
+            // Out of the layout until hover or focus, like a workspace's.
+            triggerClassName="hidden group-hover/project:inline-flex group-focus-within/project:inline-flex"
+          >
             <button
               type="button"
               aria-label={`New chat in ${group.projectName}`}
               onClick={() => void openNewChat({ projectId: group.projectId })}
-              className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 focus:opacity-100 group-hover/project:opacity-100"
+              className="flex-shrink-0 rounded p-1 hover:bg-muted/70"
             >
               <Plus className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </Tooltip>
         </div>
         {isExpanded && (
-          <div className="space-y-1.5 pl-2 pt-0.5">
-            {group.workspaces.map((workspace) => renderWorktreeGroup(workspace))}
+          <div className="ml-3.5 space-y-0.5 border-l border-border/60 pb-1 pl-2 pt-0.5">
+            {group.workspaces.map((workspace) =>
+              renderWorktreeGroup(workspace, { nested: true, hideHeader: onlyMain }),
+            )}
+            {group.chats.length === 0 && (
+              <button
+                type="button"
+                onClick={() => void openNewChat({ projectId: group.projectId })}
+                className="rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                No chats yet · start one
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -1488,6 +1810,8 @@ function SidebarComponent({
         ? (e: React.MouseEvent) => handleWorktreeContextMenu(e, group.worktreeId as string)
         : undefined;
 
+      // A whole project's archive: its mark, and each row names its workspace.
+      const isProject = Boolean(group.projectId);
       return (
         <WorktreeGroupComponent
           key={groupKey}
@@ -1495,24 +1819,40 @@ function SidebarComponent({
           title={group.worktreeName}
           subtitle={subtitle}
           icon={
-            <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+            isProject ? (
+              <ProjectMark name={group.worktreeName} active={hasActiveChat} className="h-4 w-4" />
+            ) : (
+              <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+            )
           }
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
           chatCount={group.chats.length}
-          renderChat={(chat) => <ArchivedChatItem chat={chat} activeChatId={activeChatId} />}
+          renderChat={(chat) => (
+            <ArchivedChatItem
+              chat={chat}
+              activeChatId={activeChatId}
+              isTabStop={chat.id === tabStopChatId}
+              workspaceName={isProject ? chat.worktreeName || undefined : undefined}
+            />
+          )}
           hasActiveChat={hasActiveChat}
           onContextMenu={handleWorktreeMenu}
         />
       );
     },
-    [expandedArchivedGroups, activeChatId, handleWorktreeContextMenu]
+    [expandedArchivedGroups, activeChatId, tabStopChatId, handleWorktreeContextMenu]
   );
 
   const activeChatCount = activeGroups.reduce((total, group) => total + group.chats.length, 0);
   const visibleChatCount = chatListTab === "active" ? activeChatCount : filteredArchivedChats.length;
   const hasAnyVisibleChats = visibleChatCount > 0;
+  // "No active chats" is only true once the list has answered: while it loads
+  // the rows are skeletons, and a failure says so with a Retry, rather than
+  // telling someone with 200 chats that they have none.
+  const listLoading = chatListTab === "active" && chatListPending && !chatList;
+  const listFailed = chatListTab === "active" && chatListFailed && !chatList;
   const emptyTitle = chatListTab === "active" ? "No active chats" : "No archived chats";
   const emptyDescription =
     chatListTab === "active" ? "Create your first chat to get started" : "Archived chats will appear here";
@@ -1705,7 +2045,13 @@ function SidebarComponent({
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1">
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1"
+          onKeyDown={onChatListKeyDown}
+          aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
+          role="region"
+        >
           {chatListTab === "active" ? (
             viewMode === "grouped" ? (
               projectFilterId ? (
@@ -1726,11 +2072,10 @@ function SidebarComponent({
                 <div className="space-y-1">
                   {flatList.map((chat) => {
                     const worktree = getWorktreeForChat(chat);
-                    // Across projects, the row names its project as well.
-                    const projectName = projectFilterId
-                      ? undefined
-                      : projects.find((p) => p.id === chat.projectId)?.name;
-                    const where = [projectName, worktree?.branch].filter(Boolean).join(" · ");
+                    // Across projects, the row names its project first; the
+                    // branch only when it is not the project's main checkout.
+                    const projectName = projectFilterId ? undefined : projectNameOf(chat.projectId);
+                    const branch = projectFilterId || !worktree?.isMain ? worktree?.branch : undefined;
                     return (
                       <ChatItem
                         key={chat.id}
@@ -1738,8 +2083,10 @@ function SidebarComponent({
                         inGroup={false}
                         editingChatId={editingChatId}
                         editingTitle={editingTitle}
-                        workspaceBranch={where || undefined}
+                        projectName={projectName}
+                        workspaceBranch={branch || undefined}
                         activeChatId={activeChatId}
+                        isTabStop={chat.id === tabStopChatId}
                         onChatClick={handleChatClick}
                         onContextMenu={handleChatContextMenu}
                         onEditingTitleChange={setEditingTitle}
@@ -1760,14 +2107,38 @@ function SidebarComponent({
             ) : (
               <div className="space-y-1">
                 {filteredArchivedChats.map((chat) => (
-                  <ArchivedChatItem key={chat.id} chat={chat} activeChatId={activeChatId} />
+                  <ArchivedChatItem
+                    key={chat.id}
+                    chat={chat}
+                    activeChatId={activeChatId}
+                    isTabStop={chat.id === tabStopChatId}
+                    projectName={projectFilterId ? undefined : projectNameOf(chat.projectId)}
+                  />
                 ))}
               </div>
             )
           ) : null}
 
+          {listLoading && (
+            <div role="status" aria-label="Loading chats" className="space-y-1.5 px-1 py-2" data-testid="chat-list-loading">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="h-7 animate-pulse rounded-md bg-foreground/5 motion-reduce:animate-none" />
+              ))}
+            </div>
+          )}
+
+          {listFailed && (
+            <div role="alert" className="mx-1 my-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs">
+              <p className="font-medium text-destructive-ink">Couldn't load your chats</p>
+              <p className="mt-0.5 text-muted-foreground">Your chats are safe; the list didn't arrive.</p>
+              <Button className="mt-2" variant="outline" size="sm" onClick={() => void refetchChatList()}>
+                Retry
+              </Button>
+            </div>
+          )}
+
           {/* Empty State */}
-          {!hasAnyVisibleChats && (
+          {!hasAnyVisibleChats && !listLoading && !listFailed && (
             <div className="px-2 py-8 text-center text-muted-foreground">
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
                 {chatListTab === "active" ? <Plus className="h-4 w-4" /> : <Archive className="h-4 w-4" />}

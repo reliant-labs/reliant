@@ -111,6 +111,14 @@ func (t *Triggers) ListTriggerEvents(ctx context.Context, userID, triggerID stri
 		if ev.GetRun() != nil {
 			s.RunState = strings.TrimPrefix(ev.GetRun().GetDisplayState().String(), "RUN_DISPLAY_STATE_")
 		}
+		if d := ev.GetDefinition(); d != nil {
+			s.Definition = &tools.TriggerEventDefinition{
+				Summary: d.GetSummary(), Workflow: d.GetWorkflow(), Source: d.GetSource(), Path: d.GetPath(),
+				Machine: d.GetDaemonName(), DaemonID: d.GetDaemonId(), Repo: d.GetRepo(), Branch: d.GetBranch(),
+				Commit: d.GetCommit(), Dirty: d.GetDirty(), ContentHash: d.GetContentHash(), Error: d.GetError(),
+				CatalogPin: d.GetCatalogPin(),
+			}
+		}
 		page.Events = append(page.Events, s)
 	}
 	return page, nil
@@ -127,22 +135,24 @@ func sameWorkflow(a, b string) bool {
 
 func summarize(tr *reliantv1.Trigger) tools.TriggerSummary {
 	s := tools.TriggerSummary{
-		ID:              tr.GetId(),
-		Name:            tr.GetName(),
-		Workflow:        tr.GetWorkflow(),
-		WorkflowTrigger: tr.GetWorkflowTrigger(),
-		Enabled:         tr.GetEnabled(),
-		ProjectID:       tr.GetProjectId(),
-		DaemonID:        tr.GetDaemonId(),
-		DaemonName:      tr.GetDaemonName(),
-		MachineState:    tr.GetMachineState(),
-		NoMachine:       tr.GetNoMachine(),
-		ConnectionID:    tr.GetConnectionId(),
-		WebhookURL:      tr.GetWebhookUrl(),
-		NextFireAt:      tr.GetNextFireAt(),
-		Filter:          tr.GetFilter(),
-		Health:          healthName(tr.GetHealth().GetStatus()),
-		HealthDetail:    tr.GetHealth().GetLastFailureDetail(),
+		ID:                 tr.GetId(),
+		Name:               tr.GetName(),
+		Workflow:           tr.GetWorkflow(),
+		WorkflowTrigger:    tr.GetWorkflowTrigger(),
+		Enabled:            tr.GetEnabled(),
+		ProjectID:          tr.GetProjectId(),
+		DaemonID:           tr.GetDaemonId(),
+		DaemonName:         tr.GetDaemonName(),
+		MachineState:       tr.GetMachineState(),
+		NoMachine:          tr.GetNoMachine(),
+		ConnectionID:       tr.GetConnectionId(),
+		WebhookURL:         tr.GetWebhookUrl(),
+		NextFireAt:         tr.GetNextFireAt(),
+		Filter:             tr.GetFilter(),
+		Health:             healthName(tr.GetHealth().GetStatus()),
+		HealthDetail:       tr.GetHealth().GetLastFailureDetail(),
+		Definition:         tr.GetDefinitionSource().GetSummary(),
+		DefinitionWarnings: tr.GetDefinitionSource().GetWarnings(),
 	}
 	s.Kind, s.Source = describeSource(tr)
 	return s

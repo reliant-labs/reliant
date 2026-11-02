@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,11 +13,20 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
+
+// gitCheckBudget bounds GetProject's live check of the project's git status
+// on the daemon. The daemon answers it from a short filesystem walk
+// (repo.ContainsRepo), well under this; past it, the stored flag is served.
+// A var so a test can shrink it.
+var gitCheckBudget = 1500 * time.Millisecond
 
 // errNoDaemonRouter is what the daemon-backed paths report in a composition
 // without a daemon router (Deps.Router is optional).
@@ -65,6 +72,40 @@ func (s *Service) sendProjectDaemonCommand(ctx context.Context, userID, commandT
 	return nil
 }
 
+// sendToDaemon is sendProjectDaemonCommand pinned to one machine: for a
+// command about a checkout that machine holds, whose path means nothing on
+// any other.
+func (s *Service) sendToDaemon(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	if s.deps.Router == nil {
+		return fmt.Errorf("daemon command %s: %w", commandType, errNoDaemonRouter)
+	}
+	respBytes, err := s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, 30_000)
+	if err != nil {
+		return fmt.Errorf("daemon command %s: %w", commandType, err)
+	}
+	if resp != nil {
+		if err := json.Unmarshal(respBytes, resp); err != nil {
+			return fmt.Errorf("unmarshal response for %s: %w", commandType, err)
+		}
+	}
+	return nil
+}
+
+// checkout resolves the machine a command about project runs on and the
+// project's path there (projectcheckout.Resolve). projects.path is the
+// creating machine's path and is never sent: purpose finishes the error's
+// "clone it onto a machine to …" when no machine holds a checkout.
+func (s *Service) checkout(ctx context.Context, userID string, project *db.Project, purpose string) (projectcheckout.Target, error) {
+	if s.deps.Router == nil {
+		return projectcheckout.Target{}, svcerr.WithCause(svcerr.Unavailable("no daemon available"), errNoDaemonRouter)
+	}
+	return projectcheckout.Resolve(ctx, s.deps.Repo, s.deps.Router, userID, project, purpose)
+}
+
 // verifyProjectDirectoryExists refuses to hand back a project whose directory
 // the daemon says is gone.
 //
@@ -83,15 +124,26 @@ func (s *Service) sendProjectDaemonCommand(ctx context.Context, userID, commandT
 // Only a daemon that ANSWERED "does not exist" is evidence. An unreachable
 // daemon is a different failure — onboarding races daemon provisioning by
 // ~10s — so a failed probe falls through rather than inventing a refusal.
-func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, projectID, path string) error {
+//
+// The path is the one the caller named, so it is asked of the machine the
+// request runs on (requestMachine), never of default resolution: a
+// --project-path run on machine A, whose user's default is machine B, was
+// told its directory did not exist because B was asked about A's path. When
+// no machine can be named, nothing is asked and nothing is refused.
+func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, projectID, path, daemonID string) error {
+	if daemonID == "" {
+		logging.InfoContext(ctx, "No machine records this project's checkout at the requested path; not verifying its directory",
+			"path", path, "projectID", projectID)
+		return nil
+	}
 	// Local struct rather than daemon.FileStat: the API tier does not import
 	// the daemon package, and only one field is needed.
 	var stat struct {
 		Exists bool `json:"exists"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
+	if err := s.sendToDaemon(ctx, userID, daemonID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
 		logging.WarnContext(ctx, "Could not verify project directory via daemon; proceeding",
-			"error", err, "path", path, "projectID", projectID)
+			"error", err, "path", path, "projectID", projectID, "daemonID", daemonID)
 		return nil
 	}
 	if stat.Exists {
@@ -103,18 +155,41 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 		projectID, path))
 }
 
-// resolveProjectRepoPath resolves a per-RPC repo_id selector against the
-// project's repo set and returns the absolute git checkout path. Rules
-// match WorktreeService.resolveRepoPath:
+// requestMachine is the machine a request about path runs on: the one its
+// credentials name (a daemon's own token), else the machine of the user's
+// (one that exists and is theirs, connected or not) whose checkout of the
+// project is recorded at exactly that path. "" when neither says: the API
+// never guesses which disk a path is on.
+func (s *Service) requestMachine(ctx context.Context, userID, projectID, path string) string {
+	if id := auth.GetDaemonIDFromContext(ctx); id != "" {
+		return id
+	}
+	rows, err := daemonplacement.UserCheckouts(ctx, s.deps.Repo, userID, projectID)
+	if err != nil {
+		return ""
+	}
+	want := ospath.Clean(path)
+	for _, row := range rows {
+		if ospath.Clean(row.Path) == want {
+			return row.DaemonID
+		}
+	}
+	return ""
+}
+
+// resolveProjectRepo resolves a per-RPC repo_id selector against the
+// project's repo set and returns the repo's path RELATIVE to the checkout
+// (join it onto a projectcheckout.Target: the checkout's path depends on the
+// machine). Rules match WorktreeService.resolveRepoPath:
 //
-//   - empty repoID + project has 0 or 1 repos -> use project.Path as-is
-//     (legacy single-repo behavior).
+//   - empty repoID + project has 0 or 1 repos -> the checkout root (or its
+//     one repo).
 //   - empty repoID + project has 2+ repos -> InvalidArgument; multi-repo
 //     callers must specify which repo they're acting on.
 //   - non-empty repoID -> look up the repo, ensure it belongs to this
-//     project, and return <project.Path>/<repo.relative_path>.
+//     project, and return its relative_path.
 //   - repoID not in the project's repo set -> NotFound.
-func (s *Service) resolveProjectRepoPath(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
+func (s *Service) resolveProjectRepo(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
@@ -125,14 +200,14 @@ func (s *Service) resolveProjectRepoPath(ctx context.Context, project *db.Projec
 			return "", nil, svcerr.InvalidArgument("repo_id required in multi-repo projects")
 		}
 		if len(repos) == 1 {
-			return filepath.Join(project.Path, repos[0].RelativePath), repos[0], nil
+			return repos[0].RelativePath, repos[0], nil
 		}
-		return project.Path, nil, nil
+		return "", nil, nil
 	}
 
 	for _, r := range repos {
 		if r.ID == repoID {
-			return filepath.Join(project.Path, r.RelativePath), r, nil
+			return r.RelativePath, r, nil
 		}
 	}
 	return "", nil, svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project")
@@ -238,10 +313,21 @@ func (s *Service) GetProject(
 	// derived from repo-count, because a git project the user never registers
 	// as a worktree repo still has zero repo rows. When the daemon is
 	// unreachable we keep the last-known DB value.
+	//
+	// The check is bounded by gitCheckBudget: it refreshes a cached flag, so a
+	// slow or unreachable daemon must cost the read that budget at most, never
+	// the request's whole deadline. Without the bound, GetProject in prod sat
+	// at exactly 10.0s (the client's deadline) whenever check_git was slow,
+	// and the client then failed the read it had waited for (2026-10-31/11-01:
+	// 16 of 31 calls).
 	var checkGitResp struct {
 		IsGitRepo bool `json:"is_git_repo"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
+	// Asked of the machine holding a checkout, about ITS path; with no
+	// checkout anywhere the cached flag stands.
+	if target, err := s.checkout(ctx, userID, project, "open it"); err != nil {
+		logging.WarnContext(ctx, "GetProject: no checkout to live-check git status, using DB value", "error", err, "projectID", project.ID)
+	} else if err := s.checkGit(ctx, userID, target, &checkGitResp); err != nil {
 		logging.WarnContext(ctx, "GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
 	} else if err := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, checkGitResp.IsGitRepo); err != nil {
 		logging.WarnContext(ctx, "GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
@@ -256,6 +342,14 @@ func (s *Service) GetProject(
 	return connect.NewResponse(&reliantv1.GetProjectResponse{
 		Project: projectToProto(project),
 	}), nil
+}
+
+// checkGit asks target's machine whether its checkout is a git repository,
+// within gitCheckBudget.
+func (s *Service) checkGit(ctx context.Context, userID string, target projectcheckout.Target, out any) error {
+	checkCtx, cancel := context.WithTimeout(ctx, gitCheckBudget)
+	defer cancel()
+	return s.sendToDaemon(checkCtx, userID, target.DaemonID, "project.check_git", map[string]string{"path": target.Path}, out)
 }
 
 // UpdateProject updates a project
@@ -337,16 +431,25 @@ func (s *Service) TouchProject(
 		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			logging.WarnContext(ctx, "TouchProject: failed to load project for MCP warmup", "projectID", req.Msg.ProjectId, "error", err)
-		} else if project != nil && strings.TrimSpace(project.Path) != "" {
+		} else if project != nil {
+			// Warm up on the machine holding the checkout, at its path there.
+			// A project no machine holds has nothing to warm up.
+			target, err := s.checkout(ctx, userID, project, "load its MCP servers")
+			if err != nil {
+				logging.InfoContext(ctx, "TouchProject: no checkout to warm MCP servers on", "projectID", project.ID, "error", err)
+				target = projectcheckout.Target{}
+			}
 			projectID := project.ID
-			projectPath := project.Path
 			go func() {
+				if target.DaemonID == "" {
+					return
+				}
 				warmupCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()
 
 				// Send mcp.ensure_loaded daemon command to warmup MCP servers on the user's machine
-				payload, _ := json.Marshal(map[string]string{"project_path": projectPath})
-				if _, err := s.deps.Router.SendDaemonCommand(warmupCtx, userID, "mcp.ensure_loaded", payload, 90000); err != nil {
+				payload, _ := json.Marshal(map[string]string{"project_path": target.Path})
+				if _, err := target.Send(warmupCtx, s.deps.Router, userID, "mcp.ensure_loaded", payload, 90000); err != nil {
 					logging.WarnContext(ctx, "Project MCP warmup via daemon failed", "projectID", projectID, "error", err)
 				}
 			}()

@@ -79,16 +79,37 @@ enum OwnerType {
   OWNER_TYPE_ORGANIZATION = 2;
 }
 
-// Compute tier. Comments give CPU request / limit and memory request / limit;
-// limits are 4x requests so spiky builds can burst while bin-packing stays on
-// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+// Machine tier (machine-pooled-v1). Comments give the guaranteed vCPU and
+// memory: requests equal limits. The disk per tier is pricing.yaml
+// compute.sizes disk_gib.
+//
+// 1-5 were the retired small..2xl ladder. Their numbers are reserved and never
+// reused: the old xl (15 vCPU) is today's 2XL, so a reused number would
+// silently mean a different machine.
 enum DaemonSize {
+  reserved 1 to 5;
+  reserved "DAEMON_SIZE_SMALL", "DAEMON_SIZE_MEDIUM", "DAEMON_SIZE_LARGE";
   DAEMON_SIZE_UNSPECIFIED = 0;
-  DAEMON_SIZE_SMALL = 1; // 500m/2 CPU, 2Gi/4Gi RAM
-  DAEMON_SIZE_MEDIUM = 2; // 1/4 CPU, 4Gi/8Gi RAM
-  DAEMON_SIZE_LARGE = 3; // 2/8 CPU, 8Gi/16Gi RAM
-  DAEMON_SIZE_XL = 4; // 4/16 CPU, 16Gi/32Gi RAM
-  DAEMON_SIZE_2XL = 5; // 8/32 CPU, 32Gi/64Gi RAM
+  DAEMON_SIZE_S1 = 6; // 1 vCPU, 2 GiB
+  DAEMON_SIZE_S2 = 7; // 1 vCPU, 4 GiB
+  DAEMON_SIZE_M = 8; // 2 vCPU, 4 GiB
+  DAEMON_SIZE_L = 9; // 4 vCPU, 8 GiB
+  DAEMON_SIZE_XL = 10; // 8 vCPU, 16 GiB
+  DAEMON_SIZE_2XL = 11; // 15 vCPU, 32 GiB
+  DAEMON_SIZE_3XL = 12; // 30 vCPU, 64 GiB
+}
+
+// DaemonDiskMode is where a managed machine's disk lives, fixed at create.
+enum DaemonDiskMode {
+  // Unspecified is PERSISTENT.
+  DAEMON_DISK_MODE_UNSPECIFIED = 0;
+  // The disk outlives the machine's pod and is kept while it is suspended:
+  // files, checkouts and caches survive, and the disk bills while it sleeps.
+  DAEMON_DISK_MODE_PERSISTENT = 1;
+  // Every start gets a fresh disk, deleted when the machine suspends: nothing
+  // survives a suspend, and a suspended machine costs nothing. For stateless
+  // machines such as CI pool members.
+  DAEMON_DISK_MODE_EPHEMERAL = 2;
 }
 
 enum PortAccessMode {
@@ -212,6 +233,15 @@ message Daemon {
   // The disk, as it is and as it was asked to be (managed daemons only).
   // Unset for an external daemon.
   DaemonDisk disk = 32;
+
+  // The machine's own environment variables (managed daemons only), declared
+  // by its owner with DaemonService.UpdateDaemon. Every process on the
+  // machine inherits them, from the next time its pod is built (resume,
+  // resize or re-create). Plain text: not for secrets.
+  map<string, string> env = 35;
+
+  // Where the machine's disk lives (managed daemons only); fixed at create.
+  DaemonDiskMode disk_mode = 36;
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
@@ -491,13 +521,23 @@ message DaemonPricing {
   // month (730 hours), running or suspended, in cents, as an exact decimal
   // string (never a float: it is money).
   string storage_cents_per_gib_month = 4;
+  // Immutable accepted exchange/rate version, independent of retail merchandising.
+  string pricing_version = 5;
+  // Candidate catalog is staged only; false until all routes are commissioned.
+  bool activation_ready = 6;
+  string activation_hold_reason = 7;
 }
 
 // DaemonSizePrice is one size's row of DaemonPricing.
 message DaemonSizePrice {
   string size = 1;
-  // Small-daemon-hours this size burns per wall-clock hour.
-  int64 multiplier = 2;
+  // Deprecated integer multiplier cannot represent exact cost-weight fractions.
+  int64 multiplier = 2 [deprecated = true];
+  // Exact rational num/den; not retail-price credit or a runtime billing multiplier.
+  string cost_weight = 5;
+  string route_id = 6;
+  // Canonical exact rational cents per running hour (num/den).
+  string exact_hourly_price_cents = 7;
   // Overage price per wall-clock hour at this size, in cents, as an exact
   // decimal string: multiplier × the small hourly price.
   string hourly_price_cents = 3;
@@ -736,4 +776,52 @@ message GitRepo {
   bool private = 5;
   string language = 6;
   google.protobuf.Timestamp updated_at = 7;
+}
+
+// === Panel results ===
+//
+// The result of a live Postgres dashboard panel (AppDatabaseService
+// QueryDatabasePanel). Wire-identical to observability's SqlColumn,
+// PanelSeriesResult, TimePoint and PanelTableRow, which stay where they are:
+// moving them would break every client generated from the old file. The two
+// sets can merge later through deprecate-first.
+
+// PanelResultColumn is one result column, in result order.
+message PanelResultColumn {
+  string name = 1;
+  // The Postgres type, e.g. "int8", "timestamptz", "text".
+  string type = 2;
+  // A number: drawn as a value (a series point or a row cell).
+  bool numeric = 3;
+  // A date or time: it can be the time axis.
+  bool time = 4;
+}
+
+// PanelResultPoint is one point of a series.
+message PanelResultPoint {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  // Always false for a Postgres panel; kept so the shape matches TimePoint.
+  bool partial = 3;
+  // No value at this point (NULL): a gap, not a zero. `value` is 0 and must be
+  // ignored.
+  bool null = 4;
+}
+
+// PanelResultSeries is one series: one numeric column for one group.
+message PanelResultSeries {
+  string label = 1;
+  // Group column -> value for this series. Empty without group columns.
+  map<string, string> group = 2;
+  repeated PanelResultPoint points = 3;
+  double value = 4;
+}
+
+// PanelResultRow is one result row of a panel that is not a time series.
+message PanelResultRow {
+  map<string, string> group = 1;
+  // One per entry of the response's columns. Values whose zero-based index is
+  // in missing_value_indexes MUST be ignored (NULL, not zero).
+  repeated double values = 2;
+  repeated uint32 missing_value_indexes = 3;
 }

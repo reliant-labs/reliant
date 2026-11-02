@@ -56,7 +56,9 @@ type EventRepo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
-	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (settled bool, err error)
+	// SettlePendingTriggerEvent records a verdict, and the definition the
+	// fire resolved (nil keeps the recorded one), on a still-pending event.
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (settled bool, err error)
 	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
 }
 

@@ -84,6 +84,11 @@ export interface CleanupMetadata {
    */
   stripped_paths?: string[];
   stripped_bytes?: number;
+  /**
+   * The user forgot the folder: no machine was on record for it and none
+   * connected had it. directory_deleted is set, but nothing was deleted.
+   */
+  forgotten?: boolean;
 }
 
 export interface Worktree {
@@ -108,6 +113,12 @@ export interface Worktree {
    * exist, a branch name git refuses); absent when the failure was ours.
    */
   failure_reason?: string;
+  /**
+   * The machine whose disk holds this workspace's checkout. A chat in it runs
+   * there and nowhere else (lib/workspaceMachine.ts). Absent for the main
+   * checkout, which every machine with the project has, and for old rows.
+   */
+  daemon_id?: string;
 }
 
 // Create-only inputs. base_branches carries per-repo base-branch overrides
@@ -157,6 +168,7 @@ function cleanupFromProto(proto: ProtoCleanupMetadata): CleanupMetadata {
     snapshot_refs: proto.snapshotRefs.length > 0 ? [...proto.snapshotRefs] : undefined,
     stripped_paths: proto.strippedPaths.length > 0 ? [...proto.strippedPaths] : undefined,
     stripped_bytes: proto.strippedBytes > 0n ? Number(proto.strippedBytes) : undefined,
+    forgotten: proto.forgotten || undefined,
   };
 }
 
@@ -178,6 +190,7 @@ export function worktreeFromProto(proto: ProtoWorktree): Worktree {
     deleted_at: proto.deletedAt || null,
     cleanup_metadata: proto.cleanupMetadata ? cleanupFromProto(proto.cleanupMetadata) : null,
     failure_reason: proto.failureReason || undefined,
+    daemon_id: proto.daemonId || undefined,
   };
 }
 
@@ -795,10 +808,12 @@ export function useArchivedWorktreeList(projectId: string | null | undefined, op
  */
 export function useDiscoveredWorktrees(
   projectId: string | null | undefined,
-  options?: { background?: boolean; enabled?: boolean; staleTime?: number },
+  options?: { background?: boolean; enabled?: boolean; staleTime?: number; daemonId?: string },
 ) {
   return useDiscoverWorktrees(
-    { projectId: projectId ?? "", background: options?.background ?? false },
+    // daemonId: the machine to look on (each machine has its own checkouts);
+    // unset asks the project's default machine.
+    { projectId: projectId ?? "", background: options?.background ?? false, daemonId: options?.daemonId },
     {
       enabled: !!projectId && (options?.enabled ?? true),
       select: discoveredWorktreesFromProto,

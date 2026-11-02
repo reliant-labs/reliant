@@ -34,8 +34,10 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   },
   claimable_session_released: {
     title: "This claim is open in another browser",
-    body: "A claim can be started in one browser only. Continue there, or sign in to an existing account.",
-    next: { label: "Sign in", href: "/auth" },
+    body: "A claim can be started in one browser only. Continue there, or sign in to an account you already have and claim it into that.",
+    // Returns here, where the claim is still in storage; the site is claimed
+    // into the account that signs in, which needs no session from this link.
+    next: { label: "Sign in to claim", href: "/auth?redirect=%2Fclaim" },
   },
 };
 
@@ -50,19 +52,72 @@ export const UPGRADE_STILL_REQUIRED_MESSAGE =
   "We couldn't confirm your email yet. Check that you've verified it, then try again.";
 
 /**
- * What an existing Reliant user is told. The way in for them (joining the
- * site's org) needs users to belong to more than one org, which is not built
- * (design §9, slice M1a); a signed-in redeploy gets them the same site.
- *
- * ONE place, so W11 replaces this block and nothing else.
+ * Someone who may already have a Reliant account, and is not signed in to it
+ * here (signed out, or holding the site's temporary account). They sign in and
+ * come back to this page, where ClaimIntoAccount takes over.
  */
 export const EXISTING_ACCOUNT_COPY = {
   heading: "Already on Reliant?",
-  command: "forge login",
+  body: "Sign in to your account and this site is added to it, as an organization you own.",
+  button: "Sign in to claim",
+  /** Said only when leaving would drop the site's temporary account. */
+  temporary: "This signs out of the site's temporary account. The site is still yours to claim from your own account.",
+} as const;
+
+/**
+ * Someone signed in to a real account: claiming joins the site's organization
+ * as its owner. Said before they confirm, because it is a different kind of
+ * claim from "keep it as a new account".
+ */
+export const CLAIM_INTO_ACCOUNT_COPY = {
+  heading: "Claim it into your account",
+  /** Takes the signed-in email. */
+  signedInAs: (email: string) => `You're signed in as ${email}.`,
+  body: "The site comes with its own organization. You'll own it, and it appears beside your other organizations; your own stays your default.",
+  freeSite: "The free plan includes one static site. If you already have one, you'll choose which stays live.",
+  button: "Claim into my account",
+  switchAccount: "Not you? Use a different account",
 } as const;
 
 /** Why signing in as a different account does not claim the site. */
 export const REPLACE_ANONYMOUS_COPY = {
   heading: "You're in a temporary account",
   body: "Claiming this site signs this browser out of that temporary account, and anything in it that has not been saved is lost.",
+} as const;
+
+/**
+ * Which site keeps the one free static slot (FreeSiteDialog). Plain on purpose:
+ * it is a decision about something the person built, so it names the sites and
+ * says what happens to each, and nothing is preselected.
+ */
+export const FREE_SITE_COPY = {
+  title: "You already have a free site",
+  intro: "The free plan runs one static site. Choose which one stays live.",
+  sitesLabel: "The two sites",
+  previewLabel: "Open a site to check it",
+  /** Takes the site's address. */
+  open: (address: string) => `Open ${address}`,
+  yourSite: "Your site",
+  thisSite: "This site",
+  legend: "Which site stays live",
+  keepNew: {
+    title: "Keep this new site live",
+    /** Takes the existing site's address. */
+    detail: (existing: string) => `${existing} is paused until you subscribe or delete a site.`,
+  },
+  keepExisting: {
+    title: "Keep my existing site live",
+    /** Takes the claimed site's address. */
+    detail: (claimed: string) => `${claimed} is added to your account but paused until you subscribe or delete a site.`,
+  },
+  subscribe: {
+    title: "Subscribe to keep both",
+    detail: "Go to billing. Your claim waits here and you can finish it when you come back.",
+  },
+  cancel: "Cancel",
+  continue: "Continue",
+  continueSubscribe: "Go to billing",
+  /** Takes the date and whether the site is already offline. */
+  waits: (date: string, offline: boolean) =>
+    offline ? `Claim it by ${date} or it is deleted.` : `The claim link works until ${date}.`,
 } as const;

@@ -39,7 +39,7 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import { useObsReadApi } from "@/hooks/observability-queries";
@@ -51,6 +51,7 @@ import { StatusBadge } from "./Errors/IssueBits";
 import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, formatPercent, formatRate, formatWhen } from "./format";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "./ObsStates";
+import { AskReliantActions } from "./AskReliant/AskReliant";
 
 const WORKLOAD = "resource.attr.k8s.workload.name";
 
@@ -94,11 +95,11 @@ function useResources(scope: ObsScope, side: "before" | "after", window: TimeWin
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
-    queryFn: () =>
-      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
+    queryFn: ({ signal }) =>
+      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }, { signal }),
     enabled: usable,
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -195,7 +196,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
         <WindowsLine health={h} width={width} />
       </div>
 
-      <Verdict health={h} />
+      <Verdict health={h} version={h.promotion?.version || target.promotionId.slice(0, 12)} envName={envName} />
 
       <Card padding="none" data-testid="obs-compare-services">
         <SectionTitle title="Requests, errors and latency" note="Server spans per service, weighted for sampling, before and after the promotion." />
@@ -340,8 +341,10 @@ function inconclusiveWhy(h: ReleaseHealth): string {
   return "Too little traffic on either side to judge (every service is below the minimum request count).";
 }
 
-function Verdict({ health: h }: { health: ReleaseHealth }) {
+function Verdict({ health: h, version, envName }: { health: ReleaseHealth; version: string; envName?: string }) {
   const v = VERDICT[h.verdict];
+  // A release that made things worse, or could not be proven good, is one to hand to an agent.
+  const askable = h.verdict === "fail" || h.verdict === "inconclusive";
   const fails = h.findings.filter((f) => f.policy === "fail");
   const warns = h.findings.filter((f) => f.policy !== "fail");
   return (
@@ -361,6 +364,11 @@ function Verdict({ health: h }: { health: ReleaseHealth }) {
                   ? inconclusiveWhy(h)
                   : "The server returned no verdict for this promotion."}
           </p>
+          {askable && (
+            <div className="pt-1" data-testid="obs-compare-ask">
+              <AskReliantActions subject={{ kind: "release", version, env: envName ?? null, verdict: h.verdict === "fail" ? "fail" : "inconclusive" }} />
+            </div>
+          )}
         </div>
       </div>
       {h.findings.length > 0 && (

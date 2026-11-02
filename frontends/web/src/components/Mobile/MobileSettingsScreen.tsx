@@ -20,6 +20,7 @@
  */
 
 import { useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Activity,
   Bell,
@@ -126,7 +127,13 @@ function SectionRow({
 
 export function MobileSettingsScreen() {
   const capabilities = useCapabilities();
-  const [active, setActive] = useState<SectionId | null>(null);
+  const navigate = useNavigate();
+  // A visit that arrived with somewhere to go back to (the claim page's
+  // "Subscribe to keep both") opens on that section and returns there, instead
+  // of dropping the person on the list with nothing to say where they were.
+  const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
+  const comeBackTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+  const [active, setActive] = useState<SectionId | null>(section === "billing" ? "billing" : null);
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
   // call time — can't get frozen into a stale constant, which matters both
@@ -222,14 +229,14 @@ export function MobileSettingsScreen() {
   );
 
   if (active) {
-    const onBack = () => setActive(null);
+    const onBack = () => (comeBackTo ? void navigate({ href: comeBackTo }) : setActive(null));
     switch (active) {
       case "account":
         return <MobileAccountScreen onBack={onBack} />;
       case "ai":
         return <MobileAISettingsScreen onBack={onBack} />;
       case "billing":
-        return <MobileBillingScreen onBack={onBack} />;
+        return <MobileBillingScreen onBack={onBack} backLabel={comeBackTo ? "Back to your claim" : undefined} />;
       case "github":
         return <MobileGitHubScreen onBack={onBack} />;
       case "notifications":

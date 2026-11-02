@@ -3,6 +3,7 @@ package wfyaml
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -110,11 +111,102 @@ func unmarshalWorkflowTrigger(node *yaml.Node) (*reliantv1.WorkflowTrigger, erro
 			}
 			sourceSet = fd
 		}
+		if fd.Name() == triggerInputsField {
+			if err := setTriggerInputs(wt, val); err != nil {
+				return nil, fmt.Errorf("%s: %w", key, err)
+			}
+			continue
+		}
 		if err := setStrictField(rv, fd, val); err != nil {
 			return nil, fmt.Errorf("%s: %w", key, err)
 		}
 	}
 	return wt, nil
+}
+
+// triggerInputsField is WorkflowTrigger.inputs: input name -> template.
+const triggerInputsField = "inputs"
+
+// setTriggerInputs reads a trigger's inputs mapping. Each value is a template
+// (a string), but YAML says more than its text: `asap: true` is a boolean and
+// `asap: 'true'` is the text "true". A bare boolean or number is kept as the
+// expression that yields it (`{{ true }}`, `{{ 10 }}`), so the run receives
+// the type the author wrote, and quoted text stays text, which the launch
+// refuses for a boolean or number input instead of guessing
+// (validation.InputValue). Only a scalar whose text is the canonical spelling
+// of its value is typed this way: `1.10` or `007` stays text, because the
+// expression would lose what was written.
+func setTriggerInputs(wt *reliantv1.WorkflowTrigger, node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!null" {
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected a mapping of input names to values")
+	}
+	inputs := make(map[string]string, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		key, val := node.Content[i].Value, node.Content[i+1]
+		if val.Kind != yaml.ScalarNode {
+			return fmt.Errorf("%q: expected a value or a {{ }} template, got a %s", key, yamlKindName(val.Kind))
+		}
+		inputs[key] = triggerInputTemplate(val)
+	}
+	wt.Inputs = inputs
+	return nil
+}
+
+// triggerInputTemplate is a scalar inputs value as its template.
+func triggerInputTemplate(node *yaml.Node) string {
+	if node.Style&(yaml.SingleQuotedStyle|yaml.DoubleQuotedStyle|yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		return node.Value
+	}
+	if literal, ok := canonicalTypedScalar(node.ShortTag(), node.Value); ok {
+		return "{{ " + literal + " }}"
+	}
+	return node.Value
+}
+
+// canonicalTypedScalar reports whether value, of YAML tag tag, is a boolean,
+// integer or float written in its one canonical spelling, which is then also
+// its CEL literal.
+func canonicalTypedScalar(tag, value string) (string, bool) {
+	switch tag {
+	case "!!bool":
+		if value == "true" || value == "false" {
+			return value, true
+		}
+	case "!!int":
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil && strconv.FormatInt(i, 10) == value {
+			return value, true
+		}
+	case "!!float":
+		// A whole float would read back as a CEL int: only one with a
+		// fraction is typed.
+		if f, err := strconv.ParseFloat(value, 64); err == nil && strconv.FormatFloat(f, 'f', -1, 64) == value && strings.Contains(value, ".") {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+// typedTriggerInput is a template that only types a bare YAML scalar
+// (triggerInputTemplate), as that scalar: it is written back as `true`, not
+// `'{{ true }}'`, so a workflow round-trips as its author wrote it.
+func typedTriggerInput(template string) (literal, tag string, ok bool) {
+	inner, found := strings.CutPrefix(template, "{{ ")
+	if !found {
+		return "", "", false
+	}
+	inner, found = strings.CutSuffix(inner, " }}")
+	if !found {
+		return "", "", false
+	}
+	for _, tag := range []string{"!!bool", "!!int", "!!float"} {
+		if lit, ok := canonicalTypedScalar(tag, inner); ok {
+			return lit, tag, true
+		}
+	}
+	return "", "", false
 }
 
 // setStrictField sets one field from YAML, rejecting anything the field
@@ -365,6 +457,10 @@ func marshalWorkflowTrigger(wt *reliantv1.WorkflowTrigger) (*yaml.Node, error) {
 		if !rv.Has(fd) {
 			return nil
 		}
+		if fd.Name() == triggerInputsField {
+			m.Content = append(m.Content, scalarNode(triggerInputsField, ""), marshalTriggerInputs(wt.GetInputs()))
+			return nil
+		}
 		n, err := marshalStrictField(fd, rv.Get(fd))
 		if err != nil {
 			return fmt.Errorf("%s: %w", fd.Name(), err)
@@ -399,6 +495,21 @@ func marshalWorkflowTrigger(wt *reliantv1.WorkflowTrigger) (*yaml.Node, error) {
 		}
 	}
 	return m, nil
+}
+
+// marshalTriggerInputs writes a trigger's inputs in key order, a typed bare
+// scalar (typedTriggerInput) as that scalar and every other value as text.
+func marshalTriggerInputs(inputs map[string]string) *yaml.Node {
+	m := &yaml.Node{Kind: yaml.MappingNode}
+	for _, k := range sortedKeys(inputs) {
+		v := inputs[k]
+		if literal, tag, ok := typedTriggerInput(v); ok {
+			m.Content = append(m.Content, scalarNode(k, ""), scalarNode(literal, tag))
+			continue
+		}
+		m.Content = append(m.Content, scalarNode(k, ""), stringNode(v))
+	}
+	return m
 }
 
 func marshalStrictField(fd protoreflect.FieldDescriptor, val protoreflect.Value) (*yaml.Node, error) {

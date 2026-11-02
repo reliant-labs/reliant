@@ -255,6 +255,24 @@ describe("traces and panels", () => {
     expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "sql", series: [], groupBy: [], sql: expect.stringContaining("AS clients") });
   });
 
+  it("carries the window it asked for, and the server's bucket width and zone for a Date-bucketed series", async () => {
+    const day = new Date(Date.UTC(2026, 9, 29));
+    client.queryPanel.mockResolvedValue({
+      panelId: "workflows-by-outcome", kind: "sql", unit: "", stepSeconds: 3600, truncated: false, bucketSeconds: 86_400, bucketTimezone: "UTC",
+      columns: [], rows: [], funnelSteps: [], issues: [], sessions: [],
+      series: [{ label: "runs", group: { outcome: "success" }, value: 0, points: [{ time: { seconds: BigInt(day.getTime() / 1000), nanos: 0 }, value: 53 }] }],
+    });
+    const result = await queryPanel({ ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "workflows-by-outcome", title: "Runs", kind: "sql", signal: "", series: [], sql: "SELECT toDate(Timestamp) AS day, count() AS runs FROM product_events GROUP BY day", minStep: "1d" },
+    });
+    expect(result).toMatchObject({ window, bucketSeconds: 86_400, bucketTimezone: "UTC" });
+    expect(result.series[0].timestamps).toEqual([day.getTime() / 1000]);
+
+    client.queryPanel.mockResolvedValue({ panelId: "p", kind: "sql", unit: "", stepSeconds: 120, truncated: false, bucketSeconds: 120, bucketTimezone: "", columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
+    const instants = await queryPanel({ ...env, window, services: [], stepSeconds: 0, panel: { id: "p", title: "P", kind: "sql", signal: "", series: [], sql: "SELECT 1" } });
+    expect(instants.bucketTimezone).toBeUndefined();
+  });
+
   it("preserves a SQL NULL placeholder separately from a measured zero", async () => {
     client.queryPanel.mockResolvedValue({ panelId: "nullable", kind: "sql", unit: "", stepSeconds: 0, truncated: false,
       columns: ["unmeasured", "actual_zero", "count"], rows: [{ group: {}, values: [0, 0, 12], missingValueIndexes: [0] }],

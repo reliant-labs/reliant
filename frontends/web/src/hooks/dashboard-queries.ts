@@ -17,6 +17,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardIndex, DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
+import { clientBuiltinDocument, isClientBuiltin, withClientBuiltins } from "@/services/controlPlane/observability/clientBuiltins";
 
 /** A dashboard that is not there (NotFound) is an answer, not a blip: never retried. Otherwise the area's policy. */
 export function dashboardRetry(failureCount: number, error: unknown): boolean {
@@ -46,6 +47,7 @@ export function useDashboardIndex(orgId: string | null, projectId: string | unde
   return useQuery({
     queryKey: dashboardKeys.index(orgId, projectId ?? null, envId ?? ""),
     queryFn: () => api.listDashboards({ orgId: orgId as string, projectId, envId }),
+    select: (index: DashboardIndex) => withClientBuiltins(index, { projectId, envId }),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: dashboardRetry,
@@ -68,7 +70,8 @@ export function useDashboard(orgId: string | null, ref: DashboardRef | null, ver
   const api = useObservabilityApi();
   return useQuery({
     queryKey: dashboardKeys.doc(orgId, ref, version ?? 0, release ?? ""),
-    queryFn: () => api.getDashboard({ orgId: orgId as string, ref: ref as DashboardRef, version, releaseVersion: release }),
+    // A client-owned built-in has no DashboardService document to fetch.
+    queryFn: () => (isClientBuiltin(ref) ? Promise.resolve(clientBuiltinDocument()) : api.getDashboard({ orgId: orgId as string, ref: ref as DashboardRef, version, releaseVersion: release })),
     enabled: !!orgId && !!ref,
     staleTime: 30_000,
     retry: dashboardRetry,

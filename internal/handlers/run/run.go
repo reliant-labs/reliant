@@ -81,6 +81,9 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 	if run.Outcome != nil {
 		out.Outcome = *run.Outcome
 	}
+	if run.FailureDetail != nil {
+		out.FailureDetail = *run.FailureDetail
+	}
 	if run.CompletedAt != nil {
 		out.CompletedAtMs = run.CompletedAt.UnixMilli()
 	}

@@ -153,7 +153,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
               setResumeError(null);
               resume.mutate(daemonId);
             }}
-            className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60"
+            className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           >
             {waking ? "Waking…" : "Wake it"}
           </button>
@@ -162,7 +162,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
           <button
             type="button"
             onClick={goToBilling}
-            className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Billing
           </button>
@@ -191,12 +191,14 @@ export function RunMachineBanner({ chat }: { chat: Chat }) {
   const daemonId = chat.activeDaemonId || triggerDaemonId;
   if (!daemonId) return null;
 
-  // A builder test or a Run now is attended, like a chat: a person pressed Run.
+  // A builder test, a Run now or a command-line run is attended, like a chat:
+  // a person (or their agent) started it.
   const automation =
     !!chat.launchKind &&
     chat.launchKind !== "chat.start" &&
     chat.launchKind !== "agent.start_run" &&
     chat.launchKind !== "builder.test" &&
-    chat.launchKind !== "manual.run";
+    chat.launchKind !== "manual.run" &&
+    chat.launchKind !== "cli.run";
   return <MachineStatus daemonId={daemonId} automation={automation} />;
 }

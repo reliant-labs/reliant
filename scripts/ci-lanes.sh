@@ -17,12 +17,13 @@
 #   web          the release's renderer build + verify-bundle (task build:web:verify)
 #   playwright   Playwright against the built renderer (task test:web:e2e)
 #   electron     the electron-builder package smoke (task build:electron:smoke)
-#   cp_contract  proto-vendor/controlplane/ matches control-plane main
-#                (task contract:controlplane:check; needs the private sibling).
-#                It judges a change made HERE, so even under --full it runs
-#                only when <rev>..HEAD touches what it checks: a nightly with no
-#                --base would only report that control-plane moved, which is
-#                control-plane's own gate to catch.
+#   cp_contract  proto-vendor/controlplane/ is exactly the export of the
+#                control-plane commit its SOURCE declares, and that commit is on
+#                control-plane main (task contract:controlplane:check; needs the
+#                private sibling). It judges a change made HERE, so even under
+#                --full it runs only when <rev>..HEAD touches what it checks.
+#                control-plane moving ahead is not a change here:
+#                .github/workflows/cp-contract-drift.yml reports it.
 #
 # Fails in the safe direction: an empty diff, a diff that cannot be computed,
 # or a change to CI itself (.github/workflows/ci.yml, .github/actions/, this

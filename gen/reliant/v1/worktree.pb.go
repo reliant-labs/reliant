@@ -666,6 +666,11 @@ type Worktree struct {
 	// FAILED and the reason is the user's to fix; empty otherwise, including for
 	// a failure on our side.
 	FailureReason string `protobuf:"bytes,15,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// The machine (daemon) whose disk holds this workspace's checkout. A
+	// branch workspace exists on exactly one machine, so a chat in it runs
+	// there and nowhere else. Unset for the main checkout, which every machine
+	// with the project has, and for rows from before ownership was recorded.
+	DaemonId      *string `protobuf:"bytes,16,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -805,6 +810,13 @@ func (x *Worktree) GetFailureReason() string {
 	return ""
 }
 
+func (x *Worktree) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // WorktreeSummary is the part of a worktree a chat list renders and groups by.
 // ListChats carries one per chat so the sidebar never needs the project's full
 // worktree list: the cost of showing chats scales with the chats, not with the
@@ -937,6 +949,10 @@ type CleanupMetadata struct {
 	// workspace needs its install/generate step run again.
 	StrippedPaths []string `protobuf:"bytes,7,rep,name=stripped_paths,json=strippedPaths,proto3" json:"stripped_paths,omitempty"`
 	StrippedBytes int64    `protobuf:"varint,8,opt,name=stripped_bytes,json=strippedBytes,proto3" json:"stripped_bytes,omitempty"`
+	// The user forgot the folder (InboxService.ForgetStorageWorktree): no
+	// machine was on record for it and no connected machine had it.
+	// directory_deleted is set so nothing tracks it, but nothing was deleted.
+	Forgotten     bool `protobuf:"varint,9,opt,name=forgotten,proto3" json:"forgotten,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1025,6 +1041,13 @@ func (x *CleanupMetadata) GetStrippedBytes() int64 {
 		return x.StrippedBytes
 	}
 	return 0
+}
+
+func (x *CleanupMetadata) GetForgotten() bool {
+	if x != nil {
+		return x.Forgotten
+	}
+	return false
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
@@ -1408,8 +1431,15 @@ type CreateWorktreeRequest struct {
 	// produces a second workspace. Repeat the same key to get the existing row
 	// back instead.
 	IdempotencyKey *string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3,oneof" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// daemon_id names the machine to create the workspace on (the new-chat
+	// composer's "Runs on"). Unset places it by the usual rule: the chat's
+	// machine, else the source workspace's, else the project's default. It must
+	// be one of the caller's machines the project is installed on, and it may
+	// not contradict chat_id's or source_worktree_id's machine: a checkout
+	// exists on one machine only.
+	DaemonId      *string `protobuf:"bytes,11,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateWorktreeRequest) Reset() {
@@ -1508,6 +1538,13 @@ func (x *CreateWorktreeRequest) GetBaseBranches() map[string]string {
 func (x *CreateWorktreeRequest) GetIdempotencyKey() string {
 	if x != nil && x.IdempotencyKey != nil {
 		return *x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *CreateWorktreeRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -2360,7 +2397,10 @@ type ImportWorktreeRequest struct {
 	// Must be true when the import moves the directory
 	// (DiscoveredWorktree.moves_on_import): the user has been told that
 	// anything running inside it loses its working directory.
-	ConfirmMove   bool `protobuf:"varint,6,opt,name=confirm_move,json=confirmMove,proto3" json:"confirm_move,omitempty"`
+	ConfirmMove bool `protobuf:"varint,6,opt,name=confirm_move,json=confirmMove,proto3" json:"confirm_move,omitempty"`
+	// daemon_id names the machine the directory is on: the one
+	// DiscoverWorktrees was asked about. Unset places it as CreateWorktree does.
+	DaemonId      *string `protobuf:"bytes,7,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2437,6 +2477,13 @@ func (x *ImportWorktreeRequest) GetConfirmMove() bool {
 	return false
 }
 
+func (x *ImportWorktreeRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // ImportWorktreeResponse returns the imported worktree
 type ImportWorktreeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2489,7 +2536,11 @@ type DiscoverWorktreesRequest struct {
 	// A background caller (the sidebar hint) must not wake a sleeping machine:
 	// when true and the machine is asleep, the call fails with Unavailable and
 	// nothing is woken. A user opening the discover dialog leaves it false.
-	Background    bool `protobuf:"varint,2,opt,name=background,proto3" json:"background,omitempty"`
+	Background bool `protobuf:"varint,2,opt,name=background,proto3" json:"background,omitempty"`
+	// daemon_id names the machine to look on. Unset asks the project's default
+	// machine. Each machine has its own checkouts, so the answer is about that
+	// machine only.
+	DaemonId      *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2536,6 +2587,13 @@ func (x *DiscoverWorktreesRequest) GetBackground() bool {
 		return x.Background
 	}
 	return false
+}
+
+func (x *DiscoverWorktreesRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
 }
 
 // DiscoverWorktreesResponse returns the untracked worktrees of every repo of
@@ -2605,8 +2663,10 @@ func (x *DiscoverWorktreesResponse) GetWorkspacesRoot() string {
 // PruneWorktreesRequest removes git's records of the project's worktrees
 // whose directories no longer exist.
 type PruneWorktreesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// daemon_id names the machine to prune on, as DiscoverWorktrees'.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2644,6 +2704,13 @@ func (*PruneWorktreesRequest) Descriptor() ([]byte, []int) {
 func (x *PruneWorktreesRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *PruneWorktreesRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -4514,7 +4581,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"recoveryId\x120\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\"Z\n" +
 	"\x1eDeleteWorktreeRecoveryResponse\x128\n" +
-	"\brecovery\x18\x01 \x01(\v2\x1c.reliant.v1.WorktreeRecoveryR\brecovery\"\xac\x04\n" +
+	"\brecovery\x18\x01 \x01(\v2\x1c.reliant.v1.WorktreeRecoveryR\brecovery\"\xdc\x04\n" +
 	"\bWorktree\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -4537,11 +4604,14 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"deleted_at\x18\r \x01(\tH\x01R\tdeletedAt\x88\x01\x01\x12K\n" +
 	"\x10cleanup_metadata\x18\x0e \x01(\v2\x1b.reliant.v1.CleanupMetadataH\x02R\x0fcleanupMetadata\x88\x01\x01\x12%\n" +
-	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReasonB\n" +
+	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReason\x12 \n" +
+	"\tdaemon_id\x18\x10 \x01(\tH\x03R\bdaemonId\x88\x01\x01B\n" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
-	"\x11_cleanup_metadata\"\x80\x02\n" +
+	"\x11_cleanup_metadataB\f\n" +
+	"\n" +
+	"_daemon_id\"\x80\x02\n" +
 	"\x0fWorktreeSummary\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -4553,7 +4623,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\b \x01(\tR\tprojectIdB\r\n" +
-	"\v_deleted_at\"\xb9\x02\n" +
+	"\v_deleted_at\"\xd7\x02\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +
 	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\x12\x1f\n" +
@@ -4565,7 +4635,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12#\n" +
 	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\x12%\n" +
 	"\x0estripped_paths\x18\a \x03(\tR\rstrippedPaths\x12%\n" +
-	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\"\x97\x02\n" +
+	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\x12\x1c\n" +
+	"\tforgotten\x18\t \x01(\bR\tforgotten\"\x97\x02\n" +
 	"\x12DiscoveredWorktree\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -4594,7 +4665,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x1c.reliant.v1.FileChangeStatusR\x06status\x12\x15\n" +
 	"\x06is_new\x18\x03 \x01(\bR\x05isNew\x12\x12\n" +
 	"\x04diff\x18\x04 \x01(\tR\x04diff\x12\x1b\n" +
-	"\tis_binary\x18\x05 \x01(\bR\bisBinary\"\x9e\x04\n" +
+	"\tis_binary\x18\x05 \x01(\bR\bisBinary\"\xce\x04\n" +
 	"\x15CreateWorktreeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1d\n" +
@@ -4609,7 +4680,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x12source_worktree_id\x18\b \x01(\tH\x02R\x10sourceWorktreeId\x88\x01\x01\x12X\n" +
 	"\rbase_branches\x18\t \x03(\v23.reliant.v1.CreateWorktreeRequest.BaseBranchesEntryR\fbaseBranches\x12,\n" +
 	"\x0fidempotency_key\x18\n" +
-	" \x01(\tH\x03R\x0eidempotencyKey\x88\x01\x01\x1a?\n" +
+	" \x01(\tH\x03R\x0eidempotencyKey\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\v \x01(\tH\x04R\bdaemonId\x88\x01\x01\x1a?\n" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -4617,7 +4689,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\x15\n" +
 	"\x13_source_worktree_idB\x12\n" +
-	"\x10_idempotency_key\"J\n" +
+	"\x10_idempotency_keyB\f\n" +
+	"\n" +
+	"_daemon_id\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
 	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xe5\x01\n" +
 	"\x14ListWorktreesRequest\x12%\n" +
@@ -4682,7 +4756,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\"5\n" +
 	"\x19UnarchiveWorktreeResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\xd2\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\x82\x02\n" +
 	"\x15ImportWorktreeRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
@@ -4690,27 +4764,36 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1c\n" +
 	"\achat_id\x18\x04 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x17\n" +
 	"\arepo_id\x18\x05 \x01(\tR\x06repoId\x12!\n" +
-	"\fconfirm_move\x18\x06 \x01(\bR\vconfirmMoveB\a\n" +
+	"\fconfirm_move\x18\x06 \x01(\bR\vconfirmMove\x12 \n" +
+	"\tdaemon_id\x18\a \x01(\tH\x02R\bdaemonId\x88\x01\x01B\a\n" +
 	"\x05_nameB\n" +
 	"\n" +
-	"\b_chat_id\"J\n" +
+	"\b_chat_idB\f\n" +
+	"\n" +
+	"_daemon_id\"J\n" +
 	"\x16ImportWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"Y\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\x89\x01\n" +
 	"\x18DiscoverWorktreesRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1e\n" +
 	"\n" +
 	"background\x18\x02 \x01(\bR\n" +
-	"background\"\xc2\x01\n" +
+	"background\x12 \n" +
+	"\tdaemon_id\x18\x03 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"\xc2\x01\n" +
 	"\x19DiscoverWorktreesResponse\x12>\n" +
 	"\n" +
 	"discovered\x18\x01 \x03(\v2\x1e.reliant.v1.DiscoveredWorktreeR\n" +
 	"discovered\x12/\n" +
 	"\x05stale\x18\x03 \x03(\v2\x19.reliant.v1.StaleWorktreeR\x05stale\x12'\n" +
-	"\x0fworkspaces_root\x18\x04 \x01(\tR\x0eworkspacesRootJ\x04\b\x02\x10\x03R\x05total\"6\n" +
+	"\x0fworkspaces_root\x18\x04 \x01(\tR\x0eworkspacesRootJ\x04\b\x02\x10\x03R\x05total\"f\n" +
 	"\x15PruneWorktreesRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"K\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"K\n" +
 	"\x16PruneWorktreesResponse\x121\n" +
 	"\x06pruned\x18\x01 \x03(\v2\x19.reliant.v1.StaleWorktreeR\x06pruned\":\n" +
 	"\x17RecreateWorktreeRequest\x12\x1f\n" +
@@ -5108,6 +5191,8 @@ func file_reliant_v1_worktree_proto_init() {
 	file_reliant_v1_worktree_proto_msgTypes[19].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[23].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[31].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[33].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[35].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[61].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[62].OneofWrappers = []any{}
 	type x struct{}

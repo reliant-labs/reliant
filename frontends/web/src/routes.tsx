@@ -37,6 +37,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { PageVisitTracker } from './components/PageVisitTracker'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -94,6 +95,8 @@ const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
 const ObservabilityBillingPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityBillingPreview'), 'default')
+const TraceLatencyPreview = lazyRoute(
+  () => import('./components/Forge/Observability/traceScatter/__preview__/TraceLatencyPreview'), 'default')
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
@@ -263,7 +266,7 @@ function RootShell() {
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
-      navigate({ href: mobilePathFor(pathname), replace: true });
+      navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
   }, [pathname, search, navigate]);
 
@@ -275,6 +278,7 @@ function RootShell() {
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
       <ActiveOrgBinding />
+      <PageVisitTracker />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>
@@ -563,6 +567,15 @@ const forgeObservabilityPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-observability-preview',
   component: () => <DevOnlyRoute>{new URLSearchParams(window.location.search).has('billingCase') ? <ObservabilityBillingPreview /> : <ObservabilityPreview />}</DevOnlyRoute>,
+})
+
+// The traces page's latency chart (scatter + histogram) in every state, on
+// seeded synthetic traces — a busy hour, the newest page of many, a brushed
+// region, loading, error, empty — in every scheme, no backend.
+const forgeTraceLatencyPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-trace-latency-preview',
+  component: () => <DevOnlyRoute><TraceLatencyPreview /></DevOnlyRoute>,
 })
 
 const consolePrimitivesPreviewRoute = createRoute({
@@ -929,6 +942,7 @@ const routeTree = rootRoute.addChildren([
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,
+  forgeTraceLatencyPreviewRoute,
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,

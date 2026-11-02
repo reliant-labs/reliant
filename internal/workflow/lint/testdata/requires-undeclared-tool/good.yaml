@@ -1,0 +1,27 @@
+name: fixture
+requires:
+  tools: [task, jq]
+triggers:
+- name: nightly
+  schedule: {cron: '0 3 * * *'}
+entry: [report]
+nodes:
+- id: report
+  type: run
+  timeout: 5m
+  args:
+    credentials: inherit
+    command: |
+      # task and jq in a comment are not calls
+      echo "task ci is the gate"
+      task ci:plan | jq -r .steps
+- id: done
+  type: save_message
+  args: {role: assistant, content: 'exit {{ nodes.report.exit_code }}'}
+edges:
+- {from: report, default: done}
+on_failure:
+  sequence:
+  - id: say
+    type: save_message
+    args: {role: assistant, content: failed}

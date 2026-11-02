@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import React from "react";
+import { DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
 
 // ---------------------------------------------------------------------------
 // The terminal's websocket is to the api-server, not to the daemon. So when the
@@ -52,11 +53,16 @@ class FakeWebSocket {
     this.onclose?.({ code, reason });
   }
 
-  /** Drive the server side: open the socket and confirm the session. */
-  establish() {
+  /**
+   * Drive the server side: open the socket and confirm the session, naming the
+   * machine the server sent it to when one is given.
+   */
+  establish(daemonId?: string) {
     this.readyState = FakeWebSocket.OPEN;
     this.onopen?.();
-    this.onmessage?.({ data: JSON.stringify({ type: "init", pid: 4242, session_id: "daemon-1" }) });
+    this.onmessage?.({
+      data: JSON.stringify({ type: "init", pid: 4242, session_id: "daemon-1", daemon_id: daemonId }),
+    });
   }
 }
 
@@ -184,8 +190,19 @@ function setDaemonOnline(online: boolean) {
   });
 }
 
+/** Two machines: A is always connected, B's status is what the test drives. */
+function setMachines(machineB: DaemonStatus) {
+  const a = { daemonId: "machine-a", status: DaemonStatus.ACTIVE };
+  daemonStatusMock.mockReturnValue({
+    daemons: [a, { daemonId: "machine-b", status: machineB }],
+    activeDaemon: a,
+    loading: false,
+    refresh: () => {},
+  });
+}
+
 /** Mount, let the async connect settle, and bring the session up. */
-async function mountConnected() {
+async function mountConnected(daemonId?: string) {
   const view = render(React.createElement(Terminal, { sessionId: "session-1" }));
   // connectWebSocket awaits supabase.auth.getSession() before constructing the
   // socket, so the socket does not exist until microtasks drain.
@@ -196,7 +213,7 @@ async function mountConnected() {
   const ws = sockets.at(-1);
   if (!ws) throw new Error("no websocket was opened");
   await act(async () => {
-    ws.establish();
+    ws.establish(daemonId);
   });
   return { view, ws };
 }
@@ -291,5 +308,36 @@ describe("Terminal daemon online -> offline", () => {
     expect(ws.readyState).toBe(FakeWebSocket.OPEN);
     expect(screen.queryByText("Waiting for your machine")).toBeNull();
     expect(sockets).toHaveLength(1);
+  });
+});
+
+describe("Terminal bound to one of several machines", () => {
+  it("follows the machine the server reached, not whichever machine is active", async () => {
+    setMachines(DaemonStatus.ACTIVE);
+    const { view, ws } = await mountConnected("machine-b");
+
+    // B drops while A stays connected. `activeDaemon` is still A, so "any
+    // machine is up" would keep showing a live prompt for a dead PTY.
+    setMachines(DaemonStatus.DISCONNECTED);
+    view.rerender(React.createElement(Terminal, { sessionId: "session-1" }));
+    await act(async () => {
+      vi.advanceTimersByTime(GRACE_MS + 100);
+      await Promise.resolve();
+    });
+
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(screen.getByText("Waiting for your machine")).toBeTruthy();
+    const socketsWhileOffline = sockets.length;
+
+    // B comes back: the terminal reconnects at once rather than waiting out
+    // the fallback retry, because A's state never changed to trigger it.
+    setMachines(DaemonStatus.ACTIVE);
+    view.rerender(React.createElement(Terminal, { sessionId: "session-1" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sockets.length).toBe(socketsWhileOffline + 1);
   });
 });

@@ -4,7 +4,7 @@
  *
  * It used to be the last thing in the step: a button under every machine row
  * and the notes beneath them. With six hosted sizes that pushed it below the
- * fold of a 1400x900 window, so a user who picked "Large" saw nothing happen
+ * fold of a 1400x900 window, so a user who picked "XL" saw nothing happen
  * and no way on — the footer bar sat empty under the fold line the whole time.
  *
  * These tests render the step inside the real OnboardingPage footer slot and
@@ -43,18 +43,18 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
     data: {
       plans: [
         {
-          id: "plan_compute_small",
-          name: "Small",
+          id: "plan_compute_m",
+          name: "M",
           displayOrder: 1,
           priceCents: 1500n,
-          structuredLimits: { allowedDaemonSizes: ["small"] },
+          structuredLimits: { allowedDaemonSizes: ["m"] },
         },
         {
-          id: "plan_compute_large",
-          name: "Large",
+          id: "plan_compute_xl",
+          name: "XL",
           displayOrder: 3,
           priceCents: 7900n,
-          structuredLimits: { allowedDaemonSizes: ["large"] },
+          structuredLimits: { allowedDaemonSizes: ["xl"] },
         },
       ],
     },
@@ -145,25 +145,25 @@ describe("ComputeStep — the way forward is in the card footer", () => {
     renderInCard();
     const footer = screen.getByTestId("card-footer");
     // Nothing picked yet: the first (smallest) size is the default.
-    expect(within(footer).getByRole("button", { name: "Continue with Small" })).toBeVisible();
+    expect(within(footer).getByRole("button", { name: "Continue with M" })).toBeVisible();
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Large"));
+      fireEvent.click(screen.getByText("XL"));
     });
-    expect(within(footer).getByRole("button", { name: "Continue with Large" })).toBeVisible();
+    expect(within(footer).getByRole("button", { name: "Continue with XL" })).toBeVisible();
   });
 
   it("records the picked machine when the footer action is clicked", async () => {
-    const updatePlan = renderInCard({ computePlanId: "plan_compute_large" });
+    const updatePlan = renderInCard({ computePlanId: "plan_compute_xl" });
     await act(async () => {
       fireEvent.click(
         within(screen.getByTestId("card-footer")).getByRole("button", {
-          name: "Continue with Large",
+          name: "Continue with XL",
         }),
       );
     });
     expect(updatePlan).toHaveBeenCalledWith(
-      expect.objectContaining({ compute: "cloud_paid", computePlanId: "plan_compute_large" }),
+      expect.objectContaining({ compute: "cloud_paid", computePlanId: "plan_compute_xl" }),
     );
   });
 

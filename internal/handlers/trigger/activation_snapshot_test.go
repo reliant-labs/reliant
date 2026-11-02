@@ -307,3 +307,97 @@ nodes:
 	_, _, err = eventInputContexts(wt, wf, map[string]any{"repos": many(100000), "orgs": many(100000)})
 	require.ErrorContains(t, err, "exceed the activation approval limit")
 }
+
+// runTimeArgs is pr-review's reviewer shape: the child's model, prompt and
+// response schema are computed by earlier nodes, which do not exist at
+// approval, while its tools are fixed literals.
+const runTimeArgs = `name: run-time-args
+inputs:
+  repo: {type: string, default: acme/api}
+entry: [lane]
+nodes:
+  - id: lane
+    type: compute
+    outputs:
+      model: "{{ {'tags': ['fast']} }}"
+      system: be brief
+      items: "{{ ['a', 'b'] }}"
+  - id: review
+    type: workflow
+    ref: builtin://autopilot-agent
+    thread:
+      mode: new
+      inject: {role: user, content: '{{ nodes.lane.system }}'}
+    args:
+      model: '{{ nodes.lane.model }}'
+      system_prompt: '{{ nodes.lane.system }}'
+      tools: [github__pr_get]
+      tool_params:
+        github__pr_get:
+          owner: "{{ inputs.repo.split('/')[0] }}"
+          repo: "{{ inputs.repo.split('/')[1] }}"
+          pull_number: '{{ nodes.lane.number }}'
+  - id: each
+    type: loop
+    ref: builtin://autopilot-agent
+    items: '{{ nodes.lane.items }}'
+    parallel: true
+    args:
+      system_prompt: '{{ iter.item }}'
+      tools: [github__pr_list_files]
+edges:
+  - {from: lane, default: review}
+  - {from: review, default: each}
+`
+
+func TestActivationSnapshotApprovesChildArgsOnlyARunCanEvaluate(t *testing.T) {
+	// Arguments that read node outputs or a loop's item cannot be evaluated
+	// before a run. They reach the child as unbounded instead of refusing the
+	// whole closure, so the child's fixed privileges are still disclosed.
+	snap, err := snapshotFor(t, runTimeArgs, "", nil)
+	require.NoError(t, err)
+	summary := strings.Join(snap.Summary, "\n")
+	require.Contains(t, summary, "Agent tool privileges: github__pr_get;")
+	require.Contains(t, summary, "Agent tool privileges: github__pr_list_files;")
+}
+
+func TestActivationSnapshotRefusesAChildPrivilegeARunChooses(t *testing.T) {
+	// A node output that picks the child's tools is as unbounded as an event:
+	// the approval cannot say what it grants, so it refuses.
+	yaml := `name: run-picks-tools
+entry: [pick]
+nodes:
+  - id: pick
+    type: compute
+    outputs:
+      tools: "{{ ['view'] }}"
+  - id: agent
+    type: workflow
+    ref: builtin://autopilot-agent
+    args:
+      tools: '{{ nodes.pick.tools }}'
+edges:
+  - {from: pick, default: agent}
+`
+	_, err := snapshotFor(t, yaml, "", nil)
+	require.ErrorContains(t, err, "fixed privilege choices")
+}
+
+func TestActivationSnapshotRefusesAChildRefARunChooses(t *testing.T) {
+	// The ref picks the child: a run-time value may never stand in for it.
+	yaml := `name: run-picks-child
+entry: [pick]
+nodes:
+  - id: pick
+    type: compute
+    outputs:
+      ref: builtin://autopilot-agent
+  - id: child
+    type: workflow
+    ref: '{{ nodes.pick.ref }}'
+edges:
+  - {from: pick, default: child}
+`
+	_, err := snapshotFor(t, yaml, "", nil)
+	require.ErrorContains(t, err, "must resolve before activation approval")
+}

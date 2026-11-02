@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, Plug } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
@@ -62,11 +62,15 @@ const sectionGroups: SectionGroup[] = [
     items: [
       { id: "projects", label: "Projects", icon: FolderOpen },
       { id: "branches", label: "Branches", icon: GitBranch },
+      { id: "automations", label: "Automations", icon: Zap },
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
       { id: "machines", label: "Machines", icon: Server },
       { id: "git-connections", label: "GitHub", icon: Github },
+      // The connections automations and workflow steps act through (Slack,
+      // Gmail, Twilio, HTTP, GitHub's integration), to find, test or revoke.
+      { id: "integrations", label: "Integrations", icon: Plug },
       // Tokens exist to let a self-hosted machine or headless daemon connect,
       // so they sit with Machines.
       { id: "tokens", label: "Access tokens", icon: KeyRound },
@@ -133,7 +137,7 @@ export function SettingsNavigation({
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
                         isCollapsed ? "flex items-center justify-center px-2" : "text-left",
                         isActive
-                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          ? "border-primary bg-primary/10 text-primary-ink font-medium"
                           : "border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
                       )}
                     >

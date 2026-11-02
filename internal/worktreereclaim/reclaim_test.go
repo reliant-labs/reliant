@@ -66,7 +66,11 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.MkdirAll(f.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	f.r = &Reclaimer{Root: f.root, Cwds: func(context.Context) ([]string, error) { return nil, nil }}
+	f.r = &Reclaimer{
+		Root: f.root, Cwds: func(context.Context) ([]string, error) { return nil, nil },
+		Acquire:    func(context.Context, []string) (RecoveryLease, error) { return finalizeTestLease{}, nil },
+		ProcessUse: func(context.Context, []string) error { return nil },
+	}
 	return f
 }
 

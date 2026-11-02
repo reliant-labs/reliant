@@ -780,8 +780,9 @@ function handleChatStateChange(update: UserUpdate) {
     useActivityStore.getState().removeActivity(chat_id);
     logger.info(`${LOG_PREFIX} Chat archived: ${chat_id.slice(0, 8)}`);
     applyChatPatch(projectId, chat_id, { state: nextState });
-    // The archived list needs a refetch — we can't construct an ArchivedChat row.
-    queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
+    // The archived list needs a refetch — we can't construct an ArchivedChat
+    // row. Coalesced: every successful automation run archives itself.
+    streamInvalidation.invalidate(chatServiceKeys.archivedChat);
 
     // An automation run that finished successfully archives itself. Nobody
     // put it away, so whoever is watching it finish stays on it, with its
@@ -812,7 +813,7 @@ function handleChatStateChange(update: UserUpdate) {
   if (isBeingRestored) {
     logger.info(`${LOG_PREFIX} Chat restored: ${chat_id.slice(0, 8)}`);
     applyChatPatch(projectId, chat_id, { state: nextState });
-    queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
+    streamInvalidation.invalidate(chatServiceKeys.archivedChat);
     return;
   }
 
@@ -1038,8 +1039,12 @@ function handleChatCreated(update: UserUpdate) {
 
   // The event payload is partial (chat_id/title/project_id/worktree_id only);
   // upserting a fabricated Chat row would render a broken sidebar entry, so
-  // refetch the list instead.
-  queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+  // refetch the list instead. Coalesced: an automation-heavy user creates
+  // chats in bursts, and a reconnect replays them. One ListChats per update
+  // sent 1,391 ListChats in a minute from one client (prod, 2026-10-29),
+  // filled the api-server's database pool and made every chat open in that
+  // window wait (GetChat p50 67ms outside those minutes, 2.3s inside).
+  streamInvalidation.invalidate(chatKeys.lists());
 }
 
 function handleChatTitleChanged(update: UserUpdate) {
@@ -1076,7 +1081,7 @@ function handleChatDeleted(update: UserUpdate) {
     update.project_id || useProjectStore.getState().currentProject?.id;
   removeChatFromListCache(projectId, chat_id);
   // Deletes can come from the archived list too — refetch it.
-  queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
+  streamInvalidation.invalidate(chatServiceKeys.archivedChat);
   // Release the chat's retained memory (messages cache is gcTime: Infinity,
   // per-chat Zustand slices have no TTL).
   useChatStore.getState().evictChat(chat_id);
@@ -1134,7 +1139,9 @@ function handleChatActivityChanged(update: UserUpdate) {
     // Approvals are server data in the React Query cache. On IDLE we don't hold
     // the resolved approval objects, so reconcile from the server (a genuine
     // "something changed, refetch" nudge — the one case invalidate is correct).
-    queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.approvals });
+    // Coalesced: every automation run that finishes goes IDLE, and a replay
+    // of them was one ListApprovalsByChat per update.
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.approvals);
 
     // IDLE is the authoritative "nothing is streaming" signal. Streaming
     // deltas race message finalization on a separate server channel, so a
@@ -1154,6 +1161,8 @@ function handleProcessStarted(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1188,6 +1197,7 @@ function handleProcessStarted(update: UserUpdate) {
       worktree_id: worktreeId,
       working_dir: data.working_dir,
       start_time: data.start_time || new Date().toISOString(),
+      daemon_id: data.daemon_id || undefined,
     });
   }
 
@@ -1206,6 +1216,8 @@ function handleProcessCompleted(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1232,6 +1244,8 @@ function handleProcessFailed(update: UserUpdate) {
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    // The machine the process runs on, when the event names it.
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   };
 
@@ -1281,6 +1295,7 @@ function updateProcessStatus(
     session_id?: string;
     worktree_id?: string;
     chat_id?: string;
+    daemon_id?: string;
     ports?: Array<{ port: number; protocol: string; state: string; address: string }>;
   },
   status: BackgroundProcess["status"]
@@ -1310,6 +1325,7 @@ function updateProcessStatus(
     start_time: data.start_time,
     end_time: data.end_time,
     exit_code: data.exit_code,
+    daemon_id: data.daemon_id || undefined,
   });
 }
 
@@ -1367,8 +1383,8 @@ function handleRefetch(update: UserUpdate) {
   if (refetchType === "config_health") {
     // ConfigHealthIndicator reads GetConfigHealth through the generated hook,
     // and MCP server health is part of config health.
-    void queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.settings });
-    void queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.mcp });
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.settings);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.mcp);
   }
   // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);

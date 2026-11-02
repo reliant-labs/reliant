@@ -458,7 +458,7 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 
 	// Use pause-aware activity context so activities get cancelled on pause signal.
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
-	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -466,7 +466,7 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	presetLoader := preset.NewLoaderForProject(r.projectPath)
 
@@ -478,12 +478,13 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 		}
 
 		// Load workflow via ActivityLoadWorkflow
-		loadInput := map[string]string{
-			"chat_id":       r.chatID,
-			"workflow_name": ref,
+		loadInput := types.LoadWorkflowInput{
+			ChatID:       r.chatID,
+			WorkflowName: ref,
+			CatalogPin:   catalogPinFrom(r.ctx),
 		}
 		var loadedWf LoadedWorkflow
-		if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(r.ctx, &loadedWf); err != nil {
+		if err := executeBookkeeping(baseCtx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(r.ctx, &loadedWf); err != nil {
 			return fmt.Errorf("failed to load workflow %q: %w", ref, err)
 		}
 

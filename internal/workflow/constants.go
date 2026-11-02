@@ -82,7 +82,9 @@ var RuntimeInjectedInputs = map[string]bool{
 	"spawned_by":         true, // Injected after validation
 	"__thread":           true, // Internal signal routing key for thread-scoped updates
 	"session_daemon_id":  true, // Session-level active daemon for tool execution
-	"__trigger":          true, // Launch event, exposed to CEL as `trigger`
+	// The machine pool that placed the run (launch.InputKeyMachinePool).
+	"machine_pool": true,
+	"__trigger":    true, // Launch event, exposed to CEL as `trigger`
 	// No human is watching (runtime.InputKeyUnattended). Injected by the
 	// launcher for trigger runs; the runtime's own input validation runs
 	// inside the workflow and rejected it as unknown, so every trigger fire of

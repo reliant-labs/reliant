@@ -33,7 +33,7 @@ export function RunFormError({ message, onNavigate }: { message: string; onNavig
             to="/settings/$section"
             params={{ section: "ai" }}
             onClick={onNavigate}
-            className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Add a provider in Settings → AI → Providers
           </Link>

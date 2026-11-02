@@ -14,6 +14,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { toast } from "sonner";
 
 import {
   ApprovalSchema,
@@ -24,6 +26,7 @@ import {
   type ListApprovalsByChatResponse,
 } from "../gen/reliant/v1/approval_pb";
 import { connectClient } from "../lib/connect";
+import { hasErrorReason } from "../lib/errorReasons";
 import { queryClient } from "../lib/query-client";
 import {
   approvalServiceKeys,
@@ -40,6 +43,27 @@ export { ApprovalStatus };
 const client = connectClient(ApprovalService);
 
 const listKey = (chatId: string) => approvalServiceKeys.listApprovalsByChat({ chatId });
+
+/**
+ * The status a chat feed approval update names. Only "pending" is pending: a
+ * status this web does not know (a newer server's) is some resolution, and
+ * reading it as pending would show an Approve button that can only fail.
+ */
+export function approvalStatusFromFeed(status: string | undefined): ApprovalStatus {
+  switch (status) {
+    case "pending":
+      return ApprovalStatus.PENDING;
+    case "approved":
+      return ApprovalStatus.APPROVED;
+    case "denied":
+      return ApprovalStatus.DENIED;
+    case "expired":
+    case "timeout":
+      return ApprovalStatus.EXPIRED;
+    default:
+      return ApprovalStatus.CANCELLED;
+  }
+}
 
 /** A chat's cached approvals, oldest first; [] before the first fetch. */
 export function approvalsFromCache(chatId: string): Approval[] {
@@ -150,6 +174,40 @@ function optimisticallyResolve(
 type Rollback = () => void;
 
 /**
+ * The approval was not pending when the server got the request: someone
+ * decided it elsewhere, its wait expired, or the run waiting on it ended.
+ * Retrying cannot help, so it is not an error to show raw.
+ */
+export function isApprovalNotActionable(err: unknown): boolean {
+  return hasErrorReason(err, "approval_not_pending") || (err instanceof ConnectError && err.code === Code.NotFound);
+}
+
+/** The server's sentence for a not-actionable approval ("This request expired: …"). */
+export function notActionableMessage(err: unknown): string {
+  const text = err instanceof ConnectError ? err.rawMessage : "";
+  return text || "This request was already resolved.";
+}
+
+/**
+ * A write lost to the approval's own end: take the approvals out of the
+ * pending list (rolling back would put the dead Approve button back), tell
+ * the person what happened, and re-read the chat's approvals from the server.
+ */
+function dropNotActionable(chatId: string | undefined, ids: readonly string[], err: unknown): void {
+  const message = notActionableMessage(err);
+  if (chatId) {
+    const gone = new Set(ids);
+    patchApprovalsCache(chatId, (prev) =>
+      prev.map((a) =>
+        gone.has(a.id) ? { ...a, status: ApprovalStatus.CANCELLED, denialReason: message, resolvedAt: new Date().toISOString() } : a,
+      ),
+    );
+  }
+  toast.info(message);
+  void queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
+}
+
+/**
  * The optimistic onMutate/onError pair for one chat. onMutate's return value
  * reaches onError as its third argument; the generated hook infers its type
  * (TanStack's TContext) from onMutate, so the rollback is typed end to end.
@@ -162,7 +220,10 @@ function optimistic<Req>(chatId: string | undefined, resolve: (req: Req) => [rea
       const [ids, status, extra] = resolve(req);
       return optimisticallyResolve(chatId, ids, status, extra);
     },
-    onError: (_err: unknown, _req: Req, rollback: Rollback | undefined) => rollback?.(),
+    onError: (err: unknown, req: Req, rollback: Rollback | undefined) => {
+      rollback?.();
+      if (isApprovalNotActionable(err)) dropNotActionable(chatId, resolve(req)[0], err);
+    },
   };
 }
 
@@ -216,6 +277,11 @@ export function useBatchDenyInChat(chatId?: string) {
  * useBatchApproveInChat: optimistic, rolled back on error, and the service's
  * reads invalidated once the server has recorded it.
  */
+/** How many of the chat's approvals are waiting, from the cache (no fetch). */
+export function countPendingApprovals(chatId: string): number {
+  return approvalsFromCache(chatId).filter((a) => a.status === ApprovalStatus.PENDING).length;
+}
+
 export async function approveAllPendingApprovals(chatId: string): Promise<void> {
   const pendingIds = approvalsFromCache(chatId)
     .filter((a) => a.status === ApprovalStatus.PENDING)
@@ -227,6 +293,10 @@ export async function approveAllPendingApprovals(chatId: string): Promise<void> 
     await client.batchApprove({ requestIds: pendingIds });
   } catch (err) {
     rollback();
+    if (isApprovalNotActionable(err)) {
+      dropNotActionable(chatId, pendingIds, err);
+      return;
+    }
     throw err;
   }
   void queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });

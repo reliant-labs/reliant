@@ -45,6 +45,15 @@ const (
 	// SecretStoreServiceRevokeHostedHTTPUseProcedure is the fully-qualified name of the
 	// SecretStoreService's RevokeHostedHTTPUse RPC.
 	SecretStoreServiceRevokeHostedHTTPUseProcedure = "/controlplane.v1.SecretStoreService/RevokeHostedHTTPUse"
+	// SecretStoreServiceAllowSecretUseProcedure is the fully-qualified name of the SecretStoreService's
+	// AllowSecretUse RPC.
+	SecretStoreServiceAllowSecretUseProcedure = "/controlplane.v1.SecretStoreService/AllowSecretUse"
+	// SecretStoreServiceDenySecretUseProcedure is the fully-qualified name of the SecretStoreService's
+	// DenySecretUse RPC.
+	SecretStoreServiceDenySecretUseProcedure = "/controlplane.v1.SecretStoreService/DenySecretUse"
+	// SecretStoreServiceListSecretAccessProcedure is the fully-qualified name of the
+	// SecretStoreService's ListSecretAccess RPC.
+	SecretStoreServiceListSecretAccessProcedure = "/controlplane.v1.SecretStoreService/ListSecretAccess"
 	// SecretStoreServiceListSecretsProcedure is the fully-qualified name of the SecretStoreService's
 	// ListSecrets RPC.
 	SecretStoreServiceListSecretsProcedure = "/controlplane.v1.SecretStoreService/ListSecrets"
@@ -78,6 +87,16 @@ type SecretStoreServiceClient interface {
 	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
 	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
 	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
+	// AllowSecretUse puts a principal on a secret's access list. Idempotent.
+	// Human org owner/admin only (the authorization GrantHostedHTTPUse applies);
+	// protected environments require step-up.
+	AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error)
+	// DenySecretUse removes a principal from a secret's access list. Idempotent.
+	DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error)
+	// ListSecretAccess returns the active access entries of one secret, or of
+	// every secret in the environment when secret_name is empty. Same
+	// authorization as AllowSecretUse, without the step-up gate (read-only).
+	ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
@@ -132,6 +151,24 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+SecretStoreServiceRevokeHostedHTTPUseProcedure,
 			connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
+			connect.WithClientOptions(opts...),
+		),
+		allowSecretUse: connect.NewClient[v1.AllowSecretUseRequest, v1.AllowSecretUseResponse](
+			httpClient,
+			baseURL+SecretStoreServiceAllowSecretUseProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("AllowSecretUse")),
+			connect.WithClientOptions(opts...),
+		),
+		denySecretUse: connect.NewClient[v1.DenySecretUseRequest, v1.DenySecretUseResponse](
+			httpClient,
+			baseURL+SecretStoreServiceDenySecretUseProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("DenySecretUse")),
+			connect.WithClientOptions(opts...),
+		),
+		listSecretAccess: connect.NewClient[v1.ListSecretAccessRequest, v1.ListSecretAccessResponse](
+			httpClient,
+			baseURL+SecretStoreServiceListSecretAccessProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
 			connect.WithClientOptions(opts...),
 		),
 		listSecrets: connect.NewClient[v1.ListSecretsRequest, v1.ListSecretsResponse](
@@ -189,6 +226,9 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 type secretStoreServiceClient struct {
 	grantHostedHTTPUse  *connect.Client[v1.GrantHostedHTTPUseRequest, v1.GrantHostedHTTPUseResponse]
 	revokeHostedHTTPUse *connect.Client[v1.RevokeHostedHTTPUseRequest, v1.RevokeHostedHTTPUseResponse]
+	allowSecretUse      *connect.Client[v1.AllowSecretUseRequest, v1.AllowSecretUseResponse]
+	denySecretUse       *connect.Client[v1.DenySecretUseRequest, v1.DenySecretUseResponse]
+	listSecretAccess    *connect.Client[v1.ListSecretAccessRequest, v1.ListSecretAccessResponse]
 	listSecrets         *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
 	getSecretVersions   *connect.Client[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse]
 	setSecret           *connect.Client[v1.SetSecretRequest, v1.SetSecretResponse]
@@ -207,6 +247,21 @@ func (c *secretStoreServiceClient) GrantHostedHTTPUse(ctx context.Context, req *
 // RevokeHostedHTTPUse calls controlplane.v1.SecretStoreService.RevokeHostedHTTPUse.
 func (c *secretStoreServiceClient) RevokeHostedHTTPUse(ctx context.Context, req *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
 	return c.revokeHostedHTTPUse.CallUnary(ctx, req)
+}
+
+// AllowSecretUse calls controlplane.v1.SecretStoreService.AllowSecretUse.
+func (c *secretStoreServiceClient) AllowSecretUse(ctx context.Context, req *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error) {
+	return c.allowSecretUse.CallUnary(ctx, req)
+}
+
+// DenySecretUse calls controlplane.v1.SecretStoreService.DenySecretUse.
+func (c *secretStoreServiceClient) DenySecretUse(ctx context.Context, req *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error) {
+	return c.denySecretUse.CallUnary(ctx, req)
+}
+
+// ListSecretAccess calls controlplane.v1.SecretStoreService.ListSecretAccess.
+func (c *secretStoreServiceClient) ListSecretAccess(ctx context.Context, req *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error) {
+	return c.listSecretAccess.CallUnary(ctx, req)
 }
 
 // ListSecrets calls controlplane.v1.SecretStoreService.ListSecrets.
@@ -256,6 +311,16 @@ type SecretStoreServiceHandler interface {
 	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
 	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
 	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
+	// AllowSecretUse puts a principal on a secret's access list. Idempotent.
+	// Human org owner/admin only (the authorization GrantHostedHTTPUse applies);
+	// protected environments require step-up.
+	AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error)
+	// DenySecretUse removes a principal from a secret's access list. Idempotent.
+	DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error)
+	// ListSecretAccess returns the active access entries of one secret, or of
+	// every secret in the environment when secret_name is empty. Same
+	// authorization as AllowSecretUse, without the step-up gate (read-only).
+	ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
@@ -306,6 +371,24 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 		SecretStoreServiceRevokeHostedHTTPUseProcedure,
 		svc.RevokeHostedHTTPUse,
 		connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
+		connect.WithHandlerOptions(opts...),
+	)
+	secretStoreServiceAllowSecretUseHandler := connect.NewUnaryHandler(
+		SecretStoreServiceAllowSecretUseProcedure,
+		svc.AllowSecretUse,
+		connect.WithSchema(secretStoreServiceMethods.ByName("AllowSecretUse")),
+		connect.WithHandlerOptions(opts...),
+	)
+	secretStoreServiceDenySecretUseHandler := connect.NewUnaryHandler(
+		SecretStoreServiceDenySecretUseProcedure,
+		svc.DenySecretUse,
+		connect.WithSchema(secretStoreServiceMethods.ByName("DenySecretUse")),
+		connect.WithHandlerOptions(opts...),
+	)
+	secretStoreServiceListSecretAccessHandler := connect.NewUnaryHandler(
+		SecretStoreServiceListSecretAccessProcedure,
+		svc.ListSecretAccess,
+		connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
 		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreServiceListSecretsHandler := connect.NewUnaryHandler(
@@ -362,6 +445,12 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 			secretStoreServiceGrantHostedHTTPUseHandler.ServeHTTP(w, r)
 		case SecretStoreServiceRevokeHostedHTTPUseProcedure:
 			secretStoreServiceRevokeHostedHTTPUseHandler.ServeHTTP(w, r)
+		case SecretStoreServiceAllowSecretUseProcedure:
+			secretStoreServiceAllowSecretUseHandler.ServeHTTP(w, r)
+		case SecretStoreServiceDenySecretUseProcedure:
+			secretStoreServiceDenySecretUseHandler.ServeHTTP(w, r)
+		case SecretStoreServiceListSecretAccessProcedure:
+			secretStoreServiceListSecretAccessHandler.ServeHTTP(w, r)
 		case SecretStoreServiceListSecretsProcedure:
 			secretStoreServiceListSecretsHandler.ServeHTTP(w, r)
 		case SecretStoreServiceGetSecretVersionsProcedure:
@@ -393,6 +482,18 @@ func (UnimplementedSecretStoreServiceHandler) GrantHostedHTTPUse(context.Context
 
 func (UnimplementedSecretStoreServiceHandler) RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.RevokeHostedHTTPUse is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.AllowSecretUse is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.DenySecretUse is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.ListSecretAccess is not implemented"))
 }
 
 func (UnimplementedSecretStoreServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {

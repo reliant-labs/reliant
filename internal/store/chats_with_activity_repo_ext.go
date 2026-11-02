@@ -122,6 +122,9 @@ func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core
 // their messages, contains the query; most recently active first. A non-empty
 // ProjectID narrows it to that project; empty searches all of the user's. A
 // blank query matches nothing.
+//
+// It searches the chat list, so it applies the chat list's policy
+// (list_in_sidebar): an automation's runs are searched in Runs, not here.
 func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) ([]*core.Chat, error) {
 	query := strings.TrimSpace(f.SearchQuery)
 	if query == "" {
@@ -133,7 +136,8 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 		Join("LEFT JOIN messages m ON chats_with_activity.id = m.chat_id").
 		// block_type 1 is CONTENT_BLOCK_TYPE_TEXT.
 		Join("LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1").
-		Where("chats_with_activity.user_id = ?", f.UserID)
+		Where("chats_with_activity.user_id = ?", f.UserID).
+		Where("chats_with_activity.list_in_sidebar")
 	if f.ProjectID != "" {
 		q = q.Where("chats_with_activity.project_id = ?", f.ProjectID)
 	}
@@ -275,6 +279,9 @@ func chatFromView(row *ChatsWithActivity) *core.Chat {
 	}
 	if row.WorkingThreads != nil {
 		chat.WorkingThreads = int(*row.WorkingThreads)
+	}
+	if row.Origin != nil {
+		chat.Origin = *row.Origin
 	}
 	if row.State != nil {
 		chat.State = *row.State

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -32,6 +33,9 @@ type chatMachineRecovery struct {
 	remote                                  *toolexec.RemoteExecutor
 	mu                                      sync.Mutex
 	deliveries                              map[string]int
+	// wait, when set, replaces the run step's machine wait (30m by default:
+	// a command that never reached an asleep machine is held for it).
+	wait *machineWait
 }
 
 func newChatMachineRecovery(t *testing.T) *chatMachineRecovery {
@@ -61,9 +65,17 @@ func (f *chatMachineRecovery) register(t *testing.T, id, user string, updated ti
 	t.Helper()
 	managed := "managed"
 	ctx := context.Background()
-	require.NoError(t, f.h.Repo().UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: user, DaemonType: &managed}))
+	// A managed machine connects with a daemon-bound credential: its id is
+	// reserved once the control plane's lifecycle is applied to it, and an
+	// unbound re-registration of it is refused (#2070).
+	require.NoError(t, f.h.Repo().UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: user, DaemonType: &managed, RequiresBoundToken: true}))
 	_, err := f.h.sqlDB.ExecContext(ctx, `UPDATE daemons SET updated_at = $1 WHERE id = $2`, updated, id)
 	require.NoError(t, err)
+	// Each of the user's machines has its own installed checkout of the
+	// project: a run is refused on a machine with none (projectcheckout).
+	if user == f.user {
+		require.NoError(t, f.h.Repo().UpsertProjectDaemon(ctx, f.project, id, f.path, nil))
+	}
 	now := time.Now()
 	require.NoError(t, f.h.Repo().UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 		DaemonID: id, UserID: user, Source: db.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now,
@@ -116,13 +128,23 @@ func (f *chatMachineRecovery) count(id string) int {
 	return f.deliveries[id]
 }
 
-func (f *chatMachineRecovery) run(selector *toolexec.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
+func (f *chatMachineRecovery) run(selector *activitytypes.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
 	var out ExecuteRunStepOutput
-	err := f.h.ExecuteActivity(NewExecuteRunStepActivity(f.h.Repo(), executor, nil).Execute, ExecuteRunStepInput{
+	act := NewExecuteRunStepActivity(f.h.Repo(), executor, nil)
+	act.machineWait = f.wait
+	err := f.h.ExecuteActivity(act.Execute, ExecuteRunStepInput{
 		ChatID: f.chat, WorkflowID: "live-workflow", StepID: "run", Command: "pwd", Timeout: 5000,
 		DaemonSelector: selector,
 	}, &out)
 	return out, err
+}
+
+// shortMachineWait ends the run step's hold for an undelivered command in
+// seconds, for the steps that assert the command never ran.
+func shortMachineWait() *machineWait {
+	w := defaultMachineWait()
+	w.budget, w.poll, w.firstResend, w.maxResend = 2*time.Second, 100*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond
+	return w
 }
 
 func (f *chatMachineRecovery) pinIs(t *testing.T, want string) {
@@ -154,7 +176,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	out, err = f.run(nil, f.remote)
 	require.NoError(t, err)
 	require.Equal(t, f.original, out.Stdout, "old run snapshot must honor the chat pin")
-	out, err = f.run(&toolexec.DaemonSelector{ID: f.ci}, f.remote)
+	out, err = f.run(&activitytypes.DaemonSelector{ID: f.ci}, f.remote)
 	require.NoError(t, err)
 	require.Equal(t, f.ci, out.Stdout, "explicit node selector overrides pin without rewriting it")
 	f.pinIs(t, f.original)
@@ -167,7 +189,11 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	require.NoError(t, err)
 	_, err = f.h.Repo().ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{DaemonID: f.original, Phase: "suspended", ChangedAt: time.Now()})
 	require.NoError(t, err)
+	// The step holds a command that never reached its machine (run_step.go's
+	// machineWait); a short budget ends that hold here instead of in 30m.
+	f.wait = shortMachineWait()
 	out, err = f.run(nil, f.remote)
+	f.wait = nil
 	require.Error(t, err, "offline is a transport error, not a command verdict or a switch")
 	assert.Contains(t, err.Error(), "suspended")
 	assert.Contains(t, err.Error(), "the command never ran")
@@ -247,8 +273,16 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	f.serve(t, "foreign", "other-user")
 	foreign := "foreign"
 	require.NoError(t, f.h.Repo().UpdateChatActiveDaemon(ctx, f.chat, &foreign))
-	_, err = f.run(nil, f.remote)
-	require.Error(t, err)
+	f.wait = shortMachineWait()
+	// Refused as a command (exit -1): the pinned machine has no checkout of
+	// this user's project, and the refusal never describes another
+	// account's machine beyond the id the chat already holds.
+	out, err = f.run(nil, f.remote)
+	f.wait = nil
+	require.NoError(t, err)
+	assert.Equal(t, -1, out.ExitCode)
+	assert.Contains(t, out.Stderr, "machine foreign")
+	assert.NotContains(t, out.Stderr, "cloud machine foreign", "another account's machine is never described")
 	assert.Zero(t, f.count("foreign"))
 	assert.Equal(t, ciBefore, f.count(f.ci))
 	f.pinIs(t, foreign)
@@ -257,7 +291,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	// command: that refusal precedes selector overrides in ExecuteRunStep.
 	_, err = f.h.sqlDB.ExecContext(ctx, `UPDATE chats SET active_daemon_id = NULL, no_machine = true WHERE id = $1`, f.chat)
 	require.NoError(t, err)
-	out, err = f.run(&toolexec.DaemonSelector{ID: f.ci}, f.remote)
+	out, err = f.run(&activitytypes.DaemonSelector{ID: f.ci}, f.remote)
 	require.NoError(t, err)
 	assert.Equal(t, -1, out.ExitCode)
 	assert.NotEmpty(t, out.Stderr)

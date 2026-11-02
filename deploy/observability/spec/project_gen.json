@@ -3,6 +3,9 @@
     "Frontends": [
       "web"
     ],
+    "FrontendServices": [
+      "reliant-web"
+    ],
     "HasDatabase": true,
     "Funnels": []
   },
@@ -12,6 +15,7 @@
     "id": "overview",
     "title": "reliant: overview",
     "description": "Metric-backed request, server-fault and duration health across deployed processes; saturation, errors and releases. Counters are unsampled; trace drilldowns may be sampled.",
+    "group": "overview",
     "filters": [
       {
         "id": "service",
@@ -50,9 +54,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -86,9 +88,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -116,9 +116,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -145,9 +143,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -191,9 +187,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -224,9 +218,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           }
         ],
@@ -255,9 +247,7 @@
             "op": "in",
             "values": [
               "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
+              "reliant-api-server"
             ]
           },
           {
@@ -285,72 +275,6 @@
         "height": 7
       },
       {
-        "id": "cpu-vs-limit",
-        "title": "CPU against its limit",
-        "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
-        "kind": "line",
-        "signal": "metrics",
-        "series": [
-          {
-            "label": "of limit",
-            "agg": "max",
-            "field": "k8s.container.cpu_limit_utilization",
-            "metricType": "gauge"
-          }
-        ],
-        "where": [
-          {
-            "field": "resource.attr.k8s.workload.name",
-            "op": "in",
-            "values": [
-              "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
-            ]
-          }
-        ],
-        "groupBy": [
-          "resource.attr.k8s.workload.name"
-        ],
-        "unit": "percent",
-        "width": 12,
-        "height": 7
-      },
-      {
-        "id": "memory-vs-limit",
-        "title": "Memory against its limit",
-        "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
-        "kind": "line",
-        "signal": "metrics",
-        "series": [
-          {
-            "label": "of limit",
-            "agg": "max",
-            "field": "k8s.container.memory_limit_utilization",
-            "metricType": "gauge"
-          }
-        ],
-        "where": [
-          {
-            "field": "resource.attr.k8s.workload.name",
-            "op": "in",
-            "values": [
-              "daemon-gateway",
-              "reliant-api-server",
-              "reliant-migrate",
-              "reliant-temporal-worker"
-            ]
-          }
-        ],
-        "groupBy": [
-          "resource.attr.k8s.workload.name"
-        ],
-        "unit": "percent",
-        "width": 12,
-        "height": 7
-      },
-      {
         "id": "restarts",
         "title": "Container restarts",
         "description": "The highest restart count among each workload's containers; a step is a restart.",
@@ -371,7 +295,6 @@
             "values": [
               "daemon-gateway",
               "reliant-api-server",
-              "reliant-migrate",
               "reliant-temporal-worker"
             ]
           }
@@ -401,7 +324,6 @@
             "values": [
               "daemon-gateway",
               "reliant-api-server",
-              "reliant-migrate",
               "reliant-temporal-worker"
             ]
           },
@@ -430,7 +352,6 @@
             "values": [
               "daemon-gateway",
               "reliant-api-server",
-              "reliant-migrate",
               "reliant-temporal-worker"
             ]
           },
@@ -456,6 +377,10 @@
       "id": "workloads",
       "title": "reliant: workloads",
       "description": "Per-workload customer metadata from the node agent: CPU and memory against requests and limits, restarts and the last exit reason, the image versions that ran, and Kubernetes events. Present in deployed environments only (a local forge env up has no node agent).",
+      "group": "platform",
+      "tags": [
+        "k8s"
+      ],
       "filters": [
         {
           "id": "service",
@@ -806,6 +731,7 @@
       "id": "releases",
       "title": "reliant: releases",
       "description": "Request rate, error rate and latency split by service.version, so a deploy shows as one version replacing another. Deploy markers come from the release ledger. Narrow with the service.name and deployment.environment.name filters.",
+      "group": "releases",
       "filters": [
         {
           "id": "service",
@@ -1027,6 +953,10 @@
       "id": "frontend",
       "title": "reliant: frontend",
       "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-web). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
+      "group": "product",
+      "tags": [
+        "browser"
+      ],
       "filters": [
         {
           "id": "service",

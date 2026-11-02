@@ -27,6 +27,12 @@ export interface ObsEnvironment {
    * where each came from. Null or absent: nothing recorded yet.
    */
   declared?: ObsDeclared | null;
+  /**
+   * The shape is still loading (it is fetched per environment, see
+   * useDeclaredEnvironments), so an absent `declared` does not yet mean
+   * "nothing recorded".
+   */
+  declaredPending?: boolean;
 }
 
 /** Every environment the place covers, with what it declares. */

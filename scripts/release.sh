@@ -144,11 +144,10 @@ fi
 if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     if [[ ! -f "$CHANGELOG_FILE" ]]; then
         echo -e "${RED}Error: Missing changelog source: $CHANGELOG_FILE${NC}"
-        echo -e "${YELLOW}Create it before releasing:${NC}"
-        echo -e "${BLUE}  make changelog${NC}"
-        echo -e "${BLUE}  make changelog-draft VERSION=${RELEASE_TAG} [SINCE_TAG=vX.Y.Z]${NC}"
-        echo -e "${BLUE}  edit ${CHANGELOG_FILE}${NC}"
-        echo -e "${BLUE}  task generate:docs:changelog${NC}"
+        echo -e "${YELLOW}Draft it from the PR titles merged since v${CURRENT_VERSION} (and edit it if you like):${NC}"
+        echo -e "${BLUE}  task generate:docs:changelog:draft VERSION=${RELEASE_TAG} SINCE_TAG=v${CURRENT_VERSION}${NC}"
+        # npm version already rewrote the version: put it back, so the retry starts clean.
+        git checkout -- electron/package.json electron/package-lock.json 2>/dev/null || true
         exit 1
     fi
 
@@ -160,7 +159,8 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     VERSION_IN_CHANGELOG=$(yq -r '.version // ""' "$CHANGELOG_FILE")
     TITLE_IN_CHANGELOG=$(yq -r '.title // ""' "$CHANGELOG_FILE")
     SUMMARY_IN_CHANGELOG=$(yq -r '.summary // ""' "$CHANGELOG_FILE")
-    ITEM_COUNT=$(yq -r '(.items // []) | length' "$CHANGELOG_FILE")
+    # Items at the top level, or grouped under sections (what the draft writes).
+    ITEM_COUNT=$(yq -r '((.items // []) | length) + ([.sections[]?.items[]?] | length)' "$CHANGELOG_FILE")
 
     if [[ "$VERSION_IN_CHANGELOG" != "$RELEASE_TAG" ]]; then
         echo -e "${RED}Error: $CHANGELOG_FILE version is '$VERSION_IN_CHANGELOG', expected '$RELEASE_TAG'${NC}"

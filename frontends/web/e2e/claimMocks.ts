@@ -1,4 +1,7 @@
+import { create, toBinary } from '@bufbuild/protobuf';
 import { test, type Page, type Route } from '@playwright/test';
+
+import { FreeSiteChoiceRequiredSchema } from '../src/gen/controlplane/services/claimable/v1/claimable_pb';
 
 // The /claim page against no backend: control-plane's ClaimableService and a
 // stateful fake of the one GoTrue endpoint set the flow touches, so the REAL
@@ -18,6 +21,9 @@ export const CLAIM_FRAGMENT = `#${CLAIM_TOKEN}`;
 
 const ANON_USER_ID = '7c1f0a52-3b0e-4f0e-9d7c-2a1c0f6c9a11';
 
+export const EXISTING_SITE = { deploymentId: 'dep_mine', project: 'blog', env: 'prod', name: 'web', url: 'https://quiet-heron.sites.reliantlabs.dev' };
+export const CLAIMED_SITE = { deploymentId: 'dep_new', project: 'storefront', env: 'prod', name: 'web', url: 'https://amber-quokka.reliantpreview.dev' };
+
 export const SITE = {
   project: 'storefront',
   env: 'prod',
@@ -34,6 +40,21 @@ export interface ClaimMockOptions {
   openSessionError?: { code: string; reason?: string; status?: number };
   /** Make CompleteClaim fail with this error, `times` calls in a row (default: every call). */
   completeError?: { code: string; reason?: string; status?: number; times?: number };
+  /** The claim path CompleteClaim answers with (default: "upgrade"). */
+  completeClaimPath?: 'upgrade' | 'membership';
+  /**
+   * The claimer already has their one free static site (membership claims). The
+   * mock behaves like the server: GetClaimFreeSite names both sites, and
+   * CompleteClaim refuses with claimable_free_site_choice_required until it is
+   * sent a choice, then reports the outcome and the paused site. `subscribed`
+   * (see ClaimMock.subscribe) removes the conflict, as buying a plan does.
+   */
+  freeSiteConflict?: boolean;
+  /**
+   * Serve GetClaimFreeSite as "no choice needed" while CompleteClaim still
+   * refuses: the site was added between the preview and the claim.
+   */
+  conflictAppearsAtClaim?: boolean;
   /** Start already signed in as this user (a real account, or a different anonymous one). */
   signedInAs?: { id: string; email?: string; anonymous: boolean };
 }
@@ -47,6 +68,10 @@ export interface ClaimMock {
   headerValues: string[];
   /** Requests that reached GoTrue, by "METHOD path". */
   gotrue: string[];
+  /** The `freeSite` value each CompleteClaim carried, in order. */
+  choices: string[];
+  /** The buyer subscribes (in billing, say): the conflict is gone from now on. */
+  subscribe: () => void;
 }
 
 const hours = (n: number) => new Date(Date.now() + n * 3_600_000).toISOString();
@@ -80,7 +105,8 @@ function fakeJwt(sub: string, anonymous: boolean, ttlSeconds = 3600): string {
 
 export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {}): Promise<ClaimMock> {
   const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
-  const mock: ClaimMock = { calls: [], urls: [], headerValues: [], gotrue: [] };
+  const mock: ClaimMock = { calls: [], urls: [], headerValues: [], gotrue: [], choices: [], subscribe: () => { subscribed = true; } };
+  let subscribed = false;
 
   // The account GoTrue is currently holding. The upgrade (PUT /user, then the
   // email_change verify) flips it to non-anonymous on the SAME id.
@@ -185,15 +211,86 @@ export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {
     },
     options.openSessionError,
   );
+  const conflictNow = () => (options.freeSiteConflict ?? false) && !subscribed;
+
   await claimRpc(
-    'CompleteClaim',
-    () => ({ orgId: 'org_claimed', claimPath: 'upgrade', hostnames: ['amber-quokka.sites.reliantlabs.dev'], holds: [] }),
-    options.completeError,
+    'GetClaimFreeSite',
+    () =>
+      conflictNow() && !options.conflictAppearsAtClaim
+        ? { choiceRequired: true, existingSite: EXISTING_SITE, claimedSite: CLAIMED_SITE }
+        : { choiceRequired: false },
+    undefined,
   );
 
-  // ── the rest of the app, enough for /apps after a claim ─────────────────
+  await page.route('**/controlplane.v1.ClaimableService/CompleteClaim', async (route) => {
+    const body = (route.request().postDataJSON() ?? {}) as Record<string, unknown>;
+    mock.calls.push({ rpc: 'CompleteClaim', body });
+    mock.choices.push(String(body.freeSite ?? ''));
+    const failure = options.completeError;
+    if (failure && mock.calls.filter((c) => c.rpc === 'CompleteClaim').length <= (failure.times ?? Infinity)) {
+      return connectError(route, failure);
+    }
+    const choice = body.freeSite as string | undefined;
+    if (conflictNow() && !choice) {
+      // The refusal carries the two sites as a typed detail.
+      return route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'x-forge-error-reason': 'claimable_free_site_choice_required' },
+        body: JSON.stringify({
+          code: 'failed_precondition',
+          message: 'choose',
+          details: [
+            {
+              type: 'controlplane.v1.FreeSiteChoiceRequired',
+              // Connect carries a detail as the message's proto BINARY, base64 without padding.
+              value: Buffer.from(
+                toBinary(
+                  FreeSiteChoiceRequiredSchema,
+                  create(FreeSiteChoiceRequiredSchema, { existingSite: EXISTING_SITE, claimedSite: CLAIMED_SITE }),
+                ),
+              )
+                .toString('base64')
+                .replace(/=+$/, ''),
+            },
+          ],
+        }),
+      });
+    }
+    const kept = conflictNow() ? choice : undefined;
+    return json(route, {
+      orgId: 'org_claimed',
+      claimPath: options.completeClaimPath ?? 'upgrade',
+      hostnames: ['amber-quokka.sites.reliantlabs.dev'],
+      holds: [],
+      freeSiteOutcome:
+        kept === 'FREE_SITE_CHOICE_CLAIMED'
+          ? 'FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE'
+          : kept === 'FREE_SITE_CHOICE_EXISTING'
+            ? 'FREE_SITE_OUTCOME_EXISTING_SITE_LIVE'
+            : options.completeClaimPath === 'membership'
+              ? 'FREE_SITE_OUTCOME_NO_CONFLICT'
+              : 'FREE_SITE_OUTCOME_UNSPECIFIED',
+      pausedSite: kept === 'FREE_SITE_CHOICE_CLAIMED' ? EXISTING_SITE : kept === 'FREE_SITE_CHOICE_EXISTING' ? CLAIMED_SITE : undefined,
+    });
+  });
+
+  // An existing user has onboarded already; a new human has not (the claim must not send them there).
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
-    json(route, { user: { id: 'user_claimed', email: 'new@example.com', onboardingCompleted: false } }),
+    json(route, { user: { id: 'user_claimed', email: 'new@example.com', onboardingCompleted: Boolean(options.signedInAs) } }),
+  );
+  // The orgs the signed-in person belongs to. A membership claim adds the
+  // claimed org and the page switches to it, so the list names both.
+  await page.route('**/controlplane.v1.OrganizationService/ListMyOrganizations', (route) =>
+    json(route, {
+      organizations: [
+        { id: 'org_own', name: 'My workspace', slug: 'my-workspace', role: 'owner', isOwner: true, isDefault: true, createdAt: hours(-2000) },
+        ...(options.completeClaimPath === 'membership'
+          ? [{ id: 'org_claimed', name: 'Personal workspace', slug: 'personal-claimed', role: 'owner', isOwner: true, isDefault: false, createdAt: hours(-72) }]
+          : []),
+      ],
+      defaultOrgId: 'org_own',
+    }),
   );
   await page.route('**/controlplane.v1.DeployService/ListEnvironments', (route) =>
     json(route, {

@@ -69,7 +69,8 @@ func TestDeviceLogin_PrintsTheCodeAndPollsUntilApproved(t *testing.T) {
 	srv, polls, form := fakeDeviceServer(t, true, []map[string]any{
 		{"error": "authorization_pending"},
 		{"error": "slow_down"},
-		{"access_token": "rlat_0123456789abcdef", "scope": "daemon:connect"},
+		{"access_token": "rlat_0123456789abcdef", "scope": "daemon:connect",
+			"account_id": "ext-1", "account_email": "a@example.test"},
 	})
 	var out bytes.Buffer
 	var opened string
@@ -88,6 +89,10 @@ func TestDeviceLogin_PrintsTheCodeAndPollsUntilApproved(t *testing.T) {
 	}
 	if cred.Token != "rlat_0123456789abcdef" || cred.ExpiresAt != nil || cred.Issuer != srv.URL {
 		t.Fatalf("credential = %+v", cred)
+	}
+	// The approval names who approved it.
+	if cred.AccountID != "ext-1" || cred.AccountEmail != "a@example.test" {
+		t.Fatalf("account = %q %q", cred.AccountID, cred.AccountEmail)
 	}
 	if polls.Load() != 3 {
 		t.Fatalf("polled %d times, want 3", polls.Load())

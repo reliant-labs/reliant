@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatStore } from "../../store/chatStore";
 import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
@@ -168,7 +169,10 @@ export function TerminalPanel(_props: TerminalPanelProps) {
       // re-runs this effect when its path lands — often ~10s after the user
       // started typing in the new workspace's chat — so this session does not
       // ask for focus. If the user opened the panel, that already did.
-      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, { focus: false });
+      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, {
+        focus: false,
+        chatId: useChatStore.getState().activeChatId ?? undefined,
+      });
       logger.info("[TerminalPanel] Created session for worktree", {
         worktreeId: currentWorktreeId,
         sessionId,
@@ -179,7 +183,9 @@ export function TerminalPanel(_props: TerminalPanelProps) {
 
   const handleNewTerminal = useCallback(() => {
     if (!currentProject || workingDir.kind !== "ready") return;
-    const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId);
+    const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, {
+      chatId: useChatStore.getState().activeChatId ?? undefined,
+    });
     logger.info("[TerminalPanel] Created new terminal", {
       worktreeId: currentWorktreeId,
       sessionId,
@@ -391,6 +397,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
                 workingDir={session.workingDir}
                 worktreeId={session.worktreeId}
                 projectId={session.projectId}
+                chatId={session.chatId}
                 active={shown && isTerminalOpen}
                 className={cn("absolute inset-0", shown ? "block" : "hidden")}
               />

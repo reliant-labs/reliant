@@ -1,0 +1,12 @@
+scenarios:
+- name: passes
+  events: []
+  expect:
+    outcome: completed
+    completed: [passed]
+- name: fails
+  inputs: {ok: false}
+  events: []
+  expect:
+    outcome: completed
+    completed: [failed]

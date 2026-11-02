@@ -128,7 +128,9 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeSubscription: () => query(undefined),
   useWalletOverview: () => query(undefined),
   useComputeUsage: () => query(usageState.current),
-  usePlans: () => query(undefined),
+  // No plans for sale, but the price list's weights: a coupon-only account
+  // counts its hours at the coupon unit (M), weight 1 here.
+  usePlans: () => query({ plans: [], daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'm', costWeight: '1/1' }] } }),
   useCurrentUserInvoices: () => query(undefined),
   useBillingEmail: () => query(undefined),
   useSetComputeOverage: () => mutation(),
@@ -262,10 +264,12 @@ describe('BillingSection', () => {
   // billing period, a grant depletes once and does not renew.
   describe('coupon (granted) hours', () => {
     const usage = (grantedMinutes: number) => ({
-      includedSmallDaemonSeconds: 36000,
-      usedSmallDaemonSeconds: 3600,
-      remainingSmallDaemonSeconds: 32400 + grantedMinutes * 60,
-      runningMultiplier: 0,
+      pricingVersion: 'test-version',
+      allowanceWeightedSeconds: '36000/1',
+      consumedWeightedSeconds: '3600/1',
+      remainingWeightedSeconds: '32400/1',
+      grantRemainingWeightedSeconds: String(grantedMinutes * 60),
+      runningCostWeightSum: '0/1',
       estimatedOverageCostCents: 0,
       bySize: [],
       grantedSmallDaemonSecondsRemaining: grantedMinutes * 60,
@@ -277,7 +281,7 @@ describe('BillingSection', () => {
       renderSection()
 
       expect(screen.getByText(/coupon hours/i)).toBeInTheDocument()
-      expect(screen.getByText('2 h (Small)')).toBeInTheDocument()
+      expect(screen.getByText('2 hours')).toBeInTheDocument()
       // The distinction from included minutes has to be legible, not implied.
       expect(screen.getByText(/does not renew/i)).toBeInTheDocument()
     })
@@ -289,9 +293,10 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
       expect(screen.getByText(/coupon hours remaining/i)).toBeInTheDocument()
-      expect(screen.getByText('1.5 h (Small)')).toBeInTheDocument()
+      expect(screen.getByText('1.5 hours')).toBeInTheDocument()
       // Included stays the plan's own 600 min / 10 h — the grant is not folded in.
-      expect(screen.getByText('10 h')).toBeInTheDocument()
+      expect(screen.getByText('10 hours included')).toBeInTheDocument()
+      expect(screen.queryByText(/weighted|pricing version|display-only/i)).not.toBeInTheDocument()
     })
 
     it('omits the row entirely when no coupon has been redeemed', () => {
@@ -352,7 +357,7 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
       expect(
-        await screen.findByText(/added \$25\.00 to your balance/i),
+        await screen.findByText(/added \$25 to your balance/i),
       ).toBeInTheDocument()
       expect(couponState.redeem).toHaveBeenCalledWith('welcome25')
     })
@@ -373,12 +378,10 @@ describe('BillingSection', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
-      expect(
-        await screen.findByText(/added 2 hours on a small machine/i),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByText(/3 hours on a small machine available/i),
-      ).toBeInTheDocument()
+      expect(await screen.findByText(/Added 2 hours on an M machine/)).toBeInTheDocument()
+      // No reconciliation step exists, so the confirmation never claims one.
+      expect(screen.queryByText(/reconciliation/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/3 hours on a small machine available/i)).not.toBeInTheDocument()
     })
 
     it("surfaces the server's own message when a code is rejected", async () => {

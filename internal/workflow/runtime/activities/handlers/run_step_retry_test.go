@@ -4,7 +4,6 @@ package handlers
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,26 +11,47 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 func runStepWith(t *testing.T, responses ...mockRunResponse) (*mockRunExecutor, ExecuteRunStepOutput, error) {
 	t.Helper()
+	mock := &mockRunExecutor{responses: responses}
+	out, err := runStepActivity(t, mock, nil, newFakeClock())
+	return mock, out, err
+}
+
+// runStepActivity runs ExecuteRunStep once over executor, observing the
+// machine through machines (nil: unobservable), on clock.
+func runStepActivity(t *testing.T, executor RunExecutor, machines MachineObserver, clock *fakeClock) (ExecuteRunStepOutput, error) {
+	t.Helper()
+	return runStepActivityTimed(t, executor, machines, clock, 0)
+}
+
+// runStepActivityTimed is runStepActivity for a step whose command timeout is
+// timeoutMs (0: the default).
+func runStepActivityTimed(t *testing.T, executor RunExecutor, machines MachineObserver, clock *fakeClock, timeoutMs int) (ExecuteRunStepOutput, error) {
+	t.Helper()
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
-	mock := &mockRunExecutor{responses: responses}
-	act := NewExecuteRunStepActivity(repo, nil, mock)
-	act.undeliveredRetryDelays = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond, time.Millisecond}
+	act := NewExecuteRunStepActivity(repo, nil, executor)
+	if machines != nil {
+		act = act.WithMachineObserver(machines)
+	}
+	wait := defaultMachineWait()
+	wait.now, wait.sleep = clock.Now, clock.Sleep
+	act.machineWait = wait
 
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(act.Execute)
 	val, err := env.ExecuteActivity(act.Execute, ExecuteRunStepInput{
-		WorkflowID: "wf-1", ChatID: chatID, StepID: "gate", Command: "task ci",
+		WorkflowID: "wf-1", ChatID: chatID, StepID: "gate", Command: "task ci", Timeout: timeoutMs,
 	})
 	var out ExecuteRunStepOutput
 	if err == nil {
 		require.NoError(t, val.Get(&out))
 	}
-	return mock, out, err
+	return out, err
 }
 
 func notDispatchedErr() error {
@@ -65,16 +85,15 @@ func TestRunStep_NeverDispatchedCommandIsSentAgain(t *testing.T) {
 	assert.Len(t, mock.calls, 3, "sent until it reached the machine")
 }
 
-// A machine that stays unreachable fails the step after the ladder, saying
-// the command never ran, and without a retry that would only refuse.
+// A machine that stays unreachable fails the step once the wait runs out,
+// saying the command never ran, and without a retry that would only refuse.
 func TestRunStep_UnreachableMachineFailsWithoutRetries(t *testing.T) {
 	t.Parallel()
 
-	mock, _, err := runStepWith(t, mockRunResponse{exitCode: -1, err: notDispatchedErr()})
+	_, _, err := runStepWith(t, mockRunResponse{exitCode: -1, err: notDispatchedErr()})
 
-	requireNonRetryable(t, err, runStepNotDispatchedErrType)
+	requireNonRetryable(t, err, activitytypes.RunStepMachineUnavailableErrType)
 	assert.Contains(t, err.Error(), "the command never ran")
-	assert.Len(t, mock.calls, 1+len(defaultUndeliveredRetryDelays))
 }
 
 // A command that was sent and whose result never came back may have run —

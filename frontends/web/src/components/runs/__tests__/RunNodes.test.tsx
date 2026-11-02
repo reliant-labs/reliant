@@ -33,6 +33,16 @@ describe("run node diagnostics", () => {
   render(<RunNodeList truncated={false} nodes={[]} />);
   expect(screen.getByText("No recorded node executions yet.")).toBeInTheDocument();
  });
+ // Bugs fe84af3c / eef49267: a run that failed before its first node showed
+ // only "failed" and an empty node list. The reason recorded on the run is shown.
+ it("says why a run failed before its first node", () => {
+  query.data = { run: { state: 3, failureDetail: "workflow input validation failed: input 'asap' expects boolean, got string \"true\"" }, nodes: [], nodesTruncated: false };
+  render(<RunNodes workflowId="root" />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Why the run failed");
+  expect(screen.getByRole("alert")).toHaveTextContent("input 'asap' expects boolean");
+  expect(screen.getByText("No node ran: the run failed before its first node.")).toBeInTheDocument();
+  query.data = undefined;
+ });
  it("surfaces a read failure instead of calling it an empty run", () => {
   query.isError = true;
   render(<RunNodes workflowId="root" />);

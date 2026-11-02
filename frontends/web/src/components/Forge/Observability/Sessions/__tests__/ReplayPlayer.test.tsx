@@ -19,6 +19,7 @@ import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 import { renderWithApi } from "../../__tests__/obsTestUtils";
 import { ReplayPlayer, type ReplayerCtor, type ReplayPlayerProps } from "../ReplayPlayer";
 import { FakeReplayer } from "./fakeReplayer";
+import { isReplayKnownUnplayable, resetReplayVerdictsForTests } from "../sessionModel";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/obsMocks")).obsMocks.virtual());
@@ -65,7 +66,10 @@ function renderPlayer(api: ReturnType<typeof scripted>["api"], props: Partial<Re
   return renderWithApi(api, <ReplayPlayer scope={SCOPE} session={SESSION} live={false} loadReplayer={loadFake} {...props} />);
 }
 
-beforeEach(() => FakeReplayer.reset());
+beforeEach(() => {
+  FakeReplayer.reset();
+  resetReplayVerdictsForTests();
+});
 
 describe("playback", () => {
   it("starts from page one, appends later pages, and pins the sandbox and the masked badge", async () => {
@@ -89,6 +93,14 @@ describe("playback", () => {
     const [first, second] = getSessionReplay.mock.calls.map(([req]) => req);
     expect(first).toMatchObject({ sessionId: "sess-1", maxBytes: 1024, pageToken: undefined, orgId: "org-fixture" });
     expect(second.pageToken).toBe("p2");
+  });
+
+  it("starts playback at the recording's own snapshot, past the previous session's tail", async () => {
+    const { api } = scripted([page([step(0), step(500), meta(1000), snapshot(1010), step(2000)])]);
+    renderPlayer(api);
+    await waitFor(() => expect(screen.getByTestId("replay-player")).toHaveAttribute("data-state", "ready"));
+    expect(FakeReplayer.last().events.map((e) => e.timestamp - T)).toEqual([1000, 1010, 2000]);
+    expect(isReplayKnownUnplayable("sess-1")).toBe(false);
   });
 
   it("plays, pauses, changes speed and skips inactivity through the Replayer", async () => {
@@ -186,6 +198,24 @@ describe("an incomplete recording", () => {
     expect(FakeReplayer.instances).toHaveLength(0);
   });
 
+  it("does not offer a one-event recording, and tells the list it is unplayable", async () => {
+    // A session boundary's leftover: one incremental event, stored under the next session id.
+    const { api } = scripted([page([step(1000)])]);
+    renderPlayer(api);
+    expect(await screen.findByTestId("replay-incomplete")).toHaveTextContent(/It holds 1 event but no full snapshot/);
+    expect(screen.queryByTestId("replay-play")).not.toBeInTheDocument();
+    expect(FakeReplayer.instances).toHaveLength(0);
+    expect(isReplayKnownUnplayable("sess-1")).toBe(true);
+  });
+
+  it("does not offer a snapshot with nothing recorded after it, even after a stray earlier event", async () => {
+    const { api } = scripted([page([step(0), meta(10), snapshot(20)])]);
+    renderPlayer(api);
+    expect(await screen.findByTestId("replay-incomplete")).toHaveTextContent(/single snapshot of the page and nothing recorded after it/);
+    expect(FakeReplayer.instances).toHaveLength(0);
+    expect(isReplayKnownUnplayable("sess-1")).toBe(true);
+  });
+
   it("says nothing was kept when a recorded session has no events left", async () => {
     const { api } = scripted([page([])]);
     renderPlayer(api);
@@ -215,7 +245,7 @@ describe("an incomplete recording", () => {
   });
 
   it("offers a retry when the player itself fails to load", async () => {
-    const { api } = scripted([page([meta(0), snapshot(10)]), page([meta(0), snapshot(10)])]);
+    const { api } = scripted([page([meta(0), snapshot(10), step(1000)]), page([meta(0), snapshot(10), step(1000)])]);
     let fail = true;
     const loadReplayer = async () => {
       if (fail) throw new Error("Failed to fetch dynamically imported module");

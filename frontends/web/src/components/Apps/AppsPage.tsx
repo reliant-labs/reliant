@@ -26,13 +26,14 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
+import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
-import { verdictLabel } from "@/services/forge/topology";
 
 import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
-import { LiveLink, verdictTone } from "./appParts";
+import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
 
 export function AppsPage() {
@@ -70,7 +71,7 @@ function AppsBody() {
   return (
     <div className="space-y-5" data-testid="apps-page">
       {header}
-      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} />}
+      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
         <NoApps onBuild={startBuilding} />
@@ -101,6 +102,7 @@ function AppsTable({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const rows = useMemo<AppRow[]>(() => apps.map((app) => ({ name: app.name, app })), [apps]);
+  const firing = useFiringByEnv();
 
   // A just-claimed app is brought into view once its row exists.
   const highlightedListed = !!highlighted && apps.some((app) => app.name === highlighted);
@@ -131,7 +133,7 @@ function AppsTable({
       width: "26%",
       className: "truncate max-lg:hidden",
       headerClassName: "max-lg:hidden",
-      render: (_, { app }) => <EnvsCell app={app} />,
+      render: (_, { app }) => <EnvsCell app={app} firing={firing} />,
     },
     {
       key: "deployed",
@@ -190,12 +192,12 @@ function SiteCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolea
 }
 
 /** Each long-lived environment's health, prod first; previews are counted. */
-function EnvsCell({ app }: { app: AppSummary }) {
+function EnvsCell({ app, firing }: { app: AppSummary; firing: ReadonlyMap<string, number> }) {
   if (app.envs.length === 0 && app.previews === 0) return <span className="text-ink-muted">—</span>;
   return (
     <span className="inline-flex items-center gap-3">
       {app.envs.map((env) => (
-        <EnvChip key={env.id} env={env} />
+        <EnvChip key={env.id} env={env} firing={firing.get(env.id) ?? 0} />
       ))}
       {app.previews > 0 && (
         <span className="text-xs text-ink-muted">
@@ -206,7 +208,18 @@ function EnvsCell({ app }: { app: AppSummary }) {
   );
 }
 
-function EnvChip({ env }: { env: AppEnv }) {
+/** Firing alerts by control-plane environment id: what makes a converged environment not "Healthy". */
+function useFiringByEnv(): ReadonlyMap<string, number> {
+  const org = useObservabilityOrg();
+  const alerts = useAlerts(org.orgId);
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const alert of alerts.data ?? []) if (alert.state === "firing") counts.set(alert.envId, (counts.get(alert.envId) ?? 0) + 1);
+    return counts;
+  }, [alerts.data]);
+}
+
+function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
   if (env.loading) {
     return (
       <span className="inline-flex items-center gap-1.5 text-ink-muted" data-testid={`app-env-${env.name}`}>
@@ -215,11 +228,20 @@ function EnvChip({ env }: { env: AppEnv }) {
       </span>
     );
   }
-  const facts = [verdictLabel(env.verdict), env.release || "not deployed yet"].join(" · ");
+  const health = envHealth(env.verdict, firing);
+  const facts = [health.label, env.release || "not deployed yet"].join(" · ");
   return (
-    <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict}>
-      <Status tone={verdictTone(env.verdict)} label={env.name} size="sm" />
-      <span className="sr-only">: {facts}</span>
+    <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict} data-firing={firing || undefined}>
+      <Status tone={health.tone} label={env.name} size="sm" />
+      {health.alerting ? (
+        <span className="ml-1 text-xs text-ink-muted" data-testid={`app-env-${env.name}-alerts`}>
+          <span className="sr-only">: </span>
+          {health.label}
+          <span className="sr-only"> · {env.release || "not deployed yet"}</span>
+        </span>
+      ) : (
+        <span className="sr-only">: {facts}</span>
+      )}
     </span>
   );
 }
@@ -238,7 +260,18 @@ function LastDeployCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: 
  * the user's own org by the time this shows; the list below may still be
  * catching up, which the banner says rather than leaving the user to wonder.
  */
-function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolean; loading: boolean }) {
+function ClaimedBanner({
+  name,
+  listed,
+  loading,
+  paused,
+}: {
+  name: string;
+  listed: boolean;
+  loading: boolean;
+  paused: PausedSite | null;
+}) {
+  const goToBilling = useGoToBilling("upgrade");
   return (
     <p
       className="flex items-start gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground"
@@ -249,6 +282,17 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
       <span>
         <strong className="font-semibold">{name}</strong> is yours now.
         {!loading && !listed && " It can take a moment to appear in this list."}
+        {paused && (
+          <span data-testid="apps-claimed-paused">
+            {" "}
+            {paused.kept === "claimed" ? "You kept this site live, so " : "You kept your existing site live, so "}
+            <strong className="font-semibold">{paused.name}</strong> is paused: the free plan includes one static site.{" "}
+            <button type="button" onClick={goToBilling} className="font-medium underline underline-offset-2">
+              Subscribe
+            </button>{" "}
+            to run both.
+          </span>
+        )}
       </span>
     </p>
   );
@@ -261,18 +305,31 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
  * until the list has loaded: the claim moved the site into the user's org, and
  * the list is what shows it.
  */
-function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean } {
+function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean; paused: PausedSite | null } {
   const navigate = useNavigate();
-  const { claimed } = useSearch({ strict: false }) as { claimed?: string };
+  const { claimed, pausedSite, kept } = useSearch({ strict: false }) as {
+    claimed?: string;
+    pausedSite?: string;
+    kept?: "claimed" | "existing";
+  };
   const [name, setName] = useState<string | null>(null);
+  const [paused, setPaused] = useState<PausedSite | null>(null);
 
   useEffect(() => {
     if (!claimed) return;
     setName(claimed);
+    setPaused(pausedSite && kept ? { name: pausedSite, kept } : null);
     void navigate({ to: "/apps", search: {}, replace: true });
-  }, [claimed, navigate]);
+  }, [claimed, pausedSite, kept, navigate]);
 
-  return { name, found: !loading && name !== null && names.includes(name) };
+  return { name, found: !loading && name !== null && names.includes(name), paused };
+}
+
+interface PausedSite {
+  /** The site that is paused. */
+  name: string;
+  /** Which one the person kept live. */
+  kept: "claimed" | "existing";
 }
 
 function NoApps({ onBuild }: { onBuild: () => void }) {

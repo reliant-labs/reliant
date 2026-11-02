@@ -7,7 +7,9 @@ import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// TerminalService provides terminal session management and streaming.
+// TerminalService provides terminal session management. Terminal I/O itself is
+// the websocket at /api/v2/terminal/ws (internal/handlers/terminal
+// TerminalWSHandler), which routes to the machine holding the workspace.
 service TerminalService {
   // ListSessions returns all active terminal sessions
   rpc ListSessions(ListTerminalSessionsRequest) returns (ListTerminalSessionsResponse) {}
@@ -16,13 +18,6 @@ service TerminalService {
   rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {
     option (forge.v1.method) = {
       activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}
-    };
-  }
-
-  // StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
-  rpc StreamTerminal(stream TerminalStreamInput) returns (stream TerminalStreamOutput) {
-    option (forge.v1.method) = {
-      activity: {none: "terminal I/O to and from the daemon: interactive transport, not project history"}
     };
   }
 }
@@ -50,73 +45,14 @@ message ListTerminalSessionsResponse {
 // CloseTerminalSessionRequest closes a terminal session
 message CloseTerminalSessionRequest {
   string session_id = 1;          // Required: session to close
+  // The machine the session runs on, as the terminal websocket's "init"
+  // reported it. A session lives on one machine; unset sends the close to the
+  // default machine, which knows only its own sessions.
+  optional string daemon_id = 2;
 }
 
 // CloseTerminalSessionResponse confirms session closure
 message CloseTerminalSessionResponse {
   bool success = 1;
-  string message = 2;
-}
-
-// ============================================
-// Bidi Streaming Terminal Messages
-// ============================================
-
-// TerminalStreamInput is the client-to-server message for the StreamTerminal RPC.
-message TerminalStreamInput {
-  oneof input {
-    TerminalCreateRequest create = 1;       // Create new session
-    TerminalDataInput data = 2;             // Send input to session
-    TerminalResizeInput resize = 3;         // Resize terminal
-    TerminalCloseRequest close_session = 4; // Close session
-  }
-}
-
-message TerminalCreateRequest {
-  string working_dir = 1;
-}
-
-message TerminalDataInput {
-  string session_id = 1;
-  bytes data = 2;
-}
-
-message TerminalResizeInput {
-  string session_id = 1;
-  uint32 cols = 2;
-  uint32 rows = 3;
-}
-
-message TerminalCloseRequest {
-  string session_id = 1;
-}
-
-// TerminalStreamOutput is the server-to-client message for the StreamTerminal RPC.
-message TerminalStreamOutput {
-  oneof output {
-    TerminalSessionCreated created = 1;
-    TerminalDataOutput data = 2;
-    TerminalSessionClosed closed = 3;
-    TerminalError error = 4;
-  }
-}
-
-message TerminalSessionCreated {
-  string session_id = 1;
-  int32 pid = 2;
-}
-
-message TerminalDataOutput {
-  string session_id = 1;
-  bytes data = 2;
-}
-
-message TerminalSessionClosed {
-  string session_id = 1;
-  int32 exit_code = 2;
-}
-
-message TerminalError {
-  string session_id = 1;
   string message = 2;
 }

@@ -28,8 +28,11 @@ import { hasErrorReason } from "../../lib/errorReasons";
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { useActiveChatId } from "../../store/chatStoreHooks";
 import { isElectron } from "../../lib/constants";
-import { openExternalLink } from "../../lib/open-link";
+import { embeddedBrowserUrl, openExternalLink } from "../../lib/open-link";
+import { devServerUrl, isSameDevPage } from "../../lib/dev-preview";
+import { useActiveDaemonPreviewTemplate } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
@@ -385,6 +388,9 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const createBrowserTab = useBrowserStore((state) => state.createTab);
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
   const getWorktreeTabs = useBrowserStore((state) => state.getWorktreeTabs);
+  // A dev server listens on the daemon's localhost: with a cloud daemon that is
+  // the workspace pod, reached through the daemon's preview URL.
+  const previewTemplate = useActiveDaemonPreviewTemplate();
 
   // Get workspace names from the workspaces the app holds.
   // Default to main worktree when no worktreeId is provided
@@ -394,7 +400,10 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const currentWorktree = useWorktreeById(effectiveWorktreeId) ?? null;
 
   // Package commands via React Query (needs effectiveWorktreeId/projectPath)
-  const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath);
+  // The chat beside the panel: its machine runs the main checkout's commands,
+  // as it serves that chat's Files tab and terminal.
+  const activeChatId = useActiveChatId() ?? undefined;
+  const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath, activeChatId);
   const commands = commandsQuery.data?.commands ?? ({} as Record<PackageType, PackageCommand[]>);
   const detectedTypes = commandsQuery.data?.detected_types ?? [];
   const isLoadingCommands = commandsQuery.isLoading;
@@ -589,6 +598,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         runCommandRequest({
           worktreeId: effectiveWorktreeId,
           path: projectPath,
+          chatId: activeChatId,
           commandName: cmd.name,
           packageType: cmd.package_type,
           workingDir: cmd.working_dir,
@@ -611,11 +621,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     } finally {
       setRunningCommandKey(null);
     }
-  }, [runCommandMutation, effectiveWorktreeId, projectPath]);
+  }, [runCommandMutation, effectiveWorktreeId, projectPath, activeChatId]);
 
   const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", _processWorktreeId?: string) => {
     if (source === "package") {
-      await killProcessMutation.mutateAsync({ processId });
+      // Stopped on the machine it runs on, which is not always the default.
+      const daemonId = processesQuery.data.find((p) => p.id === processId)?.daemon_id;
+      await killProcessMutation.mutateAsync({ processId, daemonId });
       return;
     }
     try {
@@ -628,7 +640,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
       }
       throw error;
     }
-  }, [killProcessMutation, killBackgroundProcess, queryClient]);
+  }, [killProcessMutation, killBackgroundProcess, queryClient, processesQuery.data]);
 
   const handleSelectProcess = useCallback((process: UnifiedProcess) => {
     setSelectedProcessId(process.id);
@@ -765,7 +777,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   }, [findCommandForProcess, handleRunCommand]);
 
   const handleOpenPort = useCallback(async (port: number) => {
-    const url = `http://localhost:${port}`;
+    const url = devServerUrl(port, previewTemplate);
     // Web build has no embedded <webview> — open the preview in a new browser tab.
     if (!isElectron()) {
       await openExternalLink(url);
@@ -773,10 +785,10 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }
     const projectId = currentProject?.id;
     if (projectId && effectiveWorktreeId) {
-      const tabId = await createBrowserTab(effectiveWorktreeId, url, projectId);
+      const tabId = await createBrowserTab(effectiveWorktreeId, await embeddedBrowserUrl(url, previewTemplate), projectId);
       await openBrowserViewer(projectId, effectiveWorktreeId, tabId);
     }
-  }, [currentProject?.id, effectiveWorktreeId, createBrowserTab, openBrowserViewer]);
+  }, [currentProject?.id, effectiveWorktreeId, createBrowserTab, openBrowserViewer, previewTemplate]);
 
   const runningProcesses = allProcesses.filter(
     (p) => p.status === BackgroundProcessStatus.RUNNING,
@@ -941,7 +953,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         
         for (const portInfo of process.ports || []) {
           const port = portInfo.port;
-          const url = `http://localhost:${port}`;
+          const url = devServerUrl(port, previewTemplate);
           
           // Skip if we've already opened this URL
           if (openedUrls.has(url)) continue;
@@ -949,14 +961,14 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
           
           try {
             // Check if a tab already exists for this URL
-            const existingTab = existingTabs.find(tab => tab.url === url);
+            const existingTab = existingTabs.find(tab => isSameDevPage(tab.url, url));
             
             if (existingTab) {
               // Tab exists - always open it (openBrowserViewer will handle if already open)
               await openBrowserViewer(projectId, worktreeId, existingTab.id);
             } else {
               // Tab doesn't exist - create and open it
-              const tabId = await createBrowserTab(worktreeId, url, projectId);
+              const tabId = await createBrowserTab(worktreeId, await embeddedBrowserUrl(url, previewTemplate), projectId);
               await openBrowserViewer(projectId, worktreeId, tabId);
             }
           } catch (err) {
@@ -972,7 +984,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, allProcesses, detectedTypes, commands, matchesSearch, commandProcessMap, currentProject?.id, getWorktreeTabs, createBrowserTab, openBrowserViewer]);
+  }, [searchQuery, allProcesses, detectedTypes, commands, matchesSearch, commandProcessMap, currentProject?.id, getWorktreeTabs, createBrowserTab, openBrowserViewer, previewTemplate]);
 
   // If a process is selected, show logs
   if (selectedProcessId) {
@@ -1063,7 +1075,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
               <SidebarHeaderButton
                 icon={
                   <span className="relative">
-                    <Layers className={cn("w-4 h-4", showAllWorkspaces && "text-primary")} />
+                    <Layers className={cn("w-4 h-4", showAllWorkspaces && "text-primary-ink")} />
                     {/* Show indicator when other workspaces have running processes */}
                     {!showAllWorkspaces && hasRunningInOtherWorkspaces && (
                       <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -1528,7 +1540,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
         disabled={isDisabled}
         className={cn(
           "rounded transition-colors flex-shrink-0",
-          isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary",
+          isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary-ink",
           isDisabled && "opacity-50 cursor-not-allowed",
           isCompact ? "p-1" : "p-1.5"
         )} aria-label={isRunning ? `${command.name} is running` : `Run ${command.name}`}>
@@ -1573,7 +1585,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
 <button
                   key={p.port}
                   onClick={(e) => { e.stopPropagation(); onOpenPort(p.port); }}
-                  className="flex items-center gap-0.5 text-xs text-primary hover:text-primary/80 hover:underline" aria-label={`Open localhost:${p.port} in browser`}>
+                  className="flex items-center gap-0.5 text-xs text-primary-ink hover:text-primary-ink/80 hover:underline" aria-label={`Open localhost:${p.port} in browser`}>
                   <Globe className="w-3 h-3" />
                   <span>{p.port}</span>
                 </button>
@@ -1803,7 +1815,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           <Tooltip content="Rerun command" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onRerun(); }}
-            className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
+            className={cn("rounded hover:bg-primary/20 text-primary-ink transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
             <RotateCw className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
           </button>
 </Tooltip>

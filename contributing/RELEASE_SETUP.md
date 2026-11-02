@@ -11,27 +11,18 @@ Electron app releases are built and published by the [control-plane](https://git
 
 To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
 
-## Who cuts a release: the release train
+## Who cuts a release: rc-train
 
-**Nobody cuts reliant by hand.** The release train in control-plane
-(`control-plane/scripts/release-train.sh`, run by the Reliant workflow `release-train`
-weekdays at 18:00 UTC, on a merged PR labelled `release:asap`, and on demand) does
-both steps below:
+**Nobody cuts reliant by hand.** control-plane's `rc-train` workflow
+(`.reliant/workflows/rc-train.yaml`) cuts a release candidate of forge, reliant and
+control-plane together when a main moved and 2h passed, or right after a PR labelled
+`release:asap` merges. It gates the candidate's exact commits, tags reliant's with
+`./scripts/release-tag.sh --commit <sha> --rc`, and promotes the set. Design and
+where to look: control-plane `docs/pr-pipeline.md`, "Release chain: rc-train".
 
-1. When main has commits since the last tag and a green release-gate record past it,
-   it writes the release notes (`docs/data/releases/vX.Y.Z.yaml`, drafted by the
-   workflow's notes agent from the PRs since the last tag) and runs
-   `./scripts/release.sh patch` from a private checkout of the green commit. The bump
-   PR is labelled `merge:queue` and `merge:priority`; the merge steward lands it.
-2. When that bump has merged, it runs `./scripts/release-tag.sh`, which tags it once
-   its release-gate record is green. The train's tick runs `scripts/release-gate.sh
-   run` on the bump commit (or main's tip) every few hours, so no chat runs the
-   40-70-minute gate itself.
-
-**To get a change released sooner, label its PR `release:asap`.** There is no release
-lock: the tag push decides a race (the remote refuses a second push of the same tag).
-The commands below are what the train runs, documented for whoever
-fixes it or cuts by hand in a prod incident (and says so to the owner).
+**To get a change released sooner, label its PR `release:asap`.** The commands below
+are documented for whoever fixes the train, or cuts by hand in a prod incident (and
+says so to the owner).
 
 ## Quick Release Commands
 
@@ -124,8 +115,11 @@ raising the baseline.
 
 ## Changelog
 
-Before creating a published stable release tag, write the version's entry in
+Before creating a published stable release tag, the version's entry must exist in
 `docs/data/releases/vX.Y.Z.yaml`: step 1 (`scripts/release.sh`) validates it.
+`task generate:docs:changelog:draft VERSION=vX.Y.Z SINCE_TAG=vA.B.C` drafts it from
+the merged PR titles (`tools/releasenotes`), grouped under `sections`; it
+never replaces an existing file unless `FORCE=1`.
 
 The YAML files under `docs/data/releases/` are the source of truth for two
 separate consumers:

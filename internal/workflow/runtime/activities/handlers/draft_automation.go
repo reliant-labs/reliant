@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // DraftAutomationInput is what TriggerService.DraftAutomation asks for: a
@@ -43,6 +43,15 @@ type DraftAutomationActivity struct {
 	// routing picks which account of the resolved provider drafts, and
 	// benches or retires one the provider refuses; nil routes nothing.
 	routing *AccountRouting
+	// usage records the draft's model request in the usage ledger; nil
+	// records nothing.
+	usage LLMUsageRecorder
+}
+
+// WithUsageRecorder wires the usage ledger into drafting.
+func (a *DraftAutomationActivity) WithUsageRecorder(r LLMUsageRecorder) *DraftAutomationActivity {
+	a.usage = r
+	return a
 }
 
 // WithAccountRouting wires multi-account routing into drafting, as titling
@@ -108,7 +117,9 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 
 	// Stream and accumulate: not every provider has a non-streaming path
 	// (see generateTitle).
-	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved.Driver, prompt, messages, []tools.Tool{draftTool})
+	// A draft belongs to no chat, so its ledger row has none.
+	meter := newUsageMeter(a.usage, spec.UserID, "", store.LLMPurposeDraftAutomation)
+	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{draftTool})
 	if err != nil {
 		return DraftAutomationOutput{}, a.routing.providerFailure(ctx, fmt.Errorf("draft automation: %w", err), usageLimitContext{
 			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),

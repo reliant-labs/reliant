@@ -275,7 +275,7 @@ export function removeChatFromListCache(
 export function useChatList(projectId?: string) {
   return useQuery({
     queryKey: chatKeys.list(projectId),
-    queryFn: () => chatActions.listChats(projectId),
+    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal }),
     enabled: !!projectId,
     select: (data) => data.chats,
   });
@@ -290,7 +290,7 @@ export function useChatList(projectId?: string) {
 export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: chatKeys.list(scope),
-    queryFn: () => chatActions.listChats(scope ?? undefined),
+    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal }),
     enabled: options.enabled ?? true,
   });
 }
@@ -413,7 +413,12 @@ export function useStartChat() {
   });
 }
 
-export function useDeleteChat() {
+/**
+ * Delete an ARCHIVED chat for good. The server refuses a chat that is not
+ * archived, so this can never quietly archive instead; archiving is
+ * useArchiveChat. Callers confirm first: there is no undo.
+ */
+export function usePermanentlyDeleteChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => chatActions.deleteChat(chatId),

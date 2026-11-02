@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/mcp"
 )
@@ -28,7 +27,7 @@ type WorktreeInfo struct {
 	RepoID string
 	// RepoPath is the absolute on-disk path of the repo's git root.
 	// For legacy single-repo projects this equals the project path.
-	// Tools that run git commands should use this, not Project.Path,
+	// Tools that run git commands should use this, not Project.Checkout,
 	// so they target the correct nested repo.
 	RepoPath string
 	// DaemonID is the daemon that owns this worktree's checkouts on disk.
@@ -36,6 +35,18 @@ type WorktreeInfo struct {
 	// actual branch. Empty for the main checkout (every daemon has it) and for
 	// pre-existing worktree rows created before daemon ownership was recorded.
 	DaemonID string
+}
+
+// Project is the chat's project as a tool sees it on the machine running the
+// call. Checkout is the project's main checkout ON THAT MACHINE — the request's
+// project root, resolved at dispatch from the machine's own project_daemons
+// row (internal/projectcheckout). It is deliberately not a db.Project:
+// projects.path is where the project was created, on whichever machine created
+// it, and is never a directory a tool may use.
+type Project struct {
+	ID       string
+	Name     string
+	Checkout string
 }
 
 // ToolContext is a minimal context for tool execution in V2
@@ -49,11 +60,11 @@ type ToolContext struct {
 	Thread    string // Thread path for this execution (UUID matching workflow ID)
 
 	// Execution context
-	Project  *db.Project   // V2 Project for file operations
+	Project  *Project      // the project and its checkout on this machine
 	Worktree *WorktreeInfo // Worktree for working directory
 
 	// Repos is the list of nested repos in the project. Each repo's nested
-	// path (relative to the workspace root, i.e. worktree.Path or project.Path)
+	// path (relative to the workspace root, i.e. worktree.Path or Project.Checkout)
 	// is the on-disk location of that repo's checkout for this chat. Tools
 	// resolve a `repo` param to workspaceRoot/repo.relative_path. Empty for
 	// legacy single-repo projects.
@@ -66,11 +77,20 @@ type ToolContext struct {
 	// MCP provides execution-time MCP access for tool discovery and invocation.
 	// Implementations may be local-manager-backed or daemon/NATS-backed.
 	MCP mcp.Runtime
+
+	// RunStep is true when the call is a workflow `run` node's command rather
+	// than a model's tool call. The shell tool then honours the node's declared
+	// timeout instead of the model's 10-minute foreground cap.
+	//
+	// It is set only from the request's server-built context
+	// (toolexec.ToolRequest.RunStep, which only the run-step executor sets),
+	// never from tool input, so a model cannot claim it.
+	RunStep bool
 }
 
 // NewToolContext creates a context for V2 tool execution
 // This doesn't require a session since V2 uses threads/contexts instead
-func NewToolContext(ctx context.Context, chatID, thread string, proj *db.Project, worktree *WorktreeInfo) *ToolContext {
+func NewToolContext(ctx context.Context, chatID, thread string, proj *Project, worktree *WorktreeInfo) *ToolContext {
 	return &ToolContext{
 		Context:  ctx,
 		ChatID:   chatID,
@@ -107,7 +127,7 @@ func (tc *ToolContext) WorkingDir() string {
 		return tc.Worktree.Path
 	}
 	if tc.Project != nil {
-		return tc.Project.Path
+		return tc.Project.Checkout
 	}
 	return ""
 }

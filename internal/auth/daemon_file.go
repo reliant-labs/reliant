@@ -45,6 +45,18 @@ type DaemonCredentials struct {
 	// proactively re-mint before it lapses instead of booting on — and then
 	// fatally failing with — a dead PAT. nil means "never expires".
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// AccountID and AccountEmail name who the PAT acts as: the external id
+	// (the IdP subject the gateway's WhoAmI and RegistrationAck name) and the
+	// account email. They are not Sub. Sub is the store key and the daemon
+	// instance's account, which a machine paired with no account named keeps
+	// as DefaultAccount; these are the token's owner whatever it is filed
+	// under. They are what keeps the daemon sign-in in step with the CLI
+	// login (`reliant auth login`, `reliant daemon start`). Empty when not
+	// known yet — a sign-in saved before they were recorded, or by a control
+	// plane that does not name accounts; `daemon start` then asks the
+	// gateway and records the answer (RecordDaemonAccount).
+	AccountID    string `json:"account_id,omitempty"`
+	AccountEmail string `json:"account_email,omitempty"`
 }
 
 // DefaultAccount is the account name an entry takes when the caller has no
@@ -322,6 +334,88 @@ func DeleteDaemonCredentials(serverURL, sub string) error {
 	return writeStore(store)
 }
 
+// DeleteDaemonCredentialsForServer removes every account's credentials at the
+// origin derived from serverURL and returns what it removed, in
+// ListDaemonCredentials order. Returns nil, nil when the origin holds none, and
+// then writes nothing.
+//
+// This is what signing a machine out of a server means. Deleting only the
+// default account would leave another account's PAT behind, and the next
+// no-flag `daemon start` would resolve to it and connect as that account
+// without a word — the same silent wrong-account connection logout is meant to
+// end.
+func DeleteDaemonCredentialsForServer(serverURL string) ([]*DaemonCredentials, error) {
+	store, err := readStore()
+	if err != nil {
+		return nil, err
+	}
+
+	origin := endpointKey(serverURL)
+	if origin == "" || len(store.Origins[origin]) == 0 {
+		return nil, nil
+	}
+	removed := store.originCredentials(origin)
+	delete(store.Origins, origin)
+	delete(store.DefaultAccounts, origin)
+	if err := writeStore(store); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
+// ListDaemonCredentialsForServer returns the daemon credentials stored for
+// serverURL's origin, the account a no-account lookup resolves to first and
+// the rest sorted. Each entry's Sub is its store account, so it can be fed
+// back into ReadDaemonCredentials or DeleteDaemonCredentials.
+func ListDaemonCredentialsForServer(serverURL string) ([]*DaemonCredentials, error) {
+	store, err := readStore()
+	if err != nil {
+		return nil, err
+	}
+	origin := endpointKey(serverURL)
+	if origin == "" || len(store.Origins[origin]) == 0 {
+		return nil, nil
+	}
+	return store.originCredentials(origin), nil
+}
+
+// RecordDaemonAccount records who one stored daemon credential acts as
+// (DaemonCredentials.AccountID / AccountEmail) without touching anything
+// else — not the PAT, and not which account the origin defaults to. sub is
+// the store account, as ListDaemonCredentialsForServer reports it. A no-op
+// when no such entry exists. An empty email keeps one already recorded.
+func RecordDaemonAccount(serverURL, sub, accountID, email string) error {
+	store, err := readStore()
+	if err != nil {
+		return err
+	}
+	creds := store.Origins[endpointKey(serverURL)][accountKey(sub)]
+	if creds == nil {
+		return nil
+	}
+	creds.AccountID = accountID
+	if email != "" {
+		creds.AccountEmail = email
+	}
+	return writeStore(store)
+}
+
+// MakeDefaultDaemonAccount makes sub the account a no-account lookup on
+// serverURL's origin resolves to, as writing it would. A no-op when no such
+// entry exists.
+func MakeDefaultDaemonAccount(serverURL, sub string) error {
+	store, err := readStore()
+	if err != nil {
+		return err
+	}
+	origin, account := endpointKey(serverURL), accountKey(sub)
+	if store.Origins[origin][account] == nil || store.DefaultAccounts[origin] == account {
+		return nil
+	}
+	store.DefaultAccounts[origin] = account
+	return writeStore(store)
+}
+
 // ListDaemonCredentials returns every stored daemon credential, in a stable
 // order: origins sorted, and within an origin the account a no-account lookup
 // resolves to first, then the rest sorted. Callers that must choose one
@@ -343,25 +437,34 @@ func ListDaemonCredentials() ([]*DaemonCredentials, error) {
 
 	var out []*DaemonCredentials
 	for _, origin := range origins {
-		accounts := make([]string, 0, len(store.Origins[origin]))
-		for account := range store.Origins[origin] {
-			accounts = append(accounts, account)
-		}
-		def := store.resolveAccount(origin, "")
-		sort.Slice(accounts, func(i, j int) bool {
-			if (accounts[i] == def) != (accounts[j] == def) {
-				return accounts[i] == def
-			}
-			return accounts[i] < accounts[j]
-		})
-		for _, account := range accounts {
-			creds := *store.Origins[origin][account]
-			if creds.ServerURL == "" {
-				creds.ServerURL = origin
-			}
-			creds.Sub = account
-			out = append(out, &creds)
-		}
+		out = append(out, store.originCredentials(origin)...)
 	}
 	return out, nil
+}
+
+// originCredentials returns copies of one origin's entries, the account a
+// no-account lookup resolves to first and the rest sorted. Each copy's Sub is
+// its store account and its ServerURL is never empty.
+func (s daemonCredentialsStore) originCredentials(origin string) []*DaemonCredentials {
+	accounts := make([]string, 0, len(s.Origins[origin]))
+	for account := range s.Origins[origin] {
+		accounts = append(accounts, account)
+	}
+	def := s.resolveAccount(origin, "")
+	sort.Slice(accounts, func(i, j int) bool {
+		if (accounts[i] == def) != (accounts[j] == def) {
+			return accounts[i] == def
+		}
+		return accounts[i] < accounts[j]
+	})
+	out := make([]*DaemonCredentials, 0, len(accounts))
+	for _, account := range accounts {
+		creds := *s.Origins[origin][account]
+		if creds.ServerURL == "" {
+			creds.ServerURL = origin
+		}
+		creds.Sub = account
+		out = append(out, &creds)
+	}
+	return out
 }

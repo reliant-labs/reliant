@@ -63,6 +63,14 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 // and `approved_by` are set by the server from the caller's credential on
 // every one of these paths, including the two exceptions.
 service DeployService {
+  // Resolve server-owned project identity. Creation never guesses between orgs.
+  rpc ResolveHostedProject(ResolveHostedProjectRequest) returns (ResolveHostedProjectResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "Project identity resolution is also used before binding an unbound target."}
+    };
+  }
   // Feature negotiation is mandatory before sending immutable snapshot documents.
   rpc GetCapabilities(GetDeployCapabilitiesRequest) returns (GetDeployCapabilitiesResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -722,16 +730,40 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
-  // GetLiveView returns every environment of one forge project with its
-  // declaration, promotion, release, bundle, latest apply and sessions — the
-  // whole Live screen in ONE round trip.
+  // GetLiveView returns every environment of one forge project as a ROSTER:
+  // each row's identity, release binding, bundle identity, phase, drift,
+  // holds and tree-health counts — the environment list every console page
+  // draws, in ONE round trip.
   //
-  // Folded for GetTenant's reason: the page cannot render until it has all of
-  // it, and N environments × six reads is both a slow page and a page assembled
-  // from six different instants. An environment list that comes back empty is
-  // an empty list, never an error: a project nobody has deployed yet is a
-  // normal state, not a failure.
+  // Folded for GetTenant's reason: N environments × several reads is both a
+  // slow page and a page assembled from different instants. Bounded per row
+  // (see DeployLiveEnvironment): the documents that grow with an environment
+  // — its declared shape, its bundle, its release — are fetched for one
+  // environment at a time. An environment list that comes back empty is an
+  // empty list, never an error: a project nobody has deployed yet is a normal
+  // state, not a failure.
   rpc GetLiveView(GetDeployLiveViewRequest) returns (GetDeployLiveViewResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetEnvironmentShape returns one environment's DECLARATION: the
+  // release.Shape its last render recorded (workloads, secrets by name and
+  // provider, domains, clusters, resolved alert rules and routes, a hash per
+  // object), with where and when it was declared.
+  //
+  // SPLIT FROM THE ROSTER because it is a document, not a field: hundreds of
+  // KB for a real environment, read only by the pages that show one
+  // environment's secrets, workloads, alerts or dashboards. It used to ride
+  // on every DeployEnvironment, which made every environment list a megabyte.
+  //
+  // MEMBER, the same scoping as GetLiveView: an environment of another org is
+  // NotFound, indistinguishable from an absent one. It names no secret VALUE —
+  // a shape's secrets are names and providers only (F-13, enforced when the
+  // shape is written).
+  //
+  // A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
+  // with no shape, which is the "never built" state, never an empty shape.
+  rpc GetEnvironmentShape(GetDeployEnvironmentShapeRequest) returns (GetDeployEnvironmentShapeResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -862,6 +894,19 @@ message GetDeployCapabilitiesResponse {
   // "object-summaries"). forge sends a hosted bundle only the parts named here;
   // a server that names none gets the document every older decoder knew.
   repeated string bundle_document_features = 4;
+}
+
+message ResolveHostedProjectRequest {
+  string project_id = 1;
+  string name = 2;
+  // Only used for unbound creation or explicit org administration.
+  optional string org_id = 3;
+  bool create = 4;
+}
+message ResolveHostedProjectResponse {
+  string project_id = 1;
+  string org_id = 2;
+  string name = 3;
 }
 
 message GetDeployTenantRequest {
@@ -2093,6 +2138,25 @@ message GetDeployLiveViewResponse {
   // Empty when the project has no environments. NOT an error: a project
   // nobody has deployed yet is a normal state.
   repeated DeployLiveEnvironment environments = 1;
+}
+
+message GetDeployEnvironmentShapeRequest {
+  string environment_id = 1 [(buf.validate.field).required = true];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
+}
+
+message GetDeployEnvironmentShapeResponse {
+  // The release.Shape JSON (snake_case keys, as forge renders it). UNSET when
+  // nothing has declared this environment yet — the "never built" state,
+  // which must never read as a shape that declares nothing.
+  google.protobuf.Struct declared_shape = 1;
+  // Where the declaration came from. Unset exactly when declared_shape is.
+  DeploySourceProvenance declared_by = 2;
+  // When it was declared. Unset exactly when declared_shape is.
+  google.protobuf.Timestamp declared_at = 3;
 }
 
 // === Plans ===

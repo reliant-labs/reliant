@@ -80,8 +80,12 @@ func toolNamed(names ...string) func(string) bool {
 // other run.
 func UnattendedWithholding(name string) string {
 	name = strings.TrimSpace(name)
+	// A named activation tool is reachable, and the owner's
+	// automation-approvals setting then decides each call: one that widens
+	// an activation's power needs a card, which an unattended run cannot
+	// show, so it is refused (activation_tools.go).
 	if IsActivationManagementTool(name) {
-		return "unattended runs cannot manage trigger activations; an interactive owner approval is required"
+		return "unattended runs can't manage trigger activations"
 	}
 	for _, category := range unattendedWithheld {
 		if category.withholds(name) {

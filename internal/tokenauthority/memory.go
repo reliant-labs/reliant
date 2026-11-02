@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // Memory is an in-process Authority for tests. It applies the SAME grant rules
@@ -76,6 +78,13 @@ func (m *Memory) Introspect(_ context.Context, token string) (*fat.Principal, er
 		TokenID: t.info.ID, OrgID: t.actingID, ActingUserID: t.actingID, Scopes: scopes,
 		Resource: t.info.Resource, Ephemeral: t.info.Ephemeral, ExpiresAt: t.info.ExpiresAt,
 	}, nil
+}
+
+// IntrospectAccount implements Authority. Like LocalStore, Memory keeps no
+// user records, so it names no email.
+func (m *Memory) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
+	p, err := m.Introspect(ctx, token)
+	return auth.AccessTokenAccount{Principal: p}, err
 }
 
 // MintForUser implements Authority.

@@ -111,7 +111,7 @@ export function CopilotDevicePanel({
               href={verificationUrl}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+              className="font-medium text-primary-ink underline underline-offset-2 hover:text-primary-ink/80"
             >
               {verificationUrl}
             </a>

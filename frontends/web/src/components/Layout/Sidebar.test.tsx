@@ -11,9 +11,13 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
+// Keeps the trigger wrapper's classes (triggerClassName): the hover-only
+// actions hide and show on it.
 vi.mock("../forge-ui/tooltip", () => ({
-  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+  default: ({ children, triggerClassName }: { children: ReactNode; triggerClassName?: string }) =>
+    triggerClassName ? <span className={triggerClassName}>{children}</span> : <>{children}</>,
 }));
 
 vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
@@ -63,7 +67,8 @@ vi.mock("../../hooks/chat-queries", () => ({
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -194,6 +199,9 @@ describe("Sidebar selected chat scroll", () => {
       worktreeName: "Archived workspace",
       projectId: "project-1",
     });
+    // One project's archive groups by workspace (across projects it groups
+    // by project: Sidebar.projectClarity.test.tsx).
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -216,6 +224,7 @@ describe("Sidebar selected chat scroll", () => {
     // The group expands and the list must NOT snap back to the active tab.
     expect(screen.getByText("Archived chat")).toBeInTheDocument();
     expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
   });
 
   it("closes the list menu after choosing an option, and on Escape", () => {
@@ -258,6 +267,45 @@ describe("Sidebar selected chat scroll", () => {
     fireEvent.click(screen.getByLabelText("View options"));
     fireEvent.click(screen.getByText("Flat list"));
     expect(screen.queryByText("Flat list")).not.toBeInTheDocument();
+  });
+
+  // At the default 240px width a workspace's name read "percent-r…": its
+  // hover-only buttons were opacity-0 and still took their width (#624).
+  it("keeps hover-only actions out of the layout, and names truncated titles in full", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // A truncated name is still readable in full, on hover.
+    expect(screen.getByText("Selected chat")).toHaveAttribute("title", "Selected chat");
+    const workspaceTitle = screen.getByText("feature/test");
+    expect(workspaceTitle).toHaveAttribute("title", "feature/test");
+
+    // The workspace header's New chat and Archive: display:none until the
+    // header is hovered or focused, never a transparent box holding width.
+    const header = workspaceTitle.closest(".group\\/header") as HTMLElement;
+    const hoverOnly = Array.from(header.querySelectorAll("button")).filter(
+      (b) => !b.contains(workspaceTitle) && b.querySelector(".lucide-plus, .lucide-archive"),
+    );
+    expect(hoverOnly).toHaveLength(2);
+    for (const button of hoverOnly) {
+      expect(button.className).not.toMatch(/opacity-0/);
+      const wrapper = button.parentElement!;
+      expect(wrapper.className).toMatch(/(^|\s)hidden(\s|$)/);
+      expect(wrapper.className).toContain("group-hover/header:inline-flex");
+      expect(wrapper.className).toContain("group-focus-within/header:inline-flex");
+    }
+
+    // The chat row's More options likewise.
+    const row = screen.getByText("Selected chat").closest("[data-chat-id]") as HTMLElement;
+    const more = row.querySelector('button[aria-haspopup="menu"]')!.closest("div")!;
+    expect(more.className).toMatch(/(^|\s)hidden(\s|$)/);
+    expect(more.className).toContain("group-hover:block");
   });
 
   it("renders Codex-style navigation actions and calls their handlers", () => {

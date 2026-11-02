@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -18,7 +18,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { InboxItemKind, InboxItemSchema, InboxStorageSchema, type InboxItem, type InboxStorage } from "@/gen/reliant/v1/inbox_pb";
+import { InboxItemKind, InboxItemSchema, InboxStorageSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 
@@ -167,21 +167,26 @@ export function needsSetupItem(overrides: Overrides<InboxItem> = {}): InboxItem 
   });
 }
 
-export function runFinishedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
+export function runPausedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
-    kind: InboxItemKind.RUN_FINISHED,
-    itemId: "run_finished:chat-1",
-    triggerId: "trg-3",
-    triggerName: "Nightly triage",
-    payload: { case: "runFinished", value: {} },
+    kind: InboxItemKind.AUTOMATION_RUN_PAUSED,
+    itemId: "automation_run_paused:chat-1@20261030T082500.000000",
+    triggerId: "trg-4",
+    triggerName: "cp-merge",
+    payload: {
+      case: "automationRunPaused",
+      value: { reason: "machine e164d47d did not answer the gate command" },
+    },
     ...overrides,
   });
 }
 
 export function storageItem(
   overrides: Overrides<InboxItem> = {},
-  storage: Overrides<InboxStorage> = {},
+  // An init shape, not Overrides: its nested messages (volumes, held,
+  // processes.top) are written as plain objects, which create() fills in.
+  storage: MessageInitShape<typeof InboxStorageSchema> = {},
 ): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.STORAGE,

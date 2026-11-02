@@ -87,6 +87,7 @@ import {
   type CloudPromotion,
 } from "../services/forge/cloudEnvs";
 import {
+  getEnvironmentShape,
   getLiveView,
   hasLiveControlPlane,
   listEnvironmentConvergences,
@@ -95,6 +96,7 @@ import {
   type LiveAvailability,
   type LiveConvergence,
   type LiveEnv,
+  type LiveShape,
 } from "../services/forge/live";
 import { registerEnvironment, type RegisterCandidate } from "../services/forge/register";
 import {
@@ -164,6 +166,9 @@ export const forgeCloudKeys = {
   // every environment's whole Live answer, because GetLiveView returns them
   // together (see services/forge/live.ts on why it is one round trip).
   liveView: cloudKey<[forgeProject: string]>("live-view"),
+  // One environment's declared shape (GetEnvironmentShape): the document the
+  // Live roster deliberately does not carry.
+  environmentShape: cloudKey<[environmentId: string]>("environment-shape"),
   cloudStatus: cloudKey<[environmentId: string]>("cloud-status"),
   cloudPromotions: cloudKey<[environmentId: string]>("cloud-promotions"),
   convergences: cloudKey<[environmentId: string]>("convergences"),
@@ -360,6 +365,9 @@ export function useLiveView(forgeProject: string | null | undefined) {
   return useQuery<LiveViewResult>({ ...liveViewQuery(forgeProject ?? ""), enabled });
 }
 
+/** How many times the Live read is sent before an unreachable answer is final (liveViewQuery). */
+export const LIVE_VIEW_ATTEMPTS = 2;
+
 export interface LiveViewResult {
   availability: LiveAvailability;
   envs: LiveEnv[];
@@ -376,14 +384,23 @@ export function liveViewQuery(forgeProject: string) {
   return {
     queryKey: forgeCloudKeys.liveView(forgeProject),
     queryFn: async (): Promise<LiveViewResult> => {
-      try {
-        return {
-          availability: "available" as const,
-          envs: await getLiveView(forgeProject),
-          detail: "",
-        };
-      } catch (err) {
-        return { availability: liveAvailabilityFromError(err), envs: [], detail: liveErrorDetail(err) };
+      // An UNREACHABLE answer (a timeout, a dropped response) is asked once
+      // more before it is resolved: this one read is the roster every console
+      // page draws from, and settling a blip as `unreachable` leaves every page
+      // without an environment until the next refetch. The answers the server
+      // gave on purpose (no access, not configured) are final at once.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return {
+            availability: "available" as const,
+            envs: await getLiveView(forgeProject),
+            detail: "",
+          };
+        } catch (err) {
+          const availability = liveAvailabilityFromError(err);
+          if (availability === "unreachable" && attempt < LIVE_VIEW_ATTEMPTS) continue;
+          return { availability, envs: [], detail: liveErrorDetail(err) };
+        }
       }
     },
     staleTime: 15_000,
@@ -404,7 +421,70 @@ export function useInvalidateLiveView() {
   const queryClient = useQueryClient();
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
+    // A registration or deploy records a new declaration as well.
+    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.environmentShape.all });
   }, [queryClient]);
+}
+
+/**
+ * One environment's DECLARED SHAPE — its secrets, workloads and alert rules
+ * as the last recorded render declares them — or null when nothing has
+ * declared it.
+ *
+ * Fetched per environment, by the page that shows it, because it is a
+ * document (hundreds of KB for a real environment) and the Live roster every
+ * page reads must stay small. Cached per environment, so the secrets page and
+ * the workloads page share one request; no poll, since a declaration moves
+ * only when somebody builds or deploys, and those paths invalidate it.
+ */
+function environmentShapeQuery(environmentId: string) {
+  return {
+    queryKey: forgeCloudKeys.environmentShape(environmentId),
+    queryFn: () => getEnvironmentShape(environmentId),
+    enabled: environmentId !== "" && hasLiveControlPlane(),
+    staleTime: 60_000,
+    retry: forgeRetry,
+  };
+}
+
+export function useEnvironmentShape(environmentId: string | null | undefined) {
+  return useQuery<LiveShape | null>(environmentShapeQuery(environmentId ?? ""));
+}
+
+/**
+ * One environment's shape as a multi-environment page holds it. `shape` is
+ * undefined until it has loaded (or when it failed — see `error`), null when
+ * the environment has never been declared.
+ */
+export interface EnvironmentShapeEntry {
+  shape: LiveShape | null | undefined;
+  isLoading: boolean;
+  error: unknown;
+}
+
+/**
+ * The same query per environment, for the pages that compare environments
+ * (secrets matrix, alerts, the workload strip). An empty id is skipped.
+ *
+ * The map is STABLE across renders while no query changes (useQueries'
+ * `combine` is memoised on its results and a stable function), so a caller
+ * may put it in a useMemo dependency list without recomputing every render.
+ */
+export function useEnvironmentShapes(environmentIds: readonly string[]): Map<string, EnvironmentShapeEntry> {
+  const key = environmentIds.join("\n");
+  const combine = useCallback(
+    (results: { data?: LiveShape | null; isLoading: boolean; error: unknown }[]) => {
+      const byId = new Map<string, EnvironmentShapeEntry>();
+      key.split("\n").forEach((id, index) => {
+        if (id === "") return;
+        const result = results[index];
+        byId.set(id, { shape: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+      });
+      return byId;
+    },
+    [key]
+  );
+  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id)), combine });
 }
 
 /**

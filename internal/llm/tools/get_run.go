@@ -55,6 +55,10 @@ type RunDetail struct {
 	Workflow  string `json:"workflow,omitempty"`
 	ProjectID string `json:"project_id"`
 	State     string `json:"state"`
+	// Failure is why a failed run failed, as recorded on the run with its
+	// status. For a run that failed before any node ran it is the only
+	// account there is.
+	Failure string `json:"failure,omitempty"`
 	// Waiting is what a live run is blocked on outside itself ("waiting for
 	// usage limit", "waiting for machine", "needs input"); empty otherwise.
 	Waiting             string `json:"waiting,omitempty"`
@@ -115,6 +119,15 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 
 	detail.Nodes = []*pb.RunNodeExecution{}
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
+		if detail.State == "failed" {
+			root, err := g.repo.GetWorkflow(rctx.Context, *chat.WorkflowID)
+			if err != nil {
+				return NewTextErrorResponse("Could not read why the run failed: " + err.Error()), nil
+			}
+			if root != nil && root.FailureDetail != nil {
+				detail.Failure = *root.FailureDetail
+			}
+		}
 		rows, err := g.repo.ListRunNodeExecutions(rctx.Context, *chat.WorkflowID, rundiagnostics.RecordLimit+1)
 		if err != nil {
 			return NewTextErrorResponse("Could not read the run's nodes: " + err.Error()), nil
@@ -133,6 +146,13 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 	}
 	fmt.Fprintf(&sb, "Run %s: %s\n", detail.RunID, title)
 	fmt.Fprintf(&sb, "State: %s\n", detail.State)
+	if detail.State == "failed" {
+		if detail.Failure != "" {
+			fmt.Fprintf(&sb, "Failure: %s\n", detail.Failure)
+		} else {
+			sb.WriteString("Failure: no reason was recorded on the run.\n")
+		}
+	}
 	if detail.Waiting != "" {
 		fmt.Fprintf(&sb, "Waiting: %s", detail.Waiting)
 		if detail.UsageLimitProvider != "" {
@@ -153,13 +173,16 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 	} else {
 		sb.WriteString("\nNo assistant message yet.\n")
 	}
-	writeRunNodes(&sb, detail.Nodes, detail.NodesTruncated)
+	writeRunNodes(&sb, detail.Nodes, detail.NodesTruncated, detail.State == "failed")
 	return WithResponseMetadata(NewTextResponse(sb.String()), detail), nil
 }
 
-func writeRunNodes(sb *strings.Builder, nodes []*pb.RunNodeExecution, truncated bool) {
+func writeRunNodes(sb *strings.Builder, nodes []*pb.RunNodeExecution, truncated, failed bool) {
 	sb.WriteString("\nNodes (newest attempts first):\n")
-	if len(nodes) == 0 {
+	switch {
+	case len(nodes) == 0 && failed:
+		sb.WriteString("None: the run failed before its first node ran (the Failure line says why).\n")
+	case len(nodes) == 0:
 		sb.WriteString("No recorded nodes yet.\n")
 	}
 	for _, n := range nodes {

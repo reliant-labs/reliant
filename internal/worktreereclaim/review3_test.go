@@ -125,8 +125,8 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 	w := Worktree{ID: "q3", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "9"}
 	got := f.one(w)
 	t.Logf("result: %+v; root exists=%v web exists=%v", got, exists(filepath.Join(ws, ".git")), exists(filepath.Join(ws, "web", ".git")))
-	if got.Outcome != OutcomeRemoved {
-		t.Errorf("a clean root+nested workspace is not removed: %s/%s %q (web removed=%v)", got.Outcome, got.Reason, got.Detail, !exists(filepath.Join(ws, "web", ".git")))
+	if got.Outcome != OutcomeHeld || got.Reason != ReasonNestedRepo || !exists(filepath.Join(ws, ".git")) || !exists(filepath.Join(ws, "web", ".git")) {
+		t.Errorf("nested choreography must retain every checkout: %+v", got)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -133,17 +132,19 @@ func (e *LocalToolExecutor) executeTool(
 	chatID, _ := contextMap["chat_id"].(string)
 	thread, _ := contextMap["thread"].(string)
 
-	// Create minimal project info
-	var project *db.Project
+	// The project and its checkout on THIS machine: the request's project
+	// path is the dispatcher's projectcheckout resolution for the machine the
+	// call was pinned to, never projects.path.
+	var project *rctx.Project
 	if projectMap, ok := contextMap["project"].(map[string]interface{}); ok {
 		projectID, _ := projectMap["id"].(string)
 		projectPath, _ := projectMap["path"].(string)
 		projectName, _ := projectMap["name"].(string)
 
-		project = &db.Project{
-			ID:   projectID,
-			Path: projectPath,
-			Name: projectName,
+		project = &rctx.Project{
+			ID:       projectID,
+			Name:     projectName,
+			Checkout: projectPath,
 		}
 	}
 
@@ -164,6 +165,9 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Create tool context with worktree info
 	toolContext := rctx.NewToolContext(ctx, chatID, thread, project, worktreeInfo)
+	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
+	// from the context map only — never from toolInput, which a model writes.
+	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.

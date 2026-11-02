@@ -32,6 +32,21 @@ type ExecutorCall struct {
 	Runner *Runner
 }
 
+// Do sends one declarative request, sub, under this call's manifest and
+// credential: for an executor that composes several requests (a lookup, then
+// a write) and wants each built, authenticated, error-classified and scrubbed
+// exactly as a declarative action is, instead of holding the credential
+// itself. sub must be a request, not another executor.
+func (c ExecutorCall) Do(ctx context.Context, sub *reliantv1.ActionSpec, params map[string]any) (*Result, error) {
+	if _, ok := manifest.ExecutorName(sub); ok || sub.GetRequest() == nil {
+		return nil, fmt.Errorf("%s: a sub-request must be declarative", sub.GetId())
+	}
+	if c.Runner == nil {
+		return nil, fmt.Errorf("%s: no runner", sub.GetId())
+	}
+	return c.Runner.run(ctx, c.Manifest, sub, params, c.Credential)
+}
+
 // ExecutorFunc implements an action whose manifest says `executor: go:<name>`.
 // It honours the same contract as a declarative action: a failed call is a
 // Result with IsError, and a Go error means the call could not be attempted.

@@ -1,0 +1,25 @@
+name: fixture
+entry: [clear]
+nodes:
+# lint:allow action-error-unread — best effort: GitHub answers 404 when the label is already gone
+- id: clear
+  type: action
+  uses: github/issue.labels.remove@1
+  with: {owner: acme, repo: app, issue_number: 1, label: stale}
+- id: label
+  type: action
+  uses: github/issue.labels.add@1
+  with: {owner: acme, repo: app, issue_number: 1, label: done}
+- id: ok
+  type: save_message
+  args: {role: assistant, content: labelled}
+- id: failed
+  type: save_message
+  outcome: failure
+  args: {role: assistant, content: could not label}
+edges:
+- {from: clear, default: label}
+- from: label
+  cases:
+  - {to: failed, condition: 'nodes.label.is_error'}
+  default: ok

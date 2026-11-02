@@ -58,6 +58,7 @@ import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from 
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
 import type { RollbackTarget } from "../Promote/rollback";
 import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { AskReliantActions } from "../Observability/AskReliant/AskReliant";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
 import { signalState, useSignalsIndex, type SignalState } from "../Observability/serviceSignals";
@@ -425,6 +426,16 @@ function WorkloadHeader({
   ];
   const link = observed ? workloadOpenUrl(observed) : "";
   const lastError = observed ? plainErrorText(workloadLastError(observed)) : "";
+  // Crash-looping, degraded, or a Job whose last run failed: the moment to hand it to an agent.
+  const trouble = isJob
+    ? latestRun?.result === "failed"
+      ? "failed"
+      : null
+    : summary?.health === "crash_looping"
+      ? "crash-looping"
+      : summary?.health === "degraded"
+        ? "degraded"
+        : null;
 
   return (
     <div className="space-y-3">
@@ -549,6 +560,17 @@ function WorkloadHeader({
               </span>
             </span>
           )}
+        </div>
+      )}
+
+      {trouble && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="workload-ask">
+          <span className="text-xs text-ink-muted">
+            {isJob ? `${name}'s last run failed in ${env.name}.` : `${name} is ${trouble} in ${env.name}.`} An agent can find out why from its logs and restarts.
+          </span>
+          <AskReliantActions
+            subject={{ kind: "workload", name, env: env.name, job: isJob, state: trouble, release: summary?.releaseVersion || latestRun?.releaseVersion || undefined }}
+          />
         </div>
       )}
 
@@ -782,7 +804,7 @@ function OverviewTab({
           loading={trend.isLoading}
           testId="workload-chart-requests"
         >
-          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests, tone: "primary" }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
+          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
         </ChartPanel>
         <ChartPanel
           title="Error rate"
@@ -894,7 +916,7 @@ function UsageChart({
   );
   const lines = series
     ? [
-        { label: title.split(" ")[0]!.toLowerCase(), values: series.values, tone: "primary" as const },
+        { label: title.split(" ")[0]!.toLowerCase(), values: series.values },
         ...(limit !== null ? [{ label: "limit", values: series.values.map(() => limit), tone: "muted" as const, dashed: true }] : []),
       ]
     : [];

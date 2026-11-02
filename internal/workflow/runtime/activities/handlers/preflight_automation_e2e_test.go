@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -204,7 +205,7 @@ func (h *automationHarness) preflightWait(t *testing.T, waitSeconds int) (Prefli
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(h.activity.Execute)
 	val, err := env.ExecuteActivity(h.activity.Execute, PreflightDaemonCheckInput{
-		ChatID: h.chatID, DaemonSelector: &toolexec.DaemonSelector{ID: h.daemonID}, WaitSeconds: waitSeconds})
+		ChatID: h.chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: h.daemonID}, WaitSeconds: waitSeconds})
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, err
 	}

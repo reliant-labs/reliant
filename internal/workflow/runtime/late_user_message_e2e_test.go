@@ -90,7 +90,7 @@ func newLateUserMessageEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment)
 	wfJSON, err := protojson.Marshal(wf)
 	require.NoError(t, err)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},

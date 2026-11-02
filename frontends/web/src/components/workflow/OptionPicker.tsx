@@ -253,7 +253,7 @@ export function OptionPicker({
                       className={cn(
                         "flex w-full cursor-pointer items-start gap-2 px-2.5 py-1.5 text-left",
                         option.value === activeRow && "bg-muted",
-                        isSelected && "text-primary",
+                        isSelected && "text-primary-ink",
                       )}
                     >
                       <span className="min-w-0 flex-1">

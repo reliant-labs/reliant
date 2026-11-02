@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
@@ -94,7 +95,8 @@ func (l *Launcher) ResolveChatWorktreeID(ctx context.Context, projectID string, 
 // Checkout is the directory a chat's runs operate in, as the runtime's
 // workflow.path / workflow.worktree_path / workflow.branch report it.
 type Checkout struct {
-	// Path is the working directory: the chat's worktree, or the project.
+	// Path is the working directory: the chat's worktree, or the project's
+	// checkout on the chat's machine.
 	Path string
 	// WorktreePath and Branch are set only when Path is a worktree reliant
 	// created for the chat. They stay empty for the project's main checkout,
@@ -106,7 +108,7 @@ type Checkout struct {
 
 // GetEffectiveWorkingPath returns the working directory path for a chat.
 // If the chat has a worktree, it returns the worktree path.
-// Otherwise, it returns the project path.
+// Otherwise, it returns the project's checkout on the chat's machine.
 // This ensures tools execute in the correct directory based on the chat's context.
 func (l *Launcher) GetEffectiveWorkingPath(ctx context.Context, chat *db.Chat) string {
 	return l.GetEffectiveCheckout(ctx, chat).Path
@@ -114,35 +116,51 @@ func (l *Launcher) GetEffectiveWorkingPath(ctx context.Context, chat *db.Chat) s
 
 // GetEffectiveCheckout is GetEffectiveWorkingPath plus, for a chat in a
 // worktree, that worktree and its branch.
+//
+// The main checkout is the project's checkout ON THE CHAT'S MACHINE (its pin,
+// else the project's oldest install): projects.path is the creating machine's
+// path and is never a working directory. A chat whose machine has no checkout
+// gets an empty Path rather than a wrong one; the run still starts, and its
+// first machine call is refused with the way out (switch machine, or clone
+// the project there), which dispatch re-checks on every call.
 func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Checkout {
 	// First try to get worktree path if the chat has one
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
 		if worktree, err := l.repo.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
-			checkout := Checkout{Path: worktree.Path}
+			// The main worktree row mirrors projects.path: it is the main
+			// checkout, resolved on the chat's machine below.
 			if !worktree.IsMain {
-				checkout.WorktreePath = worktree.Path
-				checkout.Branch = worktree.Branch
+				return Checkout{Path: worktree.Path, WorktreePath: worktree.Path, Branch: worktree.Branch}
 			}
-			return checkout
 		} else {
 			// A worktree-bound chat whose worktree can't be resolved must NOT
 			// silently degrade to the project (main) checkout — that runs the
 			// branch chat against the wrong tree and looks like it worked. Make
-			// the failure visible; the caller still gets project path as a
-			// last resort, but the log names the broken invariant.
-			logging.ErrorContext(ctx, "[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to project path",
+			// the failure visible; the caller still gets the main checkout as
+			// a last resort, but the log names the broken invariant.
+			logging.ErrorContext(ctx, "[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to the main checkout",
 				"chatID", chat.ID, "worktreeID", *chat.WorktreeID, "error", err)
 		}
 	}
 
-	// Fall back to project path
-	if chat.ProjectID != "" {
-		if project, err := l.repo.GetProject(ctx, chat.ProjectID); err == nil && project != nil {
-			return Checkout{Path: project.Path}
-		}
+	if chat.ProjectID == "" || chat.NoMachine {
+		return Checkout{}
 	}
-
-	return Checkout{}
+	project, err := l.repo.GetProject(ctx, chat.ProjectID)
+	if err != nil || project == nil {
+		return Checkout{}
+	}
+	machine := ""
+	if chat.ActiveDaemonID != nil {
+		machine = *chat.ActiveDaemonID
+	}
+	target, err := projectcheckout.ForMachine(ctx, l.repo, nil, chat.UserID, project, machine, "run workflows in it")
+	if err != nil {
+		logging.InfoContext(ctx, "[getEffectiveWorkingPath] no checkout of the project on the chat's machine; dispatch refuses its machine calls with the way out",
+			"chatID", chat.ID, "daemonID", machine, "error", err)
+		return Checkout{}
+	}
+	return Checkout{Path: target.Path}
 }
 
 // NormalizeWorkflowSlug is the slug a workflow ref addresses among the
@@ -277,4 +295,21 @@ func ExtractModelSelectors(inputs map[string]interface{}, schemas map[string]*re
 	}
 
 	return result
+}
+
+// InputKeyMachinePool is the run input a pool-placed run carries:
+// {id, name, member, members: [{id, name, state}]}. A workflow loops
+// members with a node-level `daemon: {id: …}` to reach every member.
+const InputKeyMachinePool = "machine_pool"
+
+func machinePoolInput(pool *PoolPlacement, chat *db.Chat) map[string]interface{} {
+	members := make([]interface{}, 0, len(pool.Members))
+	for _, m := range pool.Members {
+		members = append(members, map[string]interface{}{"id": m.ID, "name": m.Name, "state": m.State})
+	}
+	member := ""
+	if chat != nil && chat.ActiveDaemonID != nil {
+		member = *chat.ActiveDaemonID
+	}
+	return map[string]interface{}{"id": pool.ID, "name": pool.Name, "member": member, "members": members}
 }

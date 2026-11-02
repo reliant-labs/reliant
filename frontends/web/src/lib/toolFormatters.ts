@@ -753,6 +753,12 @@ export const formatSpawnParams: ToolFormatter = (input) => {
     return { summary: `${preset}: "${truncTitle}"`, fullText: `spawn(${preset}: "${title}")`, structured: {} };
   }
   if (preset) return { summary: preset, fullText: `spawn(${preset})`, structured: {} };
+  // A sub-agent with a title but no preset is still named: its title is what
+  // the user decides whether to open it by.
+  if (title) {
+    const truncTitle = title.length > 48 ? title.slice(0, 45) + '...' : title;
+    return { summary: truncTitle, fullText: `spawn(${title})`, structured: {} };
+  }
   return { summary: '', fullText: 'spawn()' };
 };
 

@@ -118,8 +118,8 @@ func TestReconcile_PreCommitClonesUnderToolsAreRegenerable(t *testing.T) {
 	preCommitClone(t, w.Path, ".tools/pre-commit/repo1a2b3c")
 	preCommitClone(t, w.Path, ".tools/pre-commit/repo4d5e6f")
 	write(t, filepath.Join(w.Path, ".tools", "pre-commit", "db.db"), "pre-commit's own index")
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v, want removed", got)
+	if got := f.one(w); got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, ".tools", "pre-commit", "db.db")) {
+		t.Fatalf("nested clone/protected db layout must hold whole workspace: %+v", got)
 	}
 }
 

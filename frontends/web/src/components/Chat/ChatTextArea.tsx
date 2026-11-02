@@ -358,6 +358,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           </div>
         )}
         <textarea
+          aria-label="Message the agent"
           ref={textareaRef}
           rows={1}
           value={value}

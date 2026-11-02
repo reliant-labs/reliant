@@ -1,0 +1,15 @@
+name: fixture
+entry: [fix]
+nodes:
+- id: fix
+  type: loop
+  while: outputs.exit_code != 0 && iter.iteration < 5
+  inline:
+    entry: [test]
+    outputs:
+      exit_code: '{{ nodes.test.exit_code }}'
+    nodes:
+    - id: test
+      type: run
+      timeout: 10m
+      args: {command: make test}

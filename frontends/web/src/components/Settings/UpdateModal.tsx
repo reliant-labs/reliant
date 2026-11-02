@@ -53,7 +53,7 @@ export function UpdateModal({
           <div className="space-y-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-full bg-primary/10">
-                <Download className="w-6 h-6 text-primary" />
+                <Download className="w-6 h-6 text-primary-ink" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-2">
@@ -98,7 +98,7 @@ export function UpdateModal({
           <div className="space-y-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-full bg-primary/10 animate-pulse">
-                <Download className="w-6 h-6 text-primary" />
+                <Download className="w-6 h-6 text-primary-ink" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-2">
@@ -151,7 +151,7 @@ export function UpdateModal({
                           );
                         })()
                       )}
-                      <span className="text-primary font-medium">
+                      <span className="text-primary-ink font-medium">
                         {formatSpeed(progress?.bytesPerSecond || 0)}
                       </span>
                     </div>

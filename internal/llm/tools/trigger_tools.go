@@ -42,6 +42,27 @@ type TriggerEventSummary struct {
 	Detail         string `json:"detail,omitempty"`
 	ChatID         string `json:"chat_id,omitempty"`
 	RunState       string `json:"run_state,omitempty"`
+	// Definition is which workflow definition the firing resolved.
+	Definition *TriggerEventDefinition `json:"definition,omitempty"`
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved: the
+// file and its version, the machine and git commit it was synced from, and
+// why it could not run when the firing was refused.
+type TriggerEventDefinition struct {
+	Summary     string `json:"summary"`
+	Workflow    string `json:"workflow"`
+	Source      string `json:"source,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Machine     string `json:"machine,omitempty"`
+	DaemonID    string `json:"daemon_id,omitempty"`
+	Repo        string `json:"repo,omitempty"`
+	Branch      string `json:"branch,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	Dirty       bool   `json:"dirty,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"`
+	Error       string `json:"error,omitempty"`
+	CatalogPin  string `json:"catalog_pin,omitempty"`
 }
 
 type TriggerEventPage struct {
@@ -75,6 +96,11 @@ type TriggerSummary struct {
 	HealthDetail    string
 	Source          string // a one-line description of what fires it
 	Filter          string
+	// Definition is where its runs read the workflow from ("project workflow
+	// at control-plane/.reliant/workflows/release.yaml on machine cicd"), and
+	// DefinitionWarnings what about that the owner should act on.
+	Definition         string
+	DefinitionWarnings []string
 }
 
 // =============================================================================
@@ -151,6 +177,12 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 			fmt.Fprintf(&b, "  machine: %s (id %s), state %s\n", t.DaemonName, t.DaemonID, state)
 		}
 		fmt.Fprintf(&b, "  fires on: %s\n", t.Source)
+		if t.Definition != "" {
+			fmt.Fprintf(&b, "  definition: %s\n", t.Definition)
+		}
+		for _, w := range t.DefinitionWarnings {
+			fmt.Fprintf(&b, "  warning: %s\n", w)
+		}
 		if t.Filter != "" {
 			fmt.Fprintf(&b, "  filter: %s\n", t.Filter)
 		}

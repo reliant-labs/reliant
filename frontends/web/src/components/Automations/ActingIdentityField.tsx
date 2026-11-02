@@ -6,6 +6,11 @@
  * are labels around real radios, so arrow keys move between them and the
  * whole card is the click target.
  *
+ * The bot is every new automation's default: its GitHub writes are the bot's
+ * unless the owner explicitly chooses their own account. Integrations with no
+ * bot (Slack, Gmail, Twilio, HTTP) always write through the owner's connection,
+ * so the choice is only ever about GitHub.
+ *
  * The bot needs a control plane to mint its installation tokens. Without one,
  * its option stays visible but unavailable, and the person can explicitly
  * choose their own account. Never hide a source default or silently fall back.
@@ -20,10 +25,8 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 export interface ActingIdentityFieldProps {
   value: ActingIdentityKey | undefined;
   onChange: (next: ActingIdentityKey) => void;
-  /** Mixed activations keep source-specific defaults or their stored choices. */
+  /** Mixed activations keep their stored choices. */
   defaultHint?: string;
-  /** Only GitHub has an App identity; other integrations must not offer it. */
-  allowApp?: boolean;
   /** The owner's login, to say where their writes appear. */
   ownerLogin?: string;
   /** A non-blocking note under the cards (the bot cannot write somewhere). */
@@ -48,14 +51,29 @@ function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string
   ];
 }
 
-export function ActingIdentityField({ value, onChange, ownerLogin, warning, defaultHint, allowApp = true, disabled = false, botAvailable = hasControlPlane }: ActingIdentityFieldProps) {
+/** Whether this deployment can write as the bot (it has a control plane). */
+export function reliantBotAvailable(): boolean {
+  return hasControlPlane;
+}
+
+/**
+ * The identity a new automation gets when nobody chose one, as the server
+ * decides it: the bot wherever the deployment has one. Without a control plane
+ * a GitHub-event source still means the bot (and is refused on save until the
+ * person explicitly chooses themselves); any other source is the owner's.
+ */
+export function defaultActingIdentity(githubSource: boolean, botAvailable = hasControlPlane): ActingIdentityKey {
+  return botAvailable || githubSource ? "app" : "owner";
+}
+
+export function ActingIdentityField({ value, onChange, ownerLogin, warning, defaultHint, disabled = false, botAvailable = hasControlPlane }: ActingIdentityFieldProps) {
   const ids = useId();
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-1.5 text-sm font-medium text-foreground">{allowApp ? "GitHub writes as" : "Writes as"}</legend>
+      <legend className="mb-1.5 text-sm font-medium text-foreground">GitHub writes as</legend>
       {defaultHint && <p className="mb-1.5 text-xs text-muted-foreground">{defaultHint}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
-        {choices(ownerLogin).filter((choice) => allowApp || choice.value !== "app").map((choice) => {
+        {choices(ownerLogin).map((choice) => {
           const checked = value === choice.value;
           return (
             <label
@@ -87,7 +105,7 @@ export function ActingIdentityField({ value, onChange, ownerLogin, warning, defa
           );
         })}
       </div>
-      {!botAvailable && (allowApp || value === undefined || value === "app") && (
+      {!botAvailable && (
         <p className="mt-1.5 text-xs text-warning-ink">Reliant bot requires a control plane. Choose You explicitly to write as your account; bot writes never fall back automatically.</p>
       )}
       {warning && <div className="mt-1.5 text-xs text-warning-ink">{warning}</div>}

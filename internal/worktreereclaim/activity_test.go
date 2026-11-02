@@ -3,10 +3,13 @@ package worktreereclaim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,25 +26,80 @@ type activityClock struct {
 
 func (c *activityClock) now() time.Time      { c.Lock(); defer c.Unlock(); return c.at }
 func (c *activityClock) add(d time.Duration) { c.Lock(); defer c.Unlock(); c.at = c.at.Add(d) }
+
+// inotifyExhausted reports whether err is the host running out of inotify
+// budget rather than the code under test failing. inotify instances
+// (fs.inotify.max_user_instances, EMFILE: "too many open files") and watches
+// (fs.inotify.max_user_watches, ENOSPC: "no space left on device") are
+// per-user kernel budgets shared with every other process the user runs; on a
+// shared dev box or a loaded gate, other agents' stacks exhaust them.
+func inotifyExhausted(err error) bool {
+	return errors.Is(err, syscall.EMFILE) || errors.Is(err, syscall.ENFILE) || errors.Is(err, syscall.ENOSPC) ||
+		strings.Contains(err.Error(), "too many open files") || strings.Contains(err.Error(), "no space left on device")
+}
+
+// skipIfInotifyExhausted skips the test when err is the host's inotify budget
+// running out, and fails it otherwise. Use it where a test starts watching.
+func skipIfInotifyExhausted(t *testing.T, err error) {
+	t.Helper()
+	if inotifyExhausted(err) {
+		t.Skipf("this host's inotify budget is exhausted by other processes (fs.inotify.max_user_instances / max_user_watches): %v", err)
+	}
+	t.Fatal(err)
+}
+
+// skipWithoutInotify skips a test that needs inotify when the host has no
+// instance, or no watches, to give it.
+func skipWithoutInotify(t *testing.T) {
+	t.Helper()
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		skipIfInotifyExhausted(t, err)
+	}
+	defer w.Close()
+	dir := t.TempDir()
+	for i := 0; i < 16; i++ {
+		sub := filepath.Join(dir, strconv.Itoa(i))
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Add(sub); err != nil {
+			skipIfInotifyExhausted(t, err)
+		}
+	}
+}
+
 func activityFixture(t *testing.T) (*ActivityObserver, string, *activityClock) {
 	t.Helper()
+	skipWithoutInotify(t)
 	root := t.TempDir()
 	c := &activityClock{at: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	o, err := NewActivityObserver(filepath.Join(t.TempDir(), "state.json"), c.now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { watcher.Close() })
 	root, key, err := activityKey(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.running[key] = &activityWatch{watcher: watcher, cancel: func() {}, watched: map[string]bool{}, root: root}
-	t.Cleanup(func() { delete(o.running, key) })
+	// A registered observation without its event loop, so each test drives
+	// Observe by hand.
+	o.mu.Lock()
+	if err := o.ensureWatcherLocked(); err != nil {
+		o.mu.Unlock()
+		skipIfInotifyExhausted(t, err)
+	}
+	watcher := o.watcher
+	o.running[key] = newActivityWatch(root, "", func() {})
+	o.publishRoutesLocked()
+	o.mu.Unlock()
+	t.Cleanup(func() {
+		o.mu.Lock()
+		delete(o.running, key)
+		o.publishRoutesLocked()
+		o.mu.Unlock()
+		watcher.Close()
+	})
 	return o, root, c
 }
 func observeActivity(t *testing.T, o *ActivityObserver, root string) RecoveryActivity {

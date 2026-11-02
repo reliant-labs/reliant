@@ -101,22 +101,28 @@ func (s *Service) CreateWorktree(
 	// back to (a branch chat's worktree exists on disk only here). Fail fast
 	// if no daemon is reachable — creating a worktree row that points at a
 	// directory on no daemon is worse than a clear up-front error.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, req.Msg.DaemonId, "create")
 	if err != nil {
 		return nil, err
 	}
-	ownerDaemonID := placement.DaemonID
+	// The repos are that machine's checkout of the project. A machine with
+	// none refuses here, before a row exists, with the way out.
+	target, err := s.withCheckout(ctx, userID, project, placement, "create a workspace from it")
+	if err != nil {
+		return nil, err
+	}
+	ownerDaemonID := target.machine.DaemonID
 	// The checkouts are made after this returns, so an asleep machine would
 	// leave a row that fails in the background. Wake it now instead: nothing
 	// has been recorded yet, so the client's retry creates the worktree, once,
 	// on a machine that is up.
-	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
+	if err := s.wakeIfAsleep(ctx, userID, target.machine, target.checkout.Path); err != nil {
 		return nil, err
 	}
 
 	// After placement: an empty registry is reconciled against the machine
 	// the checkouts are about to be made on.
-	repos, err := s.listProjectRepos(ctx, userID, project, func() (machinewake.Target, error) { return placement, nil })
+	repos, err := s.listProjectRepos(ctx, userID, project, func() (placed, error) { return target, nil })
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +163,7 @@ func (s *Service) CreateWorktree(
 	}
 	createReq := workspacecreate.Request{
 		Project:        project,
+		Checkout:       target.checkout.Path,
 		Repos:          repos,
 		Name:           req.Msg.Name,
 		Branch:         req.Msg.Branch,
@@ -185,7 +192,7 @@ func (s *Service) CreateWorktree(
 	pending := *worktree
 	go func() {
 		defer cancel()
-		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
+		s.finishWorktreeCreate(bgCtx, userID, target.machine, createReq, &pending)
 	}()
 
 	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
@@ -218,8 +225,10 @@ const worktreeCreateBudget = 10 * time.Minute
 // finishWorktreeCreate performs the daemon-side worktree creation and settles
 // the row to ACTIVE or FAILED, then tells clients. It runs on a context
 // detached from the client request; nothing here may assume a caller is still
-// listening.
-func (s *Service) finishWorktreeCreate(ctx context.Context, userID string, req workspacecreate.Request, worktree *db.Worktree) {
-	_ = workspacecreate.Finish(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, daemonID: req.OwnerDaemonID}, req, worktree)
+// listening. placement is the target the request placed it on
+// (req.OwnerDaemonID is its daemon), so a no-machine chat's checkouts wake
+// nothing.
+func (s *Service) finishWorktreeCreate(ctx context.Context, userID string, placement machinewake.Target, req workspacecreate.Request, worktree *db.Worktree) {
+	_ = workspacecreate.Finish(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, target: placement}, req, worktree)
 	s.emitWorktreeChanged(ctx, userID, req.Project.ID, worktree.ID)
 }

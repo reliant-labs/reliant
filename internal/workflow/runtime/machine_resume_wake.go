@@ -158,9 +158,12 @@ func wakeMachineForResume(callerCtx, actCtx workflow.Context, target map[string]
 	})
 	logger := workflow.GetLogger(callerCtx)
 	start := workflow.Now(callerCtx)
+	// failedSince carries the machine's run of Failed reports from one slice
+	// to the next, as waitForMachine does for preflight.
+	var failedSince interface{}
 	for {
 		final := workflow.Now(callerCtx).Sub(start)+machineResumeWakeSlice >= machineResumeWakeCap
-		in := make(map[string]interface{}, len(target)+4)
+		in := make(map[string]interface{}, len(target)+5)
 		for k, v := range target {
 			in[k] = v
 		}
@@ -169,6 +172,9 @@ func wakeMachineForResume(callerCtx, actCtx workflow.Context, target map[string]
 		if toolsKnown {
 			in["tools_known"] = true
 			in["tool_names"] = toolNames
+		}
+		if failedSince != nil {
+			in["failed_since"] = failedSince
 		}
 		var result map[string]interface{}
 		if err := workflow.ExecuteActivity(ctx, "MachineResumeWake", in).Get(callerCtx, &result); err != nil {
@@ -181,5 +187,6 @@ func wakeMachineForResume(callerCtx, actCtx workflow.Context, target map[string]
 		if waiting, _ := result["waiting"].(bool); !waiting || final || callerCtx.Err() != nil {
 			return
 		}
+		failedSince = result["failed_since"]
 	}
 }

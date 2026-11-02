@@ -17,6 +17,8 @@ import (
 // recorded, so a test can assert what GetTopology persisted — and that the
 // steady state persists nothing.
 type forgeNameRecordingProjects struct {
+	// MockRepository answers the checkout lookups (forgeTestProjects).
+	*MockRepository
 	project *db.Project
 	writes  []string
 }
@@ -49,7 +51,7 @@ func topologyForProjectName(t *testing.T, projects *forgeNameRecordingProjects, 
 // offline. So a topology report that names the project persists that name —
 // which is what backfills a project created before the column existed.
 func TestForgeService_GetTopology_PersistsForgeProjectName(t *testing.T) {
-	projects := &forgeNameRecordingProjects{project: &db.Project{Path: "/daemon/barksocial"}}
+	projects := &forgeNameRecordingProjects{MockRepository: forgeTestProjects("/daemon/checkout"), project: &db.Project{Path: "/daemon/barksocial"}}
 
 	topologyForProjectName(t, projects, forgeDaemonReply(t, true, true, 0, `{"project":"hounders"}`))
 	require.Equal(t, []string{"hounders"}, projects.writes)
@@ -75,7 +77,7 @@ func TestForgeService_GetTopology_KeepsForgeProjectNameWithoutAReport(t *testing
 		"exit 2, no report":   forgeDaemonReply(t, true, true, 2, ""),
 	} {
 		t.Run(name, func(t *testing.T) {
-			projects := &forgeNameRecordingProjects{project: &db.Project{
+			projects := &forgeNameRecordingProjects{MockRepository: forgeTestProjects("/daemon/checkout"), project: &db.Project{
 				Path: "/daemon/barksocial", IsForge: true, ForgeProjectName: &known,
 			}}
 			topologyForProjectName(t, projects, reply)

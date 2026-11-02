@@ -33,10 +33,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
+import {
+  InboxItemKind,
+  type InboxAutomationDefinitionBroken,
+  type InboxItem as InboxItemData,
+  type InboxStorage as InboxStorageData,
+} from "@/gen/reliant/v1/inbox_pb";
 import { useApprove, useDeny } from "@/hooks/approval-service-hooks_gen";
 import { answerQuestion } from "@/hooks/question-queries";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
@@ -51,6 +56,7 @@ import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { relativeTime as compactAge } from "../Mobile/relativeTime";
+import { hasErrorReason } from "@/lib/errorReasons";
 import { cn } from "@/lib/utils";
 import { useSurface } from "@/lib/surfaceContext";
 import { CardInset } from "../forge-ui/card";
@@ -59,7 +65,7 @@ import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
-import { StorageAction, totalHeldBytes } from "./StorageAction";
+import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
 import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -90,6 +96,7 @@ export function machineName(daemonName: string, daemonId: string): string {
   return daemonName || (daemonId ? `machine ${daemonId.slice(0, 8)}` : "this machine");
 }
 
+
 /** "Failed 3 times in a row": one Inbox item counts the whole failure streak. */
 export function failedTimesInARow(failures: number): string {
   return `Failed ${failures} times in a row.`;
@@ -109,19 +116,21 @@ interface InboxItemProps {
 }
 
 export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
-  const [handled, setHandled] = useState(false);
+  // What already happened to the item, once an action lost the race to it:
+  // the server's sentence for an approval ("This request expired: …").
+  const [handled, setHandled] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   // "Already handled": show it, then take the row out (§8.3).
   useEffect(() => {
-    if (!handled) return;
+    if (handled === null) return;
     const timer = window.setTimeout(() => removeInboxItems([item.itemId]), ALREADY_HANDLED_MS);
     return () => window.clearTimeout(timer);
   }, [handled, item.itemId]);
 
   const onRaceOrError = (verb: string) => (error: unknown) => {
     if (isAlreadyResolvedError(error)) {
-      setHandled(true);
+      setHandled(hasErrorReason(error, "approval_not_pending") ? errorText(error) : "Already handled");
       return;
     }
     toast.error(`Could not ${verb}`, { description: errorText(error) });
@@ -163,8 +172,8 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
             </span>
           )}
           {handled ? (
-            <span className="text-xs text-muted-foreground" role="status">
-              Already handled
+            <span className="max-w-72 truncate text-xs text-muted-foreground" role="status" title={handled}>
+              {handled}
             </span>
           ) : (
             <InlineAction
@@ -192,7 +201,7 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
                 "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition",
                 // A finger needs 44px; explicit px because rem renders at 87.5% here.
                 "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:w-[44px]",
-                "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Hidden until the row is hovered or anything in it has focus;
                 // always shown where there is no hover (touch).
                 "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:opacity-100",
@@ -233,8 +242,10 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
     case InboxItemKind.AUTOMATION_NEEDS_SETUP:
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
-    case InboxItemKind.RUN_FINISHED:
-      return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.AUTOMATION_DEFINITION_BROKEN:
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Workflow definition broken" />;
+    case InboxItemKind.AUTOMATION_RUN_PAUSED:
+      return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation run paused" />;
     case InboxItemKind.RECOVERY:
       return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
@@ -248,13 +259,18 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
-    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
+    if (isUnownedStorage(item.payload.value)) return "Workspaces with no machine";
+    const what = item.payload.value.processes ? "processes" : "storage";
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} ${what}`;
+  }
+  if (item.payload.case === "automationDefinitionBroken") {
+    return item.payload.value.definition?.path || item.workflowName || "Workflow definition";
   }
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
 const subjectClass =
-  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm [@media(pointer:coarse)]:py-3";
+  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm [@media(pointer:coarse)]:py-3";
 
 /**
  * A link to a run. On the mobile surface a run opens as the chat it is: the
@@ -402,12 +418,22 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
       const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "automationDefinitionBroken": {
+      const text = definitionBrokenDetail(payload.value);
+      return text ? { node: text, title: text } : null;
+    }
     case "automationLaunchFailed": {
       const { reason, consecutiveFailures } = payload.value;
       const text = [consecutiveFailures > 1 ? `${consecutiveFailures} in a row` : "", reason ? sentenceCase(reason) : ""]
         .filter(Boolean)
         .join(" · ");
       return text ? { node: text, title: text } : null;
+    }
+    case "automationRunPaused": {
+      // Why it paused; while it waits it holds its automation's slot.
+      const reason = payload.value.reason;
+      const text = reason ? `Paused: ${reason}` : "Paused";
+      return { node: text, title: `${text} — later runs of this automation wait until it resumes or ends.` };
     }
     default:
       return null;
@@ -422,6 +448,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
  * nothing about why every build was failing.
  */
 export function storageDetail(storage: InboxStorageData): string {
+  if (storage.processes) return processesDetail(storage);
   const parts: string[] = [];
   const full = pressuredVolume(storage);
   if (full) {
@@ -436,6 +463,56 @@ export function storageDetail(storage: InboxStorageData): string {
     const noun = storage.held.length === 1 ? "workspace" : "workspaces";
     parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
   }
+  if (isUnownedStorage(storage)) {
+    // online: whether any machine is connected to be asked for the folders.
+    if (!storage.online) parts.push("no machine connected to check");
+    return parts.join(" · ");
+  }
+  if (!storage.online) parts.push("offline");
+  return parts.join(" · ");
+}
+
+/**
+ * "Does not parse: … · main 1a2b3c4 on cicd · refuses nightly, deploy": the
+ * error first (it is what to fix), then where the broken version came from,
+ * then what it stops.
+ */
+export function definitionBrokenDetail(broken: InboxAutomationDefinitionBroken): string {
+  const def = broken.definition;
+  const parts: string[] = [];
+  if (def?.error) parts.push(sentenceCase(def.error));
+  if (def?.commit || def?.branch) {
+    const at = [def.branch || "detached HEAD", def.commit.slice(0, 7)].filter(Boolean).join(" ");
+    parts.push(def.daemonName ? `${at} on ${def.daemonName}` : at);
+  }
+  if (def?.dirty) parts.push("uncommitted changes");
+  const names = broken.automations.map((a) => a.triggerName).filter(Boolean);
+  if (names.length > 0) parts.push(`refuses ${names.join(", ")}`);
+  return parts.join(" · ");
+}
+
+/**
+ * "7,120 of 7,650 processes (93%) · heavy background commands paused · Fix the
+ * gate: `bash scripts/ci-gate.sh all` 4,950 · …". The machine is near its
+ * process limit; the item names the largest process trees by the agent that
+ * started each, so the person can stop the one at fault.
+ */
+export function processesDetail(storage: InboxStorageData): string {
+  const procs = storage.processes;
+  if (!procs) return "";
+  const parts: string[] = [];
+  const count = Number(procs.count);
+  const limit = Number(procs.limit);
+  parts.push(
+    limit > 0
+      ? `${count.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} processes (${Math.round((100 * count) / limit)}%)`
+      : `${count.toLocaleString("en-US")} processes`,
+  );
+  if (procs.refusingHeavy) parts.push("heavy background commands paused");
+  for (const tree of procs.top.slice(0, 3)) {
+    const who = tree.chatTitle || (tree.chatId ? `agent ${tree.chatId.slice(0, 8)}` : "untracked");
+    parts.push(`${who}: \`${tree.command}\` ${Number(tree.tasks).toLocaleString("en-US")}`);
+  }
   if (!storage.online) parts.push("offline");
   return parts.join(" · ");
 }
@@ -446,7 +523,7 @@ function hasExpansion(item: InboxItemData): boolean {
 }
 
 const actionButtonClass =
-  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60 [@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm";
+  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 [@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm";
 
 interface InlineActionProps {
   item: InboxItemData;
@@ -500,6 +577,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
           Finish setup
         </a>
       );
+    case "automationDefinitionBroken":
+      // The fix is an edit to the file; its workflow page shows the error.
+      if (mobile) return <OnDesktopNote>Fix on desktop</OnDesktopNote>;
+      return (
+        <a href={workflowPageHref(item.workflowName, item.projectId)} className={actionButtonClass}>
+          Open workflow
+        </a>
+      );
     case "recovery":
       // The full-width action lives below the row, not inside its nonwrapping controls.
       return null;
@@ -507,7 +592,7 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
-    case "runFinished":
+    case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open

@@ -524,7 +524,7 @@ export function WorkflowParamsPanel({
               className={cn(
                 "px-2 py-1 text-xs rounded transition-colors",
                 newPresetName.trim() && !isSaving
-                  ? "bg-primary/20 hover:bg-primary/30 text-primary"
+                  ? "bg-primary/20 hover:bg-primary/30 text-primary-ink"
                   : "bg-muted text-muted-foreground"
               )}
             >
@@ -568,7 +568,7 @@ export function WorkflowParamsPanel({
                 disabled={isSaving}
                 className={cn(
                   "flex items-center gap-2 px-2 py-1 rounded transition-colors",
-                  "bg-primary/10 hover:bg-primary/20 text-primary"
+                  "bg-primary/10 hover:bg-primary/20 text-primary-ink"
                 )}
               >
                 {isSaving ? (
@@ -659,7 +659,7 @@ export function WorkflowParamsPanel({
                   className={cn(
                     "p-1.5 rounded transition-colors",
                     presetName.trim() && !isSaving
-                      ? "hover:bg-primary/20 text-primary"
+                      ? "hover:bg-primary/20 text-primary-ink"
                       : "text-muted-foreground opacity-50"
                   )}
                 >

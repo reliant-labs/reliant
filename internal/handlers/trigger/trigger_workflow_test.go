@@ -472,6 +472,90 @@ func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
+// Naming triggers narrows the enable to them: an already-activated one is
+// brought to the request in place (same id, one row), a new one is created,
+// and the rest are left alone. This is `reliant trigger activate --trigger`,
+// which used to CreateTrigger a second row of the same name and fail with an
+// opaque "database error".
+func TestEnableWorkflowNamedTriggersUpdatesInPlaceAndLeavesTheRest(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+
+	first := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Triggers = []string{"new-issue"}
+	}))
+	require.True(t, first.Enabled, "%v", first.Results)
+	require.Len(t, first.Results, 1, "only the named trigger is reported")
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED, first.Results[0].Outcome)
+	id := first.Results[0].Activation.GetId()
+	require.Len(t, env.storedTriggers(t), 1, "the others are not activated")
+
+	again := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Triggers = []string{"new-issue", "nightly"}
+		r.ActingIdentity = reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+		r.NotifyOnComplete = true
+	}))
+	require.True(t, again.Enabled, "%v", again.Results)
+	got := map[string]*reliantv1.WorkflowTriggerResult{}
+	for _, r := range again.Results {
+		got[r.Trigger] = r
+	}
+	require.Len(t, got, 2)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED, got["new-issue"].Outcome)
+	assert.Equal(t, id, got["new-issue"].Activation.GetId(), "re-activating keeps the activation (and its firings and capacity scope)")
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED, got["nightly"].Outcome)
+	assert.Len(t, env.storedTriggers(t), 2, "no duplicate row; hook is still not activated")
+
+	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"nope"}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an undeclared name refuses, it does not enable nothing")
+
+	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"nightly"}
+		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "hook"}}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an override for a trigger the request does not enable is refused")
+
+	// A connection for an integration no enabled trigger listens through is
+	// a typo to refuse, not a key to ignore (the trigger would listen through
+	// the default connection instead), and nothing is written.
+	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"new-issue"}
+		r.ConnectionIds = map[string]string{"tset": conn.ID}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an unmatched connection key is refused")
+	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Triggers = []string{"nightly"}
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a connection for a trigger the request does not enable is refused")
+	assert.Len(t, env.storedTriggers(t), 2)
+
+	// A second trigger of an existing name is the caller's conflict, not an
+	// internal error.
+	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+		Name:      got["nightly"].Activation.GetName(),
+		ProjectId: env.projectID,
+		DaemonId:  env.daemonID,
+		Workflow:  "triage",
+		Source:    &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "nightly"},
+	}}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	assert.Len(t, env.storedTriggers(t), 2)
+}
+
 func withUser(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, auth.UserIDContextKey, userID)
 }

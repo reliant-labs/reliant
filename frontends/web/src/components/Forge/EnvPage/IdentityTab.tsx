@@ -531,7 +531,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
 function ExportLink({ link }: { link: IdentityExportURL }) {
   return (
     <p className="text-ink" data-testid="identity-export-link">
-      <a href={link.url} className="text-primary underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
+      <a href={link.url} className="text-primary-ink underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
         Download the export
       </a>
       {link.expiresAtMs && <span className="text-ink-muted"> — expires {formatIn(link.expiresAtMs)}</span>}

@@ -36,9 +36,14 @@ import { catalogServiceKeys } from "./catalog-service-hooks_gen";
 import {
   connectionServiceKeys,
   useCreateApiKeyConnection as useCreateApiKeyConnectionRpc,
+  useDeleteConnection as useDeleteConnectionRpc,
   useListConnections,
   useListIntegrations,
+  useRenameConnection as useRenameConnectionRpc,
+  useSetDefaultConnection as useSetDefaultConnectionRpc,
+  useTestConnection as useTestConnectionRpc,
 } from "./connection-service-hooks_gen";
+import { triggerServiceKeys } from "./trigger-service-hooks_gen";
 
 // ── Frontend types ──────────────────────────────────────────────────────────
 
@@ -61,7 +66,12 @@ export interface Connection {
    */
   senderId: string;
   status: ConnectionHealth;
+  /** Why it needs re-authorising or was revoked, in the server's words; "" otherwise. */
+  statusReason: string;
   isDefault: boolean;
+  /** RFC 3339, "" when never used or made. */
+  lastUsedAt: string;
+  createdAt: string;
 }
 
 export interface AuthMethod {
@@ -150,7 +160,10 @@ export function connectionFromProto(proto: ProtoConnection): Connection {
     accountLabel: proto.accountLabel,
     senderId: proto.senderId,
     status: statusFromProto(proto.status),
+    statusReason: proto.statusReason,
     isDefault: proto.isDefault,
+    lastUsedAt: proto.lastUsedAt,
+    createdAt: proto.createdAt,
   };
 }
 
@@ -179,6 +192,18 @@ export function useConnections(integrationId: string | undefined) {
 
 // Module-level, so React Query re-maps only when the response changes.
 const connectionsOf = (response: ListConnectionsResponse) => response.connections.map(connectionFromProto);
+
+/** Every connection the caller has, to any integration (Settings → Integrations). */
+export function useAllConnections() {
+  return useListConnections({}, { staleTime: 30_000, select: connectionsOf });
+}
+
+/** Integration id → its display name ("github" → "GitHub"), from ListIntegrations. */
+export function useIntegrationNames(): ReadonlyMap<string, string> {
+  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const integrations = query.data?.integrations;
+  return useMemo(() => new Map((integrations ?? []).map((i) => [i.id, i.displayName || i.id])), [integrations]);
+}
 
 /**
  * The integrations nobody can connect on this deployment (every connection
@@ -240,4 +265,36 @@ export function useCreateApiKeyConnection() {
   return useCreateApiKeyConnectionRpc({
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: catalogServiceKeys.all }),
   });
+}
+
+/**
+ * Rename, make default, test and remove: the generated writes, each also
+ * refreshing the catalog (a removed or re-defaulted connection changes what
+ * it says is connected) and the triggers that name a connection.
+ */
+function useConnectionWriteOptions() {
+  const queryClient = useQueryClient();
+  return {
+    onSuccess: () => {
+      invalidateConnectionQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all });
+    },
+  };
+}
+
+export function useRenameConnection() {
+  return useRenameConnectionRpc(useConnectionWriteOptions());
+}
+
+export function useSetDefaultConnection() {
+  return useSetDefaultConnectionRpc(useConnectionWriteOptions());
+}
+
+export function useDeleteConnection() {
+  return useDeleteConnectionRpc(useConnectionWriteOptions());
+}
+
+/** Probes the live credential; it records the account label it finds, so the list refreshes. */
+export function useTestConnection() {
+  return useTestConnectionRpc(useConnectionWriteOptions());
 }

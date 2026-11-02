@@ -40,6 +40,8 @@ export const ERROR_REASONS = [
   "daemon_waking",
   /** The machine's daemon is not on NATS: closed or restarting (errDaemonNotConnected). */
   "daemon_not_connected",
+  /** The machine re-registered but has not answered yet; the request was never sent (ErrDaemonReconnecting). */
+  "daemon_reconnecting",
   /** No machine exists for the request at all (ErrNoDaemon). Nothing to wait for. */
   "no_daemon",
   // ── reliant: handlers ──
@@ -49,6 +51,8 @@ export const ERROR_REASONS = [
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */
   "process_not_running",
+  /** Approve/Deny on an approval no longer pending: decided, expired, or its run ended (handlers/approval). */
+  "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
   /** A protected environment wants a fresh step-up (control-plane secret_store). */
@@ -85,6 +89,8 @@ export const ERROR_REASONS = [
   "obs_query_quota",
   /** A background poll refused early, to keep the last of the quota for a person's own query. */
   "obs_query_quota_soft",
+  /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
+  "in_flight_limit",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
@@ -101,8 +107,8 @@ export const ERROR_REASONS = [
   "claimable_session_released",
   /** CompleteClaim (PermissionDenied): the caller is still anonymous or has no verified email. Back to /upgrade. */
   "claimable_upgrade_required",
-  /** CompleteClaim (PermissionDenied): the email already belongs to a Reliant account. */
-  "claimable_existing_account",
+  /** CompleteClaim (FailedPrecondition): the caller already has their one free static site; choose which stays live. */
+  "claimable_free_site_choice_required",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

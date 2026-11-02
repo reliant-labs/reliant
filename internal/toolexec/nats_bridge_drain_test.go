@@ -476,7 +476,7 @@ func newTestBridge(js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToo
 		mgr:           mgr,
 		daemonSubs:    make(map[string][]*nats.Subscription),
 		daemonCancels: make(map[string]context.CancelFunc),
-		pollCancels:   make(map[string]context.CancelFunc),
+		pollers:       make(map[string]*pendingPoller),
 		ctx:           ctx,
 		cancel:        cancel,
 	}

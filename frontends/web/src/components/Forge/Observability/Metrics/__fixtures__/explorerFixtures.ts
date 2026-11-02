@@ -13,8 +13,8 @@
  *                to, shaped like obsquery's (positional {pN:Type} parameters,
  *                the window as fromUnixTimestamp64Nano, the step).
  *   cases        the series cap cutting the result (seriesTotal), warnings,
- *                the console's in-flight cap (ResourceExhausted), and a
- *                dashboard someone else keeps saving (version_conflict).
+ *                and a dashboard someone else keeps saving
+ *                (version_conflict).
  *
  * Deterministic, so a test and the __preview__ see the same screens.
  */
@@ -32,11 +32,6 @@ export interface ExplorerFixtureOptions extends FixtureOptions {
   seriesTotal?: number;
   /** Warnings every metrics panel comes back with. */
   warnings?: string[];
-  /**
-   * Every metrics read (catalog, detail, panels) is refused by the console's
-   * in-flight cap. Read at call time, so a test can lift it and retry.
-   */
-  inFlight?: boolean;
   /** The next N SaveDashboard calls lose a race: Aborted, version_conflict. */
   saveConflicts?: number;
 }
@@ -113,18 +108,11 @@ export function explorerExplain(panel: Panel, req: QueryPanelRequest): CompiledS
 
 export function createExplorerFixtureApi(options: ExplorerFixtureOptions = {}): ObservabilityApi {
   const base = createFixtureApi(options);
-  const refuse = (rpc: string, request: unknown) => {
-    options.onCall?.(rpc, request);
-    throw new ConnectError("too many queries in flight for this user; retry in a moment", Code.ResourceExhausted);
-  };
   return {
     ...base,
-    listMetricCatalog: (req) => (options.inFlight ? Promise.reject(refuse("ListMetrics", req)) : base.listMetricCatalog(req)),
-    getMetric: (req) => (options.inFlight ? Promise.reject(refuse("GetMetric", req)) : base.getMetric(req)),
     queryPanel: async (req) => {
       const metrics = req.panel.signal === "metrics" && req.panel.kind !== "sql" && req.panel.series.some((s) => fixtureMetricEntry(s.field ?? ""));
       if (!metrics || options.failWith !== undefined) return base.queryPanel(req);
-      if (options.inFlight) refuse("QueryPanel", req);
       options.onCall?.("QueryPanel", req);
       if (req.explain) {
         return { ...explorerMetricPanel(req.panel, req, options), series: [], rows: [], compiledSql: explorerExplain(req.panel, req) };

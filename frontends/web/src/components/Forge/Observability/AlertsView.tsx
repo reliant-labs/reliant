@@ -41,8 +41,9 @@ import { AskReliantActions, AskReliantMenu } from "./AskReliant/AskReliant";
 import type { AskSubject } from "./AskReliant/askReliantPrompt";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
+import { platformRule } from "./Dashboards/alertExpr";
 import { formatAgo, formatTimestamp } from "./format";
-import { alertPivot, alertRange, useExploreHref } from "./Metrics/pivots";
+import { alertRange, useAlertExploreHref } from "./Metrics/pivots";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
 import { ExploreLink } from "./Metrics/ExploreLink";
@@ -254,7 +255,7 @@ function AlertingNotConfigured({ ruleCount, onRules }: { ruleCount: number; onRu
           <>
             Your environments already declare {ruleCount} rule{ruleCount === 1 ? "" : "s"}; they start being evaluated as soon as it
             runs.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               See the rules
             </button>
           </>
@@ -330,9 +331,9 @@ function FiringTab({
   onRules: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
-  const exploreHref = useExploreHref();
+  const exploreHref = useAlertExploreHref();
   const exploreAlert = (a: AlertInstance, rule: DeclaredAlertRule | undefined) =>
-    rule ? (exploreHref?.(alertPivot(rule.expr, a.labels), { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
+    rule ? (exploreHref?.(rule.expr, a.labels, { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
   const ruleOf = (a: AlertInstance) => rules.find((r) => r.env.id === a.envId && r.rule.alert === a.rule);
   if (alerts.length === 0) {
     const evaluated = rules.filter((r) => !observabilityOff(r.env)).length;
@@ -342,14 +343,14 @@ function FiringTab({
           <p>
             {evaluated} rule{evaluated === 1 ? " is" : "s are"} evaluated across {environments.length} environment
             {environments.length === 1 ? "" : "s"} every minute.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               See the rules
             </button>
           </p>
         ) : (
           <p>
             No environment in view declares a rule yet, so nothing can fire.{" "}
-            <button type="button" onClick={onRules} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onRules} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Add one in code
             </button>
           </p>
@@ -460,7 +461,7 @@ function AnnotationRow({ name, value }: { name: string; value: string }) {
       <dt className="text-ink-muted">{name}</dt>
       <dd className="min-w-0 break-words text-ink">
         {link ? (
-          <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
+          <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary-ink underline-offset-2 hover:underline">
             {value}
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </a>
@@ -509,7 +510,7 @@ function HistoryTab({
         <p>
           Every time an alert starts pending, fires, or resolves it is recorded here.{" "}
           {range !== "7d" && (
-            <button type="button" onClick={() => navigate({ range: "7d" })} className="rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => navigate({ range: "7d" })} className="rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Look at the last 7 days
             </button>
           )}
@@ -575,6 +576,11 @@ function RulesTab({
 }) {
   const off = environments.filter(observabilityOff);
   const open = rules.find((r) => r.key === selected);
+  // The rules come from each environment's declared shape, fetched per
+  // environment: until they arrive, "none declared" would be a guess.
+  if (rules.length === 0 && environments.some((env) => env.declaredPending)) {
+    return <ObsLoadingRows testId="obs-rules-loading" />;
+  }
   if (rules.length === 0) {
     const env = environments[0]?.name ?? "<env>";
     return (
@@ -585,13 +591,13 @@ function RulesTab({
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
           </p>
           <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
-          <CommandLine command="forge obs alerts check" />
+          <CommandLine command="reliant forge obs alerts check" />
           <p>
             <a
               href={DOCS.alerts}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="obs-rules-none-docs"
             >
               How alerts work
@@ -654,8 +660,9 @@ function RulesTab({
 
 function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[] }) {
   const { rule, env } = entry;
-  const exploreHref = useExploreHref();
-  const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
+  const exploreHref = useAlertExploreHref();
+  const explore = exploreHref?.(rule.expr, {}, { env: env.name, range: "1h" }) ?? null;
+  const platform = platformRule(rule.expr);
   const lead = leadInstance(active);
   return (
     <Card padding="md" data-testid="obs-rule-detail">
@@ -689,10 +696,19 @@ function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[]
         </div>
         <div>
           <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
-            {rule.expr}
-          </pre>
-          <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+          {platform ? (
+            <p className="text-xs text-ink-muted" data-testid="obs-rule-platform">
+              {platform.off ? "Disabled in this environment. " : ""}Reliant raises this alert from its own records (
+              <span className="font-mono">{platform.key}</span>), not from a query on your telemetry, so there is no query to run.
+            </p>
+          ) : (
+            <>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
+                {rule.expr}
+              </pre>
+              <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+            </>
+          )}
         </div>
         {Object.keys(rule.annotations).length > 0 && (
           <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">

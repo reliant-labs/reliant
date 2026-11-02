@@ -17,6 +17,9 @@ type fakeMachineRegistry struct {
 	daemons map[string]*db.Daemon
 	event   *core.TriggerEvent
 	trigger *core.Trigger
+	chat    *db.Chat
+	pools   []*core.MachinePool
+	members map[string][]core.MachinePoolMemberRow
 }
 
 func (f *fakeMachineRegistry) ListDaemonsByUserID(_ context.Context, userID string) ([]*db.Daemon, error) {
@@ -42,6 +45,18 @@ func (f *fakeMachineRegistry) GetTriggerEventByChatID(context.Context, string) (
 }
 func (f *fakeMachineRegistry) GetTrigger(context.Context, string) (*core.Trigger, error) {
 	return f.trigger, nil
+}
+func (f *fakeMachineRegistry) GetChat(_ context.Context, id string) (*db.Chat, error) {
+	if f.chat == nil || f.chat.ID != id {
+		return nil, core.ErrChatNotFound
+	}
+	return f.chat, nil
+}
+func (f *fakeMachineRegistry) ListMachinePoolsForUser(context.Context, string) ([]*core.MachinePool, error) {
+	return f.pools, nil
+}
+func (f *fakeMachineRegistry) ListMachinePoolMembers(_ context.Context, p *core.MachinePool, _ string) ([]core.MachinePoolMemberRow, error) {
+	return f.members[p.ID], nil
 }
 
 type fakeWaker struct{ woke []string }
@@ -111,4 +126,26 @@ func TestMachineControllerActivationMachineIsTheUnattendedTriggersMachine(t *tes
 	got, err = m.ActivationMachine(ctx, "chat")
 	require.NoError(t, err)
 	require.Equal(t, "cicd", got)
+
+	// A pool-bound activation's machine is the member its chat was placed on.
+	member := "cicd-2"
+	repo.trigger = &core.Trigger{ID: triggerID, MachinePoolID: "pool-cicd"}
+	repo.chat = &db.Chat{ID: "chat", ActiveDaemonID: &member}
+	got, err = m.ActivationMachine(ctx, "chat")
+	require.NoError(t, err)
+	require.Equal(t, "cicd-2", got)
+}
+
+func TestMachineControllerListsPoolsAndLabels(t *testing.T) {
+	repo := &fakeMachineRegistry{
+		daemons: map[string]*db.Daemon{"cicd": {ID: "cicd", UserID: "u", Name: "cicd", Labels: map[string]string{"pool": "cicd"}}},
+		pools:   []*core.MachinePool{{ID: "p1", Name: "cicd"}},
+		members: map[string][]core.MachinePoolMemberRow{"p1": {{DaemonID: "cicd", LiveRuns: 2}}},
+	}
+	list, err := (&machineController{repo: repo}).ListMachines(context.Background(), "u")
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, map[string]string{"pool": "cicd"}, list[0].Labels)
+	require.Equal(t, []string{"cicd"}, list[0].Pools)
+	require.Equal(t, 2, list[0].LiveRuns["cicd"])
 }

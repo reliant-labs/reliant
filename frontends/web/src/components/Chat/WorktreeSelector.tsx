@@ -147,7 +147,7 @@ export function WorktreeSelector({
                   <div className="leading-snug text-xs opacity-80">Main workspace</div>
                 </div>
                 {selectedWorktreeId === mainWorktree?.id && (
-                  <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                  <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                 )}
               </div>
             </button>
@@ -177,7 +177,7 @@ export function WorktreeSelector({
 
                     </div>
                     {selectedWorktreeId === worktree.id && (
-                      <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                      <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                     )}
                   </div>
                 </button>

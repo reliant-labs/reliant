@@ -281,18 +281,26 @@ func ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Cont
 	return messagesFromRows(rows), nil
 }
 
+// CountMessagesOutsideThreadSQL is CountMessagesInChatOutsideThread's
+// statement, exported so the index test
+// (internal/db/messages_chat_thread_index_test.go) plans exactly what runs.
+// It takes the chat id and the thread id.
+//
+// It is an index-only scan of idx_messages_chat_thread: thread_id is in the
+// index, so no heap row is read to test it. Without that index it read every
+// one of the chat's rows from the heap (prod: p50 3.9s on long chats, ~95% of
+// a slow ListMessages).
+const CountMessagesOutsideThreadSQL = `SELECT count(*) FROM messages WHERE chat_id = ? AND thread_id <> ?`
+
 // CountMessagesInChatOutsideThread is how many messages of the chat sit on
 // threads other than threadID: with a thread's own resolved count, the chat's
 // total, in one COUNT instead of a chat-wide count minus a thread count.
 func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatID, threadID string) (int, error) {
-	n, err := db.Bun().NewSelect().Model((*Message)(nil)).
-		Where("chat_id = ?", chatID).
-		Where("thread_id <> ?", threadID).
-		Count(ctx)
-	if err != nil {
+	var n int
+	if err := db.Bun().NewRaw(CountMessagesOutsideThreadSQL, chatID, threadID).Scan(ctx, &n); err != nil {
 		return 0, fmt.Errorf("failed to count messages outside thread: %w", err)
 	}
-	return int(n), nil
+	return n, nil
 }
 
 // UpdateMessageUsage records what a message cost: the context size the LLM

@@ -48,6 +48,12 @@ func (d *daemonSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, cmd 
 	panic("unexpected command " + cmd)
 }
 
+// idleLease is the runtime admission of a machine running nothing.
+type idleLease struct{}
+
+func (idleLease) Check(context.Context) error { return nil }
+func (idleLease) Release()                    {}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -89,11 +95,22 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, repo.CreateProject(e.ctx, e.project))
 	require.NoError(t, repo.UpsertDaemon(e.ctx, &db.Daemon{ID: e.daemon, UserID: e.userID}))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: e.userID, Source: db.DaemonAttachmentSourceInbound}))
+	// The machine's installed checkout of the project: the sweep runs git in
+	// the owner's project_daemons row, never projects.path, and holds a row
+	// whose machine has none (no-checkout-on-record).
+	require.NoError(t, repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, projectPath, nil))
 
 	if err := os.MkdirAll(e.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	e.sender = &daemonSender{reclaimer: &worktreereclaim.Reclaimer{Root: e.root, Cwds: func(context.Context) ([]string, error) { return nil, nil }}}
+	// The daemon's runtime admission and process-use check (cmd_worktree.go),
+	// as an idle machine answers them: nothing runs in any worktree.
+	e.sender = &daemonSender{reclaimer: &worktreereclaim.Reclaimer{
+		Root:       e.root,
+		Cwds:       func(context.Context) ([]string, error) { return nil, nil },
+		Acquire:    func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return idleLease{}, nil },
+		ProcessUse: func(context.Context, []string) error { return nil },
+	}}
 	e.sweeper = New(repo, e.sender)
 	return e
 }
@@ -180,11 +197,16 @@ func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 	wt, path := e.worktree(t, "legacy", true)
 	_, err := e.repo.DB.ExecContext(e.ctx, `UPDATE worktrees SET daemon_id = NULL WHERE id = $1`, wt.ID)
 	require.NoError(t, err)
+	// With no machine on record the first pass only asks who has the folder
+	// (archived, no fence): never a removal.
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	assert.False(t, exists(path))
+	assert.True(t, exists(path), "a row with no machine on record is found, never removed, on the pass that finds it")
 	got := e.get(t, wt.ID)
 	require.NotNil(t, got.DaemonID, "the daemon that found the directory is recorded as its owner")
 	assert.Equal(t, e.daemon, *got.DaemonID)
+	// The next pass settles it through that machine's checkout.
+	require.NoError(t, e.sweeper.Sweep(e.ctx))
+	assert.False(t, exists(path))
 }
 
 func TestSweep_SkipsOfflineDaemon(t *testing.T) {

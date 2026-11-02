@@ -42,6 +42,27 @@ type Daemon struct {
 	LastStatusChangedAt *time.Time
 	LastOOMKilledAt     *time.Time
 	OOMKillCount        int32
+
+	// Labels are the machine's durable labels, set by its owner. They decide
+	// machine-pool membership (dev-docs/design/machine-pools.md) and, unlike
+	// the labels a daemon reports when it connects, hold while it sleeps.
+	Labels map[string]string
+
+	// IsDefault: the owner chose this machine as their default
+	// (SetDefaultDaemon). Work that names no machine runs here first; at most
+	// one of a user's daemons carries it.
+	IsDefault bool
+
+	// RequiresBoundToken reserves the id for daemon-bound credentials: once
+	// set, an unbound login token can no longer connect as this daemon. The
+	// server sets it — never the daemon — when a daemon-bound credential
+	// connects as the id, when the gateway dials the pod in, or when a
+	// control-plane lifecycle observation applies; nothing clears it.
+	//
+	// On UpsertDaemon it is the write's credential: true reserves the row,
+	// false leaves an existing reservation in place and is refused on a
+	// reserved row (ErrDaemonRequiresBoundToken).
+	RequiresBoundToken bool
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied

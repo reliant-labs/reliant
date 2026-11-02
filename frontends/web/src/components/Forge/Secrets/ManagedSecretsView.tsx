@@ -259,7 +259,7 @@ function StoreHeader({
             target="_blank"
             rel="noreferrer"
             data-testid="secrets-docs-link"
-            className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-primary"
+            className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-primary-ink"
           >
             How secrets work
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -378,7 +378,7 @@ function ProtectionLine({
           type="button"
           onClick={onUnlock}
           data-testid="secrets-unlock"
-          className="text-ink underline underline-offset-2 hover:text-primary"
+          className="text-ink underline underline-offset-2 hover:text-primary-ink"
         >
           Confirm now
         </button>

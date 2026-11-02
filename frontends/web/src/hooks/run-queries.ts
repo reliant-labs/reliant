@@ -324,6 +324,12 @@ export interface LaunchEvent {
   sourceWorkflow?: string;
   /** A workflow event's source run: its outcome ("finished", "failed", "blocked"). */
   sourceOutcome?: string;
+  /**
+   * The workflow definition the firing resolved, for display: the file, the
+   * machine, branch and commit it was synced from, and its content hash.
+   * Unset for a launch that recorded none.
+   */
+  definition?: string;
 }
 
 /** Every kind, so a kind added to the proto has to be named here to compile. */
@@ -334,6 +340,7 @@ const LAUNCH_EVENT_KINDS: Record<TriggerEventKind, string> = {
   [TriggerEventKind.AGENT_START_RUN]: "agent.start_run",
   [TriggerEventKind.BUILDER_TEST]: "builder.test",
   [TriggerEventKind.MANUAL_RUN]: "manual.run",
+  [TriggerEventKind.CLI_RUN]: "cli.run",
   [TriggerEventKind.WEBHOOK]: "webhook",
   [TriggerEventKind.INTEGRATION]: "integration",
   [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",
@@ -386,6 +393,7 @@ export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
     providerEvent: integration ? optionalString(payload.event) : undefined,
     sourceWorkflow: workflowEvent ? optionalString(payload.workflow_name) : undefined,
     sourceOutcome: workflowEvent ? optionalString(payload.outcome) : undefined,
+    definition: event.definition?.summary || undefined,
   };
 }
 

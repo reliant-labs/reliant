@@ -208,6 +208,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
   /** The brand row on the collapsed rail (a monogram). */
   brandCollapsed?: ReactNode;
   scope: { long: ScopeOption[]; previews: ScopeOption[] };
+  /** The open page reads platform telemetry, which belongs to no environment. */
+  platformWide?: boolean;
   onEnvChange: (env: string) => void;
   user?: SidebarUserInfo;
   collapsed: boolean;
@@ -226,6 +228,7 @@ export function ConsoleShell({
   brand,
   brandCollapsed,
   scope,
+  platformWide,
   onEnvChange,
   user,
   collapsed,
@@ -288,6 +291,7 @@ export function ConsoleShell({
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}
+              platformWide={platformWide}
             />
           </>
         }

@@ -86,11 +86,14 @@ func TestGitProcessesPerPass(t *testing.T) {
 		budget int
 		setup  func(f *fixture, w Worktree)
 	}{
-		{"clean, on main", 31, func(*fixture, Worktree) {}},
+		// Exact index/private-history proof is bound before/after classification
+		// and each deletion. These required fresh resolved-ref reads replace the
+		// unsafe post-classification-only baseline (P1 regression coverage).
+		{"clean, on main", 38, func(*fixture, Worktree) {}},
 		{"unpushed commit, held for remote recovery", 54, func(f *fixture, w Worktree) {
 			commit(f.t, w.Path, "b.txt", "b\n")
 		}},
-		{"squash-merged and pruned", 40, func(f *fixture, w Worktree) {
+		{"squash-merged and pruned", 49, func(f *fixture, w Worktree) {
 			f.commitIn(w, "feat/x", "one.txt", "1\n", true)
 			f.squashMerge("feat/x")
 			f.pruned(w)

@@ -193,8 +193,12 @@ func (x *ListTerminalSessionsResponse) GetTotal() int32 {
 
 // CloseTerminalSessionRequest closes a terminal session
 type CloseTerminalSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"` // Required: session to close
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"` // Required: session to close
+	// The machine the session runs on, as the terminal websocket's "init"
+	// reported it. A session lives on one machine; unset sends the close to the
+	// default machine, which knows only its own sessions.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,6 +236,13 @@ func (*CloseTerminalSessionRequest) Descriptor() ([]byte, []int) {
 func (x *CloseTerminalSessionRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CloseTerminalSessionRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -289,644 +300,6 @@ func (x *CloseTerminalSessionResponse) GetMessage() string {
 	return ""
 }
 
-// TerminalStreamInput is the client-to-server message for the StreamTerminal RPC.
-type TerminalStreamInput struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Input:
-	//
-	//	*TerminalStreamInput_Create
-	//	*TerminalStreamInput_Data
-	//	*TerminalStreamInput_Resize
-	//	*TerminalStreamInput_CloseSession
-	Input         isTerminalStreamInput_Input `protobuf_oneof:"input"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalStreamInput) Reset() {
-	*x = TerminalStreamInput{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalStreamInput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalStreamInput) ProtoMessage() {}
-
-func (x *TerminalStreamInput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalStreamInput.ProtoReflect.Descriptor instead.
-func (*TerminalStreamInput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *TerminalStreamInput) GetInput() isTerminalStreamInput_Input {
-	if x != nil {
-		return x.Input
-	}
-	return nil
-}
-
-func (x *TerminalStreamInput) GetCreate() *TerminalCreateRequest {
-	if x != nil {
-		if x, ok := x.Input.(*TerminalStreamInput_Create); ok {
-			return x.Create
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamInput) GetData() *TerminalDataInput {
-	if x != nil {
-		if x, ok := x.Input.(*TerminalStreamInput_Data); ok {
-			return x.Data
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamInput) GetResize() *TerminalResizeInput {
-	if x != nil {
-		if x, ok := x.Input.(*TerminalStreamInput_Resize); ok {
-			return x.Resize
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamInput) GetCloseSession() *TerminalCloseRequest {
-	if x != nil {
-		if x, ok := x.Input.(*TerminalStreamInput_CloseSession); ok {
-			return x.CloseSession
-		}
-	}
-	return nil
-}
-
-type isTerminalStreamInput_Input interface {
-	isTerminalStreamInput_Input()
-}
-
-type TerminalStreamInput_Create struct {
-	Create *TerminalCreateRequest `protobuf:"bytes,1,opt,name=create,proto3,oneof"` // Create new session
-}
-
-type TerminalStreamInput_Data struct {
-	Data *TerminalDataInput `protobuf:"bytes,2,opt,name=data,proto3,oneof"` // Send input to session
-}
-
-type TerminalStreamInput_Resize struct {
-	Resize *TerminalResizeInput `protobuf:"bytes,3,opt,name=resize,proto3,oneof"` // Resize terminal
-}
-
-type TerminalStreamInput_CloseSession struct {
-	CloseSession *TerminalCloseRequest `protobuf:"bytes,4,opt,name=close_session,json=closeSession,proto3,oneof"` // Close session
-}
-
-func (*TerminalStreamInput_Create) isTerminalStreamInput_Input() {}
-
-func (*TerminalStreamInput_Data) isTerminalStreamInput_Input() {}
-
-func (*TerminalStreamInput_Resize) isTerminalStreamInput_Input() {}
-
-func (*TerminalStreamInput_CloseSession) isTerminalStreamInput_Input() {}
-
-type TerminalCreateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorkingDir    string                 `protobuf:"bytes,1,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalCreateRequest) Reset() {
-	*x = TerminalCreateRequest{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalCreateRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalCreateRequest) ProtoMessage() {}
-
-func (x *TerminalCreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalCreateRequest.ProtoReflect.Descriptor instead.
-func (*TerminalCreateRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *TerminalCreateRequest) GetWorkingDir() string {
-	if x != nil {
-		return x.WorkingDir
-	}
-	return ""
-}
-
-type TerminalDataInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalDataInput) Reset() {
-	*x = TerminalDataInput{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalDataInput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalDataInput) ProtoMessage() {}
-
-func (x *TerminalDataInput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalDataInput.ProtoReflect.Descriptor instead.
-func (*TerminalDataInput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *TerminalDataInput) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalDataInput) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-type TerminalResizeInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Cols          uint32                 `protobuf:"varint,2,opt,name=cols,proto3" json:"cols,omitempty"`
-	Rows          uint32                 `protobuf:"varint,3,opt,name=rows,proto3" json:"rows,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalResizeInput) Reset() {
-	*x = TerminalResizeInput{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalResizeInput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalResizeInput) ProtoMessage() {}
-
-func (x *TerminalResizeInput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalResizeInput.ProtoReflect.Descriptor instead.
-func (*TerminalResizeInput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *TerminalResizeInput) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalResizeInput) GetCols() uint32 {
-	if x != nil {
-		return x.Cols
-	}
-	return 0
-}
-
-func (x *TerminalResizeInput) GetRows() uint32 {
-	if x != nil {
-		return x.Rows
-	}
-	return 0
-}
-
-type TerminalCloseRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalCloseRequest) Reset() {
-	*x = TerminalCloseRequest{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalCloseRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalCloseRequest) ProtoMessage() {}
-
-func (x *TerminalCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalCloseRequest.ProtoReflect.Descriptor instead.
-func (*TerminalCloseRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *TerminalCloseRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-// TerminalStreamOutput is the server-to-client message for the StreamTerminal RPC.
-type TerminalStreamOutput struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Output:
-	//
-	//	*TerminalStreamOutput_Created
-	//	*TerminalStreamOutput_Data
-	//	*TerminalStreamOutput_Closed
-	//	*TerminalStreamOutput_Error
-	Output        isTerminalStreamOutput_Output `protobuf_oneof:"output"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalStreamOutput) Reset() {
-	*x = TerminalStreamOutput{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalStreamOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalStreamOutput) ProtoMessage() {}
-
-func (x *TerminalStreamOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalStreamOutput.ProtoReflect.Descriptor instead.
-func (*TerminalStreamOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *TerminalStreamOutput) GetOutput() isTerminalStreamOutput_Output {
-	if x != nil {
-		return x.Output
-	}
-	return nil
-}
-
-func (x *TerminalStreamOutput) GetCreated() *TerminalSessionCreated {
-	if x != nil {
-		if x, ok := x.Output.(*TerminalStreamOutput_Created); ok {
-			return x.Created
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamOutput) GetData() *TerminalDataOutput {
-	if x != nil {
-		if x, ok := x.Output.(*TerminalStreamOutput_Data); ok {
-			return x.Data
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamOutput) GetClosed() *TerminalSessionClosed {
-	if x != nil {
-		if x, ok := x.Output.(*TerminalStreamOutput_Closed); ok {
-			return x.Closed
-		}
-	}
-	return nil
-}
-
-func (x *TerminalStreamOutput) GetError() *TerminalError {
-	if x != nil {
-		if x, ok := x.Output.(*TerminalStreamOutput_Error); ok {
-			return x.Error
-		}
-	}
-	return nil
-}
-
-type isTerminalStreamOutput_Output interface {
-	isTerminalStreamOutput_Output()
-}
-
-type TerminalStreamOutput_Created struct {
-	Created *TerminalSessionCreated `protobuf:"bytes,1,opt,name=created,proto3,oneof"`
-}
-
-type TerminalStreamOutput_Data struct {
-	Data *TerminalDataOutput `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
-}
-
-type TerminalStreamOutput_Closed struct {
-	Closed *TerminalSessionClosed `protobuf:"bytes,3,opt,name=closed,proto3,oneof"`
-}
-
-type TerminalStreamOutput_Error struct {
-	Error *TerminalError `protobuf:"bytes,4,opt,name=error,proto3,oneof"`
-}
-
-func (*TerminalStreamOutput_Created) isTerminalStreamOutput_Output() {}
-
-func (*TerminalStreamOutput_Data) isTerminalStreamOutput_Output() {}
-
-func (*TerminalStreamOutput_Closed) isTerminalStreamOutput_Output() {}
-
-func (*TerminalStreamOutput_Error) isTerminalStreamOutput_Output() {}
-
-type TerminalSessionCreated struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Pid           int32                  `protobuf:"varint,2,opt,name=pid,proto3" json:"pid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalSessionCreated) Reset() {
-	*x = TerminalSessionCreated{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalSessionCreated) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalSessionCreated) ProtoMessage() {}
-
-func (x *TerminalSessionCreated) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalSessionCreated.ProtoReflect.Descriptor instead.
-func (*TerminalSessionCreated) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *TerminalSessionCreated) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalSessionCreated) GetPid() int32 {
-	if x != nil {
-		return x.Pid
-	}
-	return 0
-}
-
-type TerminalDataOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalDataOutput) Reset() {
-	*x = TerminalDataOutput{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalDataOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalDataOutput) ProtoMessage() {}
-
-func (x *TerminalDataOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalDataOutput.ProtoReflect.Descriptor instead.
-func (*TerminalDataOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *TerminalDataOutput) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalDataOutput) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-type TerminalSessionClosed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ExitCode      int32                  `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalSessionClosed) Reset() {
-	*x = TerminalSessionClosed{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalSessionClosed) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalSessionClosed) ProtoMessage() {}
-
-func (x *TerminalSessionClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalSessionClosed.ProtoReflect.Descriptor instead.
-func (*TerminalSessionClosed) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *TerminalSessionClosed) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalSessionClosed) GetExitCode() int32 {
-	if x != nil {
-		return x.ExitCode
-	}
-	return 0
-}
-
-type TerminalError struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalError) Reset() {
-	*x = TerminalError{}
-	mi := &file_reliant_v1_terminal_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalError) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalError) ProtoMessage() {}
-
-func (x *TerminalError) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_terminal_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalError.ProtoReflect.Descriptor instead.
-func (*TerminalError) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_terminal_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *TerminalError) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *TerminalError) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
 var File_reliant_v1_terminal_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_terminal_proto_rawDesc = "" +
@@ -946,60 +319,19 @@ const file_reliant_v1_terminal_proto_rawDesc = "" +
 	"\x1bListTerminalSessionsRequest\"m\n" +
 	"\x1cListTerminalSessionsResponse\x127\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1b.reliant.v1.TerminalSessionR\bsessions\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"<\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"l\n" +
 	"\x1bCloseTerminalSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"R\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"R\n" +
 	"\x1cCloseTerminalSessionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x94\x02\n" +
-	"\x13TerminalStreamInput\x12;\n" +
-	"\x06create\x18\x01 \x01(\v2!.reliant.v1.TerminalCreateRequestH\x00R\x06create\x123\n" +
-	"\x04data\x18\x02 \x01(\v2\x1d.reliant.v1.TerminalDataInputH\x00R\x04data\x129\n" +
-	"\x06resize\x18\x03 \x01(\v2\x1f.reliant.v1.TerminalResizeInputH\x00R\x06resize\x12G\n" +
-	"\rclose_session\x18\x04 \x01(\v2 .reliant.v1.TerminalCloseRequestH\x00R\fcloseSessionB\a\n" +
-	"\x05input\"8\n" +
-	"\x15TerminalCreateRequest\x12\x1f\n" +
-	"\vworking_dir\x18\x01 \x01(\tR\n" +
-	"workingDir\"F\n" +
-	"\x11TerminalDataInput\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"\\\n" +
-	"\x13TerminalResizeInput\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
-	"\x04cols\x18\x02 \x01(\rR\x04cols\x12\x12\n" +
-	"\x04rows\x18\x03 \x01(\rR\x04rows\"5\n" +
-	"\x14TerminalCloseRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\x86\x02\n" +
-	"\x14TerminalStreamOutput\x12>\n" +
-	"\acreated\x18\x01 \x01(\v2\".reliant.v1.TerminalSessionCreatedH\x00R\acreated\x124\n" +
-	"\x04data\x18\x02 \x01(\v2\x1e.reliant.v1.TerminalDataOutputH\x00R\x04data\x12;\n" +
-	"\x06closed\x18\x03 \x01(\v2!.reliant.v1.TerminalSessionClosedH\x00R\x06closed\x121\n" +
-	"\x05error\x18\x04 \x01(\v2\x19.reliant.v1.TerminalErrorH\x00R\x05errorB\b\n" +
-	"\x06output\"I\n" +
-	"\x16TerminalSessionCreated\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x10\n" +
-	"\x03pid\x18\x02 \x01(\x05R\x03pid\"G\n" +
-	"\x12TerminalDataOutput\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"S\n" +
-	"\x15TerminalSessionClosed\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
-	"\texit_code\x18\x02 \x01(\x05R\bexitCode\"H\n" +
-	"\rTerminalError\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xea\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xb7\x02\n" +
 	"\x0fTerminalService\x12c\n" +
 	"\fListSessions\x12'.reliant.v1.ListTerminalSessionsRequest\x1a(.reliant.v1.ListTerminalSessionsResponse\"\x00\x12\xbe\x01\n" +
-	"\fCloseSession\x12'.reliant.v1.CloseTerminalSessionRequest\x1a(.reliant.v1.CloseTerminalSessionResponse\"[\xa2\xbb\x18W:U:Scloses a terminal session on the daemon: interactive transport, not project history\x12\xb0\x01\n" +
-	"\x0eStreamTerminal\x12\x1f.reliant.v1.TerminalStreamInput\x1a .reliant.v1.TerminalStreamOutput\"W\xa2\xbb\x18S:Q:Oterminal I/O to and from the daemon: interactive transport, not project history(\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fCloseSession\x12'.reliant.v1.CloseTerminalSessionRequest\x1a(.reliant.v1.CloseTerminalSessionResponse\"[\xa2\xbb\x18W:U:Scloses a terminal session on the daemon: interactive transport, not project historyB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_terminal_proto_rawDescOnce sync.Once
@@ -1013,45 +345,25 @@ func file_reliant_v1_terminal_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_terminal_proto_rawDescData
 }
 
-var file_reliant_v1_terminal_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_reliant_v1_terminal_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_reliant_v1_terminal_proto_goTypes = []any{
 	(*TerminalSession)(nil),              // 0: reliant.v1.TerminalSession
 	(*ListTerminalSessionsRequest)(nil),  // 1: reliant.v1.ListTerminalSessionsRequest
 	(*ListTerminalSessionsResponse)(nil), // 2: reliant.v1.ListTerminalSessionsResponse
 	(*CloseTerminalSessionRequest)(nil),  // 3: reliant.v1.CloseTerminalSessionRequest
 	(*CloseTerminalSessionResponse)(nil), // 4: reliant.v1.CloseTerminalSessionResponse
-	(*TerminalStreamInput)(nil),          // 5: reliant.v1.TerminalStreamInput
-	(*TerminalCreateRequest)(nil),        // 6: reliant.v1.TerminalCreateRequest
-	(*TerminalDataInput)(nil),            // 7: reliant.v1.TerminalDataInput
-	(*TerminalResizeInput)(nil),          // 8: reliant.v1.TerminalResizeInput
-	(*TerminalCloseRequest)(nil),         // 9: reliant.v1.TerminalCloseRequest
-	(*TerminalStreamOutput)(nil),         // 10: reliant.v1.TerminalStreamOutput
-	(*TerminalSessionCreated)(nil),       // 11: reliant.v1.TerminalSessionCreated
-	(*TerminalDataOutput)(nil),           // 12: reliant.v1.TerminalDataOutput
-	(*TerminalSessionClosed)(nil),        // 13: reliant.v1.TerminalSessionClosed
-	(*TerminalError)(nil),                // 14: reliant.v1.TerminalError
 }
 var file_reliant_v1_terminal_proto_depIdxs = []int32{
-	0,  // 0: reliant.v1.ListTerminalSessionsResponse.sessions:type_name -> reliant.v1.TerminalSession
-	6,  // 1: reliant.v1.TerminalStreamInput.create:type_name -> reliant.v1.TerminalCreateRequest
-	7,  // 2: reliant.v1.TerminalStreamInput.data:type_name -> reliant.v1.TerminalDataInput
-	8,  // 3: reliant.v1.TerminalStreamInput.resize:type_name -> reliant.v1.TerminalResizeInput
-	9,  // 4: reliant.v1.TerminalStreamInput.close_session:type_name -> reliant.v1.TerminalCloseRequest
-	11, // 5: reliant.v1.TerminalStreamOutput.created:type_name -> reliant.v1.TerminalSessionCreated
-	12, // 6: reliant.v1.TerminalStreamOutput.data:type_name -> reliant.v1.TerminalDataOutput
-	13, // 7: reliant.v1.TerminalStreamOutput.closed:type_name -> reliant.v1.TerminalSessionClosed
-	14, // 8: reliant.v1.TerminalStreamOutput.error:type_name -> reliant.v1.TerminalError
-	1,  // 9: reliant.v1.TerminalService.ListSessions:input_type -> reliant.v1.ListTerminalSessionsRequest
-	3,  // 10: reliant.v1.TerminalService.CloseSession:input_type -> reliant.v1.CloseTerminalSessionRequest
-	5,  // 11: reliant.v1.TerminalService.StreamTerminal:input_type -> reliant.v1.TerminalStreamInput
-	2,  // 12: reliant.v1.TerminalService.ListSessions:output_type -> reliant.v1.ListTerminalSessionsResponse
-	4,  // 13: reliant.v1.TerminalService.CloseSession:output_type -> reliant.v1.CloseTerminalSessionResponse
-	10, // 14: reliant.v1.TerminalService.StreamTerminal:output_type -> reliant.v1.TerminalStreamOutput
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	0, // 0: reliant.v1.ListTerminalSessionsResponse.sessions:type_name -> reliant.v1.TerminalSession
+	1, // 1: reliant.v1.TerminalService.ListSessions:input_type -> reliant.v1.ListTerminalSessionsRequest
+	3, // 2: reliant.v1.TerminalService.CloseSession:input_type -> reliant.v1.CloseTerminalSessionRequest
+	2, // 3: reliant.v1.TerminalService.ListSessions:output_type -> reliant.v1.ListTerminalSessionsResponse
+	4, // 4: reliant.v1.TerminalService.CloseSession:output_type -> reliant.v1.CloseTerminalSessionResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_terminal_proto_init() }
@@ -1060,25 +372,14 @@ func file_reliant_v1_terminal_proto_init() {
 		return
 	}
 	file_reliant_v1_terminal_proto_msgTypes[0].OneofWrappers = []any{}
-	file_reliant_v1_terminal_proto_msgTypes[5].OneofWrappers = []any{
-		(*TerminalStreamInput_Create)(nil),
-		(*TerminalStreamInput_Data)(nil),
-		(*TerminalStreamInput_Resize)(nil),
-		(*TerminalStreamInput_CloseSession)(nil),
-	}
-	file_reliant_v1_terminal_proto_msgTypes[10].OneofWrappers = []any{
-		(*TerminalStreamOutput_Created)(nil),
-		(*TerminalStreamOutput_Data)(nil),
-		(*TerminalStreamOutput_Closed)(nil),
-		(*TerminalStreamOutput_Error)(nil),
-	}
+	file_reliant_v1_terminal_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_terminal_proto_rawDesc), len(file_reliant_v1_terminal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

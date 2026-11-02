@@ -44,7 +44,7 @@ func TestOrdinaryBoundSendCannotMoveModelsOrClearBinding(t *testing.T) {
 	require.NoError(t, err)
 	for _, id := range []string{sonnetOnClaude, "qwen@local"} {
 		inputs := map[string]interface{}{"model": map[string]any{"id": id}, v2.InputKeyProviderSwitch: "codex"}
-		require.Empty(t, svc.moveUnservableModels(ctx, "test-user", fx.chatID, chat.ProjectID, "builtin://agent", fx.rootThreadID, inputs))
+		require.Empty(t, svc.moveUnservableModels(ctx, "test-user", chat, "builtin://agent", fx.rootThreadID, inputs))
 		svc.refreshChatProvider(ctx, "test-user", chat, "builtin://agent", inputs)
 		require.Equal(t, "codex", inputs[v2.InputKeyProviderSwitch])
 		require.Equal(t, "codex", svc.chatProvider(ctx, fx.chatID))
@@ -81,7 +81,8 @@ func TestFreshStoredModelDoesNotBindChat(t *testing.T) {
 		require.NoError(t, err)
 		chat, err := repo.GetChat(ctx, fx.chatID)
 		require.NoError(t, err)
-		inputs := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
+		inputs, err := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
+		require.NoError(t, err)
 		require.NotContains(t, inputs, v2.InputKeyProviderSwitch)
 		require.Equal(t, "fallback", v2.ProviderPolicy(inputs).OnLimit)
 	}
@@ -97,7 +98,8 @@ func TestExplicitSwitchBindingSurvivesSelectionWritesAndFreshLaunch(t *testing.T
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "auto"})
 	chat, err := repo.GetChat(ctx, fx.chatID)
 	require.NoError(t, err)
-	inputs := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
+	inputs, err := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
+	require.NoError(t, err)
 	require.Equal(t, "codex", inputs[v2.InputKeyProviderSwitch])
 }
 
