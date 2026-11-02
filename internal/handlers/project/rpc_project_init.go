@@ -38,7 +38,6 @@ func (s *Service) GetProjectInitStatus(
 	// Asked of the machine holding a checkout, about its path there — never
 	// projects.path, the creating machine's. With no checkout to ask, the
 	// fallback below answers, as it does for a daemon that cannot.
-	err = errNoDaemonRouter
 	if target, terr := s.checkout(ctx, userID, project, "open it"); terr != nil {
 		err = terr
 	} else {
