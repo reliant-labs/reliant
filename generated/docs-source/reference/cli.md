@@ -14081,8 +14081,8 @@ List, start, stop, resize and rename your machines
 Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
-suspends a running one; resize changes a SUSPENDED machine's size (small,
-medium, large, xl, 2xl), which takes effect when it next starts. To resize a
+suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
+m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
 called, and nothing else.
 
@@ -14148,7 +14148,7 @@ starts. A running machine is refused: stop it first. Disks only grow, so a
 downsize keeps the larger disk.
 
 ```
-reliant machine resize <name|id> <small|medium|large|xl|2xl>
+reliant machine resize <name|id> <s1|s2|m|l|xl|2xl|3xl>
 ```
 
 ---

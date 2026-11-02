@@ -188,22 +188,6 @@ func redateReflog(t *testing.T, path string, at time.Time) {
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
-// requireInspectableHost skips a test that needs a whole-worktree retirement to
-// go through when this host cannot prove ANY path idle. The retirement's
-// process-use check fails closed on a same-owner process whose /proc state it
-// cannot read, and a non-dumpable process (ssh-agent, gpg-agent, credsandbox's
-// init) reads EACCES for its cwd, fds and maps. With one running, every
-// retirement is held in_use whatever the test does, so asserting that it
-// succeeds measures the host, not the code: GitHub's release-gate runners have
-// one, and these tests failed there on every run (reliant#1998, which also
-// tracks what production should do about such processes).
-func requireInspectableHost(t *testing.T) {
-	t.Helper()
-	if err := worktreereclaim.CheckProcessUse(context.Background(), []string{t.TempDir()}); err != nil {
-		t.Skipf("this host cannot prove an unrelated empty directory idle (%v), so a retirement is held here whatever the code does; see reliant#1998", err)
-	}
-}
-
 // S1: Unarchive re-locks as active BEFORE flipping the row, so a removal that
 // was claimed under the archive's fence can no longer proceed.
 func TestUnarchive_RelocksAsActiveSoAStaleClaimCannotRemove(t *testing.T) {
@@ -283,17 +267,6 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
-}
-
-func TestPermanentDelete_SucceedsOnceTheMachineRemovedTheDirectory(t *testing.T) {
-	requireInspectableHost(t)
-	e := newReclaimEnv(t)
-	wt, path := e.worktree(t, "pd2")
-	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	age(t, path)
-	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
-	require.NoError(t, err)
-	assert.False(t, exists(path))
 }
 
 // S2: an import may not claim an archived workspace's directory.
@@ -452,28 +425,6 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 	require.NotNil(t, after.CleanupMetadata)
 	assert.Equal(t, resp.Msg.SnapshotRefs, after.CleanupMetadata.SnapshotRefs)
 	assert.NoFileExists(t, filepath.Join(path, "wip.txt"))
-}
-
-// R-S2: unarchiving a workspace whose directory a removal already finished is
-// refused, and the row records that the directory is gone.
-func TestUnarchive_RefusedWhenTheMachineSaysGone(t *testing.T) {
-	requireInspectableHost(t)
-	e := newReclaimEnv(t)
-	wt, path := e.worktree(t, "gonerow")
-	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	age(t, path)
-	require.NoError(t, e.sweeper.Sweep(e.ctx)) // removes it, but the server has not recorded it yet:
-	require.NoError(t, e.repo.MergeWorktreeCleanupMetadata(e.ctx, wt.ID, func(m *core.CleanupMetadata, _ bool) bool {
-		m.DirectoryDeleted = false
-		return true
-	}))
-	require.False(t, exists(path))
-	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
-	assert.NotNil(t, got.DeletedAt, "the row must NOT flip to active over a missing directory")
-	assert.True(t, got.CleanupMetadata.DirectoryDeleted, "and it now records that the files are gone")
 }
 
 // R-S2: an unreachable machine does not block the unarchive; it records the

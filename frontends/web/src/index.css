@@ -229,6 +229,10 @@
   --color-warning-surface: hsl(var(--warning) / 0.12);
   --color-warning-border: hsl(var(--warning) / 0.38);
   --color-warning-ink: hsl(var(--warning-ink));
+  /* Info → reliant's info: the one blue every scheme keeps (pure-black's
+     --primary is ink), for data that is blue by meaning, such as a
+     successful trace in the traces page's latency chart. */
+  --color-info: hsl(var(--info));
 }
 
 /*
