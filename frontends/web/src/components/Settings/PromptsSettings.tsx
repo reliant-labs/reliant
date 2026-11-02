@@ -42,6 +42,15 @@ function promptToProto(p: Prompt) {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+interface SaveJob {
+  projectId: string;
+  next: Prompt[];
+  /** editSeq when queued: a newer edit makes this save's outcome stale. */
+  seq: number;
+  /** scopeGen when queued: a project switch makes it stale too. */
+  gen: number;
+}
+
 interface PromptsSettingsProps {
   projectId?: string;
 }
@@ -68,52 +77,87 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
   const [draft, setDraft] = useState<Prompt[] | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The edit the timer will save, so a project switch or unmount can save it
+  // now instead of dropping it.
+  const pendingEdit = useRef<Prompt[] | null>(null);
   // Each edit bumps this; a save that finishes after a newer edit leaves the
   // newer edit alone.
   const editSeq = useRef(0);
+  // Bumped when the project changes: a save for the previous project still
+  // lands, but no longer touches this page's state.
+  const scopeGen = useRef(0);
+  // Every save sends the whole set, so saves run one at a time: two in flight
+  // could land out of order and an older set overwrite a newer one. Edits made
+  // while one is in flight wait here, newest snapshot per project only.
+  const queue = useRef<SaveJob[]>([]);
+  const draining = useRef(false);
+  const mutateRef = useRef(savePrompts.mutateAsync);
+  mutateRef.current = savePrompts.mutateAsync;
+
+  const drain = useCallback(async () => {
+    if (draining.current) return;
+    draining.current = true;
+    try {
+      for (let job = queue.current.shift(); job; job = queue.current.shift()) {
+        const current = () => job.gen === scopeGen.current && job.seq === editSeq.current && queue.current.length === 0;
+        if (job.gen === scopeGen.current) setSaveState("saving");
+        // A prompt still without a title is kept on screen but not saved yet.
+        const complete = job.next
+          .map((p) => ({ ...p, id: p.id.trim(), title: p.title.trim() }))
+          .filter((p) => p.id && p.title);
+        try {
+          await mutateRef.current({ projectId: job.projectId, prompts: complete.map(promptToProto) });
+          if (!current()) continue;
+          setSaveState("saved");
+          toast.success("Prompts saved", { id: "prompts-autosave" });
+          // The cache now holds what was saved; show it, unless an untitled
+          // prompt is still being written.
+          if (complete.length === job.next.length) setDraft(null);
+        } catch (e) {
+          console.error(e);
+          if (!current()) continue;
+          setSaveState("error");
+          toast.error("Couldn't save prompts", { id: "prompts-autosave" });
+        }
+      }
+    } finally {
+      draining.current = false;
+    }
+  }, []);
+
+  const enqueue = useCallback(
+    (projectId: string, next: Prompt[]) => {
+      const job = { projectId, next, seq: editSeq.current, gen: scopeGen.current };
+      queue.current = [...queue.current.filter((j) => j.projectId !== projectId), job];
+      void drain();
+    },
+    [drain],
+  );
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
     setDraft(null);
     setSaveState("idle");
-  }, [effectiveProjectId]);
-
-  useEffect(
-    () => () => {
+    return () => {
+      // Leaving this project (or the page): save its unsaved edit now, then
+      // let nothing from it touch the next project's state.
       if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+      timer.current = null;
+      if (effectiveProjectId && pendingEdit.current) enqueue(effectiveProjectId, pendingEdit.current);
+      pendingEdit.current = null;
+      scopeGen.current += 1;
+    };
+  }, [effectiveProjectId, enqueue]);
 
   const saved = useMemo(() => serverPrompts.prompts.map(promptToView), [serverPrompts.prompts]);
   const prompts = draft ?? saved;
   const loading = !!effectiveProjectId && serverPrompts.isPending;
 
   const commit = useCallback(
-    async (next: Prompt[]) => {
+    (next: Prompt[]) => {
       if (!effectiveProjectId) return;
-      const seq = editSeq.current;
-      setSaveState("saving");
-      // A prompt still without a title is kept on screen but not saved yet.
-      const complete = next
-        .map((p) => ({ ...p, id: p.id.trim(), title: p.title.trim() }))
-        .filter((p) => p.id && p.title);
-      try {
-        await savePrompts.mutateAsync({ projectId: effectiveProjectId, prompts: complete.map(promptToProto) });
-        if (seq !== editSeq.current) return;
-        setSaveState("saved");
-        toast.success("Prompts saved", { id: "prompts-autosave" });
-        // The cache now holds what was saved; show it, unless an untitled
-        // prompt is still being written.
-        if (complete.length === next.length) setDraft(null);
-      } catch (e) {
-        console.error(e);
-        if (seq !== editSeq.current) return;
-        setSaveState("error");
-        toast.error("Couldn't save prompts", { id: "prompts-autosave" });
-      }
+      enqueue(effectiveProjectId, next);
     },
-    [effectiveProjectId, savePrompts],
+    [effectiveProjectId, enqueue],
   );
 
   const edit = (change: (prev: Prompt[]) => Prompt[]) => {
@@ -122,7 +166,12 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
     setDraft(next);
     setSaveState("idle");
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void commit(next), PROMPT_AUTOSAVE_DELAY_MS);
+    pendingEdit.current = next;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      pendingEdit.current = null;
+      commit(next);
+    }, PROMPT_AUTOSAVE_DELAY_MS);
   };
 
   const handleAdd = () => {
@@ -180,7 +229,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
         >
           New prompt
         </Button>
-        <SaveStatus state={saveState} onRetry={() => void commit(prompts)} />
+        <SaveStatus state={saveState} onRetry={() => commit(prompts)} />
       </div>
 
       {loadError && (
