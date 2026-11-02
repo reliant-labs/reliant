@@ -534,14 +534,15 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
+		live := p.Live()
 		info := &daemon.ProcessInfo{
 			ID:             p.ID,
 			Command:        p.Command,
-			Status:         p.Status,
-			ExitCode:       p.ExitCode,
+			Status:         live.Status,
+			ExitCode:       live.ExitCode,
 			StartTime:      p.StartTime,
-			EndTime:        p.EndTime,
-			Ports:          shellPortsToDaemon(p.Ports),
+			EndTime:        live.EndTime,
+			Ports:          shellPortsToDaemon(live.Ports),
 			DaemonID:       daemonID,
 			WorkingDir:     p.WorkingDir,
 			WorktreeID:     p.WorktreeID,

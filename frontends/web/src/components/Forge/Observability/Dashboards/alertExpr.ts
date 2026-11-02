@@ -170,6 +170,51 @@ export function alertExprProblem(expr: string): string | null {
   return null;
 }
 
+/**
+ * A PLATFORM rule's marker: the control plane raises the alert from its own
+ * records (a new issue, a failed deploy, a quota), not from a query on the
+ * telemetry, so forge records its `expr` as a SELECT that returns no row with a
+ * comment naming the event:
+ *
+ *   SELECT 1 AS value WHERE 0 /* reliant:platform new-issue env:{reliant_env_id:String} *\/
+ *
+ * ` off` before the close means the env disabled it. The grammar is forge's
+ * (obsdash platform markers) and the control plane's (alerting.PlatformMarker).
+ */
+const PLATFORM_MARKER = /\/\* reliant:platform (\S+) env:(\S+?)( off)? \*\//;
+
+/** The event a platform rule's marker names, or null when `expr` is a real query. */
+export function platformRule(expr: string): { key: string; off: boolean } | null {
+  const m = PLATFORM_MARKER.exec(expr);
+  return m ? { key: m[1]!, off: m[3] !== undefined } : null;
+}
+
+/**
+ * The names of the ClickHouse parameters (`{name:Type}`) a statement uses, in
+ * order of first use. One inside a string literal or a comment is not a
+ * parameter: ClickHouse never binds it.
+ */
+export function parameterNames(sql: string): string[] {
+  const out = new Set<string>();
+  for (let i = 0; i < sql.length; ) {
+    const skipped = region(sql, i);
+    if (skipped) {
+      i = skipped.end;
+      continue;
+    }
+    if (sql[i] === "{") {
+      const m = PARAM.exec(sql.slice(i));
+      if (m) {
+        out.add(m[1]!);
+        i += m[0].length;
+        continue;
+      }
+    }
+    i++;
+  }
+  return [...out];
+}
+
 /** A ClickHouse single-quoted string literal. */
 export function chString(value: string): string {
   return `'${value.replace(/[\\'\n\r\t\0]/g, (c) => ({ "\\": "\\\\", "'": "\\'", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\0": "\\0" })[c] ?? c)}'`;

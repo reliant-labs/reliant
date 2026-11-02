@@ -111,8 +111,10 @@ func forgeSkillsForInput(input DiscoverInput) []Definition {
 			break
 		}
 	}
+	// The shipped skills are the pinned forge's in a project that pins
+	// another one (shippedSkillsFor, forge_pinned.go).
 	out = append(out, discoverForgeSkillsFiltered(sharedDir, "", input.LoadFullDefinitions, sharedForge, false,
-		func(s forgecli.Skill) bool { return s.Scope != string(projectSkillScope) })...)
+		func(s forgecli.Skill) bool { return s.Scope != projectSkillScope })...)
 
 	seen := map[string]struct{}{}
 	for _, src := range candidates {
@@ -177,10 +179,21 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 // discoverForgeSkillsFiltered is discoverForgeSkills with the forge-project
 // decision made by the caller and an optional filter over forgecli's listing.
 // keep == nil keeps everything.
+//
+// Outside projectOnly the shipped skills come from the forge baseDir pins
+// (shippedSkillsFor); when it cannot be obtained, the forge namespace is a
+// single entry naming why (pinnedForgeUnavailable).
 func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, hasForgeYAML, projectOnly bool, keep func(forgecli.Skill) bool) []Definition {
-	skills, err := forgecli.ListSkills(baseDir)
-	if err != nil {
-		return nil
+	var skills []forgecli.Skill
+	var unavailable error
+	if projectOnly {
+		listed, err := forgecli.ListSkills(baseDir)
+		if err != nil {
+			return nil
+		}
+		skills = listed
+	} else {
+		skills, unavailable = shippedSkillsFor(baseDir, hasForgeYAML, keep == nil)
 	}
 	if keep != nil {
 		kept := skills[:0:0]
@@ -191,7 +204,7 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 		}
 		skills = kept
 	}
-	if len(skills) == 0 {
+	if len(skills) == 0 && unavailable == nil {
 		return nil
 	}
 
@@ -208,7 +221,9 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 			defs = append(defs, def)
 		}
 	}
-	if hasForgeYAML && !projectOnly {
+	if unavailable != nil && !projectOnly {
+		defs = append(defs, pinnedForgeUnavailable(baseDir, source, unavailable))
+	} else if hasForgeYAML && !projectOnly {
 		defs = append(defs, Definition{
 			Name:        forgeNamespace,
 			Description: forgeParentDescription,
@@ -436,6 +451,20 @@ func loadForgeDefinition(def Definition) (Definition, error) {
 		// Parent body should have been pre-rendered at discovery; nothing
 		// useful to load from forge here. Fall through with empty body.
 		return def, nil
+	}
+	// A project that pins another forge reads that forge's skill. When it
+	// cannot be obtained, a framework skill fails rather than read as the
+	// embedded forge's; a methodology skill (bare path) is version-agnostic
+	// and keeps loading here.
+	if body, handled, err := pinnedBodyFor(baseDir, forgePath); handled {
+		if err == nil {
+			out := def
+			out.Body = body
+			return out, nil
+		}
+		if strings.HasPrefix(def.SkillPath, forgeNamespace+"/") || def.SkillPath == forgeNamespace {
+			return def, fmt.Errorf("load forge skill %q from %s: %w", forgePath, baseDir, err)
+		}
 	}
 	audience := "general"
 	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {

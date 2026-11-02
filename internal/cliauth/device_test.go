@@ -91,8 +91,8 @@ func TestDeviceLogin_PrintsTheCodeAndPollsUntilApproved(t *testing.T) {
 		t.Fatalf("credential = %+v", cred)
 	}
 	// The approval names who approved it.
-	if cred.Account != (Account{ID: "ext-1", Email: "a@example.test"}) {
-		t.Fatalf("account = %+v", cred.Account)
+	if cred.AccountID != "ext-1" || cred.AccountEmail != "a@example.test" {
+		t.Fatalf("account = %q %q", cred.AccountID, cred.AccountEmail)
 	}
 	if polls.Load() != 3 {
 		t.Fatalf("polled %d times, want 3", polls.Load())

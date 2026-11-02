@@ -9,17 +9,17 @@
  * standalone screens, each gated by its own capability so a section that
  * regresses shows up as a one-line diff rather than a silent removal.
  *
- * Navigation is internal component state, not nested routes: `/m/settings`
- * is a single flat route (see `routes.tsx`, owned by another agent), so a
- * section click swaps which sub-screen renders rather than pushing a new
- * URL. Each sub-screen's own "back" button clears the selection.
+ * The open section is the URL's `?section=<id>` on the one flat `/m/settings`
+ * route: a desktop link to a section lands on its screen
+ * (lib/mobileRedirect.ts maps the ids), a refresh keeps it, and opening a
+ * section pushes a history entry so the browser's Back returns to the list.
+ * Each sub-screen's own "back" button goes to the list too.
  *
  * Sections not listed here (MCP, Prompts, Keyboard shortcuts, Developer,
  * per-machine app access and port access rules) are desktop-only by design — see the
  * "Manage on desktop" note at the bottom of the list.
  */
 
-import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Activity,
@@ -133,7 +133,6 @@ export function MobileSettingsScreen() {
   // of dropping the person on the list with nothing to say where they were.
   const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
   const comeBackTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
-  const [active, setActive] = useState<SectionId | null>(section === "billing" ? "billing" : null);
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
   // call time — can't get frozen into a stale constant, which matters both
@@ -143,7 +142,7 @@ export function MobileSettingsScreen() {
     {
       id: "account",
       label: "Account",
-      description: "Identity, theme, sign out",
+      description: "Identity and sign out",
       icon: User,
       group: "identity",
       capability: "mobileAccount",
@@ -192,8 +191,8 @@ export function MobileSettingsScreen() {
     },
     {
       id: "workspace",
-      label: "Workspace preferences",
-      description: "Archive, branch, and delete defaults",
+      label: "Branches",
+      description: "Cleanup defaults for branched chats",
       icon: FolderGit2,
       group: "preferences",
       capability: "settingsWorkspace",
@@ -227,9 +226,11 @@ export function MobileSettingsScreen() {
   const visible = sections.filter(
     (s) => !s.hidden && capabilities[s.capability],
   );
+  const active = visible.find((s) => s.id === section)?.id ?? null;
+  const openSection = (id: SectionId) => void navigate({ href: `/m/settings?${new URLSearchParams({ section: id })}` });
 
   if (active) {
-    const onBack = () => (comeBackTo ? void navigate({ href: comeBackTo }) : setActive(null));
+    const onBack = () => void navigate({ href: comeBackTo ?? "/m/settings" });
     switch (active) {
       case "account":
         return <MobileAccountScreen onBack={onBack} />;
@@ -273,7 +274,7 @@ export function MobileSettingsScreen() {
                 <SectionRow
                   key={section.id}
                   section={section}
-                  onSelect={setActive}
+                  onSelect={openSection}
                 />
               ))}
             </MobileCardGroup>
@@ -286,9 +287,9 @@ export function MobileSettingsScreen() {
         <div className="flex gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Machines and GitHub are available from the main menu. MCP servers,
-            prompts, keyboard shortcuts, developer tools, app access, and port
-            access rules aren&apos;t available here. Manage those on desktop.
+            Machines are in the main menu. MCP servers, prompts, keyboard
+            shortcuts, developer tools, app access, and port access rules
+            aren&apos;t available here. Manage those on desktop.
           </p>
         </div>
       </MobileScreenBody>

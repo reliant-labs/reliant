@@ -41,7 +41,23 @@ func On(ctx context.Context, r Reader, userID string, project *db.Project, daemo
 		t.Path = mine.Path
 		return t, nil
 	}
-	return Target{}, NotOnError(ctx, r, project, daemonID, mine, elsewhere, purpose)
+	return Target{}, NotOnError(ctx, ownNames{r, userID}, project, daemonID, mine, elsewhere, purpose)
+}
+
+// ownNames reads only userID's machines for the refusal's wording: a pin that
+// names another account's machine (corrupted or foreign) is described by its
+// short id alone, never by that machine's name, hostname or kind.
+type ownNames struct {
+	r      Reader
+	userID string
+}
+
+func (o ownNames) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	d, err := o.r.GetDaemon(ctx, id)
+	if err != nil || d == nil || d.UserID != o.userID {
+		return nil, err
+	}
+	return d, nil
 }
 
 // ForMachine is On for a named machine and Resolve for "" (no machine chosen

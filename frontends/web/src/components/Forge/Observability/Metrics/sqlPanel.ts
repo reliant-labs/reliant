@@ -7,7 +7,8 @@
  *
  * A compiled statement binds every value as a positional parameter
  * (`{p3:Int64}`); a SQL panel binds only the scope's own parameters (dashspec
- * sql.go: `{from}`, `{to}`, `{step}`, `{env_ids}`, `{envs}`, `{services}`), so
+ * sql.go: `{from}`, `{to}`, `{step}`, `{env_ids}`, `{envs}`, `{services}`, and
+ * the control plane's `{reliant_env_id}` when one environment is in scope), so
  * the rest are written in as literals and the window becomes the panel's:
  *
  *   fromUnixTimestamp64Nano({p:Int64})  →  {from:DateTime64(9)} / {to:DateTime64(9)},
@@ -23,8 +24,15 @@
 
 import type { CompiledStatement, TimeWindow } from "@/services/controlPlane/observability/types";
 
-/** The parameters a SQL panel's statement binds from the scope (forge dashspec sql.go). */
-export const SCOPE_PARAMS = ["from", "to", "step", "env_ids", "envs", "services"] as const;
+import { parameterNames } from "../Dashboards/alertExpr";
+
+/**
+ * The parameters a SQL panel's statement binds from the scope: forge dashspec
+ * sql.go's, plus `reliant_env_id`, the id of the env an alert rule is declared
+ * for, which the control plane binds when the scope is exactly one environment
+ * (obsread.EnvIDParam), so a rule's own query runs here as written.
+ */
+export const SCOPE_PARAMS = ["from", "to", "step", "env_ids", "envs", "services", "reliant_env_id"] as const;
 
 const PARAM = /\{([A-Za-z_][A-Za-z0-9_]*):([^{}]+)\}/g;
 
@@ -123,9 +131,10 @@ export function sqlPanelStatement(statement: CompiledStatement, ctx: SqlPanelCon
     .replace(/\b[A-Za-z_][A-Za-z0-9_]*\.(otel_[A-Za-z0-9_]+)\b/g, "$1");
 }
 
-/** The positional parameters a statement still carries after the rewrite: what the SQL panel could not bind. */
+/**
+ * The parameters a statement uses that the SQL panel does not bind. A `{…}` in
+ * a comment or a string literal is not one: ClickHouse never binds it.
+ */
 export function unboundParams(sql: string): string[] {
-  const out = new Set<string>();
-  for (const match of sql.matchAll(PARAM)) if (!(SCOPE_PARAMS as readonly string[]).includes(match[1])) out.add(match[1]);
-  return [...out];
+  return parameterNames(sql).filter((name) => !(SCOPE_PARAMS as readonly string[]).includes(name));
 }

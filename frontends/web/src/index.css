@@ -365,6 +365,13 @@
        --primary, which is a fill tuned for the label on it; held AA on every
        surface and on the primary tints by primaryInkContrast.test.ts. */
     --primary-ink: 221 83% 44%;
+    /* The brand's second hue (the mark's violet), for LABELS only: a section
+       eyebrow on a marketing-like surface (onboarding, a first-run empty
+       state, the plan picker), at most one per screen. Never interactive,
+       never a status. Brand-wide, so every scheme shares it; AA on every
+       surface (reliantSchemeDefault.test.ts). The logo violet itself
+       (#6e39ff) is 3.5:1 on the dark canvas: decoration only. */
+    --brand-violet: 254 75% 53%;
     --secondary: 220 14% 94%;        /* Purple accent */
     --secondary-foreground: 220 10% 12%;
     --muted: 220 14% 95.5%;            /* Very light blue-gray */
@@ -481,6 +488,7 @@
     --primary-foreground: 222 47% 9%;
     --primary-hover: 215 92% 77%; /* the pressed/hovered fill: darker in light, lighter in dark, so its label keeps contrast */
     --primary-ink: 215 92% 70%;
+    --brand-violet: 253 100% 77.5%;
     --secondary: 220 12% 19%;        /* Purple accent */
     --secondary-foreground: 220 10% 95%;
     --muted: 220 12% 18.5%;            /* Reads against the lifted card */

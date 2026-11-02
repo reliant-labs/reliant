@@ -20,6 +20,7 @@ import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
   type HeldWorktreeSchema,
+  InboxApprovalSchema,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -156,16 +157,17 @@ describe("InboxPage item kinds", () => {
     expect(mocks.restoreInboxItem).not.toHaveBeenCalled();
   });
 
-  it("an approval shows its title on one line, with Approve / Deny", async () => {
+  it("an approval opens with its card, and Approve / Deny named after the run", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     expect(within(row).getByText("Deploy to production?")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /hide/i })).toHaveAttribute("aria-expanded", "true");
 
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
 
-    await userEvent.click(within(row).getByRole("button", { name: "Deny" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Deny Nightly triage" }));
     await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("appr-1", undefined, undefined));
   });
 
@@ -286,7 +288,7 @@ describe("InboxPage item kinds", () => {
     mocks.approve.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
   });
 
@@ -298,7 +300,7 @@ describe("InboxPage item kinds", () => {
     );
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     expect(await within(row).findByText(message)).toBeInTheDocument();
   });
 });
@@ -335,9 +337,42 @@ describe("InboxPage layout", () => {
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     const time = row.querySelector("time")!;
     expect(within(time).getByText("3h")).toHaveAttribute("aria-hidden", "true");
-    expect(within(time).getByText(/waiting since 3 hours ago/)).toHaveClass("sr-only");
+    expect(within(time).getByText("waiting for 3 hours")).toHaveClass("sr-only");
     // The answer form and other tall content are not rendered until asked for.
     expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
+  });
+
+  it("shows and announces the same age: 41 hours is 1d and 1 day", async () => {
+    respond([approvalItem({ waitingSince: new Date(Date.now() - 41 * 60 * 60_000).toISOString() })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    const time = row.querySelector("time")!;
+    expect(within(time).getByText("1d")).toHaveAttribute("aria-hidden", "true");
+    expect(within(time).getByText("waiting for 1 day")).toHaveClass("sr-only");
+  });
+
+  it("an activation approval shows what it grants, Approve under it, and folds the technical lines", async () => {
+    const title = [
+      "Turn on PR review for acme/shopfront: it will run on each GitHub event it watches (pull_request.opened), and use GitHub as the Reliant GitHub app (a bot account).",
+      "Approval needed: A new activation is new standing power.",
+      "Repositories: acme/shopfront",
+      "Acts as: the Reliant GitHub app (a bot account)",
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+    respond([approvalItem({ payload: { case: "approval", value: create(InboxApprovalSchema, { approvalId: "appr-1", title }) } })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(within(row).getByText(/^Turn on PR review for acme\/shopfront/)).toBeInTheDocument();
+    const repos = within(row).getByText("acme/shopfront");
+    const approve = within(row).getByRole("button", { name: "Approve Nightly triage" });
+    // Approve follows the details in reading order.
+    expect(repos.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(row).getByText("Technical details").closest("details")).not.toHaveAttribute("open");
+    // Collapsing hides Approve with the card: it is never beside a cut-off line.
+    await userEvent.click(within(row).getByRole("button", { name: /hide/i }));
+    expect(within(row).queryByRole("button", { name: "Approve Nightly triage" })).toBeNull();
   });
 
   it("an automation item without a run links to the trigger", async () => {

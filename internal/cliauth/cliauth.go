@@ -61,21 +61,22 @@ type Login struct {
 // needs a browser and a human.
 var ErrInteractiveRequired = errors.New("interactive login required but running non-interactively")
 
-// Run performs the login and returns the credential with the account it
-// signed in as. It does not store it; see Store. The two are split because a
-// daemon registration keeps its credential in the daemon store, not the CLI's.
-func (l Login) Run(ctx context.Context) (Session, error) {
+// Run performs the login and returns the credential, naming the account it
+// signed in as (AccountID / AccountEmail). It does not store it; see Store.
+// The two are split because a daemon registration keeps its credential in the
+// daemon store, not the CLI's.
+func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 	if l.NonInteractive {
-		return Session{}, ErrInteractiveRequired
+		return credentials.Credential{}, ErrInteractiveRequired
 	}
 	meta, err := oauth2.DiscoverAuthorizationServer(ctx, l.HTTPClient, l.Server)
 	if err != nil {
 		if errors.Is(err, oauth2.ErrNoAuthorizationServer) {
-			return Session{}, fmt.Errorf("%s does not offer browser login (%w)\n"+
+			return credentials.Credential{}, fmt.Errorf("%s does not offer browser login (%w)\n"+
 				"it must publish %s naming its control plane; for a self-hosted server, "+
 				"mint a token there and pass it with RELIANT_TOKEN", l.Server, err, oauth2.AuthorizationServerMetadataPath)
 		}
-		return Session{}, err
+		return credentials.Credential{}, err
 	}
 	open := l.OpenURL
 	if open == nil {
@@ -97,14 +98,17 @@ func (l Login) Run(ctx context.Context) (Session, error) {
 		HTTPClient:        l.HTTPClient,
 	}.Run(ctx)
 	if err != nil {
-		return Session{}, fmt.Errorf("login via %s: %w", meta.Issuer, err)
+		return credentials.Credential{}, fmt.Errorf("login via %s: %w", meta.Issuer, err)
 	}
 	now := time.Now().UTC()
+	account := accountFromToken(tok)
 	c := credentials.Credential{
-		Token:     tok.AccessToken,
-		Scopes:    strings.Fields(tok.Scope),
-		CreatedAt: now,
-		Issuer:    meta.Issuer,
+		Token:        tok.AccessToken,
+		Scopes:       strings.Fields(tok.Scope),
+		CreatedAt:    now,
+		Issuer:       meta.Issuer,
+		AccountID:    account.ID,
+		AccountEmail: account.Email,
 	}
 	if len(tok.AccessToken) > 13 {
 		c.TokenPrefix = tok.AccessToken[:13]
@@ -112,7 +116,7 @@ func (l Login) Run(ctx context.Context) (Session, error) {
 	if exp := tok.Expiry(now); !exp.IsZero() {
 		c.ExpiresAt = &exp
 	}
-	return Session{Credential: c, Account: accountFromToken(tok)}, nil
+	return c, nil
 }
 
 // adapter is the Service over one credentials-file location and one set of
@@ -139,7 +143,7 @@ func DepsFromEnv() Deps {
 	return Deps{Dirs: credentials.DirsFromEnv()}
 }
 
-func (a *adapter) Login(ctx context.Context, l Login) (Session, error) {
+func (a *adapter) Login(ctx context.Context, l Login) (credentials.Credential, error) {
 	if l.HTTPClient == nil {
 		l.HTTPClient = a.deps.HTTPClient
 	}
@@ -151,15 +155,16 @@ func (a *adapter) Login(ctx context.Context, l Login) (Session, error) {
 
 func (a *adapter) CredentialsPath() (string, error) { return a.deps.Dirs.Path() }
 
-func (a *adapter) Store(server string, s Session) (string, error) {
+func (a *adapter) Store(server string, c credentials.Credential) (string, error) {
 	path, err := a.CredentialsPath()
 	if err != nil {
 		return "", err
 	}
-	if err := credentials.Store(path, server, ClientID, s.Credential); err != nil {
+	if err := credentials.Store(path, server, ClientID, c); err != nil {
 		return path, err
 	}
-	return path, recordAccount(path, server, s.Token, s.Account)
+	_ = dropLegacyAccount(path, server) // it described the login just replaced
+	return path, nil
 }
 
 func (a *adapter) Lookup(server string) (credentials.Credential, string, error) {
@@ -177,15 +182,7 @@ func (a *adapter) Lookup(server string) (credentials.Credential, string, error) 
 	if c.Expired(a.deps.Now()) {
 		return credentials.Credential{}, path, fmt.Errorf("%w: the stored login expired at %s", ErrNotLoggedIn, c.ExpiresAt.Format(time.RFC3339))
 	}
-	return c, path, nil
-}
-
-func (a *adapter) LookupSession(server string) (Session, string, error) {
-	c, path, err := a.Lookup(server)
-	if err != nil {
-		return Session{}, path, err
-	}
-	return Session{Credential: c, Account: recordedAccount(path, server, c.Token)}, path, nil
+	return adoptLegacyAccount(path, server, c), path, nil
 }
 
 func (a *adapter) Remove(server string) (bool, string, error) {
@@ -197,7 +194,8 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 	if err != nil {
 		return existed, path, err
 	}
-	return existed, path, forgetAccount(path, server)
+	_ = dropLegacyAccount(path, server)
+	return existed, path, nil
 }
 
 // The CLI's entry points: the adapter over the environment's credentials
@@ -208,22 +206,16 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 // `forge login` writes.
 func CredentialsPath() (string, error) { return New(DepsFromEnv()).CredentialsPath() }
 
-// Store saves s as the reliant CLI's login for server, with the account it
-// signed in as, and returns the credentials file path.
-func Store(server string, s Session) (string, error) {
-	return New(DepsFromEnv()).Store(server, s)
+// Store saves c — with the account it signed in as — as the reliant CLI's
+// login for server, and returns the credentials file path.
+func Store(server string, c credentials.Credential) (string, error) {
+	return New(DepsFromEnv()).Store(server, c)
 }
 
 // Lookup returns the stored credential for server, or ErrNotLoggedIn.
 // An entry past its issuer-reported expiry counts as not logged in.
 func Lookup(server string) (credentials.Credential, string, error) {
 	return New(DepsFromEnv()).Lookup(server)
-}
-
-// LookupSession is Lookup plus the account the login signed in as (zero when
-// unknown).
-func LookupSession(server string) (Session, string, error) {
-	return New(DepsFromEnv()).LookupSession(server)
 }
 
 // Remove forgets the stored credential for server.

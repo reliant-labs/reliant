@@ -2,9 +2,14 @@ import { useState, useEffect } from "react";
 import { Check, Lightbulb } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
-import { COLOR_SCHEME_ATTR, RETIRED_COLOR_SCHEME_IDS } from "../../lib/forgeTokens";
+import {
+  COLOR_SCHEME_ATTR,
+  DEFAULT_COLOR_SCHEME,
+  DEFAULT_COLOR_SCHEME_ATTR,
+  RETIRED_COLOR_SCHEME_IDS,
+} from "../../lib/forgeTokens";
 
-type ColorScheme = "purple" | "blue" | "neutral" | "teal" | "slate" | "black";
+type ColorScheme = "reliant" | "purple" | "blue" | "neutral" | "teal" | "slate" | "pure-black";
 
 interface ColorSchemeOption {
   id: ColorScheme;
@@ -18,6 +23,16 @@ interface ColorSchemeOption {
 }
 
 const COLOR_SCHEMES: ColorSchemeOption[] = [
+  {
+    id: "reliant",
+    name: "Reliant",
+    description: "The brand: blue on blue-black",
+    preview: {
+      primary: "#0A70E0",
+      accent: "#6E39FF",
+      background: "#0A0A0F",
+    },
+  },
   {
     id: "blue",
     name: "Professional Blue",
@@ -69,7 +84,7 @@ const COLOR_SCHEMES: ColorSchemeOption[] = [
     },
   },
   {
-    id: "black",
+    id: "pure-black",
     name: "Pure Black",
     description: "True black for OLED screens",
     preview: {
@@ -81,7 +96,7 @@ const COLOR_SCHEMES: ColorSchemeOption[] = [
 ];
 
 export function ColorSchemeSelector() {
-  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>("black");
+  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>(DEFAULT_COLOR_SCHEME);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from settingsSync on mount (wait for initialization)
@@ -95,10 +110,10 @@ export function ColorSchemeSelector() {
       }
       
       // Now read settings from settingsSync (which has loaded from database)
-      const raw = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black") as string;
+      const raw = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME) as string;
       // A scheme retired since it was picked selects its replacement.
       const stored = (RETIRED_COLOR_SCHEME_IDS[raw] ?? raw) as ColorScheme;
-      setSelectedScheme(stored || "black");
+      setSelectedScheme(stored || DEFAULT_COLOR_SCHEME);
       setIsLoaded(true);
     };
     
@@ -112,7 +127,7 @@ export function ColorSchemeSelector() {
     const applyScheme = (scheme: ColorScheme) => {
       const root = document.documentElement;
 
-      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? "pure-black");
+      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? DEFAULT_COLOR_SCHEME_ATTR);
 
       // Sync to database
       settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, scheme).catch((error) => {
@@ -134,22 +149,42 @@ export function ColorSchemeSelector() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold mb-1">Color Scheme</h3>
+        <h3 className="text-sm font-semibold mb-1">Color scheme</h3>
         <p className="text-xs text-muted-foreground">
           Choose the accent color for your interface
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {COLOR_SCHEMES.map((scheme) => {
+      {/* A radiogroup: one tab stop (the chosen scheme), arrows move and
+          select, and the choice is aria-checked rather than only a border. */}
+      <div role="radiogroup" aria-label="Color scheme" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {COLOR_SCHEMES.map((scheme, index) => {
           const isSelected = selectedScheme === scheme.id;
 
           return (
             <button
               key={scheme.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => setSelectedScheme(scheme.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = (index + step + COLOR_SCHEMES.length) % COLOR_SCHEMES.length;
+                setSelectedScheme(COLOR_SCHEMES[next].id);
+                const group = event.currentTarget.parentElement;
+                group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              }}
               className={cn(
-                "relative p-4 rounded-lg border-2 transition-all text-left",
+                "relative p-4 rounded-lg border-2 transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 // Options are insets in their panel: no shadow, the border
                 // and an accent wash say which is chosen.
                 isSelected

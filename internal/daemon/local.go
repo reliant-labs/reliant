@@ -1095,16 +1095,17 @@ func (c *LocalClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
 
 	result := make([]*ProcessInfo, 0, len(all))
 	for _, p := range all {
+		live := p.Live()
 		// DaemonID stays empty: a LocalClient runs the process on the user's
 		// own machine, so its loopback is directly reachable and needs no proxy.
 		info := &ProcessInfo{
 			ID:             p.ID,
 			Command:        p.Command,
-			Status:         p.StatusSafe(),
-			ExitCode:       p.ExitCode,
+			Status:         live.Status,
+			ExitCode:       live.ExitCode,
 			StartTime:      p.StartTime,
-			EndTime:        p.EndTime,
-			Ports:          shellPortsToDaemon(p.Ports),
+			EndTime:        live.EndTime,
+			Ports:          shellPortsToDaemon(live.Ports),
 			WorkingDir:     p.WorkingDir,
 			WorktreeID:     p.WorktreeID,
 			PackageCommand: p.PackageCommand,

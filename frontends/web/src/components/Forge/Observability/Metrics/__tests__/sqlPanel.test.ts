@@ -54,6 +54,17 @@ describe("sqlPanelStatement", () => {
   });
 });
 
+describe("unboundParams", () => {
+  it("counts {reliant_env_id} as bound: the server binds it to the one environment in scope, as the alert evaluator does", () => {
+    expect(unboundParams("SELECT count() AS value FROM otel_logs WHERE ResourceAttributes['reliant.env.id'] = {reliant_env_id:String}")).toEqual([]);
+  });
+
+  it("ignores a {…} in a comment or a string literal: ClickHouse never binds it", () => {
+    expect(unboundParams("SELECT 1 AS value WHERE 0 /* reliant:platform new-issue env:{x:String} */")).toEqual([]);
+    expect(unboundParams("SELECT '{x:String}' AS a -- {y:String}\nFROM t WHERE b = {z:String}")).toEqual(["z"]);
+  });
+});
+
 describe("stringLiteral", () => {
   it("escapes quotes and backslashes", () => {
     expect(stringLiteral("a'b\\c")).toBe("'a\\'b\\\\c'");

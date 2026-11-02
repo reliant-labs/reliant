@@ -106,6 +106,7 @@ func TestUninspectable_KnownAgentsOnlyByExactIdentity(t *testing.T) {
 		{"dbus-broker", "dbus-broker", "dbus-broker", argv("/usr/bin/dbus-broker", "--log", "4", "--controller", "9", "--machine-id", "x"), false},
 		{"systemd --user", "systemd", "systemd", argv("/usr/lib/systemd/systemd", "--user"), false},
 		{"systemd --user, re-executed", "systemd", "systemd", argv("/lib/systemd/systemd", "--user", "--deserialize=43"), false},
+		{"systemd's (sd-pam)", "(sd-pam)", "(sd-pam)", argv("(sd-pam)"), false},
 		{"cmdline unreadable: comm and Name decide", "ssh-agent", "ssh-agent", nil, false},
 
 		{"unknown process", "worktreereclaim", "worktreereclaim", argv("/tmp/worktreereclaim.test"), true},

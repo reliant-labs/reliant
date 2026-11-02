@@ -41,8 +41,9 @@ import { AskReliantActions, AskReliantMenu } from "./AskReliant/AskReliant";
 import type { AskSubject } from "./AskReliant/askReliantPrompt";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
+import { platformRule } from "./Dashboards/alertExpr";
 import { formatAgo, formatTimestamp } from "./format";
-import { alertPivot, alertRange, useExploreHref } from "./Metrics/pivots";
+import { alertRange, useAlertExploreHref } from "./Metrics/pivots";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
 import { ExploreLink } from "./Metrics/ExploreLink";
@@ -330,9 +331,9 @@ function FiringTab({
   onRules: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
-  const exploreHref = useExploreHref();
+  const exploreHref = useAlertExploreHref();
   const exploreAlert = (a: AlertInstance, rule: DeclaredAlertRule | undefined) =>
-    rule ? (exploreHref?.(alertPivot(rule.expr, a.labels), { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
+    rule ? (exploreHref?.(rule.expr, a.labels, { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
   const ruleOf = (a: AlertInstance) => rules.find((r) => r.env.id === a.envId && r.rule.alert === a.rule);
   if (alerts.length === 0) {
     const evaluated = rules.filter((r) => !observabilityOff(r.env)).length;
@@ -659,8 +660,9 @@ function RulesTab({
 
 function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[] }) {
   const { rule, env } = entry;
-  const exploreHref = useExploreHref();
-  const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
+  const exploreHref = useAlertExploreHref();
+  const explore = exploreHref?.(rule.expr, {}, { env: env.name, range: "1h" }) ?? null;
+  const platform = platformRule(rule.expr);
   const lead = leadInstance(active);
   return (
     <Card padding="md" data-testid="obs-rule-detail">
@@ -694,10 +696,19 @@ function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[]
         </div>
         <div>
           <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
-            {rule.expr}
-          </pre>
-          <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+          {platform ? (
+            <p className="text-xs text-ink-muted" data-testid="obs-rule-platform">
+              {platform.off ? "Disabled in this environment. " : ""}Reliant raises this alert from its own records (
+              <span className="font-mono">{platform.key}</span>), not from a query on your telemetry, so there is no query to run.
+            </p>
+          ) : (
+            <>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
+                {rule.expr}
+              </pre>
+              <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+            </>
+          )}
         </div>
         {Object.keys(rule.annotations).length > 0 && (
           <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">

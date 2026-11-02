@@ -4,7 +4,12 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -28,11 +33,27 @@ var (
 // loginAs stores token as the CLI login for server, signed in as account.
 func loginAs(t *testing.T, server, token string, account cliauth.Account) {
 	t.Helper()
-	_, err := cliauth.Store(server, cliauth.Session{
-		Credential: credentials.Credential{Token: token, TokenPrefix: token, CreatedAt: fixtureTime},
-		Account:    account,
+	_, err := cliauth.Store(server, credentials.Credential{
+		Token: token, TokenPrefix: token, CreatedAt: fixtureTime,
+		AccountID: account.ID, AccountEmail: account.Email,
 	})
 	require.NoError(t, err)
+}
+
+// recordLegacyLoginAccount writes the record an earlier release kept beside
+// the credentials file: server's login, holding token, signed in as account.
+func recordLegacyLoginAccount(t *testing.T, server, token string, account cliauth.Account) {
+	t.Helper()
+	credPath, err := cliauth.CredentialsPath()
+	require.NoError(t, err)
+	key, err := credentials.Normalize(server)
+	require.NoError(t, err)
+	sum := sha256.Sum256([]byte(token))
+	data, err := json.Marshal(map[string]any{"logins": map[string]any{key: map[string]string{
+		"token_sha256": hex.EncodeToString(sum[:]), "account_id": account.ID, "account_email": account.Email,
+	}}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(credPath), "reliant-accounts.json"), data, 0o600))
 }
 
 // saveDaemonSignIn stores a daemon sign-in under the store account sub,
@@ -199,6 +220,29 @@ func TestDaemonAccountForCLILogin(t *testing.T) {
 		saveDaemonSignIn(t, testServerURL, "", "rlat_DAEMON_bob", bobAccount, "")
 		_, want, out := run(t, noGateway)
 		require.False(t, want.Known())
+		require.Empty(t, out)
+	})
+
+	t.Run("an earlier release's recorded account is kept: another account's default is not used", func(t *testing.T) {
+		isolateLogout(t)
+		loginFor(t, testServerURL, "rlat_ADALOGIN00000000")
+		recordLegacyLoginAccount(t, testServerURL, "rlat_ADALOGIN00000000", adaAccount)
+		saveDaemonSignIn(t, testServerURL, "", "rlat_DAEMON_bob", bobAccount, "")
+
+		account, want, out := run(t, noGateway)
+		require.Equal(t, adaAccount, want)
+		require.Equal(t, adaAccount.ID, account, "Bob's default sign-in must not be selected")
+		require.Contains(t, out, "pairing this machine as ada@example.test instead")
+	})
+
+	t.Run("a recorded account for a replaced login is not adopted", func(t *testing.T) {
+		isolateLogout(t)
+		loginFor(t, testServerURL, "rlat_NEWLOGIN0000000")
+		recordLegacyLoginAccount(t, testServerURL, "rlat_ADALOGIN00000000", adaAccount)
+		saveDaemonSignIn(t, testServerURL, "", "rlat_DAEMON_bob", bobAccount, "")
+
+		_, want, out := run(t, noGateway)
+		require.False(t, want.Known(), "a record whose token hash does not match names nobody")
 		require.Empty(t, out)
 	})
 
