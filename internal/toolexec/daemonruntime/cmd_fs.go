@@ -72,8 +72,21 @@ func handleFSReadFile(ctx context.Context, payload []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := denyViewerRead(path, req.ViewerRoot); err != nil {
-		return nil, err
+	// A viewer read reads the file its guard checked, not the path again.
+	if req.ViewerRoot != "" {
+		f, err := openForRead(path, req.ViewerRoot)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		resp, err := daemon.ReadOpenFileContent(f, req.Opts)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(struct {
+			*daemon.FileContent
+			viewerGuard
+		}{resp, viewerGuard{true}})
 	}
 
 	resp, err := daemon.ReadFileContent(path, req.Opts)
@@ -96,6 +109,7 @@ type fsReadBinaryFileRequest struct {
 
 type fsReadBinaryFileResponse struct {
 	Data string `json:"data"` // base64-encoded
+	viewerGuard
 }
 
 func handleFSReadBinaryFile(ctx context.Context, payload []byte) ([]byte, error) {
@@ -114,11 +128,15 @@ func handleFSReadBinaryFile(ctx context.Context, payload []byte) ([]byte, error)
 		return nil, err
 	}
 	req.Path = resolved
-	if err := denyViewerRead(req.Path, req.ViewerRoot); err != nil {
+
+	// A viewer read is checked on the file it opened and read from that same
+	// file (openForRead).
+	f, err := openForRead(req.Path, req.ViewerRoot)
+	if err != nil {
 		return nil, err
 	}
-
-	info, err := os.Stat(req.Path)
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", req.Path, err)
 	}
@@ -129,13 +147,14 @@ func handleFSReadBinaryFile(ctx context.Context, payload []byte) ([]byte, error)
 		return nil, fmt.Errorf("file %s is %d bytes, exceeds maximum of %d bytes", req.Path, info.Size(), req.MaxBytes)
 	}
 
-	data, err := os.ReadFile(req.Path)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", req.Path, err)
 	}
 
 	resp := fsReadBinaryFileResponse{
-		Data: base64.StdEncoding.EncodeToString(data),
+		Data:        base64.StdEncoding.EncodeToString(data),
+		viewerGuard: viewerGuard{req.ViewerRoot != ""},
 	}
 	return json.Marshal(resp)
 }
@@ -461,10 +480,14 @@ func handleFSStat(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	guard := viewerGuard{req.ViewerRoot != ""}
 	info, err := os.Stat(req.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return json.Marshal(daemon.FileStat{Exists: false})
+			return json.Marshal(struct {
+				daemon.FileStat
+				viewerGuard
+			}{daemon.FileStat{Exists: false}, guard})
 		}
 		return nil, fmt.Errorf("stat %s: %w", req.Path, err)
 	}
@@ -476,7 +499,10 @@ func handleFSStat(ctx context.Context, payload []byte) ([]byte, error) {
 		IsDir:   info.IsDir(),
 		Mode:    info.Mode().String(),
 	}
-	return json.Marshal(resp)
+	return json.Marshal(struct {
+		daemon.FileStat
+		viewerGuard
+	}{resp, guard})
 }
 
 // =============================================================================
@@ -1167,6 +1193,7 @@ type fsPreviewInfoResponse struct {
 	MIMEType   string `json:"mime_type"`
 	IsBinary   bool   `json:"is_binary"`
 	IsEditable bool   `json:"is_editable"`
+	viewerGuard
 }
 
 func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1190,15 +1217,19 @@ func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Path = resolved
-	if err := denyViewerRead(req.Path, req.ViewerRoot); err != nil {
-		return nil, err
-	}
 
-	info, err := os.Stat(req.Path)
+	// The stat and the 8KB sample come from one open file, so a viewer read
+	// classifies the file its guard checked (see handleFSReadBinaryFile).
+	f, err := openForRead(req.Path, req.ViewerRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("file not found: %s", req.Path)
 		}
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", req.Path, err)
 	}
 	if info.IsDir() {
@@ -1206,11 +1237,6 @@ func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	// Read first 8KB for classification
-	f, err := os.Open(req.Path)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", req.Path, err)
-	}
-	defer f.Close()
 
 	buf := make([]byte, 8192)
 	n, err := f.Read(buf)
@@ -1222,14 +1248,15 @@ func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
 	classification := filepreview.Classify(req.Path, sample)
 
 	resp := fsPreviewInfoResponse{
-		Name:       info.Name(),
-		Path:       req.Path,
-		Size:       info.Size(),
-		Modified:   info.ModTime().Format(time.RFC3339),
-		ViewerKind: string(classification.ViewerKind),
-		MIMEType:   classification.MIMEType,
-		IsBinary:   classification.IsBinary,
-		IsEditable: classification.IsEditable,
+		Name:        info.Name(),
+		Path:        req.Path,
+		Size:        info.Size(),
+		Modified:    info.ModTime().Format(time.RFC3339),
+		ViewerKind:  string(classification.ViewerKind),
+		MIMEType:    classification.MIMEType,
+		IsBinary:    classification.IsBinary,
+		IsEditable:  classification.IsEditable,
+		viewerGuard: viewerGuard{req.ViewerRoot != ""},
 	}
 	return json.Marshal(resp)
 }
@@ -1311,7 +1338,7 @@ func handleFSCopy(ctx context.Context, payload []byte) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-// denyViewerRead applies the file viewer's credential guard to a read the
+// denyViewerRead applies the file viewer's credential guard to a stat the
 // viewer made (root is its workspace); any other caller sends no root and is
 // not affected.
 func denyViewerRead(path, root string) error {
@@ -1319,4 +1346,45 @@ func denyViewerRead(path, root string) error {
 		return nil
 	}
 	return daemonpolicy.DenyViewerRead(path, root)
+}
+
+// openForRead opens path for a read: through the viewer's credential guard
+// when the viewer asked (root is its workspace), and plainly otherwise. The
+// caller reads the returned file and never reopens path: the guard vets the
+// open file itself (daemonpolicy.CheckViewerFile), so a symlink swapped
+// between the check and the read cannot hand it a different file.
+func openForRead(path, root string) (*os.File, error) {
+	if root != "" {
+		if err := daemonpolicy.DenyViewerRead(path, root); err != nil {
+			return nil, err
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	if root == "" {
+		return f, nil
+	}
+	viewerOpened(path)
+	if err := daemonpolicy.CheckViewerFile(f, path, root); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// viewerOpened runs between a viewer read's open and its check. Tests swap a
+// symlink in it to drive that race deterministically.
+var viewerOpened = func(string) {}
+
+// viewerGuard marks a reply to a viewer command as having passed the
+// credential guard. The server requires it before it shows a file outside
+// the workspace: a daemon from before the guard ignores viewer_root, and its
+// reply has no mark (internal/handlers/file_system, requireViewerGuard).
+type viewerGuard struct {
+	ViewerGuarded bool `json:"viewer_guarded,omitempty"`
 }

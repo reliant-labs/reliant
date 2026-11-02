@@ -5,6 +5,7 @@ package daemonpolicy
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,42 +86,83 @@ func viewerProtected(home, forgeCredentials string) []Credential {
 
 // DenyViewerRead returns an error wrapping ErrViewerCredential when the file
 // viewer must not open path, and nil otherwise. root is the workspace the
-// request was made in.
+// request was made in. It judges a pathname, so it is all a stat needs; a
+// read of the file's bytes also checks the file it opened (CheckViewerFile).
 //
 // A path is refused when it, or what it resolves to through symlinks, lies in
 // a credential store, so a link inside the project to ~/.ssh/id_rsa is
-// refused like the path itself. A file of the workspace is still served when
-// it is reached through a store that lives in it by link (a dotfiles repo that
-// ~/.ssh points into); a workspace that contains the store itself (one rooted
-// at the home directory) does not exempt it.
+// refused like the path itself, and when it is a hard link to a file in one.
+// A file of the workspace is still served when it is reached through a store
+// that lives in it by link (a dotfiles repo that ~/.ssh points into); a
+// workspace that contains the store itself (one rooted at the home directory)
+// does not exempt it, and neither does a hard link.
 func DenyViewerRead(path, root string) error {
 	home, _ := os.UserHomeDir()
 	return denyViewerRead(path, root, viewerProtected(home, forgeCredentialsPath()))
+}
+
+// CheckViewerFile is DenyViewerRead for a file the viewer has already opened
+// by path: it refuses f unless it is not a credential store AND it is the file
+// path names now. The caller then reads f, never the pathname again.
+// Checking a pathname and then reopening it is a race: a project symlink
+// pointing at README.md during the check can point at ~/.ssh/id_rsa by the
+// open. Opening first and requiring the resolved path to name the open file
+// closes it; a path that changed in between is refused rather than retried.
+// Call DenyViewerRead before the open too, so that a missing file in a store
+// is a refusal, not a "not found" that tells the caller what ~/.ssh holds.
+func CheckViewerFile(f *os.File, path, root string) error {
+	home, _ := os.UserHomeDir()
+	return checkViewerFile(f, path, root, viewerProtected(home, forgeCredentialsPath()))
+}
+
+func checkViewerFile(f *os.File, path, root string, protected []Credential) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	abs, real := viewerPaths(path)
+	if ri, err := os.Stat(real); err != nil || !os.SameFile(info, ri) {
+		return fmt.Errorf("%w (%s changed while it was opened)", ErrViewerCredential, path)
+	}
+	return checkViewerRead(abs, real, root, info, protected)
 }
 
 func denyViewerRead(path, root string, protected []Credential) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
+	abs, real := viewerPaths(path)
+	info, err := os.Stat(real)
+	if err != nil {
+		info = nil
+	}
+	return checkViewerRead(abs, real, root, info, protected)
+}
+
+// viewerPaths returns path made absolute, and that with its symlinks resolved.
+func viewerPaths(path string) (abs, real string) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = filepath.Clean(path)
 	}
-	real := ResolveLoose(abs)
+	return abs, ResolveLoose(abs)
+}
+
+// checkViewerRead is the guard itself. info is the file being read (nil when
+// it does not exist); it is what a hard link is recognised by.
+func checkViewerRead(abs, real, root string, info os.FileInfo, protected []Credential) error {
 	realRoot := ""
 	if strings.TrimSpace(root) != "" {
 		realRoot = ResolveLoose(root)
 	}
-	info, statErr := os.Stat(real)
 	for _, c := range protected {
 		realStore := ResolveLoose(c.Path)
 		hit := c.covers(abs) || c.covers(real) ||
 			Credential{Path: realStore, Dir: c.Dir}.covers(real)
-		if !hit && !c.Dir && statErr == nil {
-			// A hard link, or a second mount of the same disk.
-			if ci, err := os.Stat(realStore); err == nil && os.SameFile(info, ci) {
-				hit = true
-			}
+		if !hit && info != nil && sameAsStored(info, realStore, c.Dir) {
+			// A hard link, or a second mount of the same disk. Where it sits
+			// says nothing about what it is, so no exemption below applies.
+			return fmt.Errorf("%w (%s)", ErrViewerCredential, c.Path)
 		}
 		if !hit {
 			continue
@@ -135,6 +177,35 @@ func denyViewerRead(path, root string, protected []Credential) error {
 		return fmt.Errorf("%w (%s)", ErrViewerCredential, c.Path)
 	}
 	return nil
+}
+
+// sameAsStored reports whether info is the credential file store or, for a
+// directory store, a file inside it. A directory is only walked for a file
+// that may have a second name (more than one link), which an ordinary project
+// file does not.
+func sameAsStored(info os.FileInfo, store string, dir bool) bool {
+	if !dir {
+		si, err := os.Stat(store)
+		return err == nil && os.SameFile(info, si)
+	}
+	if !info.Mode().IsRegular() || !mayHaveOtherNames(info) {
+		return false
+	}
+	found := false
+	_ = filepath.WalkDir(store, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		if si, err := d.Info(); err == nil && os.SameFile(info, si) {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 // covers reports whether p is the credential location c or, for a directory,

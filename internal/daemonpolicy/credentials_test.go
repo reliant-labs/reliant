@@ -123,8 +123,8 @@ func TestCredentialsNone_InheritsOnlyTheAllowlist(t *testing.T) {
 		"RELIANT_GITHUB_WEBHOOK_SECRET": "whsec",
 		"RELIANT_VAULT_KEY":             "vault",
 		"FOO_SECRET":                    "foo",
-		"STRIPE_LIVE":                   "sk_live_0123456789abcdef",
-		"SLACK_BOT":                     "xoxb-0123456789-abcdefghij",
+		"STRIPE_LIVE":                   "stripe-fixture",
+		"SLACK_BOT":                     "slack-fixture",
 		"SOME_UNLISTED_SETTING":         "plain",
 		// On the allowlist by name, dropped by value: a proxy with a password.
 		"HTTPS_PROXY": "http://user:pw@proxy.example:3128",

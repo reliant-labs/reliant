@@ -209,6 +209,34 @@ func (w workspaceScope) resolveForView(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeAllowAbsolute)
 }
 
+// requireViewerGuard refuses to show a file outside the workspace unless the
+// daemon's reply says it applied the credential guard (viewer_guarded, which
+// cmd_fs.go sets on every reply to a viewer_root request).
+//
+// A daemon from before the guard ignores viewer_root and would return
+// ~/.ssh/id_rsa like any other file, so a server deploy alone protects
+// nobody whose machine has not updated. Until it updates, such a daemon may
+// show files of the workspace only (a symlink in the project to a store still
+// leaks there, which is what updating fixes), and an absolute path outside it
+// is FailedPrecondition, naming the fix. The warning below is how adoption is
+// verified after a release: it counts, per daemon, the viewer reads an
+// outdated daemon was refused, and falls to zero once every active machine
+// runs a daemon with the guard.
+func (w workspaceScope) requireViewerGuard(ctx context.Context, resolvedPath string, guarded bool) error {
+	if guarded || insideWorkspace(w.basePath, resolvedPath) {
+		return nil
+	}
+	logging.WarnContext(ctx, "[FSProxy] refused a viewer read outside the workspace: the daemon predates the credential guard",
+		"daemon_id", w.target.DaemonID, "path", resolvedPath)
+	return svcerr.FailedPrecondition("this machine's daemon is out of date: update it to view files outside the workspace")
+}
+
+// insideWorkspace reports whether resolvedPath lies at or beneath basePath.
+func insideWorkspace(basePath, resolvedPath string) bool {
+	rel, err := filepath.Rel(filepath.Clean(basePath), filepath.Clean(resolvedPath))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // validateWorkspacePath is the single place this package applies the shared
 // path contract.
 //
@@ -478,12 +506,16 @@ func (s *Service) GetFileContent(
 	}
 
 	var cmdResp struct {
-		Content    string `json:"content"`
-		TotalLines int    `json:"total_lines"`
-		Truncated  bool   `json:"truncated"`
-		Size       int64  `json:"size"`
+		Content       string `json:"content"`
+		TotalLines    int    `json:"total_lines"`
+		Truncated     bool   `json:"truncated"`
+		Size          int64  `json:"size"`
+		ViewerGuarded bool   `json:"viewer_guarded"`
 	}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -560,8 +592,13 @@ func (s *Service) GetFileMetadata(
 		ModTime time.Time `json:"mod_time"`
 		IsDir   bool      `json:"is_dir"`
 		Mode    string    `json:"mode"`
+
+		ViewerGuarded bool `json:"viewer_guarded"`
 	}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -636,6 +673,8 @@ type fsProxyPreviewInfo struct {
 	MIMEType   string `json:"mime_type"`
 	IsBinary   bool   `json:"is_binary"`
 	IsEditable bool   `json:"is_editable"`
+
+	ViewerGuarded bool `json:"viewer_guarded"`
 }
 
 // previewInfo asks the machine holding resolvedPath to stat and classify it.
@@ -653,6 +692,9 @@ func (s *Service) previewInfo(ctx context.Context, userID string, scope workspac
 			logging.DebugContext(ctx, "[FSProxy] preview requested for a directory", "path", requestedPath)
 			return nil, svcerr.FailedPrecondition("path is a directory")
 		}
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, info.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	return &info, nil
@@ -717,7 +759,8 @@ func (s *Service) GetFilePreview(
 	}
 
 	var bin struct {
-		Data string `json:"data"`
+		Data          string `json:"data"`
+		ViewerGuarded bool   `json:"viewer_guarded"`
 	}
 	cmdReq := map[string]any{"path": resolvedPath, "max_bytes": maxFilePreviewBytes, "viewer_root": scope.basePath}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_binary_file", cmdReq, &bin, filePreviewTimeoutMs); err != nil {
@@ -725,6 +768,9 @@ func (s *Service) GetFilePreview(
 		if strings.Contains(err.Error(), "exceeds maximum of") {
 			return nil, filePreviewTooLarge(info.Size)
 		}
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, bin.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	content, err := base64.StdEncoding.DecodeString(bin.Data)

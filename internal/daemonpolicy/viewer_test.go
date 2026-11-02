@@ -115,3 +115,81 @@ func TestDenyViewerRead_DotfilesRepoKeepsItsFiles(t *testing.T) {
 		t.Errorf("~/.ssh/config viewed from another project = %v, want ErrViewerCredential", err)
 	}
 }
+
+// A hard link is the file it links to wherever it sits, so a project hard
+// link to a key in ~/.ssh (a directory store) or to ~/.netrc (a file store)
+// is refused, even though its path is in the workspace.
+func TestDenyViewerRead_HardLinksIntoStores(t *testing.T) {
+	home, project := viewerHome(t)
+	protected := viewerProtected(home, "")
+	for name, target := range map[string]string{
+		"ssh-key": filepath.Join(home, ".ssh", "id_rsa"),
+		"netrc":   filepath.Join(home, ".netrc"),
+		"cookies": filepath.Join(home, ".config", "google-chrome", "Default", "Cookies"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(project, name)
+			if err := os.Link(target, p); err != nil {
+				t.Skipf("hard links unavailable here: %v", err)
+			}
+			if err := denyViewerRead(p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("denyViewerRead(hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := checkViewerFile(f, p, project, protected); !errors.Is(err, ErrViewerCredential) {
+				t.Errorf("checkViewerFile(hard link to %s) = %v, want ErrViewerCredential", target, err)
+			}
+		})
+	}
+	// A project file with a second name of its own is still a project file.
+	readme := filepath.Join(project, "README.md")
+	if err := os.Link(readme, filepath.Join(project, "README.copy")); err != nil {
+		t.Skipf("hard links unavailable here: %v", err)
+	}
+	if err := denyViewerRead(readme, project, protected); err != nil {
+		t.Errorf("a hard-linked project file was refused: %v", err)
+	}
+}
+
+// The viewer checks the file it opened: when the path names another file by
+// the time it is checked (a symlink swapped after the open), the open file is
+// refused, whichever way the swap went.
+func TestCheckViewerFile_RefusesAPathThatChanged(t *testing.T) {
+	home, project := viewerHome(t)
+	protected := viewerProtected(home, "")
+	key := filepath.Join(home, ".ssh", "id_rsa")
+	readme := filepath.Join(project, "README.md")
+	link := filepath.Join(project, "link")
+	point := func(target string) {
+		_ = os.Remove(link)
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Opened the key, then pointed at README.md for the check.
+	point(key)
+	f, err := os.Open(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	point(readme)
+	if err := checkViewerFile(f, link, project, protected); !errors.Is(err, ErrViewerCredential) {
+		t.Errorf("an open key checked as README.md = %v, want ErrViewerCredential", err)
+	}
+	_ = f.Close()
+
+	// Unchanged, a project file passes.
+	f, err = os.Open(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := checkViewerFile(f, link, project, protected); err != nil {
+		t.Errorf("an unchanged project file was refused: %v", err)
+	}
+}

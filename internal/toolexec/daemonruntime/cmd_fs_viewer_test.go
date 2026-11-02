@@ -68,3 +68,59 @@ func TestFSViewerReadsRefuseCredentialStores(t *testing.T) {
 		})
 	}
 }
+
+// A viewer read reads the file its guard checked. A project symlink swapped
+// between README.md and ~/.ssh/id_rsa around the open (the viewerOpened seam)
+// is refused either way, by every viewer read that returns bytes: starting at
+// the key, the pathname check before the open refuses it; starting at
+// README.md, the open file is no longer what the path names.
+func TestFSViewerReadsRefuseASymlinkSwap(t *testing.T) {
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	key := filepath.Join(home, ".ssh", "id_rsa")
+	project := filepath.Join(home, "proj")
+	readme := filepath.Join(project, "README.md")
+	for f, body := range map[string]string{key: "KEY BYTES\n", readme: "readme\n"} {
+		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(project, "doc")
+	point := func(target string) {
+		_ = os.Remove(link)
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	handlers := map[string]CommandHandler{
+		"fs.read_file":        handleFSReadFile,
+		"fs.read_binary_file": handleFSReadBinaryFile,
+		"fs.preview_info":     handleFSPreviewInfo,
+	}
+	for name, h := range handlers {
+		for _, swap := range []struct{ before, after string }{{readme, key}, {key, readme}} {
+			t.Run(name+"/"+filepath.Base(swap.before)+"-then-"+filepath.Base(swap.after), func(t *testing.T) {
+				point(swap.before)
+				prev := viewerOpened
+				viewerOpened = func(string) { point(swap.after) }
+				t.Cleanup(func() { viewerOpened = prev })
+
+				payload, err := json.Marshal(map[string]any{"path": link, "viewer_root": project, "max_bytes": 1 << 20})
+				if err != nil {
+					t.Fatal(err)
+				}
+				out, err := h(context.Background(), payload)
+				if !errors.Is(err, daemonpolicy.ErrViewerCredential) {
+					t.Fatalf("%s through a swapped symlink = %s, %v; want ErrViewerCredential", name, out, err)
+				}
+			})
+		}
+	}
+}

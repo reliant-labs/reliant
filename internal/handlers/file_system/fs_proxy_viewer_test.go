@@ -20,8 +20,8 @@ import (
 )
 
 // viewerGuardRouter answers like a daemon that applies the viewer's
-// credential guard (daemonpolicy.DenyViewerRead, as cmd_fs.go does), and
-// records what the server sent.
+// credential guard (daemonpolicy.DenyViewerRead, as cmd_fs.go does) and marks
+// its reply as guarded, and records what the server sent.
 type viewerGuardRouter struct {
 	toolexectest.Stub
 	lastPayload []byte
@@ -44,8 +44,47 @@ func (r *viewerGuardRouter) SendDaemonCommand(_ context.Context, _ string, comma
 		if err := daemonpolicy.DenyViewerRead(req.Path, req.ViewerRoot); err != nil {
 			return nil, toolexec.DaemonReportedFailure(commandType, err.Error())
 		}
+		return []byte(`{"viewer_guarded":true}`), nil
 	}
 	return []byte(`{}`), nil
+}
+
+// outdatedDaemonRouter answers like a daemon from before the guard: it
+// ignores viewer_root and serves any path, with no viewer_guarded mark.
+type outdatedDaemonRouter struct{ toolexectest.Stub }
+
+func (r *outdatedDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
+func (*outdatedDaemonRouter) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
+	return []byte(`{"content":"secret","exists":true}`), nil
+}
+
+// A daemon that predates the guard would serve ~/.ssh/id_rsa, so the server
+// shows nothing outside the workspace from it (FailedPrecondition: update the
+// daemon), while the workspace's own files still open.
+func TestFileSystemProxy_OutdatedDaemonViewsOnlyTheWorkspace(t *testing.T) {
+	repo, projectID, base := seedFSProxyProject(t)
+	outside := filepath.Join(t.TempDir(), "id_rsa")
+	require.NoError(t, os.WriteFile(filepath.Join(base, "README.md"), []byte("hi\n"), 0o644))
+
+	content := func(p string) error {
+		_, err := newProxy(t, &outdatedDaemonRouter{}, repo).GetFileContent(fsProxyContext(),
+			connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: p}))
+		return err
+	}
+	metadata := func(p string) error {
+		_, err := newProxy(t, &outdatedDaemonRouter{}, repo).GetFileMetadata(fsProxyContext(),
+			connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: p}))
+		return err
+	}
+	for name, call := range map[string]func(string) error{"GetFileContent": content, "GetFileMetadata": metadata} {
+		err := call(outside)
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s(%s) from an outdated daemon: %v", name, outside, err)
+		assert.NoError(t, call("README.md"), "%s of a workspace file from an outdated daemon", name)
+		assert.NoError(t, call(filepath.Join(base, "README.md")), "%s of an absolute workspace path from an outdated daemon", name)
+	}
 }
 
 // The viewer opens absolute paths outside the workspace, but never a
@@ -59,7 +98,7 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 	t.Setenv("HOME", home)
 	key := filepath.Join(home, ".ssh", "id_rsa")
 	require.NoError(t, os.MkdirAll(filepath.Dir(key), 0o700))
-	require.NoError(t, os.WriteFile(key, []byte("-----BEGIN OPENSSH PRIVATE KEY-----\n"), 0o600))
+	require.NoError(t, os.WriteFile(key, []byte("fixture: not a key\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(base, "README.md"), []byte("hi\n"), 0o644))
 	require.NoError(t, os.Symlink(key, filepath.Join(base, "innocent.txt")))
 
