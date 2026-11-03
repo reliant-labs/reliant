@@ -16,6 +16,7 @@ import { useChatStore } from "@/store/chatStore";
 import { NO_MACHINE_COMPOSER_HINT, NO_MACHINE_EXPLAINER, NO_MACHINE_PILL } from "@/lib/chatMachine";
 import Tooltip from "../forge-ui/tooltip";
 import { ConnectMachineDialog } from "./ConnectMachineDialog";
+import { useStatusSlotSummary } from "./ComposerStatusSlot";
 
 /** Header pill: "No machine · web & integrations". Opens Connect a machine. */
 export function NoMachinePill({ chatId }: { chatId: string }) {
@@ -42,6 +43,7 @@ export function NoMachinePill({ chatId }: { chatId: string }) {
 /** The composer's one-line hint, with the way out. */
 export function NoMachineComposerHint({ chatId }: { chatId: string }) {
   const [open, setOpen] = useState(false);
+  useStatusSlotSummary({ label: NO_MACHINE_PILL, tone: "neutral" });
   return (
     <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1200px]">
@@ -55,7 +57,7 @@ export function NoMachineComposerHint({ chatId }: { chatId: string }) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="font-medium text-primary-ink hover:underline"
+            className="font-medium text-primary-ink hover:underline pointer-coarse:min-h-11"
           >
             Connect a machine
           </button>

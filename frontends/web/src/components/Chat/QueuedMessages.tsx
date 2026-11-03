@@ -23,6 +23,7 @@ import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
 import { type QueuedAgentMessageView } from "../../hooks/chat-model";
 import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
 import * as chatActions from "../../hooks/chat-actions";
+import { useStatusSlotSummary } from "./ComposerStatusSlot";
 
 
 const AGE_TICK_MS = 1_000;
@@ -236,6 +237,10 @@ export function QueuedMessages({
   // user's next turn, and anything genuinely undeliverable (the thread really
   // exited) is marked by the reconciler's resolveOrphanedAgentMessages rather
   // than being silently resent from a stale client view.
+
+  // Collapsed into the composer's status slot this is "2 queued"; take-back
+  // and interrupt stay in the slot's sheet, which renders this strip in full.
+  useStatusSlotSummary(hasPending ? { label: `${pending.length} queued` } : null);
 
   // Nothing queued means nothing to say. An empty container here would be a
   // permanent gap above the composer.

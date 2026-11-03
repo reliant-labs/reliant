@@ -31,6 +31,7 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
 import { processOomKillNotice } from "@/lib/machineMemory";
+import { useStatusSlotSummary } from "./ComposerStatusSlot";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
 
@@ -120,13 +121,15 @@ export function OomKillBanner() {
     writeDismissed(sig);
   }, [sig]);
 
-  if (!sig) return null;
-  if (dismissedSig && dismissedSig === sig) return null;
+  const visible = !!sig && dismissedSig !== sig;
+  useStatusSlotSummary(visible ? { label: "Machine ran out of memory", tone: "warning" } : null);
+
+  if (!visible) return null;
 
   const descriptor = oomDaemon ? machineDescriptor(oomDaemon) : "";
 
   return (
-    <div className="flex-shrink-0 border-t border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+    <div className="flex-shrink-0 border-t border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-ink">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <MemoryStick className="h-4 w-4 flex-shrink-0" />
@@ -153,7 +156,7 @@ export function OomKillBanner() {
                 params: { section: "machines" },
               })
             }
-            className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-amber-500/30"
+            className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-warning/30 pointer-coarse:min-h-11"
           >
             Upgrade machine size
             <ArrowUpRight className="h-3 w-3" />
@@ -162,7 +165,7 @@ export function OomKillBanner() {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss"
-            className="rounded-md p-1 transition-colors hover:bg-amber-500/20"
+            className="inline-flex items-center justify-center rounded-md p-1 transition-colors hover:bg-warning/20 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <X className="h-3.5 w-3.5" />
           </button>

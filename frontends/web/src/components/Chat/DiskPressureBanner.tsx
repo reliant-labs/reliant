@@ -31,6 +31,7 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { diskNotice, failingRecently, heavyRefused, pressuredVolume } from "@/lib/machineDisk";
 import { cn } from "@/lib/utils";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
+import { useStatusSlotSummary } from "./ComposerStatusSlot";
 
 const DISMISS_KEY = "reliant.diskPressureBanner.dismissed";
 
@@ -81,10 +82,11 @@ export function DiskPressureBanner({ daemonId }: { daemonId?: string | null }) {
     writeDismissed(sig);
   }, [sig]);
 
-  if (!daemon || !volume) return null;
-  if (dismissedSig && dismissedSig === sig && !dialogOpen) return null;
+  const visible = !!daemon && !!volume && !(dismissedSig && dismissedSig === sig && !dialogOpen);
+  const notice = visible && volume ? diskNotice(volume, now) : null;
+  useStatusSlotSummary(notice ? { label: notice.title, tone: notice.tone === "error" ? "danger" : "warning" } : null);
 
-  const notice = diskNotice(volume, now);
+  if (!daemon || !volume || !notice) return null;
   const machineLabel = daemon.name || daemon.hostname || "this machine";
   const online = daemon.status === DaemonStatus.ACTIVE;
 
@@ -121,7 +123,7 @@ export function DiskPressureBanner({ daemonId }: { daemonId?: string | null }) {
             type="button"
             onClick={() => setDialogOpen(true)}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-medium transition-colors",
+              "inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-medium transition-colors pointer-coarse:min-h-11",
               notice.tone === "error"
                 ? "border-destructive/40 hover:bg-destructive/20"
                 : "border-warning/40 hover:bg-warning/20",
@@ -133,7 +135,7 @@ export function DiskPressureBanner({ daemonId }: { daemonId?: string | null }) {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss"
-            className="rounded-md p-1 transition-colors hover:bg-foreground/10"
+            className="inline-flex items-center justify-center rounded-md p-1 transition-colors hover:bg-foreground/10 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <X className="h-3.5 w-3.5" />
           </button>

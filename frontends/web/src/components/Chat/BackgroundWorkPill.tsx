@@ -43,6 +43,7 @@ import {
   type WaitingQuestion,
 } from "./useBackgroundWork";
 import * as chatActions from "../../hooks/chat-actions";
+import { useStatusSlotSummary } from "./ComposerStatusSlot";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -129,7 +130,7 @@ function SpawnRow({
       data-testid={`background-work-spawn-${spawn.threadId}`}
     >
       {spawn.isBlocked ? (
-        <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+        <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
       ) : (
         <Bot className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
       )}
@@ -137,7 +138,7 @@ function SpawnRow({
       <span
         className={cn(
           "truncate",
-          spawn.isBlocked ? "text-amber-500" : "text-muted-foreground",
+          spawn.isBlocked ? "text-warning-ink" : "text-muted-foreground",
         )}
       >
         {spawn.isBlocked ? spawn.blockReason : spawn.activity}
@@ -187,9 +188,9 @@ function WaitingQuestionRow({
       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
       data-testid={`background-work-question-${waiting.threadId}`}
     >
-      <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+      <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
       <span className="truncate font-medium text-foreground">{waiting.title}</span>
-      <span className="truncate text-amber-500">Waiting on your answer</span>
+      <span className="truncate text-warning-ink">Waiting on your answer</span>
     </button>
   );
 }
@@ -396,8 +397,6 @@ export function BackgroundWorkPill({
     if (!hasAnything) setIsExpanded(false);
   }, [hasAnything]);
 
-  if (!hasAnything) return null;
-
   // Everything waiting on the user: spawn rows marked blocked, plus threads
   // with a question that no spawn row shows.
   const waitingTitles = [
@@ -406,6 +405,21 @@ export function BackgroundWorkPill({
   ];
   const isBlocked = waitingTitles.length > 0;
   const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} stopped`;
+  const waitingLabel = `${waitingTitles.length === 1 ? waitingTitles[0] : `${waitingTitles.length} agents`} waiting on you`;
+  const runningCount = spawns.length + commands.length;
+
+  // The status slot's one line: what needs the user first, else "3 running".
+  useStatusSlotSummary(
+    !hasAnything
+      ? null
+      : isBlocked
+        ? { label: waitingLabel, tone: "warning" }
+        : hasFailed
+          ? { label: failedLabel, tone: "warning" }
+          : { label: `${runningCount} running`, tone: "info" },
+  );
+
+  if (!hasAnything) return null;
 
   return (
     <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
@@ -418,8 +432,8 @@ export function BackgroundWorkPill({
       >
         {isBlocked ? (
           <span className="relative flex h-2 w-2 flex-shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-warning" />
           </span>
         ) : hasFailed ? (
           <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
@@ -433,11 +447,11 @@ export function BackgroundWorkPill({
         <span
           className={cn(
             "font-medium",
-            isBlocked ? "text-amber-500" : hasFailed ? "text-warning-ink" : "text-foreground",
+            isBlocked ? "text-warning-ink" : hasFailed ? "text-warning-ink" : "text-foreground",
           )}
         >
           {isBlocked
-            ? `${waitingTitles.length === 1 ? waitingTitles[0] : `${waitingTitles.length} agents`} waiting on you`
+            ? waitingLabel
             : hasFailed
               ? failedLabel
               : summary}

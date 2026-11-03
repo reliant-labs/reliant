@@ -13,18 +13,27 @@
  * because an expanded diff is unreadable in a phone viewport.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
-import { ChevronLeft, FolderGit2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "@tanstack/react-router";
 import { ChatContainer } from "../Chat/ChatContainer";
-import { useChat } from "../../store/chatStoreHooks";
+import { useThreads } from "../Chat/thread-views";
+import { useThreadNavigation } from "../Chat/useThreadNavigation";
+import { transformWorkflowExecution } from "../Chat/ExecutionSidebar/transformApiData";
+import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { useChat, useContextUsage } from "../../store/chatStoreHooks";
 import { useProjectStore } from "../../store/projectStore";
 import { fetchProjects, getCachedProjects } from "../../hooks/project-queries";
+import { useMessages } from "../../hooks/message-queries";
+import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
+import { WorkflowState } from "../../gen/reliant/v1/chat_pb";
+import type { Message } from "../../api/client";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
-import { MobileWorkflowExecutionEntry } from "./MobileWorkflowExecutionEntry";
-import { MobileScreenHeader } from "./MobileChrome";
+import { MobileChatTopBar } from "./MobileChatTopBar";
+import { MobileChatSheet } from "./MobileChatSheet";
 import { loadMainWorktree } from "../../hooks/worktree-actions";
 import { useMainWorktree } from "../../hooks/worktree-queries";
+
+const NO_MESSAGES: Message[] = [];
 
 export function MobileChatScreen() {
   // `strict: false` rather than `from: "/m/chats/$chatId"`. The route is
@@ -36,6 +45,7 @@ export function MobileChatScreen() {
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const [showWorkspace, setShowWorkspace] = useState(false);
+  const [showSheet, setShowSheet] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
   // shell selected. What the chat screen reads — worktrees, files, the
@@ -74,6 +84,33 @@ export function MobileChatScreen() {
   }, [currentProjectId]);
 
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;
+  const openWorkspace = effectiveWorktreeId ? () => setShowWorkspace(true) : undefined;
+
+  // Thread selection lives here rather than in ChatPresenter, because this
+  // screen's top bar and Chat sheet are what pick the thread. A new chat
+  // starts on the all-threads view, as ChatPresenter does.
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [threadsFor, setThreadsFor] = useState(chatId);
+  if (threadsFor !== chatId) {
+    setThreadsFor(chatId);
+    setSelectedThreadId(null);
+  }
+  const { data: workflowExecution, allWorkflows } = useWorkflowExecutions(chatId ?? null);
+  const workflowTrees = useMemo(() => allWorkflows.map(transformWorkflowExecution), [allWorkflows]);
+  const messages = useMessages(chatId).data?.messages ?? NO_MESSAGES;
+  const threads = useThreads(messages, chatId ?? "", workflowTrees);
+  const { hasMultipleThreads, isInSubThread, selectedThread, backTarget, backTargetId } =
+    useThreadNavigation(threads, selectedThreadId);
+
+  // Status for the bar: only a workflow that is running now. A finished one
+  // stays reachable from the Chat sheet's workflow row.
+  const runningWorkflow =
+    workflowExecution &&
+    (workflowExecution.state === WorkflowState.ACTIVE || workflowExecution.state === WorkflowState.PENDING)
+      ? getWorkflowDisplayName(workflowExecution.workflowName, true)
+      : undefined;
+  const contextUsage = useContextUsage(chatId ?? "");
+  const title = chat?.title || "Chat";
 
   // `useParams({ strict: false })` types every param as optional, so chatId is
   // `string | undefined` here even though this route cannot match without one.
@@ -83,45 +120,43 @@ export function MobileChatScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Sticky header — on a phone there's no persistent sidebar to go back
-          to, so the back affordance has to live in the chat itself. */}
-      <MobileScreenHeader
-        // A chat title is a sentence, not a label, so it gets the smaller
-        // `titleClassName` — at `text-xl` a real title wraps or truncates to
-        // three words, which tells the user less than the full line does.
-        title={chat?.title || "Chat"}
-        titleClassName="text-base font-semibold"
-        leading={
-          <Link
-            to="/m/chats"
-            // Explicit px, not `h-10 w-10`: rem sizing resolves against the
-            // root font-size, and at the smallest Appearance step `h-10`
-            // measures under 44px — on the only navigation control here.
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-            aria-label="Back to chats"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Link>
+      {/* One bar: back, the title that opens the Chat sheet, one optional
+          status line, and at most two trailing icons. On a phone there is no
+          persistent sidebar to go back to, so back has to live here. */}
+      <MobileChatTopBar
+        title={title}
+        onOpenSheet={() => setShowSheet(true)}
+        runningWorkflow={runningWorkflow}
+        subThread={
+          isInSubThread && selectedThread
+            ? {
+                name: selectedThread.name,
+                backLabel: backTarget ? `Back to ${backTarget.name}` : "Back to main thread",
+              }
+            : undefined
         }
-        trailing={
-          effectiveWorktreeId ? (
-            <button
-              type="button"
-              onClick={() => setShowWorkspace(true)}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-              aria-label="Open workspace"
-            >
-              <FolderGit2 className="h-5 w-5" />
-            </button>
-          ) : undefined
-        }
+        onBackToThread={() => setSelectedThreadId(backTargetId)}
+        noMachine={chat?.noMachine}
+        contextUsage={contextUsage}
+        onOpenWorkspace={openWorkspace}
       />
 
-      {/* Renders only while a workflow is actually executing — "what is my
-          agent doing right now" is the highest-value thing a phone can answer,
-          and it's the one workflow affordance mobile has (the desktop panel is
-          gated off via chatExecutionSidebar). */}
-      <MobileWorkflowExecutionEntry chatId={chatId} />
+      {showSheet && (
+        <MobileChatSheet
+          chatId={chatId}
+          title={title}
+          createdAt={chat?.createdAt}
+          worktreeId={chat?.worktreeId ?? undefined}
+          onClose={() => setShowSheet(false)}
+          workflow={workflowExecution}
+          threads={threads}
+          hasMultipleThreads={hasMultipleThreads}
+          selectedThreadId={selectedThreadId}
+          onSelectThread={setSelectedThreadId}
+          contextUsage={contextUsage}
+          onOpenWorkspace={openWorkspace}
+        />
+      )}
 
       {effectiveWorktreeId && (
         <MobileWorkspaceSheet
@@ -144,10 +179,15 @@ export function MobileChatScreen() {
         className="mx-auto min-h-0 w-full max-w-3xl flex-1"
         style={{ paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" }}
       >
-        {/* The screen header above already shows the title; ChatHeader's own
-            copy was a second 50px band under it. Its menu, context ring and
-            thread tabs stay. */}
-        <ChatContainer tabId={chatId} hideChatTitle />
+        {/* The top bar and Chat sheet replace ChatHeader entirely, so the
+            container renders no header row; the thread they pick is owned
+            here and drives the container's timeline and composer. */}
+        <ChatContainer
+          tabId={chatId}
+          hideHeader
+          selectedThreadId={selectedThreadId}
+          onSelectThread={setSelectedThreadId}
+        />
       </div>
     </div>
   );
