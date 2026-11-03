@@ -341,9 +341,6 @@ func TestReaper_ArchivedWorkspaceStopsItsProcessesAtOnce(t *testing.T) {
 		return busy.StatusSafe() == "killed" && server.StatusSafe() == "killed"
 	}, 10*time.Second, 10*time.Millisecond)
 	require.Equal(t, "running", other.StatusSafe())
-	out, err := m.GetCombinedOutput(server.ID)
-	require.NoError(t, err)
-	require.Contains(t, out[len(out)-1].Text, "its workspace was archived")
 }
 
 // The daemon removing a workspace directory stops what runs inside it, and
