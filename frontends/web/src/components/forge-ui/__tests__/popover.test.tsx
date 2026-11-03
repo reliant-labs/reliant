@@ -7,7 +7,7 @@
  * (pkg/components/library_popover_test.go); the behaviour is tested here.
  */
 import { describe, expect, it } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -42,17 +42,22 @@ describe("Popover dismissal", () => {
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
   });
 
-  it("stays open when focus moves into a portalled layer, and closes when it leaves for the page", async () => {
+  it("stays open when focus moves into a portalled layer, and closes when it leaves for the page", () => {
     render(<Harness />);
     const inPanel = screen.getByRole("button", { name: "In panel" });
+    const inSheet = screen.getByRole("button", { name: "In portalled sheet" });
     act(() => inPanel.focus());
-    act(() => screen.getByRole("button", { name: "In portalled sheet" }).focus());
-    // The close is decided after focusin; give it the tick it waits for.
-    await act(() => new Promise((r) => setTimeout(r, 10)));
+    // The real transition: focusout from the panel names the sheet's button
+    // as relatedTarget, then focusin lands on it. Both are dispatched within
+    // the one act(), and the close is decided at focusin, with no timer.
+    act(() => inSheet.focus());
+    expect(document.activeElement).toBe(inSheet);
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
 
+    // Focus can move on from the sheet back into the panel, then out.
     act(() => inPanel.focus());
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
     act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
+    expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
   });
 });

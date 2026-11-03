@@ -5,7 +5,7 @@
  * migration gained (research/forge-migration/13-p9-frontend-plan.md §6).
  */
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import DropdownMenu from "../dropdown_menu";
@@ -173,7 +173,7 @@ describe("DropdownMenu", () => {
 });
 
 describe("Popover", () => {
-  it("is a dialog that holds controls, and closes when focus leaves it", async () => {
+  it("is a dialog that holds controls, and closes when focus leaves it", () => {
     render(
       <>
         <Popover trigger="Ports" label="Detected ports">
@@ -190,8 +190,6 @@ describe("Popover", () => {
     act(() => {
       screen.getByRole("button", { name: "Elsewhere" }).focus();
     });
-    // Decided a tick later, once focusin says whether the new focus is in
-    // a layer the panel portals (popover.test.tsx).
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

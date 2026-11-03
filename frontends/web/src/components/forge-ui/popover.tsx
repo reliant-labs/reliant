@@ -277,7 +277,7 @@ export default function Popover({
   // handlers see those and record them; the native listeners below, which
   // run after React's, read the record.
   const pressInTree = useRef(false);
-  const focusInTree = useRef<EventTarget | null>(null);
+  const focusInTree = useRef(false);
 
   // A press outside both the trigger and the panel dismisses, leaving focus
   // where the press put it.
@@ -304,26 +304,35 @@ export default function Popover({
     function onKeyDown(e: KeyboardEvent) {
       panelKeyDown.current?.(e);
     }
-    let pendingFocusOut: ReturnType<typeof setTimeout> | undefined;
+    // Whether focus left the panel's DOM for somewhere that may still be its
+    // React tree; the focusin that follows settles it.
+    let focusLeft = false;
     function onFocusOut(e: FocusEvent) {
       const next = e.relatedTarget as Node | null;
       // null: focus went to the page itself (a click on nothing), which the
       // pointerdown handler above already decided.
       if (!next || panel?.contains(next) || triggerRef.current?.contains(next)) return;
       // Focus reaching a portalled descendant is reported by focusin, which
-      // fires after this focusout; decide once it has.
-      focusInTree.current = null;
-      clearTimeout(pendingFocusOut);
-      pendingFocusOut = setTimeout(() => {
-        if (focusInTree.current !== next) close(false);
-      }, 0);
+      // fires after this focusout: the panel's React capture handler marks
+      // it, and the document listener below, which runs after React's root
+      // and portal listeners, reads the mark.
+      focusInTree.current = false;
+      focusLeft = true;
+    }
+    function onFocusIn() {
+      if (!focusLeft) return;
+      focusLeft = false;
+      const inTree = focusInTree.current;
+      focusInTree.current = false;
+      if (!inTree && !triggerRef.current?.contains(document.activeElement)) close(false);
     }
     panel.addEventListener("keydown", onKeyDown);
     panel.addEventListener("focusout", onFocusOut);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
-      clearTimeout(pendingFocusOut);
       panel.removeEventListener("keydown", onKeyDown);
       panel.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("focusin", onFocusIn);
     };
   }, [open, close]);
 
@@ -391,8 +400,8 @@ export default function Popover({
             onPointerDownCapture={() => {
               pressInTree.current = true;
             }}
-            onFocusCapture={(e) => {
-              focusInTree.current = e.target;
+            onFocusCapture={() => {
+              focusInTree.current = true;
             }}
             className={`fixed z-50 rounded-lg border border-border bg-surface shadow-lg focus:outline-none ${panelClassName ?? ""}`}
             style={{
