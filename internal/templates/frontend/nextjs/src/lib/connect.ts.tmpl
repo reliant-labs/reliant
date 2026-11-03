@@ -1,0 +1,205 @@
+import { createClient, type Transport } from "@connectrpc/connect";
+import { createConnectTransport } from "@connectrpc/connect-web";
+import { buildRuntimeInterceptors } from "@reliantlabs/forge-web-runtime";
+{{if .HasTypedConfig}}
+import { loadConfig } from "@/lib/config_gen";
+{{end}}
+import { apiBase } from "./api-base";
+import { DEV_API_URL } from "./apiurl_gen";
+
+import type { DescService } from "@bufbuild/protobuf";
+{{if .HasTypedConfig}}
+// The API origin comes from the typed config module, which reads it at
+// RUNTIME from the KCL-rendered config.js. Reading NEXT_PUBLIC_API_URL here
+// instead would let the bundler inline the value at BUILD time, freezing
+// this artifact to the environment it was built against — so `forge env
+// promote` could not move the bundle without a rebuild, which is the one
+// property the runtime-config design exists to buy.
+//
+// Falls back to DEV_API_URL when the environment pins no origin —
+// regenerated on every `forge generate` from the proto descriptor + the
+// canonical dev port, so it can't drift from where the backend listens.
+//
+// Under `next dev`, apiBase() answers with this page's own origin instead
+// (`<basePath>/_api`, which next.config.ts proxies to the API), so the dev
+// loop works from any host the dev server is opened on — see
+// src/lib/api-base.ts.
+//
+// A function, not a module-scope const, for the same reason
+// src/lib/auth/session-provider.ts uses one: loadConfig() throws on invalid
+// config, and evaluating that at import time turns a fixable
+// misconfiguration into a blank page whose stack trace points at an import.
+function apiBaseUrl(): string {
+  return apiBase(loadConfig().API_URL || DEV_API_URL);
+}
+{{- else}}
+// The API URL is read from the NEXT_PUBLIC_API_URL environment variable.
+// In development it falls back to DEV_API_URL — regenerated on every
+// `forge generate` from the proto descriptor + the canonical dev port, so
+// it can't drift from where the backend actually listens.
+//
+// Under `next dev`, apiBase() answers with this page's own origin instead
+// (`<basePath>/_api`, which next.config.ts proxies to the API), so the dev
+// loop works from any host the dev server is opened on — see
+// src/lib/api-base.ts.
+function apiBaseUrl(): string {
+  return apiBase(process.env.NEXT_PUBLIC_API_URL ?? DEV_API_URL);
+}
+{{- end}}
+
+// The forge frontend runtime owns the interceptor stack: brand headers, W3C
+// traceparent propagation (so backend spans join the same trace — always on,
+// no collector required), and typed error normalization. It ships as
+// @reliantlabs/forge-web-runtime. Retries are not in the chain: React Query
+// (src/lib/query-client.ts) is the single retry owner, so a mutation is
+// never re-sent.
+//
+// NO TOKEN GETTER, and nothing here sets an Authorization header. Sign-in is
+// native: the browser POSTs credentials to this app's own API, the server
+// runs the whole OIDC flow, and the session comes back as an HttpOnly
+// cookie. This bundle cannot read that cookie — a token no script can reach
+// is a token an XSS cannot steal — so there is no token to attach. The
+// cookie travels on the fetch below instead. See src/lib/auth/native-login.ts.
+const interceptors = buildRuntimeInterceptors({});
+
+// Send the session cookie with every RPC.
+//
+// "include", not the browser's "same-origin" default: whenever the API is on
+// another origin — a deployed API_URL naming its own host, or the dev loop
+// with FORGE_DEV_API_PROXY=off, where the API binds its own port — the
+// default silently DROPS the cookie: the calls go out unauthenticated, the
+// backend answers 401, and nothing in the console explains why. The server
+// pairs this with cors_allow_credentials. Through the dev proxy the requests
+// are same-origin and this costs nothing. native-login.ts makes the
+// identical choice for the same reason.
+const fetchWithSession: typeof globalThis.fetch = (input, init) =>
+  fetch(input, { ...init, credentials: "include" });
+
+function buildTransport(): Transport {
+  // MOCK_API has three modes:
+  //   "true"   — pure mock. All RPCs hit the mock transport. No backend
+  //              contacted. Use for offline UI dev and CI tests.
+  //   "hybrid" — scenarios overlay a real backend. Unmatched RPCs (when
+  //              the active scenario has passthrough:true) forward to the
+  //              real transport. Use for LLM / Chrome MCP debugging.
+  //   anything else (default) — real backend, real auth.
+{{- if .HasMockAPI}}
+  const mode = loadConfig().MOCK_API;
+{{- else}}
+  const mode = process.env.NEXT_PUBLIC_MOCK_API;
+{{- end}}
+  const baseUrl = apiBaseUrl();
+
+  if (mode === "true") {
+    // Dynamic require to avoid bundling mock data in production builds.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createMockTransport } = require("@/lib/mock-transport_gen");
+    return createMockTransport();
+  }
+
+  // Real-backend modes require a concrete base URL. Failing here (loud,
+  // at startup, with the fix in the message) beats the old behavior of
+  // silently pointing at a hardcoded port nobody is listening on.
+  if (!baseUrl) {
+    throw new Error(
+{{- if .HasTypedConfig}}
+      "connect.ts: no API base URL configured. Set api_url on this " +
+        "frontend's config instance in deploy/kcl/<env>/config.k and re-run " +
+        "`forge generate` (which also bakes the dev port into " +
+        "src/lib/apiurl_gen.ts). For UI-only development set mock_api to " +
+        '"true" the same way.',
+{{- else}}
+      "connect.ts: no API base URL configured. Set NEXT_PUBLIC_API_URL " +
+        "(shell env, or the forge.Frontend `config.api_url` KCL knob), or " +
+        "declare a service in forge.yaml and run `forge generate` (which " +
+        "bakes the dev port into src/lib/apiurl_gen.ts). For UI-only " +
+        "development set NEXT_PUBLIC_MOCK_API=true.",
+{{- end}}
+    );
+  }
+
+  if (mode === "hybrid") {
+    const real = createConnectTransport({
+      baseUrl,
+      interceptors,
+      fetch: fetchWithSession,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createMockTransport } = require("@/lib/mock-transport_gen");
+    return createMockTransport(real);
+  }
+
+  return createConnectTransport({
+    baseUrl,
+    interceptors,
+    fetch: fetchWithSession,
+  });
+}
+
+// Active transport. Module-level so the per-call connectClient() helper
+// resolves the current transport (not the one captured at module load) —
+// tests swap this via setTransport() in src/lib/test-utils to drive
+// page-level integration tests against a mock without rebuilding the
+// generated hook modules.
+let _transport: Transport = buildTransport();
+
+export function setTransport(t: Transport): void {
+  _transport = t;
+}
+
+// Re-export the active transport as a getter-backed live binding. Direct
+// access (e.g. `import { transport } from "@/lib/connect"`) always sees
+// the current value, even after a test calls setTransport().
+export const transport = new Proxy({} as Transport, {
+  get(_target, prop, receiver) {
+    return Reflect.get(_transport as object, prop, receiver);
+  },
+});
+{{- if .Workspaces}}
+
+// Wire the workspace-shared hooks package to this frontend's Transport.
+// The hooks package itself is DOM-free and Transport-agnostic; each
+// frontend constructs its own Transport (Next.js fetch here, custom
+// fetch under React Native) and hands it over once at module load. The
+// proxy above keeps setTransport() swaps visible inside the hooks pkg.
+import { setApiTransport } from "{{.HooksPackage}}";
+setApiTransport(transport);
+{{- end}}
+
+/**
+ * connectClient creates a typed Connect client for a given service descriptor.
+ *
+ * Usage:
+{{- if .Workspaces}}
+ *   import { UserService } from "{{.APIPackage}}/services/users/v1/users_pb";
+{{- else}}
+ *   import { UserService } from "../gen/user/v1/user_pb";
+{{- end}}
+ *
+ *   const client = connectClient(UserService);
+ *   const user = await client.getUser({ id: "1" });
+ *
+ * Resolves the active transport on every call so tests can swap it via
+ * setTransport() between cases. *
+ * Every generated hook calls connectClient(<Service>), so this function is
+ * the ONE place that decides which transport each service uses. To send
+ * some services to another backend (a second API, a control plane, an
+ * unauthenticated endpoint), route on the descriptor's fully-qualified name
+ * here rather than wrapping the generated hooks:
+ *
+ *   const billing = createConnectTransport({ baseUrl: BILLING_URL, interceptors });
+ *   const routes: Record<string, Transport> = {
+ *     "billing.v1.InvoiceService": billing,
+ *   };
+ *   export function connectClient<S extends DescService>(service: S) {
+ *     return createClient(service, routes[service.typeName] ?? transport);
+ *   }
+ *
+ * Keep the default branch on `transport` (the live binding) so
+ * setTransport() in tests still reaches every service. An app adopting
+ * forge with a transport layer of its own points this at that layer the
+ * same way: forge only ever calls connectClient().
+ */
+export function connectClient<S extends DescService>(service: S) {
+  return createClient(service, transport);
+}

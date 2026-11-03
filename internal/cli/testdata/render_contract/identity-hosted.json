@@ -1,0 +1,252 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane": {
+      "endpoint": "https://admin.reliantapi.com",
+      "registry_host": "registry.reliantapi.com",
+      "token_env": "FORGE_CONTROL_PLANE_TOKEN",
+      "type": "control_plane"
+    },
+    "control_plane_secrets": [
+      {
+        "cluster": "gke_acme_ops",
+        "connected_cluster": "acme-ops",
+        "keys": [
+          "key.json"
+        ],
+        "kind": "identity_machine_key",
+        "name": "acme-ops-key",
+        "namespace": "acme-ops",
+        "reason": "managed identity 'identity' machine user 'ops'",
+        "required": null,
+        "type": "control_plane_secret"
+      }
+    ],
+    "databases": [],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "identity": {
+      "applications": [
+        {
+          "kind": "native_broker",
+          "login_uri": null,
+          "logout_uris": null,
+          "name": "prod:api",
+          "redirect_uris": null,
+          "workload": "api"
+        }
+      ],
+      "consumers": [
+        {
+          "application": "prod:api",
+          "deliver_only": null,
+          "fields": null,
+          "omit": null,
+          "workload": "api"
+        }
+      ],
+      "deliveries": [
+        {
+          "cluster": "gke_acme_ops",
+          "connected_cluster": "acme-ops",
+          "kind": "identity_machine_key",
+          "name": "acme-ops-key",
+          "namespace": "acme-ops"
+        }
+      ],
+      "domain": null,
+      "login": {
+        "mode": "native"
+      },
+      "machine_users": [
+        {
+          "key_secret": {
+            "cluster": "gke_acme_ops",
+            "connected_cluster": "acme-ops",
+            "name": "acme-ops-key",
+            "namespace": "acme-ops"
+          },
+          "name": "ops",
+          "roles": [
+            "admin"
+          ]
+        }
+      ],
+      "managed_secrets": [
+        "RELIANT_IDENTITY_IDENTITY_AUDIENCE",
+        "RELIANT_IDENTITY_IDENTITY_ISSUER",
+        "RELIANT_IDENTITY_IDENTITY_JWKS",
+        "RELIANT_IDENTITY_IDENTITY_PROD_API_BROKER_TOKEN",
+        "RELIANT_IDENTITY_IDENTITY_PROD_API_CLIENT_ID",
+        "RELIANT_IDENTITY_IDENTITY_PROD_API_LOGIN_URI",
+        "RELIANT_IDENTITY_IDENTITY_PROD_API_REDIRECT_URI",
+        "RELIANT_IDENTITY_IDENTITY_SCOPES"
+      ],
+      "name": "identity",
+      "project_name": null,
+      "public": null,
+      "roles": [
+        {
+          "display_name": "Administrators",
+          "group": null,
+          "key": "admin",
+          "members": [
+            "boss@acme.test"
+          ],
+          "members_from": "declared"
+        },
+        {
+          "display_name": null,
+          "group": null,
+          "key": "member",
+          "members": null,
+          "members_from": "console"
+        }
+      ],
+      "runtime": "hosted",
+      "seed_users": [],
+      "share_with": null,
+      "smtp": {
+        "host": "smtp.acme.test",
+        "password_secret": "SMTP_PASSWORD",
+        "port": 587,
+        "sender": "no-reply@acme.test",
+        "user": "postmaster"
+      }
+    },
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "type": "hosted"
+    },
+    "uptime_checks": [
+      {
+        "interval_seconds": 60,
+        "method": "GET",
+        "name": "api",
+        "source": "default",
+        "target": "api",
+        "timeout_seconds": 10
+      }
+    ],
+    "workloads": [
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_AUDIENCE"
+              },
+              "name": "JWT_AUDIENCE"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_ISSUER"
+              },
+              "name": "JWT_ISSUER"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_JWKS",
+                "optional": true
+              },
+              "name": "JWT_JWKS_SNAPSHOT"
+            },
+            {
+              "name": "JWT_ROLES_CLAIM",
+              "value": "auto"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_SCOPES"
+              },
+              "name": "OIDC_SCOPES"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_PROD_API_CLIENT_ID"
+              },
+              "name": "OIDC_CLIENT_ID"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_PROD_API_REDIRECT_URI"
+              },
+              "name": "OIDC_REDIRECT_URI"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_PROD_API_BROKER_TOKEN"
+              },
+              "name": "IDP_BROKER_TOKEN"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_ISSUER"
+              },
+              "name": "IDP_BASE"
+            },
+            {
+              "managedSecret": {
+                "name": "RELIANT_IDENTITY_IDENTITY_PROD_API_LOGIN_URI"
+              },
+              "name": "IDP_LOGIN_URI"
+            }
+          ],
+          "image": "ghcr.io/acme/api",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

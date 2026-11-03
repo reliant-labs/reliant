@@ -1,0 +1,221 @@
+{{- if .ShapeMismatch}}
+// {{.MethodName}} implements the {{.MethodName}} RPC.
+//
+// forge:custom-read-shape: {{.MismatchReason}}
+//
+// This RPC diverges from AIP-158 CRUD, so the body is yours to refine.
+// forge scaffolded a WIRED (if naive) {{.EntityName}} query as a starting
+// point. Compose pkg/crud + pkg/orm helpers, or drop to raw SQL via
+// s.deps.DB. `forge project audit` lists this under crud_stubs until you finish
+// wiring the response (remove the TODO below). See the forge `db` skill.
+//
+// UNSCOPED: the scaffolded query reads the caller's claims nowhere. The
+// interceptor has already enforced this RPC's auth_required declaration;
+// what it cannot know is which rows this caller may see — resolve the
+// principal with {{.AuthSeam}}(ctx) before the query and scope the filters
+// to those claims.
+func (s *Service) {{.MethodName}}(
+	ctx context.Context,
+	req *connect.Request[pb.{{.InputType}}],
+) (*connect.Response[pb.{{.OutputType}}], error) {
+	_ = req
+	// Best-effort filters mapped from the request's scalar fields onto
+	// declared columns. Refine or replace these for your real query.
+	var opts []orm.QueryOption
+{{- range .CustomFilters}}
+{{- if .IsOptional}}
+	if req.Msg.{{.GoName}} != nil {
+{{- if eq .FilterType "search"}}
+		opts = append(opts, orm.WhereILikeAny([]string{ {{- range $i, $c := .SearchColumns}}{{if $i}}, {{end}}"{{$c}}"{{- end}} }, "%"+*req.Msg.{{.GoName}}+"%"))
+{{- else}}
+		opts = append(opts, orm.WhereEq("{{.ColumnName}}", *req.Msg.{{.GoName}}))
+{{- end}}
+	}
+{{- else}}
+{{- if eq .FilterType "search"}}
+	if req.Msg.{{.GoName}} != "" {
+		opts = append(opts, orm.WhereILikeAny([]string{ {{- range $i, $c := .SearchColumns}}{{if $i}}, {{end}}"{{$c}}"{{- end}} }, "%"+req.Msg.{{.GoName}}+"%"))
+	}
+{{- else if eq .FieldType "string"}}
+	if req.Msg.{{.GoName}} != "" {
+		opts = append(opts, orm.WhereEq("{{.ColumnName}}", req.Msg.{{.GoName}}))
+	}
+{{- else if eq .FieldType "bool"}}
+	opts = append(opts, orm.WhereEq("{{.ColumnName}}", req.Msg.{{.GoName}}))
+{{- else}}
+	if req.Msg.{{.GoName}} != 0 {
+		opts = append(opts, orm.WhereEq("{{.ColumnName}}", req.Msg.{{.GoName}}))
+	}
+{{- end}}
+{{- end}}
+{{- end}}
+
+	rows, err := db.List{{.EntityName}}(ctx, s.deps.DB, opts...)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+
+	items := make([]*pb.{{.EntityPbType}}, 0, len(rows))
+	for _, row := range rows {
+		m, err := {{.EntityLower}}ToProto(row)
+		if err != nil {
+			return nil, svcerr.Wrap(err)
+		}
+		items = append(items, m)
+	}
+	_ = items // TODO: refine this query and place items onto pb.{{.OutputType}}.
+
+	return connect.NewResponse(&pb.{{.OutputType}}{}), nil
+}
+{{- else}}
+{{- /*
+  What a delegation does, and what each Auth tag means, is said ONCE in the
+  file header (crudShimHeader); ten lines of it repeated above every method
+  buried the one fact that differs between them. The Auth line still names
+  the seam on EVERY method — an author editing DeleteOrder reads DeleteOrder's
+  comment, not the header (crud_auth_honesty_test.go) — and stays readable on
+  its own, because a method appended into an older file sits under a header
+  that predates this wording.
+*/}}
+// {{.MethodName}} delegates CRUD {{.Operation}} to pkg/crud.
+{{- if .Scoped}}
+// Auth: SCOPED to {{.OwnerColumn}} (forge:owner) via {{.AuthSeam}}(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+{{- else if .AuthRequired}}
+// Auth: AUTHENTICATED, UNSCOPED — nothing reads the caller; scope with {{.AuthSeam}}(ctx) (see file header).
+{{- else}}
+// Auth: PUBLIC (auth_required: false) — no {{.AuthSeam}}(ctx) here; if that is wrong, fix the annotation.
+{{- end}}
+{{- if eq .Operation "update"}}
+{{- if .UpdateMaskField}}
+// AIP-134: req.Msg.{{.UpdateMaskField}} is honored (empty or "*" = full replace); op.ReadOnly columns are refused in it and kept on a full replace.
+{{- else}}
+// No update_mask field, so every Update is a whole-row write (op.ReadOnly columns are still kept); add one for AIP-134 partial updates.
+{{- end}}
+{{- end}}
+{{- if .FillHandlerColumns}}
+// forge:fill=handler: {{range $i, $c := .FillHandlerColumns}}{{if $i}}, {{end}}{{$c}}{{end}} — nothing else assigns them; set each at its FORGE_SCAFFOLD marker below.
+{{- end}}
+{{- if or .FillHandlerColumns .Scoped}}
+func (s *Service) {{.MethodName}}(
+	ctx context.Context,
+	req *connect.Request[pb.{{.InputType}}],
+) (*connect.Response[pb.{{.OutputType}}], error) {
+{{- if .Scoped}}
+	claims, err := {{.AuthSeam}}(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// {{.EntityName}}.{{.OwnerColumn}} that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+{{- end}}
+	op := s.crud{{.MethodName}}Op()
+{{- if eq .Operation "list"}}
+{{- if .Scoped}}
+	// The predicate goes in the QUERY, never on the returned page: Count runs
+	// over these same opts, so a post-filtered page would report a total
+	// including rows this caller may not see.
+	filters := op.Filters // nil when the RPC declares no filter fields
+	op.Filters = func(ctx context.Context, r *pb.{{.InputType}}) ([]orm.QueryOption, error) {
+		var opts []orm.QueryOption
+		if filters != nil {
+			var err error
+			if opts, err = filters(ctx, r); err != nil {
+				return nil, err
+			}
+		}
+		return append(opts, orm.WhereEq("{{.OwnerColumn}}", owner)), nil
+	}
+{{- end}}
+{{- else if eq .Operation "get"}}
+{{- if .Scoped}}
+	// Passed as a query option rather than compared after the fetch: a row
+	// that is not this caller's is never read, and reports NotFound exactly
+	// as an unknown id does. A distinguishable "exists but is not yours"
+	// tells an attacker which ids are real.
+	fetch := op.Fetch
+	op.Fetch = func(ctx context.Context, id string, opts ...orm.QueryOption) (*db.{{.EntityName}}, error) {
+		return fetch(ctx, id, append(opts, orm.WhereEq("{{.OwnerColumn}}", owner))...)
+	}
+{{- end}}
+{{- else if eq .Operation "delete"}}
+{{- if .Scoped}}
+	// Scoped like Get: a row that is not this caller's is not deleted, and
+	// the absent-row check reports NotFound.
+	del := op.Persist
+	op.Persist = func(ctx context.Context, id string, opts ...orm.QueryOption) error {
+		return del(ctx, id, append(opts, orm.WhereEq("{{.OwnerColumn}}", owner))...)
+	}
+{{- end}}
+{{- else if eq .Operation "update"}}
+{{- if .Scoped}}
+	// Two halves, and both are needed. The predicate is checked against the
+	// STORED row, so a caller cannot take ownership by rewriting
+	// {{.OwnerColumn}} in the request they send; the stamp then keeps the
+	// written row on the same owner, since a maskless update writes every
+	// column of the submitted entity.
+	build := op.Entity
+	op.Entity = func(ctx context.Context, r *pb.{{.InputType}}) (*db.{{.EntityName}}, error) {
+		e, err := build(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		e.{{.OwnerField}} = owner
+		return e, nil
+	}
+	persist := op.Persist
+	op.Persist = func(ctx context.Context, e *db.{{.EntityName}}, opts ...orm.QueryOption) error {
+		return persist(ctx, e, append(opts, orm.WhereEq("{{.OwnerColumn}}", owner))...)
+	}
+{{- if .UpdateMaskField}}
+	persistMasked := op.PersistMasked
+	op.PersistMasked = func(ctx context.Context, e *db.{{.EntityName}}, fields []string, opts ...orm.QueryOption) error {
+		return persistMasked(ctx, e, fields, append(opts, orm.WhereEq("{{.OwnerColumn}}", owner))...)
+	}
+{{- end}}
+{{- end}}
+{{- else if eq .Operation "create"}}
+	build := op.Entity
+	op.Entity = func(ctx context.Context, r *pb.{{.InputType}}) (*db.{{.EntityName}}, error) {
+		e, err := build(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+{{- if .Scoped}}
+		// Stamped from the caller, never from the request: a create that
+		// took {{.OwnerColumn}} off the wire would let anyone file a row
+		// under anyone else's name.
+		e.{{.OwnerField}} = owner
+{{- end}}
+{{- range .FillHandlerColumns}}
+		// FORGE_SCAFFOLD: {{.}} is forge:read-only with no column DEFAULT,
+		// so nothing assigns it and every Create fails the NOT NULL / FK check.
+		// Set it here — typically from {{$.AuthSeam}}(ctx).
+{{- end}}
+		return e, nil
+	}
+{{- end}}
+{{- if eq .Operation "create"}}
+	resp, err := crud.HandleCreate(op)(ctx, req)
+	metrics.RecordCreated(ctx, "{{.EntityName}}", err)
+	return resp, err
+{{- else}}
+	return crud.Handle{{.Operation | title}}(op)(ctx, req)
+{{- end}}
+}
+{{- else}}
+func (s *Service) {{.MethodName}}(
+	ctx context.Context,
+	req *connect.Request[pb.{{.InputType}}],
+) (*connect.Response[pb.{{.OutputType}}], error) {
+{{- if eq .Operation "create"}}
+	resp, err := crud.HandleCreate(s.crud{{.MethodName}}Op())(ctx, req)
+	metrics.RecordCreated(ctx, "{{.EntityName}}", err)
+	return resp, err
+{{- else}}
+	return crud.Handle{{.Operation | title}}(s.crud{{.MethodName}}Op())(ctx, req)
+{{- end}}
+}
+{{- end}}
+{{- end}}

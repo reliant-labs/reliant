@@ -1,0 +1,168 @@
+"use client";
+
+import { installDevLogging, RuntimeShell } from "@reliantlabs/forge-web-runtime";
+import { QueryClientProvider } from "@tanstack/react-query";
+{{- if not .Public}}
+import { usePathname, useRouter } from "next/navigation";
+{{- end}}
+import { useCallback, useEffect, useMemo } from "react";
+
+import ToastNotification from "@/components/ui/toast_notification";
+import { AuthContextProvider } from "@/lib/auth/context";
+{{- if not .Public}}
+import { RouteGuard } from "@/lib/auth/route-guard";
+{{- end}}
+import { useAuth } from "@/lib/auth/use-auth";
+import { EventBusProvider } from "@/lib/event-context";
+import { initTelemetry } from "@/lib/otel_gen";
+import { queryClient } from "@/lib/query-client";
+import { useEventBus } from "@/lib/use-event";
+
+import type { ToastEvent } from "@/lib/events";
+import type { RuntimeToastHostProps, RuntimeToastSink } from "@reliantlabs/forge-web-runtime";
+
+/**
+ * Top-level client-only provider wrapper.
+ *
+ * - Initializes browser telemetry (initTelemetry: the HyperDX SDK — errors,
+ *   console, fetch/XHR spans, web vitals, to the same-origin /_otel route)
+ *   exactly once per page load. `"use client"` + `useEffect` guarantees this
+ *   runs only after hydration; it is idempotent and a no-op while telemetry
+ *   is off, so a StrictMode double-invoke is safe. Distributed tracing (the
+ *   traceparent on every RPC) is independent — it lives in the runtime
+ *   interceptor stack and is always on.
+ * - Provides the shared `QueryClient` so any descendant can run Connect
+ *   queries/mutations.
+ * - Wraps with `AuthContextProvider` (dependency-injectable auth; the stub
+ *   provider by default) and `EventBusProvider` (typed event bus, dev-mode
+ *   logging in development).
+ * - Mounts the forge frontend runtime shell (`RuntimeShell`): the session
+ *   context (the signed-in user from the JWT), a top-level error boundary
+ *   with a designed fallback, and the toast host that finally renders the
+ *   `toast:show` events the mutation-error chokepoint emits.
+ */
+export function Providers({ children }: { children: React.ReactNode }) {
+  const isDev = process.env.NODE_ENV === "development";
+
+  useEffect(() => {
+    initTelemetry();
+    // Mirror console output and uncaught errors to the dev server, which
+    // writes them to .forge/logs/<env>/frontend_<name>.log — so a browser-side
+    // failure is visible on disk instead of only in devtools. Delete this
+    // block and src/app/%5F_forge/log/route.ts (it serves /__forge/log) to
+    // opt out.
+    //
+    // Guarded on the literal, not on `isDev`: the bundler folds
+    // process.env.NODE_ENV at build time, so a statement-level `if` lets the
+    // whole call be dropped from a production bundle. Passing the flag as an
+    // argument instead only folds the argument and leaves the call live.
+    if (process.env.NODE_ENV !== "production") {
+      installDevLogging({ dev: true });
+    }
+  }, [isDev]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <EventBusProvider devMode={isDev}>
+        <AuthContextProvider>
+{{- if .Public}}
+          {/*
+            PUBLIC FRONTEND (auth_mode: none): no route guard. Every page
+            renders for every visitor. To gate it later, set
+            `auth_mode: native` in forge.yaml and wrap this in the
+            RouteGuard from @/lib/auth/route-guard — see
+            `forge skill load auth/frontend`.
+          */}
+          <RuntimeLayer>{children}</RuntimeLayer>
+{{- else}}
+          <AppRouteGuard>
+            <RuntimeLayer>{children}</RuntimeLayer>
+          </AppRouteGuard>
+{{- end}}
+        </AuthContextProvider>
+      </EventBusProvider>
+    </QueryClientProvider>
+  );
+}
+{{if not .Public}}
+/**
+ * The App Router adapter for the shared route guard.
+ *
+ * The guard itself is framework-agnostic and lives in
+ * `src/lib/auth/route-guard.tsx`, shared byte-for-byte with the Vite scaffold;
+ * this supplies the two things Next.js does differently — how to read the
+ * current path, and how to navigate.
+ *
+ * `replace`, not `push`: a page you were bounced off is not a place Back
+ * should return you to.
+ *
+ * Which routes are public, and whether to gate the whole app at all, are
+ * decisions in route-guard.tsx — both files are yours.
+ */
+function AppRouteGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const navigate = useCallback((path: string) => router.replace(path), [router]);
+
+  return (
+    <RouteGuard pathname={pathname ?? "/"} navigate={navigate}>
+      {children}
+    </RouteGuard>
+  );
+}
+
+{{else}}
+{{end -}}
+/**
+ * Feeds the forge runtime the three app-owned things it deliberately does not
+ * import: the auth state, the event subscription, and the toast markup. This
+ * is the seam — the runtime is regenerated every `forge generate`, this file
+ * is yours, so restyling the toast or swapping the auth provider is a local
+ * edit that can never be stomped.
+ */
+function RuntimeLayer({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  const { identity } = auth;
+
+  // The runtime wants a user object and a token getter. Identity comes from
+  // the server; the token is deliberately unreachable (HttpOnly) and nothing
+  // needs it — the session cookie is attached to requests automatically.
+  const runtimeAuth = useMemo(
+    () => ({
+      ...auth,
+      user: identity.authenticated
+        ? { id: identity.subject ?? "", email: identity.email, name: identity.name }
+        : null,
+      getToken: async () => null,
+    }),
+    [auth, identity],
+  );
+  const bus = useEventBus();
+
+  const subscribe = useCallback(
+    (sink: RuntimeToastSink) => {
+      const offShow = bus.on("toast:show", (payload: ToastEvent) => sink.onShow(payload));
+      const offDismiss = bus.on("toast:dismiss", (payload: { id?: string }) =>
+        sink.onDismiss(payload?.id),
+      );
+      return () => {
+        offShow();
+        offDismiss();
+      };
+    },
+    [bus],
+  );
+
+  const render = useCallback<RuntimeToastHostProps["render"]>(
+    ({ toasts, onDismiss }) => <ToastNotification toasts={toasts} onDismiss={onDismiss} />,
+    [],
+  );
+
+  const toast = useMemo<RuntimeToastHostProps>(() => ({ subscribe, render }), [subscribe, render]);
+
+  return (
+    <RuntimeShell auth={runtimeAuth} toast={toast}>
+      {children}
+    </RuntimeShell>
+  );
+}
