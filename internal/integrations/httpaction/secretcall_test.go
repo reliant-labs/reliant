@@ -175,3 +175,20 @@ func TestSecretCallMasksTheResponseBeforeItIsCut(t *testing.T) {
 		})
 	}
 }
+
+// A secret that is also a valid JSON token (a number) does not break the
+// document: it is decoded first, then masked, so the request still succeeds with
+// structured output and the value masked.
+func TestSecretCallMasksANumericSecretWithoutBreakingTheJSON(t *testing.T) {
+	ctx := WithSecretCall(context.Background(), stepsecrets.NewMasker("123456"))
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":123456,"ok":true}`))
+	}))
+	m, a := builtinHTTPRequest(t)
+	res, err := tlsHTTPRunner(t, srv).Run(ctx, m, a, map[string]any{"url": srv.URL + "/x"})
+	require.NoError(t, err)
+	require.False(t, res.IsError, res.Content)
+	assert.NotContains(t, res.Content+fmt.Sprint(res.Data), "123456")
+	assert.Contains(t, res.Content, `"ok":true`, "the document is still structured output")
+}

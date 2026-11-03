@@ -513,29 +513,55 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 	// bytes, a success maxContentChars): a secret the server echoes across a
 	// cut would leave a fragment no registered form matches, and the action
 	// activity's mask afterwards could not catch it (reliant #2037 review).
-	// The decoded JSON is masked too: a valid JSON spelling of the value the
-	// wire text does not show (\u escapes, an escaped slash) is restored by
-	// json.Unmarshal, and everything after reads p.parsed.
+	// A JSON body is masked as a decoded document: json.Unmarshal restores
+	// spellings the wire text does not show (\u escapes, an escaped slash).
 	scrub := SecretCall(ctx)
-	if scrub != nil && len(raw) > 0 {
-		raw = []byte(scrub.Mask(string(raw)))
-	}
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
+		// Decoded BEFORE masking: masking the wire text could turn a valid
+		// document invalid (a numeric value replaced by the mask). The decoded
+		// document is masked and the raw text re-derived from it.
 		if p.jsonErr = json.Unmarshal(raw, &parsed); p.jsonErr == nil {
 			if scrub != nil {
-				// The raw text is re-derived from the masked document, so no
-				// snippet of it can carry an alternate spelling either.
-				parsed = scrub.MaskAny(parsed)
+				parsed = maskNumbers(scrub, scrub.MaskAny(parsed))
 				if b, err := json.Marshal(parsed); err == nil {
 					p.raw = b
+				} else {
+					p.raw = []byte(scrub.Mask(string(raw)))
 				}
 			}
 			p.parsed = parsed
+			return p, nil
 		}
 	}
+	if scrub != nil && len(raw) > 0 {
+		p.raw = []byte(scrub.Mask(string(raw)))
+	}
 	return p, nil
+}
+
+// maskNumbers replaces a decoded JSON number whose text is a secret value with
+// the mask: MaskAny masks strings, and a numeric secret ("123456") echoed as a
+// number would otherwise survive into the step's structured output.
+func maskNumbers(s SecretScrubber, v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, e := range x {
+			x[k] = maskNumbers(s, e)
+		}
+		return x
+	case []any:
+		for i, e := range x {
+			x[i] = maskNumbers(s, e)
+		}
+		return x
+	case float64:
+		if t := strconv.FormatFloat(x, 'f', -1, 64); s.Mask(t) != t {
+			return s.Mask(t)
+		}
+	}
+	return v
 }
 
 func validateParams(a *reliantv1.ActionSpec, params *map[string]any) error {
