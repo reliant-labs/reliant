@@ -138,7 +138,7 @@ func TestWithSecretCallNilMarksNothing(t *testing.T) {
 // once left a prefix no registered form matched, and it survived the action
 // activity's mask (reliant #2037 review). Error, non-JSON and JSON responses.
 func TestSecretCallMasksTheResponseBeforeItIsCut(t *testing.T) {
-	const secret = "sk-live-0123456789abcdefghijklmnopqrstuvwxyz"
+	const secret = "sk-live/0123456789abcdefghijklmnopqrstuvwxyz"
 	masker := stepsecrets.NewMasker(secret)
 	ctx := WithSecretCall(context.Background(), masker)
 	pad := strings.Repeat("x", 300-10) // the value starts 10 bytes before the 300-byte cut
@@ -150,6 +150,10 @@ func TestSecretCallMasksTheResponseBeforeItIsCut(t *testing.T) {
 		"error response": {http.StatusBadRequest, "text/plain", pad + secret + pad},
 		"not JSON":       {http.StatusOK, "text/html", pad + secret + pad},
 		"JSON":           {http.StatusOK, "application/json", `{"echo":"` + pad + secret + `"}`},
+		// Valid JSON spellings the wire text does not match: json.Unmarshal restores them.
+		"JSON unicode escapes": {http.StatusOK, "application/json", `{"echo":"` + pad + `\u0073\u006b-live/0123456789abcdefghijklmnopqrstuvwxyz"}`},
+		"JSON escaped slash":   {http.StatusOK, "application/json", `{"echo":"` + pad + `sk-live\/0123456789abcdefghijklmnopqrstuvwxyz"}`},
+		"JSON error escaped":   {http.StatusBadRequest, "application/json", `{"error":"` + pad + `sk-live\/0123456789abcdefghijklmnopqrstuvwxyz"}`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -163,13 +167,10 @@ func TestSecretCallMasksTheResponseBeforeItIsCut(t *testing.T) {
 			if err != nil {
 				text = err.Error()
 			} else {
-				text = res.Content
+				text = res.Content + fmt.Sprint(res.Data)
 			}
-			for _, frag := range []string{secret[:8], secret[8:16], secret[len(secret)-8:]} {
+			for _, frag := range []string{"sk-live", "0123456789", "opqrstuvwxyz"} {
 				assert.NotContains(t, text, frag, "a fragment of the echoed secret survived")
-			}
-			if res != nil && res.Data != nil {
-				assert.NotContains(t, fmt.Sprint(res.Data), secret[:8])
 			}
 		})
 	}

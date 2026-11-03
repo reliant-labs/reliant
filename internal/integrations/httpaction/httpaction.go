@@ -513,13 +513,25 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 	// bytes, a success maxContentChars): a secret the server echoes across a
 	// cut would leave a fragment no registered form matches, and the action
 	// activity's mask afterwards could not catch it (reliant #2037 review).
-	if s := SecretCall(ctx); s != nil && len(raw) > 0 {
-		raw = []byte(s.Mask(string(raw)))
+	// The decoded JSON is masked too: a valid JSON spelling of the value the
+	// wire text does not show (\u escapes, an escaped slash) is restored by
+	// json.Unmarshal, and everything after reads p.parsed.
+	scrub := SecretCall(ctx)
+	if scrub != nil && len(raw) > 0 {
+		raw = []byte(scrub.Mask(string(raw)))
 	}
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
 		if p.jsonErr = json.Unmarshal(raw, &parsed); p.jsonErr == nil {
+			if scrub != nil {
+				// The raw text is re-derived from the masked document, so no
+				// snippet of it can carry an alternate spelling either.
+				parsed = scrub.MaskAny(parsed)
+				if b, err := json.Marshal(parsed); err == nil {
+					p.raw = b
+				}
+			}
 			p.parsed = parsed
 		}
 	}
