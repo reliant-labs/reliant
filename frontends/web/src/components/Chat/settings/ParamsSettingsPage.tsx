@@ -19,6 +19,8 @@ interface ParamsSettingsPageProps {
   onChange: (values: Record<string, unknown>) => void;
   onBack: () => void;
   onClose: () => void;
+  /** Embedded in a host sheet that has its own close: no close button here. */
+  hideClose?: boolean;
   excludeParams?: string[];
 }
 
@@ -28,6 +30,7 @@ export function ParamsSettingsPage({
   onChange,
   onBack,
   onClose,
+  hideClose = false,
   excludeParams = DEFAULT_EXCLUDE,
 }: ParamsSettingsPageProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set([""]));
@@ -109,9 +112,11 @@ export function ParamsSettingsPage({
             </div>
             <h3 className="text-sm font-semibold">Settings</h3>
           </div>
-          <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-            <X className="h-3.5 w-3.5" />
-          </button>
+          {!hideClose && (
+            <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
           No additional settings available
@@ -138,9 +143,11 @@ export function ParamsSettingsPage({
             </p>
           </div>
         </div>
-        <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {!hideClose && (
+          <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Scrollable content */}

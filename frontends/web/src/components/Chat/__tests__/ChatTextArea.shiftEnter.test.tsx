@@ -1,9 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { ChatTextArea } from "../ChatTextArea";
-import type { CodeContext } from "../useCodeContexts";
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
@@ -20,14 +19,12 @@ function Harness({
   initial = "",
   onSend = vi.fn(),
   isStreaming = false,
-  contexts,
-  onRemoveContext,
+  onQueue,
 }: {
   initial?: string;
   onSend?: () => void;
   isStreaming?: boolean;
-  contexts?: CodeContext[];
-  onRemoveContext?: (id: string) => void;
+  onQueue?: () => void;
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -36,8 +33,7 @@ function Harness({
       onChange={setValue}
       onSend={onSend}
       isStreaming={isStreaming}
-      contexts={contexts}
-      onRemoveContext={onRemoveContext}
+      onQueue={onQueue}
     />
   );
 }
@@ -110,36 +106,91 @@ describe("newlines", () => {
   });
 });
 
-describe("code context chips", () => {
-  const context: CodeContext = {
-    id: "/src/app.ts:1-10",
-    filePath: "/src/app.ts",
-    fileName: "app.ts",
-    startLine: 1,
-    endLine: 10,
-    language: "ts",
-  };
+/** The primary pointer, as `(pointer: coarse)` reports it. */
+function primaryPointer(kind: "coarse" | "fine") {
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) =>
+      ({
+        matches: kind === "coarse" && query === "(pointer: coarse)",
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList,
+  );
+}
 
-  it("renders attached references above the text", () => {
-    render(<Harness contexts={[context]} />);
+describe("which key sends (design doc D2)", () => {
+  afterEach(() => vi.unstubAllGlobals());
 
-    expect(screen.getByTestId("chat-input-contexts")).toBeInTheDocument();
-    expect(screen.getByText(/app\.ts \(1-10\)/)).toBeInTheDocument();
+  it("fine pointer: Enter sends, Cmd+Enter does not", () => {
+    primaryPointer("fine");
+    const onSend = vi.fn();
+    render(<Harness initial="ship it" onSend={onSend} />);
+
+    fireEvent.keyDown(editor(), { key: "Enter", metaKey: true });
+    expect(onSend).not.toHaveBeenCalled();
+    fireEvent.keyDown(editor(), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
   });
 
-  it("shows no chip row when nothing is attached", () => {
-    render(<Harness />);
-
-    expect(screen.queryByTestId("chat-input-contexts")).not.toBeInTheDocument();
-  });
-
-  it("reports removal by id", async () => {
-    const onRemoveContext = vi.fn();
+  it("coarse pointer: Return inserts a newline instead of sending", async () => {
+    primaryPointer("coarse");
+    const onSend = vi.fn();
     const user = userEvent.setup();
-    render(<Harness contexts={[context]} onRemoveContext={onRemoveContext} />);
+    render(<Harness initial="half a thought" onSend={onSend} />);
 
-    await user.click(screen.getByTitle("Remove from chat"));
+    const el = editor();
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    await user.keyboard("{Enter}");
 
-    expect(onRemoveContext).toHaveBeenCalledWith("/src/app.ts:1-10");
+    expect(el.value).toBe("half a thought\n");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it.each([{ metaKey: true }, { ctrlKey: true }])("coarse pointer: %o+Enter sends", (modifier) => {
+    primaryPointer("coarse");
+    const onSend = vi.fn();
+    render(<Harness initial="ship it" onSend={onSend} />);
+
+    fireEvent.keyDown(editor(), { key: "Enter", ...modifier });
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("coarse pointer: Cmd+Enter queues while the agent runs", () => {
+    primaryPointer("coarse");
+    const onSend = vi.fn();
+    const onQueue = vi.fn();
+    render(<Harness initial="also do this" onSend={onSend} onQueue={onQueue} isStreaming />);
+
+    fireEvent.keyDown(editor(), { key: "Enter" });
+    expect(onQueue).not.toHaveBeenCalled();
+    fireEvent.keyDown(editor(), { key: "Enter", metaKey: true });
+    expect(onQueue).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("coarse pointer: the newline shortcut (dispatched Cmd+Enter) sends instead", () => {
+    primaryPointer("coarse");
+    const onSend = vi.fn();
+    render(<Harness initial="ship it" onSend={onSend} />);
+
+    editor().focus();
+    fireEvent(window, new CustomEvent("composer-insert-newline"));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(editor().value).toBe("ship it");
+  });
+
+  it("fine pointer: the newline shortcut inserts a newline", () => {
+    primaryPointer("fine");
+    const onSend = vi.fn();
+    render(<Harness initial="ship it" onSend={onSend} />);
+
+    const el = editor();
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    fireEvent(window, new CustomEvent("composer-insert-newline"));
+    expect(onSend).not.toHaveBeenCalled();
+    expect(el.value).toBe("ship it\n");
   });
 });

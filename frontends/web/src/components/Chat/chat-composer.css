@@ -9,3 +9,90 @@
 .chat-composer::placeholder {
   color: var(--chat-input-placeholder);
 }
+
+/*
+ * Composer layout (dev-docs/design/mobile-chat-redesign.md §4.2, §5.3, §5.5).
+ *
+ * Keyed on the composer's OWN width, not the viewport: the same ChatInput
+ * renders in a phone, a 400px desktop split pane, a tablet column and the
+ * new-chat screen, and only its container knows how much room it has.
+ *
+ * One grid, two arrangements of the same elements — so switching never
+ * remounts the textarea, the uploads or the open popovers:
+ *
+ *   compact (< 560px)           wide (≥ 560px)
+ *   chips chips  chips          chips chips chips
+ *   plus  text   action         text  text  text
+ *                               plus  tools action
+ *
+ * The chips row has no content when there are no chips, so its track
+ * collapses to nothing.
+ */
+.composer-root {
+  container: composer / inline-size;
+}
+
+.composer-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "chips chips chips"
+    "plus text action";
+  align-items: end;
+  column-gap: 4px;
+}
+
+.composer-chips {
+  grid-area: chips;
+}
+
+.composer-plus {
+  grid-area: plus;
+}
+
+.composer-text {
+  grid-area: text;
+  min-width: 0;
+  padding-inline: 4px;
+}
+
+.composer-action {
+  grid-area: action;
+}
+
+/* The priority+ row: hidden in compact, where everything lives in ⊕. */
+.composer-tools {
+  grid-area: tools;
+  display: none;
+}
+
+@container composer (min-width: 560px) {
+  .composer-grid {
+    grid-template-areas:
+      "chips chips chips"
+      "text text text"
+      "plus tools action";
+    align-items: center;
+  }
+
+  .composer-text {
+    padding: 4px 8px 6px;
+  }
+
+  .composer-tools {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+}
+
+/* A control that did not fit: still mounted (its state and any open popover
+   survive, and it can be measured when the row widens), but out of the row's
+   flow and invisible. Its ⊕ sheet row is how it is reached meanwhile. */
+.composer-tools > [data-folded="true"] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}

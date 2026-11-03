@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   ChevronRight,
+  ChevronLeft,
   Box,
   LayoutGrid,
   Settings2,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import { ComposerSheet } from "../ComposerSheet";
 import { ModelSettingsPage } from "./ModelSettingsPage";
 import { PresetSettingsPage } from "./PresetSettingsPage";
 import { ParamsSettingsPage } from "./ParamsSettingsPage";
@@ -24,13 +24,20 @@ import type { Preset } from "../../../hooks/preset-queries";
 // Types
 // ---------------------------------------------------------------------------
 
-type PageId = "main" | "model" | "preset" | "params";
+export type PageId = "main" | "model" | "preset" | "params";
 
 interface ChatSettingsPopoverProps {
   isOpen: boolean;
   onClose: () => void;
   initialPage?: PageId;
-  mobile?: boolean;
+  /**
+   * Render as a page inside a host sheet (the composer's ⊕ sheet) instead of
+   * as an anchored popover: no dialog shell of its own, no outside-click
+   * dismissal, and no close buttons — the host sheet has the one close.
+   * Back from the page it opened on returns to the host via `onExit`.
+   */
+  embedded?: boolean;
+  onExit?: () => void;
   disabled?: boolean;
   // Workflow params (dynamic)
   inputs: Record<string, InputDef> | null;
@@ -66,7 +73,7 @@ const providerColors: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 /** Find the model param key (first key ending with ".model" or typed as model). */
-function findModelParamKey(
+export function findModelParamKey(
   inputs: Record<string, InputDef> | null,
 ): string | null {
   if (!inputs) return null;
@@ -142,7 +149,8 @@ export function ChatSettingsPopover({
   isOpen,
   onClose,
   initialPage = "main",
-  mobile = false,
+  embedded = false,
+  onExit,
   disabled = false,
   inputs,
   values,
@@ -173,7 +181,7 @@ export function ChatSettingsPopover({
 
   // Close on click outside (but not when clicking the trigger button itself)
   useEffect(() => {
-    if (!isOpen || mobile) return;
+    if (!isOpen || embedded) return;
     const handleClick = (e: MouseEvent) => {
       // The popover is rendered inside a relative wrapper alongside its trigger button.
       // Check the wrapper (parentElement) so clicks on the trigger are ignored here —
@@ -190,7 +198,7 @@ export function ChatSettingsPopover({
       cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [isOpen, onClose, mobile]);
+  }, [isOpen, onClose, embedded]);
 
   // Find special param keys
   const modelKey = findModelParamKey(inputs);
@@ -227,12 +235,20 @@ export function ChatSettingsPopover({
     [modeKey, values, onChange],
   );
 
+  // Back from the page this opened on leaves for the host when embedded (the
+  // ⊕ sheet's Model row opens straight onto the model page, and its back
+  // arrow means "back to Chat options", not "on to Chat settings").
+  const back = useCallback(() => {
+    if (embedded && onExit && currentPage === initialPage) onExit();
+    else setCurrentPage("main");
+  }, [embedded, onExit, currentPage, initialPage]);
+
   const handlePresetSelect = useCallback(
     (preset: Preset | null) => {
       onPresetChange?.(preset);
-      setCurrentPage("main");
+      back();
     },
-    [onPresetChange],
+    [onPresetChange, back],
   );
 
   if (!isOpen) return null;
@@ -245,16 +261,27 @@ export function ChatSettingsPopover({
           <div>
             {/* Header */}
             <div className="flex items-center px-3 py-2.5 border-b border-border/50 gap-2">
+              {embedded && onExit && (
+                <button
+                  onClick={onExit}
+                  aria-label="Back"
+                  className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+              )}
               <h3 className="text-sm font-semibold text-foreground flex-1">
                 Chat Settings
               </h3>
-              <button
-                onClick={onClose}
-                aria-label="Close settings"
-                className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              {!embedded && (
+                <button
+                  onClick={onClose}
+                  aria-label="Close settings"
+                  className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Model row */}
@@ -364,8 +391,9 @@ export function ChatSettingsPopover({
           <ModelSettingsPage
             value={modelValue}
             onChange={handleModelChange}
-            onBack={() => setCurrentPage("main")}
+            onBack={back}
             onClose={onClose}
+            hideClose={embedded}
             chatId={chatId}
           />
         )}
@@ -376,8 +404,9 @@ export function ChatSettingsPopover({
             presets={presets}
             selectedPreset={selectedPreset ?? null}
             onPresetChange={handlePresetSelect}
-            onBack={() => setCurrentPage("main")}
+            onBack={back}
             onClose={onClose}
+            hideClose={embedded}
           />
         )}
 
@@ -387,8 +416,9 @@ export function ChatSettingsPopover({
             inputs={inputs}
             values={values}
             onChange={onChange}
-            onBack={() => setCurrentPage("main")}
+            onBack={back}
             onClose={onClose}
+            hideClose={embedded}
             excludeParams={[
               ...(modelKey ? [modelKey] : []),
               ...(modeKey ? [modeKey] : []),
@@ -398,9 +428,7 @@ export function ChatSettingsPopover({
       </fieldset>
   );
 
-  if (mobile) {
-    return <ComposerSheet title="Chat settings" onClose={onClose}>{content}</ComposerSheet>;
-  }
+  if (embedded) return content;
   return (
     <div ref={popoverRef} role="dialog" aria-label="Chat settings"
       className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden">

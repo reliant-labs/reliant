@@ -23,8 +23,17 @@ function mediaQuery(): MediaQueryList | null {
 function subscribe(onChange: () => void): () => void {
   const mql = mediaQuery();
   if (!mql) return () => {};
-  mql.addEventListener("change", onChange);
-  return () => mql.removeEventListener("change", onChange);
+  // Older WebKit (and some test stubs) only implement the deprecated
+  // addListener; a list with neither simply never reports a change.
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }
+  if (typeof mql.addListener === "function") {
+    mql.addListener(onChange);
+    return () => mql.removeListener(onChange);
+  }
+  return () => {};
 }
 
 function snapshot(): boolean {
