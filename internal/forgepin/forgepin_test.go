@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func fakeSource(t *testing.T, key string, runs *[]string) *Source {
+func fakeSource(t *testing.T, key string, runs *[]string) *source {
 	t.Helper()
 	cache := t.TempDir()
-	return &Source{
+	return &source{Deps: Deps{
 		Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 			return forgecli.PinnedForge{Path: "/pinned/forge", Key: key, Want: "forge_version v1.0.4"}, true, nil
 		},
@@ -30,7 +30,7 @@ func fakeSource(t *testing.T, key string, runs *[]string) *Source {
 			return []byte("out of " + strings.Join(args, " ")), nil
 		},
 		CacheDir: func() string { return cache },
-	}
+	}}
 }
 
 // The first command line the pinned forge accepts answers; the answer is kept
@@ -46,7 +46,7 @@ func TestOutput_FirstAcceptedTryIsCachedPerVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "out of a", string(out))
 	_, _ = s.Output(pf, "", "x.json", []string{"a"})
-	next := &Source{Run: s.Run, CacheDir: s.CacheDir}
+	next := &source{Deps: Deps{Run: s.Run, CacheDir: s.CacheDir}}
 	again, err := next.Output(pf, "", "x.json", []string{"a"})
 	require.NoError(t, err)
 	assert.Equal(t, "out of a", string(again))
@@ -67,10 +67,10 @@ func TestOutput_ACheckoutIsNotCachedOnDisk(t *testing.T) {
 // One resolution per project and command is reused while forge.yaml stays.
 func TestPinned_IsReusedWhileForgeYAMLIsUnchanged(t *testing.T) {
 	calls := 0
-	s := &Source{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+	s := &source{Deps: Deps{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 		calls++
 		return forgecli.PinnedForge{}, false, errors.New("no such host")
-	}}
+	}}}
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("forge_version: v1.0.4\n"), 0o644))
 	for range 3 {

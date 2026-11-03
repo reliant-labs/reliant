@@ -18,10 +18,10 @@ import (
 // embedded forge serves every test unless the test installs a fake
 // (useFakePinnedForge).
 func TestMain(m *testing.M) {
-	pinnedForge = &forgepin.Source{
+	pinnedForge = forgepin.New(forgepin.Deps{
 		Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 			return forgecli.PinnedForge{}, false, nil
 		},
-	}
+	})
 	os.Exit(m.Run())
 }

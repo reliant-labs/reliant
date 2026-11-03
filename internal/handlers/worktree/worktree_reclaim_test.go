@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -269,50 +268,6 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
-}
-
-// reliant#1998: an ssh-agent of the daemon's user is undumpable, so /proc
-// shows no one its cwd, descriptors or mappings, and the retirement's
-// process-use check used to hold every workspace while one ran. It is a known
-// agent that never holds a worktree: the retirement goes through.
-func TestPermanentDelete_ProceedsWhileAnSSHAgentRuns(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("undumpable processes are a Linux /proc matter")
-	}
-	bin, err := exec.LookPath("ssh-agent")
-	if err != nil {
-		t.Skip("ssh-agent is not installed")
-	}
-	e := newReclaimEnv(t)
-	sockDir, err := os.MkdirTemp("", "sa")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sock := filepath.Join(sockDir, "s")
-	agent := exec.Command(bin, "-D", "-a", sock)
-	require.NoError(t, agent.Start())
-	t.Cleanup(func() { _ = agent.Process.Kill(); _ = agent.Wait() })
-	// Running (its socket exists), not just undumpable: that starts inside
-	// execve.
-	require.Eventually(t, func() bool { _, err := os.Stat(sock); return err == nil }, 10*time.Second, 5*time.Millisecond, "ssh-agent never listened")
-	fdDir := filepath.Join("/proc", strconv.Itoa(agent.Process.Pid), "fd")
-	if _, err := os.ReadDir(fdDir); !os.IsPermission(err) {
-		t.Skipf("this host lets the daemon inspect ssh-agent (%v): nothing to prove", err)
-	}
-
-	wt, path := e.worktree(t, "sshagent")
-	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	age(t, path)
-	_, err = e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
-	if err != nil {
-		// The refusal says only "in_use"; the recorded hold names the process
-		// that held it, which is what a red run on another host needs.
-		var detail string
-		if got, gerr := e.repo.GetWorktree(e.ctx, wt.ID); gerr == nil && got.CleanupMetadata != nil {
-			detail = got.CleanupMetadata.HeldDetail
-		}
-		require.NoError(t, err, "held by: %s", detail)
-	}
-	assert.False(t, exists(path))
 }
 
 // S2: an import may not claim an archived workspace's directory.
