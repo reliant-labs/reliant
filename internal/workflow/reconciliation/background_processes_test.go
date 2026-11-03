@@ -26,6 +26,9 @@ type fakeProcessDaemons struct {
 	processes map[string]map[string]daemon.ProcessStatusInfo
 	connected map[string][]string // userID -> daemon ids
 	asked     []string            // daemon ids, in call order
+	// chats is the word on each process's chat the daemons were told,
+	// by daemon id.
+	chats map[string][]daemon.ProcessChatState
 }
 
 func (f *fakeProcessDaemons) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, payload []byte, _ int32) ([]byte, error) {
@@ -42,6 +45,12 @@ func (f *fakeProcessDaemons) SendDaemonCommandToDaemon(_ context.Context, _, dae
 	var req daemon.ProcessStatusRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, err
+	}
+	if len(req.Chats) > 0 {
+		if f.chats == nil {
+			f.chats = map[string][]daemon.ProcessChatState{}
+		}
+		f.chats[daemonID] = append(f.chats[daemonID], req.Chats...)
 	}
 	var resp daemon.ProcessStatusResponse
 	for _, id := range req.ProcessIDs {
@@ -285,6 +294,41 @@ func (f *fakeActivity) got() []string {
 // 2026-10-28: agents parked on a usage limit sent the machine nothing, the
 // idle detector suspended it 30 minutes in, and a prod deploy the agent had
 // backgrounded died mid-apply — three suspends in one night.
+// The daemon's idle reaper stops a finished chat's background process, but
+// only the server knows whether a chat has a run in progress. The sweep that
+// already asks each daemon about its processes every pass carries that word
+// along, per process; the daemon acts only while it keeps hearing it.
+func TestReconcile_TellsTheOwningDaemonWhetherEachProcessChatIsRunning(t *testing.T) {
+	repo := newMockRepo()
+	repo.daemons = map[string]bool{"d-1": true}
+	repo.seedBackgroundedCall("tc-busy", "u-1", strp("p-busy"), strp("d-1"))
+	repo.seedBackgroundedCall("tc-done", "u-1", strp("p-done"), strp("d-1"))
+	repo.seedBackgroundedCall("tc-archived", "u-1", strp("p-archived"), strp("d-1"))
+	// A row that names no daemon: nothing says which daemon runs it, so no
+	// daemon is told anything about its chat.
+	repo.seedBackgroundedCall("tc-legacy", "u-1", strp("p-legacy"), nil)
+	repo.backgroundedProcessCalls[0].ChatRunning = true
+	repo.backgroundedProcessCalls[2].WorkspaceArchived = true
+
+	daemons := &fakeProcessDaemons{
+		processes: map[string]map[string]daemon.ProcessStatusInfo{"d-1": {
+			"p-busy": {Status: "running"}, "p-done": {Status: "running"},
+			"p-archived": {Status: "running"}, "p-legacy": {Status: "running"},
+		}},
+		connected: map[string][]string{"u-1": {"d-1"}},
+	}
+	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler.SetBackgroundProcessDaemons(daemons)
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	assert.ElementsMatch(t, []daemon.ProcessChatState{
+		{ProcessID: "p-busy", Running: true},
+		{ProcessID: "p-done"},
+		{ProcessID: "p-archived", WorkspaceArchived: true},
+	}, daemons.chats["d-1"])
+}
+
 func TestReconcile_HeldRunBackgroundWorkKeepsItsMachineAwake(t *testing.T) {
 	run := func(t *testing.T, held bool, requestedAt time.Time, status string) []string {
 		t.Helper()

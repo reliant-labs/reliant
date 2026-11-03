@@ -343,6 +343,8 @@ var reissuableDaemonCommands = map[string]bool{
 	"fs.search":           true,
 	"exec.bg_output":      true,
 	"exec.bg_list":        true,
+	// Touching twice is touching once.
+	"exec.bg_touch": true,
 }
 
 // interruption is ErrDaemonConnectionInterrupted in the gateway's own words,

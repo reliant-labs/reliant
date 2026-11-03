@@ -263,6 +263,22 @@ type Guards struct {
 	// CommandThreads is each command's thread limit; zero derives it from
 	// the machine (proctree.Size).
 	CommandThreads int
+	// BackgroundIdleReap is how long a background process an agent started
+	// may sit idle, once its chat has no run in progress, before the daemon
+	// stops it. Zero is shell.DefaultIdleReap; negative turns it off.
+	BackgroundIdleReap time.Duration
+}
+
+// IdleReapWindow is the idle reaper's window; zero is off.
+func (g Guards) IdleReapWindow() time.Duration {
+	switch {
+	case g.BackgroundIdleReap < 0:
+		return 0
+	case g.BackgroundIdleReap == 0:
+		return shell.DefaultIdleReap
+	default:
+		return g.BackgroundIdleReap
+	}
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -364,6 +380,11 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	go client.diskGuard.Run(ctx)
 	go client.procGuard.Run(ctx)
+	// Stop the background processes finished chats left behind, once idle
+	// for the window (shell/background_reaper.go).
+	idleReap := opts.Guards.IdleReapWindow()
+	logging.InfoContext(ctx, logPrefix+" Background process idle reaper", "idle_after", idleReap.String())
+	go shell.GetBackgroundManager().RunReaper(ctx, shell.ReaperConfig{IdleAfter: idleReap})
 
 	// Repair what a crash left in the shared clones (empty objects, torn
 	// indexes, stale gc.log, dead registrations) before agents run git there.
