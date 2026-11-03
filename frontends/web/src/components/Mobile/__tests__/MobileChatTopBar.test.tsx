@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 const { MobileChatTopBar, CONTEXT_RING_THRESHOLD } = await import("../MobileChatTopBar");
+const { FloatingChromeFrame } = await import("../../Chat/floatingChrome");
 
 function renderBar(props: Partial<React.ComponentProps<typeof MobileChatTopBar>> = {}) {
   const onOpenSheet = vi.fn();
@@ -123,3 +124,38 @@ describe("MobileChatTopBar workspace", () => {
     expect(onOpenWorkspace).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("MobileChatTopBar chrome (§4.3)", () => {
+  it("floats over the transcript as glass with no hairline at rest inside the chat frame", () => {
+    render(
+      <FloatingChromeFrame>
+        <MobileChatTopBar title="Fix flaky login test" onOpenSheet={vi.fn()} />
+      </FloatingChromeFrame>,
+    );
+    const bar = screen.getByTestId("mobile-chat-top-bar");
+    expect(bar).toHaveClass("absolute", "inset-x-0", "top-0");
+    expect(bar).toHaveClass("bg-background/85", "backdrop-blur-xl");
+    // The Phase 1 always-on border is gone: transparent until content is
+    // scrolled under the bar (the frame's data-scroll-edge-top).
+    expect(bar).toHaveClass("border-b", "border-transparent", "group-data-[scroll-edge-top]/chat-chrome:border-border/60");
+    expect(bar).not.toHaveClass("border-border");
+  });
+
+  it("is opaque with its hairline always on under reduced transparency", () => {
+    render(
+      <FloatingChromeFrame>
+        <MobileChatTopBar title="Fix flaky login test" onOpenSheet={vi.fn()} />
+      </FloatingChromeFrame>,
+    );
+    const bar = screen.getByTestId("mobile-chat-top-bar");
+    expect(bar).toHaveClass("reduce-transparency:bg-background", "reduce-transparency:border-border/60");
+  });
+
+  it("stays a docked, opaque row outside the frame", () => {
+    renderBar();
+    const bar = screen.getByTestId("mobile-chat-top-bar");
+    expect(bar).not.toHaveClass("absolute");
+    expect(bar).toHaveClass("bg-background", "border-border");
+  });
+});
+

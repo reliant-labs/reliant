@@ -290,15 +290,13 @@ export function MobileChatSheet({
         {recoverableWorktree && (
           // The same items the desktop menu renders, sized up to 44px rows
           // for a thumb rather than forked.
-          <MobileCardGroup
-            label="Workspace recovery"
-            className="[&>button]:min-h-[44px] [&>button]:gap-3 [&>button]:px-4 [&>button]:active:bg-foreground/5"
-          >
+          <MobileCardGroup label="Workspace recovery">
             <WorkspaceRecoveryMenuItems
               chatId={chatId}
               worktree={recoverableWorktree}
               mainWorktree={actions.mainWorktree}
               onSelect={onClose}
+              itemClassName="min-h-[44px] gap-3 px-4 active:bg-foreground/5"
             />
           </MobileCardGroup>
         )}

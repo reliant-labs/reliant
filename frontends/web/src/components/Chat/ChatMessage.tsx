@@ -861,7 +861,9 @@ function ChatMessageComponent({
   // anchoring it to the message's top hid it above the fold exactly when the
   // message was long enough to need it. The sticky offset clears the pinned
   // user-message header the timeline floats over the top of the transcript
-  // (`--chat-pinned-header-h`, 0 when there is no header or no timeline).
+  // (`--chat-pinned-header-h`, 0 when there is no header or no timeline), and
+  // under floating chrome the top bar it sits below (`--chat-top-inset`, 0
+  // where the chrome docks).
   //
   // Anchored to the message ROW — the full content column — for both roles,
   // never to the message's own box. A user bubble is only as wide as its text,
@@ -922,7 +924,7 @@ function ChatMessageComponent({
           "group-hover:opacity-100",
           "group-focus-within:opacity-100"
         )}
-        style={{ top: "var(--chat-pinned-header-h, 0px)" }}
+        style={{ top: "calc(var(--chat-top-inset, 0px) + var(--chat-pinned-header-h, 0px))" }}
       >
         {actionControls}
       </div>

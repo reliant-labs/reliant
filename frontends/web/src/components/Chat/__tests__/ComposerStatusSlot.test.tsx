@@ -14,6 +14,7 @@ import { ComposeModeProvider } from "../../../lib/composeMode";
 import {
   ComposerStatusSlot,
   RecoveryBanner,
+  StatusBandColumn,
   StatusSlotItem,
   statusSlotLayoutForWidth,
   useStatusSlotSummary,
@@ -295,5 +296,73 @@ describe("RecoveryBanner", () => {
     const banner = screen.getByTestId("recovery-banner");
     expect(banner.className).toContain("text-warning-ink");
     expect(banner.outerHTML).not.toMatch(/amber-/);
+  });
+});
+
+describe("banners in the status sheet", () => {
+  function GutterBanner() {
+    useStatusSlotSummary({ label: "Waking mac…" });
+    return (
+      <StatusBandColumn data-testid="gutter-banner" className="text-xs">
+        Waking mac…
+      </StatusBandColumn>
+    );
+  }
+
+  function renderSheet(layout: StatusSlotLayout) {
+    render(
+      <ComposerStatusSlot
+        layout={layout}
+        upper={null}
+        approvals={null}
+        lower={
+          <>
+            <StatusSlotItem id="recovery">
+              <RecoveryBanner onRestart={() => {}} />
+            </StatusSlotItem>
+            <StatusSlotItem id="wake">
+              <GutterBanner />
+            </StatusSlotItem>
+          </>
+        }
+      />,
+    );
+  }
+
+  it("renders each item as a rounded card, with no band border or doubled gutters", () => {
+    renderSheet("compact");
+    fireEvent.click(lines()[0]);
+    const sheet = screen.getByTestId("status-slot-sheet");
+
+    for (const id of ["recovery", "wake"]) {
+      const card = sheet.querySelector(`[data-status-slot-item="${id}"]`) as HTMLElement;
+      expect(card).toHaveClass("rounded-lg", "elevation-1", "overflow-hidden");
+    }
+
+    // A tone banner keeps its fill and ink but drops the band's border-t and
+    // its column padding for the card's.
+    const recovery = within(sheet).getByTestId("recovery-banner");
+    expect(recovery).toHaveClass("bg-warning/10", "text-warning-ink", "px-3", "py-2.5");
+    expect(recovery).not.toHaveClass("border-t");
+    expect(recovery).not.toHaveClass("px-4");
+
+    // A gutter-aligned banner is just its body on the card's padding: no
+    // composer gutters, no max-width column inside the card.
+    const gutter = within(sheet).getByTestId("gutter-banner");
+    expect(gutter).toHaveClass("px-3", "py-2.5", "text-xs");
+    expect(gutter.className).not.toMatch(/sm:px-6/);
+    expect(gutter.querySelector(".max-w-\\[1200px\\]")).toBeNull();
+  });
+
+  it("keeps the full-width band treatment inline on a wide column", () => {
+    renderSheet("wide");
+
+    const recovery = screen.getByTestId("recovery-banner");
+    expect(recovery).toHaveClass("border-t", "px-4");
+    expect(recovery.closest("[data-status-slot-item]")).toHaveClass("contents");
+
+    const gutter = screen.getByTestId("gutter-banner");
+    expect(gutter).toHaveClass("px-4", "sm:px-6", "lg:px-8");
+    expect(gutter.querySelector(".max-w-\\[1200px\\]")).not.toBeNull();
   });
 });

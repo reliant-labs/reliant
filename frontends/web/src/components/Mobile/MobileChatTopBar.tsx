@@ -13,6 +13,7 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, FolderGit2, Loader2 } from "lucide-react";
 import { ContextUsageIndicator } from "../Chat/ContextUsageIndicator";
+import { FLOATING_BAR_SURFACE, FLOATING_TOP_EDGE, useFloatingChrome } from "../Chat/floatingChrome";
 import { cn } from "../../lib/utils";
 
 /**
@@ -80,12 +81,19 @@ export function MobileChatTopBar({
   const ratio = contextUsageRatio(contextUsage);
   const hasBack = (subThread && onBackToThread) || !listPaneVisible;
 
+  // Inside the chat screen's floating frame the bar floats over the
+  // transcript (§4.3): glass, with a hairline only while content is scrolled
+  // under it. The frame measures it to pad the transcript by its height.
+  const floating = useFloatingChrome();
+
   return (
-    // The hairline stays until the scroll-edge treatment (§4.3) lands and can
-    // show it only while content is scrolled under the bar.
     <header
+      ref={floating?.topBarRef}
       className={cn(
-        "flex min-h-[48px] shrink-0 items-center gap-0.5 border-b border-border bg-background px-1",
+        "flex min-h-[48px] shrink-0 items-center gap-0.5 px-1",
+        floating
+          ? cn("absolute inset-x-0 top-0 z-30", FLOATING_BAR_SURFACE, FLOATING_TOP_EDGE)
+          : "border-b border-border bg-background",
         // With no leading control, the title lines up with the list pane's
         // 16px content inset instead of sitting against the bar's edge.
         !hasBack && "pl-3",

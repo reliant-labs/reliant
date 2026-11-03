@@ -20,6 +20,10 @@ const IDLE_FADE_MS = 2000;
  * changes height with what is running, so no fixed offset can clear it.
  * Anchored to the transcript, the band can only push it up with the frame.
  *
+ * Where the composer floats over the transcript (the mobile chat screen), the
+ * frame's bottom edge is under the composer, so the anchor adds the
+ * `--chat-bottom-inset` the floating band publishes.
+ *
  * Starts as a small circle, then expands into a labeled pill after a
  * short delay so users notice it during longer scrolls. On a coarse pointer it
  * stays a 44px circle: on a phone the expanding label covers the very text the
@@ -99,7 +103,14 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   return (
     // Non-interactive full-width strip, so only the button itself takes clicks
     // — the transcript on either side of it stays selectable and clickable.
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center">
+    // Lifted by the floating composer band's height where the chrome floats
+    // over the transcript (floatingChrome.tsx); the inset is unset, so 0,
+    // where it docks.
+    <div
+      className="pointer-events-none absolute inset-x-0 z-30 flex justify-center"
+      style={{ bottom: "calc(var(--chat-bottom-inset, 0px) + 0.75rem)" }}
+      data-testid="scroll-to-bottom-anchor"
+    >
       <button
         onClick={onClick}
         onMouseEnter={handleMouseEnter}

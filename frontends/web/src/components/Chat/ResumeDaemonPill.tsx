@@ -9,7 +9,8 @@ import {
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { resumeErrorMessage, resumeErrorNeedsUpgrade } from "@/lib/daemon-resume";
 import { machineDisplayName } from "@/lib/machineName";
-import { useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
+import { cn } from "@/lib/utils";
+import { STATUS_SHEET_CARD_BODY, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 const RESUME_POLL_MS = 3_000;
 const RESUME_GRACE_MS = 120_000;
@@ -43,7 +44,8 @@ function writeDismissed(sig: string): void {
 export function ResumeDaemonPill({ placement: placementProp = "absolute" }: ResumeDaemonPillProps) {
   // Collapsed into the composer's status slot, the pill renders in the slot's
   // sheet: floating over the column there would put it over the sheet's title.
-  const placement = useStatusSlotCollapsed() ? "inline" : placementProp;
+  const inSheet = useStatusSlotCollapsed();
+  const placement = inSheet ? "inline" : placementProp;
   const goToBilling = useGoToBilling("chat");
   // Daemons whose Resume RPC succeeded. The registry's lifecycle mirror lags
   // the real state (control-plane's reconciler writes it), so the list keeps
@@ -143,7 +145,7 @@ export function ResumeDaemonPill({ placement: placementProp = "absolute" }: Resu
       className={
         placement === "absolute"
           ? "pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2"
-          : "pointer-events-none relative z-20 flex w-full justify-center"
+          : cn("pointer-events-none relative z-20 flex w-full justify-center", inSheet && STATUS_SHEET_CARD_BODY)
       }
     >
       <div className="pointer-events-auto flex flex-col items-center gap-1">

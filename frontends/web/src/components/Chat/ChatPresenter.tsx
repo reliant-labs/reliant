@@ -66,6 +66,8 @@ import { useWakingMachines } from "../../lib/machineWake";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatActivity } from "../../store/activityStore";
 import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
+import { FLOATING_BAR_SURFACE, FLOATING_BOTTOM_EDGE, useFloatingChrome } from "./floatingChrome";
+import { cn } from "../../lib/utils";
 
 interface ChatPresenterProps {
   // Message data
@@ -168,6 +170,11 @@ export const ChatPresenter = memo(function ChatPresenter({
   // embed, so this single flag decides whether any of that state, effects,
   // or markup mount at all — never render-and-hide.
   const showDesktopChrome = useCapability("chatExecutionSidebar");
+  // The mobile chat screen floats its chrome over the transcript (§4.3): the
+  // band from the status slot down to the composer is lifted out of the
+  // column, measured, and reserved as the transcript's bottom inset. Docked
+  // everywhere else.
+  const floatingChrome = useFloatingChrome();
 
   // Thread selection state (lifted up to share between header and timeline).
   // Controlled when the host owns the thread picker (mobile top bar).
@@ -803,142 +810,160 @@ export const ChatPresenter = memo(function ChatPresenter({
             not be announced. */}
         <TimelineCatchUpStatus visible={catchUpOverlayVisible} />
 
-        {/* Everything between the transcript and the composer goes through
-            the status slot: in full on a wide column, one line (three at
-            medium width) plus a sheet on a narrow one. Approvals are never
-            collapsed. */}
-        <ComposerStatusSlot
-          upper={
-            <>
-              {/* Messages already queued into the running agent's mailbox.
-                  Above the background-work pill deliberately: this is what the
-                  user already sent and can still take back, so it outranks the
-                  ambient readout of what is running. Same gutters and max
-                  width as the composer, so the strip and the input it belongs
-                  to share one column. */}
-              <StatusSlotItem id="queued">
-                <QueuedMessages
-                  chatId={chatId || undefined}
-                  threadId={queueThreadId}
-                  messages={queuedMessages}
-                  onRefresh={refreshQueuedMessages}
-                  onForget={forgetQueuedMessage}
-                  onInterrupted={refreshQueuedMessages}
-                  isRunning={isAgentWorking}
-                  waitingOnMachine={heldForMachine}
-                />
-              </StatusSlotItem>
-              {/* Background work (async spawns + running commands) — the spawn
-                  tool call that started them scrolls away, so this is the
-                  fixed surface that keeps them reachable. */}
-              <StatusSlotItem id="background">
-                <BackgroundWorkPill
-                  chatId={chatId || undefined}
-                  worktreeId={worktreeId ?? undefined}
-                  selectedThreadId={selectedThreadId}
-                  mainThreadId={chatForQueue?.workflowId}
-                  onSelectThread={setSelectedThreadId}
-                  onSelectCommand={handleSelectBackgroundCommand}
-                />
-              </StatusSlotItem>
-            </>
+        {/* The bottom band. Docked, `contents` keeps every child a direct
+            flex item of the column, exactly as before. Floating, it is one
+            glass panel over the transcript's bottom edge, padded clear of the
+            home indicator, with its hairline drawn only while transcript
+            content continues underneath it. */}
+        <div
+          ref={floatingChrome?.bottomBandRef}
+          data-testid={floatingChrome ? "floating-composer-band" : undefined}
+          className={
+            floatingChrome
+              ? cn("absolute inset-x-0 bottom-0 z-20 flex flex-col", FLOATING_BAR_SURFACE, FLOATING_BOTTOM_EDGE)
+              : "contents"
           }
-          approvals={
-            <PermissionsPanelWrapper>
-              <PermissionsPanel chatId={chatId || undefined} />
-            </PermissionsPanelWrapper>
+          style={
+            floatingChrome ? { paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" } : undefined
           }
-          lower={
-            <>
-              {/* Floats over the top of the column on a wide layout (the
-                  column is its containing block); a slot entry otherwise. */}
-              {!noMachine && (
-                <StatusSlotItem id="resume">
-                  <ResumeDaemonPill />
-                </StatusSlotItem>
-              )}
-              {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
-              {!noMachine && (
-                <StatusSlotItem id="oom">
-                  <OomKillBanner />
-                </StatusSlotItem>
-              )}
-              {/* Disk banner — a volume on the chat's machine is (nearly) full */}
-              {!noMachine && (
-                <StatusSlotItem id="disk">
-                  <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />
-                </StatusSlotItem>
-              )}
-              {noMachine && chatId ? (
-                <StatusSlotItem id="no-machine">
-                  <NoMachineComposerHint chatId={chatId} />
-                </StatusSlotItem>
-              ) : (
-                // "Waking <machine>…" while this send wakes the chat's machine,
-                // and "Continue without machine" whenever that machine is
-                // unavailable.
-                <StatusSlotItem id="wake">
-                  <ComposerWakeStatus
-                    sending={sendingThisChat}
-                    daemonId={currentChat?.activeDaemonId}
+        >
+          {/* Everything between the transcript and the composer goes through
+              the status slot: in full on a wide column, one line (three at
+              medium width) plus a sheet on a narrow one. Approvals are never
+              collapsed. */}
+          <ComposerStatusSlot
+            upper={
+              <>
+                {/* Messages already queued into the running agent's mailbox.
+                    Above the background-work pill deliberately: this is what the
+                    user already sent and can still take back, so it outranks the
+                    ambient readout of what is running. Same gutters and max
+                    width as the composer, so the strip and the input it belongs
+                    to share one column. */}
+                <StatusSlotItem id="queued">
+                  <QueuedMessages
+                    chatId={chatId || undefined}
+                    threadId={queueThreadId}
+                    messages={queuedMessages}
+                    onRefresh={refreshQueuedMessages}
+                    onForget={forgetQueuedMessage}
+                    onInterrupted={refreshQueuedMessages}
+                    isRunning={isAgentWorking}
                     waitingOnMachine={heldForMachine}
-                    machineStatusInTranscript={!!machineNotice && showsTimeline}
-                    continueWithoutMachine={
-                      chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
-                    }
                   />
                 </StatusSlotItem>
-              )}
-              {/* Shown when the run's workflow was lost */}
-              {needsRecovery && (
-                <StatusSlotItem id="recovery">
-                  <RecoveryBanner onRestart={onRestartConversation} />
+                {/* Background work (async spawns + running commands) — the spawn
+                    tool call that started them scrolls away, so this is the
+                    fixed surface that keeps them reachable. */}
+                <StatusSlotItem id="background">
+                  <BackgroundWorkPill
+                    chatId={chatId || undefined}
+                    worktreeId={worktreeId ?? undefined}
+                    selectedThreadId={selectedThreadId}
+                    mainThreadId={chatForQueue?.workflowId}
+                    onSelectThread={setSelectedThreadId}
+                    onSelectCommand={handleSelectBackgroundCommand}
+                  />
                 </StatusSlotItem>
-              )}
-            </>
-          }
-        />
-
-
-        {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
-        {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused && showTakeOverBar && chatForQueue ? (
-          <TakeOverRunBar
-            chat={chatForQueue}
-            onReply={() => {
-              setTakeOverExpandedFor(chatId);
-              // The composer mounts on this render; focus it on the next frame.
-              requestAnimationFrame(() => chatInputRef.current?.focus());
-            }}
+              </>
+            }
+            approvals={
+              <PermissionsPanelWrapper>
+                <PermissionsPanel chatId={chatId || undefined} />
+              </PermissionsPanelWrapper>
+            }
+            lower={
+              <>
+                {/* Floats over the top of the column on a wide layout (the
+                    column is its containing block); a slot entry otherwise. */}
+                {!noMachine && (
+                  <StatusSlotItem id="resume">
+                    <ResumeDaemonPill />
+                  </StatusSlotItem>
+                )}
+                {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
+                {!noMachine && (
+                  <StatusSlotItem id="oom">
+                    <OomKillBanner />
+                  </StatusSlotItem>
+                )}
+                {/* Disk banner — a volume on the chat's machine is (nearly) full */}
+                {!noMachine && (
+                  <StatusSlotItem id="disk">
+                    <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />
+                  </StatusSlotItem>
+                )}
+                {noMachine && chatId ? (
+                  <StatusSlotItem id="no-machine">
+                    <NoMachineComposerHint chatId={chatId} />
+                  </StatusSlotItem>
+                ) : (
+                  // "Waking <machine>…" while this send wakes the chat's machine,
+                  // and "Continue without machine" whenever that machine is
+                  // unavailable.
+                  <StatusSlotItem id="wake">
+                    <ComposerWakeStatus
+                      sending={sendingThisChat}
+                      daemonId={currentChat?.activeDaemonId}
+                      waitingOnMachine={heldForMachine}
+                      machineStatusInTranscript={!!machineNotice && showsTimeline}
+                      continueWithoutMachine={
+                        chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
+                      }
+                    />
+                  </StatusSlotItem>
+                )}
+                {/* Shown when the run's workflow was lost */}
+                {needsRecovery && (
+                  <StatusSlotItem id="recovery">
+                    <RecoveryBanner onRestart={onRestartConversation} />
+                  </StatusSlotItem>
+                )}
+              </>
+            }
           />
-        ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (
-          <div className="flex-shrink-0">
-            <ChatInputWrapper
-              ref={chatInputRef}
-              onScrollToBottom={scrollToBottom}
-              onSend={handleSend}
-              onStop={onStopStreaming}
-              disabled={false}
-              worktreeId={worktreeId ?? undefined}
-              isStreaming={isChatBusy}
-              chatId={chatId ?? undefined}
-              connectionStatus={
-                connectionStatus as ConnectionStatus | undefined
-              }
-              isChatBusy={isChatBusy}
-              projectId={projectId ?? undefined}
-              paneId={paneId}
-              selectedThreadId={selectedThreadId}
-              // The composer's thread chip × sends the next message back to
-              // the main thread.
-              onSelectThread={setSelectedThreadId}
-              workflowExecution={workflowExecution}
+
+
+          {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
+          {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused && showTakeOverBar && chatForQueue ? (
+            <TakeOverRunBar
+              chat={chatForQueue}
+              onReply={() => {
+                setTakeOverExpandedFor(chatId);
+                // The composer mounts on this render; focus it on the next frame.
+                requestAnimationFrame(() => chatInputRef.current?.focus());
+              }}
             />
-          </div>
-        ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
-          <div className="p-2 border-t border-border bg-muted/20 text-center text-sm text-muted-foreground flex-shrink-0">
-            Click to focus and type a message
-          </div>
-        ) : null}
+          ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (
+            <div className="flex-shrink-0">
+              <ChatInputWrapper
+                ref={chatInputRef}
+                onScrollToBottom={scrollToBottom}
+                onSend={handleSend}
+                onStop={onStopStreaming}
+                disabled={false}
+                worktreeId={worktreeId ?? undefined}
+                isStreaming={isChatBusy}
+                chatId={chatId ?? undefined}
+                connectionStatus={
+                  connectionStatus as ConnectionStatus | undefined
+                }
+                isChatBusy={isChatBusy}
+                projectId={projectId ?? undefined}
+                paneId={paneId}
+                selectedThreadId={selectedThreadId}
+                // The composer's thread chip × sends the next message back to
+                // the main thread.
+                onSelectThread={setSelectedThreadId}
+                workflowExecution={workflowExecution}
+              />
+            </div>
+          ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
+            <div className="p-2 border-t border-border bg-muted/20 text-center text-sm text-muted-foreground flex-shrink-0">
+              Click to focus and type a message
+            </div>
+          ) : null}
+        </div>
       </div>
       
       {/* Side Panel Workflow Viewer - resizable panel beside chat */}

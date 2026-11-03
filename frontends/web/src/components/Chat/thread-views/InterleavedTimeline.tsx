@@ -15,7 +15,8 @@
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { ContentBlockType, MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
 import { acknowledgeScrollToMessage } from "../../../lib/scrollToMessage";
-import { useTimelineVirtualizer } from "./useTimelineVirtualizer";
+import { END_THRESHOLD_PX, useTimelineVirtualizer } from "./useTimelineVirtualizer";
+import { FLOATING_BAR_SURFACE, useFloatingChrome, useFloatingChromeInsets } from "../floatingChrome";
 import { useSurface } from "../../../lib/surfaceContext";
 import { transcriptDateLabels } from "./transcriptPresentation";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
@@ -986,11 +987,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     (index: number) => timelineItemKey(timelineItems[index]),
     [timelineItems],
   );
+  // Floating chrome (the mobile chat screen) overlays the scroller's top and
+  // bottom edges; its measured heights become part of the virtual space, so
+  // the first row starts below the top bar and the last ends above the
+  // composer. Both 0 where the chrome docks.
+  const floatingChrome = useFloatingChrome();
+  const chromeInsets = useFloatingChromeInsets();
   const timeline = useTimelineVirtualizer({
     count: timelineItems.length,
     getItemKey: getTimelineItemKey,
-    paddingStart: TIMELINE_HEADER_PX,
-    scrollPaddingStart: pinnedHeaderLine,
+    paddingStart: chromeInsets.top + TIMELINE_HEADER_PX,
+    scrollPaddingStart: chromeInsets.top + pinnedHeaderLine,
+    endInset: chromeInsets.bottom,
   });
   const { virtualizer, scrollToBottom, atBottom, scroller: scrollerEl } = timeline;
   const scrollerElRef = useRef<HTMLElement | null>(null);
@@ -1034,7 +1042,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const nextPinned = resolvePinnedUserMessage({
       rows: measureRows(scroller),
       userMessageForItem,
-      line: pinnedHeaderLine,
+      // Rows are measured from the scroller's top edge, which floating
+      // chrome puts under the top bar: the header hangs below the bar.
+      line: chromeInsets.top + pinnedHeaderLine,
       previousPinned: pinnedUserMessageIdxRef.current,
       releaseHysteresisPx: PINNED_HEADER_RELEASE_HYSTERESIS_PX,
     });
@@ -1042,7 +1052,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       pinnedUserMessageIdxRef.current = nextPinned;
       setPinnedUserMessageIdx(nextPinned);
     }
-  }, [userMessageForItem, pinnedHeaderLine]);
+  }, [userMessageForItem, pinnedHeaderLine, chromeInsets.top]);
 
   // Scroll-back paging: load the next page when the reader is near the top.
   // Prepending needs no compensation here — the virtualizer is anchored to
@@ -1250,6 +1260,31 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // re-publishes too.
   }, [pinnedUserMsg, pinnedPromptForm]);
 
+  // The scroll edge (§4.3): tell the floating frame whether content is
+  // scrolled under the top bar and whether more continues under the composer,
+  // so each bar shows its hairline only then. A visible pinned prompt hangs
+  // from the bar and carries the edge itself, so the bar's own hairline stays
+  // off — one edge under both, not one between them. Read on every scroll
+  // (the frame writes attributes only on a change, never React state).
+  const pinnedHeaderShown = !!pinnedUserMsg && pinnedPromptForm !== "hidden";
+  const reportScrollEdges = floatingChrome?.reportScrollEdges;
+  useEffect(() => {
+    if (!reportScrollEdges || !scrollerEl) return;
+    const report = () =>
+      reportScrollEdges({
+        top: scrollerEl.scrollTop > 0 && !pinnedHeaderShown,
+        bottom: scrollerEl.scrollHeight - scrollerEl.clientHeight - scrollerEl.scrollTop > END_THRESHOLD_PX,
+      });
+    report();
+    scrollerEl.addEventListener("scroll", report, { passive: true });
+    return () => {
+      scrollerEl.removeEventListener("scroll", report);
+      reportScrollEdges({ top: false, bottom: false });
+    };
+    // atBottom and the insets move the end without a scroll event of our
+    // own (a row streamed in while scrolled up, the composer grew).
+  }, [reportScrollEdges, scrollerEl, pinnedHeaderShown, atBottom, chromeInsets.top, chromeInsets.bottom]);
+
   // `index` is a plain index into timelineItems.
   const renderItem = useCallback((index: number, item: TimelineItem, compactToolSpacing = false) => {
     if (item.type === "thread-start") {
@@ -1456,7 +1491,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           // Fully opaque and elevated: the timeline scrolls underneath, so any
           // translucency here would let message text show through the gaps
           // around the floating bubble.
-          className="group/pinned pointer-events-none absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background pt-1 pb-1.5 shadow-md"
+          className="group/pinned pointer-events-none absolute inset-x-0 z-50 border-b border-border/60 bg-background pt-1 pb-1.5 shadow-md"
+          // Directly under a floating top bar; at the top edge otherwise.
+          style={{ top: chromeInsets.top }}
         >
           <div className={timelineHorizontalPaddingClass}>
             <div className={cn(contentMaxWidthClass, "mx-auto flex items-center gap-2")}>
@@ -1497,29 +1534,40 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       {/* Pinned prompt, compact width: one line, and the whole line is the
           jump target — a bubble plus a separate button would be ~75px of a
           phone's height for a breadcrumb. Same floating treatment as the top
-          bar it sits under: opaque so transcript text never shows through, a
-          hairline instead of a shadow.
+          bar it hangs from: the same glass under floating chrome (opaque where
+          the chrome docks, so transcript text never shows through), and the
+          scroll edge's hairline instead of a shadow — it only shows while a
+          message is scrolled away, so the edge is always on.
 
           The selection reasoning above still holds for the wrapper (it stays
           pointer-events-none); the strip itself must take the tap, and at
-          36px against the top edge a drag-select rarely starts over it. The
-          after: box extends the hit area to 44px downward, never upward into
-          the top bar. */}
+          36px against the top edge a drag-select rarely starts over it.
+
+          The wrapper is pinned at the visual height (36px + hairline), which
+          is what --chat-pinned-header-h and the pin line measure. The button
+          inside is a real 44px box overflowing it downward, transparent below
+          the strip: a hit area the element itself reports (a pseudo-element
+          extension tapped fine but measured 36px), and never upward into the
+          top bar. */}
       {pinnedUserMsg && pinnedPromptForm === "strip" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"
           data-form="strip"
-          className="pointer-events-none absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 z-50 h-[37px] border-b border-border/60",
+            floatingChrome ? FLOATING_BAR_SURFACE : "bg-background",
+          )}
+          style={{ top: chromeInsets.top }}
         >
           <button
             type="button"
             onClick={handleJumpToPinned}
             aria-label="Jump to your last message"
             className={cn(
-              "pointer-events-auto relative flex h-[36px] w-full select-none items-center gap-2 text-left text-xs text-muted-foreground",
+              // pb-2 keeps the label centered in the visible 36px.
+              "pointer-events-auto relative flex h-[44px] w-full select-none items-center gap-2 pb-2 text-left text-xs text-muted-foreground",
               timelineHorizontalPaddingClass,
-              "after:absolute after:inset-x-0 after:top-0 after:h-[44px] after:content-['']",
               "transition-colors hover:text-foreground focus-visible:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             )}
@@ -1535,7 +1583,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           viewport (not the scroll content) and above the pinned user-message
           header, so it is seen wherever the reader is when a fetch starts. */}
       {isLoadingOlderMessages && (
-        <div className="pointer-events-none absolute inset-x-0 top-2 z-[60] flex justify-center">
+        <div
+          className="pointer-events-none absolute inset-x-0 z-[60] flex justify-center"
+          style={{ top: chromeInsets.top + 8 }}
+        >
           <div
             role="status"
             aria-live="polite"
@@ -1553,7 +1604,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         // "contain": the end-of-list bounce stays (it is macOS's native
         // rubber-band; its length is set by the OS, not here), but a scroll
         // past either end never chains to the page behind the transcript.
-        style={{ overscrollBehavior: "contain" }}
+        //
+        // The scroll paddings keep the browser's own scrolling (focus moving
+        // into a row, keyboard paging) from parking content under floating
+        // chrome; the virtualizer reserves the same insets as content padding.
+        style={{
+          overscrollBehavior: "contain",
+          scrollPaddingTop: "var(--chat-top-inset, 0px)",
+          scrollPaddingBottom: "var(--chat-bottom-inset, 0px)",
+        }}
         // Focus target for "focus the conversation" — makes the transcript
         // keyboard-scrollable (arrows, PageUp/Down, Home/End) without stealing
         // those keys from anywhere else, since they only apply while focused.
@@ -1570,8 +1629,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               The in-flight indicator is the viewport overlay further down:
               this band is usually scrolled out of sight when a load starts. */}
           <div
-            className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 text-xs text-muted-foreground"
-            style={{ height: TIMELINE_HEADER_PX }}
+            className="absolute inset-x-0 flex items-center justify-center gap-2 text-xs text-muted-foreground"
+            style={{ top: chromeInsets.top, height: TIMELINE_HEADER_PX }}
           >
             {onLoadOlderMessages && hasOlderMessages && !isLoadingOlderMessages && (
               <button
@@ -1592,8 +1651,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           {/* The footer sits in the paddingEnd the virtualizer reserves for
               it, so "the end" it pins to includes the footer. Anchored to the
               container's bottom edge, which the virtualizer sizes directly,
-              so it moves with the total without a re-render. */}
-          <div ref={timeline.footerRef} className="absolute inset-x-0 bottom-0">
+              so it moves with the total without a re-render — lifted above
+              the floating composer band's share of that padding. */}
+          <div ref={timeline.footerRef} className="absolute inset-x-0" style={{ bottom: chromeInsets.bottom }}>
             {footer ? (
               <div className={cn(timelineHorizontalPaddingClass, "pb-3")}>
                 <div className={cn(contentMaxWidthClass, "mx-auto")}>{footer}</div>

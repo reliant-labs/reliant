@@ -31,7 +31,7 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
 import { processOomKillNotice } from "@/lib/machineMemory";
-import { useStatusSlotSummary } from "./ComposerStatusSlot";
+import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
 
@@ -123,13 +123,20 @@ export function OomKillBanner() {
 
   const visible = !!sig && dismissedSig !== sig;
   useStatusSlotSummary(visible ? { label: "Machine ran out of memory", tone: "warning" } : null);
+  const inSheet = useStatusSlotCollapsed();
 
   if (!visible) return null;
 
   const descriptor = oomDaemon ? machineDescriptor(oomDaemon) : "";
 
   return (
-    <div className="flex-shrink-0 border-t border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-ink">
+    <div
+      className={statusBannerFrame(
+        inSheet,
+        "flex-shrink-0 border-t border-warning/30 px-4 py-3",
+        "bg-warning/10 text-sm text-warning-ink",
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <MemoryStick className="h-4 w-4 flex-shrink-0" />

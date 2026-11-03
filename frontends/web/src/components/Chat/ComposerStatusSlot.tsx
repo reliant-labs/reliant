@@ -37,6 +37,16 @@
  * the sheet's body (collapsed, sheet open). React's event bubbling follows the
  * component tree, not the DOM, so every action keeps working wherever the node
  * sits.
+ *
+ * ## How a banner looks in the sheet
+ *
+ * Inline, a banner is a full-width band of the column: a `border-t`, the
+ * composer's gutters, its own vertical padding. Moved into the sheet, that
+ * read as a stack of edge-to-edge strips with doubled padding. So collapsed,
+ * each `StatusSlotItem` is a rounded card (the MobileCardGroup treatment), and
+ * a banner reading `useStatusSlotCollapsed()` drops its band chrome for the
+ * card's padding — `statusBannerFrame()` names the two frames for the banners
+ * that share them.
  */
 
 import {
@@ -164,11 +174,61 @@ export function useStatusSlotSummary(summary: StatusSummary | null): void {
 
 /**
  * True while the band is collapsed, so this banner renders either hidden or in
- * the sheet — never inline in the column. ResumeDaemonPill reads it to stop
+ * the sheet — never inline in the column. Banners read it to swap their band
+ * chrome for a card body (`statusBannerFrame`), and ResumeDaemonPill to stop
  * floating over the header.
  */
 export function useStatusSlotCollapsed(): boolean {
   return useContext(SlotContext)?.collapsed ?? false;
+}
+
+/**
+ * A banner's outer frame. `band` is how it spans the column inline (its
+ * `border-t`, gutters and padding); in the sheet the item around it is already
+ * a card, so the banner keeps only its own look (`common`: tone fill, text)
+ * on the card's padding.
+ */
+export function statusBannerFrame(inSheet: boolean, band: string, common?: string): string {
+  return cn(inSheet ? STATUS_SHEET_CARD_BODY : band, common);
+}
+
+/** The padding of a banner's body inside its sheet card. */
+export const STATUS_SHEET_CARD_BODY = "px-3 py-2.5";
+
+/**
+ * The frame of a banner that lines up with the composer (the machine lines,
+ * the no-machine hint). Inline: the composer's gutters and max width, and the
+ * body's small inset and bottom spacing against the input (`bandClassName`).
+ * In the sheet: just the body, on the card's padding.
+ */
+export function StatusBandColumn({
+  children,
+  className,
+  bandClassName = "px-1 pb-1.5",
+  "data-testid": testId,
+}: {
+  children: ReactNode;
+  /** The body's own classes, in both frames. */
+  className?: string;
+  /** Inline-only body spacing. */
+  bandClassName?: string;
+  "data-testid"?: string;
+}) {
+  const inSheet = useStatusSlotCollapsed();
+  if (inSheet) {
+    return (
+      <div className={cn(STATUS_SHEET_CARD_BODY, className)} data-testid={testId}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid={testId}>
+      <div className="mx-auto max-w-[1200px]">
+        <div className={cn(bandClassName, className)}>{children}</div>
+      </div>
+    </div>
+  );
 }
 
 /** One banner in the band. Supplies the item's identity to its reporter. */
@@ -180,12 +240,13 @@ export function StatusSlotItem({ id, children }: { id: StatusSlotItemId; childre
   return (
     <ItemReportContext.Provider value={itemReport}>
       {/* Inline, `contents` makes the banner a direct child of the chat
-          column, exactly as before. Collapsed, the wrapper is a flex item of
-          the sheet body, ordered by priority; an inactive banner renders
-          nothing and `empty:hidden` keeps it from taking a gap. */}
+          column, exactly as before. Collapsed, the wrapper is a card in the
+          sheet body, ordered by priority; it clips the banner's tone fill to
+          its corners. An inactive banner renders nothing and `empty:hidden`
+          keeps it from taking a gap. */}
       <div
         data-status-slot-item={id}
-        className={collapsed ? "min-w-0 empty:hidden" : "contents"}
+        className={collapsed ? "min-w-0 overflow-hidden rounded-lg elevation-1 empty:hidden" : "contents"}
         style={collapsed ? { order: STATUS_SLOT_PRIORITY[id] } : undefined}
       >
         {children}
@@ -451,11 +512,16 @@ function StatusLineButton({
 /** The run's workflow was lost; history is intact and a restart picks it up. */
 export function RecoveryBanner({ onRestart }: { onRestart?: () => void }) {
   useStatusSlotSummary({ label: "Session interrupted", tone: "warning" });
+  const inSheet = useStatusSlotCollapsed();
   return (
     <div
       role="alert"
       data-testid="recovery-banner"
-      className="flex-shrink-0 border-t border-warning/30 bg-warning/10 px-4 py-2 text-sm text-warning-ink"
+      className={statusBannerFrame(
+        inSheet,
+        "flex-shrink-0 border-t border-warning/30 px-4 py-2",
+        "bg-warning/10 text-sm text-warning-ink",
+      )}
     >
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">

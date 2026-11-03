@@ -48,7 +48,7 @@ import { CANT_REACH_RELIANT, classifyDaemonWait, WAITING_FOR_MACHINE } from "@/l
 import { defaultMachineDaemon, installedDaemonIds } from "@/lib/chatMachine";
 import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { useProjectStore } from "@/store/projectStore";
-import { useStatusSlotSummary } from "./ComposerStatusSlot";
+import { StatusBandColumn, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 interface ComposerWakeStatusProps {
   /** A send for this chat is awaiting the server. */
@@ -109,13 +109,12 @@ export function ComposerWakeStatus({
 function MachineExitLine({ continueWithoutMachine }: { continueWithoutMachine: ReactNode }) {
   useStatusSlotSummary({ label: "Continue without machine" });
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid="composer-machine-exit">
-      <div className="mx-auto max-w-[1200px]">
-        <div className="forge-ui flex flex-wrap items-center gap-x-3 px-1 pb-1.5 text-xs text-muted-foreground">
-          {continueWithoutMachine}
-        </div>
-      </div>
-    </div>
+    <StatusBandColumn
+      data-testid="composer-machine-exit"
+      className="forge-ui flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground"
+    >
+      {continueWithoutMachine}
+    </StatusBandColumn>
   );
 }
 
@@ -235,18 +234,21 @@ function FailedMachineLine({
   const resume = useResumeDaemon();
   const state = classifyDaemonWait({ daemon, elapsedMs: 0, isCloud: true });
   useStatusSlotSummary({ label: state.title, tone: "danger" });
+  const inSheet = useStatusSlotCollapsed();
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid="composer-machine-failed">
-      <div className="mx-auto max-w-[1200px]">
-        <DaemonWaitState
-          variant="inline"
-          state={state}
-          onRetry={resume.isPending ? undefined : () => resume.mutate(daemon.daemonId)}
-          className="rounded-md border border-border/60"
-        />
-        {continueWithoutMachine && <div className="px-1 pt-1 pb-1.5">{continueWithoutMachine}</div>}
-      </div>
-    </div>
+    // Inline the wait state is its own bordered box; in the sheet the card
+    // already is that box.
+    <StatusBandColumn data-testid="composer-machine-failed" bandClassName="">
+      <DaemonWaitState
+        variant="inline"
+        state={state}
+        onRetry={resume.isPending ? undefined : () => resume.mutate(daemon.daemonId)}
+        className={inSheet ? undefined : "rounded-md border border-border/60"}
+      />
+      {continueWithoutMachine && (
+        <div className={inSheet ? "pt-1" : "px-1 pt-1 pb-1.5"}>{continueWithoutMachine}</div>
+      )}
+    </StatusBandColumn>
   );
 }
 
@@ -265,16 +267,12 @@ function StatusLine({
 }) {
   useStatusSlotSummary({ label, tone: variant === "error" ? "danger" : "info" });
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1200px]">
-        <div className="forge-ui flex flex-wrap items-center gap-x-3 gap-y-0.5 px-1 pb-1.5 text-xs text-muted-foreground">
-          <p role="status" aria-label={label} className="flex items-center gap-2" data-testid="composer-wake-status">
-            <Status tone={variant === "error" ? "danger" : "neutral"} pulse={pulse} size="sm" />
-            <span>{children}</span>
-          </p>
-          {continueWithoutMachine}
-        </div>
-      </div>
-    </div>
+    <StatusBandColumn className="forge-ui flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+      <p role="status" aria-label={label} className="flex items-center gap-2" data-testid="composer-wake-status">
+        <Status tone={variant === "error" ? "danger" : "neutral"} pulse={pulse} size="sm" />
+        <span>{children}</span>
+      </p>
+      {continueWithoutMachine}
+    </StatusBandColumn>
   );
 }

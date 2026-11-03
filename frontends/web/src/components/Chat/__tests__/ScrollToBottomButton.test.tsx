@@ -28,7 +28,11 @@ describe("ScrollToBottomButton", () => {
   it("anchors to the bottom edge of its container instead of offsetting from the composer", () => {
     render(<ScrollToBottomButton visible onClick={() => {}} />);
 
-    expect(button().parentElement).toHaveClass("absolute", "bottom-3");
+    expect(button().parentElement).toHaveClass("absolute");
+    // 0.75rem above the frame's bottom edge, plus the floating composer band's
+    // inset where the chrome floats over the transcript (unset, so 0, where it
+    // docks).
+    expect(button().parentElement?.style.bottom).toBe("calc(var(--chat-bottom-inset, 0px) + 0.75rem)");
     expect(button().style.marginTop).toBe("");
   });
 

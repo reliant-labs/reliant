@@ -43,7 +43,7 @@ import {
   type WaitingQuestion,
 } from "./useBackgroundWork";
 import * as chatActions from "../../hooks/chat-actions";
-import { useStatusSlotSummary } from "./ComposerStatusSlot";
+import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -418,11 +418,12 @@ export function BackgroundWorkPill({
           ? { label: failedLabel, tone: "warning" }
           : { label: `${runningCount} running`, tone: "info" },
   );
+  const inSheet = useStatusSlotCollapsed();
 
   if (!hasAnything) return null;
 
   return (
-    <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
+    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5")}>
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
