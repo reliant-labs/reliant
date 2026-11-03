@@ -52,6 +52,26 @@ export interface ChatActions {
   openTerminal?: () => void;
 }
 
+/**
+ * Compact a chat's context with its user feedback (toasts). A plain function,
+ * not only the hook's `compact`: the composer's `/compact` calls it directly,
+ * because `useChatActions` subscribes to the chat's messages and would
+ * re-render the composer on every streamed update.
+ */
+export async function compactChatWithFeedback(chatId: string | null, threadId: string): Promise<void> {
+  if (!chatId) {
+    toast.info("Start a conversation before compacting it");
+    return;
+  }
+  try {
+    await chatActions.compactChat(chatId, threadId);
+    toast.success("Compacting conversation…");
+  } catch (error) {
+    logger.error("[useChatActions] Compaction failed", error);
+    toast.error("Could not compact the conversation");
+  }
+}
+
 export function useChatActions(chatId: string | null, worktreeIdOverride?: string): ChatActions {
   const chat = useChat(chatId || undefined).data;
   const messages = useMessages(chatId || undefined).data?.messages;
@@ -156,21 +176,8 @@ export function useChatActions(chatId: string | null, worktreeIdOverride?: strin
     }
   }, [chatId]);
 
-  // The same call and messages as the composer's `/compact`.
   const compact = useCallback(
-    async (threadId: string) => {
-      if (!chatId) {
-        toast.info("Start a conversation before compacting it");
-        return;
-      }
-      try {
-        await chatActions.compactChat(chatId, threadId);
-        toast.success("Compacting conversation…");
-      } catch (error) {
-        logger.error("[useChatActions] Compaction failed", error);
-        toast.error("Could not compact the conversation");
-      }
-    },
+    (threadId: string) => compactChatWithFeedback(chatId, threadId),
     [chatId],
   );
 
