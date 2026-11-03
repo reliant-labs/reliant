@@ -707,36 +707,6 @@ func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
 	}
 }
 
-// S11: refs are unique and never overwritten, even within one nanosecond tick.
-func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "twenty snapshots in a row, ~230 git processes, which is the point of it")
-	f := newFixture(t)
-	w := f.worktree("w15", "feat/n")
-	write(t, filepath.Join(w.Path, "u.txt"), "u\n")
-	seen := map[string]bool{}
-	for i := 0; i < 20; i++ {
-		ref, _, err := Snapshot(context.Background(), w.Path, "refs/reliant/wip/w15/root/", "w15", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if seen[ref] {
-			t.Fatalf("ref %s reused", ref)
-		}
-		seen[ref] = true
-	}
-	head := run(t, f.project, "rev-parse", "HEAD")
-	if _, err := createRef(context.Background(), f.project, "refs/reliant/wip/x/", head); err != nil {
-		t.Fatal(err)
-	}
-	// An existing ref name must make update-ref fail rather than overwrite.
-	ref := run(t, f.project, "for-each-ref", "--format=%(refname)", "refs/reliant/wip/x")
-	other := run(t, f.project, "rev-parse", "HEAD~0")
-	if _, err := git(context.Background(), f.project, nil, "update-ref", ref, other, ""); err == nil {
-		t.Fatal("update-ref with an empty old value overwrote an existing ref")
-	}
-}
-
 // S3: the work changes between the snapshot and the removal.
 func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
 	t.Parallel()

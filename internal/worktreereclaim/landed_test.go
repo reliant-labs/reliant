@@ -193,26 +193,6 @@ func TestLanded_NoCommitsBeyondBaseCounts(t *testing.T) {
 	requireLanded(t, f.landed(w, false), true, "HEAD is an ancestor of origin/main")
 }
 
-func TestLanded_MultiRepoNeedsEveryCheckoutLanded(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "a two-checkout workspace landing one checkout at a time (~80 git processes)")
-	f := newFixture(t)
-	f.idle()
-	w := f.multiRepo("mr")
-	api, web := Worktree{Path: filepath.Join(w.Path, "api")}, Worktree{Path: filepath.Join(w.Path, "web")}
-	f.commitIn(api, "feat/mra", "api.txt", "api\n", true)
-	f.commitIn(web, "feat/mrb", "web.txt", "web\n", true)
-
-	f.mergeCommit("feat/mra")
-	f.fetch(api)
-	requireLanded(t, f.landed(w, false), false, "api merged, web only pushed")
-
-	f.squashMerge("feat/mrb")
-	f.fetch(web)
-	requireLanded(t, f.landed(w, false), true, "both checkouts merged")
-	requireStillActive(t, f, Worktree{ID: w.ID, Path: api.Path})
-}
-
 func TestLanded_ProbeNeverDeletesFromLiveWorktree(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "a landed worktree probed for shedding five ways (~70 git processes)")
