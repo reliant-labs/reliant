@@ -61,7 +61,13 @@ type gitTokenFetcher func(ctx context.Context, cmd *cobra.Command, pin forgecred
 
 var errGitProviderNotConnected = errors.New("Reliant has no usable GitHub connection for you: reconnect GitHub in Reliant settings") //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 
-func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, provider string) (string, error) {
+// sessionKindDaemon is forgecred.Session.Kind for a daemon's credential.
+const sessionKindDaemon = "daemon"
+
+// discoverDaemonSessions lists this machine's daemon sessions, most preferred
+// first. TokenService.GetGitToken and GetGitHubBotToken admit only a daemon
+// credential, so a CLI login is never offered to them.
+func discoverDaemonSessions(cmd *cobra.Command, pin forgecred.Pin) ([]forgecred.Session, error) {
 	preferred := ""
 	if conn, err := resolveServer(cmd); err == nil {
 		preferred = conn.ServerURL
@@ -72,10 +78,44 @@ func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, p
 	}
 	sessions, err := forgecred.Discover(pin, preferred, path, time.Now())
 	if err != nil {
-		return "", fmt.Errorf("reading Reliant sessions: %w", err)
+		return nil, fmt.Errorf("reading Reliant sessions: %w", err)
+	}
+	return daemonSessionsOnly(sessions), nil
+}
+
+// daemonSessionsOnly keeps the daemon sessions of sessions, in order.
+//
+// Discover lists the preferred server's CLI login BEFORE its daemon session.
+// On a machine that holds both (every cloud machine someone ran `reliant auth
+// login` on), offering the login first cost a refused round trip — a fresh
+// TLS handshake — out of the same deadline before the daemon session was
+// asked. Under load that was the whole deadline, so the bot token was never
+// fetched and agents fell back to the machine's gh login, the owner's account;
+// and when the daemon attempt did fail, the login's refusal was the error
+// reported instead of the daemon's.
+func daemonSessionsOnly(sessions []forgecred.Session) []forgecred.Session {
+	out := make([]forgecred.Session, 0, len(sessions))
+	for _, s := range sessions {
+		if s.Kind == sessionKindDaemon {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// deadlineMessage names a request that ran out of time in words a person can
+// act on, instead of Go's "context deadline exceeded".
+func deadlineMessage(budget time.Duration) string {
+	return fmt.Sprintf("the Reliant server did not answer within %s (is this machine overloaded?); retry", budget)
+}
+
+func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, provider string) (string, error) {
+	sessions, err := discoverDaemonSessions(cmd, pin)
+	if err != nil {
+		return "", err
 	}
 	if len(sessions) == 0 {
-		return "", errors.New("no Reliant session on this machine")
+		return "", errors.New("no Reliant daemon session on this machine: run this in a Reliant agent's shell or on a signed-in daemon's machine")
 	}
 	var last error
 	for _, s := range sessions {
@@ -94,6 +134,8 @@ func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, p
 			return "", errGitProviderNotConnected
 		case connect.CodeUnauthenticated, connect.CodePermissionDenied:
 			last = fmt.Errorf("%s session was not accepted: %s", s.Kind, connect.CodeOf(err))
+		case connect.CodeDeadlineExceeded:
+			last = errors.New(deadlineMessage(gitCredentialTimeout))
 		default:
 			last = fmt.Errorf("asking Reliant for the git token: %s", connect.CodeOf(err))
 		}
