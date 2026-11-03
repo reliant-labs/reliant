@@ -549,7 +549,7 @@ function RunningSpinner({
 }) {
   return (
     <Loader2
-      className="h-3 w-3 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+      className="h-3 w-3 shrink-0 animate-spin text-primary-ink motion-reduce:animate-none"
       data-testid={testId}
       data-activity-state={activityState}
       data-tone="running"
