@@ -40,6 +40,7 @@ import {
   Boxes,
   Activity,
   MessageCircleQuestion,
+  Loader2,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -491,16 +492,27 @@ function ChatStatusChip({
   activityState: string;
   runningBeside: boolean;
 }) {
-  const attention = chip.tone === "attention";
+  const tone = chip.tone;
+  if (tone === "running") {
+    // Running is the common state, so it is a small spinner, not a chip.
+    return (
+      <RunningSpinner
+        testId={`chat-activity-dot-${chatId}`}
+        label={chip.detail ?? chip.label}
+        activityState={activityState}
+      />
+    );
+  }
+  const attention = tone === "attention";
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-2xs font-medium leading-4",
-        CHAT_ROW_CHIP_CLASS[chip.tone],
+        CHAT_ROW_CHIP_CLASS[tone],
       )}
       data-testid={attention ? `chat-needs-input-${chatId}` : `chat-activity-dot-${chatId}`}
       data-activity-state={activityState}
-      data-tone={chip.tone}
+      data-tone={tone}
     >
       <span role="img" aria-label={chip.detail ?? chip.label} className="inline-flex items-center gap-1">
         {attention ? (
@@ -508,27 +520,43 @@ function ChatStatusChip({
         ) : (
           <span
             aria-hidden="true"
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              chip.tone === "running"
-                ? "bg-primary animate-pulse motion-reduce:animate-none"
-                : chip.tone === "failed"
-                  ? "bg-destructive"
-                  : "bg-muted-foreground",
-            )}
+            className={cn("h-1.5 w-1.5 rounded-full", tone === "failed" ? "bg-destructive" : "bg-muted-foreground")}
           />
         )}
         <span aria-hidden="true">{chip.label}</span>
       </span>
       {/* Agents still running beside the question. The label above says it. */}
-      {runningBeside && (
-        <span
-          className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse motion-reduce:animate-none"
-          data-testid={`chat-needs-input-running-${chatId}`}
-          aria-hidden="true"
-        />
-      )}
+      {runningBeside && <RunningSpinner testId={`chat-needs-input-running-${chatId}`} decorative />}
     </span>
+  );
+}
+
+/**
+ * The small spinner a running chat shows in place of a chip. Beside a
+ * needs-input chip it is decorative: that chip's label already says agents
+ * are still running.
+ */
+function RunningSpinner({
+  testId,
+  label,
+  activityState,
+  decorative = false,
+}: {
+  testId: string;
+  label?: string;
+  activityState?: string;
+  decorative?: boolean;
+}) {
+  return (
+    <Loader2
+      className="h-3 w-3 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+      data-testid={testId}
+      data-activity-state={activityState}
+      data-tone="running"
+      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label })}
+    >
+      {!decorative && label && <title>{label}</title>}
+    </Loader2>
   );
 }
 
