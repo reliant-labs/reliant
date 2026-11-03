@@ -92,6 +92,27 @@ describe("composer auto-grow cap", () => {
     expect(editor().style.height).toBe("72px");
   });
 
+  it("stays one line when empty, however tall the placeholder renders", () => {
+    installVisualViewport(844);
+    // Chromium counts a wrapped placeholder in scrollHeight: model a
+    // three-line one on an empty field.
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: HTMLTextAreaElement) {
+        return this.value === "" ? 3 * LINE : Math.max(1, this.value.split("\n").length) * LINE;
+      },
+    });
+    render(
+      <SurfaceProvider surface="mobile">
+        <Harness initial="" />
+      </SurfaceProvider>,
+    );
+    expect(editor().style.height).toBe(`${LINE}px`);
+
+    fireEvent.change(editor(), { target: { value: "a\nb" } });
+    expect(editor().style.height).toBe(`${2 * LINE}px`);
+  });
+
   it("on desktop, ignores the viewport: ten lines", () => {
     installVisualViewport(300);
     render(<Harness initial={THIRTY_LINES} />);

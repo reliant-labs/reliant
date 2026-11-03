@@ -568,6 +568,27 @@ send, and it can't change afterward.
 | Composer, one line | ~135 | 52 |
 | **Transcript** | **~30–60 (8–15%)** | **~264–300 (66–75%)** |
 
+**After** (measured on the redesigned tree by `e2e/mobile-chat-geometry.spec.ts`,
+same fixture and method as §1.1: Chromium with touch emulation, `busyChat`, a
+one-line blurred draft, default Appearance step). The chrome floats (§4.3), so
+the transcript scroller is the full height and readable = composer band top −
+top bar bottom − pinned strip; the spec checks its structural walk against those
+edges. No status line renders for this fixture.
+
+| Band | 390×844 | 390×480 | 1024×768 (list–detail) |
+|---|---|---|---|
+| Top bar | 48 | 48 | 48 |
+| Pinned prompt strip | 37 | 37 | 56 (wide column: the pinned bubble, not the one-line strip) |
+| Composer band (card + 8px + safe area) | 60 (card 52) | 60 (card 52) | 114 (wide composer: text row + priority+ row) |
+| **Readable transcript** | **699 (83%)** | **335 (70%)** | **550 (72%)** |
+| §1.1 baseline | 425 (50%) | 61 (13%) | — |
+
+The empty composer is the same 60px band: its example-prompt placeholder is
+clipped to one ellipsized line and never sizes the textarea. A multi-line draft
+grows to the 20% cap (168px of text at 844px, a 184px band). Compose mode hides
+the pinned strip, so with the keyboard up the strip's 37px also goes to the
+transcript; that state still needs native evidence (§12 Acceptance).
+
 ---
 
 ## 11. Feature parity map
@@ -668,6 +689,37 @@ first"), then install. Don't fork `forge-ui/modal.tsx`, which stays verbatim.
 - Native: Device Hub evidence on iPhone (Safari and installed PWA, keyboard
   open), iPad (portrait, split view) and one Android phone. A missing
   capability is recorded as a blocker, not a pass.
+
+### Status (2026-11, branch `feat/mobile-update`)
+
+All seven phases are implemented. What landed, and what did not:
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0. Measure | Done | `e2e/mobile-chat-geometry.spec.ts` + `busyChat` fixture; baseline in §1.1, after-numbers in §10. The spec lives beside `mobile-responsive.spec.ts`, not in it |
+| 1. Top bar + Chat sheet | Done | `useChatActions` shared by the desktop dropdown and the Chat sheet; `terminal` capability in `surface.ts` |
+| 2. Inline composer + `⊕` | Done | `@container` grid (one textarea, never remounted across widths), chip row only when present, four-state action, model only in `⊕` (D1), touch Return = newline (D2). One-line card measured at 52px, band 60px; the placeholder is one ellipsized line |
+| 3. Status slot | Done | `ComposerStatusSlot`; approvals and questions stay out of it |
+| 4. Transcript polish | Done | One-line pinned strip hidden in compose mode, 44px scroll circle, floating chrome + scroll-edge hairlines |
+| 5. Tablet | Partly | Priority+ composer row, list–detail at ≥ 840px and `interactive-widget=resizes-content` are in. **Deferred:** medium-width sheets as anchored popovers |
+| 6. New chat + list | Done | Workspace options inline on the canvas (D3), list top bar with search/new |
+
+Acceptance:
+
+- **Geometry gate: met** at 390×844 (83%) and 390×480 (70%) with no status
+  line, and `mobile-chat-geometry.spec.ts` now runs it as a real `test`. The
+  ≥ 60%-with-one-status-line case has no fixture yet.
+- **Draft survival: met** for resize (wide, 540px pane, short window) and `⊕`
+  dismissal. The e2e test also requires the same textarea element throughout.
+- **Deferred, needs forge `Modal` support:** bottom-sheet detents and
+  drag-to-dismiss. Medium-width anchored popovers wait on the same primitive
+  work. The sheets ship as today's `sheetOnMobile` sheets with in-sheet page
+  push.
+- **Not done:** Device Hub native evidence (iPhone Safari + installed PWA with
+  the keyboard open, iPad, Android). Keyboard-open geometry is still inferred
+  from the 480px short window. The webkit e2e projects
+  (`responsive-webkit-phone`, `responsive-webkit-tablet`) were not run locally;
+  CI runs them. The color-scheme screenshot pass was not reviewed.
 
 ---
 

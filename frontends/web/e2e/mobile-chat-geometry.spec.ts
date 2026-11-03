@@ -25,9 +25,9 @@ async function openBusyChat(page: Page, viewport: { width: number; height: numbe
   await page.setViewportSize(viewport);
   await page.goto('/m/chats/chat_a');
   await expect(page.locator('[data-context="transcript"]')).toBeVisible();
-  // A one-line draft, then blur: the empty composer's placeholder is a random
-  // example prompt that wraps to one or two lines, so its height is not a
-  // fixed number. Blurring keeps any focus-driven chrome out of the reading.
+  // A one-line draft, then blur: the same state the §1.1 baseline measured
+  // (when the empty composer's random placeholder could still wrap). Blurring
+  // keeps any focus-driven chrome out of the reading.
   const composer = page.getByRole('textbox', { name: 'Message the agent', exact: true });
   await composer.fill('Looks good, ship it.');
   await composer.blur();
@@ -63,12 +63,19 @@ test('expanded width shows the chat list beside the thread', async ({ page }, in
 });
 
 // The §12 acceptance gate: transcript ≥ 66% of the visible height with no
-// status line. Declared fixme while the redesign phases land; the redesign's
-// final verification task flips it to `test(...)`. A declaration, not a
-// runtime skip, and outside the required mobile-responsive suite.
-test.fixme('readable transcript is at least 66% of a 390×480 window', async ({ page }) => {
-  await openBusyChat(page, SHORT);
-  const geometry = await settledChatGeometry(page);
-  await expect(page.getByTestId('composer-status-slot'), 'the fixture must show no status line').toHaveCount(0);
-  expect(geometry.readable / SHORT.height).toBeGreaterThanOrEqual(0.66);
-});
+// status line, on the short window that stands in for an open keyboard (the
+// 844px phone clears it by far more, so it gets the same check). The chrome
+// floats (design §4.3), so the readable height is the gap between the top
+// bar and the composer band minus the pinned strip; the structural walk and
+// those edges must agree before the share means anything.
+for (const viewport of [SHORT, PHONE]) {
+  test(`readable transcript is at least 66% of a ${viewport.width}×${viewport.height} window`, async ({ page }) => {
+    await openBusyChat(page, viewport);
+    const geometry = await settledChatGeometry(page);
+    await expect(page.getByTestId('composer-status-slot'), 'the fixture must show no status line').toHaveCount(0);
+    expect(geometry.floating, 'the mobile chat screen floats its chrome').toBeDefined();
+    const { barBottom, bandTop, strip } = geometry.floating!;
+    expect(geometry.readable).toBe(bandTop - barBottom - strip);
+    expect(geometry.readable / viewport.height).toBeGreaterThanOrEqual(0.66);
+  });
+}

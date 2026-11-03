@@ -15,6 +15,11 @@ import { expect, type Page, type TestInfo } from '@playwright/test';
  *   prompt, a translucent top bar, a floating composer) leaves the scroller
  *   tall but hides what is under it. It counts against the readable height.
  *
+ * In the floating layout (design §4.3) the scroller runs the full height, so
+ * the top bar, the pinned strip and the composer band all land in the second
+ * case, and readable = band top − bar bottom − strip. `floating` records those
+ * edges directly so the gate can check the walk against them.
+ *
  * A banner nobody listed still shows up (as "Other"), and a band that moves
  * between components is still counted exactly once. Labels come from
  * selectors meant to survive the redesign: testids, the semantic `header`,
@@ -42,6 +47,14 @@ export interface ChatGeometry {
   overlay: number;
   /** What is left to read: transcript minus overlays. */
   readable: number;
+  /**
+   * The floating layout's own edges (design §4.3), when the screen floats its
+   * chrome: the top bar's bottom, the bottom band's top and the pinned strip
+   * between them. Recorded independently of the structural walk so a gate can
+   * check that the two agree: what is readable is the gap between the bars
+   * minus the strip, and nothing else.
+   */
+  floating?: { barBottom: number; bandTop: number; strip: number };
 }
 
 /** Selector → label, first match wins. */
@@ -143,7 +156,23 @@ export async function measureChatGeometry(page: Page): Promise<ChatGeometry | nu
       if (x.bottom > reach) { overlay += x.bottom - Math.max(x.top, reach); reach = x.bottom; }
     }
     overlay = Math.round(overlay);
-    return { viewport: { width: window.innerWidth, height: vh }, bands, transcript, overlay, readable: transcript - overlay };
+
+    let floatingEdges: { barBottom: number; bandTop: number; strip: number } | undefined;
+    const frame = scroller.closest('[data-floating-chrome]');
+    const bar = frame?.querySelector('[data-testid="mobile-chat-top-bar"]');
+    const band = frame?.querySelector('[data-testid="floating-composer-band"]');
+    if (bar && band) {
+      const strip = frame!.querySelector('[data-testid="pinned-user-message-header"]');
+      floatingEdges = {
+        barBottom: Math.round(bar.getBoundingClientRect().bottom),
+        bandTop: Math.round(band.getBoundingClientRect().top),
+        strip: strip ? px(strip) : 0,
+      };
+    }
+    return {
+      viewport: { width: window.innerWidth, height: vh }, bands, transcript, overlay,
+      readable: transcript - overlay, floating: floatingEdges,
+    };
   }, { bandSelectors: BAND_SELECTORS, detailSelectors: DETAIL_SELECTORS });
 }
 
@@ -171,6 +200,7 @@ export function formatChatGeometry(name: string, g: ChatGeometry): string {
     `| Transcript scroller | | ${g.transcript} | | ${pct(g.transcript)} |`,
     `| Covered by overlays | | ${g.overlay} | | |`,
     `| **Readable transcript** | | **${g.readable}** | | **${pct(g.readable)}** |`,
+    ...(g.floating ? [`floating edges: bar bottom ${g.floating.barBottom}, band top ${g.floating.bandTop}, pinned strip ${g.floating.strip}`] : []),
   ].join('\n');
 }
 

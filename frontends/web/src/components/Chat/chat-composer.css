@@ -6,8 +6,13 @@
   overflow-wrap: anywhere;
 }
 
+/* One line, ellipsized: a placeholder that wraps would make an empty composer
+   taller than a one-line draft (the random example prompt does at 390px). */
 .chat-composer::placeholder {
   color: var(--chat-input-placeholder);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /*

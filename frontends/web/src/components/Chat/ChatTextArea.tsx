@@ -190,7 +190,12 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       // already sized to fit it.
       el.style.height = "auto";
       el.style.maxHeight = `${maxHeight}px`;
-      el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)}px`;
+      // Empty, the box is one line whatever the placeholder: Chromium counts a
+      // wrapped placeholder in scrollHeight, and a random example prompt that
+      // wrapped would grow the composer (and reflow the screen) with nothing
+      // typed. The placeholder itself is clipped to one line in CSS.
+      const contentHeight = el.value === "" ? minHeight : el.scrollHeight;
+      el.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
 
       const caretAtEnd =
         document.activeElement === el &&
@@ -384,8 +389,13 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           // padded to the height of the controls beside it (32px, 44px on
           // touch), so the text line sits level with ⊕ and send, and a tap
           // just above or below the line still lands in the field (the
-          // auto-resize counts the padding).
-          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-1 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-2.5"
+          // auto-resize counts the padding). Touch padding is in px, not rem:
+          // with the default line height it lands just under the 44px floor,
+          // so min-height alone sets the one-line box at every Appearance
+          // step instead of the rem padding overshooting it. `block`: an
+          // inline textarea sits on a text baseline and its parent grows a
+          // descender gap under it (8px of dead composer height).
+          className="chat-composer block w-full resize-none border-0 bg-transparent px-0 py-1 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-[8px]"
           style={{
             color: "var(--chat-input-text)",
           }}

@@ -1904,10 +1904,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       >
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1200px] mx-auto">
-            <div ref={containerRef} className="composer-root mt-1 mb-1.5">
+            {/* px, not rem, for the card's inset and the band around it: the
+                one-line card is 44px controls + 1px border + 3px padding = 52
+                (design §5.3), and the band adds 7px + its hairline, at every
+                Appearance step. */}
+            <div ref={containerRef} className="composer-root mb-[4px] mt-[3px]">
               <div
                 className={cn(
-                  "relative rounded-3xl border bg-card p-1 chat-input-container cursor-text transition-colors duration-200",
+                  "relative rounded-3xl border bg-card p-[3px] chat-input-container cursor-text transition-colors duration-200",
                   hasPendingQuestion ? "border-warning/70" : "border-border",
                   isDragging && "bg-[var(--chat-drag-bg,var(--transparent-button-hover))]",
                 )}
