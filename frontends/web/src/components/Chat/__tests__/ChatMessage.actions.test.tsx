@@ -226,9 +226,10 @@ describe("ChatMessage hover actions", () => {
   it("rests the floating toolbar at the top of the reserved band", () => {
     render(<ChatMessage message={buildMessage(MessageRole.ASSISTANT)} chatId="chat-1" />);
 
-    // No extra offset past the pinned-header allowance: any positive `top` would
-    // push the toolbar out of the band and back over the first line of content.
-    expect(toolbar().style.top).toBe("var(--chat-pinned-header-h, 0px)");
+    // No extra offset past the floating top bar and pinned-header allowances
+    // (both 0 when absent): any other positive `top` would push the toolbar out
+    // of the band and back over the first line of content.
+    expect(toolbar().style.top).toBe("calc(var(--chat-top-inset, 0px) + var(--chat-pinned-header-h, 0px))");
   });
 
   it("leaves the inline toolbar fully interactive", () => {

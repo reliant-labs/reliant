@@ -18,8 +18,15 @@ final answer inside collapsed tool activity.
   infer a posture or hinge from a model string. The 540px automated pane case is
   a width regression check, **not** proof of an actual Duo or hinge behavior.
 - Input is independent of width: mouse, touch and hardware keyboard must work.
-  Touch targets are at least 44×44 CSS px, including icon-only controls and sheet
-  close buttons. Editable fields use at least 16px text to avoid iOS focus zoom.
+  Touch targets are at least 44×44 CSS px on a coarse pointer, including
+  icon-only controls, composer chips' × and sheet close buttons; with a fine
+  pointer (the `chromium` project's mouse runs) controls keep their desktop
+  size, so assert 44×44 only when the project has touch. Editable fields use
+  at least 16px text to avoid iOS focus zoom.
+- Return in the composer follows the pointer, not the width: on a coarse
+  pointer it inserts a newline and only the action button or Cmd/Ctrl+Enter
+  sends (or queues); a fine pointer keeps Enter-to-send
+  (`dev-docs/design/mobile-chat-redesign.md` §5.3, decision D2).
 - No page-level horizontal overflow. Long prose, paths and URLs wrap. Only
   explicitly identified code/table viewers may scroll horizontally locally;
   never whitelist all overflowing descendants or conceal a failure with root
@@ -66,7 +73,9 @@ not a green shell or a cleanly ended empty stream fixture.
 `frontends/web/e2e/mobile-responsive.spec.ts` uses real rendered `/m/chats` and
 `/m/inbox` routes, plus new/existing chat composers, with RPC-boundary fixtures
 from `mobileMocks.ts`. Composer drafts survive wide, pane and short-window resizes
-and options-sheet dismissal. It asserts
+and options-sheet dismissal, in the same textarea element throughout (a remount
+that refills the value would still drop the caret, undo stack and IME
+composition, so the test marks the element and requires it back). It asserts
 navigation dialog focus/escape/restore, target geometry and hit testing,
 page overflow, and question selection/submission through rotation, 540px pane,
 320px narrow window and restoration. Required tests have no runtime skips and

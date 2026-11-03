@@ -23,6 +23,9 @@ export function TimelineCatchUpOverlay({ hasContent }: { hasContent: boolean }) 
         "timeline-catchup-in absolute inset-0 z-20 flex items-center justify-center",
         hasContent && "bg-background/40 backdrop-blur-xs",
       )}
+      // Under floating chrome the frame runs beneath both bars; center the
+      // label in the part of it that is actually visible. 0 where docked.
+      style={{ paddingTop: "var(--chat-top-inset, 0px)", paddingBottom: "var(--chat-bottom-inset, 0px)" }}
     >
       <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground shadow-sm">
         <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />

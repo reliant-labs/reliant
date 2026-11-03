@@ -31,6 +31,13 @@
  * indicator, approval prompt) is not a row, but its measured height is fed in
  * as `paddingEnd`, so "the end" the virtualizer pins to includes it.
  *
+ * Floating chrome (the mobile chat screen, floatingChrome.tsx) overlays the
+ * scroller's top and bottom edges. Its heights are fed in as part of
+ * paddingStart / paddingEnd and as the scroll paddings, so "the end" is the
+ * last row resting fully ABOVE the composer and a jump aligns a row BELOW the
+ * top bar — the geometry the virtualizer reasons about is the real one, not a
+ * CSS padding it cannot see.
+ *
  * Following is position-based: within END_THRESHOLD_PX of the end means
  * following. Scrolling up stops it; reaching the bottom resumes it. A held
  * primary-button press in the transcript suspends it until release, so a
@@ -90,16 +97,27 @@ function distanceFromEnd(element: HTMLElement): number {
 export function useTimelineVirtualizer(params: {
   count: number;
   getItemKey: (index: number) => string;
-  /** Space reserved above the first row (the scroll-back loading header). */
+  /**
+   * Space reserved above the first row (the scroll-back loading header, plus
+   * the floating top bar's height where the chrome floats).
+   */
   paddingStart: number;
   /**
-   * Height of the overlay floating over the top of the viewport (the pinned
-   * user-message header). A jump that aligns a row to the start lands it
-   * below the overlay instead of underneath it.
+   * Height of what floats over the top of the viewport (the floating top bar
+   * and the pinned user-message header). A jump that aligns a row to the
+   * start lands it below them instead of underneath.
    */
   scrollPaddingStart: number;
+  /**
+   * Height of what floats over the bottom of the viewport (the floating
+   * composer band); 0 where the composer docks below the scroller. Reserved
+   * after the footer, so at the end the last row and the footer rest fully
+   * above it, and reaching the end — not merely the scroller's bottom edge —
+   * is what counts as following.
+   */
+  endInset?: number;
 }): TimelineVirtualizer {
-  const { count, getItemKey, paddingStart, scrollPaddingStart } = params;
+  const { count, getItemKey, paddingStart, scrollPaddingStart, endInset = 0 } = params;
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   const [footerHeight, setFooterHeight] = useState(0);
@@ -119,8 +137,10 @@ export function useTimelineVirtualizer(params: {
     overscan: OVERSCAN_ROWS,
     paddingStart,
     scrollPaddingStart,
-    // The footer lives in this reserved space, so the end includes it.
-    paddingEnd: footerHeight,
+    scrollPaddingEnd: endInset,
+    // The footer lives in this reserved space, so the end includes it; the
+    // floating composer band covers the space below it.
+    paddingEnd: footerHeight + endInset,
     // Bottom-anchored: growth at the end while at the end keeps the end in
     // view; edits above the viewport keep the reader's row still; a prepend
     // (an older page) holds position.
@@ -208,18 +228,37 @@ export function useTimelineVirtualizer(params: {
     return () => observer.disconnect();
   }, [footer]);
 
-  // paddingEnd changed while at the end: the end moved, so follow it. Layout
-  // effect, so the correction lands before paint.
-  const previousFooterHeightRef = useRef(footerHeight);
+  // paddingEnd grew while at the end (the footer appeared, or the floating
+  // composer band grew a line): the end moved, so follow it. Layout effect,
+  // so the correction lands before paint.
+  const paddingEnd = footerHeight + endInset;
+  const previousPaddingEndRef = useRef(paddingEnd);
   useLayoutEffect(() => {
-    const grew = footerHeight - previousFooterHeightRef.current;
-    previousFooterHeightRef.current = footerHeight;
+    const grew = paddingEnd - previousPaddingEndRef.current;
+    previousPaddingEndRef.current = paddingEnd;
     if (!scroller || grew <= 0 || pressHeldRef.current) return;
     // At the end BEFORE this growth means the gap now equals the growth.
     if (distanceFromEnd(scroller) - grew <= END_THRESHOLD_PX) {
       virtualizer.scrollToEnd({ behavior: "auto" });
     }
-  }, [footerHeight, scroller, virtualizer]);
+  }, [paddingEnd, scroller, virtualizer]);
+
+  // paddingStart changed (the floating top bar gained or lost its status
+  // line): every row moved by the difference, and the virtualizer does not
+  // compensate a padding change the way it does a row resize. Keep the reader
+  // where they were — at the end, still at the end (following); elsewhere,
+  // on the same text.
+  const previousPaddingStartRef = useRef(paddingStart);
+  useLayoutEffect(() => {
+    const delta = paddingStart - previousPaddingStartRef.current;
+    previousPaddingStartRef.current = paddingStart;
+    if (!scroller || delta === 0 || count === 0) return;
+    if (atBottomRef.current && !pressHeldRef.current) {
+      virtualizer.scrollToEnd({ behavior: "auto" });
+    } else {
+      virtualizer.scrollBy(delta, { behavior: "auto" });
+    }
+  }, [paddingStart, scroller, count, virtualizer]);
 
   const scrollToBottom = useCallback(() => {
     if (count > 0) virtualizer.scrollToEnd({ behavior: "auto" });

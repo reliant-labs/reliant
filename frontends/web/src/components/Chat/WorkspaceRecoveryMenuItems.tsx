@@ -13,6 +13,7 @@ import { FolderGit2, RotateCcw } from "lucide-react";
 import { useMoveChatToMainCheckout, useRecreateWorkspace } from "../../hooks/workspace-recovery";
 import { toast } from "../../lib/toast-manager";
 import { type Worktree } from "../../hooks/worktree-queries";
+import { cn } from "../../lib/utils";
 
 interface WorkspaceRecoveryMenuItemsProps {
   chatId: string;
@@ -22,12 +23,24 @@ interface WorkspaceRecoveryMenuItemsProps {
   mainWorktree?: Worktree;
   /** Called once an item is chosen, to close the menu. */
   onSelect?: () => void;
+  /**
+   * Classes merged onto each item, for a host whose rows are sized
+   * differently from the desktop dropdown (the mobile Chat sheet's 44px rows).
+   */
+  itemClassName?: string;
 }
 
 const itemClass = "w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2 disabled:opacity-50";
 
-export function WorkspaceRecoveryMenuItems({ chatId, worktree, mainWorktree, onSelect }: WorkspaceRecoveryMenuItemsProps) {
+export function WorkspaceRecoveryMenuItems({
+  chatId,
+  worktree,
+  mainWorktree,
+  onSelect,
+  itemClassName,
+}: WorkspaceRecoveryMenuItemsProps) {
   const recreate = useRecreateWorkspace();
+  const className = cn(itemClass, itemClassName);
   const moveToMain = useMoveChatToMainCheckout();
 
   if (worktree.is_main || worktree.deleted_at) {
@@ -64,11 +77,11 @@ export function WorkspaceRecoveryMenuItems({ chatId, worktree, mainWorktree, onS
 
   return (
     <>
-      <button onClick={handleRecreate} disabled={recreate.isPending} className={itemClass}>
+      <button onClick={handleRecreate} disabled={recreate.isPending} className={className}>
         <RotateCcw className="h-4 w-4" />
         Recreate workspace
       </button>
-      <button onClick={handleMoveToMain} disabled={moveToMain.isPending} className={itemClass}>
+      <button onClick={handleMoveToMain} disabled={moveToMain.isPending} className={className}>
         <FolderGit2 className="h-4 w-4" />
         Move to main checkout
       </button>

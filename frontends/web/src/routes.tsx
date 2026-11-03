@@ -134,8 +134,10 @@ const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
   () => import('./components/Mobile/MobileShell'), 'MobileShell')
-const MobileChatList = lazyRoute(
-  () => import('./components/Mobile/MobileChatList'), 'MobileChatList')
+const MobileSplitLayout = lazyRoute(
+  () => import('./components/Mobile/MobileSplitLayout'), 'MobileSplitLayout')
+const MobileChatsEmptyDetail = lazyRoute(
+  () => import('./components/Mobile/MobileSplitLayout'), 'MobileChatsEmptyDetail')
 const MobileChatScreen = lazyRoute(
   () => import('./components/Mobile/MobileChatScreen'), 'MobileChatScreen')
 const MobileNewChat = lazyRoute(
@@ -795,14 +797,24 @@ const mobileLayoutRoute = createRoute({
   component: MobileShell,
 })
 
-const mobileChatsRoute = createRoute({
+// The chats routes share one layout: single pane on a phone, list–detail at
+// 840px and up, where the list stays mounted beside the routed chat (see
+// MobileSplitLayout). Pathless, so the chat routes keep their paths and the
+// layout owns the list: `/m/chats` itself is only the empty detail pane.
+const mobileChatsLayoutRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
+  id: '_chats',
+  component: MobileSplitLayout,
+})
+
+const mobileChatsRoute = createRoute({
+  getParentRoute: () => mobileChatsLayoutRoute,
   path: '/m/chats',
-  component: MobileChatList,
+  component: MobileChatsEmptyDetail,
 })
 
 const mobileChatRoute = createRoute({
-  getParentRoute: () => mobileLayoutRoute,
+  getParentRoute: () => mobileChatsLayoutRoute,
   path: '/m/chats/$chatId',
   component: MobileChatScreen,
 })
@@ -956,8 +968,7 @@ const routeTree = rootRoute.addChildren([
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
     mobileLayoutRoute.addChildren([
-      mobileChatsRoute,
-      mobileChatRoute,
+      mobileChatsLayoutRoute.addChildren([mobileChatsRoute, mobileChatRoute]),
       mobileNewChatRoute,
       mobileDaemonsRoute,
       mobileDaemonRoute,

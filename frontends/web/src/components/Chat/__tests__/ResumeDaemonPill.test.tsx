@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { ResumeDaemonPill } from "../ResumeDaemonPill";
+import { ComposerStatusSlot, StatusSlotItem } from "../ComposerStatusSlot";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
 
@@ -96,5 +97,25 @@ describe("ResumeDaemonPill", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Resume ws-1" }));
 
     expect(await screen.findByText("Upgrade plan")).toBeTruthy();
+  });
+
+  it("joins the composer's status slot instead of floating over the header when collapsed", async () => {
+    state.resume.mockResolvedValue(undefined);
+    renderWithQuery(
+      <ComposerStatusSlot
+        layout="compact"
+        upper={null}
+        approvals={null}
+        lower={<StatusSlotItem id="resume"><ResumeDaemonPill /></StatusSlotItem>}
+      />,
+    );
+    const line = await screen.findByTestId("status-slot-line-resume");
+    expect(line).toHaveTextContent("ws-1 is suspended");
+    fireEvent.click(line);
+    const resume = screen.getByRole("button", { name: "Resume ws-1" });
+    // In the sheet it lays out inline, not absolutely over the column's top.
+    expect(screen.getByTestId("status-slot-sheet").innerHTML).not.toContain("absolute left-1/2 top-3");
+    fireEvent.click(resume);
+    await waitFor(() => expect(state.resume).toHaveBeenCalledWith("d-1"));
   });
 });

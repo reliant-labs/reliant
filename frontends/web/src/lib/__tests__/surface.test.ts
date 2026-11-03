@@ -28,6 +28,14 @@ describe('surface capabilities', () => {
     expect(caps.chatExecutionSidebar).toBe(false)
   })
 
+  it('has a terminal only on desktop', () => {
+    // There is no terminal panel on /m/* or in an embed, so "Open Terminal"
+    // would open nothing there (mobile-chat-redesign §5.2).
+    expect(capabilitiesFor('desktop').terminal).toBe(true)
+    expect(capabilitiesFor('mobile').terminal).toBe(false)
+    expect(capabilitiesFor('embed').terminal).toBe(false)
+  })
+
   it('enables the iteration-1 mobile feature set', () => {
     const caps = capabilitiesFor('mobile')
     expect(caps.chatSend).toBe(true)

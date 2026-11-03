@@ -26,6 +26,7 @@ vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ activeDaemon: state.activeId ? { daemonId: state.activeId } : undefined }),
 }));
 import { DiskPressureBanner } from "../DiskPressureBanner";
+import { ComposerStatusSlot, StatusSlotItem } from "../ComposerStatusSlot";
 
 function machine(
   over: { lastNoSpaceAtMs?: bigint; pressure?: boolean; freeBytes?: bigint; guard?: DiskGuardState; reclaimed?: string[] } = {},
@@ -142,5 +143,23 @@ describe("DiskPressureBanner", () => {
     const dialog = await screen.findByTestId("free-disk-space-dialog");
     expect(within(dialog).getByText("Go build cache")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /Clear 1 cache \(about 4\.0 GB\)/ })).toBeEnabled();
+  });
+
+  it("reports its headline and tone to the composer's status slot", () => {
+    state.daemons = [machine({ lastNoSpaceAtMs: BigInt(Date.now() - 30_000), freeBytes: 0n })];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ComposerStatusSlot
+          layout="compact"
+          upper={null}
+          approvals={null}
+          lower={<StatusSlotItem id="disk"><DiskPressureBanner daemonId="d-1" /></StatusSlotItem>}
+        />
+      </QueryClientProvider>,
+    );
+    const line = screen.getByTestId("status-slot-line-disk");
+    expect(line).toHaveTextContent("Commands are failing: your machine's disk is full");
+    expect(line.className).toContain("text-destructive-ink");
   });
 });

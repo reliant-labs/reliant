@@ -36,6 +36,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
+import { ComposeModeProvider } from "../../lib/composeMode";
 import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
@@ -99,8 +100,9 @@ export function MobileLayout({ children }: { children: ReactNode }) {
           // its tappable row stays above the indicator.
         }}
         data-surface="mobile"
+        data-compose-mode={keyboardOpen || undefined}
       >
-        {children}
+        <ComposeModeProvider keyboardOpen={keyboardOpen}>{children}</ComposeModeProvider>
       </div>
     </SurfaceProvider>
   );
