@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 )
 
 type scrubNothing struct{}
@@ -129,4 +131,46 @@ func TestSecretCallDoesNotFollowAPaginationLinkToAnotherHost(t *testing.T) {
 func TestWithSecretCallNilMarksNothing(t *testing.T) {
 	assert.Nil(t, SecretCall(WithSecretCall(context.Background(), nil)))
 	assert.NotNil(t, SecretCall(secretCtx()))
+}
+
+// A secret the server echoes is masked in the whole response before the runner
+// cuts it: an error snippet keeps 300 bytes, so a value echoed across that cut
+// once left a prefix no registered form matched, and it survived the action
+// activity's mask (reliant #2037 review). Error, non-JSON and JSON responses.
+func TestSecretCallMasksTheResponseBeforeItIsCut(t *testing.T) {
+	const secret = "sk-live-0123456789abcdefghijklmnopqrstuvwxyz"
+	masker := stepsecrets.NewMasker(secret)
+	ctx := WithSecretCall(context.Background(), masker)
+	pad := strings.Repeat("x", 300-10) // the value starts 10 bytes before the 300-byte cut
+	for name, tc := range map[string]struct {
+		status int
+		ctype  string
+		body   string
+	}{
+		"error response": {http.StatusBadRequest, "text/plain", pad + secret + pad},
+		"not JSON":       {http.StatusOK, "text/html", pad + secret + pad},
+		"JSON":           {http.StatusOK, "application/json", `{"echo":"` + pad + secret + `"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", tc.ctype)
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			m, a := builtinHTTPRequest(t)
+			res, err := tlsHTTPRunner(t, srv).Run(ctx, m, a, map[string]any{"url": srv.URL + "/x"})
+			text := ""
+			if err != nil {
+				text = err.Error()
+			} else {
+				text = res.Content
+			}
+			for _, frag := range []string{secret[:8], secret[8:16], secret[len(secret)-8:]} {
+				assert.NotContains(t, text, frag, "a fragment of the echoed secret survived")
+			}
+			if res != nil && res.Data != nil {
+				assert.NotContains(t, fmt.Sprint(res.Data), secret[:8])
+			}
+		})
+	}
 }

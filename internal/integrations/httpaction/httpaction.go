@@ -508,6 +508,14 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 		return nil, err
 	}
 	raw := resp.Body
+	// A call carrying a step's secrets has the response masked here, whole,
+	// before anything cuts it (defaultErrorMessage and notJSONResult keep 300
+	// bytes, a success maxContentChars): a secret the server echoes across a
+	// cut would leave a fragment no registered form matches, and the action
+	// activity's mask afterwards could not catch it (reliant #2037 review).
+	if s := SecretCall(ctx); s != nil && len(raw) > 0 {
+		raw = []byte(s.Mask(string(raw)))
+	}
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
