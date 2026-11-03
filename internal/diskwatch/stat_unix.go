@@ -57,6 +57,14 @@ func allocatedBytes(fi fs.FileInfo) uint64 {
 	return 0
 }
 
+// ownerUID is the uid owning a stat result; -1 when unknown.
+func ownerUID(fi fs.FileInfo) int {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(st.Uid)
+	}
+	return -1
+}
+
 // deviceOf is the st_dev of a stat result.
 func deviceOf(fi fs.FileInfo) (uint64, bool) {
 	if st, ok := fi.Sys().(*syscall.Stat_t); ok {

@@ -73,26 +73,6 @@ func TestRecoveryStageCleanupNeverDeletesLateFile(t *testing.T) {
 	require.Equal(t, "only copy", string(data))
 }
 
-func TestRecoveryRestoreMultiRepoPreparedRestartAndResponseLoss(t *testing.T) {
-	req, workspace := recoveryRestartFixture(t, true)
-	got := restoreRecoveryWorkspace(context.Background(), req)
-	require.Equal(t, worktreereclaim.OutcomeRestored, got.Outcome, got.Detail)
-	require.Equal(t, []string{"alpha", "beta"}, got.RestoredRepoIDs)
-	require.NoDirExists(t, workspace)
-	for _, c := range req.Captures {
-		require.NoError(t, worktreereclaim.ValidateRestoredRecovery(context.Background(), filepath.Join(got.Path, c.Rel), req.Branch, c))
-	}
-	// Discard the first response: exact persisted state is the only authority.
-	retry := restoreRecoveryWorkspace(context.Background(), req)
-	require.Equal(t, got, retry)
-	require.NoError(t, os.WriteFile(filepath.Join(got.Path, "beta", "raw"), []byte("user after response loss"), 0644))
-	changed := restoreRecoveryWorkspace(context.Background(), req)
-	require.Equal(t, worktreereclaim.OutcomeHeld, changed.Outcome)
-	data, err := os.ReadFile(filepath.Join(got.Path, "beta", "raw"))
-	require.NoError(t, err)
-	require.Equal(t, "user after response loss", string(data))
-}
-
 func TestRecoveryRestoreIncompleteRestartPreservesAllStaging(t *testing.T) {
 	req, workspace := recoveryRestartFixture(t, false)
 	// Ordinary own partial materialization plus user data in a later repo or

@@ -19,7 +19,7 @@ const (
 // InboxPending is one row of the cross-chat pending list. Text1, Text2 and
 // Int1 are kind-specific:
 //
-//	approval:        Text1 title, Int1 approval type
+//	approval:        Text1 title, Text2 batch id, Int1 approval type
 //	question:        Text1 thread id, Text2 metadata JSON
 //	launch failed:   Text1 newest outcome detail, Text2 event kind, Int1 failures in the episode; ItemKey is the episode's first failed event
 //	run paused:      Text1 the failure that paused it; ItemKey is the chat id and when that failure happened

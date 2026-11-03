@@ -32,7 +32,7 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 	// Get thread to find conversation ID
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil {
-		return nil, fmt.Errorf("thread not found: %w", err)
+		return nil, lookupFailed(err, "thread not found", "failed to load thread")
 	}
 
 	// Get current context window to link as parent

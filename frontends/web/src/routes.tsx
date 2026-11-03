@@ -894,6 +894,10 @@ const mobileDiagnosticsRoute = createRoute({
 const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
+  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string } => ({
+    section: typeof search.section === 'string' ? search.section : undefined,
+    returnTo: typeof search.returnTo === 'string' ? search.returnTo : undefined,
+  }),
   component: MobileSettingsScreen,
 })
 

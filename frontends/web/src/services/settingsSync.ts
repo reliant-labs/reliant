@@ -11,7 +11,7 @@ import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
-import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { COLOR_SCHEME_ATTR, DEFAULT_COLOR_SCHEME, DEFAULT_COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
 import { applyThemeMode, parseThemeMode } from "../lib/themeMode";
 
 // Setting key prefixes for organization
@@ -391,8 +391,8 @@ export class SettingsSyncService {
     applyThemeMode(parseThemeMode(theme));
 
     // Apply color scheme
-    const colorScheme = this.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black");
-    const colorSchemeAttr = COLOR_SCHEME_MAP[colorScheme] || "pure-black";
+    const colorScheme = this.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME);
+    const colorSchemeAttr = COLOR_SCHEME_MAP[colorScheme] || DEFAULT_COLOR_SCHEME_ATTR;
     logger.info(`[SettingsSync] Applying color scheme: "${colorScheme}" -> "${colorSchemeAttr}"`);
     document.documentElement.setAttribute("data-color-scheme", colorSchemeAttr);
 

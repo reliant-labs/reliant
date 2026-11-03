@@ -7,12 +7,14 @@ import {
   Settings2,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
+import { ComposerSheet } from "../ComposerSheet";
 import { ModelSettingsPage } from "./ModelSettingsPage";
 import { PresetSettingsPage } from "./PresetSettingsPage";
 import { ParamsSettingsPage } from "./ParamsSettingsPage";
 import type { InputDef } from "../../../lib/inputHelpers";
 import {
   getInputEnumValues,
+  getInputMulti,
   getInputDefault,
   getInputUI,
 } from "../../../lib/inputHelpers";
@@ -28,6 +30,8 @@ interface ChatSettingsPopoverProps {
   isOpen: boolean;
   onClose: () => void;
   initialPage?: PageId;
+  mobile?: boolean;
+  disabled?: boolean;
   // Workflow params (dynamic)
   inputs: Record<string, InputDef> | null;
   values: Record<string, unknown>;
@@ -78,7 +82,7 @@ function findModeParamKey(
 ): string | null {
   if (!inputs) return null;
   for (const [key, def] of Object.entries(inputs)) {
-    if (def?.type === "enum") {
+    if (def?.type === "enum" && !getInputMulti(def)) {
       const values = getInputEnumValues(def);
       if (
         values &&
@@ -123,7 +127,7 @@ function countExtraParams(
     if (key === modelKey || key === modeKey) continue;
     if (def?.type === "preset" || def?.type === "tools") continue;
     const ui = getInputUI(def);
-    if (ui === "hidden" || ui === "toolbar") continue;
+    if (ui === "hidden") continue;
     if (def?.type === "message" || def?.type === "attachments" || def?.type === "thread") continue;
     count++;
   }
@@ -138,16 +142,27 @@ export function ChatSettingsPopover({
   isOpen,
   onClose,
   initialPage = "main",
+  mobile = false,
+  disabled = false,
   inputs,
   values,
-  onChange,
+  onChange: persistValues,
   presets,
   selectedPreset,
-  onPresetChange,
+  onPresetChange: persistPreset,
   chatId,
 }: ChatSettingsPopoverProps) {
   const [currentPage, setCurrentPage] = useState<PageId>(initialPage);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // A fieldset blocks user input, not child effects (e.g. thinking-level
+  // reconciliation after a catalog refresh). Gate every mutation at the boundary.
+  const onChange = useCallback((next: Record<string, unknown>) => {
+    if (!disabled) persistValues(next);
+  }, [disabled, persistValues]);
+  const onPresetChange = useCallback((preset: Preset | null) => {
+    if (!disabled) persistPreset?.(preset);
+  }, [disabled, persistPreset]);
 
   // Reset page when popover opens
   useEffect(() => {
@@ -158,7 +173,7 @@ export function ChatSettingsPopover({
 
   // Close on click outside (but not when clicking the trigger button itself)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || mobile) return;
     const handleClick = (e: MouseEvent) => {
       // The popover is rendered inside a relative wrapper alongside its trigger button.
       // Check the wrapper (parentElement) so clicks on the trigger are ignored here —
@@ -175,7 +190,7 @@ export function ChatSettingsPopover({
       cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, mobile]);
 
   // Find special param keys
   const modelKey = findModelParamKey(inputs);
@@ -222,27 +237,9 @@ export function ChatSettingsPopover({
 
   if (!isOpen) return null;
 
-  // Above `md` it is a 360px popover anchored to its trigger. On a phone a
-  // 360px box anchored to a button partway across a 390px composer ran off
-  // the right edge, so there it is a bottom sheet over a scrim instead: full
-  // width, clear of the home indicator, scrolling within itself. The scrim
-  // closes it (the outside-click handler below treats the scrim, which sits
-  // inside the trigger's wrapper, as inside).
-  return (
-    <>
-      <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-[99] hidden bg-black/40 max-md:block" />
-      <div
-        ref={popoverRef}
-        role="dialog"
-        aria-label="Chat settings"
-        style={{
-          animation: "chatSettingsPopoverIn 0.12s ease-out",
-        }}
-        className={cn(
-          "absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden",
-          "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:w-auto max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0 max-md:pb-[env(safe-area-inset-bottom)]",
-        )}
-      >
+  // One page tree owns all settings and policy; only the surrounding shell varies.
+  const content = (
+      <fieldset disabled={disabled} className="min-w-0 border-0 p-0 m-0">
         {/* Main page */}
         {currentPage === "main" && (
           <div>
@@ -322,7 +319,7 @@ export function ChatSettingsPopover({
                         key={mode}
                         onClick={() => handleModeChange(mode)}
                         className={cn(
-                          "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize",
+                          "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize touch:min-h-[44px]",
                           isSelected
                             ? "border-primary bg-primary/15 text-primary-ink"
                             : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:text-foreground",
@@ -398,7 +395,16 @@ export function ChatSettingsPopover({
             ]}
           />
         )}
-      </div>
-    </>
+      </fieldset>
+  );
+
+  if (mobile) {
+    return <ComposerSheet title="Chat settings" onClose={onClose}>{content}</ComposerSheet>;
+  }
+  return (
+    <div ref={popoverRef} role="dialog" aria-label="Chat settings"
+      className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+      {content}
+    </div>
   );
 }

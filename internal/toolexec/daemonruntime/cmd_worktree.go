@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/worktreeerr"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
@@ -743,6 +744,7 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 
 	// Check if git worktree path exists and remove it
 	if _, err := os.Stat(req.WorktreePath); err == nil {
+		stopProcessesInRemovedWorkspace(req.WorktreePath)
 		worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 		removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 		removeCmd.Dir = req.ProjectPath
@@ -786,6 +788,7 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	stopProcessesInRemovedWorkspace(req.WorktreePath)
 	worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 	removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 	removeCmd.Dir = req.ProjectPath
@@ -825,10 +828,20 @@ func handleWorktreeRemoveWorkspaceDir(_ context.Context, payload []byte) ([]byte
 		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: "workspace_path is required"})
 	}
 
+	stopProcessesInRemovedWorkspace(req.WorkspacePath)
 	if err := os.RemoveAll(req.WorkspacePath); err != nil {
 		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: err.Error()})
 	}
 	return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: true})
+}
+
+// stopProcessesInRemovedWorkspace stops the background processes running in
+// a workspace directory about to be removed: a dev server left in an archived
+// workspace would otherwise run on, in a directory that no longer exists.
+func stopProcessesInRemovedWorkspace(dir string) {
+	if n := shell.GetBackgroundManager().StopProcessesUnder(dir, "its workspace "+dir+" was removed"); n > 0 {
+		logging.Info(logPrefix+" Stopped background processes of a removed workspace", "dir", dir, "count", n)
+	}
 }
 
 // =============================================================================

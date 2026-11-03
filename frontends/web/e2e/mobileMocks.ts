@@ -1,4 +1,5 @@
 import { test, type Page, type Route } from '@playwright/test';
+import { COMPOSER_MODELS, COMPOSER_PRESETS, COMPOSER_PROVIDERS, COMPOSER_WORKFLOWS } from './helpers/composerFixtures';
 
 // A signed-in, onboarded user with one project, three chats and a full inbox,
 // against no backend: every Connect RPC is answered here. Used by the mobile
@@ -264,6 +265,35 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
     json(route, { user: { id: 'user_mobile', email: 'dev@example.com', onboardingCompleted: true } }),
   );
+  await page.route('**/reliant.v1.WorkflowService/ListWorkflows', route => json(route, {
+    workflows: COMPOSER_WORKFLOWS.map(({ workflow, source }) => ({ name: workflow.name, title: workflow.title, description: workflow.description, inputs: workflow.inputs, filename: workflow.name, source, status: 2, hasPresetGroups: !!workflow.presets || workflow.name === 'parallel-compete' })),
+  }));
+  await page.route('**/reliant.v1.WorkflowService/GetWorkflow', route => {
+    const { name } = route.request().postDataJSON();
+    const result = COMPOSER_WORKFLOWS.find(item => `builtin://${item.workflow.name}` === name || item.workflow.name === name);
+    return result ? json(route, result) : route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'not_found', message: `Mock workflow not found: ${name}` }) });
+  });
+  for (const method of ['ListPresets', 'ListPresetsForWorkflow']) {
+    await page.route(`**/reliant.v1.PresetService/${method}`, route => json(route, { presets: COMPOSER_PRESETS }));
+  }
+  await page.route('**/reliant.v1.PresetService/GetPreset', route => {
+    const { name } = route.request().postDataJSON();
+    return json(route, { preset: COMPOSER_PRESETS.find(preset => preset.name === name) });
+  });
+  await page.route('**/reliant.v1.CatalogService/ListModels', route => json(route, {
+    models: COMPOSER_MODELS, total: COMPOSER_MODELS.length,
+    tiers: [{ tag: 'flagship', modelId: COMPOSER_MODELS[0].id, thinkingLevel: 'high' }],
+  }));
+  await page.route('**/reliant.v1.CatalogService/ListAvailableModels', route => json(route, {
+    models: COMPOSER_MODELS.map(model => ({
+      id: model.id.split('@')[0], displayName: model.name, provider: model.driverId,
+      family: 'claude', apiModel: model.id.split('@')[0], contextWindow: model.contextWindow,
+      defaultMaxTokens: model.defaultMaxTokens, canReason: model.canReason,
+      supportsAttachments: model.supportsAttachments, supportsTools: model.supportsTools,
+      supportsCaching: model.supportsCaching, tags: model.tags, enabled: true,
+    })),
+  }));
+  await page.route('**/reliant.v1.SettingsService/GetProviderStatuses', route => json(route, { providers: COMPOSER_PROVIDERS }));
   await page.route('**/reliant.v1.ProjectService/ListProjects', (route) => json(route, { projects: [PROJECT] }));
   await page.route('**/reliant.v1.ProjectService/GetProject', (route) => json(route, { project: PROJECT }));
   await page.route('**/reliant.v1.ChatService/ListChats', (route) =>

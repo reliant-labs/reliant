@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, act } from "@testing-library/react";
 import { MobileLayout } from "../MobileLayout";
+import { MobileEmptyState } from "../MobileChrome";
+import { MessageSquare } from "lucide-react";
 
 vi.mock("../../../services/settingsSync", () => ({
   settingsSync: { getSetting: (_: string, fallback: unknown) => fallback },
@@ -24,9 +26,10 @@ function installVisualViewport(height: number, offsetTop = 0) {
   Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
   Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
   return {
-    set(next: { height: number; offsetTop?: number }) {
+    set(next: { height: number; offsetTop?: number; scale?: number }) {
       vv.height = next.height;
       vv.offsetTop = next.offsetTop ?? 0;
+      vv.scale = next.scale ?? 1;
       act(() => listeners.forEach((fn) => fn()));
     },
   };
@@ -40,6 +43,19 @@ const shell = (container: HTMLElement) =>
   container.querySelector<HTMLElement>('[data-surface="mobile"]')!;
 
 describe("MobileLayout", () => {
+  it("gives short-height empty content its own scroll region and safe centering", () => {
+    const { getByRole } = render(
+      <MobileLayout>
+        <MobileEmptyState icon={MessageSquare} title="No chats" action={<button>Start chat</button>} />
+      </MobileLayout>,
+    );
+    const content = getByRole("button", { name: "Start chat" }).parentElement!.parentElement!;
+    expect(content.className).toContain("my-auto");
+    expect(content.className).toContain("shrink-0");
+    expect(content.parentElement!.className).toContain("min-h-0");
+    expect(content.parentElement!.className).toContain("overflow-y-auto");
+  });
+
   it("fills the dynamic viewport while the keyboard is closed", () => {
     installVisualViewport(844);
     const { container } = render(
@@ -77,6 +93,28 @@ describe("MobileLayout", () => {
     );
     vv.set({ height: 508, offsetTop: 120 });
     expect(shell(container).style.top).toBe("120px");
+  });
+
+  it("preserves the mounted draft across keyboard dismissal, zoom and rotation", () => {
+    const vv = installVisualViewport(844);
+    const { container } = render(<MobileLayout><input defaultValue="unsent draft" /></MobileLayout>);
+    const input = container.querySelector("input");
+    vv.set({ height: 508, offsetTop: 120 });
+    vv.set({ height: 844 });
+    expect(shell(container).style.height).toBe("");
+    expect(shell(container).style.top).toBe("");
+    expect(shell(container).style.position).toBe("");
+    expect(shell(container).style.getPropertyValue("--mobile-safe-bottom")).not.toBe("0px");
+    vv.set({ height: 422, scale: 2 });
+    expect(shell(container).style.position).toBe("");
+    vv.set({ height: 390 });
+    act(() => {
+      Object.defineProperty(window, "innerHeight", { value: 390, configurable: true });
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(shell(container).style.position).toBe("");
+    expect(container.querySelector("input")).toBe(input);
+    expect(input?.value).toBe("unsent draft");
   });
 
   it("does not treat a collapsing URL bar as a keyboard", () => {

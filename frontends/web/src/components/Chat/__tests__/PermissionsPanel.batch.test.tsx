@@ -72,6 +72,19 @@ const activationApproval: Approval = {
   createdAt: now,
 };
 
+// The plain-text form servers wrote before the card: no plain-words summary
+// of what it grants, so it cannot be shown in a batch confirmation.
+const legacyActivationApproval: Approval = {
+  ...activationApproval,
+  id: "appr-legacy",
+  title: [
+    "Approval: A new activation is new standing power.",
+    "Machine: laptop (id d_1)",
+    "Operation: enable_trigger",
+    'Activation: {"name":"nightly"}',
+  ].join("\n"),
+};
+
 function renderPanel() {
   return render(
     <SurfaceProvider surface="desktop">
@@ -103,28 +116,75 @@ describe("PermissionsPanel", () => {
     expect(mocks.batchDeny).toHaveBeenCalledWith("chat-1", { requestIds: ["appr-step", "appr-tool"] });
   });
 
-  it("never puts an approval that grants power in Approve all", () => {
+  it("puts an activation card in Approve all, after a confirmation that shows what it grants", () => {
     mocks.pending = [stepApproval, activationApproval, retiredToolApproval];
     renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: /approve all 2/i }));
-    expect(mocks.batchApprove).toHaveBeenCalledWith("chat-1", { requestIds: ["appr-step", "appr-tool"] });
 
+    // The card is still read and decidable on its own.
     const card = screen.getByTestId("approval-appr-activation");
     expect(within(card).getByText(/grants an automation standing power/i)).toBeInTheDocument();
     expect(within(card).getByText("Repositories")).toBeInTheDocument();
-    expect(within(card).getByText("acme/shopfront")).toBeInTheDocument();
-    // The technical lines are behind a disclosure, not in the body.
     expect(within(card).getByText("Technical details").closest("details")).not.toHaveAttribute("open");
-    fireEvent.click(within(card).getByRole("button", { name: /^Approve: Turn on PR review/ }));
-    expect(mocks.approve).toHaveBeenCalledWith("chat-1", { requestId: "appr-activation" });
+
+    fireEvent.click(screen.getByRole("button", { name: /approve all 3/i }));
+    // Nothing is approved until the confirmation has shown the grant summary.
+    expect(mocks.batchApprove).not.toHaveBeenCalled();
+    const confirm = within(screen.getByTestId("approval-batch-confirm"));
+    const grant = within(screen.getByTestId("batch-grant-appr-activation"));
+    expect(grant.getByText(/^Turn on PR review for acme\/shopfront/)).toBeInTheDocument();
+    expect(grant.getByText("Repositories")).toBeInTheDocument();
+    expect(grant.getByText("acme/shopfront")).toBeInTheDocument();
+    expect(grant.getByText("Approval needed")).toBeInTheDocument();
+    expect(confirm.getByText("And 2 routine requests")).toBeInTheDocument();
+    expect(confirm.getByText("Deploy to production?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve 3" }));
+    expect(mocks.batchApprove).toHaveBeenCalledWith("chat-1", {
+      requestIds: ["appr-step", "appr-activation", "appr-tool"],
+    });
   });
 
-  it("has no batch bar when the only other approval grants power", () => {
+  it("cancelling the confirmation approves nothing", () => {
     mocks.pending = [stepApproval, activationApproval];
     renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /approve all 2/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByTestId("approval-batch-confirm")).not.toBeInTheDocument();
+    expect(mocks.batchApprove).not.toHaveBeenCalled();
+  });
+
+  it("denies a batch with activation cards at once: denying grants nothing", () => {
+    mocks.pending = [stepApproval, activationApproval];
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /deny all 2/i }));
+    expect(mocks.batchDeny).toHaveBeenCalledWith("chat-1", { requestIds: ["appr-step", "appr-activation"] });
+  });
+
+  it("keeps an old-format activation approval out of Approve all, and says why", () => {
+    mocks.pending = [stepApproval, activationApproval, legacyActivationApproval, retiredToolApproval];
+    renderPanel();
+    const legacy = within(screen.getByTestId("approval-appr-legacy"));
+    expect(legacy.getByText(/^Not in Approve all: this request was raised before approval cards said/)).toBeInTheDocument();
+    expect(screen.getByText(/1 decided on its own/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /approve all 3/i }));
+    expect(screen.queryByTestId("batch-grant-appr-legacy")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve 3" }));
+    expect(mocks.batchApprove).toHaveBeenCalledWith("chat-1", {
+      requestIds: ["appr-step", "appr-activation", "appr-tool"],
+    });
+
+    // It is still decided on its own.
+    fireEvent.click(legacy.getByRole("button", { name: /^Approve: Approval: A new activation/ }));
+    expect(mocks.approve).toHaveBeenCalledWith("chat-1", { requestId: "appr-legacy" });
+  });
+
+  it("has no batch bar when the only other approval is an old-format activation", () => {
+    mocks.pending = [stepApproval, legacyActivationApproval];
+    renderPanel();
     expect(screen.queryByRole("button", { name: /approve all/i })).not.toBeInTheDocument();
-    // The shortcut belongs to the routine approval, never the activation.
+    // The shortcut belongs to the approval it would approve, never the old card.
     expect(screen.getByRole("button", { name: "Approve: Deploy to production?" }).textContent).toMatch(/\+↵/);
-    expect(screen.getByRole("button", { name: /^Approve: Turn on PR review/ }).textContent).not.toMatch(/\+↵/);
+    expect(screen.getByRole("button", { name: /^Approve: Approval: A new activation/ }).textContent).not.toMatch(/\+↵/);
   });
 });

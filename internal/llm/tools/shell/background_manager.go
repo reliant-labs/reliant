@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,6 +94,11 @@ type BackgroundProcess struct {
 	PackageCommand bool   `json:"package_command,omitempty"`
 	SessionID      string `json:"session_id"`
 	ChatID         string `json:"chat_id,omitempty"`
+	// ThreadID is the agent thread of ChatID whose tool call started it.
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive exempts the process from the idle reaper: an intentional
+	// long-lived server (background_reaper.go).
+	KeepAlive bool `json:"keep_alive,omitempty"`
 	// GrantID records the connector grant that started this process, empty for
 	// first-party ones. The registry is process-global and keyed by id alone,
 	// so without this a connector holding a guessed id could read the output
@@ -120,6 +126,14 @@ type BackgroundProcess struct {
 	// tree bounds the command's processes and reaches all of them on a kill
 	// (internal/proctree). Nil for a process recovered from the database.
 	tree *proctree.Tree
+
+	// activity is when the process last wrote output or an agent touched
+	// it. Nil for a process recovered from the database, which the reaper
+	// never stops. chat is the server's latest word on the chat that started
+	// it, heard at chatAt, guarded by outputMu. See background_reaper.go.
+	activity *OutputActivity
+	chat     ChatVerdict
+	chatAt   time.Time
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -174,6 +188,15 @@ type BackgroundManager struct {
 
 	// Optional repo for DB-backed operations (e.g., killing recovered processes by PID)
 	repo ProcessStore
+
+	// clock is the time a process's activity is stamped with and the idle
+	// reaper judges by; nil is time.Now. A field so a test can move it.
+	clock func() time.Time
+	// idleReap is the idle window the reaper runs with (0: off), read by
+	// listings to say when a process would be stopped (background_reaper.go).
+	idleReap atomic.Int64
+	// reapKick wakes the reaper early: a workspace archived needs no wait.
+	reapKick chan struct{}
 }
 
 var (
@@ -186,6 +209,7 @@ func GetBackgroundManager() *BackgroundManager {
 	bgManagerOnce.Do(func() {
 		bgManager = &BackgroundManager{
 			processes: make(map[string]*BackgroundProcess),
+			reapKick:  make(chan struct{}, 1),
 		}
 		// Note: Process monitor is initialized separately to avoid circular dependencies
 	})
@@ -385,6 +409,9 @@ type StartProcessOptions struct {
 	// PackageCommand marks a Commands-panel process (see
 	// BackgroundProcess.PackageCommand).
 	PackageCommand bool
+	// ThreadID and KeepAlive: see BackgroundProcess.
+	ThreadID  string
+	KeepAlive bool
 }
 
 // StartProcessWithEnv starts a new background process with custom environment variables
@@ -466,7 +493,10 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		PackageCommand: opts.PackageCommand,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
+		ThreadID:       opts.ThreadID,
+		KeepAlive:      opts.KeepAlive,
 		GrantID:        opts.GrantID,
+		activity:       NewOutputActivity(m.now),
 		cmd:            cmd,
 		stdout:         stdout,
 		stderr:         stderr,
@@ -579,6 +609,11 @@ type outputLineWriter struct {
 
 func (w *outputLineWriter) Write(p []byte) (int, error) {
 	written := len(p)
+	// Output is activity, whole line or not: a process printing progress
+	// dots without a newline is as alive as one printing log lines.
+	if written > 0 {
+		w.process.activity.Touch()
+	}
 	for len(p) > 0 {
 		newline := bytes.IndexByte(p, '\n')
 		if newline < 0 {
@@ -825,6 +860,24 @@ func (p *BackgroundProcess) StatusSafe() string {
 	p.outputMu.RLock()
 	defer p.outputMu.RUnlock()
 	return p.Status
+}
+
+// LiveState is a consistent copy of a process's mutable fields (Status,
+// ExitCode, EndTime and Ports), read under the lock that guards them.
+type LiveState struct {
+	Status   string
+	ExitCode *int
+	EndTime  *time.Time
+	Ports    []PortInfo
+}
+
+// Live returns the process's mutable fields under outputMu. A lister that
+// read p.Status or p.Ports bare raced refreshPorts' write of Ports (a
+// shell_wait polling ListProcesses while a kill refreshed the same process).
+func (p *BackgroundProcess) Live() LiveState {
+	p.outputMu.RLock()
+	defer p.outputMu.RUnlock()
+	return LiveState{Status: p.Status, ExitCode: p.ExitCode, EndTime: p.EndTime, Ports: append([]PortInfo(nil), p.Ports...)}
 }
 
 // refreshPorts re-reads the OS port list for a running process.
@@ -1412,6 +1465,8 @@ type AdoptRunningProcessOptions struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
+	ThreadID   string
+	KeepAlive  bool
 	StartTime  time.Time
 	StdoutBuf  *bytes.Buffer // Existing stdout buffer
 	StderrBuf  *bytes.Buffer // Existing stderr buffer
@@ -1419,6 +1474,10 @@ type AdoptRunningProcessOptions struct {
 	// Tree is the command's process tree (proctree), which the background
 	// manager takes over: it releases it, and a kill reaches all of it.
 	Tree *proctree.Tree
+	// Activity is stamped by the writers that feed StdoutBuf/StderrBuf
+	// (OutputActivity.Writer), so output after adoption keeps the process
+	// from looking idle. Nil starts a fresh one that only touches stamp.
+	Activity *OutputActivity
 }
 
 // AdoptRunningProcess adopts an already-running command into the background manager.
@@ -1463,6 +1522,12 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 	if stderr == nil {
 		stderr = &bytes.Buffer{}
 	}
+	// The command keeps writing into the caller's buffers; their writers
+	// stamp opts.Activity, which becomes this process's activity clock.
+	activity := opts.Activity
+	if activity == nil {
+		activity = NewOutputActivity(m.now)
+	}
 
 	process := &BackgroundProcess{
 		ID:             processID,
@@ -1473,6 +1538,9 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		WorktreeID:     opts.WorktreeID,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
+		ThreadID:       opts.ThreadID,
+		KeepAlive:      opts.KeepAlive,
+		activity:       activity,
 		cmd:            opts.Cmd,
 		tree:           opts.Tree,
 		stdout:         stdout,

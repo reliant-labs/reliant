@@ -205,7 +205,8 @@ describe("ChatMessage hover actions", () => {
       </SurfaceProvider>,
     );
 
-    expect(toolbar().parentElement?.parentElement).not.toHaveClass("pt-7");
+    expect(screen.queryByRole("button", { name: "Branch from message" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Message actions" }).parentElement).not.toHaveClass("pt-7");
   });
 
   it.each([

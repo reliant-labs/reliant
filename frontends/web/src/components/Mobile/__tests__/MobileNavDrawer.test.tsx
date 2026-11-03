@@ -205,6 +205,27 @@ describe("MobileNavDrawer", () => {
     expect(document.activeElement).toBe(first);
   });
 
+  it("traps focus: every Tab is moved by the trap, never left to the browser", async () => {
+    // Safari's default Tab order skips links, so a trap that only wrapped at
+    // the last element let focus escape past a trailing link. A bare keydown
+    // (which moves nothing by itself) proves the trap advances focus on every
+    // Tab, links included, and wraps at the end.
+    renderAt("/m/chats", true, vi.fn());
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(focusable[0]));
+
+    for (let i = 1; i <= focusable.length; i++) {
+      const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(tab);
+      expect(tab.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(focusable[i % focusable.length]);
+    }
+  });
+
   it("traps focus: Shift+Tab from the first element wraps to the last", async () => {
     const user = userEvent.setup();
     renderAt("/m/chats", true, vi.fn());

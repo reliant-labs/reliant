@@ -49,6 +49,10 @@ type ShellParams struct {
 	// heavy slots (see daemon.RunCommandRequest.Heavy). Its schema
 	// description is attached in JSONSchemaExtend.
 	Heavy bool `json:"heavy,omitempty"`
+	// KeepAlive exempts a background command from the daemon's idle reaper
+	// (daemon.RunCommandRequest.KeepAlive). Its schema description is
+	// attached in JSONSchemaExtend.
+	KeepAlive bool `json:"keep_alive,omitempty"`
 }
 
 // shellDescriptionParamDoc is the schema description for ShellParams.Description.
@@ -91,7 +95,13 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 	if prop, ok := s.Properties.Get("heavy"); ok {
 		prop.Description = shellHeavyParamDoc
 	}
+	if prop, ok := s.Properties.Get("keep_alive"); ok {
+		prop.Description = shellKeepAliveParamDoc
+	}
 }
+
+// shellKeepAliveParamDoc is the schema description for ShellParams.KeepAlive.
+const shellKeepAliveParamDoc = "With run_in_background: keep this process running after this chat finishes. Without it, a background process is stopped once it has been idle for 4 hours by default (no output, and no agent read it with shell_output/shell_wait, listed it with shell_list or killed it) and the chat that started it has no run in progress. Set it only for an intentional long-lived server the user will keep using."
 
 // shellHeavyParamDoc is the schema description for ShellParams.Heavy.
 const shellHeavyParamDoc = "Set true when the command saturates CPU or memory for a while — a whole-project build, a test suite, codegen — but the daemon would not recognize it (a project script, a Makefile target). Heavy commands queue for one of the machine's heavy slots, shared by every agent, before they run; go build/test/vet, vitest, npm test/build, forge generate/lint, make test* and task test* are recognized without it. A queued command's timeout includes the wait, so run long ones with run_in_background."
@@ -368,6 +378,7 @@ Usage notes:
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
 - Use 'run_in_background: true' to run long-running commands in the background. You can then use shell_output to check output, shell_kill to terminate, and shell_list to see all running processes.
+- A background process is stopped automatically once it has been idle for 4 hours by default (no output, and no agent used it with shell_output, shell_wait, shell_list or shell_kill) and the chat that started it has no run in progress. Stop your own servers with shell_kill when you are done; set 'keep_alive: true' only for an intentional long-lived server the user will keep using.
 - Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
 - VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
@@ -541,6 +552,8 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		Credentials: credentials,
 		Heavy:       params.Heavy,
 		ChatID:      chatID,
+		ThreadID:    rctx.Thread,
+		KeepAlive:   params.KeepAlive,
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,

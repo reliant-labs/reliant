@@ -12,7 +12,7 @@ function safeGet(key: string, fallback: string): string {
 }
 
 export function loadFont() {
-  // "default" (bundled Inter), matching every other read site. This path was
+  // "default" (bundled Geist), matching every other read site. This path was
   // left on "system" when the default typeface changed, so which face a new
   // user saw depended on which code path applied settings first.
   const font = safeGet(SETTINGS_KEYS.FONT, "default");

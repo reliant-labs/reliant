@@ -40,6 +40,7 @@ func init() {
 	RegisterCommand("exec.bg_kill", handleExecBGKill)
 	RegisterCommand("exec.bg_list", handleExecBGList)
 	RegisterCommand("exec.bg_status", handleExecBGStatus)
+	RegisterCommand("exec.bg_touch", handleExecBGTouch)
 }
 
 // =============================================================================
@@ -142,8 +143,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	// Output stamps activity, so if the command is detached into the
+	// background its idle time starts from its last output, not the detach.
+	activity := shell.NewOutputActivity(nil)
+	cmd.Stdout = activity.Writer(&stdoutBuf)
+	cmd.Stderr = activity.Writer(&stderrBuf)
 
 	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
 	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
@@ -201,6 +205,10 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
 			Tree:       tree,
+			ChatID:     req.ChatID,
+			ThreadID:   req.ThreadID,
+			KeepAlive:  req.KeepAlive,
+			Activity:   activity,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -283,6 +291,11 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		WorktreeID:     req.WorktreeID,
 		PackageCommand: req.PackageCommand,
 		AgentID:        req.ChatID,
+		// The chat that started it, so the idle reaper may stop it once
+		// that chat has finished (shell/background_reaper.go).
+		ChatID:    req.ChatID,
+		ThreadID:  req.ThreadID,
+		KeepAlive: req.KeepAlive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)
@@ -463,6 +476,17 @@ func handleExecBGStatus(ctx context.Context, payload []byte) ([]byte, error) {
 	mgr := shell.GetBackgroundManager()
 	grantID := daemonpolicy.GrantIDFromContext(ctx)
 
+	// The server's word on each process's chat, for the idle reaper. Only
+	// the server's own (first-party) poll may give it: a connector could
+	// otherwise talk the reaper into stopping the user's processes.
+	if grantID == "" && len(req.Chats) > 0 {
+		verdicts := make(map[string]shell.ChatVerdict, len(req.Chats))
+		for _, c := range req.Chats {
+			verdicts[c.ProcessID] = shell.ChatVerdict{Running: c.Running, WorkspaceArchived: c.WorkspaceArchived}
+		}
+		mgr.RecordChatVerdicts(verdicts)
+	}
+
 	visible := req.ProcessIDs
 	var hidden []string
 	if grantID != "" {
@@ -510,22 +534,40 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
+		live := p.Live()
 		info := &daemon.ProcessInfo{
 			ID:             p.ID,
 			Command:        p.Command,
-			Status:         p.Status,
-			ExitCode:       p.ExitCode,
+			Status:         live.Status,
+			ExitCode:       live.ExitCode,
 			StartTime:      p.StartTime,
-			EndTime:        p.EndTime,
-			Ports:          shellPortsToDaemon(p.Ports),
+			EndTime:        live.EndTime,
+			Ports:          shellPortsToDaemon(live.Ports),
 			DaemonID:       daemonID,
 			WorkingDir:     p.WorkingDir,
 			WorktreeID:     p.WorktreeID,
 			PackageCommand: p.PackageCommand,
 		}
+		daemon.StampReapOutlook(info, mgr, p)
 		result = append(result, info)
 	}
 	return json.Marshal(result)
+}
+
+// =============================================================================
+// exec.bg_touch — an agent used these background processes
+// =============================================================================
+
+// handleExecBGTouch resets the idle time of the named processes: an agent
+// read, waited on, listed or killed them, so they are not left behind. A
+// connector reaches only its own processes, as with bg_output and bg_kill.
+func handleExecBGTouch(ctx context.Context, payload []byte) ([]byte, error) {
+	var req daemon.TouchProcessesRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	shell.GetBackgroundManager().TouchForGrant(daemonpolicy.GrantIDFromContext(ctx), req.ProcessIDs...)
+	return json.Marshal(struct{}{})
 }
 
 // shellPortsToDaemon converts the shell package's PortInfo to the daemon wire

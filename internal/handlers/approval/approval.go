@@ -52,6 +52,9 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 	if a.DenialReason != nil {
 		proto.DenialReason = a.DenialReason
 	}
+	if a.BatchID != nil && *a.BatchID != "" {
+		proto.BatchId = a.BatchID
+	}
 
 	if a.ResolvedAt != nil {
 		resolvedAt := a.ResolvedAt.Format(time.RFC3339)
@@ -123,12 +126,13 @@ func resolvedMessage(a *db.Approval) string {
 const retiredToolApprovalType = 1
 
 // answeredByItsRun reports whether denying a reaches the model through its own
-// run. A row the removed prompt recorded asked about one call, and the run
-// still waiting on it refuses that call in ExecuteTools with the reason, so a
-// denial message — a tool_result for every call in the turn — would duplicate
-// that result.
+// run. A tool-call approval (and a row the removed prompt recorded) asks about
+// one call, and the run waiting on it answers that call in ExecuteTools with
+// the refusal, so a denial message — a tool_result for every call in the turn,
+// including calls that still run — would contradict and duplicate it.
 func answeredByItsRun(a *db.Approval) bool {
-	return a.ApprovalType == retiredToolApprovalType
+	return a.ApprovalType == retiredToolApprovalType ||
+		a.ApprovalType == int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL)
 }
 
 // ListApprovalsByChat lists all pending approvals for a chat
@@ -168,80 +172,9 @@ func (s *Service) Approve(
 	if req.Msg.RequestId == "" {
 		return nil, svcerr.InvalidArgument("request_id is required")
 	}
-
-	// Get the approval
-	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
-	}
-	if approval == nil {
-		return nil, svcerr.NotFound("approval")
-	}
-
-	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
+	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{approved: true, actionTaken: req.Msg.ActionTaken}); err != nil {
 		return nil, err
 	}
-
-	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, notActionable(approval)
-	}
-
-	// Get action_taken from request
-	var actionTaken *string
-	if req.Msg.ActionTaken != nil && *req.Msg.ActionTaken != "" {
-		actionTaken = req.Msg.ActionTaken
-	}
-
-	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-		// Update approval status
-		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
-			return fmt.Errorf("failed to update approval status: %w", err)
-		}
-
-		// Build chat_update data
-		updateData := map[string]interface{}{
-			"update_type":   "approval",
-			"id":            approval.ID,
-			"approval_type": approval.ApprovalType,
-			"entity_id":     approval.EntityID,
-			"status":        "approved",
-			"title":         approval.Title,
-			"resolved_at":   time.Now().Format(time.RFC3339),
-		}
-
-		if actionTaken != nil {
-			updateData["action_taken"] = *actionTaken
-		}
-
-		// Marshal update data
-		updateDataJSON, err := json.Marshal(updateData)
-		if err != nil {
-			return fmt.Errorf("failed to marshal chat_update data: %w", err)
-		}
-
-		// Create chat_update in same transaction
-		if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
-			return fmt.Errorf("failed to create chat_update: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to approve"))
-	}
-
-	// Signal the workflow
-	var actionTakenStr string
-	if actionTaken != nil {
-		actionTakenStr = *actionTaken
-	}
-	s.signalApproval(ctx, approval, map[string]interface{}{
-		"status":       "approved",
-		"action_taken": actionTakenStr,
-	})
-
 	return connect.NewResponse(&reliantv1.ApproveResponse{
 		Success: true,
 		Message: "Request approved",
@@ -256,107 +189,17 @@ func (s *Service) Deny(
 	if req.Msg.RequestId == "" {
 		return nil, svcerr.InvalidArgument("request_id is required")
 	}
-
-	// Get the approval
-	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
-	}
-	if approval == nil {
-		return nil, svcerr.NotFound("approval")
-	}
-
-	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
+	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied this approval"), actionTaken: req.Msg.ActionTaken}); err != nil {
 		return nil, err
 	}
-
-	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, notActionable(approval)
-	}
-
-	// Use default denial reason if not provided.
-	denialReason := "User denied this approval"
-	if req.Msg.DenialReason != nil && *req.Msg.DenialReason != "" {
-		denialReason = *req.Msg.DenialReason
-	}
-	denialReasonPtr := &denialReason
-
-	// Get action_taken from request
-	var actionTaken *string
-	if req.Msg.ActionTaken != nil && *req.Msg.ActionTaken != "" {
-		actionTaken = req.Msg.ActionTaken
-	}
-
-	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-		// Update approval status
-		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
-			return fmt.Errorf("failed to update approval status: %w", err)
-		}
-
-		// Build chat_update data
-		updateData := map[string]interface{}{
-			"update_type":   "approval",
-			"id":            approval.ID,
-			"approval_type": approval.ApprovalType,
-			"entity_id":     approval.EntityID,
-			"status":        "denied",
-			"title":         approval.Title,
-			"denial_reason": denialReason,
-			"resolved_at":   time.Now().Format(time.RFC3339),
-		}
-
-		if actionTaken != nil {
-			updateData["action_taken"] = *actionTaken
-		}
-
-		// Marshal update data
-		updateDataJSON, err := json.Marshal(updateData)
-		if err != nil {
-			return fmt.Errorf("failed to marshal chat_update data: %w", err)
-		}
-
-		// Create chat_update in same transaction
-		if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
-			return fmt.Errorf("failed to create chat_update: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to deny"))
-	}
-
-	// Create denial message with tool_results marked as denied — unless the
-	// run answers the call itself (answeredByItsRun).
-	if !answeredByItsRun(approval) {
-		if err := s.createDenialMessage(ctx, approval.ChatID, denialReason); err != nil {
-			logging.ErrorContext(ctx, "Failed to create denial message", "error", err, "approvalID", approval.ID)
-			// Don't fail the request, just log the error
-		}
-	}
-
-	// Signal denial to the workflow — edge conditions handle routing
-	var actionTakenStr string
-	if actionTaken != nil {
-		actionTakenStr = *actionTaken
-	}
-	s.signalApproval(ctx, approval, map[string]interface{}{
-		"status":        "denied",
-		"denial_reason": denialReason,
-		"action_taken":  actionTakenStr,
-	})
-
-	logging.InfoContext(ctx, "Denied request and signalled workflow", "requestID", req.Msg.RequestId, "hasReason", denialReason != "")
-
+	logging.InfoContext(ctx, "Denied request and signalled workflow", "requestID", req.Msg.RequestId)
 	return connect.NewResponse(&reliantv1.DenyResponse{
 		Success: true,
 		Message: "Request denied",
 	}), nil
 }
 
-// BatchApprove approves multiple pending approval requests at once
+// BatchApprove approves every listed approval that is still pending.
 func (s *Service) BatchApprove(
 	ctx context.Context,
 	req *connect.Request[reliantv1.BatchApproveRequest],
@@ -364,131 +207,19 @@ func (s *Service) BatchApprove(
 	if len(req.Msg.RequestIds) == 0 {
 		return nil, svcerr.InvalidArgument("request_ids cannot be empty")
 	}
-
-	// Get action_taken from request
-	var actionTaken *string
-	if req.Msg.ActionTaken != nil && *req.Msg.ActionTaken != "" {
-		actionTaken = req.Msg.ActionTaken
-	}
-
-	chatID, pending, skipped, err := s.batchApprovals(ctx, req.Msg.RequestIds)
+	chatID, approved, skipped, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{approved: true, actionTaken: req.Msg.ActionTaken})
 	if err != nil {
 		return nil, err
 	}
-
-	// Process each approval
-	for _, approval := range pending {
-		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-			// Update approval status
-			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
-				return fmt.Errorf("failed to update approval status: %w", err)
-			}
-
-			// Build chat_update data
-			updateData := map[string]interface{}{
-				"update_type":   "approval",
-				"id":            approval.ID,
-				"approval_type": approval.ApprovalType,
-				"entity_id":     approval.EntityID,
-				"status":        "approved",
-				"title":         approval.Title,
-				"resolved_at":   time.Now().Format(time.RFC3339),
-			}
-
-			if actionTaken != nil {
-				updateData["action_taken"] = *actionTaken
-			}
-
-			// Marshal update data
-			updateDataJSON, err := json.Marshal(updateData)
-			if err != nil {
-				return fmt.Errorf("failed to marshal chat_update data: %w", err)
-			}
-
-			// Create chat_update in same transaction
-			if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
-				return fmt.Errorf("failed to create chat_update: %w", err)
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to approve"))
-		}
-
-		// Signal workflow
-		var actionTakenStr string
-		if actionTaken != nil {
-			actionTakenStr = *actionTaken
-		}
-		s.signalApproval(ctx, approval, map[string]interface{}{
-			"status":       "approved",
-			"action_taken": actionTakenStr,
-		})
-	}
-
 	return connect.NewResponse(&reliantv1.BatchApproveResponse{
 		Success:  true,
-		Approved: int32(len(pending)),
-		Message:  batchMessage("Approved", len(pending), skipped),
+		Approved: int32(approved),
+		Message:  batchMessage("Approved", approved, skipped),
 		ChatId:   chatID,
 	}), nil
 }
 
-// batchApprovals reads a batch's approvals and checks it: every id exists,
-// all belong to one chat, and that chat is the caller's (checked once — the
-// same-chat rule makes it cover every id). It splits them into the pending
-// ones and the ones already resolved, which a batch skips: a panel acting on
-// "every pending approval" may hold one that expired or was decided
-// elsewhere, and that must not fail the rest. When none is pending the batch
-// fails with what happened to them.
-func (s *Service) batchApprovals(ctx context.Context, requestIDs []string) (chatID string, pending, skipped []*db.Approval, err error) {
-	for _, requestID := range requestIDs {
-		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
-		if err != nil {
-			return "", nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
-		}
-		if approval == nil {
-			return "", nil, nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID))
-		}
-		if chatID == "" {
-			chatID = approval.ChatID
-			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
-				return "", nil, nil, err
-			}
-		} else if chatID != approval.ChatID {
-			return "", nil, nil, svcerr.InvalidArgument("all approvals must belong to the same chat")
-		}
-		if approval.Status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-			pending = append(pending, approval)
-		} else {
-			skipped = append(skipped, approval)
-		}
-	}
-	if len(pending) == 0 {
-		if len(skipped) == 1 {
-			return "", nil, nil, notActionable(skipped[0])
-		}
-		return "", nil, nil, svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
-			"These %d requests were already resolved (decided, expired, or their run ended); nothing changed.", len(skipped))),
-			ReasonApprovalNotPending)
-	}
-	return chatID, pending, skipped, nil
-}
-
-// batchMessage is a batch response's message: what was done, and how many
-// were skipped as already resolved.
-func batchMessage(verb string, done int, skipped []*db.Approval) string {
-	msg := fmt.Sprintf("%s %d requests", verb, done)
-	if len(skipped) > 0 {
-		msg += fmt.Sprintf("; %d already resolved, skipped", len(skipped))
-	}
-	return msg
-}
-
-// BatchDeny denies multiple pending approval requests at once
+// BatchDeny denies every listed approval that is still pending.
 func (s *Service) BatchDeny(
 	ctx context.Context,
 	req *connect.Request[reliantv1.BatchDenyRequest],
@@ -496,98 +227,171 @@ func (s *Service) BatchDeny(
 	if len(req.Msg.RequestIds) == 0 {
 		return nil, svcerr.InvalidArgument("request_ids cannot be empty")
 	}
-
-	// Use default denial reason if not provided.
-	denialReason := "User denied one or more approvals"
-	if req.Msg.DenialReason != nil && *req.Msg.DenialReason != "" {
-		denialReason = *req.Msg.DenialReason
-	}
-	denialReasonPtr := &denialReason
-
-	// Get action_taken from request
-	var actionTaken *string
-	if req.Msg.ActionTaken != nil && *req.Msg.ActionTaken != "" {
-		actionTaken = req.Msg.ActionTaken
-	}
-
-	chatID, pending, skipped, err := s.batchApprovals(ctx, req.Msg.RequestIds)
+	chatID, denied, skipped, err := s.resolveApprovals(ctx, req.Msg.RequestIds, decision{denialReason: denialReasonOr(req.Msg.DenialReason, "User denied one or more approvals"), actionTaken: req.Msg.ActionTaken})
 	if err != nil {
 		return nil, err
 	}
+	return connect.NewResponse(&reliantv1.BatchDenyResponse{
+		Success: true,
+		Denied:  int32(denied),
+		Message: batchMessage("Denied", denied, skipped),
+		ChatId:  chatID,
+	}), nil
+}
 
-	// Process each approval
-	deniedStepApproval := false
-	for _, approval := range pending {
-		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
+// decision is what the person decided about one or more approvals.
+type decision struct {
+	approved bool
+	// denialReason is the reason a denial records (denials only).
+	denialReason string
+	// actionTaken is the button that was clicked, when the client names one.
+	actionTaken *string
+}
 
-		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-			// Update approval status
-			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
+func denialReasonOr(reason *string, fallback string) string {
+	if reason != nil && *reason != "" {
+		return *reason
+	}
+	return fallback
+}
+
+// resolveApprovals records d on every listed approval that is still pending,
+// all in one transaction, then signals each one's waiting run. It returns the
+// chat they belong to, how many it resolved and how many it skipped as
+// already resolved.
+//
+// Every id is checked before anything is written: it must exist, and all of
+// them must be one chat the caller owns. An approval already decided — on
+// another surface, or by its run timing out — is skipped, read again inside
+// the transaction so a decision that lands concurrently is never overwritten.
+// Only when none of them was still pending is that an error
+// (FailedPrecondition, ReasonApprovalNotPending, saying what happened), which
+// is what lets a batch approve what is left of itself after one of its
+// approvals expired or was decided elsewhere.
+func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision) (string, int, int, error) {
+	var chatID string
+	for _, id := range ids {
+		approval, err := s.deps.Repo.GetApproval(ctx, id)
+		if err != nil {
+			return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
+		}
+		if approval == nil {
+			return "", 0, 0, svcerr.NotFound("approval")
+		}
+		// The same-chat rule makes one ownership check cover every id.
+		if chatID == "" {
+			chatID = approval.ChatID
+			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
+				return "", 0, 0, err
+			}
+		} else if chatID != approval.ChatID {
+			return "", 0, 0, svcerr.InvalidArgument("all approvals must belong to the same chat")
+		}
+	}
+
+	status := reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED
+	statusName := "approved"
+	var denialReason *string
+	if !d.approved {
+		status = reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED
+		statusName = "denied"
+		denialReason = &d.denialReason
+	}
+	var actionTaken *string
+	if d.actionTaken != nil && *d.actionTaken != "" {
+		actionTaken = d.actionTaken
+	}
+
+	var resolved, skipped []*db.Approval
+	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		resolved, skipped = nil, nil
+		for _, id := range ids {
+			approval, err := s.deps.Repo.GetApproval(txCtx, id)
+			if err != nil {
+				return err
+			}
+			if approval == nil {
+				continue
+			}
+			if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+				skipped = append(skipped, approval)
+				continue
+			}
+			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(status), denialReason, actionTaken, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
 			}
-
-			// Build chat_update data
 			updateData := map[string]interface{}{
 				"update_type":   "approval",
 				"id":            approval.ID,
 				"approval_type": approval.ApprovalType,
 				"entity_id":     approval.EntityID,
-				"status":        "denied",
+				"status":        statusName,
 				"title":         approval.Title,
-				"denial_reason": denialReason,
 				"resolved_at":   time.Now().Format(time.RFC3339),
 			}
-
+			if denialReason != nil {
+				updateData["denial_reason"] = *denialReason
+			}
 			if actionTaken != nil {
 				updateData["action_taken"] = *actionTaken
 			}
-
-			// Marshal update data
 			updateDataJSON, err := json.Marshal(updateData)
 			if err != nil {
 				return fmt.Errorf("failed to marshal chat_update data: %w", err)
 			}
-
-			// Create chat_update in same transaction
 			if err := s.deps.Repo.CreateChatUpdate(txCtx, approval.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
 				return fmt.Errorf("failed to create chat_update: %w", err)
 			}
-
-			return nil
-		})
-
-		if err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to deny"))
+			resolved = append(resolved, approval)
 		}
-
-		// Signal denial to the workflow
-		var actionTakenStr string
-		if actionTaken != nil {
-			actionTakenStr = *actionTaken
+		return nil
+	})
+	if err != nil {
+		return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to resolve approval"))
+	}
+	if len(resolved) == 0 {
+		if len(skipped) == 1 {
+			return "", 0, 0, notActionable(skipped[0])
 		}
-		s.signalApproval(ctx, approval, map[string]interface{}{
-			"status":        "denied",
-			"denial_reason": denialReason,
-			"action_taken":  actionTakenStr,
-		})
+		return "", 0, 0, svcerr.WithReason(svcerr.FailedPrecondition(fmt.Sprintf(
+			"These %d requests were already resolved (decided, expired, or their run ended); nothing changed.", len(skipped))),
+			ReasonApprovalNotPending)
 	}
 
-	// Create one denial message for the chat (all approvals are in the same
-	// chat), unless every one of them is answered by its run.
-	if chatID != "" && deniedStepApproval {
-		if err := s.createDenialMessage(ctx, chatID, denialReason); err != nil {
-			logging.ErrorContext(ctx, "Failed to create denial message", "error", err, "chatID", chatID)
-			// Don't fail the request, just log the error
+	// One denial message for the chat, unless every denied approval is
+	// answered by its own run.
+	if !d.approved {
+		for _, approval := range resolved {
+			if !answeredByItsRun(approval) {
+				if err := s.createDenialMessage(ctx, chatID, d.denialReason); err != nil {
+					logging.ErrorContext(ctx, "Failed to create denial message", "error", err, "chatID", chatID)
+				}
+				break
+			}
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.BatchDenyResponse{
-		Success: true,
-		Denied:  int32(len(pending)),
-		Message: batchMessage("Denied", len(pending), skipped),
-		ChatId:  chatID,
-	}), nil
+	signal := map[string]interface{}{"status": statusName, "action_taken": ""}
+	if actionTaken != nil {
+		signal["action_taken"] = *actionTaken
+	}
+	if denialReason != nil {
+		signal["denial_reason"] = *denialReason
+	}
+	for _, approval := range resolved {
+		s.signalApproval(ctx, approval, signal)
+	}
+	return chatID, len(resolved), len(skipped), nil
+}
+
+// batchMessage is a batch response's message: what was done, and how many
+// were skipped as already resolved.
+func batchMessage(verb string, done, skipped int) string {
+	msg := fmt.Sprintf("%s %d requests", verb, done)
+	if skipped > 0 {
+		msg += fmt.Sprintf("; %d already resolved, skipped", skipped)
+	}
+	return msg
 }
 
 // signalApproval sends a signal to the workflow using PauseService.SignalWithRecovery

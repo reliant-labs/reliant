@@ -1142,13 +1142,21 @@ func (e *StepExecutor) activityOptionsWithSlack(node *reliantv1.Node, slack time
 	return workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 		StartToCloseTimeout: timeout,
 		HeartbeatTimeout:    activityHeartbeatTimeout,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute,
-			MaximumAttempts:    stepActivityMaxAttempts,
-		},
+		RetryPolicy:         stepActivityRetryPolicy(),
 	})
+}
+
+// stepActivityRetryPolicy is the retry ladder every graph step runs on. Its
+// rungs are seconds apart, sized for a flaky call; a database outage is
+// ridden out inside an attempt instead (db_outage.go), so it does not spend
+// the ladder.
+func stepActivityRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute,
+		MaximumAttempts:    stepActivityMaxAttempts,
+	}
 }
 
 // threadInterruptedSince reports whether this executor's thread was interrupted

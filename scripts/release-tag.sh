@@ -42,6 +42,8 @@
 set -euo pipefail
 # shellcheck source=release-lock.sh
 . "$(dirname "${BASH_SOURCE[0]}")/release-lock.sh"
+# shellcheck source=rc-shape.sh
+. "$(dirname "${BASH_SOURCE[0]}")/rc-shape.sh"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -84,9 +86,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --commit <sha>       Tag this main commit instead of the version bump (it must contain the bump)"
             echo "  --dry-run            Print exactly what would happen, create and push nothing"
             echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
-            echo "  --rc                 With --commit: the commit heads an RC branch (release/vX.Y.Z-rc.N) whose"
-            echo "                       parent is on main; its gate is its green release-gate record (the RC"
-            echo "                       train publishes it), else that commit's 'Release gate' job on Actions"
+            echo "  --rc                 With --commit: the commit heads an RC branch (release/vX.Y.Z-rc.N): main,"
+            echo "                       the train's pin commit, then any fix commits. The version and notes are"
+            echo "                       the RC commit's (main must carry the same version); its gate is its"
+            echo "                       green release-gate record, else that commit's 'Release gate' job"
             exit 0
             ;;
         *)
@@ -170,7 +173,22 @@ fi
 
 # ── Which commit gets the tag? ──────────────────────────────────────────────
 #
-# The commit on origin/main that INTRODUCED this version, not origin/main's
+# --rc: the RC branch head the train gated. A set fixed in place carries its own
+# version bump and notes as fix commits (the same change reaches main as a PR, which
+# is why main must carry the version above), so the head is judged on what IT
+# carries: the version, the notes and the RC shape (below). It never contains
+# main's bump commit, which squash-merged as a different object.
+RC_VERSION_COMMIT=""
+if [[ "$RC_MODE" == "true" && -n "$REQUESTED_COMMIT" ]]; then
+    RC_VERSION_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
+    if [[ "$(git show "$RC_VERSION_COMMIT:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")" != "$NEW_VERSION" ]]; then
+        echo -e "${RED}Error: --rc ${RC_VERSION_COMMIT:0:9} does not carry version ${NEW_VERSION} (main's)${NC}" >&2
+        echo -e "${YELLOW}  Put the version bump on the RC branch as a fix commit, as on main.${NC}" >&2
+        exit 1
+    fi
+fi
+
+# Otherwise: the commit on origin/main that INTRODUCED this version, not origin/main's
 # tip. Main keeps moving while a release is in flight, and tagging the tip
 # would silently sweep whatever merged after the bump into the release.
 #
@@ -178,8 +196,8 @@ fi
 # the first one carrying this version — that is the bump itself.
 echo -e "${YELLOW}🔎 Locating the commit on origin/main that set version ${NEW_VERSION}...${NC}"
 
-RELEASE_COMMIT=""
-while read -r candidate; do
+RELEASE_COMMIT="$RC_VERSION_COMMIT"
+[[ -n "$RELEASE_COMMIT" ]] || while read -r candidate; do
     [[ -z "$candidate" ]] && continue
     candidate_version=$(git show "$candidate:electron/package.json" 2>/dev/null \
         | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).version}catch(e){''}" 2>/dev/null || echo "")
@@ -198,7 +216,7 @@ fi
 # --commit: tag a later commit of main than the bump (a fix that landed after
 # it). It must contain the bump and still carry this version; the guard, the
 # release notes and the release gate below then judge it like any other.
-if [[ -n "$REQUESTED_COMMIT" ]]; then
+if [[ -n "$REQUESTED_COMMIT" && -z "$RC_VERSION_COMMIT" ]]; then
     VERSION_COMMIT="$RELEASE_COMMIT"
     RELEASE_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
     if ! git merge-base --is-ancestor "$VERSION_COMMIT" "$RELEASE_COMMIT"; then
@@ -216,8 +234,9 @@ fi
 # The one check that would have caught this five releases ago. It is cheap,
 # and it is the difference between a release that can be described by
 # `git describe` and one that cannot.
-# --rc: the RC train tags the set's reliant commit R' = a main commit plus ONE pin commit,
-# kept on origin as the head of release/vX.Y.Z-rc.N. It is held to exactly that shape.
+# --rc: the RC train tags the set's reliant commit R' = a main commit plus ONE pin commit
+# and any fix commits (scripts/rc-shape.sh), kept on origin as the head of
+# release/vX.Y.Z-rc.N. It is held to exactly that shape.
 RC_BRANCH=""
 if [[ "$RC_MODE" == "true" ]]; then
     if [[ -z "$REQUESTED_COMMIT" ]]; then
@@ -228,12 +247,12 @@ if [[ "$RC_MODE" == "true" ]]; then
         | grep -E '^refs/heads/release/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -1 || true)
 fi
 if [[ -n "$RC_BRANCH" ]] && ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
-    if ! git merge-base --is-ancestor "${RELEASE_COMMIT}^" origin/main; then
-        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/} but its parent is not on origin/main${NC}" >&2
-        echo -e "${YELLOW}  An RC commit is a main commit plus exactly one pin commit.${NC}" >&2
+    if ! rc_shaped "$RELEASE_COMMIT" origin/main; then
+        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/} but is not main + the train's pin commit + fix commits${NC}" >&2
+        echo -e "${YELLOW}  An RC commit is a main commit, one pin commit (RC-Set: trailer), then linear fix commits.${NC}" >&2
         exit 1
     fi
-    echo -e "${YELLOW}ℹ️  ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/}; its parent is on origin/main (--rc)${NC}"
+    echo -e "${YELLOW}ℹ️  ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/}, cut off origin/main (--rc)${NC}"
 elif ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
     echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} is not an ancestor of origin/main${NC}" >&2
     echo -e "${YELLOW}  A tag off the trunk breaks git describe, changelog-from-tags, and Go pseudo-versions.${NC}" >&2

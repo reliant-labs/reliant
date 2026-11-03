@@ -23,7 +23,7 @@ describe('surface capabilities', () => {
     // reasonable-sounding feature request, so pin them.
     const caps = capabilitiesFor('mobile')
     expect(caps.workflowAuthoring).toBe(false)
-    expect(caps.chatWorkflowParams).toBe(false)
+    expect(caps.chatWorkflowParams).toBe(true) // Execution configuration, not authoring.
     expect(caps.terminal).toBe(false)
     expect(caps.chatExecutionSidebar).toBe(false)
   })
@@ -90,7 +90,7 @@ describe('surface capabilities', () => {
     const caps = capabilitiesFor('mobile')
     expect(caps.gitManagement).toBe(false)
     expect(caps.worktreeManage).toBe(false)
-    expect(caps.chatAttachments).toBe(false)
+    expect(caps.chatAttachments).toBe(true)
   })
 
   it('lets mobile manage machines through the dedicated machine surface', () => {
