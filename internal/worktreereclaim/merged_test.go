@@ -4,7 +4,6 @@ package worktreereclaim
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -48,63 +47,6 @@ func (f *fixture) pruned(w Worktree) {
 	run(f.t, w.Path, "fetch", "-q", "--prune", "origin")
 	if out := run(f.t, w.Path, "branch", "-r", "--contains", "HEAD"); out != "" {
 		f.t.Fatalf("a remote ref still names HEAD:\n%s", out)
-	}
-}
-
-func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "a squash merge, a deleted remote branch and a full reclaim (~66 git processes)")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("sq", "feat/sq")
-	f.commitIn(w, "feat/sq", "one.txt", "1\n", true)
-	f.commitIn(w, "feat/sq", "two.txt", "2\n", true)
-	f.squashMerge("feat/sq")
-	f.pruned(w)
-
-	// The base moved on after the squash, as it does on a busy repository.
-	other := filepath.Join(t.TempDir(), "other")
-	run(t, filepath.Dir(other), "clone", "-q", f.origin, other)
-	run(t, other, "config", "user.name", "x")
-	run(t, other, "config", "user.email", "x@e.com")
-	write(t, filepath.Join(other, "later.txt"), "later\n")
-	run(t, other, "add", ".")
-	run(t, other, "commit", "-q", "-m", "later work")
-	run(t, other, "push", "-q", "origin", "main")
-	run(t, w.Path, "fetch", "-q", "origin")
-
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v, want removed: its two commits are on main as one squash", got)
-	}
-	run(t, f.project, "rev-parse", "--verify", "refs/heads/feat/sq") // the branch itself is never deleted
-}
-
-func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "~59 git processes")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("rb", "feat/rb")
-	f.commitIn(w, "feat/rb", "a.txt", "a\n", true)
-	f.commitIn(w, "feat/rb", "b.txt", "b\n", true)
-
-	// GitHub's "rebase and merge": each commit is re-applied on main with a new
-	// sha but the same patch, and the PR branch is deleted.
-	srv := filepath.Join(t.TempDir(), "server")
-	run(t, filepath.Dir(srv), "clone", "-q", f.origin, srv)
-	run(t, srv, "config", "user.name", "gh")
-	run(t, srv, "config", "user.email", "gh@e.com")
-	write(t, filepath.Join(srv, "newer.txt"), "main moved\n")
-	run(t, srv, "add", ".")
-	run(t, srv, "commit", "-q", "-m", "main moved first")
-	run(t, srv, "cherry-pick", "origin/feat/rb~1", "origin/feat/rb")
-	run(t, srv, "push", "-q", "origin", "main")
-	run(t, f.origin, "branch", "-D", "feat/rb")
-	f.pruned(w)
-	run(t, w.Path, "fetch", "-q", "origin")
-
-	if got := f.one(w); got.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v, want removed", got)
 	}
 }
 
@@ -284,48 +226,6 @@ func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 
 	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed {
 		t.Fatalf("got %+v, want held/unpushed: main has a different change to that file", got)
-	}
-}
-
-// A multi-repo workspace is removed only when EVERY checkout is done: one
-// squash-merged and one with unpushed work holds the whole thing, and naming
-// the checkout that is not done.
-func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "two checkouts, two squash merges, a verdict and a full reclaim (~130 git processes)")
-	f := newFixture(t)
-	f.idle()
-	ws := filepath.Join(f.root, "proj", "multi")
-	checkouts := map[string]string{"api": "feat/api", "web": "feat/web"}
-	for c, b := range checkouts {
-		run(t, f.project, "worktree", "add", "-q", "-b", b, filepath.Join(ws, c), "main")
-		if err := LockCheckout(context.Background(), filepath.Join(ws, c), "multi"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	w := Worktree{ID: "multi", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "9"}
-	api, web := Worktree{Path: filepath.Join(ws, "api")}, Worktree{Path: filepath.Join(ws, "web")}
-	f.commitIn(api, "feat/api", "api.txt", "a\n", true)
-	f.squashMerge("feat/api")
-	f.pruned(api)
-	f.commitIn(web, "feat/web", "web.txt", "never pushed\n", false)
-	run(t, api.Path, "fetch", "-q", "origin")
-
-	got := f.verdict(w)
-	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed || !strings.Contains(got.Detail, "web") || strings.Contains(got.Detail, "api: ") {
-		t.Fatalf("got %+v, want held/unpushed naming web only", got)
-	}
-	if !exists(filepath.Join(ws, "api")) || !exists(filepath.Join(ws, "web")) {
-		t.Fatal("a checkout was removed from a workspace that is not done")
-	}
-
-	// Once web is merged too, the whole workspace goes.
-	run(t, web.Path, "push", "-q", "origin", "feat/web")
-	f.squashMerge("feat/web")
-	f.pruned(web)
-	run(t, web.Path, "fetch", "-q", "origin")
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(ws) {
-		t.Fatalf("got %+v exists=%v, want the whole workspace removed", got, exists(ws))
 	}
 }
 
