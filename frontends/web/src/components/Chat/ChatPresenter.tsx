@@ -928,6 +928,9 @@ export const ChatPresenter = memo(function ChatPresenter({
               projectId={projectId ?? undefined}
               paneId={paneId}
               selectedThreadId={selectedThreadId}
+              // The composer's thread chip × sends the next message back to
+              // the main thread.
+              onSelectThread={setSelectedThreadId}
               workflowExecution={workflowExecution}
             />
           </div>
