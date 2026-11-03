@@ -26,22 +26,36 @@ runs with workflows, workspaces, approvals and background work.
 ### 1.1 The vertical budget with the keyboard open
 
 On an iPhone 15/16 (393×852) in Safari with the keyboard up, the visual viewport
-is about **400 CSS px** tall. The chat screen stacks this chrome inside it:
+is about **400 CSS px** tall. The chat screen stacks this chrome inside it.
 
-| Band | Source | Height (est.) |
-|---|---|---|
-| Screen header (back, title, workspace) | `MobileChrome.tsx` `MobileScreenHeader`, `min-h-[56px]` + border | 57 |
-| Workflow pill, as its own full-width row | `MobileWorkflowExecutionEntry`, `min-h-[44px]`. Renders for **any** execution, not just a running one, whatever its comment says | 44 |
-| `ChatHeader` row holding only the `⋯` menu and the context ring | `ChatHeader.tsx`, `py-1` + a `touch-target` button | 52 |
-| Thread tabs (chats with sub-threads) | `ThreadTabs` | +32 |
-| Pinned user-message overlay | `InterleavedTimeline.tsx` `pinnedUserMsg`, `pt-1 pb-1.5` + a full bubble | 50–75 |
-| Composer | `ChatInput.tsx`: `mt-1 mb-1.5`, 2px border, 4px padding, an attachment wrapper whose `pt-3` renders **even with no attachments**, one text line, then a toolbar row (`pt-2 mt-2 border-t` + 44px controls) | ~135 |
-| **Total chrome** | | **~340–370** |
-| **Left for the conversation** | | **~30–60 px: two or three lines** |
+Measured by `e2e/mobile-chat-geometry.spec.ts` on the pre-redesign tree
+(commit `39efe9fc6`), Chromium with touch emulation, `/m/chats/chat_a` with the
+`busyChat` fixture: a running workflow with two threads and a long last turn
+that the timeline pins, a one-line draft in the composer (blurred). CSS px at
+the default Appearance step (the root font size resolves to 17px, so rem
+paddings are a little larger than their Tailwind names suggest).
 
-These are estimates from the class names. The worktree has no `node_modules`,
-so nothing was rendered. Phase 0 (§11) replaces them with Playwright
-measurements. Even if they're off by 50%, the conclusion holds.
+| Band | Source | 390×844 | 390×480 |
+|---|---|---|---|
+| Screen header (back, title, workspace) | `MobileChrome.tsx` `MobileScreenHeader`, `min-h-[56px]` + border | 56 | 56 |
+| Workflow pill, as its own full-width row | `MobileWorkflowExecutionEntry`, `min-h-[44px]`. Renders for **any** execution, not just a running one, whatever its comment says | 44 | 44 |
+| `ChatHeader`: the `⋯` menu and context ring row, plus thread tabs | `ChatHeader.tsx`, `py-1`, a 44px `touch-target` row, then `ThreadTabs` (45 of the 100) | 100 | 100 |
+| Composer, one line | `ChatInput.tsx`: `mt-1 mb-1.5` (11), 2px border, 4px padding, an attachment wrapper whose `pt-3` renders **even with no attachments** (13), the text line, then a toolbar row (`pt-2 mt-2 border-t` + 44px controls, 62) | 163 | 163 |
+| **In-flow chrome** | | **363** | **363** |
+| Transcript scroller | `InterleavedTimeline.tsx` `[data-context=transcript]` | 481 (57%) | 117 (24%) |
+| Pinned user-message overlay, drawn over the scroller | `InterleavedTimeline.tsx` `pinnedUserMsg`, `pt-1 pb-1.5` + a clamped bubble | 56 | 56 |
+| **Readable conversation** | scroller minus overlay | **425 (50%)** | **61 (13%)** |
+
+Two things the class names did not show. The empty composer is not one line:
+its placeholder is a random example prompt that wraps to two lines at 390px
+often enough to make it 191px, which leaves **33px (7%)** at 390×480. And no
+banner rendered for this fixture, so these are the floor: each banner in §1.2
+item 5 comes off the 61.
+
+390×480 is a short window, not a keyboard: browser emulation cannot open one
+(`responsive-ui-standards.md`, "Native acceptance"). With the keyboard up a
+phone has ~400px, less than this, so the real number is worse. Keyboard-open
+evidence stays a Device Hub task.
 
 ### 1.2 Structural causes
 
