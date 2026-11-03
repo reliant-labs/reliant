@@ -1,0 +1,250 @@
+# Publish @reliantlabs/forge-web-runtime to npm when a web-runtime/v* tag
+# lands.
+#
+# WHY THIS IS AUTOMATED. The publish used to end with a hand-typed
+# `npm publish --access public --otp <code>`, justified as "irreversible, so
+# not automated". That reasoning does not survive contact with what we already
+# automate: reliant's release.yml publishes a NOTARIZED Electron app from CI,
+# holding Apple credentials and R2/S3 keys, on exactly this trigger shape. A
+# scoped npm publish is strictly less dangerous than that, and the manual step
+# had a real cost — v0.3.0 shipped with a devlog module that existed in the
+# source and in the templates but never reached the registry, because tagging
+# and publishing were separate acts and only one of them happened. Every
+# scaffold made against the registry copy then failed to typecheck with
+# TS2305 on installDevLogging.
+#
+# So the tag is the release trigger, and this workflow is the only thing that
+# publishes. scripts/release-web-runtime.sh remains the local validator and
+# tagger: it runs the same gates before the tag exists, which is where a
+# failure is cheap.
+#
+# The validations below deliberately DUPLICATE the script rather than trusting
+# it. The script runs on a maintainer's machine against their node_modules;
+# this runs on a clean checkout with a fresh install, which is the only place
+# "the tarball a stranger downloads is correct" can actually be established.
+# The pack-contents check is the one that matters most: a build that silently
+# emits nothing is indistinguishable from a healthy publish until an install
+# fails somewhere else entirely.
+#
+# HOW IT AUTHENTICATES: npm TRUSTED PUBLISHING (OIDC). There is NO stored
+# credential — no NPM_TOKEN secret exists in this repo, and none should be
+# created. GitHub mints a short-lived OIDC token for this job (that is what
+# `id-token: write` grants), npm verifies it came from THIS repo running THIS
+# workflow file, and only then issues a publish credential that expires
+# minutes later. The trusted publisher is registered on npmjs.com against
+# reliant-labs/forge + release-web-runtime.yml; renaming this file or moving
+# the publish into a different workflow breaks the publish until the
+# registration is updated to match.
+#
+# That is a real security improvement over a long-lived automation token: a
+# leaked token publishes from anywhere, forever, until someone notices and
+# revokes it. An OIDC token is worthless off this runner.
+#
+# --provenance is the other half. It publishes a signed, publicly verifiable
+# attestation linking the tarball to the commit and the CI run that built it,
+# so a consumer can check that what they installed came from this source and
+# not from a maintainer's laptop. That matters here specifically: this repo has
+# already shipped artifacts that could not state their own origin, and the
+# devlog incident (below) was only diagnosable by reading a human's memory of
+# what was published. Provenance makes the tarball answer that question itself.
+name: Release web-runtime
+
+on:
+  push:
+    tags: ["web-runtime/v*"]
+  # Exercise the whole path without minting a tag. Defaults to a dry run so
+  # that a mis-click cannot publish.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate and pack, but do not publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  # Lets GitHub mint the OIDC token npm exchanges for a short-lived publish
+  # credential, and the one --provenance signs the attestation with. Without
+  # it npm falls back to looking for a token that does not exist and fails
+  # with a 404 that reads like the package is missing.
+  id-token: write
+
+concurrency:
+  # Never let two publishes of the same tag race. Not cancel-in-progress: a
+  # half-cancelled publish is the state this whole workflow exists to avoid.
+  group: release-web-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-runtime
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # web-runtime declares engines.node >=22; installing under 20 warns
+          # (EBADENGINE) and would publish an artifact built by a toolchain the
+          # package says it does not support.
+          node-version: "22"
+          # Still required under trusted publishing. registry-url writes the
+          # .npmrc that points npm at the registry it will perform the OIDC
+          # exchange against; without it the publish targets a default that
+          # has no trusted-publisher registration and fails.
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Ensure npm supports trusted publishing
+        # Node 22 currently bundles npm 10.9.x, which is BELOW the 11.5.1 floor
+        # where OIDC trusted publishing landed. An older npm does not perform
+        # the token exchange at all — it looks for a credential, finds none,
+        # and fails with a 404 on the package name, which reads like "the
+        # package does not exist" rather than "your npm is too old". That
+        # misdiagnosis is expensive, so upgrade first and then assert loudly.
+        #
+        # Pinned to a major range rather than @latest so a future npm 12 cannot
+        # silently change publish behaviour on a release day.
+        run: |
+          echo "bundled npm: $(npm --version)"
+          npm install -g npm@^11.5.1
+          NPM_VERSION="$(npm --version)"
+          echo "active npm:  ${NPM_VERSION}"
+          # Sort-based comparison: succeeds only if 11.5.1 is the lower of the
+          # two, i.e. the active npm is >= the floor.
+          if [ "$(printf '%s\n11.5.1\n' "$NPM_VERSION" | sort -V | head -n1)" != "11.5.1" ]; then
+            echo "::error::npm ${NPM_VERSION} is older than 11.5.1 and cannot use OIDC trusted publishing."
+            exit 1
+          fi
+          echo "npm ${NPM_VERSION} supports trusted publishing"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify the tag matches package.json
+        # A tag that disagrees with the manifest publishes something the tag
+        # does not describe. Skipped on workflow_dispatch, where there is no
+        # tag to agree with.
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#web-runtime/v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} implies version ${TAG_VERSION}, but package.json says ${PKG_VERSION}"
+            exit 1
+          fi
+          echo "tag and manifest agree on ${PKG_VERSION}"
+
+      - name: Verify provenance metadata
+        # --provenance makes npm compare package.json's `repository` against
+        # the repository in the signed provenance statement, and reject the
+        # publish with a 422 when they disagree. An ABSENT field reads as ""
+        # and fails that comparison.
+        #
+        # This check exists because that failure happens at the WORST possible
+        # moment: the first 0.3.1 publish was authenticated, packed, signed,
+        # and written to the sigstore transparency log before the registry
+        # refused it. Everything upstream reported success. Catching it here
+        # costs a second and fails with a sentence that names the fix.
+        run: |
+          REPO_URL="$(node -p "require('./package.json').repository?.url ?? ''")"
+          EXPECTED="github.com/${GITHUB_REPOSITORY}"
+          echo "package.json repository.url: ${REPO_URL:-<absent>}"
+          echo "expected to contain:         ${EXPECTED}"
+          case "$REPO_URL" in
+            *"$EXPECTED"*)
+              echo "provenance metadata agrees with ${GITHUB_REPOSITORY}" ;;
+            *)
+              echo "::error::package.json repository.url is '${REPO_URL}', which does not match ${EXPECTED}. npm publish --provenance will reject this with a 422 AFTER signing. Set repository.url to git+https://github.com/${GITHUB_REPOSITORY}.git"
+              exit 1 ;;
+          esac
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify pack contents
+        # The check that catches a build which emitted nothing. `files` in
+        # package.json declares dist/ + interceptors/ + README; if dist is
+        # empty or missing the tarball still packs cleanly and only fails for
+        # a consumer, long after the version is immutable on the registry.
+        #
+        # index.d.ts is asserted specifically because it is the file every
+        # TypeScript consumer resolves against — a tarball with .js and no
+        # typings typechecks green here and fails in every scaffold.
+        #
+        # LICENSE and NOTICE are asserted because Apache-2.0 §4 obliges every
+        # redistributor to pass both on, and the tarball is the thing apps
+        # redistribute. npm packs LICENSE on its own; NOTICE rides on `files`.
+        # Both are copies of the repo-root files, held identical by
+        # TestWebRuntimeShipsTheRepoLicense (license_test.go).
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.txt
+          for required in dist/index.js dist/index.d.ts LICENSE NOTICE; do
+            if ! grep -q "$required" /tmp/pack.txt; then
+              echo "::error::$required is missing from the packed tarball — the build emitted nothing usable"
+              exit 1
+            fi
+          done
+          echo "pack contents verified"
+
+      - name: Publish
+        id: publish
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        # No `env:` block, and deliberately so — the credential is the OIDC
+        # token GitHub mints for this job, exchanged by npm at publish time.
+        # Adding NODE_AUTH_TOKEN back would take precedence and silently
+        # revert this to token auth.
+        #
+        # --access public is required: npm defaults a SCOPED package to
+        # restricted, and a restricted package breaks `npm install` for
+        # everyone outside the org — including every machine that scaffolds a
+        # project with a released forge.
+        #
+        # --provenance emits the signed source attestation described in the
+        # header. It requires id-token: write, which this job has.
+        run: npm publish --provenance --access public
+
+      - name: Confirm the registry actually serves it
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        # `npm publish` exiting 0 means the registry ACCEPTED the upload, not
+        # that the version is fetchable. This step asks the registry the same
+        # question a consumer's `npm install` asks, and it exists because every
+        # upstream signal already reported success the last time this went
+        # wrong: the first 0.3.1 publish was authenticated, packed, signed and
+        # written to the transparency log before the registry refused it.
+        #
+        # It also closes the gap this whole workstream was created to fix. A
+        # tag that exists while the registry has nothing is the exact state
+        # web-runtime/v0.3.1 sat in — invisible until a scaffolded project
+        # failed to install days later. After this step, "the tag exists" and
+        # "the artifact is fetchable" cannot disagree without CI going red.
+        #
+        # The loop lives in a SCRIPT so it can be tested — see
+        # internal/cli/release_web_runtime_verify_test.go. As inline YAML it
+        # was untestable, and it was wrong: a ~60s window failed the 0.3.2
+        # release, which had published fine and simply had not propagated
+        # yet. The script waits ~10 minutes with backoff and distinguishes
+        # "published but not yet served" from "not published".
+        #
+        # --publish-reported-success is passed only when the publish step
+        # above actually succeeded, which is what lets the script tell those
+        # two states apart instead of blaming the worse one by default.
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          NAME="$(node -p "require('./package.json').name")"
+          ../scripts/verify-npm-published.sh \
+            --name "$NAME" --version "$VERSION" \
+            ${{ steps.publish.outcome == 'success' && '--publish-reported-success' || '' }}
+
+      - name: Dry run — publish skipped
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          echo "Dry run: every validation passed; publish deliberately skipped."

@@ -1,0 +1,364 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// MIGRATION POLICY — and, deliberately, nothing else.
+//
+// The subcommands below are a shape every project shares, but every LINE
+// inside them is an operational decision that differs per deployment:
+//
+//   - `up` refuses to run against a dirty schema. That is the safe default,
+//     not a law. A staging environment that would rather auto-recover can
+//     call m.Force(version) and retry right here — migratekit exposes Force
+//     for exactly that, so the policy change stays a source edit in this
+//     file instead of a fork of the library.
+//   - "nothing was pending" exits 0. A pipeline that wants to fail when a
+//     release ships no migration inverts that by testing res.Changed.
+//   - `force` is the way out of that refusal, and it lives HERE, in the
+//     binary, because the image is the one thing every environment that
+//     reads the refusal has. A production image carries no forge and no
+//     checkout, and a hosted database is reachable only from inside the
+//     platform, so a recovery that needed either would be advice the
+//     operator cannot take. Run it as a one-off from the same image.
+//
+// There is NO `down`, deliberately. Forge rolls forward only: a down script
+// claims to undo a release and cannot — by the time anyone would run it the
+// release has written rows in the new shape and other code has acted on them,
+// and the script was written before any of that. A bad migration is repaired
+// by a NEW forward migration written against the state the database is
+// actually in. Write migrations expand-then-contract (add, backfill, switch
+// readers, drop in a later release) so the previous release keeps working
+// against the new schema; that is what makes a bad deploy survivable.
+//
+// The invariant half — opening a migrator over the embedded SQL, rewriting
+// the DATABASE_URL to the scheme the driver registered under, closing both
+// handles, and turning golang-migrate's sentinel errors into plain facts —
+// is in github.com/reliant-labs/forge/pkg/migratekit. It is not a decision
+// anyone re-derives, so improvements to it arrive through a dependency bump
+// rather than a re-scaffold.
+//
+// WHY THE MIGRATIONS ARE EMBEDDED. `db migrate` applies the SQL compiled
+// INTO this binary, never files read off disk. That is what lets the
+// production image migrate itself: the runtime stage copies the binary and
+// nothing else, so there is no db/migrations directory in the container and a
+// filesystem-sourced migrator could only ever fail there. The embedded set
+// comes from db/migrations/*.sql via db.Source() in db/source_gen.go
+// (forge-owned — it is the one part of this command that forge re-derives,
+// because whether db/embed_gen.go exists at all depends on whether you have
+// written any SQL yet). go:embed re-reads at compile time, so `go run
+// ./cmd/...` picks up a .sql you just wrote; `forge generate` is needed only
+// the FIRST time, to emit db/embed_gen.go.
+package cmd
+
+import (
+	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
+
+	"github.com/spf13/cobra"
+
+	"github.com/reliant-labs/forge/pkg/migratekit"
+
+	forgedb "{{.Module}}/db"
+	"{{.Module}}/pkg/config"
+)
+
+// This file is scaffolded only for a project configured for migrations, so it
+// ADDS ITSELF to the command tree rather than being named from root.go: a
+// direct call there would not compile for a project without this file, and a
+// conditional would freeze that decision in a scaffold-once file forever. The
+// set of commands is therefore exactly the set of files present. Delete this
+// file and `db migrate` is gone, with nothing left dangling.
+func init() { registerCommand(newDBCmd) }
+
+// newDBCmd builds the `db` command tree.
+//
+// deps is accepted but unused: every command constructor in this tree takes
+// Deps so root.go can wire them uniformly, and so adding a dependency here
+// (an audit sink for who ran a migration, say) is a change to this function's
+// body rather than to its signature and every call site.
+func newDBCmd(deps Deps) *cobra.Command {
+	_ = deps
+	dbCmd := &cobra.Command{
+		Use:   "db",
+		Short: "Database management commands",
+		Long:  "Database management commands. Use subcommands to run or inspect migrations.",
+	}
+
+	migrateCmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Manage database migrations",
+		Long: "Apply or inspect the SQL migrations embedded in this binary " +
+			"(compiled from db/migrations/). Forward only: there is no down.",
+	}
+	config.RegisterFlags(migrateCmd)
+
+	upCmd := &cobra.Command{
+		Use:   "up",
+		Short: "Apply all pending migrations",
+		Long: "Apply every pending migration, then exit 0. Safe to run concurrently, " +
+			"including alongside servers that migrate at boot (AUTO_MIGRATE): migratekit takes " +
+			"one session advisory lock per database, so replicas racing the same release " +
+			"serialize — one applies, the rest wait and then find nothing to do. " +
+			"Already-applied migrations are skipped, so a re-run is a no-op.",
+		// This runs unattended (a deploy-time initContainer). A failure must
+		// leave the SQL error at the end of the pod log, not a flag table.
+		SilenceUsage: true,
+		RunE: withOptionalMigrator(func(cmd *cobra.Command, m *migratekit.Migrator) error {
+			// FAIL HARD ON A DIRTY SCHEMA. Dirty means a previous migration
+			// failed partway; applying more on top compounds the damage. In
+			// an initContainer this stalls the rollout with the old pods
+			// still serving, which is the correct outcome — a human should
+			// look before anything else touches the schema.
+			state, err := m.State()
+			if err != nil {
+				return err
+			}
+			if state.Dirty {
+				// Name `force` by this binary's own command path, so the
+				// advice is a command the reader of this log can run.
+				return fmt.Errorf("database schema is dirty at version %d — a previous migration "+
+					"failed partway; inspect the database, finish or undo the partial migration, then "+
+					"clear the dirty flag with `%s force %d` before retrying",
+					state.Version, cmd.Parent().CommandPath(), state.Version)
+			}
+
+			res, err := m.Up()
+			if err != nil {
+				// A schema AHEAD of this binary that nobody declared
+				// backward-compatible arrives here as a
+				// *migratekit.SchemaAheadError. Failing is the safe
+				// default: this binary's code was never written for that
+				// schema, and forge never steps a schema back.
+				return fmt.Errorf("migrate up: %w", err)
+			}
+			// A DATABASE WHOSE HISTORY THE BASELINE REPLACES WAS ADOPTED —
+			// another tool's (goose), or a forge history `forge db squash`
+			// collapsed: it matched the baseline's `-- forge:adopts`
+			// declaration exactly, so the baseline was recorded as applied
+			// WITHOUT running. Say so — it is the one run in a database's life
+			// where the version moved and no SQL did. Anything after the
+			// baseline was applied as usual and is reported below.
+			if res.Adopted != nil {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), res.Adopted.String())
+			}
+			// THE SCHEMA IS AHEAD OF THIS BINARY — the app was rolled
+			// back — and every version it does not embed was declared
+			// `-- forge:backward-compatible`. Nothing was applied and this
+			// release's code can run, so exit 0; but say it loudly, because
+			// "the database is newer than the code" is the fact an operator
+			// mid-rollback most needs confirmed.
+			if res.Ahead != nil {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+					"SCHEMA AHEAD OF THIS BINARY (rollback): database is at version %d, this binary embeds up to %d; "+
+						"version(s) %v were declared backward-compatible — nothing applied\n",
+					res.Ahead.Version, res.Ahead.Latest, res.Ahead.Versions)
+				return nil
+			}
+			// NOTHING PENDING IS SUCCESS. res.Changed is false both for a
+			// release that shipped no migration and for a replica that lost
+			// the advisory-lock race to a peer that applied it — neither is
+			// a failure. Invert this to fail when nothing was pending.
+			if !res.Changed {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "no pending migrations (version=%d)\n", res.After.Version)
+				return nil
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "migrations applied: %d -> %d\n", res.Before.Version, res.After.Version)
+			return nil
+		}),
+	}
+	// EVERY MIGRATION RUNS UNDER A lock_timeout, so one that cannot get its
+	// lock fails fast and is retried instead of queueing every query on the
+	// table behind it (pkg/migratekit/locktimeout.go). These flags set the
+	// run's values; a migration's own `-- forge:lock-timeout` and
+	// `-- forge:statement-timeout` header lines win for that file.
+	upCmd.Flags().String("lock-timeout", "", "how long one attempt at a migration waits for a lock, e.g. 5s, 30s, off (default 5s)")
+	upCmd.Flags().String("statement-timeout", "", "longest one statement may run, e.g. 30m, 2h, off (default 30m)")
+	upCmd.Flags().Int("lock-attempts", 0, "attempts at a migration whose lock times out, the first included (default 5; 1 never retries)")
+	migrateCmd.AddCommand(upCmd)
+
+	migrateCmd.AddCommand(&cobra.Command{
+		Use:          "status",
+		Short:        "Print the current migration version",
+		SilenceUsage: true,
+		RunE: withMigrator(func(cmd *cobra.Command, m *migratekit.Migrator) error {
+			state, err := m.State()
+			if err != nil {
+				return err
+			}
+			// An unmigrated database is a normal state, not an error — say so
+			// plainly rather than printing "version=0", which reads like a
+			// version that exists.
+			if !state.Applied {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no migrations have been applied")
+				return nil
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "version=%d dirty=%v\n", state.Version, state.Dirty)
+			return nil
+		}),
+	})
+
+	migrateCmd.AddCommand(&cobra.Command{
+		Use:   "force <version>",
+		Short: "Clear a dirty migration state by recording a version without running SQL",
+		Long: "Record <version> as the schema's version and clear the dirty flag, WITHOUT running " +
+			"any SQL — the way out when a migration failed part-way and `up` refuses the dirty schema. " +
+			"Forcing asserts a fact; it does not verify one. Inspect the database and finish or undo " +
+			"the partial migration FIRST, then force the version the schema now truly reflects and " +
+			"run `up`. The versions it asserts are recorded as this binary's own embedded migrations, " +
+			"so run the release that failed. -1 means no version applied.",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			version, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("force: %q is not a migration version (an integer, or -1 for none)", args[0])
+			}
+			return withMigrator(func(cmd *cobra.Command, m *migratekit.Migrator) error {
+				if err := m.Force(version); err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+					"forced version %d: the dirty flag is cleared and no SQL was run; `%s up` applies the rest\n",
+					version, cmd.Parent().CommandPath())
+				return nil
+			})(cmd, args)
+		},
+	})
+
+	dbCmd.AddCommand(migrateCmd)
+	return dbCmd
+}
+
+// withMigrator adapts a migrator-taking function into a cobra RunE: it opens
+// the migrator, runs fn, and closes on every path including fn's error path.
+//
+// It exists so each subcommand above is nothing but its own policy. The
+// open/defer-close pair is identical in all three, and repeating it three
+// times invites the version where one of them forgets — a leaked connection
+// holding a migration lock, which is the failure that makes the NEXT deploy
+// hang rather than this one fail.
+//
+// A close error is reported to stderr rather than returned: the migration
+// itself already succeeded or failed on its own terms, and turning a failed
+// cleanup into a non-zero exit would fail a deploy whose schema change
+// actually landed.
+func withMigrator(fn func(*cobra.Command, *migratekit.Migrator) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, _ []string) error {
+		m, err := openMigrator(cmd)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if cerr := m.Close(); cerr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: close migrator: %v\n", cerr)
+			}
+		}()
+		return fn(cmd, m)
+	}
+}
+
+// withOptionalMigrator is withMigrator for `migrate up` — the one command
+// that runs UNATTENDED, at every boot, before anything else starts.
+//
+// A binary embedding no migrations is not an error there. A project that has
+// not written its first migration is the state every project starts in, and
+// `forge project new` tells the user to run `forge env up` next: a migrate step
+// that hard-fails on an empty db/migrations/ means the scaffold cannot
+// execute its own next step. The job gates every workload in the
+// environment, so nothing started at all — a fresh project could not boot.
+//
+// Skipping is safe precisely because there is nothing to apply. It is NOT
+// extended to `status`: it is typed by a human asking a direct question
+// about the schema, and answering "no migrations embedded" with silence would
+// hide a regenerate they need to run. It keeps withMigrator and keeps failing.
+//
+// See db/source_gen.go, whose generated doc states this same contract from
+// the other side.
+func withOptionalMigrator(fn func(*cobra.Command, *migratekit.Migrator) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// HasMigrations, not `Source() == nil`: with migrations embedded,
+		// Source returns a concrete embed.FS value that is never nil, so the
+		// nil comparison is dead code (staticcheck SA4023).
+		if !forgedb.HasMigrations {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(),
+				"no migrations embedded — nothing to apply "+
+					"(write one with `forge db migration new <name>`)")
+			return nil
+		}
+		return withMigrator(fn)(cmd, args)
+	}
+}
+
+// openMigrator resolves the DSN and opens a migrator over the embedded set.
+//
+// The DSN comes from the same flag and env var the server reads, so
+// `db migrate` and the application can never be pointed at different
+// databases by accident. NO POOL TUNING is applied: migrations run once, at
+// boot, on a dedicated connection that holds locks the serving pool must not
+// queue behind — the serving pool's sizing has nothing to say about it.
+//
+// It reads that ONE field directly rather than calling config.Load, and the
+// distinction is load-bearing. config.Load validates every field marked
+// `required: true` across the WHOLE config message, so a project with a
+// required credential — an internal-service secret, a signing key — got a
+// migrate command that refused to start without a value it never reads:
+//
+//	load config: required config field internal_service_secret is not set
+//
+// That is unsatisfiable for the deploy-time migration Job, which is
+// deliberately deployed with none of the app's secrets: a schema migration
+// has no business holding a signing key, and forge's own guidance is to give
+// each workload only the credentials it reads. The Job exited before opening
+// a connection, and every workload gated behind it then failed against a
+// schema that was never created — reported as a missing relation, which
+// reads like a migration-ordering bug and is not one.
+//
+// A required field the SERVER needs is still enforced where the server loads
+// its config. This narrows the migrator's credential surface to what it
+// actually consumes.
+func openMigrator(cmd *cobra.Command) (*migratekit.Migrator, error) {
+	dsn, err := migratorDSN(cmd)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := migratorLimits(cmd)
+	if err != nil {
+		return nil, err
+	}
+	return migratekit.Open(migratekit.Options{
+		FS:  forgedb.Source(),
+		Dir: forgedb.SourceDir,
+		DSN: dsn,
+		Run: migratekit.RunOptions{Limits: limits, Logger: slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), nil))},
+	})
+}
+
+// migratorLimits reads the lock and statement timeout flags `migrate up`
+// declares; the other subcommands declare none, and get the defaults.
+func migratorLimits(cmd *cobra.Command) (migratekit.Limits, error) {
+	lock, _ := cmd.Flags().GetString("lock-timeout")
+	statement, _ := cmd.Flags().GetString("statement-timeout")
+	attempts, _ := cmd.Flags().GetInt("lock-attempts")
+	return migratekit.ParseLimits(lock, statement, attempts)
+}
+
+// migratorDSN resolves the migration DSN from --database-url, else
+// DATABASE_URL. Flag beats env, matching config.Load's precedence for this
+// field. Empty is an error: a migrator with no DSN must say so rather than
+// fall back to a default and migrate something unintended.
+func migratorDSN(cmd *cobra.Command) (string, error) {
+	url, err := cmd.Flags().GetString("database-url")
+	if err != nil || url == "" {
+		// forbidigo bans reading env directly, and is right to: the typed
+		// loader is how settings should be reached. This is the ONE command
+		// that cannot use it — config.Load validates every required field in
+		// the whole config message, which is exactly the coupling this
+		// function exists to remove. DATABASE_URL is the env var the field's
+		// own (forge.v1.config) annotation declares, so the two cannot drift.
+		url = os.Getenv("DATABASE_URL") //nolint:forbidigo // see above: the typed loader validates the WHOLE config
+	}
+	if url == "" {
+		return "", fmt.Errorf("DATABASE_URL (or --database-url) is required")
+	}
+	return url, nil
+}
