@@ -115,7 +115,6 @@ export function InlinePresetPicker({
           className={cn(
             "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
             COMPOSER_CONTROL,
-            "touch:min-h-[44px]",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",

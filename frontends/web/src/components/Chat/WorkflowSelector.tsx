@@ -181,7 +181,7 @@ export function WorkflowSelector({
           // Compact mode is icon-only, so the label must come from here.
           aria-label={`Workflow: ${displayText}`}
           className={cn(
-            "flex items-center gap-1.5 rounded-full transition-colors text-2xs font-medium touch:h-[44px] touch:min-w-[44px] touch:justify-center touch:px-3",
+            "flex items-center gap-1.5 rounded-full transition-colors text-2xs font-medium touch:justify-center touch:px-3",
             COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
