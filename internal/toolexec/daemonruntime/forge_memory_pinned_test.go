@@ -27,6 +27,7 @@ var pinRE = regexp.MustCompile(`(?m)^forge_version:\s*(\S+)`)
 type fakePinnedForges struct {
 	mu   sync.Mutex
 	runs []string
+	deps forgepin.Deps
 }
 
 func useFakePinnedForges(t *testing.T) *fakePinnedForges {
@@ -65,7 +66,8 @@ func useFakePinnedForges(t *testing.T) *fakePinnedForges {
 
 // restart is a new process: fresh memory, the same disk cache.
 func (f *fakePinnedForges) restart(resolve func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error), run func(string, string, ...string) ([]byte, error), cache string) {
-	pinnedForge = &forgepin.Source{Resolve: resolve, Run: run, CacheDir: func() string { return cache }}
+	f.deps = forgepin.Deps{Resolve: resolve, Run: run, CacheDir: func() string { return cache }}
+	pinnedForge = forgepin.New(f.deps)
 }
 
 func forgeDir(t *testing.T, name, pin string) string {
@@ -93,8 +95,7 @@ func TestForgeMemory_APinnedProjectGetsThePinnedForgesGuide(t *testing.T) {
 	assert.NotContains(t, got, string(embedded[:200]), "the embedded forge's guide was injected")
 
 	_ = projectMemoryWithForgeFramework(dir, nil)
-	resolve, run := pinnedForge.Resolve, pinnedForge.Run
-	f.restart(resolve, run, pinnedForge.CacheDir())
+	f.restart(f.deps.Resolve, f.deps.Run, f.deps.CacheDir())
 	again := string(projectMemoryWithForgeFramework(dir, []byte("user notes")))
 	assert.Equal(t, got, again)
 	assert.Equal(t, []string{"v1.0.4 project memory --json"}, f.runs, "the pinned forge was asked again for its guide")

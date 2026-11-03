@@ -39,7 +39,7 @@ import (
 // =============================================================================
 
 // pinnedForge runs the forge projects pin; the tests replace it.
-var pinnedForge = forgepin.Default
+var pinnedForge = forgepin.Default()
 
 // pinnedForgeCache holds a pinned forge's parsed catalog, per forge identity.
 var pinnedForgeCache sync.Map // key -> *pinnedForgeEntry

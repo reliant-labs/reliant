@@ -20,7 +20,7 @@ import (
 var forgeMemoryWarn = logging.NewThrottle(time.Hour, time.Now)
 
 // pinnedForge runs the forge projects pin; the tests replace it.
-var pinnedForge = forgepin.Default
+var pinnedForge = forgepin.Default()
 
 // embeddedForgeIdentity names the forge compiled into this binary, for
 // forgeFrameworkMemoryFrom's identity.
