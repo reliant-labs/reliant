@@ -234,19 +234,6 @@ func waitUninspectable(t *testing.T, pid int) {
 	}
 }
 
-// waitListening waits for an agent's socket to exist: the agent is running.
-func waitListening(t *testing.T, sock string) {
-	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
-		if _, err := os.Stat(sock); err == nil {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ssh-agent never created %s", sock)
-		}
-	}
-}
-
 // startUndumpable starts this binary as an undumpable helper in dir, its own
 // process group's leader, and returns it once it is undumpable. Kept alive as
 // briefly as the caller needs: while it lives, every same-owner process-use
