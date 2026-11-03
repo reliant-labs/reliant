@@ -43,6 +43,8 @@ import { useActiveThreads } from "../../../store/threadActivityStore";
 import { logger } from "../../../lib/logger";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
+import { messageText } from "../../../lib/transcript";
+import { pinnedPromptFirstLine, usePinnedPromptForm } from "./pinnedPromptForm";
 import {
   measureRows,
   resolvePinnedUserMessage,
@@ -1202,6 +1204,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }, []);
 
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  // The same shell as state, for the pinned prompt's width subscription: the
+  // shell mounts only once there are rows, after the first render.
+  const [timelineShellEl, setTimelineShellEl] = useState<HTMLDivElement | null>(null);
+  const setTimelineShell = useCallback((el: HTMLDivElement | null) => {
+    timelineContainerRef.current = el;
+    setTimelineShellEl(el);
+  }, []);
+  const pinnedPromptForm = usePinnedPromptForm(timelineShellEl);
 
   // Publish the pinned header's height: per-message hover toolbars stick below
   // it, and it is the crossing line the pin resolver measures against.
@@ -1236,7 +1246,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const observer = new ResizeObserver(publish);
     observer.observe(header);
     return () => observer.disconnect();
-  }, [pinnedUserMsg]);
+    // The form swaps the header element (overlay <-> strip <-> none), so it
+    // re-publishes too.
+  }, [pinnedUserMsg, pinnedPromptForm]);
 
   // `index` is a plain index into timelineItems.
   const renderItem = useCallback((index: number, item: TimelineItem, compactToolSpacing = false) => {
@@ -1423,7 +1435,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   return (
     <div
-      ref={timelineContainerRef}
+      ref={setTimelineShell}
       className={timelineShellClass}
       style={{ position: "relative" }}
     >
@@ -1437,7 +1449,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           view. With hit-testing passing through, a drag over it extends the
           selection to the text underneath instead. The Jump-to button opts
           back in, so it stays clickable. */}
-      {pinnedUserMsg && (
+      {pinnedUserMsg && pinnedPromptForm === "overlay" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"
@@ -1480,6 +1492,43 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               </Tooltip>
             </div>
           </div>
+        </div>
+      )}
+      {/* Pinned prompt, compact width: one line, and the whole line is the
+          jump target — a bubble plus a separate button would be ~75px of a
+          phone's height for a breadcrumb. Same floating treatment as the top
+          bar it sits under: opaque so transcript text never shows through, a
+          hairline instead of a shadow.
+
+          The selection reasoning above still holds for the wrapper (it stays
+          pointer-events-none); the strip itself must take the tap, and at
+          36px against the top edge a drag-select rarely starts over it. The
+          after: box extends the hit area to 44px downward, never upward into
+          the top bar. */}
+      {pinnedUserMsg && pinnedPromptForm === "strip" && (
+        <div
+          ref={pinnedHeaderRef}
+          data-testid="pinned-user-message-header"
+          data-form="strip"
+          className="pointer-events-none absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background"
+        >
+          <button
+            type="button"
+            onClick={handleJumpToPinned}
+            aria-label="Jump to your last message"
+            className={cn(
+              "pointer-events-auto relative flex h-[36px] w-full select-none items-center gap-2 text-left text-xs text-muted-foreground",
+              timelineHorizontalPaddingClass,
+              "after:absolute after:inset-x-0 after:top-0 after:h-[44px] after:content-['']",
+              "transition-colors hover:text-foreground focus-visible:text-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            )}
+          >
+            <ArrowUp aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {pinnedPromptFirstLine(messageText(pinnedUserMsg)) || "Your last message"}
+            </span>
+          </button>
         </div>
       )}
       {/* Scroll-back loading indicator, pinned to the top of the visible

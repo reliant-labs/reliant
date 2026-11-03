@@ -79,6 +79,22 @@ const PINNED_MESSAGE_MAX_HEIGHT = "1.5rem";
 /** Fades the last line of a clipped message out instead of cutting it mid-glyph. */
 const COLLAPSED_FADE_MASK = "linear-gradient(to bottom, #000 60%, transparent 100%)";
 
+/**
+ * Transcript prose type: user bubbles and assistant markdown.
+ *
+ * Desktop keeps its dense `text-sm`. The mobile surface reads at 16px with
+ * 1.55 leading (`dev-docs/design/mobile-chat-redesign.md` §7.1). Spelled in
+ * rem against the mobile root (`MOBILE_FONT_SIZE_MAP`, 17px at the default
+ * step), so it is 16px by default and still moves with the Appearance step —
+ * a px size would freeze it. Raising the whole mobile root instead would
+ * enlarge every control on `/m/*` to get one band of text right.
+ *
+ * `--chat-prose-leading` reaches MarkdownRenderer's paragraphs, which set
+ * their own leading.
+ */
+const MOBILE_PROSE_TYPE_CLASS = "text-[0.9412rem] leading-[1.55] [--chat-prose-leading:1.55]";
+const DESKTOP_PROSE_TYPE_CLASS = "text-sm leading-relaxed";
+
 interface ChatMessageProps {
   message: Message;
   approvals?: Approval[];
@@ -1016,7 +1032,8 @@ function ChatMessageComponent({
                     <div
                       ref={contentRef}
                       className={cn(
-                        "text-sm leading-relaxed text-foreground",
+                        isMobile ? MOBILE_PROSE_TYPE_CLASS : DESKTOP_PROSE_TYPE_CLASS,
+                        "text-foreground",
                         // Expanded messages scroll inside the bubble instead of
                         // growing without bound — a pasted log should not push
                         // the whole conversation off screen.
@@ -1112,7 +1129,7 @@ function ChatMessageComponent({
                             isUser={false}
                             isStreaming={isStreaming}
                             worktreeId={chatWorktreeId}
-                            className="text-sm w-full"
+                            className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : "text-sm", "w-full")}
                           />
                         </div>
                       )}
