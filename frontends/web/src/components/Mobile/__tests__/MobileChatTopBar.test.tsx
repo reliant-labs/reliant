@@ -91,6 +91,25 @@ describe("MobileChatTopBar back", () => {
     await userEvent.click(screen.getByRole("button", { name: "Back to Parent" }));
     expect(onBackToThread).toHaveBeenCalledTimes(1);
   });
+
+  it("drops back-to-chats while the list pane is beside the chat", () => {
+    renderBar({ listPaneVisible: true });
+    expect(screen.queryByLabelText("Back to chats")).not.toBeInTheDocument();
+    // The title is then the bar's first control.
+    expect(screen.getByRole("button", { name: /chat actions/ })).toBeInTheDocument();
+  });
+
+  it("still returns to the parent thread beside the list pane", async () => {
+    const onBackToThread = vi.fn();
+    renderBar({
+      listPaneVisible: true,
+      subThread: { name: "Child", backLabel: "Back to Parent" },
+      onBackToThread,
+    });
+    expect(screen.queryByLabelText("Back to chats")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Back to Parent" }));
+    expect(onBackToThread).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("MobileChatTopBar workspace", () => {

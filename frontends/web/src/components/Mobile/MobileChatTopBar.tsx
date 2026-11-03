@@ -13,6 +13,7 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, FolderGit2, Loader2 } from "lucide-react";
 import { ContextUsageIndicator } from "../Chat/ContextUsageIndicator";
+import { cn } from "../../lib/utils";
 
 /**
  * The ring earns a slot in the bar only once compaction is close enough to
@@ -47,6 +48,12 @@ interface MobileChatTopBarProps {
    */
   subThread?: { name: string; backLabel: string };
   onBackToThread?: () => void;
+  /**
+   * The chat list is on screen beside the chat (expanded `/m/*`), so there is
+   * no list to go back to and the back control is dropped. Back to a parent
+   * thread still shows: that is navigation inside the chat.
+   */
+  listPaneVisible?: boolean;
   noMachine?: boolean;
   contextUsage?: ContextUsage | null;
   /** Present when the chat has a workspace to open. */
@@ -59,6 +66,7 @@ export function MobileChatTopBar({
   runningWorkflow,
   subThread,
   onBackToThread,
+  listPaneVisible = false,
   noMachine,
   contextUsage,
   onOpenWorkspace,
@@ -70,23 +78,29 @@ export function MobileChatTopBar({
     noMachine ? "No machine" : null,
   ].filter(Boolean).join(" · ");
   const ratio = contextUsageRatio(contextUsage);
+  const hasBack = (subThread && onBackToThread) || !listPaneVisible;
 
   return (
     // The hairline stays until the scroll-edge treatment (§4.3) lands and can
     // show it only while content is scrolled under the bar.
     <header
-      className="flex min-h-[48px] shrink-0 items-center gap-0.5 border-b border-border bg-background px-1"
+      className={cn(
+        "flex min-h-[48px] shrink-0 items-center gap-0.5 border-b border-border bg-background px-1",
+        // With no leading control, the title lines up with the list pane's
+        // 16px content inset instead of sitting against the bar's edge.
+        !hasBack && "pl-3",
+      )}
       data-testid="mobile-chat-top-bar"
     >
       {subThread && onBackToThread ? (
         <button type="button" onClick={onBackToThread} className={ICON_BUTTON} aria-label={subThread.backLabel}>
           <ChevronLeft className="h-5 w-5" />
         </button>
-      ) : (
+      ) : !listPaneVisible ? (
         <Link to="/m/chats" className={ICON_BUTTON} aria-label="Back to chats">
           <ChevronLeft className="h-5 w-5" />
         </Link>
-      )}
+      ) : null}
 
       {/* The title is the Chat sheet's trigger; the chevron is the cue that
           it opens something (Claude's pattern). */}

@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryHistory,
@@ -143,6 +143,24 @@ describe("MobileNavDrawer", () => {
     expect(screen.getByRole("link", { name: /Account/ })).toHaveAttribute("href", "/m/account");
     expect(screen.getByRole("link", { name: /Project/ })).toHaveAttribute("href", "/m/projects");
     expect(screen.getByText("reliant")).toBeInTheDocument();
+  });
+
+  it("lays the destinations out as a grid above the project switcher", async () => {
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(nav.className).toContain("grid-cols-3");
+    // Every destination is a tile in the grid; the project is not one of them.
+    expect(within(nav).getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /^Settings/ })).toBeInTheDocument();
+    const project = screen.getByRole("link", { name: /Project/ });
+    expect(nav).not.toContainElement(project);
+    expect(nav.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Tiles keep a touch target above the 44px floor.
+    for (const tile of within(nav).getAllByRole("link")) {
+      expect(tile.className).toContain("min-h-[64px]");
+    }
   });
 
   it("calls onClose when the scrim is tapped", async () => {

@@ -112,6 +112,7 @@ vi.mock("../MobileWorkspaceSheet", () => ({
 }));
 
 const { MobileChatScreen } = await import("../MobileChatScreen");
+const { ChatListPaneContext } = await import("../mobileSplitPane");
 
 describe("MobileChatScreen", () => {
   it("shows the chat title and a container with no header row of its own", () => {
@@ -201,6 +202,25 @@ describe("MobileChatScreen thread back", () => {
     await user.click(screen.getByRole("button", { name: "Back to main thread" }));
     expect(container).toHaveAttribute("data-thread", "null");
     expect(screen.getByLabelText("Back to chats")).toBeInTheDocument();
+  });
+
+  it("has no back-to-chats beside the list pane, but still leaves a sub-thread", async () => {
+    const user = userEvent.setup();
+    threadsMock = [
+      thread({ id: "chat-1", name: "Main", isMain: true }),
+      thread({ id: "t-spawn", name: "Helper", isSpawn: true, parentThread: "chat-1" }),
+    ];
+    render(
+      <ChatListPaneContext.Provider value>
+        <MobileChatScreen />
+      </ChatListPaneContext.Provider>,
+    );
+    expect(screen.queryByLabelText("Back to chats")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "open spawn" }));
+    await user.click(screen.getByRole("button", { name: "Back to main thread" }));
+    expect(screen.getByTestId("chat-container")).toHaveAttribute("data-thread", "null");
+    expect(screen.queryByLabelText("Back to chats")).not.toBeInTheDocument();
   });
 });
 

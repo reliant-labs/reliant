@@ -30,6 +30,7 @@ import type { Message } from "../../api/client";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
 import { MobileChatTopBar } from "./MobileChatTopBar";
 import { MobileChatSheet } from "./MobileChatSheet";
+import { useChatListPaneVisible } from "./mobileSplitPane";
 import { loadMainWorktree } from "../../hooks/worktree-actions";
 import { useMainWorktree } from "../../hooks/worktree-queries";
 
@@ -46,6 +47,8 @@ export function MobileChatScreen() {
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [showSheet, setShowSheet] = useState(false);
+  // Expanded `/m/*` keeps the chat list beside this screen (MobileSplitLayout).
+  const listPaneVisible = useChatListPaneVisible();
 
   // A deep link or notification can open a chat that is not in the project the
   // shell selected. What the chat screen reads — worktrees, files, the
@@ -122,7 +125,8 @@ export function MobileChatScreen() {
     <div className="flex h-full min-h-0 flex-col">
       {/* One bar: back, the title that opens the Chat sheet, one optional
           status line, and at most two trailing icons. On a phone there is no
-          persistent sidebar to go back to, so back has to live here. */}
+          persistent sidebar to go back to, so back has to live here; beside
+          the list pane it is dropped. */}
       <MobileChatTopBar
         title={title}
         onOpenSheet={() => setShowSheet(true)}
@@ -136,6 +140,7 @@ export function MobileChatScreen() {
             : undefined
         }
         onBackToThread={() => setSelectedThreadId(backTargetId)}
+        listPaneVisible={listPaneVisible}
         noMachine={chat?.noMachine}
         contextUsage={contextUsage}
         onOpenWorkspace={openWorkspace}
@@ -174,9 +179,12 @@ export function MobileChatScreen() {
 
           The inset is applied here because this screen hides the tab bar, so
           the shared chat composer is the element at the screen edge and would
-          otherwise sit under the home indicator. */}
+          otherwise sit under the home indicator.
+
+          720px is the medium class's transcript column (§4.1): a phone in
+          landscape or an iPad mini keeps a readable line length, centered. */}
       <div
-        className="mx-auto min-h-0 w-full max-w-3xl flex-1"
+        className="mx-auto min-h-0 w-full max-w-[720px] flex-1"
         style={{ paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" }}
       >
         {/* The top bar and Chat sheet replace ChatHeader entirely, so the
