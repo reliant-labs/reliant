@@ -81,8 +81,52 @@ tag.
    correct it. If the release is incompatible with the job, move to the commit
    of a known-good release. Either way, fix the table and the `uses:` line
    together in one PR labelled `release:asap`.
-3. Re-run the workflow on the fix: dispatch `build-images.yml`, or the release
-   with `dry_run: true` first. Cut the release again only after that run passes
-   the checks above. While the image build or desktop release is red, it blocks
-   the release it was building. Nothing already published is touched, because a
-   failed run publishes nothing.
+3. Before fixing forward, find out what the failed run already published. A
+   failed run is not all-or-nothing:
+   - `release-macos`, `release-linux` and `release-windows` each publish their
+     own installers and update feeds to R2 independently, so one platform can
+     be live while another failed.
+   - `finalize` runs whenever `prepare` succeeded (`if: always()`), even when a
+     platform job failed: it purges the CDN cache and creates the GitHub
+     Release for the tag regardless.
+   - `build-images.yml` can push the image to the nonprod GAR and then fail
+     before `Mirror digest to prod GAR`.
+
+   So inspect the existing platform artifacts and update feeds
+   (`scripts/verify-release-artifacts.sh <vX.Y.Z>` names what is missing), the
+   GitHub Release for the tag, and both GARs for the image tag. Record which
+   platforms and registries are live for that version; a version that some
+   clients already auto-update to cannot be treated as untouched.
+4. Re-run the workflow on the fix: dispatch `build-images.yml`, or the release
+   with `dry_run: true` first. The release workflow runs from the tagged
+   commit, so a re-run of the failed tag still uses the bad pin: ship the fix
+   as a new version that supersedes the partial one, and note in the partial
+   version's GitHub Release which platforms it reached. Cut it only after the
+   dry run passes the checks above. While the image build or desktop release
+   is red, it blocks the release it was building.
+
+## Upstream verification record
+
+Each row of `reviewedActionPins` was resolved against the action's upstream
+repository with `git ls-remote https://github.com/<owner>/<action>
+refs/tags/<tag> 'refs/tags/<tag>^{}'` (the `^{}` line when the tag is
+annotated) on 2026-11-03. Every pinned commit equals the commit its tag points
+to upstream:
+
+| Action | Tag | Upstream commit |
+| --- | --- | --- |
+| actions/checkout | v4.4.0 | `11d5960a326750d5838078e36cf38b85af677262` |
+| actions/checkout | v6.1.0 | `d23441a48e516b6c34aea4fa41551a30e30af803` |
+| actions/setup-go | v6.5.0 | `924ae3a1cded613372ab5595356fb5720e22ba16` |
+| actions/setup-node | v6.5.0 | `249970729cb0ef3589644e2896645e5dc5ba9c38` |
+| actions/cache | v4.3.0 | `0057852bfaa89a56745cba8c7296529d2fc39830` |
+| actions/upload-artifact | v4.6.2 | `ea165f8d65b6e75b540449e92b4886f43607fa02` |
+| actions/download-artifact | v4.3.0 | `d3f86a106a0bac45b974a628896c90dbdf5c8093` |
+| pnpm/action-setup | v4.3.0 | `b906affcce14559ad1aafd4ab0e942779e9f58b1` |
+| docker/setup-buildx-action | v3.12.0 | `8d2750c68a42422c14e847fe6c8ac0403b4cbd6f` |
+| docker/metadata-action | v5.10.0 | `c299e40c65443455700f0fdfc63efafe5b349051` |
+| docker/build-push-action | v6.19.2 | `10e90e3645eae34f1e60eeb005ba3a3d33f178e8` |
+| google-github-actions/auth | v2.1.13 | `c200f3691d83b41bf9bbd8638997a462592937ed` |
+| google-github-actions/setup-gcloud | v2.2.1 | `e427ad8a34f8676edf47cf7d7925499adf3eb74f` |
+
+Re-run that resolution, and update this table, in any PR that changes a row.
