@@ -57,7 +57,7 @@ vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   usePresetsForWorkflow: () => NO_PRESETS,
   fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
-vi.mock("../settings", () => ({ ChatSettingsPopover: (props: { embedded: boolean; initialPage: string; disabled: boolean }) => <div data-testid="shared-settings" data-embedded={props.embedded} data-page={props.initialPage} data-disabled={props.disabled} /> }));
+vi.mock("../settings", () => ({ ChatSettingsPopover: (props: { isOpen: boolean; embedded: boolean; initialPage: string; disabled: boolean }) => !props.isOpen ? null : <div data-testid="shared-settings" data-embedded={props.embedded} data-page={props.initialPage} data-disabled={props.disabled} /> }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";

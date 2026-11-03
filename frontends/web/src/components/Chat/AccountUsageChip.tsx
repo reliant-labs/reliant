@@ -148,7 +148,6 @@ export function AccountUsageChip({ chatId }: { chatId?: string }) {
         className={cn(
           "flex max-w-[16rem] items-center rounded-full border px-2.5 text-2xs font-medium transition-colors",
           COMPOSER_CONTROL,
-          "touch:min-h-[44px]",
           compact && "min-h-[44px]",
           TONE[state.kind],
         )}

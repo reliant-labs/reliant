@@ -8,6 +8,7 @@ import {
   useMemo,
   forwardRef,
   useImperativeHandle,
+  type ReactElement,
 } from "react";
 import { Settings2, ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
@@ -43,6 +44,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { getAcceptedMimeTypes } from "../../lib/filetypes";
 import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
+import type { PopoverTriggerProps } from "../forge-ui/popover";
 import { findModelParamKey, type PageId as SettingsPageId } from "./settings/ChatSettingsPopover";
 import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
@@ -1712,33 +1714,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // Note: Global ESC key handling is done in ModernApp.tsx with proper priority checks
     // (checks for open modals, workflow builder, etc. before pausing chat)
 
-    // Local escape hatch: allow closing expanded settings with Escape when focus is in chat input area.
-    useEffect(() => {
-      if (settingsPage === null) return;
-
-      const handleEscapeToCloseSettings = (event: KeyboardEvent) => {
-        if (event.key !== "Escape") return;
-
-        const container = containerRef.current;
-        if (!container) return;
-
-        const activeElement = document.activeElement as HTMLElement | null;
-        if (!activeElement) return;
-
-        // Only handle ESC when focus is inside this chat input container.
-        if (!container.contains(activeElement)) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        setSettingsPage(null);
-      };
-
-      // Use capture to run before document-level handlers that may use ESC for pause/stop.
-      window.addEventListener("keydown", handleEscapeToCloseSettings, true);
-      return () => {
-        window.removeEventListener("keydown", handleEscapeToCloseSettings, true);
-      };
-    }, [settingsPage]);
+    // Escape on an open settings panel is the panel's own (forge-ui Popover
+    // claims it in the capture phase, before the global pause/stop handler).
 
     // Compute effective popover props once (used by whichever trigger renders it)
     const popoverInputs = isViewingThreadParams && threadParamsOverride
@@ -1751,15 +1728,24 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       ? handleThreadParamsChange
       : handleWorkflowParamsChange;
 
-    const renderSettingsPopover = (
-      initialPage: SettingsPageId,
-      embedded?: { onExit: () => void },
-    ) => {
-      if (!popoverInputs || !canConfigure) return null;
+    const hasSettings = !!popoverInputs && canConfigure;
+
+    // The settings page tree, either anchored to a toolbar control (it renders
+    // that control as its trigger, so it renders whether or not it is open) or
+    // embedded as a page of the ⊕ sheet.
+    type SettingsShell =
+      | { embedded: { onExit: () => void } }
+      | { anchored: { open: boolean; onOpen: () => void; trigger: (props: PopoverTriggerProps) => ReactElement } };
+    const renderSettingsPopover = (initialPage: SettingsPageId, shell: SettingsShell) => {
+      const embedded = "embedded" in shell ? shell.embedded : undefined;
+      const anchored = "anchored" in shell ? shell.anchored : undefined;
+      if (embedded && !hasSettings) return null;
       return (
         <ChatSettingsPopover
-          isOpen={true}
+          isOpen={embedded ? true : !!anchored?.open && hasSettings}
           onClose={() => (embedded ? setOptionsPage(null) : setSettingsPage(null))}
+          onOpen={anchored?.onOpen}
+          trigger={anchored?.trigger}
           initialPage={initialPage}
           embedded={!!embedded}
           onExit={embedded?.onExit}
@@ -2083,26 +2069,34 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
                       {/* Model pill - opens settings popover directly to model page */}
                       {modelInlineAllowed && (
-                        <div className="relative" {...toolProps("model")}>
-                          <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
-                            <button
-                              className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5",
-                                COMPOSER_CONTROL,
-                                settingsPage === 'model'
-                                  ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
-                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-                              )}
-                              disabled={disabled || !isMessagingAllowed}
-                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')}
-                              aria-label="Model settings"
-                            >
-                              <span className={cn("w-1.5 h-1.5 rounded-full", providerDotColor(composerModel.provider))} />
-                              <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
-                              <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-                            </button>
-                          </Tooltip>
-                          {settingsPage === 'model' && renderSettingsPopover('model')}
+                        <div {...toolProps("model")}>
+                          {renderSettingsPopover('model', {
+                            anchored: {
+                              open: settingsPage === 'model',
+                              onOpen: () => setSettingsPage('model'),
+                              trigger: (triggerProps) => (
+                                <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
+                                  <button
+                                    {...triggerProps}
+                                    type="button"
+                                    className={cn(
+                                      "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5",
+                                      COMPOSER_CONTROL,
+                                      settingsPage === 'model'
+                                        ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
+                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
+                                    )}
+                                    disabled={disabled || !isMessagingAllowed}
+                                    aria-label="Model settings"
+                                  >
+                                    <span className={cn("w-1.5 h-1.5 rounded-full", providerDotColor(composerModel.provider))} />
+                                    <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
+                                    <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+                                  </button>
+                                </Tooltip>
+                              ),
+                            },
+                          })}
                         </div>
                       )}
 
@@ -2131,40 +2125,42 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
                       {/* Settings Button - opens settings popover */}
                       {settingsInlineAllowed && (
-                        <div className="relative" {...toolProps("settings")}>
-                          <Tooltip
-                            content={
-                              settingsPage !== null
-                                ? "Hide settings"
-                                : "Show all settings"
-                            }
-                            side="top"
-                          >
-                            <button
-                              data-contextual-tip="params-toggle"
-                              aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
-                              onClick={() =>
-                                setSettingsPage(settingsPage !== null ? null : 'main')
-                              }
-                              disabled={disabled || !isMessagingAllowed}
-                              className={cn(
-                                "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:h-[44px] touch:w-[44px]",
-                                COMPOSER_CONTROL,
-                                !disabled
-                                  ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
-                                  : "cursor-default opacity-60",
-                                settingsPage !== null
-                                  ? "bg-primary/20 text-primary-ink"
-                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
-                              )}
-                            >
-                              <Settings2 className="w-3.5 h-3.5" />
-                              {hasUnsetParams && (
-                                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
-                              )}
-                            </button>
-                          </Tooltip>
-                          {settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
+                        <div {...toolProps("settings")}>
+                          {renderSettingsPopover(settingsPage && settingsPage !== 'model' ? settingsPage : 'main', {
+                            anchored: {
+                              open: settingsPage !== null && settingsPage !== 'model',
+                              onOpen: () => setSettingsPage('main'),
+                              trigger: (triggerProps) => (
+                                <Tooltip
+                                  content={settingsPage !== null ? "Hide settings" : "Show all settings"}
+                                  side="top"
+                                >
+                                  <button
+                                    {...triggerProps}
+                                    type="button"
+                                    data-contextual-tip="params-toggle"
+                                    aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
+                                    disabled={disabled || !isMessagingAllowed}
+                                    className={cn(
+                                      "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:w-[44px]",
+                                      COMPOSER_CONTROL,
+                                      !disabled
+                                        ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
+                                        : "cursor-default opacity-60",
+                                      settingsPage !== null
+                                        ? "bg-primary/20 text-primary-ink"
+                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
+                                    )}
+                                  >
+                                    <Settings2 className="w-3.5 h-3.5" />
+                                    {hasUnsetParams && (
+                                      <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ),
+                            },
+                          })}
                         </div>
                       )}
                     </div>
@@ -2254,7 +2250,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     model: findModelParamKey(popoverInputs) ? (
                       <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
                     ) : null,
-                    renderSettings: (page, onExit) => renderSettingsPopover(page, { onExit }),
+                    renderSettings: (page, onExit) => renderSettingsPopover(page, { embedded: { onExit } }),
                   }
                 : null
             }
