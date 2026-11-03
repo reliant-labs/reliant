@@ -74,7 +74,7 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 	}
 	f.restart = func() {
 		clearPinnedCatalog()
-		pinnedForge = &forgepin.Source{Resolve: resolve, Run: run, CacheDir: func() string { return cache }}
+		pinnedForge = forgepin.New(forgepin.Deps{Resolve: resolve, Run: run, CacheDir: func() string { return cache }})
 	}
 	f.restart()
 }

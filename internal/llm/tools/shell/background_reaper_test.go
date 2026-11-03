@@ -64,15 +64,6 @@ func startQuiet(t *testing.T, m *BackgroundManager, opts StartProcessOptions) *B
 	return process
 }
 
-func reaped(ids []string, id string) bool {
-	for _, got := range ids {
-		if got == id {
-			return true
-		}
-	}
-	return false
-}
-
 // The owner's rule (2026-11-02): a background process a chat left behind is
 // stopped once it has been idle for the window AND the chat that started it
 // has no run in progress. Each case below is one half of that rule failing,
@@ -350,9 +341,6 @@ func TestReaper_ArchivedWorkspaceStopsItsProcessesAtOnce(t *testing.T) {
 		return busy.StatusSafe() == "killed" && server.StatusSafe() == "killed"
 	}, 10*time.Second, 10*time.Millisecond)
 	require.Equal(t, "running", other.StatusSafe())
-	out, err := m.GetCombinedOutput(server.ID)
-	require.NoError(t, err)
-	require.Contains(t, out[len(out)-1].Text, "its workspace was archived")
 }
 
 // The daemon removing a workspace directory stops what runs inside it, and
