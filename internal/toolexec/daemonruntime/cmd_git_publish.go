@@ -75,7 +75,7 @@ func isolatedGitEnv() []string {
 			base = append(base, kv)
 		}
 	}
-	env := daemonpolicy.StripCredentials(base)
+	env := daemonpolicy.StripCredentials(base, nil)
 	return append(env,
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_CONFIG_SYSTEM="+os.DevNull,
