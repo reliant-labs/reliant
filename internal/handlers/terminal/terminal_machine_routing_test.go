@@ -390,3 +390,16 @@ type pinnedCreateRouter struct {
 func (r *pinnedCreateRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
+
+// A machine name is the owner's own words: a daemon id that is not the
+// caller's is named by its short id, never by the name its owner gave it.
+func TestTerminalWS_MachineNameNeverNamesAnotherUsersMachine(t *testing.T) {
+	checkouts := routingCheckouts()
+	checkouts.daemons["their-machine-id"] = &db.Daemon{ID: "their-machine-id", UserID: "someone-else", Name: "their secret laptop"}
+	cfg := terminalWSConfig{checkouts: checkouts}
+
+	require.Equal(t, "cicd", cfg.machineName(context.Background(), terminalTestUserID, "daemon-c"))
+	name := cfg.machineName(context.Background(), terminalTestUserID, "their-machine-id")
+	require.NotContains(t, name, "their secret laptop")
+	require.Equal(t, "machine their-ma", name)
+}
