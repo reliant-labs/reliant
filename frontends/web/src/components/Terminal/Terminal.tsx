@@ -18,6 +18,7 @@ import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { getGRPCBaseURLPublic } from "../../api/grpc-client";
 import { pageActivity } from "../../lib/pageActivity";
+import { startTerminalSessionSpan, type TerminalSessionSpan } from "./terminalTrace";
 
 interface TerminalProps {
   sessionId: string;
@@ -67,7 +68,7 @@ const DAEMON_OFFLINE_GRACE_DELAY = 6000;
 // The server's `code` on an "error" when the daemon refused the requested
 // working directory because it is not on the machine — most often a project
 // whose clone is still running. See wsErrorWorkingDirUnavailable in
-// internal/grpc/services/terminal_ws.go.
+// internal/handlers/terminal/terminal_ws.go.
 const WORKING_DIR_UNAVAILABLE_CODE = "working_dir_unavailable";
 // The working directory is gone for good — its workspace was archived,
 // deleted, or removed from disk — so no retry can open a shell there. The
@@ -114,6 +115,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // The current connection's client span (terminalTrace.ts).
+  const sessionSpanRef = useRef<TerminalSessionSpan | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -469,6 +472,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         }
         wsRef.current = null;
       }
+      // Its onclose was detached above, so its span ends here.
+      sessionSpanRef.current?.end(undefined, "replaced");
+      sessionSpanRef.current = null;
 
       // Per-attempt evidence: cleared here, set by this attempt's messages.
       daemonUnavailableRef.current = false;
@@ -501,6 +507,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       if (worktreeId) params.append("worktreeId", worktreeId);
       if (projectId) params.append("projectId", projectId);
       if (token) params.append("token", token);
+      // Adds the trace context the server's span continues, and whether this
+      // replaces an earlier connection of this terminal.
+      const span = startTerminalSessionSpan(params, {
+        reconnect: seq > 1,
+        projectId,
+        worktreeId,
+      });
 
       const wsUrl = `${protocol}//${host}/api/v2/terminal/ws?${params.toString()}`;
 
@@ -508,6 +521,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      sessionSpanRef.current = span;
       socketCreatedAtRef.current = Date.now();
 
       ws.onopen = () => {
@@ -554,6 +568,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
               reconnectAttemptsRef.current = 0;
               daemonUnavailableRef.current = false;
               workingDirAttemptsRef.current = 0;
+              span.established();
               updateConnectionState("connected");
               if (data.pid) {
                 updateSessionPID(sessionId, data.pid);
@@ -635,6 +650,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
 
       ws.onclose = (event) => {
         logger.info("[Terminal] WebSocket closed", { code: event.code, reason: event.reason });
+        span.end(event.code, "closed");
 
         // Intentionally closed (component unmount / effect re-run): the
         // terminal instance is disposed, do nothing.
@@ -814,6 +830,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.close();
       }
+      sessionSpanRef.current?.end(undefined, "unmounted");
+      sessionSpanRef.current = null;
 
       term.dispose();
       // Nothing may reach the disposed terminal through the refs: the refit

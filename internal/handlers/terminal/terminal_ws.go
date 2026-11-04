@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -20,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -27,7 +30,8 @@ import (
 const (
 	// wsPingInterval is how often the server sends a websocket ping frame.
 	wsPingInterval = 30 * time.Second
-	// wsPongTimeout is how long the server waits for a pong before closing.
+	// wsPongTimeout is how long the server waits for a pong before closing
+	// (terminalWSConfig.pongTimeout's default).
 	wsPongTimeout = 45 * time.Second
 	// wsDrainCloseGrace bounds how long a connection the server is closing
 	// for shutdown waits for the browser's answering close frame.
@@ -88,6 +92,10 @@ type TerminalWSOption func(*terminalWSConfig)
 
 type terminalWSConfig struct {
 	checkouts terminalCheckouts
+	telemetry terminalTelemetryProviders
+	// pongTimeout is wsPongTimeout; a test shortens it to prove a ping
+	// timeout without waiting 45s.
+	pongTimeout time.Duration
 }
 
 // WithTerminalCheckouts lets the handler classify a missing working directory
@@ -96,6 +104,17 @@ type terminalWSConfig struct {
 // working_dir_unavailable, which the browser waits on.
 func WithTerminalCheckouts(checkouts terminalCheckouts) TerminalWSOption {
 	return func(c *terminalWSConfig) { c.checkouts = checkouts }
+}
+
+// withTerminalTelemetry sends the handler's spans and metrics to p instead of
+// the process's global providers. For tests.
+func withTerminalTelemetry(p terminalTelemetryProviders) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.telemetry = p }
+}
+
+// withPongTimeout overrides wsPongTimeout. For tests.
+func withPongTimeout(d time.Duration) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.pongTimeout = d }
 }
 
 // workingDirMayAppear reports whether a working directory the daemon could
@@ -161,49 +180,72 @@ type wsResizeMessage struct {
 //   - workingDir: directory to start the shell in
 //   - worktreeId: (optional) worktree identifier
 //   - projectId:  (optional) the project the terminal belongs to; logged only
+//   - reconnect:  (optional) "1" when the browser is replacing a connection
+//     this terminal already had; recorded on the connection's telemetry
+//   - traceparent, tracestate: (optional) the browser's W3C trace context,
+//     which a browser WebSocket cannot send as headers
+//
+// Each connection is one terminal.session server span, continuing the
+// browser's trace, and the reliant.terminal.* metrics (terminal_ws_telemetry.go).
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter.
 func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator, opts ...TerminalWSOption) http.HandlerFunc {
-	var cfg terminalWSConfig
+	cfg := terminalWSConfig{pongTimeout: wsPongTimeout}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	tel := newTerminalWSTelemetry(cfg.telemetry)
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		token := q.Get("token")
 		workingDir := q.Get("workingDir")
 		worktreeID := q.Get("worktreeId")
 		projectID := q.Get("projectId")
+		reconnect := q.Get("reconnect") == "1"
+
+		// Everything this connection logs and sends to the daemon runs under
+		// its span, so each line carries the trace id and the daemon's
+		// commands continue the trace.
+		spanCtx, sess := tel.begin(r, reconnect, projectID, worktreeID)
+		// Deferred first, so it runs last: after the daemon session is
+		// closed and the socket with it.
+		defer sess.finish(spanCtx)
 
 		// --- Authenticate ---
 		if validator == nil {
+			sess.end(outcomeUnauthenticated, nil)
 			http.Error(w, "auth not configured", http.StatusInternalServerError)
 			return
 		}
 		if token == "" {
+			sess.end(outcomeUnauthenticated, nil)
 			http.Error(w, "missing token query parameter", http.StatusUnauthorized)
 			return
 		}
 		claims, err := validator.ValidateToken(token)
 		if err != nil {
-			logging.WarnContext(r.Context(), "[TerminalWS] Invalid token", "error", err)
+			sess.end(outcomeUnauthenticated, err)
+			logging.WarnContext(spanCtx, "[TerminalWS] Invalid token", "error", err)
 			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 		userID := claims.Sub
+		spanCtx = telemetry.BindUser(spanCtx, userID)
 		// Every line this connection logs says whose terminal it was.
 		logFields := []any{"user_id", userID, "project_id", projectID, "worktree_id", worktreeID}
 
 		// --- Upgrade to WebSocket ---
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logging.ErrorContext(r.Context(), "[TerminalWS] WebSocket upgrade failed", append([]any{"error", err}, logFields...)...)
+			sess.end(outcomeUpgradeFailed, err)
+			logging.ErrorContext(spanCtx, "[TerminalWS] WebSocket upgrade failed", append([]any{"error", err}, logFields...)...)
 			return
 		}
 		defer conn.Close()
+		sess.opened(spanCtx)
 
-		ctx, cancel := context.WithCancel(r.Context())
+		ctx, cancel := context.WithCancel(spanCtx)
 		defer cancel()
 
 		// The server is draining (the route is serverkit.LongLived): close
@@ -215,7 +257,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// answering close frame, which is what returns the input pump's read;
 		// the drain waits for this handler to return, with ctx still live for
 		// the session close.
+		var draining atomic.Bool
 		stopDrainClose := serverkit.AfterDrain(r.Context(), func() {
+			draining.Store(true)
 			deadline := time.Now().Add(wsDrainCloseGrace)
 			_ = conn.WriteControl(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseServiceRestart, "server restarting"), deadline)
@@ -232,7 +276,8 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		}
 		payload, err := json.Marshal(createReq)
 		if err != nil {
-			writeWSError(conn, fmt.Sprintf("marshal create request: %v", err), logFields...)
+			sess.end(outcomeCreateFailed, err)
+			writeWSError(ctx, conn, fmt.Sprintf("marshal create request: %v", err), logFields...)
 			return
 		}
 
@@ -246,7 +291,8 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				if mayAppear {
 					code = wsErrorWorkingDirUnavailable
 				}
-				logging.InfoContext(r.Context(), "[TerminalWS] Working directory unavailable",
+				sess.end(code, nil) // the outcome is the code the browser is sent
+				logging.InfoContext(ctx, "[TerminalWS] Working directory unavailable",
 					append([]any{"requested_working_dir", workingDir, "may_appear", mayAppear, "error", err}, logFields...)...)
 				writeWSJSON(conn, wsMessage{Type: "error", Code: code, Data: err.Error()})
 				return
@@ -256,11 +302,14 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			// answering is the machine's state: the browser shows it and
 			// retries. Said once per window (see logTerminalMachineState).
 			if state, ok := terminalMachineState(err); ok {
+				sess.end(outcomeMachineUnavailable, err)
+				sess.machineState(state)
 				logTerminalMachineState(ctx, router, userID, state, err, logFields)
 				writeWSJSON(conn, wsMessage{Type: "error", Data: message})
 				return
 			}
-			writeWSError(conn, message, append([]any{"error", err}, logFields...)...)
+			sess.end(outcomeCreateFailed, err)
+			writeWSError(ctx, conn, message, append([]any{"error", err}, logFields...)...)
 			return
 		}
 
@@ -272,22 +321,25 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			WorkingDir string `json:"working_dir"`
 		}
 		if err := json.Unmarshal(respBytes, &createResp); err != nil {
-			writeWSError(conn, fmt.Sprintf("unmarshal create response: %v", err), logFields...)
+			sess.end(outcomeCreateFailed, err)
+			writeWSError(ctx, conn, fmt.Sprintf("unmarshal create response: %v", err), logFields...)
 			return
 		}
 
 		sessionID := createResp.SessionID
+		sess.created(sessionID)
 		// This connection owns the session, so it closes it however the
 		// connection ends — including every early return below.
 		defer closeDaemonTerminalSession(ctx, router, userID, sessionID)
 		// Both directories, so a terminal in the wrong place is diagnosable
 		// from this line alone: this server cannot see the filesystem.
 		logFields = append(logFields, "session_id", sessionID)
-		logging.InfoContext(r.Context(), "[TerminalWS] Session created",
+		logging.InfoContext(ctx, "[TerminalWS] Session created",
 			append([]any{
 				"pid", createResp.PID,
 				"requested_working_dir", workingDir,
 				"working_dir", createResp.WorkingDir,
+				"reconnect", reconnect,
 			}, logFields...)...)
 
 		// Send init message to browser, carrying the daemon's session id so the
@@ -297,21 +349,22 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// --- Subscribe to terminal output ---
 		outputCh, unsub, err := router.SubscribeTerminalOutput(ctx, userID, sessionID)
 		if err != nil {
-			writeWSError(conn, fmt.Sprintf("subscribe terminal output: %v", err), logFields...)
+			sess.end(outcomeSubscribeFailed, err)
+			writeWSError(ctx, conn, fmt.Sprintf("subscribe terminal output: %v", err), logFields...)
 			return
 		}
 		defer unsub()
 
 		// --- WebSocket keepalive ---
 		// Set initial pong deadline; each pong resets it.
-		_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
+		_ = conn.SetReadDeadline(time.Now().Add(cfg.pongTimeout))
 		conn.SetPongHandler(func(string) error {
 			// Once the connection is ending, a late pong must not push back
 			// the drain's close deadline.
 			if ctx.Err() != nil {
 				return nil
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
+			_ = conn.SetReadDeadline(time.Now().Add(cfg.pongTimeout))
 			return nil
 		})
 
@@ -319,13 +372,11 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		var wg sync.WaitGroup
 		wg.Add(3)
 
-		var pumpErr error
-		var errOnce sync.Once
-		setPumpErr := func(e error) {
-			errOnce.Do(func() {
-				pumpErr = e
-				cancel()
-			})
+		// endSession records why the connection ended — the first pump to
+		// end it names the outcome — and stops the others.
+		endSession := func(outcome string, err error) {
+			sess.end(outcome, err)
+			cancel()
 		}
 
 		// Ping pump: sends periodic pings to keep the connection alive
@@ -340,7 +391,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 					return
 				case <-ticker.C:
 					if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
-						setPumpErr(nil)
+						endSession(outcomeClientGone, nil)
 						return
 					}
 				}
@@ -362,12 +413,12 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 					writeWSJSON(conn, wsMessage{Type: wsServerPong})
 				case evt, ok := <-outputCh:
 					if !ok {
-						setPumpErr(nil)
+						endSession(outcomeOutputEnded, nil)
 						return
 					}
 					if evt.Error != "" {
 						writeWSJSON(conn, wsMessage{Type: "error", Data: evt.Error})
-						setPumpErr(nil)
+						endSession(outcomeDaemonError, nil)
 						return
 					}
 					if evt.Closed {
@@ -375,10 +426,12 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 							Type: "exit",
 							Data: fmt.Sprintf("Process exited with code %d", evt.ExitCode),
 						})
-						setPumpErr(nil)
+						sess.shellExited(evt.ExitCode)
+						endSession(outcomeShellExited, nil)
 						return
 					}
 					if len(evt.Data) > 0 {
+						sess.output(ctx, len(evt.Data))
 						writeWSJSON(conn, wsMessage{Type: "output", Data: string(evt.Data)})
 					}
 				}
@@ -392,9 +445,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				_, raw, err := conn.ReadMessage()
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-						logging.DebugContext(r.Context(), "[TerminalWS] WebSocket read error", append([]any{"error", err}, logFields...)...)
+						logging.DebugContext(ctx, "[TerminalWS] WebSocket read error", append([]any{"error", err}, logFields...)...)
 					}
-					setPumpErr(nil)
+					endSession(readEndOutcome(err, draining.Load()), nil)
 					return
 				}
 
@@ -410,8 +463,8 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				}
 				if ctlOK && ctl.Type == "resize" {
 					if err := router.SendTerminalResize(ctx, userID, sessionID, ctl.Cols, ctl.Rows); err != nil {
-						logging.ErrorContext(r.Context(), "[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
-						setPumpErr(err)
+						logging.ErrorContext(ctx, "[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
+						endSession(outcomeInputFailed, err)
 						return
 					}
 					continue
@@ -419,19 +472,40 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 				// Otherwise treat as raw PTY input.
 				if err := router.SendTerminalInput(ctx, userID, sessionID, raw); err != nil {
-					logging.ErrorContext(r.Context(), "[TerminalWS] Send input failed", append([]any{"error", err}, logFields...)...)
-					setPumpErr(err)
+					logging.ErrorContext(ctx, "[TerminalWS] Send input failed", append([]any{"error", err}, logFields...)...)
+					endSession(outcomeInputFailed, err)
 					return
 				}
+				sess.input(ctx, len(raw))
 			}
 		}()
 
 		wg.Wait()
-		if pumpErr != nil {
-			logging.ErrorContext(r.Context(), "[TerminalWS] Session ended with error", append([]any{"error", pumpErr}, logFields...)...)
+		// spanCtx, not ctx: ctx is cancelled by now, and the line belongs
+		// to the connection's span either way.
+		endFields := append(sess.logFields(), logFields...)
+		if _, pumpErr := sess.ended(); pumpErr != nil {
+			logging.ErrorContext(spanCtx, "[TerminalWS] Session ended with error", append([]any{"error", pumpErr}, endFields...)...)
 		} else {
-			logging.InfoContext(r.Context(), "[TerminalWS] Session ended", logFields...)
+			logging.InfoContext(spanCtx, "[TerminalWS] Session ended", endFields...)
 		}
+	}
+}
+
+// readEndOutcome names why the input pump's read ended the connection: the
+// server draining (its close frame, or the grace deadline it set), the
+// browser closing, the pong deadline passing, or the connection dropping.
+func readEndOutcome(err error, draining bool) string {
+	var netErr net.Error
+	switch {
+	case draining:
+		return outcomeServerDraining
+	case websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway):
+		return outcomeClientClosed
+	case errors.As(err, &netErr) && netErr.Timeout():
+		return outcomePingTimeout
+	default:
+		return outcomeClientGone
 	}
 }
 
@@ -452,8 +526,8 @@ func writeWSJSON(conn *websocket.Conn, msg wsMessage) {
 // with the connection's context. Only for real failures: the machine not being
 // there, not being up, or not answering goes through logTerminalMachineState
 // instead.
-func writeWSError(conn *websocket.Conn, msg string, logFields ...any) {
-	logging.Error("[TerminalWS] Error", append([]any{"message", msg}, logFields...)...)
+func writeWSError(ctx context.Context, conn *websocket.Conn, msg string, logFields ...any) {
+	logging.ErrorContext(ctx, "[TerminalWS] Error", append([]any{"message", msg}, logFields...)...)
 	writeWSJSON(conn, wsMessage{Type: "error", Data: msg})
 }
 
