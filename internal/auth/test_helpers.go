@@ -27,5 +27,7 @@ func (v *testJWTValidator) ValidateToken(token string) (*JWTClaims, error) {
 		Role:  "authenticated",
 		Exp:   9999999999, // Far future expiration
 		Iat:   0,
+		// It stands in for the session JWT validator.
+		Credential: CredentialSession,
 	}, nil
 }

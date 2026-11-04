@@ -299,7 +299,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	projectID := uuid.New().String()
 	projectPath := t.TempDir()
 
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	// The story's user is a person signed in to the app: approvals require it.
+	ctx := auth.WithCredential(context.WithValue(context.Background(), auth.UserIDContextKey, userID), auth.CredentialSession)
 
 	now := time.Now().UTC()
 	require.NoError(t, s.Repo.CreateProject(ctx, &db.Project{
