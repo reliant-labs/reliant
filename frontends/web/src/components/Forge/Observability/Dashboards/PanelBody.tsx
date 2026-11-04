@@ -187,20 +187,31 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     );
   }
   const unit = unitOf(panel, data);
+  // A sql or postgres panel is drawn from what its statement returned.
+  const statement = panel.kind === "sql" || panel.kind === "postgres";
   // SQL has no declared series or groupBy: Columns names the numeric values,
   // while every non-numeric column lives in the returned groups. Include keys
   // from ALL rows (not just the first row or the compact preview's three).
-  const keys = panel.kind === "sql"
+  const keys = statement
     ? [...new Set([...data.rows, ...data.series].flatMap((row) => Object.keys(row.group)))]
     : groupBy?.length ? groupBy : (panel.groupBy ?? []);
   const sqlFunnel = panel.kind === "sql" && panel.display?.style === "funnel" ? funnelFromRows(data) : null;
-  const kind = panel.kind === "sql"
-    ? sqlFunnel ? "sql-funnel" : data.series.length > 0 ? "line" : sqlAggregate(data) ? "number" : "table"
+  const draw = panel.postgres?.draw;
+  const kind = statement
+    ? sqlFunnel
+      ? "sql-funnel"
+      : data.series.length > 0
+        ? "line"
+        : draw === "bar"
+          ? "bar"
+          : draw === "number" || (draw !== "table" && sqlAggregate(data))
+            ? "number"
+            : "table"
     : panel.kind;
   const chartHeight = height ?? (compact ? 28 : Math.max((panel.height || 7) * 28 - 92, 120));
   const truncated = data.truncated && !compact ? (
     <p className="mt-2 text-xs text-ink-muted">
-      {panel.kind === "sql"
+      {statement
         ? `Only the first returned ${kind === "table" ? "rows" : "series or points"} are shown.`
         : `Only the largest ${TRUNCATED_WHAT[panel.kind] ?? "series"} are shown.`}
     </p>
@@ -211,10 +222,10 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       return (
         <NumberFigures
           panel={panel}
-          data={panel.kind === "sql" ? sqlFigures(data) : data}
+          data={statement ? sqlFigures(data) : data}
           unit={unit}
           keys={keys}
-          compare={panel.kind === "sql" && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
+          compare={statement && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
           compareLabel={compare?.label}
           compact={compact}
         />
@@ -502,7 +513,7 @@ function PanelTable({
   compact: boolean;
 }) {
   const columnUnit = (index: number): Unit => {
-    if (panel.kind === "sql") return unitOf(panel, result);
+    if (panel.kind === "sql" || panel.kind === "postgres") return unitOf(panel, result);
     const intent = panel.series[index];
     if (intent?.agg === "quantile" && intent.field === "span.duration") return "ms";
     if (intent?.agg === "count" || intent?.agg === "count_distinct") return "count";

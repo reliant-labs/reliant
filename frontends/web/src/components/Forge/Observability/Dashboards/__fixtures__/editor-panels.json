@@ -1,0 +1,1067 @@
+{
+  "about": "Written by editorPanelsContract.test.ts from the panel builder; read by internal/dashspeccontract against forge's ParseDashboard. Do not edit by hand.",
+  "valid": {
+    "id": "editor-panels",
+    "title": "Every panel the builder makes",
+    "panels": [
+      {
+        "id": "line",
+        "title": "line line",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "number",
+        "title": "number number",
+        "width": 12,
+        "height": 7,
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "bar",
+        "title": "bar bar",
+        "width": 12,
+        "height": 7,
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "table",
+        "title": "table table",
+        "width": 12,
+        "height": 7,
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "heatmap",
+        "title": "heatmap heatmap",
+        "width": 12,
+        "height": 7,
+        "kind": "heatmap",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "events",
+            "agg": "count",
+            "field": "span.duration"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "unit": "ms"
+      },
+      {
+        "id": "search",
+        "title": "search search",
+        "width": 12,
+        "height": 7,
+        "kind": "search",
+        "signal": "traces",
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "span.name",
+          "span.duration"
+        ]
+      },
+      {
+        "id": "sql",
+        "title": "sql sql",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       count() AS requests\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t\nORDER BY t",
+        "unit": "count"
+      },
+      {
+        "id": "postgres",
+        "title": "postgres postgres",
+        "width": 12,
+        "height": 7,
+        "kind": "postgres",
+        "postgres": {
+          "database": "app",
+          "sql": "SELECT count(*) AS tables\nFROM information_schema.tables\nWHERE table_schema = 'public'"
+        },
+        "unit": "count"
+      },
+      {
+        "id": "text",
+        "title": "text text",
+        "width": 12,
+        "height": 7,
+        "kind": "text",
+        "markdown": "## About this dashboard\n\nWhat it is for, and where to look when it turns red."
+      },
+      {
+        "id": "funnel",
+        "title": "funnel funnel",
+        "width": 12,
+        "height": 7,
+        "kind": "funnel",
+        "signal": "traces",
+        "funnel": {
+          "steps": [
+            "signup_started",
+            "signup_completed"
+          ],
+          "window": "1h",
+          "by": "session"
+        }
+      },
+      {
+        "id": "issues",
+        "title": "issues issues",
+        "width": 12,
+        "height": 7,
+        "kind": "issues",
+        "signal": "traces"
+      },
+      {
+        "id": "sessions",
+        "title": "sessions sessions",
+        "width": 12,
+        "height": 7,
+        "kind": "sessions",
+        "signal": "traces"
+      },
+      {
+        "id": "line-line",
+        "title": "line line-line",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "display": {
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "line-area",
+        "title": "line line-area",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "display": {
+          "style": "area",
+          "stack": true,
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "line-bars",
+        "title": "line line-bars",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "display": {
+          "style": "bars",
+          "stack": true,
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "bar-bar",
+        "title": "bar bar-bar",
+        "width": 12,
+        "height": 7,
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "stack": true,
+          "horizontal": true
+        },
+        "unit": "count"
+      },
+      {
+        "id": "bar-pie",
+        "title": "bar bar-pie",
+        "width": 12,
+        "height": 7,
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "style": "pie",
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "bar-donut",
+        "title": "bar bar-donut",
+        "width": 12,
+        "height": 7,
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "style": "donut",
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "number-stat",
+        "title": "number number-stat",
+        "width": 12,
+        "height": 7,
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "number-gauge",
+        "title": "number number-gauge",
+        "width": 12,
+        "height": 7,
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "display": {
+          "style": "gauge",
+          "min": 0,
+          "max": 500
+        },
+        "unit": "count"
+      },
+      {
+        "id": "sql-line",
+        "title": "sql sql-line",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       count() AS requests\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t\nORDER BY t",
+        "display": {
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "sql-area",
+        "title": "sql sql-area",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       count() AS requests\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t\nORDER BY t",
+        "display": {
+          "style": "area",
+          "stack": true,
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "sql-bars",
+        "title": "sql sql-bars",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       count() AS requests\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t\nORDER BY t",
+        "display": {
+          "style": "bars",
+          "stack": true,
+          "topN": 8
+        },
+        "unit": "count"
+      },
+      {
+        "id": "sql-funnel",
+        "title": "sql sql-funnel",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       count() AS requests\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t\nORDER BY t",
+        "display": {
+          "style": "funnel"
+        },
+        "unit": "count"
+      },
+      {
+        "id": "number-gauge-percent",
+        "title": "number number-gauge-percent",
+        "width": 12,
+        "height": 7,
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "display": {
+          "style": "gauge"
+        },
+        "unit": "percent"
+      },
+      {
+        "id": "bar-limited",
+        "title": "bar bar-limited",
+        "width": 12,
+        "height": 7,
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "limit": 5,
+        "unit": "count"
+      },
+      {
+        "id": "table-limited",
+        "title": "table table-limited",
+        "width": 12,
+        "height": 7,
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "limit": 20,
+        "unit": "count"
+      },
+      {
+        "id": "heatmap-logs",
+        "title": "heatmap heatmap-logs",
+        "width": 12,
+        "height": 7,
+        "kind": "heatmap",
+        "signal": "logs",
+        "series": [
+          {
+            "label": "events",
+            "agg": "count",
+            "field": "log.attr.duration_ms"
+          }
+        ],
+        "unit": "ms"
+      },
+      {
+        "id": "line-logs",
+        "title": "line line-logs",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "logs",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "unit": "count"
+      },
+      {
+        "id": "line-metrics",
+        "title": "line line-metrics",
+        "width": 12,
+        "height": 7,
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "memory",
+            "agg": "avg",
+            "field": "go.memory.used",
+            "metricType": "gauge"
+          }
+        ],
+        "unit": "bytes"
+      },
+      {
+        "id": "sql-min-step",
+        "title": "sql sql-min-step",
+        "width": 12,
+        "height": 7,
+        "kind": "sql",
+        "sql": "SELECT toDate(Timestamp) AS day, count() AS events FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day ORDER BY day",
+        "minStep": "1d",
+        "unit": "count"
+      },
+      {
+        "id": "postgres-line",
+        "title": "postgres postgres-line",
+        "width": 12,
+        "height": 7,
+        "kind": "postgres",
+        "postgres": {
+          "database": "app",
+          "draw": "line",
+          "time": "t",
+          "values": [
+            "signups"
+          ],
+          "group": [
+            "plan"
+          ],
+          "sql": "SELECT date_trunc('hour', created_at) AS t, plan, count(*) AS signups FROM users WHERE created_at >= $1 AND created_at < $2 GROUP BY 1, 2 ORDER BY 1"
+        },
+        "unit": "count"
+      },
+      {
+        "id": "postgres-bar",
+        "title": "postgres postgres-bar",
+        "width": 12,
+        "height": 7,
+        "kind": "postgres",
+        "postgres": {
+          "database": "app",
+          "draw": "bar",
+          "sql": "SELECT state, count(*) AS orders FROM orders GROUP BY state"
+        },
+        "unit": "count"
+      },
+      {
+        "id": "text-table",
+        "title": "text text-table",
+        "width": 12,
+        "height": 7,
+        "kind": "text",
+        "markdown": "| service | owner |\n| --- | --- |\n| api | payments |"
+      }
+    ]
+  },
+  "invalid": [
+    {
+      "why": "a text panel takes no series",
+      "panel": {
+        "id": "text-series",
+        "title": "t",
+        "kind": "text",
+        "markdown": "hi",
+        "series": [
+          {
+            "label": "a",
+            "agg": "count"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a text panel takes no signal",
+      "panel": {
+        "id": "text-signal",
+        "title": "t",
+        "kind": "text",
+        "signal": "traces",
+        "markdown": "hi"
+      }
+    },
+    {
+      "why": "a text panel needs Markdown",
+      "panel": {
+        "id": "text-empty",
+        "title": "t",
+        "kind": "text",
+        "markdown": "   "
+      }
+    },
+    {
+      "why": "a sql panel takes no filters",
+      "panel": {
+        "id": "sql-where",
+        "title": "s",
+        "kind": "sql",
+        "sql": "SELECT 1",
+        "where": [
+          {
+            "field": "service.name",
+            "op": "eq",
+            "value": "api"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a sql panel needs a statement",
+      "panel": {
+        "id": "sql-empty",
+        "title": "s",
+        "kind": "sql"
+      }
+    },
+    {
+      "why": "a sql panel's minStep is a span",
+      "panel": {
+        "id": "sql-step",
+        "title": "s",
+        "kind": "sql",
+        "sql": "SELECT 1",
+        "minStep": "daily"
+      }
+    },
+    {
+      "why": "a postgres line needs a time column",
+      "panel": {
+        "id": "pg-line",
+        "title": "p",
+        "kind": "postgres",
+        "postgres": {
+          "database": "app",
+          "draw": "line",
+          "sql": "SELECT 1"
+        }
+      }
+    },
+    {
+      "why": "a postgres database is a lowercase name",
+      "panel": {
+        "id": "pg-db",
+        "title": "p",
+        "kind": "postgres",
+        "postgres": {
+          "database": "App DB",
+          "sql": "SELECT 1"
+        }
+      }
+    },
+    {
+      "why": "a postgres panel takes no signal",
+      "panel": {
+        "id": "pg-signal",
+        "title": "p",
+        "kind": "postgres",
+        "signal": "traces",
+        "postgres": {
+          "database": "app",
+          "sql": "SELECT 1"
+        }
+      }
+    },
+    {
+      "why": "a postgres number shows one value",
+      "panel": {
+        "id": "pg-number",
+        "title": "p",
+        "kind": "postgres",
+        "postgres": {
+          "database": "app",
+          "draw": "number",
+          "values": [
+            "a",
+            "b"
+          ],
+          "sql": "SELECT 1 AS a, 2 AS b"
+        }
+      }
+    },
+    {
+      "why": "a pie takes exactly one series",
+      "panel": {
+        "id": "pie-two",
+        "title": "bad bar",
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "a",
+            "agg": "count"
+          },
+          {
+            "label": "b",
+            "agg": "count"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "style": "pie"
+        }
+      }
+    },
+    {
+      "why": "a gauge needs a max",
+      "panel": {
+        "id": "gauge-max",
+        "title": "bad number",
+        "kind": "number",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "display": {
+          "style": "gauge"
+        }
+      }
+    },
+    {
+      "why": "stacked lines are refused",
+      "panel": {
+        "id": "line-stack",
+        "title": "bad line",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "display": {
+          "stack": true
+        }
+      }
+    },
+    {
+      "why": "topN does not apply to a bar panel's bars",
+      "panel": {
+        "id": "bar-top-n",
+        "title": "bad bar",
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "topN": 5
+        }
+      }
+    },
+    {
+      "why": "horizontal applies to bars only",
+      "panel": {
+        "id": "pie-horizontal",
+        "title": "bad bar",
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ],
+        "display": {
+          "style": "pie",
+          "horizontal": true
+        }
+      }
+    },
+    {
+      "why": "a table is drawn one way",
+      "panel": {
+        "id": "table-display",
+        "title": "bad table",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "display": {
+          "style": "line"
+        }
+      }
+    },
+    {
+      "why": "a style the kind does not take",
+      "panel": {
+        "id": "line-pie",
+        "title": "bad line",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "display": {
+          "style": "pie"
+        }
+      }
+    },
+    {
+      "why": "a bar panel needs a group-by",
+      "panel": {
+        "id": "bar-group",
+        "title": "bad bar",
+        "kind": "bar",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a heatmap takes no group-by",
+      "panel": {
+        "id": "heatmap-group",
+        "title": "bad heatmap",
+        "kind": "heatmap",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "e",
+            "agg": "count",
+            "field": "span.duration"
+          }
+        ],
+        "groupBy": [
+          "service.name"
+        ]
+      }
+    },
+    {
+      "why": "a heatmap counts",
+      "panel": {
+        "id": "heatmap-agg",
+        "title": "bad heatmap",
+        "kind": "heatmap",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "e",
+            "agg": "avg",
+            "field": "span.duration"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a heatmap buckets a numeric field",
+      "panel": {
+        "id": "heatmap-field",
+        "title": "bad heatmap",
+        "kind": "heatmap",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "e",
+            "agg": "count",
+            "field": "span.name"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a heatmap is not over metrics",
+      "panel": {
+        "id": "heatmap-metrics",
+        "title": "bad heatmap",
+        "kind": "heatmap",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "e",
+            "agg": "count",
+            "field": "m",
+            "metricType": "histogram"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a filter names a field of another signal",
+      "panel": {
+        "id": "logs-span-kind",
+        "title": "bad line",
+        "kind": "line",
+        "signal": "logs",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a group-by names a field of another signal",
+      "panel": {
+        "id": "metrics-span-name",
+        "title": "bad table",
+        "kind": "table",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "m",
+            "agg": "avg",
+            "field": "go.memory.used",
+            "metricType": "gauge"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ]
+      }
+    },
+    {
+      "why": "only a text panel takes Markdown",
+      "panel": {
+        "id": "line-markdown",
+        "title": "bad line",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "markdown": "hi"
+      }
+    },
+    {
+      "why": "only a sql panel takes a statement",
+      "panel": {
+        "id": "line-sql",
+        "title": "bad line",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "sql": "SELECT 1"
+      }
+    }
+  ]
+}
