@@ -1,0 +1,172 @@
+# forge/pkg's OWN lint configuration — the runtime library, which compiles
+# INTO every generated binary.
+#
+# It exists because the repo-root .golangci.yml does not lint pkg/: it
+# excludes `(^|/)pkg/` (that entry's comment has the backlog and the plan to
+# shrink it). Before pkg/ joined the root module the root run could not see
+# it at all, and it reported green over 12 direct environment reads in code
+# that ships to users. golangci-lint discovers this file by walking up from
+# its working directory, so CI must run it with `working-directory: pkg`
+# (see ../.github/workflows/library-lint.yml) — a run from the repo root
+# reads the root config instead.
+#
+# NARROW ON PURPOSE. Only forbidigo is enabled here. The root config's full
+# linter set reports 77 pre-existing findings against this library — real
+# triage that belongs in its own change, not smuggled in behind a security
+# guardrail. Widening this file is welcome; leaving forbidigo out is not.
+#
+# The rule itself is not new: forge's own project template
+# (../internal/templates/project/golangci.yml.tmpl) FAILS a generated
+# project's build for exactly these three calls, allowlisting exactly one
+# package — the generated config loader. This library was the one place
+# where forge's library did what forge's lint forbids in the code it
+# generates.
+
+version: "2"
+
+run:
+  # A hang guard, not a budget: see the root .golangci.yml. A cold build
+  # cache on a loaded machine exceeded 5m and failed a run with 0 issues.
+  timeout: 20m
+  # See the root .golangci.yml for the full rationale: the golangci-lint
+  # lock is one machine-wide path, and its five-second default deadline
+  # turns concurrent runs into spurious exit-3 failures. pkg/ is linted
+  # right after the repo root by `task lint`, so it needs the same
+  # setting or the second run races the first.
+  allow-serial-runners: true
+
+issues:
+  # Report EVERY finding — golangci-lint otherwise truncates at 50 per
+  # linter / 3 per message, and a gate that hides what it found cannot be
+  # trusted to be green for the reason you think it is.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: none
+  enable:
+    # Enabled — not merely configured. `linters.enable` membership IS the
+    # gate: a plain `golangci-lint run` (what CI invokes) fails on these
+    # findings. The root config carries the same settings block with
+    # forbidigo deliberately absent from `enable`, which is why it never
+    # gated anything.
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: 'os\.Getenv'
+          msg: >-
+            A library changes behaviour only through the arguments its
+            caller passed. An ambient variable is invisible to the app: it
+            appears in no config proto, no KCL env block and no typed
+            config object, so nothing the app can read explains why the
+            same binary behaves differently on two machines. Take the value
+            as a field on the options/config struct this package already
+            has and let the app decide where it comes from. The generated
+            config loader (config/) is the ONE package allowed to read the
+            environment directly — that projection IS the mechanism.
+        - pattern: 'os\.LookupEnv'
+          msg: >-
+            A library changes behaviour only through the arguments its
+            caller passed. Take the value as a field on the options/config
+            struct this package already has; the generated config loader
+            (config/) is the ONE package allowed to read the environment
+            directly.
+        - pattern: 'os\.Environ'
+          msg: >-
+            A library changes behaviour only through the arguments its
+            caller passed. Take the value as a field on the options/config
+            struct this package already has; the generated config loader
+            (config/) is the ONE package allowed to read the environment
+            directly.
+  exclusions:
+    rules:
+      # ANCHORED regexes. A bare word is an unanchored substring match: it
+      # would exempt every path containing it and report green over code no
+      # linter had read.
+
+      # The config loader is the sanctioned reader. Projecting a field's
+      # DECLARED `env_var` annotation onto the typed message — and resolving
+      # FORGE_CONFIG to a file path — is the mechanism every other package
+      # is being pointed at, not an exception to it.
+      - path: ^config/
+        linters:
+          - forbidigo
+
+      # Test-support packages, whose consumer is a `go test` process. There
+      # is no typed config object in a test binary and no caller to thread a
+      # value through: `go test ./...` fans out to one binary per package,
+      # and the environment is the ONLY channel that crosses those process
+      # boundaries. Both variables are also somebody else's published
+      # contract — FORGE_TEST_POSTGRES_URL names an external server a CI job
+      # provisioned, KUBEBUILDER_ASSETS is set by `setup-envtest use`. Neither
+      # changes how a shipped app behaves; they decide what the test harness
+      # attaches to.
+      - path: ^pgtest/
+        linters:
+          - forbidigo
+      - path: ^controller/controllertest/
+        linters:
+          - forbidigo
+
+      # release.CaptureProvenance runs `git` against the caller's checkout,
+      # and a child git needs the ambient environment to run at all (PATH,
+      # HOME for its config, GIT_* for a worktree). The ONE variable it adds
+      # is GIT_INDEX_FILE, pointing at a temporary index so the user's own
+      # index is never touched. Nothing read here changes how the library
+      # behaves — it is passed through to a subprocess, not consulted.
+      # Scoped to the capture file alone: the rest of pkg/release (the
+      # ledger vocabulary, the plan and diff rules) stays under the guard.
+      - path: ^release/capture(_test)?\.go$
+        linters:
+          - forbidigo
+
+      # observe/otelenv.go reads the standard OTEL_* variables — the published
+      # contract between an app and the platform's collector. No typed config
+      # object can carry them: the platform renders them per environment and the
+      # OpenTelemetry SDK itself reads the same names. Scoped to that one file.
+      - path: ^observe/otelenv\.go$
+        linters:
+          - forbidigo
+
+      # credentials/env.go reads FORGE_HOME and XDG_CONFIG_HOME — where the
+      # shared credentials file lives, a contract between every CLI that
+      # shares it (forge's own variable and the OS convention), not an app's
+      # configuration. DirsFromEnv is the one spelling of that lookup, so a
+      # consumer cannot drift from `forge login`. Scoped to that one file:
+      # the rest of pkg/credentials still takes its Dirs from the caller.
+      - path: ^credentials/env\.go$
+        linters:
+          - forbidigo
+
+      # The prettier guard over the component library reads CI to decide
+      # whether a missing npx is a skip (laptop) or a failure (CI). It is a
+      # test-harness switch: it never runs in a shipped binary and changes
+      # nothing about how the library behaves.
+      - path: ^components/library_prettier_test\.go$
+        linters:
+          - forbidigo
+
+      # The component type-contract test reads CI for the same reason: a
+      # missing npm is a skip on a laptop and a failure in CI. Same test-only
+      # switch.
+      - path: ^components/library_type_contract_test\.go$
+        linters:
+          - forbidigo
+
+      # The component behaviour test (vitest in jsdom over testdata/behavior/)
+      # reads CI for the same reason — a missing npm is a skip on a laptop and
+      # a failure in CI — and hands the inherited environment plus CI=1 to the
+      # vitest child it execs. Same test-only switch.
+      - path: ^components/library_behaviour_test\.go$
+        linters:
+          - forbidigo
+
+      # The headers-file smoke boots two collector containers, so it is
+      # opt-in: RUN_HEADERS_FILE_SMOKE=1 is the switch, read by an
+      # integration-tagged test file that never compiles into a shipped binary
+      # and changes nothing about how the library behaves. Same reasoning as
+      # the prettier guard above; scoped to that one file.
+      - path: ^observe/headers_file_smoke_integration_test\.go$
+        linters:
+          - forbidigo

@@ -1,0 +1,73 @@
+{
+  "name": "{{.FrontendName}}",
+  "version": "0.1.0",
+  "private": true,
+  "// vite note": "vite, vitest and @vitejs/plugin-react move together. vitest.config.ts takes defineConfig from vitest's vite and react() from the plugin's vite, so both must be ONE copy, or `tsc --noEmit` fails it with TS2769 (\"Property 'rolldownVersion' is missing\": a vite 7 plugin handed to a vite 8 config, or the reverse). vite is declared here rather than left to vitest's peer so npm places this app's copy where both resolve it, including in a workspace whose other members bring a vite of their own (forge's dev bridge links web-runtime, whose vitest pulls vite 8). Bump the three together; `pnpm why vite` should list one version. This note sits at the TOP LEVEL because npm rejects a comment key inside devDependencies with EINVALIDPACKAGENAME.",
+  "packageManager": "pnpm@{{pnpmVersion}}",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "// vitest range note": "vitest is ^5 on purpose, and internal/templates/frontend_vitest_pin_test.go pins the major so the next bump is a decision rather than a drift. 3.x pulls tinypool (GHSA-5gmw-xhrv-c9v3 and GHSA-85c8-ppgw-ccpr, critical) and a vulnerable @vitest/mocker (GHSA-82fw-gwwq-j7x9), which failed a fresh project's own vuln-npm gate. 4.x carries neither, but npm 10 (the npm Node 22 ships) crashes resolving its peer set with \"Cannot read properties of null (reading 'edgesOut')\", so `npm install` never finishes. 5.x installs and audits clean. Same pin as the vite-spa scaffold.",
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "NODE_ENV=production next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "lint:styles": "stylelint \"src/**/*.css\"",
+    "lint:styles:fix": "stylelint \"src/**/*.css\" --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "analyze": "ANALYZE=true next build --webpack"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.0.0",
+    "@hookform/resolvers": "^3.9.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@reliantlabs/forge-web-runtime": "^0.13.0",
+    "@tanstack/react-query": "^5.62.0",
+{{- if .Workspaces}}
+    "{{.APIPackage}}": "workspace:*",
+    "{{.HooksPackage}}": "workspace:*",
+    "{{.UIWebPackage}}": "workspace:*",
+{{- end}}
+    "geist": "^1.9.0",
+    "lucide-react": "^1.17.0",
+    "next": "^16.3.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.53.0",
+    "zod": "^3.23.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^2.5.0",
+    "@eslint/js": "^9.25.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.25.0",
+    "eslint-config-next": "^16.3.5",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-unicorn": "^56.0.0",
+    "jsdom": "^26.0.0",
+    "prettier": "3.5.3",
+    "stylelint": "^17.2.0",
+    "stylelint-config-standard": "^40.0.0",
+    "@tailwindcss/postcss": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.30.0",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.4",
+    "@vitejs/plugin-react": "^6.0.0",
+    "@next/bundle-analyzer": "^16.3.5"
+  }
+}

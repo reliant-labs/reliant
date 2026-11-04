@@ -1,0 +1,224 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The sign-in screen. An ordinary form that POSTs to this app's own API.
+//
+// There is no identity provider in this file: no issuer URL, no client id,
+// no PKCE, no redirect, no iframe. The server does all of that
+// (internal/app/login_broker.go) and answers with an HttpOnly session
+// cookie. See src/lib/auth/native-login.ts for why that split matters.
+//
+// This is starter code. It is deliberately plain — most products restyle
+// their sign-in heavily, and an opinionated design here would be harder to
+// replace than a neutral one.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+
+import { PasswordRequirements } from "@/components/password-requirements";
+import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
+import Label from "@/components/ui/label";
+import { AuthError, signIn, signUp, type PasswordRule } from "@/lib/auth/native-login";
+import { useAuth } from "@/lib/auth/use-auth";
+import { usePasswordPolicy } from "@/lib/auth/use-password-policy";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function SignIn() {
+  const searchParams = useSearchParams();
+  const { refresh } = useAuth();
+
+  // Where the visitor was headed before the guard sent them here.
+  //
+  // Same-origin, absolute-path only: this is attacker-supplied input, and
+  // handing it to a navigation unchecked is an open redirect. `//evil.com`
+  // is a protocol-relative URL, so the second character matters as much as
+  // the first.
+  const requested = searchParams?.get("returnTo") ?? null;
+  const returnTo =
+    requested !== null && requested.startsWith("/") && !requested.startsWith("//")
+      ? requested
+      : "/";
+
+  const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
+  const signingUp = mode === "signUp";
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [needsTotp, setNeedsTotp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // The password rules the SERVER found unmet on the last attempt, so the
+  // checklist marks exactly those.
+  const [serverUnmet, setServerUnmet] = useState<PasswordRule[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  // What a password must contain. Only shown when signing up: signing in
+  // takes whatever the account already has.
+  const policy = usePasswordPolicy();
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setServerUnmet([]);
+    try {
+      if (signingUp) {
+        await signUp({ email, password });
+      } else {
+        await signIn({ email, password, ...(totp ? { totp } : {}) });
+      }
+      // The cookie is set. Tell the app to re-read its auth state, then go
+      // where the visitor was headed. A full navigation rather than a
+      // router push: it guarantees every provider re-initialises with the
+      // session in place.
+      await refresh();
+      window.location.assign(returnTo);
+    } catch (err) {
+      const message = err instanceof AuthError ? err.message : "Sign-in failed. Please try again.";
+      // The issuer reports a missing second factor as a rejection; showing
+      // the field on the retry turns a dead end into a completable form.
+      if (/(totp|factor|otp)/i.test(message)) setNeedsTotp(true);
+      setError(message);
+      setServerUnmet(err instanceof AuthError ? err.unmet : []);
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-surface-muted p-6">
+      <div className="w-full max-w-sm">
+        <form
+          onSubmit={onSubmit}
+          className="rounded-xl border border-border bg-surface p-8 shadow-sm"
+        >
+          <h1 className="text-xl font-semibold tracking-tight text-ink">
+            {signingUp ? "Create your {{.ProjectName}} account" : "Sign in to {{.ProjectName}}"}
+          </h1>
+
+          <Label className="mt-6" htmlFor="email">
+            Email
+          </Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <Label className="mt-4" htmlFor="password">
+            Password
+          </Label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete={signingUp ? "new-password" : "current-password"}
+            required
+            aria-describedby={signingUp ? "password-requirements" : undefined}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          {signingUp ? (
+            <PasswordRequirements
+              id="password-requirements"
+              policy={policy}
+              password={password}
+              serverUnmet={serverUnmet}
+            />
+          ) : (
+            /*
+              Self-serve reset. The link is emailed only if this app's
+              identity has SMTP configured (forge.ManagedIdentity.smtp) —
+              the /auth/forgot screen says so. Delete this link and the
+              /auth/forgot and /auth/reset routes in login_broker.go to
+              turn password reset off.
+            */
+            <p className="mt-1 text-right text-xs">
+              <a className="font-medium text-accent underline" href={joinBasePath("/auth/forgot")}>
+                Forgot your password?
+              </a>
+            </p>
+          )}
+
+          {!signingUp && needsTotp ? (
+            <>
+              <Label className="mt-4" htmlFor="totp">
+                Authentication code
+              </Label>
+              <Input
+                id="totp"
+                name="totp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={totp}
+                onChange={(e) => setTotp(e.target.value)}
+              />
+            </>
+          ) : null}
+
+          {error ? (
+            <p
+              role="alert"
+              className="mt-4 break-words rounded-md border border-danger-border bg-danger-surface p-3 text-sm text-danger-ink"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          <Button type="submit" size="xl" fullWidth loading={submitting} className="mt-6">
+            {submitting
+              ? signingUp
+                ? "Creating your account…"
+                : "Signing in…"
+              : signingUp
+                ? "Create account"
+                : "Sign in"}
+          </Button>
+
+          {/*
+            Sign in and sign up on ONE screen, swapping behaviour rather
+            than navigating: both post to the same API and land in the same
+            place, so a second route would add a page transition and
+            nothing else.
+
+            Delete this block for an invite-only product, and delete the
+            /auth/register route in internal/app/login_broker.go with it
+            (that file explains how an invite-only app gets its users).
+          */}
+          <p className="mt-4 text-center text-sm text-ink-muted">
+            {signingUp ? "Already have an account?" : "New here?"}{" "}
+            <button
+              type="button"
+              className="font-medium text-accent underline"
+              onClick={() => {
+                setMode(signingUp ? "signIn" : "signUp");
+                setError(null);
+                setServerUnmet([]);
+              }}
+            >
+              {signingUp ? "Sign in" : "Create an account"}
+            </button>
+          </p>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+// useSearchParams bails out of prerendering, and Next requires the opt-in
+// to be explicit. Scoping the boundary here keeps the bailout to this
+// component rather than letting it swallow the whole page.
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignIn />
+    </Suspense>
+  );
+}

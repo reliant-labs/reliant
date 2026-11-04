@@ -1,0 +1,148 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// THE COMMAND TREE — its shape, and every command on it.
+//
+// This is the file to edit when you want a different CLI. Add a persistent
+// flag, reorder the tree, give the root command a Long description, wrap
+// RunE — it is ordinary cobra code and forge will not revert it.
+//
+// The command logic lives under cmd/{{.Name}}/cmd as a real cobra package,
+// dir-nested by category (the devspace idiom). This file owns the SHARED
+// surface every command consumes:
+//
+//   - Deps        — the dependency set threaded through the tree. Add a field
+//     here (a metrics sink, an audit writer) and every command can take it.
+//   - Factory     — the constructor shape of a command contributed by a
+//     conditional file (func(Deps) *cobra.Command; see registerCommand).
+//
+// EVERY FILE IN THIS PACKAGE IS YOURS but one: roots_gen.go, the projection
+// of internal/app's roots onto the tree (below). ServiceName is a constant
+// below (the project name, fixed at scaffold), and the one derived migration
+// fact — whether this
+// project has an embedded migration set yet — lives in the db package it is a
+// fact about, as db.Source(). That function compiles whether or not you have
+// written a migration, so writing your first one rewrites nothing here.
+//
+// What a process RUNS is a ROOT of the composition graph (internal/app):
+// every //forge:root struct — or, with none declared, the generated default,
+// `server` — gets one command, generated into roots_gen.go and added below by
+// rootCommands(deps). There is no command per service, worker or operator:
+// splitting a process is a new root, and its command follows.
+//
+// The one exception is registeredCommands below, for a command whose FILE is
+// conditional (db.go, scaffolded only with migrations). Explicit naming cannot
+// express "call this only if that file exists", so that single case registers
+// itself. See registerCommand for why the alternative is worse.
+//
+// The command tree:
+//
+//   - cmd/{{.Name}}/main.go          — composition root: cmd.Execute().
+//   - cmd/{{.Name}}/cmd/root.go      — this file (root + Deps + Factory + ServiceName).
+//   - cmd/{{.Name}}/cmd/roots_gen.go — one command per root (generated).
+//   - cmd/{{.Name}}/cmd/serve.go     — runRoot: the process policy every root runs under.
+//   - cmd/{{.Name}}/cmd/version.go   — `{{.Name}} version`.
+//   - cmd/{{.Name}}/cmd/db.go        — `{{.Name}} db migrate ...` (if migrations).
+//   - cmd/{{.Name}}/cmd/commands.go  — userCommands(deps): YOUR extension point.
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+// Deps is the dependency set threaded through the command tree (the gh
+// pattern): everything a command needs to run, injected for testability.
+// Commands read deps.Cmd for config flags (config.Load) and deps.Out for
+// user-facing output.
+type Deps struct {
+	// Cmd is the cobra command currently executing — config.Load reads its
+	// flag set. Set per-invocation in each command's RunE.
+	Cmd *cobra.Command
+	// Out is the writer for user-facing output (defaults to os.Stdout).
+	Out *os.File
+	// Err is the writer for diagnostics (defaults to os.Stderr).
+	Err *os.File
+}
+
+// Factory builds one subcommand from deps: the shape registerCommand takes.
+type Factory func(deps Deps) *cobra.Command
+
+// ServiceName is this binary's APP IDENTITY — the logical service name reported
+// on OpenTelemetry traces/metrics (semconv service.name), and the root
+// command's own name.
+//
+// It is a constant here rather than a config.Config field because identity is a
+// build-time property of the binary, not a per-env knob. It was briefly a
+// generated constant so that renaming the project could move it; that bought a
+// whole regenerated file for a string that is written once at scaffold and then
+// only ever changed by a rename you are performing by hand anyway — at which
+// point editing this line is the smaller half of the job.
+const ServiceName = "{{.Name}}"
+
+// registeredCommands holds subcommands contributed by files that may or may
+// not exist in this package. newRootCmd adds each to the tree.
+//
+// WHY A REGISTRY AND NOT A CALL. Naming newDBCmd(deps) directly in newRootCmd
+// would not compile for a project scaffolded without migrations, because db.go
+// is not written for such a project. Writing it under a build-time conditional
+// is worse: this file is scaffold-once, so the branch taken on the day the
+// project was born would be frozen with no later run able to correct it.
+// Registration inverts that — the file that DEFINES the command is the file
+// that adds it, so the set is exactly the set of files on disk, and a project
+// gains or loses `db migrate` by gaining or losing db.go.
+//
+// This is the ONE registry in the command tree, and it is deliberately not the
+// pattern for your own commands: the roots' commands come from rootCommands,
+// and your own additions go in commands.go's userCommands. Use this only for a
+// command whose FILE is conditional.
+var registeredCommands []Factory
+
+// registerCommand adds a subcommand constructor to the root tree. Call it from
+// an init() in the file that defines the command:
+//
+//	func init() { registerCommand(newDBCmd) }
+//
+// Order is init order (file name, within a package), which is stable but not
+// meaningful — cobra sorts subcommands in help output regardless.
+func registerCommand(f Factory) { registeredCommands = append(registeredCommands, f) }
+
+// newRootCmd assembles the full command tree from deps. Kept separate from
+// Execute so tests can drive the tree without going through os.Exit.
+func newRootCmd(deps Deps) *cobra.Command {
+	root := &cobra.Command{
+		Use:   ServiceName,
+		Short: ServiceName + " service",
+	}
+
+	// One command per root of the composition graph (roots_gen.go): `server`
+	// runs the default root, and every //forge:root you declare adds its own.
+	root.AddCommand(rootCommands(deps)...)
+	root.AddCommand(newVersionCmd(deps))
+
+	// Commands contributed by an OPTIONAL file in this package — today that is
+	// `db migrate`, from the db.go that is scaffolded only for a project
+	// configured for migrations. See registerCommand below.
+	for _, f := range registeredCommands {
+		root.AddCommand(f(deps))
+	}
+
+	// userCommands (cmd/{{.Name}}/cmd/commands.go, user-owned): second
+	// binaries and custom tooling register as code.
+	for _, c := range userCommands(deps) {
+		root.AddCommand(c)
+	}
+	return root
+}
+
+// Execute is the program entry point cmd/{{.Name}}/main.go calls.
+func Execute() {
+	deps := Deps{Out: os.Stdout, Err: os.Stderr}
+	root := newRootCmd(deps)
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

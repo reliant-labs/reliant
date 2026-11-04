@@ -1,0 +1,355 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The browser half of NATIVE SIGN-IN — and it is deliberately small.
+//
+// ── What this file does NOT do ────────────────────────────────────────
+//
+// It does not know what OIDC is. There is no issuer URL here, no client
+// id, no PKCE, no discovery document, no redirect to a provider, no hidden
+// iframe, no token parsing, and no token storage. The browser never
+// contacts the identity provider at all.
+//
+// Everything below is an ordinary POST to this app's own API. Your server
+// runs the whole OIDC flow (internal/app/login_broker.go) and answers with
+// an HttpOnly session cookie.
+//
+//	sign in  →  POST /auth/login     → cookie set, identity returned
+//	sign up  →  POST /auth/register  → cookie set, identity returned
+//	who am I →  GET  /auth/session   → identity, or not authenticated
+//	sign out →  POST /auth/logout    → cookie cleared
+//
+//	what must a password contain →  GET  /auth/password-policy
+//	forgot password              →  POST /auth/forgot  → reset link requested
+//	reset password               →  POST /auth/reset   → password set, signed in
+//
+// ── Why the token is not here ─────────────────────────────────────────
+//
+// The session cookie is HttpOnly, so this code CANNOT read it — and that
+// is the point rather than a limitation. A token no script can reach is a
+// token an XSS cannot steal. The cookie rides along automatically on
+// same-origin requests, so nothing here has to attach an Authorization
+// header.
+//
+// What you get instead is an `Identity`: who is signed in, for rendering.
+// Use it to decide what to SHOW. Never to decide what is ALLOWED — the
+// server validates the real token on every request.
+//
+// ── Where these requests go ───────────────────────────────────────────
+//
+// Wherever src/lib/connect.ts sends RPCs: both ask src/lib/api-base.ts. In
+// the dev loop that is this page's own origin (`/_api`, proxied to the API
+// by the dev server), so the cookie the API sets is first-party to whatever
+// host the page was opened on — localhost, or a workspace preview URL.
+{{if .HasTypedConfig}}
+import { apiBase } from "@/lib/api-base";
+import { loadConfig } from "@/lib/config_gen";
+{{else}}
+import { apiBase } from "@/lib/api-base";
+{{end}}
+{{- if .HasTypedConfig}}
+/**
+ * Where the API lives. Empty means same-origin, which is the common case.
+ *
+ * Read through the generated typed config module rather than from
+ * process.env: the module already resolves window.__FORGE_CONFIG__ in the
+ * browser and the process environment during server rendering, so routing
+ * through it removes a second, hand-maintained copy of that same fallback
+ * chain — and removes the build-time-inlined env read that would freeze
+ * this bundle to the environment it was built against. apiBase() swaps in
+ * this page's own origin while the dev server proxies the API.
+ */
+function apiOrigin(): string {
+  return apiBase(String(loadConfig().API_URL || ""));
+}
+{{- else}}
+/**
+ * Where the API lives. Empty means same-origin, which is the common case.
+ * apiBase() swaps in this page's own origin while the dev server proxies
+ * the API.
+ */
+function apiOrigin(): string {
+  const fromRuntime =
+    typeof window !== "undefined"
+      ? (window as { __FORGE_CONFIG__?: { API_URL?: unknown } })
+          .__FORGE_CONFIG__?.API_URL
+      : undefined;
+  const configured =
+    fromRuntime ||
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
+    "";
+  return apiBase(String(configured));
+}
+{{- end}}
+
+/** Who is signed in. Presentation only — see the file header. */
+export interface Identity {
+  authenticated: boolean;
+  email?: string;
+  name?: string;
+  subject?: string;
+}
+
+export interface Credentials {
+  email: string;
+  password: string;
+  /** Only meaningful for an account with TOTP enrolled. */
+  totp?: string;
+}
+
+export interface Registration {
+  email: string;
+  password: string;
+  givenName?: string;
+  familyName?: string;
+}
+
+/** One clause of the password policy. The names are the server's wire spelling. */
+export type PasswordRule = "min_length" | "uppercase" | "lowercase" | "number" | "symbol";
+
+/**
+ * What a password must contain, as the identity provider enforces it.
+ *
+ * Served by GET /auth/password-policy. The provider is the authority: this is
+ * what the forms SHOW and check while the person types, and a password that
+ * passes every check here can still be refused.
+ */
+export interface PasswordPolicy {
+  min_length: number;
+  has_uppercase: boolean;
+  has_lowercase: boolean;
+  has_number: boolean;
+  has_symbol: boolean;
+}
+
+/**
+ * Thrown when the API refuses a request. `status` lets a screen tell
+ * "wrong credentials" (401) from "the service is down" (5xx), which are
+ * very different things to tell a user.
+ *
+ * `unmet` is set when the PASSWORD was what was refused: every policy rule it
+ * breaks, as the server evaluated them. A screen can mark exactly those.
+ */
+export class AuthError extends Error {
+  readonly status: number;
+  readonly unmet: PasswordRule[];
+
+  constructor(message: string, status: number, unmet: PasswordRule[] = []) {
+    super(message);
+    this.name = "AuthError";
+    this.status = status;
+    this.unmet = unmet;
+  }
+}
+
+/** Signs in. Resolves with the identity; the session cookie is already set. */
+export async function signIn(credentials: Credentials): Promise<Identity> {
+  return post("/auth/login", {
+    email: credentials.email,
+    password: credentials.password,
+    ...(credentials.totp ? { totp: credentials.totp } : {}),
+  });
+}
+
+/**
+ * Creates an account and signs in, in one call.
+ *
+ * The server does both, so there is no window where someone has an account
+ * but no session — no bouncing back to a login form to retype the password
+ * they just chose.
+ */
+export async function signUp(details: Registration): Promise<Identity> {
+  return post("/auth/register", {
+    email: details.email,
+    password: details.password,
+    ...(details.givenName ? { givenName: details.givenName } : {}),
+    ...(details.familyName ? { familyName: details.familyName } : {}),
+  });
+}
+
+/** Clears the session cookie. */
+export async function signOut(): Promise<Identity> {
+  return post("/auth/logout", {});
+}
+
+/**
+ * Asks the server who is signed in.
+ *
+ * This is how the app learns its own auth state at load: the cookie is
+ * unreadable to scripts, so the server is the only thing that can answer.
+ * One cheap same-origin request, and no provider round trip.
+ */
+export async function fetchIdentity(): Promise<Identity> {
+  try {
+    const response = await fetch(`${apiOrigin()}/auth/session`, {
+      // See the note in post(): the cookie only travels to an API on
+      // another origin with "include".
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return { authenticated: false };
+    return (await response.json()) as Identity;
+  } catch {
+    // A transport failure is not a signed-out user, but it is the safe
+    // answer to render: closed rather than open.
+    return { authenticated: false };
+  }
+}
+
+async function post(path: string, body: unknown): Promise<Identity> {
+  return (await request(path, body)) as Identity;
+}
+
+async function request(path: string, body: unknown): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // "include", not "same-origin": whenever the API is on another origin
+      // — a deployed API_URL naming its own host, or the dev loop with
+      // FORGE_DEV_API_PROXY=off — "same-origin" silently DROPS the session
+      // cookie: login returns 200 and the user stays signed out, with
+      // nothing in the console to explain it. The server pairs this with
+      // cors_allow_credentials. Through the dev proxy it costs nothing.
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // Distinguished from a credential failure so a user does not retype a
+    // correct password at a server that is simply unreachable.
+    throw new AuthError("Could not reach the sign-in service.", 0);
+  }
+
+  if (!response.ok) {
+    throw await rejection(response);
+  }
+  return response.json();
+}
+
+/**
+ * Asks the server to email a password-reset link.
+ *
+ * Resolves with the server's message, which is the same whether or not the
+ * address has an account. THAT IS NOT A PROMISE THAT MAIL ARRIVES: the link is
+ * sent by the identity provider, which sends mail only when the app's
+ * identity has SMTP configured (forge.ManagedIdentity.smtp). See
+ * src/app/auth/forgot (Next.js) or the /auth/forgot route (Vite).
+ */
+export async function forgotPassword(email: string): Promise<string> {
+  const body = (await request("/auth/forgot", { email })) as { message?: string };
+  return body.message ?? "If that address has an account, a reset link is on its way.";
+}
+
+/** The three values the reset link carries (userID and code), plus the new password. */
+export interface PasswordReset {
+  userID: string;
+  code: string;
+  password: string;
+}
+
+/**
+ * Sets a new password with the code from a reset link.
+ *
+ * Resolves with the identity: `authenticated` is true when the server also
+ * signed the person in (the common case) and false when the password was set
+ * but that follow-up sign-in failed, in which case send them to sign in.
+ */
+export async function resetPassword(reset: PasswordReset): Promise<Identity> {
+  return post("/auth/reset", reset);
+}
+
+/**
+ * Reads what a password must contain, or null when the server cannot say.
+ *
+ * Null is a normal answer, not an error to show: the requirements are
+ * guidance, the server checks the password regardless, and a form with no
+ * checklist still works. The checklist is an upgrade, never a dependency.
+ */
+export async function fetchPasswordPolicy(): Promise<PasswordPolicy | null> {
+  try {
+    const response = await fetch(`${apiOrigin()}/auth/password-policy`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as PasswordPolicy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every rule of the policy `password` breaks, in display order.
+ *
+ * The character classes match the identity provider's: A-Z, a-z, 0-9, and a
+ * symbol is anything else (a space counts). GUIDANCE ONLY — the server
+ * decides.
+ */
+export function unmetRules(policy: PasswordPolicy, password: string): PasswordRule[] {
+  const unmet: PasswordRule[] = [];
+  if (policy.min_length > 0 && [...password].length < policy.min_length) {
+    unmet.push("min_length");
+  }
+  if (policy.has_uppercase && !/[A-Z]/.test(password)) unmet.push("uppercase");
+  if (policy.has_lowercase && !/[a-z]/.test(password)) unmet.push("lowercase");
+  if (policy.has_number && !/[0-9]/.test(password)) unmet.push("number");
+  if (policy.has_symbol && !/[^A-Za-z0-9]/.test(password)) unmet.push("symbol");
+  return unmet;
+}
+
+/** The rules the policy actually has, in display order. */
+export function activeRules(policy: PasswordPolicy): PasswordRule[] {
+  const rules: PasswordRule[] = [];
+  if (policy.min_length > 0) rules.push("min_length");
+  if (policy.has_uppercase) rules.push("uppercase");
+  if (policy.has_lowercase) rules.push("lowercase");
+  if (policy.has_number) rules.push("number");
+  if (policy.has_symbol) rules.push("symbol");
+  return rules;
+}
+
+/** One rule as the phrase a checklist shows: "At least 8 characters". */
+export function describeRule(policy: PasswordPolicy, rule: PasswordRule): string {
+  switch (rule) {
+    case "min_length":
+      return `At least ${policy.min_length} characters`;
+    case "uppercase":
+      return "An uppercase letter";
+    case "lowercase":
+      return "A lowercase letter";
+    case "number":
+      return "A number";
+    case "symbol":
+      return "A symbol";
+  }
+}
+
+/**
+ * The refusal as an AuthError.
+ *
+ * The server's message is already safe to display: sign-in failures are
+ * deliberately generic (a form that distinguishes "no such user" from "wrong
+ * password" is a user-enumeration oracle), while sign-up and reset failures
+ * are specific because the person filling in the form has to read them to fix
+ * it — a rejected password names the rules it breaks.
+ */
+async function rejection(response: Response): Promise<AuthError> {
+  try {
+    const body = (await response.json()) as { error?: string; unmet?: PasswordRule[] };
+    if (body.error) {
+      return new AuthError(
+        body.error,
+        response.status,
+        Array.isArray(body.unmet) ? body.unmet : [],
+      );
+    }
+  } catch {
+    // Fall through.
+  }
+  return new AuthError(
+    response.status >= 500
+      ? "The sign-in service is unavailable. Please try again."
+      : "Those credentials were not accepted.",
+    response.status,
+  );
+}
