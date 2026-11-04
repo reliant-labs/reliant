@@ -214,19 +214,44 @@ describe('unauthInterceptor — 401 sign-out discrimination', () => {
     expect(mocks.signOut).toHaveBeenCalledTimes(1)
   })
 
-  it('recognises every backend wording of a rejected credential', async () => {
-    const { rejectsCredential } = await import('../transport')
+  // Fail closed: only a known person-only refusal keeps an API key. Any other
+  // 401, including wordings this client has never seen, signs it out.
+  it('signs an API key out on a 401 it does not recognise', async () => {
+    mocks.isApiKey.mockReturnValue(true)
+    const interceptor = await loadUnauthInterceptor()
+    const req = buildRequest({ Authorization: 'Bearer rlat_revoked' })
+    const next = vi.fn(async () => {
+      throw new ConnectError('missing authorization token', Code.Unauthenticated)
+    })
+
+    await expect(interceptor(next)(req)).rejects.toThrow()
+
+    expect(mocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an API key only for a person-only refusal', async () => {
+    const { refusesMachineCredential } = await import('../transport')
+    for (const msg of [
+      'no user ID in context',
+      'user ID not found in context',
+      'no authenticated user',
+      'user not authenticated',
+    ]) {
+      expect(refusesMachineCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(true)
+    }
     for (const msg of [
       'invalid or expired token',
       'invalid authorization header format',
       'invalid token: signature is invalid',
       'invalid API key: not found',
       'authentication failed: provide a valid Bearer token or API key',
+      'missing authorization token',
+      'this Reliant credential is no longer valid; sign in to Reliant again',
+      'unauthenticated',
+      'some other auth middleware said no',
+      'no user ID in context; also the key is revoked',
     ]) {
-      expect(rejectsCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(true)
-    }
-    for (const msg of ['no user ID in context', 'no authenticated user', 'resolving internal user']) {
-      expect(rejectsCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(false)
+      expect(refusesMachineCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(false)
     }
   })
 

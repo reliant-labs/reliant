@@ -53,9 +53,9 @@ export interface AuthTokenProvider {
 
   /**
    * Whether the credential is a long-lived API key rather than a session.
-   * A key cannot be refreshed, so a 401 that does not say the key itself was
-   * rejected (a person-only RPC refusing a machine credential, for one) must
-   * not sign it out. Optional: a provider without it is treated as a session.
+   * A key cannot be refreshed, so a 401 that only says a person-only RPC
+   * refused a machine credential must not sign it out; every other 401 does.
+   * Optional: a provider without it is treated as a session.
    */
   isApiKey?(): boolean;
 }

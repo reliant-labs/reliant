@@ -472,19 +472,22 @@ type RecoveryOutcome =
   | { kind: "no-session" }
   | { kind: "kept" };
 
-// The messages with which a backend says it looked at the credential and
-// rejected it: reliant's auth interceptor ("invalid or expired token",
-// "invalid authorization header format") and forge's auth package
-// ("invalid token: …", "invalid API key: …", "invalid authorization format",
-// "authentication failed: provide a valid Bearer token or API key"). Any other
-// 401 on a presented credential came from past authentication: a handler that
-// serves people only ("no user ID in context", "no authenticated user")
-// refusing a machine credential such as an API key.
-const CREDENTIAL_REJECTED = /^\s*(\[unauthenticated\]\s*)?(invalid\b|authentication failed)/i;
+// The messages with which a handler that serves people only refuses a caller
+// that authenticated without a person behind it, such as an API key: the
+// credential was accepted, this one RPC just has no user to act for. This is
+// an allowlist on purpose. A 401 with any other message — a rejected or
+// revoked key ("invalid or expired token", "missing authorization token",
+// "this Reliant credential is no longer valid", another backend's wording) —
+// fails closed and signs the key out, so a dead key is never kept.
+const MACHINE_CREDENTIAL_REFUSED =
+  /^\s*(\[unauthenticated\]\s*)?(no user ID in context|user ID not found in context|no authenticated user|user not authenticated)\s*$/i;
 
-/** Whether a 401 says the presented credential itself was rejected. */
-export function rejectsCredential(error: ConnectError): boolean {
-  return CREDENTIAL_REJECTED.test(error.rawMessage);
+/**
+ * Whether a 401 says only that this RPC needs a person, not that the presented
+ * credential was rejected.
+ */
+export function refusesMachineCredential(error: ConnectError): boolean {
+  return MACHINE_CREDENTIAL_REFUSED.test(error.rawMessage);
 }
 
 interface Recovery {
@@ -559,7 +562,7 @@ async function runRecovery(
   // refusing it (GetCurrentUser, billing) is that call's failure, not the
   // key's, and signing out over it threw an agent's or a self-hoster's key
   // session out of the app whenever a page asked who "me" is (#1831).
-  if (provider.isApiKey?.() && !rejectsCredential(error)) {
+  if (provider.isApiKey?.() && refusesMachineCredential(error)) {
     logger.warn("[gRPC Client] 401 for an API key that the backend did not reject; staying signed in", {
       service: req.service.typeName,
       method: req.method.name,
