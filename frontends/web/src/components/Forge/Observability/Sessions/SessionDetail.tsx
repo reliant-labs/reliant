@@ -118,8 +118,9 @@ function SessionBody({
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
   // Every trace of the session — the browser's own spans and the backend work
   // its requests caused (they carry its id as session.id) — over the window it ran in.
-  // Every other narrowing is dropped: a service kept from the sessions list (its
-  // frontend) would exclude the backend traces this promises.
+  // Every other narrowing is dropped: a service or a client/build filter kept
+  // from the sessions list (its frontend's) would exclude the backend traces
+  // this promises.
   const openTraces = () =>
     navigate({
       ...LEAVE_SESSIONS,

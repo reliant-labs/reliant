@@ -160,7 +160,7 @@ We don't read device identifiers, installed fonts or plugins, your device model,
 
 Location, device and app version, and these links are all part of crash and error reporting: turning **Crash and Error Reporting** off stops them with the rest of it. Location and device data is kept as long as the telemetry it belongs to: 14 days with a session, 30 days with crash and error data.
 
-**Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it.
+**Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it: once the change is saved, the app reloads and starts again without telemetry.
 
 For deployment administrators, the renderer runtime configuration's `OTEL_ENDPOINT` decides whether browser telemetry is sent at all (empty or `off`: none), and `OTEL_REPLAY` controls the ClickStack replay recorder. These configuration changes take effect on the next app initialization.
 

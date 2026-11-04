@@ -6,9 +6,12 @@
  * (telemetryEndpoint.ts). A failure the app catches itself is reported through
  * errorReporting.ts.
  *
- * Consent: init only when crash reporting is on. Turning it off mid-session
- * calls the runtime's disableTelemetry(). The SDK has no off switch for its own
- * auto-instrumentation, which is why init, not a flag, is the gate.
+ * Consent: init only when crash reporting is on. The SDK has no off switch for
+ * its own auto-instrumentation (page loads, fetch/XHR, uncaught errors), which
+ * is why init, not a flag, is the gate. So turning it off mid-session calls the
+ * runtime's disableTelemetry() at once (replay, product events, reported
+ * errors) and then, once the switch is saved, reloads the page: the reload
+ * starts without the SDK, so its automatic spans stop too.
  *
  * Privacy rules the runtime forces while replay is on: all text and inputs
  * masked, media blocked, no canvas, no request/response bodies, no query
@@ -21,7 +24,11 @@ import {
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
-import { privacyConsent, subscribePrivacyConsent } from "../hooks/privacy-queries";
+import {
+  privacyConsent,
+  privacyWritesSettled,
+  subscribePrivacyConsent,
+} from "../hooks/privacy-queries";
 import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
@@ -193,6 +200,28 @@ async function stampClientAttributes(
 
 let started: Promise<boolean> | null = null;
 let unsubscribeConsent: (() => void) | null = null;
+let withdrawing = false;
+let reloadPage: () => void = () => window.location.reload();
+
+/**
+ * Crash reporting switched off while the SDK runs: stop what the runtime can
+ * stop now, then reload into the consent-gated startup, which leaves the SDK
+ * out. The reload waits for the write, which a reload would abandon; a write
+ * the server refused rolls the switch back, and then there is nothing to
+ * reload for (this page's replay and events stay off until the next load).
+ */
+function onConsentChange(consent: { crashReportingEnabled: boolean }): void {
+  if (consent.crashReportingEnabled || withdrawing) return;
+  withdrawing = true;
+  disableTelemetry();
+  void privacyWritesSettled().then(() => {
+    if (privacyConsent().crashReportingEnabled) {
+      withdrawing = false;
+      return;
+    }
+    reloadPage();
+  });
+}
 
 /**
  * Start browser telemetry. Idempotent, never throws, and resolves to whether
@@ -256,9 +285,7 @@ async function start(): Promise<boolean> {
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
 
-  unsubscribeConsent = subscribePrivacyConsent((consent) => {
-    if (!consent.crashReportingEnabled) disableTelemetry();
-  });
+  unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
 
   try {
     await stampClientAttributes({ "reliant.build": buildVersion });
@@ -322,4 +349,11 @@ export function resetTelemetryForTests(): void {
   started = null;
   unsubscribeConsent?.();
   unsubscribeConsent = null;
+  withdrawing = false;
+  reloadPage = () => window.location.reload();
+}
+
+/** Test seam: what a consent withdrawal reloads with. */
+export function setReloadForTests(reload: () => void): void {
+  reloadPage = reload;
 }

@@ -186,6 +186,31 @@ These are row attributes, never metric labels. Stored in tenant schema v21
 (`rum_sessions.Client`/`Viewport`, `error_events.BrowserName`/…); design:
 control-plane `docs/observability/client-context.md`.
 
+#### Verifying it live (post-deploy check)
+
+Only a live environment shows the ingest half (control-plane's
+workspace-proxy) and the opt-out end to end. The browser half is the published
+`@reliantlabs/forge-web-runtime` 0.13.1, built with npm provenance from forge
+`5f5293e733e6` (tag `web-runtime/v0.13.1`), the forge `go.mod` pins. After the
+release carrying this reaches prod, the person shipping it checks, against the
+prod control plane (its release must contain the commit named in
+`proto-vendor/controlplane/SOURCE`):
+
+1. Sign in from a browser and from the desktop app, then open a project's
+   Observability console. **Sessions**: both new sessions show browser, OS,
+   device and build; the desktop one's client panel shows `app.desktop.version`
+   and its Electron and Chromium versions.
+2. Filter Sessions, Traces and Errors by that browser, OS and build: only
+   matching rows remain. From a session, **Traces** (`session-traces`) lists
+   its traces with the browser/OS/build filters cleared.
+3. Turn **Crash and Error Reporting** off in Settings: the app reloads once the
+   switch is saved (`lib/telemetry.ts`, the SDK's own fetch/XHR and error spans
+   have no off switch short of a page without it). Use the app: no new session,
+   span or error for that user appears after the switch.
+
+A failure in 1-2 is a release regression (fix forward); a failure in 3 is a
+privacy defect: roll the release back.
+
 ## Claim funnel (the `/claim` page)
 
 A claimable deploy is handed to a human as `…/claim#rcl_<token>`

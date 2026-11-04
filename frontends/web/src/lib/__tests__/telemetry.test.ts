@@ -8,9 +8,12 @@ import { setRuntimeConfig } from "@/test/runtimeConfig";
 const privacy = vi.hoisted(() => {
   const listeners = new Set<(s: { crashReportingEnabled: boolean }) => void>();
   const state = { crashReportingEnabled: true, analyticsEnabled: true };
+  // The consent write in flight: privacyWritesSettled() resolves with it.
+  const write = { settled: Promise.resolve() };
   return {
     state,
     listeners,
+    write,
     subscribe: (fn: (s: { crashReportingEnabled: boolean }) => void) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
@@ -43,6 +46,7 @@ vi.mock("@hyperdx/browser", () => ({
 }));
 vi.mock("../../hooks/privacy-queries", () => ({
   privacyConsent: () => privacy.state,
+  privacyWritesSettled: () => privacy.write.settled,
   subscribePrivacyConsent: privacy.subscribe,
 }));
 vi.mock("../constants", () => ({ isDev: false }));
@@ -56,6 +60,7 @@ import {
   replaySampleRate,
   reportErrorToTelemetry,
   resetTelemetryForTests,
+  setReloadForTests,
   setTelemetryUserId,
 } from "../telemetry";
 
@@ -89,7 +94,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   resetTelemetryForTests();
+  setReloadForTests(vi.fn());
   privacy.listeners.clear();
+  privacy.write.settled = Promise.resolve();
   privacy.state.crashReportingEnabled = true;
   privacy.state.analyticsEnabled = true;
   localStorage.clear();
@@ -327,6 +334,61 @@ describe("consent withdrawn mid-session", () => {
     await initTelemetry();
     privacy.set({ analyticsEnabled: false });
     expect(runtime.disableTelemetry).not.toHaveBeenCalled();
+  });
+
+  // The SDK's fetch/XHR and error spans have no off switch once it runs, so
+  // only a page without it stops them: withdrawal reloads, and the reloaded
+  // page's consent-gated startup never initialises the SDK.
+  it("reloads into a startup that leaves the SDK out", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+    await initTelemetry();
+    expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(1);
+
+    privacy.set({ crashReportingEnabled: false });
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+    // What the reload runs: a fresh module state, consent now off.
+    resetTelemetryForTests();
+    expect(await initTelemetry()).toBe(false);
+    expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the switch to be saved before reloading, and reloads once", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+    let save!: () => void;
+    privacy.write.settled = new Promise((resolve) => (save = resolve));
+    await initTelemetry();
+
+    privacy.set({ crashReportingEnabled: false });
+    // The optimistic flip and the refetch after the save both report it.
+    privacy.set({ crashReportingEnabled: false });
+    await Promise.resolve();
+    expect(runtime.disableTelemetry).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+
+    save();
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    privacy.set({ crashReportingEnabled: false });
+    await Promise.resolve();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload when the server refused the switch", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+    let save!: () => void;
+    privacy.write.settled = new Promise((resolve) => (save = resolve));
+    await initTelemetry();
+
+    privacy.set({ crashReportingEnabled: false });
+    // The rollback restores consent before the write settles.
+    privacy.state.crashReportingEnabled = true;
+    save();
+    await privacy.write.settled;
+    await Promise.resolve();
+    expect(reload).not.toHaveBeenCalled();
   });
 });
 

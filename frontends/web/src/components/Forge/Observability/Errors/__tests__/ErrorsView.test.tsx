@@ -11,6 +11,11 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { getOption } from "@bufbuild/protobuf";
+
+import { field as validateField } from "@/gen/buf/validate/validate_pb";
+import { ListIssuesRequestSchema } from "@/gen/controlplane/services/issues/v1/issues_pb";
+
 import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 import { ENV_PLACE, PROJECT_PLACE, renderPanel } from "../../__tests__/obsTestUtils";
 
@@ -106,6 +111,37 @@ describe("the issue list", () => {
     renderPanel(api, { view: "errors", user: "u_8812" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent("can't filter issues by user");
     expect(screen.queryAllByTestId(/^obs-issue-iss-/)).toHaveLength(0);
+  });
+
+  it("never shows a user-filtered list as one client's when the control plane applies user_id but not browser", async () => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    // An intermediate control plane: user_id shipped, the client fields did not.
+    api.listIssues = (req, options) => listIssues({ ...req, browser: undefined, os: undefined, serviceVersion: undefined }, options);
+    renderPanel(api, { view: "errors", user: "u_8812", browser: "Mobile Safari" }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent("can't filter issues by browser");
+    expect(screen.queryAllByTestId(/^obs-issue-iss-/)).toHaveLength(0);
+  });
+
+  it("probes every filter with a value its validated request field accepts", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "errors", user: "u_8812", browser: "Mobile Safari", os: "iOS", build: "v1.8.3" }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    const probed = { userId: 0, browser: 0, os: 0, serviceVersion: 0 };
+    for (const req of listCalls(onCall) as (ListReq & Record<string, unknown>)[]) {
+      for (const key of Object.keys(probed) as (keyof typeof probed)[]) {
+        const value = req[key];
+        if (typeof value !== "string") continue;
+        const fieldDesc = ListIssuesRequestSchema.fields.find((f) => f.localName === key)!;
+        const rules = getOption(fieldDesc, validateField).type;
+        expect(rules.case).toBe("string");
+        const { minLen, maxLen } = rules.value as { minLen: bigint; maxLen: bigint };
+        expect(BigInt(value.length) >= minLen && BigInt(value.length) <= maxLen, `${key}=${value}`).toBe(true);
+        if (value.startsWith("probe-")) probed[key]++;
+      }
+    }
+    // One probe per filter, each asked alone.
+    expect(probed).toEqual({ userId: 1, browser: 1, os: 1, serviceVersion: 1 });
   });
 
   it.each(["u_8812", "reliant-console-filter-probe"])("filters by user %s on a supporting control plane whose events name any user id", async (user) => {

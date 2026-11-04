@@ -794,13 +794,27 @@ export interface IssueFilters {
 export const ISSUE_PAGE_SIZE = 50;
 
 /**
- * A user id no one has, which useIssues asks for to learn whether user_id is
- * applied. User ids are the application's own strings, so no fixed value is
- * reserved: each read draws a fresh random one (122 bits) nobody can hold.
+ * A value no one has, which useIssues asks for to learn whether a filter is
+ * applied. User ids, browsers, OSes and builds are the application's own
+ * strings, so no fixed value is reserved: each read draws a fresh random one
+ * (122 bits) nobody can hold. 42 characters, inside every probed field's
+ * validated length (ListIssuesRequest's browser and os take at most 64).
  */
-export function issueUserFilterProbe(): string {
-  return `reliant-console-filter-probe-${crypto.randomUUID()}`;
+export function issueFilterProbe(): string {
+  return `probe-${crypto.randomUUID()}`;
 }
+
+/**
+ * The filters useIssues probes, each by its own request field and its own
+ * label. They did not all ship together (user_id came before the client and
+ * build fields), so each is asked about alone.
+ */
+const ISSUE_PROBED_FILTERS = [
+  { key: "userId", label: "user" },
+  { key: "browser", label: "browser" },
+  { key: "os", label: "OS" },
+  { key: "serviceVersion", label: "build" },
+] as const satisfies readonly { key: keyof IssueFilters; label: string }[];
 
 /**
  * One root for every issue read, so a triage (which can move an issue between
@@ -878,25 +892,19 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // An issue row names no user, so whether the server applied user_id is
       // asked, not inferred: the same first page for a user nobody is. A server
       // that knows the filter answers it with nothing; one that ignores it
-      // answers with exactly the unfiltered rows the real read would get.
-      // The client and build filters are asked the same way, each with a value
-      // nobody has, all in one probe: they shipped together.
-      const clientFilter = filters.browser ? "browser" : filters.os ? "OS" : filters.serviceVersion ? "build" : "";
-      const probing = !pageParam && (!!filters.userId || !!clientFilter);
-      const [result, probe] = await Promise.all([
+      // answers with rows. The client and build filters are asked the same way.
+      // Each probe asks about one filter alone, the other probed filters
+      // removed: a server that applies user_id but ignores browser would answer
+      // a combined probe with nothing (the random user matches no one) and pass
+      // off a user-filtered list as a browser-filtered one.
+      const probed = pageParam ? [] : ISSUE_PROBED_FILTERS.filter(({ key }) => !!filters[key]);
+      const unprobed = Object.fromEntries(ISSUE_PROBED_FILTERS.map(({ key }) => [key, undefined]));
+      const [result, ...probes] = await Promise.all([
         api.listIssues(request, { signal }),
-        probing
-          ? api.listIssues({
-              ...request,
-              userId: filters.userId ? issueUserFilterProbe() : undefined,
-              browser: filters.browser ? issueUserFilterProbe() : undefined,
-              os: filters.os ? issueUserFilterProbe() : undefined,
-              serviceVersion: filters.serviceVersion ? issueUserFilterProbe() : undefined,
-              pageSize: 1,
-            }, { signal })
-          : null,
+        ...probed.map(({ key }) => api.listIssues({ ...request, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }, { signal })),
       ]);
-      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError(filters.userId ? "user" : clientFilter, "issues");
+      const ignored = probed.find((_, i) => probes[i].issues.length > 0);
+      if (ignored) throw new FilterUnsupportedError(ignored.label, "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
