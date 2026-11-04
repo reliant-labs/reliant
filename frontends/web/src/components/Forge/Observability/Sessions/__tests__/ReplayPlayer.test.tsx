@@ -110,8 +110,10 @@ describe("playback", () => {
     const replayer = FakeReplayer.last();
     const user = userEvent.setup();
 
+    // It opens just past the full snapshot (10 ms after the meta event) and plays from there.
+    expect(replayer.calls).toEqual(["pause:11"]);
     await user.click(screen.getByTestId("replay-play"));
-    expect(replayer.calls).toContain("play:0");
+    expect(replayer.calls).toContain("play:11");
     expect(screen.getByTestId("replay-play")).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByTestId("replay-play"));
     expect(replayer.calls.at(-1)).toBe("pause:");
@@ -164,6 +166,25 @@ describe("playback", () => {
     await userEvent.setup().click(screen.getByText("timeline entry"));
     await waitFor(() => expect(replayer.calls).toContain("pause:12000"));
     expect(onTime).toHaveBeenLastCalledWith(T + 12_000);
+  });
+
+  it("never seeks into the gap between the meta event and the full snapshot", async () => {
+    // rrweb's clock starts at the meta event; a seek before the snapshot,
+    // after playback, leaves the last played frame on screen (see
+    // replayRealRrweb.test.tsx for the real Replayer doing so).
+    const { api } = scripted([page([meta(0), snapshot(17), step(20_000)])]);
+    renderPlayer(api);
+    await waitFor(() => expect(screen.getByTestId("replay-player")).toHaveAttribute("data-state", "ready"));
+    const replayer = FakeReplayer.last();
+
+    fireEvent.change(screen.getByTestId("replay-seek"), { target: { value: "8000" } });
+    fireEvent.change(screen.getByTestId("replay-seek"), { target: { value: "0" } });
+    expect(replayer.calls.at(-1)).toBe("pause:18");
+
+    // Played to the end, Play starts over from the snapshot too.
+    fireEvent.change(screen.getByTestId("replay-seek"), { target: { value: "20000" } });
+    await userEvent.setup().click(screen.getByTestId("replay-play"));
+    expect(replayer.calls.at(-1)).toBe("play:18");
   });
 });
 
