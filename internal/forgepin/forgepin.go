@@ -43,6 +43,13 @@ const (
 	// pin" is reused. Resolving can run the project's .tools/bin/forge to
 	// read its version, and a skills index asks once per skill.
 	resolutionTTL = time.Minute
+	// failedResolutionTTL is how long a failure to obtain the pinned forge
+	// is reused. Obtaining it can mean building it (minutes, several cores):
+	// retried every minute for every project that pins it, a machine whose
+	// builds were failing (a full disk, load past its CPUs) ran one more
+	// build per project per minute, each killed at resolveTimeout, which kept
+	// it failing (2026-11-03).
+	failedResolutionTTL = 10 * time.Minute
 	// runTimeout bounds one command of the pinned forge.
 	runTimeout = time.Minute
 )
@@ -79,14 +86,18 @@ func Default() Service { return defaultService }
 // Pinned reports the forge the project at root pins when it is not the
 // embedded one (ok), or why it could not be obtained (err). command is the
 // forge command the caller will run, which the decision depends on. An answer
-// is reused for a minute while forge.yaml is unchanged — a failure too, so an
-// unobtainable pin is not rebuilt once per skill.
+// is reused for a minute while forge.yaml is unchanged, and a failure for ten,
+// so an unobtainable pin is not rebuilt once per skill or once a minute.
 func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error) {
 	yaml, _ := os.ReadFile(filepath.Join(root, "forge.yaml"))
 	key := root + "\x00" + command
 	if v, ok := s.resolutions.Load(key); ok {
 		r := v.(resolution)
-		if r.yaml == string(yaml) && time.Since(r.at) < resolutionTTL {
+		ttl := resolutionTTL
+		if r.err != nil {
+			ttl = failedResolutionTTL
+		}
+		if r.yaml == string(yaml) && time.Since(r.at) < ttl {
 			return r.pf, r.ok, r.err
 		}
 	}
