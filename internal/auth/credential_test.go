@@ -19,7 +19,8 @@ func TestValidatorsClassifyTheirCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exp := time.Now().Add(time.Hour).Unix()
+	// A fixed expiry far in the future: nothing here depends on the time of day.
+	exp := time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
 
 	session, err := v.ValidateToken(signES256(t, key, map[string]any{"sub": "u1", "exp": exp, "session_id": "s1"}))
 	if err != nil {

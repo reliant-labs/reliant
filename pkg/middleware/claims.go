@@ -22,7 +22,9 @@ import (
 //
 // The principal stands for a person signed in to the app, so it carries
 // auth.CredentialSession; a test of a machine credential sets its own with
-// auth.WithCredential.
+// auth.WithCredential. It is for tests alone: on a serving path it would
+// upgrade any principal to a session, so TestContextWithClaimsIsTestOnly
+// (internal/architecture) fails a non-test file that references it.
 func ContextWithClaims(ctx context.Context, claims *forgeauth.Claims) context.Context {
 	if claims == nil {
 		return ctx
