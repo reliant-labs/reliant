@@ -279,8 +279,8 @@ describe("breakdownPanel", () => {
   });
 
   it("is a valid panel", () => {
-    expect(panelProblems(breakdownPanel(panel(), "status", 8))).toEqual([]);
-    expect(panelProblems(breakdownPanel(panel({ kind: "bar" }), "status", 8))).toEqual([]);
+    expect(panelProblems(breakdownPanel(panel(), "metric.attr.status", 8))).toEqual([]);
+    expect(panelProblems(breakdownPanel(panel({ kind: "bar" }), "metric.attr.status", 8))).toEqual([]);
   });
 
   it("topSeries keeps the first n", () => {

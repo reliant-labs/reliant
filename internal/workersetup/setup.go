@@ -104,6 +104,10 @@ type Config struct {
 	// credential source. nil refuses nodes that request hosted_use.
 	HostedActions handlers.HostedActionExecutor
 
+	// SecretResolver resolves declared secrets for the step activities (a
+	// command, a request); nil refuses every step that uses one.
+	SecretResolver handlers.SecretResolver
+
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
 	// loopback or link-local address. False is the default.
@@ -245,6 +249,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
+	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)

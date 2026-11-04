@@ -74,7 +74,7 @@ describe("the builder's moves", () => {
 
   it("clears what belonged to the old signal", () => {
     const metrics = withSignal({ ...starter, series: [withErrorsOnly(starter.series[0], true, "traces")] }, "metrics");
-    expect(metrics.series[0]).toMatchObject({ agg: "avg", field: "", metricType: "gauge", where: [] });
+    expect(metrics.series[0]).toMatchObject({ agg: "avg", field: "", metricType: "gauge", where: undefined });
     expect(withSignal(metrics, "logs").series[0].metricType).toBeUndefined();
   });
 

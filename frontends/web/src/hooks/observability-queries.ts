@@ -125,18 +125,19 @@ export function useObsReadApi(): ObservabilityApi {
  * (pollRegistry.ts): a single timer per key however many panels watch it,
  * stopped while the quota is gone, a quarter as fast while it is tight, idle in
  * a hidden tab, and each poll marked `Forge-Poll` for the server. `false` or a
- * disabled query does not poll.
+ * disabled query does not poll. `quota: false` is for a read that does not
+ * spend the ClickHouse quota (a postgres panel): its polls ignore the quota.
  */
-function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true) {
+function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true, quota = true) {
   const client = useQueryClient();
   const { polls } = useObsQuota();
   const keyHash = hashKey(queryKey);
   useEffect(() => {
     if (!enabled || intervalMs === false) return;
-    return polls.subscribe(client, queryKey, intervalMs);
+    return polls.subscribe(client, queryKey, intervalMs, { quota });
     // The key is compared by hash: a new array with the same content is the same key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, polls, keyHash, intervalMs, enabled]);
+  }, [client, polls, keyHash, intervalMs, enabled, quota]);
 }
 
 interface PageParam {
@@ -342,21 +343,56 @@ export function usePanelQuery(
   options: PanelQueryOptions = {}
 ) {
   const api = useObsReadApi();
+  // A postgres panel reads the environment's own database, not ClickHouse: the telemetry quota does not apply to it.
+  const databaseApi = useObservabilityApi();
   const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
   const enabled = !!scope && panelRunsQuery(panel.kind) && (options.enabled ?? true);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
       const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal });
+      const window = resolveWindow(range, Date.now() - offset);
+      if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
+      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy }, { signal });
     },
     enabled,
     staleTime: 30_000,
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   });
-  usePolled(queryKey, options.refetchInterval ?? false, enabled);
+  // Nor does the quota slow or stop a postgres panel's refresh.
+  usePolled(queryKey, options.refetchInterval ?? false, enabled, panel.kind !== "postgres");
   return query;
+}
+
+/**
+ * A postgres panel's read (AppDatabaseService.QueryDatabasePanel): one
+ * environment's database, so a scope over several environments, or none, is
+ * refused here with the reason, as the server would refuse it.
+ */
+function queryPostgresPanel(api: ObservabilityApi, scope: ObsScope, window: TimeWindow, panel: Panel, signal: AbortSignal) {
+  if (scope.envIds.length !== 1) {
+    throw new ConnectError("a postgres panel reads one environment's database: choose one environment", Code.InvalidArgument);
+  }
+  if (!panel.postgres) throw new ConnectError("the panel has no postgres query", Code.InvalidArgument);
+  return api.queryDatabasePanel({ environmentId: scope.envIds[0], window, query: panel.postgres, panelId: panel.id }, { signal });
+}
+
+/**
+ * The environment's databases a postgres panel may read, with the tables and
+ * columns its dashboard role may SELECT: the panel editor's schema browser.
+ * Postgres, not ClickHouse, so no quota guard.
+ */
+export function useDashboardDatabases(environmentId: string | null) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: ["observability", "dashboard-databases", environmentId ?? ""] as const,
+    queryFn: ({ signal }) => api.listDashboardDatabases(environmentId as string, { signal }),
+    enabled: !!environmentId,
+    staleTime: 60_000,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
+  });
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
