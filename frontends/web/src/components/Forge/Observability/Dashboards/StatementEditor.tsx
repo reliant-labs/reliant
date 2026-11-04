@@ -19,7 +19,7 @@
  * refuses it, the refusal is shown here in the server's own words.
  */
 
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Play } from "lucide-react";
 
 import { useAttributeValues, useDashboardDatabases, useMetricCatalog } from "@/hooks/observability-queries";
@@ -420,6 +420,35 @@ const listOf = (text: string) => {
   return items.length ? items : undefined;
 };
 
+/**
+ * A comma-separated list of column names. The text is kept as typed, so a
+ * trailing comma or space survives until the next name; the list is parsed
+ * from it on every change, and the text follows the list only when the list
+ * changes from outside.
+ */
+function ListInput({ id, value, onChange, placeholder, testId }: { id: string; value: string[] | undefined; onChange: (list: string[] | undefined) => void; placeholder: string; testId?: string }) {
+  const [text, setText] = useState(() => (value ?? []).join(", "));
+  const joined = (value ?? []).join(",");
+  useEffect(() => {
+    setText((current) => ((listOf(current) ?? []).join(",") === joined ? current : (value ?? []).join(", ")));
+    // value is compared by its joined form: a new array with the same names is the same list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined]);
+  return (
+    <input
+      id={id}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(listOf(e.target.value));
+      }}
+      placeholder={placeholder}
+      className={cn(INPUT, "font-mono")}
+      data-testid={testId}
+    />
+  );
+}
+
 export function PostgresStatementEditor({
   draft,
   setDraft,
@@ -475,10 +504,10 @@ export function PostgresStatementEditor({
         <input id={`${id}-time`} value={query.time ?? ""} onChange={(e) => set({ time: e.target.value.trim() || undefined })} placeholder={draw === "line" ? "required for a line: t" : "t"} className={cn(INPUT, "w-56 font-mono")} />
       </Row>
       <Row label="Values" htmlFor={`${id}-values`}>
-        <input id={`${id}-values`} value={(query.values ?? []).join(", ")} onChange={(e) => set({ values: listOf(e.target.value) })} placeholder="every numeric column" className={cn(INPUT, "font-mono")} />
+        <ListInput id={`${id}-values`} value={query.values} onChange={(values) => set({ values })} placeholder="every numeric column" testId="panel-builder-postgres-values" />
       </Row>
       <Row label="Split by" htmlFor={`${id}-group`}>
-        <input id={`${id}-group`} value={(query.group ?? []).join(", ")} onChange={(e) => set({ group: listOf(e.target.value) })} placeholder="up to three text columns" className={cn(INPUT, "font-mono")} />
+        <ListInput id={`${id}-group`} value={query.group} onChange={(group) => set({ group })} placeholder="up to three text columns" testId="panel-builder-postgres-group" />
       </Row>
       <SchemaPane>
         <PostgresSchema environmentId={environmentId} database={query.database} onDatabase={(database) => set({ database })} onInsert={insert} />

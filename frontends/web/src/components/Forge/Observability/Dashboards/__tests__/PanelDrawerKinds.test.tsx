@@ -175,6 +175,34 @@ describe("a postgres panel", () => {
     expect(await screen.findByTestId("statement-refusal")).toHaveTextContent("dbquery: refused (statement_not_read_only): the statement starts with DELETE");
   });
 
+  it("re-reads on a second Run with nothing edited", async () => {
+    const user = userEvent.setup();
+    const { onCall } = renderDrawer();
+    await user.click(kind("Postgres"));
+    const schema = await screen.findByTestId("schema-postgres");
+    await user.click(within(schema).getByRole("button", { name: "Use" }));
+    const reads = () => onCall.mock.calls.filter(([rpc]) => rpc === "QueryDatabasePanel");
+    await user.click(screen.getByTestId("statement-run"));
+    await waitFor(() => expect(reads()).toHaveLength(1));
+    await waitFor(() => expect(screen.getByTestId("statement-run")).toBeEnabled());
+    await user.click(screen.getByTestId("statement-run"));
+    await waitFor(() => expect(reads()).toHaveLength(2));
+  });
+
+  it("takes comma-separated values and split-by columns as they are typed", async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderDrawer();
+    await user.click(kind("Postgres"));
+    await user.click(within(await screen.findByTestId("schema-postgres")).getByRole("button", { name: "Use" }));
+    await user.type(screen.getByTestId("panel-builder-postgres-values"), "orders, revenue");
+    await user.type(screen.getByTestId("panel-builder-postgres-group"), "region,plan");
+    expect(screen.getByTestId("panel-builder-postgres-values")).toHaveValue("orders, revenue");
+    expect(screen.getByTestId("panel-builder-postgres-group")).toHaveValue("region,plan");
+    expect(screen.getByTestId("panel-drawer-save")).toBeEnabled();
+    await user.click(screen.getByTestId("panel-drawer-save"));
+    expect((onSave.mock.calls.at(-1)?.[0] as Panel | undefined)?.postgres).toMatchObject({ values: ["orders", "revenue"], group: ["region", "plan"] });
+  });
+
   it("says why it cannot read with more than one environment in scope", async () => {
     const user = userEvent.setup();
     renderDrawer({ envIds: ["env-prod", "env-dev"] });

@@ -124,18 +124,19 @@ export function useObsReadApi(): ObservabilityApi {
  * (pollRegistry.ts): a single timer per key however many panels watch it,
  * stopped while the quota is gone, a quarter as fast while it is tight, idle in
  * a hidden tab, and each poll marked `Forge-Poll` for the server. `false` or a
- * disabled query does not poll.
+ * disabled query does not poll. `quota: false` is for a read that does not
+ * spend the ClickHouse quota (a postgres panel): its polls ignore the quota.
  */
-function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true) {
+function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true, quota = true) {
   const client = useQueryClient();
   const { polls } = useObsQuota();
   const keyHash = hashKey(queryKey);
   useEffect(() => {
     if (!enabled || intervalMs === false) return;
-    return polls.subscribe(client, queryKey, intervalMs);
+    return polls.subscribe(client, queryKey, intervalMs, { quota });
     // The key is compared by hash: a new array with the same content is the same key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, polls, keyHash, intervalMs, enabled]);
+  }, [client, polls, keyHash, intervalMs, enabled, quota]);
 }
 
 interface PageParam {
@@ -339,7 +340,8 @@ export function usePanelQuery(
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   });
-  usePolled(queryKey, options.refetchInterval ?? false, enabled);
+  // Nor does the quota slow or stop a postgres panel's refresh.
+  usePolled(queryKey, options.refetchInterval ?? false, enabled, panel.kind !== "postgres");
   return query;
 }
 

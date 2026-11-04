@@ -30,9 +30,10 @@
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { hashKey } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 
-import { usePanelQuery } from "@/hooks/observability-queries";
+import { obsKeys, usePanelQuery } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import type { ObsScope, Panel, PanelDisplay, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 import type { ObsEnvironment } from "../obsPlace";
@@ -133,8 +134,13 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
   const preview = usePanelQuery(scope, range, queried ?? settled, services, [], { enabled: previewable });
   // A statement's picture (style, unit, title) follows the draft; only its statement waits for Run.
   const drawn: Panel | null = statement ? (ranCurrent ? { ...draft, sql: ranCurrent.sql, minStep: ranCurrent.minStep, postgres: ranCurrent.postgres } : null) : draft.kind === "text" ? draft : settled;
+  // Run again over an unchanged request re-reads it: setting the same key would fetch nothing.
+  const sameRequest = (a: Panel, b: Panel) => hashKey(obsKeys.panel(scope, range, a, services, [])) === hashKey(obsKeys.panel(scope, range, b, services, []));
   const run: StatementRun = {
-    onRun: () => setRan(draft),
+    onRun: () => {
+      if (ranCurrent && previewable && sameRequest(ranCurrent, draft)) void preview.refetch();
+      else setRan(draft);
+    },
     canRun: problems.length === 0,
     running: previewable && preview.isFetching,
     stale: !!ranCurrent && (ranCurrent.sql !== draft.sql || ranCurrent.minStep !== draft.minStep || JSON.stringify(ranCurrent.postgres) !== JSON.stringify(draft.postgres)),
