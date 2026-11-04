@@ -14,6 +14,8 @@
 
 import type { TraceSummary } from "@/services/controlPlane/observability/types";
 
+import { operationName } from "../traceTitle";
+
 export interface TracePoint {
   traceId: string;
   startMs: number;
@@ -39,7 +41,7 @@ export function pointsOf(traces: readonly TraceSummary[]): TracePoint[] {
     startMs: t.startMs,
     durationMs: Math.max(0, t.rootDurationMs),
     error: t.errorCount > 0,
-    label: [t.rootService || "unknown", t.rootOperation || t.traceId].join(" "),
+    label: [t.rootService || "unknown", operationName(t.rootOperation) || t.traceId].join(" "),
   }));
 }
 

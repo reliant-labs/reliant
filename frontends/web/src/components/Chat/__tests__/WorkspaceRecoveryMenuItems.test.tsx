@@ -119,4 +119,24 @@ describe("WorkspaceRecoveryMenuItems", () => {
     expect(screen.queryByText("Recreate workspace")).toBeNull();
     expect(screen.queryByText("Move to main checkout")).toBeNull();
   });
+
+  it("merges a host's itemClassName onto every item, overriding the dropdown sizing", () => {
+    renderWithQuery(
+      <WorkspaceRecoveryMenuItems
+        chatId="chat-1"
+        worktree={worktree()}
+        mainWorktree={main}
+        itemClassName="min-h-[44px] gap-3 px-4"
+      />,
+    );
+
+    for (const label of ["Recreate workspace", "Move to main checkout"]) {
+      const item = screen.getByRole("button", { name: label });
+      expect(item).toHaveClass("min-h-[44px]", "gap-3", "px-4");
+      // tailwind-merge drops the dropdown's own padding and gap, rather than
+      // leaving both in the class list for the cascade to pick.
+      expect(item).not.toHaveClass("px-3");
+      expect(item).not.toHaveClass("gap-2");
+    }
+  });
 });

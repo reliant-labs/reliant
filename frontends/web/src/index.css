@@ -20,6 +20,14 @@
  */
 @custom-variant touch (@media (pointer: coarse));
 
+/*
+ * `reduce-transparency:` — Tailwind v4 ships no variant for this media
+ * feature. The mobile chat's floating bars are translucent glass; under the
+ * preference they turn opaque and keep their hairline (mobile-chat-redesign
+ * §4.3, components/Chat/floatingChrome.tsx).
+ */
+@custom-variant reduce-transparency (@media (prefers-reduced-transparency: reduce));
+
 @layer utilities {
   @media (pointer: coarse) {
     .touch-target {

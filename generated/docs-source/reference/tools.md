@@ -788,7 +788,7 @@ LIMITATIONS:
 - Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
-- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:

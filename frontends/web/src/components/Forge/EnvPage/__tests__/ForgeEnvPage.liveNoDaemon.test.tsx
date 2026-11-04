@@ -447,11 +447,11 @@ describe("the Live tab makes zero daemon calls", () => {
  * the checkout's topology, which feeds the separately labelled "not
  * registered" list — and the table must render in full when that throws.
  */
-describe("the Environments table needs no daemon", () => {
+describe("the Environments list needs no daemon", () => {
   it("lists every environment from the control plane, fully rendered", async () => {
     renderWithQuery(<WithRoster><EnvironmentsPage /></WithRoster>);
 
-    await screen.findByTestId("forge-env-table");
+    await screen.findByTestId("forge-env-list");
 
     const prod = screen.getByTestId("env-row-prod");
     expect(within(prod).getByText("v12")).toBeInTheDocument();

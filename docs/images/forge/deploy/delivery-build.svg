@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 630" width="440" height="630" role="img" aria-label="Delivery, part one: forge env deploy builds and packs a release bundle, pushes it to the registry, Reliant records it, and the bundle is signed with your organization key">
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+    <style>
+      .box{fill:#fff;stroke:#333;stroke-width:1.5}
+      .acc{fill:#fff;stroke:#2563eb;stroke-width:2}
+      .t{font:600 16px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#111}
+      .s{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#555}
+      .sa{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#2563eb}
+      .lbl{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#555}
+      .lbla{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#2563eb}
+      .head{font:600 14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#888;letter-spacing:.06em}
+      .ln{stroke:#555;stroke-width:1.5;fill:none}
+      .la{stroke:#2563eb;stroke-width:1.5;fill:none}
+    </style>
+  </defs>
+  <rect width="440" height="630" fill="#fff"/>
+  <text class="head" x="16" y="26">1 · BUILD, RECORD, SIGN</text>
+
+  <rect class="box" x="16" y="44" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="72">forge env deploy</text>
+  <text class="s" x="30" y="94">on a laptop, in CI, or run by an agent</text>
+  <text class="s" x="30" y="114">builds images, renders the env's KCL</text>
+
+  <line class="ln" x1="200" y1="126" x2="200" y2="162" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="150">pack</text>
+
+  <rect class="box" x="16" y="164" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="192">Release bundle (OCI)</text>
+  <text class="s" x="30" y="214">1 config blob + 1 layer of manifests</text>
+  <text class="s" x="30" y="234">same tree in, same digest out</text>
+
+  <line class="ln" x1="200" y1="246" x2="200" y2="282" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="270">push</text>
+
+  <rect class="box" x="16" y="284" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="312">Registry</text>
+  <text class="s" x="30" y="334">images and bundle, by digest</text>
+  <text class="s" x="30" y="354">a tag, once written, never moves</text>
+
+  <line class="ln" x1="200" y1="366" x2="200" y2="402" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="390">record the release</text>
+
+  <rect class="box" x="16" y="404" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="432">Reliant checks the bundle</text>
+  <text class="s" x="30" y="454">digest derived from the bytes, objects</text>
+  <text class="s" x="30" y="474">inside your org's registry path, blob present</text>
+
+  <line class="la" x1="200" y1="486" x2="200" y2="522" marker-end="url(#ab)"/>
+  <text class="lbla" x="212" y="510">checks pass: sign</text>
+
+  <rect class="acc" x="16" y="524" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="552">Signature</text>
+  <text class="s" x="30" y="574">your organization's own key</text>
+  <text class="sa" x="30" y="594">cosign signature, kept beside the bundle</text>
+
+  <!-- signature goes back to the registry -->
+  <path class="la" d="M384 565 H414 V325 H388" marker-end="url(#ab)"/>
+  <text class="lbla" transform="translate(430 445) rotate(-90)" text-anchor="middle">signature</text>
+</svg>

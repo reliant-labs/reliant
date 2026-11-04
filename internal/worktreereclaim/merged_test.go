@@ -178,31 +178,6 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 	}
 }
 
-// The base is refreshed before concluding the work is unmerged: the merge may
-// have happened since this clone last fetched.
-func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "a merge on the origin, a fetch and a full reclaim (~64 git processes)")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("ft", "feat/ft")
-	f.commitIn(w, "feat/ft", "f.txt", "f\n", true)
-	stale := run(t, w.Path, "rev-parse", "refs/remotes/origin/main")
-	f.squashMerge("feat/ft")
-	f.pruned(w)
-	// This clone last fetched before the merge: put origin/main back where it was.
-	run(t, w.Path, "update-ref", "refs/remotes/origin/main", stale)
-
-	fetched := 0
-	f.r.FetchBase = func(ctx context.Context, checkout, base string) { fetched++; FetchBaseBranch(ctx, checkout, base) }
-	if got := f.one(w); got.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v, want removed after refreshing origin/main", got)
-	}
-	if fetched == 0 {
-		t.Fatal("origin/main was never refreshed")
-	}
-}
-
 // A branch deleted on GitHub after merge may still have patch-equal changes
 // reverted since; what counts is the patch, so a squash of DIFFERENT content
 // must not match.

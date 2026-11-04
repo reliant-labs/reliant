@@ -3024,7 +3024,7 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=c641d20f0aa825ad197f143efff9530052db7f7338f3077779946ea7cceb0c72
+// forge:hash=31b0d91c3412392106acd61f65fda04739ca3b7a3b9de49b21f4f4de392a1452
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3045,6 +3045,8 @@ type MockExecuteToolsStore struct {
 	GetToolCallResultFunc                 func(context.Context, string) (*db.ToolCallResult, error)
 	UpsertToolCallResultFunc              func(context.Context, string, *db.ToolCallResult) error
 	SetChatDaemonBlockedFunc              func(context.Context, string, bool) error
+	CreateAttachmentFunc                  func(context.Context, *db.Attachment) error
+	GetAttachmentFunc                     func(context.Context, string) (*db.Attachment, error)
 	EmitToolCallUpdateFunc                func(context.Context, string, db.ToolCallUpdate) error
 	EmitUserRefetchFunc                   func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	MarkQueuedAgentMessagesPreemptingFunc func(context.Context, string, time.Time) (int64, error)
@@ -3154,6 +3156,24 @@ func (m *MockExecuteToolsStore) SetChatDaemonBlocked(ctx context.Context, chatID
 		return m.SetChatDaemonBlockedFunc(ctx, chatID, blocked)
 	}
 	return contractkit.MockNotSet("MockExecuteToolsStore", "SetChatDaemonBlocked")
+}
+
+// CreateAttachment records the call and delegates to CreateAttachmentFunc when set.
+func (m *MockExecuteToolsStore) CreateAttachment(ctx context.Context, attachment *db.Attachment) error {
+	m.Recorder.Record("CreateAttachment", ctx, attachment)
+	if m.CreateAttachmentFunc != nil {
+		return m.CreateAttachmentFunc(ctx, attachment)
+	}
+	return contractkit.MockNotSet("MockExecuteToolsStore", "CreateAttachment")
+}
+
+// GetAttachment records the call and delegates to GetAttachmentFunc when set.
+func (m *MockExecuteToolsStore) GetAttachment(ctx context.Context, id string) (*db.Attachment, error) {
+	m.Recorder.Record("GetAttachment", ctx, id)
+	if m.GetAttachmentFunc != nil {
+		return m.GetAttachmentFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetAttachment")
 }
 
 // EmitToolCallUpdate records the call and delegates to EmitToolCallUpdateFunc when set.

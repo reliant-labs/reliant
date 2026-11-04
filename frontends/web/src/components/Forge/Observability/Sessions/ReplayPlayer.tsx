@@ -34,6 +34,14 @@
  * feed buffers the rest ahead of the playhead, and a seek past the buffer
  * waits for the feed to reach it. A live session keeps growing: new events are
  * appended to the running Replayer as the feed polls them in.
+ *
+ * ── SEEKING ────────────────────────────────────────────────────────────────
+ *
+ * No seek lands before the full snapshot (snapshotOffset): rrweb rebuilds the
+ * page on a seek only when the snapshot is strictly before the target, so a
+ * seek to 0:00 — the scrubber's start, or Play after the end — would keep the
+ * last frame played and replay the recording onto it. replayRealRrweb.test.tsx
+ * pins that against the real Replayer.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -80,6 +88,26 @@ export function playableEvents(events: readonly RrwebEvent[]): RrwebEvent[] | nu
   const from = events.slice(start);
   const snapshot = from.findIndex((e) => e.type === RRWEB_FULL_SNAPSHOT);
   return from.length - snapshot >= 2 ? from : null;
+}
+
+/**
+ * The earliest offset a seek can land on: just past the first full snapshot,
+ * from the start of `events` (what the Replayer was given).
+ *
+ * rrweb's clock starts at the first event, which is the meta event a few ms
+ * before the snapshot (11–24 ms in stored recordings). A seek replays
+ * synchronously only the events strictly BEFORE the target; one at or after it
+ * goes on rrweb's timer, which the pause that ends a seek clears. So a seek to
+ * the start, or to the snapshot itself, never rebuilds the page: the frame
+ * left on screen is the last one played, not the recording's first, and
+ * playing on applies the recording to that stale page. One millisecond past
+ * the snapshot, the rebuild is part of every seek.
+ */
+export function snapshotOffset(events: readonly RrwebEvent[]): number {
+  const snapshot = events.find((e) => e.type === RRWEB_FULL_SNAPSHOT);
+  if (!snapshot || !events.length) return 0;
+  const last = events[events.length - 1].timestamp;
+  return Math.min(snapshot.timestamp + 1, last) - events[0].timestamp;
 }
 
 /** The real Replayer and its stylesheet (mouse cursor, wrapper), as their own chunk. */
@@ -129,6 +157,8 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const replayerRef = useRef<ReplayerLike | null>(null);
+  /** snapshotOffset of the events the Replayer was built from. */
+  const floorRef = useRef(0);
   const feedRef = useRef<ReplayFeed | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const playingRef = useRef(false);
@@ -177,7 +207,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
       setPendingSeek(atMs);
       return;
     }
-    const at = clamp(atMs - m.startTime, 0, m.totalTime);
+    const at = clamp(atMs - m.startTime, floorRef.current, m.totalTime);
     pendingSeekRef.current = null;
     setPendingSeek(null);
     if (playingRef.current) replayer.play(at);
@@ -216,7 +246,9 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
         (Replayer) => {
           if (disposed || !mountRef.current) return;
           // From the recording's start: what precedes its first snapshot has no page to be drawn on.
-          const replayer = new Replayer(playableEvents(buffer) ?? playable, {
+          const events = playableEvents(buffer) ?? playable;
+          floorRef.current = snapshotOffset(events);
+          const replayer = new Replayer(events, {
             root: mountRef.current,
             speed: speedRef.current,
             skipInactive: skipRef.current,
@@ -237,10 +269,14 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             const size = payload as { width?: number; height?: number } | undefined;
             if (size?.width && size?.height) setViewport({ width: size.width, height: size.height });
           });
-          replayer.on("finish", () => setPlaying(false));
+          replayer.on("finish", () => {
+            setPlaying(false);
+            // The last tick can be up to TICK_MS short of the end.
+            setOffset(replayer.getMetaData().totalTime);
+          });
           const m = refreshMeta(replayer);
           const target = pendingSeekRef.current;
-          const at = target !== null && target <= m.endTime ? clamp(target - m.startTime, 0, m.totalTime) : 0;
+          const at = target !== null && target <= m.endTime ? clamp(target - m.startTime, floorRef.current, m.totalTime) : floorRef.current;
           if (target !== null && target <= m.endTime) {
             pendingSeekRef.current = null;
             setPendingSeek(null);
@@ -366,7 +402,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
     }
     const m = replayer.getMetaData();
     const current = replayer.getCurrentTime();
-    replayer.play(current >= m.totalTime - TICK_MS ? 0 : current);
+    replayer.play(current >= m.totalTime - TICK_MS ? floorRef.current : Math.max(current, floorRef.current));
     setPlaying(true);
   };
 

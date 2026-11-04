@@ -13,8 +13,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <!-- viewport-fit=cover: without it every env(safe-area-inset-*) the
          mobile surface pads with resolves to 0, and a notched phone in
-         landscape or a home-screen web app draws under the notch. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+         landscape or a home-screen web app draws under the notch.
+         interactive-widget=resizes-content: Chromium 108+ and Firefox 132+
+         then shrink the LAYOUT viewport (and so 100dvh) for the on-screen
+         keyboard, so the composer stays above it with no script. WebKit
+         ignores it; MobileLayout's visualViewport pinning covers iOS and is a
+         no-op where the layout viewport already matches. Keyboard detection
+         for this case lives in src/lib/responsiveGeometry.ts. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- The default UI face (Geist, Latin subset) is preloaded by the build:
          its file name is content-hashed (vite-plugin-preload-fonts.ts). -->
     <title>Reliant</title>

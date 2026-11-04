@@ -84,13 +84,17 @@ vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
   usePresetsForWorkflow: () => PRESETS,
   fetchDefaultPresets: vi.fn().mockResolvedValue({}),
+  useDefaultPresets: () => ({ defaults: {}, loading: false }),
 }));
 vi.mock("../settings", () => ({
-  ChatSettingsPopover: (props: { onPresetChange: (p: unknown) => void; selectedPreset: string | null }) => (
-    <button data-testid="pick-preset" onClick={() => props.onPresetChange(PRESET)}>
-      {props.selectedPreset ?? "None"}
-    </button>
-  ),
+  // Anchored, the real popover always renders its trigger and shows its
+  // content only when open.
+  ChatSettingsPopover: (props: { isOpen: boolean; onPresetChange: (p: unknown) => void; selectedPreset: string | null }) =>
+    props.isOpen ? (
+      <button data-testid="pick-preset" onClick={() => props.onPresetChange(PRESET)}>
+        {props.selectedPreset ?? "None"}
+      </button>
+    ) : null,
 }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 

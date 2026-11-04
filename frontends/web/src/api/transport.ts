@@ -64,6 +64,7 @@ import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
+import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
 import { noteVersionSkew } from "./versionSkew";
 import { pageActivity } from "../lib/pageActivity";
@@ -257,10 +258,23 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   "controlplane.v1.DeployService/ListEnvironments": 30_000,
 };
 
+/**
+ * What a console ClickHouse read (readSlots.ts) waits for. The server lets
+ * one run up to the gateway's 15s (the prod route has no timeout policy, so
+ * Envoy's default ends it at 15.0s), and the 10s default threw away reads
+ * that were about to answer: on 2026-11-03 the Overview's ListWorkloads was
+ * cut at 10.0s while admin-server finished in 9.4-11.0s, so Services, Jobs
+ * and "Needs attention" never loaded. Just under the gateway, so a read that
+ * cannot answer in time ends here, as a timeout the page explains and does not
+ * retry, rather than as a dropped connection that is retried once.
+ */
+export const OBS_READ_TIMEOUT_MS = 14_000;
+
 /** The client-side budget for one RPC. Exported for the transport tests. */
 export function timeoutForProcedure(serviceTypeName: string, methodName: string): number {
   return (
     PROCEDURE_TIMEOUTS[`${serviceTypeName}/${methodName}`] ??
+    (isReadSlotProcedure(serviceTypeName, methodName) ? OBS_READ_TIMEOUT_MS : undefined) ??
     LONG_TIMEOUT_METHODS[methodName] ??
     DEFAULT_GRPC_TIMEOUT_MS
   );

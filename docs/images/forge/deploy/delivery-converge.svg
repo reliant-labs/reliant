@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 740" width="440" height="740" role="img" aria-label="Delivery, part two: an optional promotion gate admits the request, the promotion is appended to the ledger, Reliant points Flux at the recorded bundle by digest, Flux checks the signature and applies it to the destination cluster; the release health verdict feeds the gate">
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+    <style>
+      .box{fill:#fff;stroke:#333;stroke-width:1.5}
+      .acc{fill:#fff;stroke:#2563eb;stroke-width:2}
+      .opt{fill:#fff;stroke:#2563eb;stroke-width:2;stroke-dasharray:6 4}
+      .t{font:600 16px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#111}
+      .s{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#555}
+      .sa{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#2563eb}
+      .lbl{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#555}
+      .lbla{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#2563eb}
+      .foot{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#777}
+      .head{font:600 14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#888;letter-spacing:.06em}
+      .ln{stroke:#555;stroke-width:1.5;fill:none}
+      .la{stroke:#2563eb;stroke-width:1.5;fill:none}
+    </style>
+  </defs>
+  <rect width="440" height="740" fill="#fff"/>
+  <text class="head" x="16" y="26">2 · GATE, RECORD, SIGN-CHECK, APPLY</text>
+  <line class="ln" x1="200" y1="40" x2="200" y2="74" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="61">promote request</text>
+  <rect class="opt" x="16" y="76" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="104">Promotion gate (opt-in)</text>
+  <text class="s" x="30" y="126">if prod lists staging in health_gate.after,</text>
+  <text class="s" x="30" y="146">the release must have passed there first</text>
+  <line class="ln" x1="200" y1="158" x2="200" y2="194" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="180">admitted</text>
+  <rect class="box" x="16" y="196" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="224">Ledger</text>
+  <text class="s" x="30" y="246">append-only: a promotion is one new row</text>
+  <text class="s" x="30" y="266">naming an env and a bundle digest</text>
+  <line class="ln" x1="200" y1="278" x2="200" y2="314" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="300">recorded bundle, by digest</text>
+  <rect class="box" x="16" y="316" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="344">Source pinned by digest</text>
+  <text class="s" x="30" y="366">Reliant points the env's Flux source</text>
+  <text class="s" x="30" y="386">at the recorded digest</text>
+  <line class="ln" x1="200" y1="398" x2="200" y2="434" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="420">pulled by digest</text>
+  <rect class="acc" x="16" y="436" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="464">Flux verifies, then applies</text>
+  <text class="sa" x="30" y="486">checks the signature, then applies trees</text>
+  <text class="sa" x="30" y="506">in order: pre, rollout, post</text>
+  <line class="ln" x1="200" y1="518" x2="200" y2="554" marker-end="url(#ag)"/>
+  <text class="lbl" x="212" y="540">applies</text>
+  <rect class="box" x="16" y="556" width="368" height="82" rx="4"/>
+  <text class="t" x="30" y="584">Destination cluster</text>
+  <text class="s" x="30" y="606">Reliant hosting, or a cluster you</text>
+  <text class="s" x="30" y="626">connected with forge cluster connect</text>
+  <path class="la" d="M384 597 H414 V117 H388" stroke-dasharray="5 4" marker-end="url(#ab)"/>
+  <text class="lbla" transform="translate(430 357) rotate(-90)" text-anchor="middle">release health verdict, read before the next promotion</text>
+
+  <text class="foot" x="16" y="672">Your own cluster, with applier = "flux": forge</text>
+  <text class="foot" x="16" y="692">installs Flux there and forge env deploy points</text>
+  <text class="foot" x="16" y="712">it at the bundle instead.</text>
+</svg>

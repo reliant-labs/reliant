@@ -433,14 +433,7 @@ func (s *Service) GetWorkflowExecutions(
 		s.attachThreadsWithoutWorkflowRow(threads, allRootProtos)
 	}
 
-	// The most recent root is first (for backwards compat)
-	var latestRootProto *reliantv1.WorkflowExecution
-	if len(allRootProtos) > 0 {
-		latestRootProto = allRootProtos[0]
-	}
-
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
-		RootWorkflow:     latestRootProto,
 		AllRootWorkflows: allRootProtos,
 	}), nil
 }

@@ -74,7 +74,7 @@ forge generate && forge lint && go build ./... && task test
 ```
 
 - `forge generate` re-derives everything from your protos and applied migrations. It never touches your handlers, migrations or other owned files, and it does almost nothing when nothing changed, so run it whenever in doubt.
-- `forge lint` checks Go, proto and frontend code, migration safety, architecture conventions and edits to generated files. It fixes formatting in place first. `forge lint --quiet` prints only failures, with the verdict on the last line.
+- `forge lint` checks Go, proto and frontend code, migration safety, architecture conventions and edits to generated files. It fixes formatting in place first. `forge lint --quiet` prints only failures, with the verdict on the last line. [Linting](/forge/linting/overview) explains the lanes, and [the rules index](/forge/linting/rules-index) lists every rule and how to fix it.
 - `task test` runs the Go tests with the race detector, against a real Postgres, plus every frontend's tests. While iterating, `task test:short -- ./internal/handlers/billing/...` runs one package's fast tests, cached.
 - `task ci` runs the whole pull-request gate locally: generated-code check, lint, build, vulnerability scan, environment rendering, unit and integration tests.
 
@@ -99,4 +99,4 @@ Settings are declared once, in `proto/<project>/config/v1/config.proto` (package
 
 ## Related topics
 
-[Environments & deploys](/forge/environments-and-deploys) for shipping the change, and [Troubleshooting](/forge/troubleshooting) when generate or lint stops you. Agents can load the `api`, `db`, `proto`, `testing` and `services` skills for the full conventions.
+[Environments & deploys](/forge/environments-and-deploys) for shipping the change, [Linting](/forge/linting/overview) for what the gate checks, the [Concepts](/forge/concepts/two-sources-of-truth) pages for how generation, injection and configuration fit together, and [Troubleshooting](/forge/troubleshooting) when generate or lint stops you. Agents can load the `api`, `db`, `proto`, `testing` and `services` skills for the full conventions.

@@ -60,7 +60,7 @@ interface WorkflowExecutionTree {
  * every mounted observer's `select`.
  */
 function toTree(response: GetWorkflowExecutionsResponse): WorkflowExecutionTree {
-  return { latest: response.rootWorkflow ?? null, all: response.allRootWorkflows };
+  return { latest: response.allRootWorkflows[0] ?? null, all: response.allRootWorkflows };
 }
 
 /**

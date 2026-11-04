@@ -6,9 +6,28 @@ function install() {
   const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
   vi.stubGlobal("visualViewport", viewport);
   vi.stubGlobal("innerHeight", 844);
+  vi.stubGlobal("innerWidth", 390);
   return viewport;
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.body.innerHTML = "";
+});
+
+/** Chromium under resizes-content: layout and visual viewport shrink together. */
+function resizeLayout(vv: { height: number }, height: number) {
+  vi.stubGlobal("innerHeight", height);
+  vv.height = height;
+  (vv as unknown as EventTarget).dispatchEvent(new Event("resize"));
+  window.dispatchEvent(new Event("resize"));
+}
+
+function focusComposer(): HTMLTextAreaElement {
+  const textarea = document.createElement("textarea");
+  document.body.appendChild(textarea);
+  textarea.focus();
+  return textarea;
+}
 
 describe("useVisualViewport lifecycle", () => {
   it("follows open, pan and dismissal without losing the layout fallback", () => {
@@ -45,6 +64,45 @@ describe("useVisualViewport lifecycle", () => {
     expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function));
     expect(removeWindow).toHaveBeenCalledWith("resize", expect.any(Function));
     removeWindow.mockRestore();
+  });
+
+  it("detects a keyboard that resized the layout viewport (resizes-content)", () => {
+    const vv = install();
+    const { result } = renderHook(() => useVisualViewport());
+    focusComposer();
+    act(() => resizeLayout(vv, 508));
+    expect(result.current).toEqual({ height: 508, offsetTop: 0, keyboardOpen: true });
+    act(() => resizeLayout(vv, 844));
+    expect(result.current?.keyboardOpen).toBe(false);
+  });
+
+  it("does not read a layout shrink without a focused field as a keyboard", () => {
+    const vv = install();
+    const { result } = renderHook(() => useVisualViewport());
+    act(() => resizeLayout(vv, 508));
+    expect(result.current?.keyboardOpen).toBe(false);
+  });
+
+  it("re-reads when focus arrives after the resize", async () => {
+    vi.useFakeTimers();
+    try {
+      const vv = install();
+      const { result } = renderHook(() => useVisualViewport());
+      act(() => resizeLayout(vv, 508));
+      expect(result.current?.keyboardOpen).toBe(false);
+      act(() => { focusComposer(); vi.runAllTimers(); });
+      expect(result.current?.keyboardOpen).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("measures a rotated layout against its own orientation's baseline", () => {
+    const vv = install();
+    const { result } = renderHook(() => useVisualViewport());
+    focusComposer();
+    act(() => { vi.stubGlobal("innerWidth", 844); resizeLayout(vv, 390); });
+    expect(result.current?.keyboardOpen).toBe(false);
   });
 
   it("falls back without the visual viewport API", () => {

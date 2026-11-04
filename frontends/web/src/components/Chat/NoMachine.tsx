@@ -16,6 +16,7 @@ import { useChatStore } from "@/store/chatStore";
 import { NO_MACHINE_COMPOSER_HINT, NO_MACHINE_EXPLAINER, NO_MACHINE_PILL } from "@/lib/chatMachine";
 import Tooltip from "../forge-ui/tooltip";
 import { ConnectMachineDialog } from "./ConnectMachineDialog";
+import { StatusBandColumn, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 /** Header pill: "No machine · web & integrations". Opens Connect a machine. */
 export function NoMachinePill({ chatId }: { chatId: string }) {
@@ -42,27 +43,26 @@ export function NoMachinePill({ chatId }: { chatId: string }) {
 /** The composer's one-line hint, with the way out. */
 export function NoMachineComposerHint({ chatId }: { chatId: string }) {
   const [open, setOpen] = useState(false);
+  useStatusSlotSummary({ label: NO_MACHINE_PILL, tone: "neutral" });
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1200px]">
-        <p
-          role="note"
-          data-testid="no-machine-composer-hint"
-          className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 pb-1.5 text-xs text-muted-foreground"
+    <StatusBandColumn>
+      <p
+        role="note"
+        data-testid="no-machine-composer-hint"
+        className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
+      >
+        <CloudOff className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+        <span>{NO_MACHINE_COMPOSER_HINT}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="font-medium text-primary-ink hover:underline pointer-coarse:min-h-11"
         >
-          <CloudOff className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-          <span>{NO_MACHINE_COMPOSER_HINT}</span>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="font-medium text-primary-ink hover:underline"
-          >
-            Connect a machine
-          </button>
-        </p>
-      </div>
+          Connect a machine
+        </button>
+      </p>
       <ConnectMachineDialog chatId={chatId} open={open} onClose={() => setOpen(false)} />
-    </div>
+    </StatusBandColumn>
   );
 }
 

@@ -51,9 +51,21 @@ interface ChatContainerProps {
   isFocused?: boolean;
   /** The host shows the chat's title itself (run detail). */
   hideChatTitle?: boolean;
+  /** The host renders the chat header itself (the mobile top bar). */
+  hideHeader?: boolean;
+  /** Controlled thread selection; see ChatPresenter. */
+  selectedThreadId?: string | null;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
-export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatContainerProps) {
+export function ChatContainer({
+  tabId,
+  isFocused = true,
+  hideChatTitle,
+  hideHeader,
+  selectedThreadId,
+  onSelectThread,
+}: ChatContainerProps) {
   // In the new navigation system, tabId IS the chatId (no separate tabs)
   // We keep the tabId prop name for compatibility but treat it as chatId
   const chatId = tabId;
@@ -317,6 +329,9 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
       hideChatTitle={hideChatTitle}
+      hideHeader={hideHeader}
+      selectedThreadId={selectedThreadId}
+      onSelectThread={onSelectThread}
     />
   );
 }

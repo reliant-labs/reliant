@@ -9,6 +9,8 @@ import {
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { resumeErrorMessage, resumeErrorNeedsUpgrade } from "@/lib/daemon-resume";
 import { machineDisplayName } from "@/lib/machineName";
+import { cn } from "@/lib/utils";
+import { STATUS_SHEET_CARD_BODY, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 const RESUME_POLL_MS = 3_000;
 const RESUME_GRACE_MS = 120_000;
@@ -39,7 +41,11 @@ function writeDismissed(sig: string): void {
   }
 }
 
-export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
+export function ResumeDaemonPill({ placement: placementProp = "absolute" }: ResumeDaemonPillProps) {
+  // Collapsed into the composer's status slot, the pill renders in the slot's
+  // sheet: floating over the column there would put it over the sheet's title.
+  const inSheet = useStatusSlotCollapsed();
+  const placement = inSheet ? "inline" : placementProp;
   const goToBilling = useGoToBilling("chat");
   // Daemons whose Resume RPC succeeded. The registry's lifecycle mirror lags
   // the real state (control-plane's reconciler writes it), so the list keeps
@@ -106,8 +112,17 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
     if (suspended.length === 0) setError(null);
   }, [suspended.length]);
 
-  if (active.length > 0 || suspended.length === 0) return null;
-  if (dismissedSig && dismissedSig === sig) return null;
+  const visible = active.length === 0 && suspended.length > 0 && !(dismissedSig && dismissedSig === sig);
+  useStatusSlotSummary(
+    visible
+      ? {
+          label: suspended.length > 1 ? `${suspended.length} machines suspended` : `${machineDisplayName(suspended[0])} is suspended`,
+          tone: "warning",
+        }
+      : null,
+  );
+
+  if (!visible) return null;
 
   const handleResume = (id: string) => {
     if (resume.isPending) return;
@@ -130,11 +145,11 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
       className={
         placement === "absolute"
           ? "pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2"
-          : "pointer-events-none relative z-20 flex w-full justify-center"
+          : cn("pointer-events-none relative z-20 flex w-full justify-center", inSheet && STATUS_SHEET_CARD_BODY)
       }
     >
       <div className="pointer-events-auto flex flex-col items-center gap-1">
-        <div className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-1 text-sm shadow-md backdrop-blur">
+        <div className="inline-flex items-center gap-0.5 rounded-full border border-warning/30 bg-warning/10 px-1.5 py-1 text-sm shadow-md backdrop-blur">
           {suspended.length > 1 ? (
             <PillDropdown
               suspended={suspended}
@@ -152,7 +167,7 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
             type="button"
             onClick={dismiss}
             aria-label="Dismiss"
-            className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="inline-flex items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -190,7 +205,7 @@ function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
       type="button"
       onClick={() => void onResume(daemon.daemonId)}
       disabled={busy}
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-warning-ink transition-colors hover:bg-warning/10 pointer-coarse:min-h-11 disabled:opacity-60"
     >
       <Play className="h-3.5 w-3.5" />
       <span>{busy ? "Resuming…" : `Resume ${machineDisplayName(daemon)}`}</span>
@@ -223,7 +238,7 @@ function PillDropdown({ suspended, onResume, busyId }: PillDropdownProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-amber-500 transition-colors hover:bg-amber-500/10"
+        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-warning-ink transition-colors hover:bg-warning/10 pointer-coarse:min-h-11"
       >
         <Play className="h-3.5 w-3.5" />
         <span>{suspended.length} suspended</span>
@@ -247,7 +262,7 @@ function PillDropdown({ suspended, onResume, busyId }: PillDropdownProps) {
                 className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-accent disabled:opacity-60"
               >
                 <span className="truncate">{machineDisplayName(d)}</span>
-                <span className="inline-flex items-center gap-1 text-amber-500">
+                <span className="inline-flex items-center gap-1 text-warning-ink">
                   <Play className="h-3.5 w-3.5" />
                   {busy ? "Resuming…" : "Resume"}
                 </span>

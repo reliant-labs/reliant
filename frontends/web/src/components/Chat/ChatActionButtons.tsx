@@ -1,74 +1,104 @@
-import { useChatButtons } from "./useChatButtons";
+import { ArrowUp } from "lucide-react";
+import { cn } from "../../lib/utils";
+import Tooltip from "../forge-ui/tooltip";
+import { COMPOSER_ROUND_BUTTON } from "./composerControl";
 
-interface ChatActionButtonsProps {
-  // Send/Stop
+interface ComposerActionSlotProps {
   onSend: () => void;
   onStop?: () => void;
+  /** Queue the text into the running agent's mailbox. Absent: running means stop only. */
   onQueue?: () => void;
-  canSend: boolean;
   isStreaming: boolean;
+  /** Text, attachments or file references: something a send would carry. */
+  hasContent: boolean;
+  /** Typed text. Only text can be queued, so it alone arms the queue state. */
+  hasText: boolean;
+  /** Blocks send and queue (uploads pending, a send in flight). Stop is never blocked. */
   disabled: boolean;
-
-  // File actions
-  onAttach: () => void;
-  uploading: boolean;
-
-  // Responsiveness
-  compact?: boolean;
+  /** Label of the key that sends, for the tooltip ("Enter", "⌘↵"). */
+  sendKeyHint: string;
 }
 
-interface ButtonLayoutProps extends ChatActionButtonsProps {
-  layout?: string[]; // Array of button names to control order/grouping
-}
+/**
+ * The composer's one action slot (design doc §5.3), four states:
+ *
+ *   idle, empty            → Send, disabled
+ *   idle, with content     → Send (filled)
+ *   running, empty         → Stop
+ *   running, with text     → ghost Stop, then Queue (filled)
+ *
+ * Running-with-text is the only state with two controls, and only while it
+ * applies: queueing is a Reliant feature with its own visible state rather
+ * than a hidden keyboard behavior.
+ */
+export function ComposerActionSlot({
+  onSend,
+  onStop,
+  onQueue,
+  isStreaming,
+  hasContent,
+  hasText,
+  disabled,
+  sendKeyHint,
+}: ComposerActionSlotProps) {
+  const stop = (ghost: boolean) => (
+    <Tooltip content="Stop the agent (Esc)" side="top" delay={300} triggerClassName="inline-flex">
+      <button
+        type="button"
+        onClick={() => onStop?.()}
+        aria-label="Stop the agent"
+        data-testid="stop-button"
+        className={cn(
+          COMPOSER_ROUND_BUTTON,
+          ghost
+            ? "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            : "bg-foreground text-background hover:bg-foreground/85",
+        )}
+      >
+        <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden />
+      </button>
+    </Tooltip>
+  );
 
-export function ChatActionButtons(props: ChatActionButtonsProps) {
-  const defaultLayout = [
-    "attach", "sendStop"
-  ];
+  if (isStreaming) {
+    if (!hasText || !onQueue) return stop(false);
+    return (
+      <div className="flex items-center gap-1">
+        {stop(true)}
+        <Tooltip content={`Queue for the agent's next turn (${sendKeyHint})`} side="top" delay={300} triggerClassName="inline-flex">
+          <button
+            type="button"
+            onClick={onQueue}
+            disabled={disabled}
+            aria-label="Queue message for the agent's next turn"
+            data-testid="queue-send-button"
+            className={cn(COMPOSER_ROUND_BUTTON, "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50")}
+          >
+            <ArrowUp className="h-4 w-4" aria-hidden />
+          </button>
+        </Tooltip>
+      </div>
+    );
+  }
 
-  return <ButtonLayout {...props} layout={defaultLayout} />;
-}
-
-// Flexible layout component that you can use with custom arrangements
-export function ButtonLayout({
-  layout = ["tasks", "plans", "attach", "sendStop"],
-  ...props
-}: ButtonLayoutProps) {
-  const { buttons } = useChatButtons(props);
-
-  // Always keep send/stop button on the right. `queueSend` is rendered just
-  // before it, so the Stop affordance never shifts position.
-  const sendButtonNames = ["sendStop", "send", "stop", "queueSend"];
-  const sendButton = layout.find(name => sendButtonNames.includes(name) && name !== "queueSend");
-
-  const alwaysVisibleNames = ["attach"];
-  const alwaysVisibleButtons = layout.filter(name => alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
-  const inlineActionButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
-
-  const buttonPriority = {
-    divider: 1,
-  };
-
-  const sortedInlineActionButtons = [...inlineActionButtons].sort((a, b) => {
-    const aPriority = buttonPriority[a as keyof typeof buttonPriority] || 0;
-    const bPriority = buttonPriority[b as keyof typeof buttonPriority] || 0;
-    if (aPriority !== bPriority) {
-      return bPriority - aPriority;
-    }
-    return inlineActionButtons.indexOf(a) - inlineActionButtons.indexOf(b);
-  });
-
-  const alwaysVisibleElements = alwaysVisibleButtons.map((buttonName) => buttons[buttonName]).filter(Boolean);
-  const inlineActionElements = sortedInlineActionButtons.map((buttonName) => buttons[buttonName]).filter(Boolean) as React.ReactElement[];
-  const queueButtonElement = buttons["queueSend"] ?? null;
-  const sendButtonElement = sendButton ? buttons[sendButton] : null;
-
+  const canSend = hasContent && !disabled;
   return (
-    <div className="flex items-center gap-1.5 flex-shrink-0">
-      {alwaysVisibleElements}
-      {inlineActionElements}
-      {queueButtonElement}
-      {sendButtonElement}
-    </div>
+    <Tooltip content={`Send message (${sendKeyHint})`} side="top" delay={300} triggerClassName="inline-flex">
+      <button
+        type="button"
+        onClick={onSend}
+        disabled={!canSend}
+        aria-label="Send message"
+        data-testid="send-button"
+        className={cn(
+          COMPOSER_ROUND_BUTTON,
+          canSend
+            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+            : "cursor-not-allowed bg-foreground/10 text-muted-foreground",
+        )}
+      >
+        <ArrowUp className="h-4 w-4" aria-hidden />
+      </button>
+    </Tooltip>
   );
 }

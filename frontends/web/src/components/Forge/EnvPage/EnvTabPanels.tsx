@@ -30,7 +30,7 @@ import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
-import { formatTimestamp } from "../Overview/EnvironmentTable";
+import { formatTimestamp } from "../Overview/EnvironmentList";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { CheckoutMissing } from "./CheckoutMissing";

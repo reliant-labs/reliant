@@ -16,7 +16,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/forgecred"
 )
 
@@ -35,6 +34,12 @@ const (
 	githubAsApp  = "app"
 	githubAsUser = "user"
 )
+
+// githubTokenTimeout bounds one `reliant github token|gh` fetch. It is wider
+// than git's credential timeout: no git process is blocked on it, and a busy
+// agent machine (load in the hundreds) spent most of 30s on TLS alone, so the
+// fetch failed and the agent fell back to the machine's own gh login.
+const githubTokenTimeout = 60 * time.Second
 
 // githubBotToken is what the server answers for --as app.
 type githubBotToken struct {
@@ -60,25 +65,18 @@ func fetchGitHubToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin
 		tok, err := fetchGitToken(ctx, cmd, pin, "github")
 		return githubBotToken{Token: tok}, err
 	}
-	preferred := ""
-	if conn, err := resolveServer(cmd); err == nil {
-		preferred = conn.ServerURL
-	}
-	path, err := cliauth.CredentialsPath()
+	sessions, err := discoverDaemonSessions(cmd, pin)
 	if err != nil {
-		path = ""
-	}
-	sessions, err := forgecred.Discover(pin, preferred, path, time.Now())
-	if err != nil {
-		return githubBotToken{}, fmt.Errorf("reading Reliant sessions: %w", err)
+		return githubBotToken{}, err
 	}
 	if len(sessions) == 0 {
 		return githubBotToken{}, errors.New("no Reliant daemon session on this machine: run this in a Reliant agent's shell or on a signed-in daemon's machine")
 	}
 	var last error
 	for _, s := range sessions {
+		// No per-request timeout: ctx's githubTokenTimeout is the whole
+		// budget, so a slow handshake on a loaded machine may use all of it.
 		httpClient := (&connection{ServerURL: s.Server}).httpClientWithBearer(s.Token)
-		httpClient.Timeout = 20 * time.Second
 		resp, err := reliantv1connect.NewTokenServiceClient(httpClient, strings.TrimRight(s.Server, "/")).
 			GetGitHubBotToken(ctx, connect.NewRequest(&reliantv1.GetGitHubBotTokenRequest{
 				Owner: req.Owner, Repo: req.Repo, Permissions: req.Permissions,
@@ -99,6 +97,9 @@ func fetchGitHubToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin
 			// the repository: the message says which, and it is not the
 			// session's fault only in the first case.
 			last = errors.New(connectMessage(err))
+		case connect.CodeDeadlineExceeded:
+			// Out of time: the next session would start with none left.
+			return githubBotToken{}, errors.New(deadlineMessage(githubTokenTimeout))
 		default:
 			// A refusal (not installed, not connected, bad name) is the same
 			// from every session: report it rather than try the next one.
@@ -202,7 +203,7 @@ func newGitHubTokenCmd(fetch githubTokenFetcher) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), gitCredentialTimeout)
+			ctx, cancel := context.WithTimeout(cmd.Context(), githubTokenTimeout)
 			defer cancel()
 			tok, err := fetch(ctx, cmd, f.pin, req)
 			if err != nil {
@@ -288,7 +289,7 @@ request stay yours: run git and gh as usual for those.`,
 			if err != nil {
 				return err
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), gitCredentialTimeout)
+			ctx, cancel := context.WithTimeout(cmd.Context(), githubTokenTimeout)
 			defer cancel()
 			tok, err := fetch(ctx, cmd, f.pin, req)
 			if err != nil {

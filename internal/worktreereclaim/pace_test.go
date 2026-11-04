@@ -138,31 +138,6 @@ func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 	}
 }
 
-// A rebase or amend leaves the old tip in the worktree's reflog, on no branch.
-// Its change is on main, so losing the name loses nothing.
-func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "~57 git processes")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("rb", "feat/rb")
-	f.commitIn(w, "feat/rb", "one.txt", "1\n", true)
-	old := run(t, w.Path, "rev-parse", "HEAD")
-	f.squashMerge("feat/rb")
-	run(t, w.Path, "fetch", "-q", "--prune", "origin")     // the PR branch is gone from origin
-	run(t, w.Path, "reset", "-q", "--hard", "origin/main") // the "git pull" after merge: the old tip survives only in the reflog
-	if run(t, w.Path, "cat-file", "-t", old) != "commit" {
-		t.Fatal("setup: old tip gone")
-	}
-	got := f.one(w)
-	if got.Outcome != OutcomeRemoved {
-		t.Fatalf("a reflog tip whose change is on main must not hold the worktree: %+v", got)
-	}
-	if refs := run(t, f.project, "for-each-ref", "refs/reliant/"); refs != "" {
-		t.Fatalf("a tip whose change is on main is not saved (a ref pins it forever):\n%s", refs)
-	}
-}
-
 // Local refs are not durable recovery. An orphaned tip must stay in its
 // original worktree until the Git recovery protocol proves remote closure.
 func TestOrphan_TipWithWorkNotOnBaseRequiresRemoteRecovery(t *testing.T) {

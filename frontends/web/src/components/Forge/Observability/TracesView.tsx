@@ -50,6 +50,7 @@ import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./O
 import { TraceDetail } from "./TraceDetail";
 import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
 import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
+import { operationName } from "./traceTitle";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -450,7 +451,9 @@ function TraceTable({
             return (
               <span className="flex min-w-0 items-baseline gap-2">
                 <span className="shrink-0 text-ink-muted">{trace.rootService || "unknown"}</span>
-                <span className="truncate font-mono text-ink">{trace.rootOperation || trace.traceId}</span>
+                <span className="truncate font-mono text-ink" title={trace.rootOperation || undefined}>
+                  {operationName(trace.rootOperation) || trace.traceId}
+                </span>
                 <OperatorBadge provenance={trace} />
               </span>
             );
@@ -628,7 +631,7 @@ function TraceTable({
                           onFocus={() => setActive(item.index)}
                           onClick={() => onOpen(trace.traceId)}
                           className="flex w-full min-w-0 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px] touch:items-center"
-                          aria-label={`Open trace ${trace.rootService} ${trace.rootOperation}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
+                          aria-label={`Open trace ${trace.rootService} ${operationName(trace.rootOperation)}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
                         >
                           <table.FlexRender cell={cell} />
                         </button>

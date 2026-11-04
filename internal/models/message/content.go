@@ -150,6 +150,12 @@ func (bc BinaryContent) String(provider models.Family) string {
 	return base64Encoded
 }
 
+// DataURL is the content as a data: URL, the form an OpenAI-compatible
+// image_url or file_data field takes whatever the provider family.
+func (bc BinaryContent) DataURL() string {
+	return "data:" + bc.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(bc.Data)
+}
+
 func (BinaryContent) isPart() {}
 
 // ToolCall wraps message.ToolCall to implement ContentPart

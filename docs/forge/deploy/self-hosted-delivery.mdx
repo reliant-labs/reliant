@@ -1,0 +1,105 @@
+---
+title: "Self-hosted delivery"
+description: "Deploy to a cluster you run, with no control plane: direct apply by default, or opt in to a Flux that forge installs in your cluster with applier = flux"
+---
+
+An environment that declares no `forge.ControlPlane` is **self-hosted**: nothing of Reliant's sits between you and the cluster. This page covers the two ways forge delivers to such a cluster, how to pick between them, and what each costs you. If you are deploying to [Reliant hosting](/forge/hosting), or to a cluster you registered with `forge cluster connect`, delivery is handled for you and you can skip this page.
+
+## Direct apply, the default
+
+With no `applier` declared, `forge env deploy` renders the new release and applies it from the machine you run it on, using the kubectl context the environment's KCL names. It never falls back to the context your shell has selected, so a stray `kubectl config use-context` cannot send a deploy to the wrong cluster.
+
+Before it writes anything forge checks, live, that every Secret key and image the release references actually exists on the target, and refuses if one is missing. Then it applies migrations first, waits for each Deployment and Job to become ready, and exits non-zero if any does not. That per-resource wait is the health gate, and `--rollout-timeout` sets each resource's budget (five minutes by default).
+
+Direct apply is where every environment starts, and it is the right end state for `dev` and for throwaway CI clusters. For a real environment it has two limits. The machine that runs `forge env deploy` needs write access to the cluster, so that credential lives wherever your deploys run. And nothing keeps the cluster matching the release between deploys: forge applies when you ask, and drift is yours to notice. `forge env deploy <env> <release> --live-diff` runs a client-side `kubectl diff` against the cluster when you want to see it.
+
+## Gitless Flux delivery, opt-in
+
+If you want a reconciler to own the cluster, declare it. `applier = "flux"` makes forge install Flux in the environment's own cluster and deliver each release to it as an OCI bundle. Forge then never applies the bundle itself; a direct apply of such an environment is refused, so the declaration cannot quietly fall back.
+
+```python
+output = forge.render(forge.Bundle {
+    project = "acme"
+    env = "prod"
+    cluster_target = _prod
+    applier = "flux"
+    # Optional. Every field has a working default.
+    flux_delivery = forge.FluxDelivery {
+        pull_secret_from = "acme-prod/ghcr-pull"   # an existing image-pull Secret
+    }
+    workloads = [...]
+})
+```
+
+The delivery is **gitless**. There is no repository to write to and no deploy key to hold; the release's bundle is pushed to your registry, and Flux pulls it by digest. The same mechanism delivers hosted environments, so what you test on your own cluster is what Reliant runs for its hosted ones.
+
+### Bootstrap, once per cluster
+
+```bash
+forge env render prod --target flux-delivery    # review what it installs
+forge env deploy prod --target flux-delivery    # install it; records no release
+```
+
+This installs a pinned Flux Operator and a Flux instance running only the source and kustomize controllers (the others are off by design), plus the environment's **delivery namespace** (`forge-delivery-<project>-<env>`), which holds the pull-Secret copy and the identities Flux applies as. Two environments can share a cluster, because each gets its own namespace. Run it again whenever you change `flux_delivery`.
+
+The pinned Flux is hardened by default: Flux's multitenancy mode on, no cluster-admin binding for its controllers, Pod Security `restricted` on `flux-system`, and ingress to the controllers only from within `flux-system`. Each is overridable through `forge.flux_chart()` if your cluster needs otherwise.
+
+### Shipping a release
+
+```bash
+forge env deploy prod              # build, cut, then ship it, like any environment
+forge env deploy prod v1.4.0       # ship a release that is already cut
+forge env status prod --wait       # what the environment's Flux reports
+```
+
+A deploy records the release in forge's ledger, pushes the release's bundle to `<registry>/bundle.v1/<env>` pinned by digest, points the environment's Flux at it, and waits until every Kustomization has applied it. The usual flags work: `--plan`, `--yes`, `--approve <digest>`, `--no-wait`, `--timeout`, `--json`. A release deploy cannot be scoped with `--target` or `--frontends-only`, because Flux applies the whole bundle.
+
+The bundle registry is `flux_delivery.registry` when you declare it, otherwise the registry of the environment's first cluster workload image (`ghcr.io/acme/api` gives `ghcr.io/acme`). The push uses your docker credentials, and Flux pulls with the copied `pull_secret_from` Secret.
+
+Several deployers can share one environment safely. The pointer carries a fence, a count of writes so far, and every write is conditional on the pointer it read. A CI runner and an administrator, each with their own ledger, therefore share one sequence, and the one that loses a race re-reads and re-checks against what won.
+
+### When a release needs a new permission (exit 9)
+
+The bootstrap gives Flux's apply identities exactly the permissions the environment's render needs, derived from the objects it contains, and records what it granted. A release that adds a kind those grants do not cover (a new CRD, a first StatefulSet or CronJob, a namespace no earlier release used) would fail `Forbidden` inside the cluster. So every deploy checks the release against the record **before anything is recorded, pushed or pointed**.
+
+If your credential can grant the new permission, an admin kubeconfig on your laptop for example, the plan lists the new grants, and once you approve it the deploy re-runs the bootstrap and continues. If it cannot, such as a CI credential that may only point Flux at a bundle, the deploy stops with **exit 9** and writes nothing:
+
+```text
+release 20261102.101500-ab12cd34ef56 for env prod needs permissions the delivery identities were not granted:
+  forge-delivery-pre    apiextensions.k8s.io/customresourcedefinitions  (cluster)
+  forge-delivery-apply  apps/statefulsets                               (namespace shop)
+this credential cannot grant them (it may not escalate rbac.authorization.k8s.io/clusterroles/...).
+Ask a cluster admin to run:   forge env deploy prod --target flux-delivery
+then re-run this deploy. Nothing was recorded, pushed or pointed.
+```
+
+Exit 9 means a person has to act, and re-running before they do changes nothing, so a pipeline should stop and notify rather than retry. `--json` carries the same list as `delivery_grants`. This is the design working as intended: a deploy credential never needs permission to write RBAC. It needs, in the delivery namespace only, create and update on the input provider, read on the grants record, and read on Flux's `resourcesets`, `ocirepositories` and `kustomizations`, plus push access to the bundle registry.
+
+### Tuning
+
+| `forge.FluxDelivery` field | Default | What it changes |
+|---|---|---|
+| `apply_identities` | `True` | Each tree applies as an identity whose grant forge derives from the render. `False` applies as cluster-admin; reserve it for a cluster nobody else shares. |
+| `delivery_scope` | `"namespace"` | `"namespace"` gives the rollout identity a Role in each namespace the render targets; `"cluster"` gives it one ClusterRole over the same kinds everywhere. |
+| `namespace` | `forge-delivery-<project>-<env>` | The delivery namespace, when the derived name is too long or taken. |
+| `pull_secret_from` | empty | `<namespace>/<name>` of an existing image-pull Secret. Re-run the bootstrap after rotating it. |
+| `registry` | first cluster workload image's registry | Where each release's bundle is pushed. |
+| `values`, `placement`, `distribution` | empty | Passed to `forge.flux_chart()`: operator chart values, a node pool, a mirror for the Flux images. |
+
+The grants follow the render. Re-running the bootstrap re-derives them from your checkout, and a grant the render no longer needs is removed by the same run.
+
+### What it refuses, and what it does not do yet
+
+The render refuses `applier = "flux"` beside a `control_plane` (that environment is delivered by its hub), on an environment that targets more or fewer than one cluster, and beside a `forge.flux_chart()` you declared yourself. `flux_delivery` on an environment that does not declare `applier = "flux"` is refused too.
+
+**Signing is capped at `audit`.** Nothing signs a self-hosted environment's bundles yet, so `signing` and `flux_verify` default to `off` here, and asking for `enforce` is refused when you declare it on an environment with no control plane. The release's shape and the bootstrap report what actually takes effect. If you need signature enforcement, deliver through a control plane.
+
+Also not available in this mode: the opt-in [health gate](/forge/deploy/releases-and-promotion#the-health-gate-opt-in), which is enforced by a control plane and only recorded for a self-hosted environment.
+
+### Choosing
+
+Stay on direct apply when the cluster is yours alone, deploys run from one trusted place, and you are content to apply when you ask. Choose `applier = "flux"` when a deploy credential should not be able to write to the cluster, when several people or pipelines deploy and need one ordering, or when you want the cluster to converge to the recorded release by itself. Moving later costs one declaration and one bootstrap.
+
+## Related topics
+
+[Releases and promotion](/forge/deploy/releases-and-promotion) covers plans, approvals and the ledger that both modes share. [What gets deployed](/forge/deploy/what-gets-deployed) shows the objects that land on the cluster. Agents can run `forge skill load deploy/flux/self-hosted` and `deploy/flux` for the full reference, including the Flux hardening table.

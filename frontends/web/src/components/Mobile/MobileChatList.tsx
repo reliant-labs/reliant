@@ -31,7 +31,7 @@
  */
 
 import { Suspense, lazy, memo, useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertCircle,
   Archive,
@@ -43,6 +43,7 @@ import {
   Loader2,
   MessageCircleQuestion,
   MessageSquarePlus,
+  Search,
 } from "lucide-react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useQueryClient } from "@tanstack/react-query";
@@ -99,6 +100,11 @@ import { chatListRows } from "../../lib/sidebarChatList";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
 import { archiveWorktree } from "../../hooks/worktree-actions";
+
+// Explicit px, not `h-11 w-11`: rem sizing resolves against the root
+// font-size, and at the smallest Appearance step it measures under 44px.
+const HEADER_ACTION =
+  "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-muted";
 
 interface ChatGroup {
   worktreeId: string;
@@ -221,7 +227,16 @@ function primeChatOpen(chat: Chat): void {
 // (an activity change, an unread flip, a new message's lastMessageAt on any
 // chat). React Query keeps an unchanged chat's object identity across those
 // writes, so only the row whose chat actually changed re-renders.
-const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
+const ChatRow = memo(function ChatRow({
+  chat,
+  isLast,
+  selected,
+}: {
+  chat: Chat;
+  isLast: boolean;
+  /** The chat routed beside the list (expanded `/m/*`). */
+  selected: boolean;
+}) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
   const busy = isChatBusy(state);
@@ -243,14 +258,20 @@ const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: bo
         // Chat so the screen has it on the first frame (without it, a send in
         // that window had no chat and started a new one).
         onPointerDown={() => primeChatOpen(chat)}
+        aria-current={selected ? "page" : undefined}
         // 64px min touch target — comfortably above the 44px floor, and it
         // gives two lines of text room to breathe.
         className={cn(
-          "flex min-h-16 w-full items-center gap-3 border-b border-border py-3 pl-4 pr-4 elevation-1",
+          "relative flex min-h-16 w-full items-center gap-3 border-b border-border py-3 pl-4 pr-4 elevation-1",
           "active:bg-foreground/5",
           isLast && "rounded-b-lg border-b-0",
         )}
       >
+        {/* Beside the list pane the open chat needs an orientation cue. A
+            blue bar, not a blue row: selection is not an action (web-styling). */}
+        {selected && (
+          <span aria-hidden className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-primary" />
+        )}
         {/* A fixed-width rail rather than a conditional dot: without it, a
             chat gaining an unread dot shifts its own title sideways while
             its neighbours stay put. */}
@@ -419,6 +440,8 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
 
 export function MobileChatList() {
   const navigate = useNavigate();
+  // Set only when the list is a pane beside the routed chat (MobileSplitLayout).
+  const { chatId: selectedChatId } = useParams({ strict: false });
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectName = useProjectStore((s) => s.currentProject?.name);
   // The list is the project filter's (/m/projects), every project by default.
@@ -519,19 +542,22 @@ export function MobileChatList() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* `☰  Chats  🔍  ✎` (§9): search is a tap away instead of a
+          drawer-only destination, and new chat sits beside it. */}
       <MobileScreenHeader
         title="Chats"
         leading={<MobileMenuButton />}
         trailing={
-          <Link
-            to="/m/new"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-            aria-label="New chat"
-          >
-            {/* The same glyph the nav drawer uses for New chat, so the two
-                entry points read as one action. */}
-            <MessageSquarePlus className="h-5 w-5" />
-          </Link>
+          <>
+            <Link to="/m/search" className={HEADER_ACTION} aria-label="Search chats">
+              <Search className="h-5 w-5" />
+            </Link>
+            <Link to="/m/new" className={HEADER_ACTION} aria-label="New chat">
+              {/* The same glyph the nav drawer uses for New chat, so the two
+                  entry points read as one action. */}
+              <MessageSquarePlus className="h-5 w-5" />
+            </Link>
+          </>
         }
       />
 
@@ -574,7 +600,7 @@ export function MobileChatList() {
           itemContent={(index) => {
             const chat = flatChats[index];
             if (!chat) return null;
-            return <ChatRow chat={chat} isLast={groupEndIndices.has(index)} />;
+            return <ChatRow chat={chat} isLast={groupEndIndices.has(index)} selected={chat.id === selectedChatId} />;
           }}
           components={listComponents}
         />

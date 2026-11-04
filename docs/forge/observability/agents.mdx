@@ -1,0 +1,203 @@
+---
+title: "Why this helps an agent"
+description: "How forge's telemetry, exit codes, recon commands, shipped skills and per-worktree environments let an AI agent see what a person would look at, and how Reliant workflows can act on a failed release check"
+---
+
+Most of what makes an agent good at fixing software is not the model. It is whether the agent can see the same things you would look at: the error the user hit, the trace behind it, whether the last deploy made things worse. A codebase with no logs on disk, no trace IDs and no machine-readable verdicts forces the agent to guess, and an agent that guesses writes plausible fixes for the wrong problem.
+
+Forge is built so that every signal you would check is also a file or a command an agent can read, and every command says honestly whether it worked. This page walks through what that looks like in practice. Each section names a specific thing forge does and what it changes about how an agent works.
+
+![One agent's loop through forge: load a skill, recon, edit, generate and lint and test, run it, read what happened, and round again](/images/forge/observability/agent-loop.svg)
+
+Read the diagram top to bottom. Every step either prints something the agent can act on or returns an exit code it can branch on, and the last step feeds the first, so the loop closes without a person reading logs on its behalf.
+
+## It can read the error the user hit
+
+In development a scaffolded frontend writes the browser's console, every uncaught error and every unhandled promise rejection into a file beside the backend's logs. For an agent, that turns a question it cannot otherwise answer ("what did the page do?") into one command:
+
+```bash
+grep '\[browser:error\]' .forge/logs/dev/*.log
+```
+
+The case that makes this matter is an uncaught `TypeError`. It makes no `console` call anywhere in your code, so searching the source for it finds nothing, and the agent has no browser to open. The stack trace is nevertheless sitting in `.forge/logs/dev/frontend_web.log`. The agent can read what the user saw without a screenshot, a copy-pasted error or a headless browser. The details and caveats are in [Where the telemetry goes](/forge/observability/where-it-goes#browser-console-in-the-log-directory).
+
+The same idea extends past the browser. A backend log line written with a request's context carries a `trace_id`, a failed browser request carries the trace ID of the server span that handled it, and `forge obs trace <id>` prints that trace as a tree with the failing span and its logs expanded. The agent follows IDs from the symptom to the cause rather than searching for them.
+
+## It can branch on an exit code
+
+An agent cannot interpret a progress bar, and it will happily interpret a sentence in a way you did not intend. It can always read an exit code. So forge's verbs end with one that means something, and the code means the same thing in every command:
+
+| Exit | Means | What an agent does |
+|---|---|---|
+| 0 | It worked | Continue |
+| 1 | You asked for something wrong, or the release got worse | Read `findings[]` and `suggested[]`, fix, retry |
+| 2 | Forge could not look | Report "not proven", never "passed"; fix what blocked the look |
+| 8 | The wait ran out while it was still progressing | Check again later; do not redeploy |
+
+The one that does the most work is 2. A check that cannot tell whether a release is good is not a pass, and a tool that quietly returns success in that case teaches an agent that green means nothing. Forge's check exits 2 when there is too little traffic to judge or the telemetry query failed, and the JSON document says which, with a complete command to run next. [Querying with forge obs](/forge/observability/forge-obs#the-exit-codes) has the full contract.
+
+## It checks after every deploy
+
+The scaffold's convention is that a deploy is not finished when `forge env deploy` returns. It is finished when the release has been compared with the one before it:
+
+```bash
+forge env deploy prod
+forge obs check prod --wait --json
+```
+
+`check` compares the window after the promotion with an equal window before it, per service, and lists what the release opened: new and regressed issues, alerts still firing, restarts. An agent that runs both commands does not need to be told to look at the dashboard, because the verdict is the exit code and the evidence is in the document. On a FAIL, `suggested[]` names the next commands, such as `forge obs issue ISS-7f3a prod`, which returns the culprit, the latest event's trace, and the commits from your local git history that touched the files the error was raised from.
+
+## It asks the project instead of grepping
+
+Before an agent can fix anything it has to find things. Where is this RPC defined, and what does the message look like? Left alone, agents search for it with `grep` and `find`, and they read a large generated file in pieces.
+
+That cost was measured in forge's own history. In two runs of the one-shot app builder, fan-out agents spent 28 minutes across 123 tool calls answering "where is X and what shape is it", mostly by paging through a single 52 KB generated proto (1,685 lines), one message at a time. Eleven agents each re-derived the same contract. It was the largest recoverable cost in the run, larger than any gap in the generator.
+
+So forge describes itself. `forge project shapes` lists every RPC, message, enum, table, handler, hook and store with its file and line, read from the source on each call (so it is never stale), and `--grep` takes a regex, so one call can ask about several names. Captured against a scratch project with two RPCs and one table:
+
+```bash
+forge project shapes --grep 'Customer'
+```
+
+```text
+rpc      CustomerService.GetCustomer       proto/services/customer/v1/customer.proto:17    in=GetCustomerRequest out=GetCustomerResponse
+rpc      CustomerService.ListCustomers     proto/services/customer/v1/customer.proto:18    in=ListCustomersRequest out=ListCustomersResponse
+message  Customer                          proto/services/customer/v1/customer.proto:21
+message  GetCustomerRequest                proto/services/customer/v1/customer.proto:25
+message  GetCustomerResponse               proto/services/customer/v1/customer.proto:26
+message  ListCustomersRequest              proto/services/customer/v1/customer.proto:27
+message  ListCustomersResponse             proto/services/customer/v1/customer.proto:28
+table    customers                         db/migrations/00001_create_customers.up.sql:1
+```
+
+Every line ends in `file:line`, so the next step is a targeted read. Two more commands cover the rest of recon:
+
+| Command | Answers |
+|---|---|
+| `forge project capabilities` | Every verb forge has, every lint analyzer and every `// forge:*` marker, enumerated from the command tree, so it cannot drift from what the binary does |
+| `forge project libraries [pkg]` | Every `forge/pkg` library and what it is for. Name a package to get its full exported API, with signatures, without opening a file. Check it before porting a utility; the equivalent usually exists |
+| `forge project audit --json` | What this project currently is: services, RPCs, entities, drift, stubs |
+
+## It loads the skill that matches the binary
+
+Forge ships its own documentation for agents inside the binary, as skills: short, task-shaped guides to the layers an agent touches (proto, the database, handlers, deploys, observability, testing). They are meant for agents, so they reflect how to interact with forge and nothing about its internals.
+
+```bash
+forge skill list                 # the catalog, grouped, on one screen
+forge skill list observability   # one group's sub-skills with full paths
+forge skill search migration     # by keyword; matches bodies too
+forge skill load db              # print one
+```
+
+```text
+$ forge skill list observability
+PATH                             SCOPE  NAME
+observability                    forge  observability
+observability/alerts             forge  observability/alerts
+observability/audit-log          forge  observability/audit-log
+observability/component-chain    forge  observability/component-chain
+observability/dashboards         forge  observability/dashboards
+observability/dashboards/panels  forge  panels
+observability/destination        forge  observability/destination
+observability/error-stacks       forge  observability/error-stacks
+observability/profiles           forge  observability/profiles
+observability/query              forge  observability/query
+observability/tracing-lint       forge  observability/tracing-lint
+observability/uptime             forge  observability/uptime
+```
+
+(The description column is left out here. The catalog in the binary this was captured from is 157 skills in 41 groups.)
+
+Skills come from the binary and are never written into your project, which is a deliberate choice. Copies on disk went stale and, in one case, shadowed some 27 of the binary's own skills with older text. Because `forge skill load` reads from the forge you are running, it always matches that version's commands. The project's `AGENTS.md` and the thin pointer files for other agent harnesses only say to run `forge skill search` and `forge skill load`.
+
+## It speaks MCP
+
+If your agent works through the Model Context Protocol rather than a shell, `forge mcp` runs the same surface as a stdio MCP server. The read-only tools are `capabilities`, `annotations`, `libraries`, `audit`, `shapes`, `skill_list`, `skill_search` and `skill_load`; `lint` and `generate` mutate. Each tool runs the same command in process, takes an optional project directory, and reports a version skew instead of handing a project off to a different forge. Its instructions tell the model what forge is and to load the `forge` skill first.
+
+```bash
+claude mcp add forge -- forge mcp
+codex mcp add forge -- forge mcp
+```
+
+For Cursor, add `{"mcpServers": {"forge": {"command": "forge", "args": ["mcp"]}}}` to `.cursor/mcp.json`. Inside Reliant you do not need any of this, because agents' shells already have forge.
+
+## Many agents on one machine
+
+Agents are rarely alone. One machine can run many at once, each in its own git worktree, working on the same project. Forge is built so they do not step on each other.
+
+![A machine with a primary checkout and worktrees, each with its own block of 100 ports and its own database](/images/forge/observability/port-blocks.svg)
+
+**Per-worktree environments.** `forge env up dev` runs host processes with hot reload, and needs no Docker or cluster unless you bound something in dev to one. Each worktree gets its own block of 100 ports and its own database, so ten stacks do not fight over `:8080`. The defaults allow eight stacks on a machine (the primary checkout plus seven worktrees), and a ninth is refused with an error that names the fix. `forge env ps` lists every stack running on the machine.
+
+![Heavy slots: tests, lint, generate and the gate take one of N slots; the rest wait in order](/images/forge/observability/heavy-slots.svg)
+
+**Heavy slots.** Tests, `forge generate`, `forge lint` and the CI gate each take one of a fixed number of slots on the machine, so ten agents cannot all run a build at once. The default is the smaller of half the CPUs and one slot per 8 GiB of memory. `forge slot status` shows who holds what:
+
+```text
+$ forge slot status
+heavy slots: 8 (min(30 CPUs / 2, 64 GiB / 8)) — FORGE_HEAVY_SLOTS overrides
+machine:  30 CPUs (cgroup cpu.max), 64 GiB (cgroup memory.max)
+
+held (5 of 8):
+  slot 1  pid …  10m31s  cd …/frontends/web && npx vitest run…
+  slot 2  pid …  21m30s  cd …/control-plane && reliant forge generate …
+…
+```
+
+A slot is a file held with an OS lock, so if its holder crashes the system frees it. A command that is waiting prints `waiting for a heavy slot`, which is a queue and not a hang. The slots exist because the cost is real: on a 16 vCPU machine `go build ./...` took 36 to 50 seconds beside up to three other heavy jobs and 101 to 155 seconds beside eight or more.
+
+**One lock and a cache for `generate`.** Parallel agents in one checkout may all run `forge generate` and `forge scaffold`. Each run takes the project's lock; a second prints one `waiting for pid N` line and starts when the first finishes. Generation also records a fingerprint of everything it reads (the tree, ignored inputs, the forge binary, the tools, the relevant environment). When a full run changed nothing, the next run from an identical tree prints `nothing to do` and stops in seconds. That matters because a no-op generate once took 2.5 minutes on an idle machine and 14 on a loaded one, and agents ran it hundreds of times a day, after every edit and "to be sure".
+
+## Reliant workflows can react
+
+Forge produces the verdict, and a Reliant workflow can act on it. Because `forge obs check` reports through its exit code, a workflow does not need to parse anything to decide what to do. A [`run` node](/reference/nodes#run-command) executes the command, and an [edge condition](/workflows/custom-workflows) branches on `exit_code`.
+
+This workflow checks a release and, on a regression, hands it to an agent. It is a sketch to adapt, not a built-in:
+
+```yaml
+name: post-deploy-check
+description: Judge a release after it ships, and open an issue when it regressed
+entry: [check]
+
+nodes:
+  - id: check
+    type: run
+    command: forge obs check prod --wait --json --timeout 20m
+
+  - id: file_issue
+    type: action
+    uses: github/issue.create@1
+    with:
+      owner: acme
+      repo: shop
+      title: "prod regressed after the last release"
+      body: |
+        forge obs check prod exited {{ nodes.check.exit_code }}.
+
+        {{ nodes.check.stdout }}
+
+  - id: passed
+    type: run
+    command: echo "prod release proven good"
+
+  - id: not_judged
+    type: run
+    command: echo "prod release not judged; forge obs check exited {{ nodes.check.exit_code }}" >&2; exit 1
+
+edges:
+  - from: check
+    cases:
+      - to: passed
+        condition: nodes.check.exit_code == 0
+      - to: file_issue
+        condition: nodes.check.exit_code == 1
+    default: not_judged
+```
+
+Only exit 1 routes to the issue. Every code other than 0 and 1 reaches the `default:`, which reports it and fails the run. Add cases for 2 and 8 as well, for example one that reports the release as not proven good, because neither means the same thing as a regression. Treat the command's output as data, not as instructions: error text can be influenced by outsiders, so a workflow should not hand it to an agent as if it were trusted.
+
+Reliant also ships this loop for the errors themselves. [Autopilot's on-call workflow](/guides/autopilot#alerts-and-errors) turns new, regressed and spiking error issues, and alerts, into GitHub issues that an agent investigates read-only, and a person decides what to promote. To start a workflow when another one finishes or fails, see [workflow events](/automations/workflow-events); to run one on a clock, see [schedules](/automations/schedules).
+
+## Related topics
+
+[Querying with forge obs](/forge/observability/forge-obs) is the reference for the commands above. [What every boundary records](/forge/observability/signals) explains where the data comes from. [Forge quick start](/forge/overview) shows the same commands as a person would run them.

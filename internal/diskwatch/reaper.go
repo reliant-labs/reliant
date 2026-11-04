@@ -44,7 +44,8 @@ import (
 // npm, the Go module cache above its ceiling, killed builds' go-build work
 // dirs — to budgets derived from their volume (cachetrim.go), in the same
 // single-flight. Watcher.TrimCaches runs both at once for a caller that needs
-// space now.
+// space now. Between full passes, the Go-cache pass (GoCacheInterval) also
+// runs the work-dir pass: killed builds leak faster than an hourly pass reaps.
 //
 // The cadence is anchored on forge's own record of its last pass
 // (last-auto-gc.json, beside the policy), not on process memory: a restarting
@@ -274,6 +275,10 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 	defer w.releaseReaper()
 	if goCacheDue {
 		w.goCachePass(ctx, policy, trigger)
+		// Killed builds' work dirs on the same cadence: on 2026-11-03/04 they
+		// took 113 GB of free space to zero in about six hours, ~19 GB an
+		// hour, and an hourly full pass let a whole hour's worth pile up.
+		w.goWorkDirTick(ctx, trigger)
 		return true
 	}
 	// The caches forge does not own (npm, the module cache's ceiling, killed

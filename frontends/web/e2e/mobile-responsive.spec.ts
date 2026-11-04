@@ -23,17 +23,24 @@ for (const route of ['/m/new', '/m/chats/chat_a']) {
     await expect(composer).toBeEditable();
     const draft = 'Keep this draft while rotating and opening chat options.';
     await composer.fill(draft);
+    // The draft must survive because the textarea is never remounted (the
+    // container-query composer, the ≥840px list–detail split and the floating
+    // chrome all keep the same element), not because a store refills a new
+    // one: a remount also drops the caret, the undo stack and an IME
+    // composition. Mark the element and require the same one at every size.
+    await composer.evaluate((el) => { el.dataset.e2eDraftProbe = 'original'; });
     for (const viewport of [responsiveViewports.wide, responsiveViewports.splitPane,
       { width: 390, height: 460 }, responsiveViewports.phone]) {
       await page.setViewportSize(viewport);
       await expect(page).toHaveURL(new RegExp(`${route}$`));
       await expect(page.locator('[data-surface="mobile"]').first()).toBeVisible();
       await expect(composer).toHaveValue(draft);
+      await expect(composer).toHaveAttribute('data-e2e-draft-probe', 'original');
       await expectNoPageOverflow(page);
       await expectReachable(composer, !!info.project.use.hasTouch);
     }
-    const add = page.getByRole('button', { name: 'Add', exact: true });
-    await expectReachable(add);
+    const add = page.getByRole('button', { name: 'Chat options', exact: true });
+    await expectReachable(add, !!info.project.use.hasTouch);
     await add.click();
     const sheet = page.getByRole('dialog', { name: 'Chat options' });
     await expect(sheet).toBeVisible();
@@ -41,36 +48,42 @@ for (const route of ['/m/new', '/m/chats/chat_a']) {
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
     await expect(composer).toHaveValue(draft);
+    await expect(composer).toHaveAttribute('data-e2e-draft-probe', 'original');
     await expect(add).toBeFocused();
   });
 }
 test('Chat options expose canonical agent settings and editable thinking levels', async ({ page }) => {
   await mockMobileBackend(page);
   await page.goto('/m/new');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Chat options' })).toBeVisible();
+  await page.getByRole('button', { name: 'Chat options', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'Chat options' });
+  await expect(sheet).toBeVisible();
   await expect(page.getByText('Agent', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: /^All settings/ }).click();
   await expect(page.getByText('Execution Mode', { exact: true })).toBeVisible();
   for (const mode of ['manual', 'auto', 'plan']) {
     await expect(page.getByRole('button', { name: mode, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole('button', { name: /^Preset/ })).toBeVisible();
+  // In the sheet: at a wide container the composer's priority+ row shows its
+  // own Preset control beside it.
+  await expect(sheet.getByRole('button', { name: /^Preset/ })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: /^Model / }).click();
   const thinking = page.getByRole('combobox');
   await expect(thinking).toBeVisible();
   await expect(thinking.locator('option')).toHaveText(['Auto (high)', 'Low', 'Medium', 'High', 'X-High']);
   await thinking.selectOption('high');
   await expect(thinking).toHaveValue('high');
-  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Model settings', exact: true }).click();
+  // Pages push inside the one sheet: Back twice returns to its root, and the
+  // Model row (the model's only home on touch, D1) shows the same choice.
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await sheet.getByRole('button', { name: /^Model/ }).click();
   await expect(page.getByRole('combobox')).toHaveValue('high');
-  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByRole('button', { name: /^All settings/ }).click();
-  await page.getByRole('button', { name: /^Preset/ }).click();
-  await page.getByRole('button', { name: /^researcher/ }).click();
-  await expect(page.getByRole('button', { name: 'Preset researcher', exact: true })).toBeVisible();
+  await sheet.getByRole('button', { name: /^Preset/ }).click();
+  await sheet.getByRole('button', { name: /^researcher/ }).click();
+  await expect(sheet.getByRole('button', { name: 'Preset researcher', exact: true })).toBeVisible();
   await expectNoPageOverflow(page);
 });
 

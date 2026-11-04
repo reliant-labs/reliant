@@ -175,3 +175,21 @@ func TestGitHubGH_FetchErrorRunsNothing(t *testing.T) {
 		t.Error("ran gh without a token")
 	}
 }
+
+// The token RPCs admit only a daemon credential, so a CLI login is never
+// offered: listed first, it spent the deadline on a refusal.
+func TestDaemonSessionsOnly_DropsCLILoginsInOrder(t *testing.T) {
+	got := daemonSessionsOnly([]forgecred.Session{
+		{Server: "https://api.example.com", Token: "cli", Kind: "cli"},
+		{Server: "https://api.example.com", Token: "d1", Kind: sessionKindDaemon},
+		{Server: "https://api.other.com", Token: "cli2", Kind: "cli"},
+		{Server: "https://api.other.com", Token: "d2", Kind: sessionKindDaemon},
+	})
+	var tokens []string
+	for _, s := range got {
+		tokens = append(tokens, s.Token)
+	}
+	if !slices.Equal(tokens, []string{"d1", "d2"}) {
+		t.Fatalf("daemonSessionsOnly kept %v, want [d1 d2]", tokens)
+	}
+}

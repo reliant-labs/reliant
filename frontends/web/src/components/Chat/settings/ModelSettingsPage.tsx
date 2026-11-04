@@ -26,6 +26,8 @@ interface ModelSettingsPageProps {
   onChange: (value: unknown) => void;
   onBack: () => void;
   onClose: () => void;
+  /** Embedded in a host sheet that has its own close: no close button here. */
+  hideClose?: boolean;
   /** The chat whose provider policy the on-limit row edits; absent (a new chat, a sub-agent's params) hides the row. */
   chatId?: string;
 }
@@ -111,6 +113,7 @@ export function ModelSettingsPage({
   onChange,
   onBack,
   onClose,
+  hideClose = false,
   chatId,
 }: ModelSettingsPageProps) {
   const navigate = useNavigate();
@@ -323,13 +326,15 @@ export function ModelSettingsPage({
         >
           <Settings2 className="w-3.5 h-3.5" />
         </button>
-        <button
-          onClick={onClose}
-          aria-label="Close settings"
-          className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        {!hideClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close settings"
+            className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {loading && <p role="status" className="px-4 py-3 text-sm text-muted-foreground">Loading models…</p>}

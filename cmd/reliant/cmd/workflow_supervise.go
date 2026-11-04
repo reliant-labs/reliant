@@ -506,15 +506,11 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	if err != nil {
 		return clients.rpcError(err, "fetching workflow executions")
 	}
-	root := execResp.Msg.GetRootWorkflow()
-	if root == nil {
-		if all := execResp.Msg.GetAllRootWorkflows(); len(all) > 0 {
-			root = all[0]
-		}
-	}
-	if root == nil {
+	roots := execResp.Msg.GetAllRootWorkflows()
+	if len(roots) == 0 {
 		return fmt.Errorf("no workflow execution found for %s", executionID)
 	}
+	root := roots[0] // newest first
 
 	report := statusReport{
 		ExecutionID: executionID,

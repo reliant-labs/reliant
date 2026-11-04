@@ -123,6 +123,93 @@ export const MESSAGES = [
   },
 ];
 
+const LONG_PROMPT = [
+  'Good find. Make the retrying identity client back off with jitter instead of a fixed 200ms,',
+  'cap it at three attempts, and surface the last 503 to the caller with the attempt count in the message.',
+  'Then add a test that stubs the provider to fail twice and succeed on the third call, and one that',
+  'fails all three times and checks the error text. Keep the public API of the client unchanged, and do not',
+  'touch the signup flow yet: we will decide on that after this lands and the flake rate is back under 1%.',
+].join(' ');
+
+const LONG_REPLY = [
+  'Done. The client now backs off exponentially from 100ms with full jitter, capped at three attempts.',
+  '',
+  '## What changed',
+  '',
+  '- `retryingIdentityProviderClient.ts`: replaced the fixed `sleep(200)` with `backoff(attempt)`, which draws',
+  '  uniformly from `[0, 100 * 2^attempt)` ms. The attempt cap is the existing `RETRIES` constant.',
+  '- The final failure is rethrown as `IdentityProviderUnavailable` carrying the last status and the attempt',
+  '  count, so the login form can say "the identity provider is unavailable (3 attempts)".',
+  '- `login.test.ts`: two new cases. One stubs the provider to answer 503, 503, 200 and expects a session;',
+  '  the other answers 503 three times and asserts the error text and that exactly three requests were made.',
+  '',
+  '## Verification',
+  '',
+  'I ran the login suite 200 times in a loop: 0 failures, against 41 failures in 200 before the change.',
+  'The jitter is seeded from the test clock, so the new cases are deterministic.',
+  '',
+  '## Not done',
+  '',
+  'The signup flow uses the same client and would get the same fix for free, but you asked to leave it until',
+  'the flake rate is confirmed. When you want it, it is a one-line change in `signupController.ts`.',
+].join('\n');
+
+/**
+ * A second turn for the busy chat (`busyChat`): a long prompt, then a reply
+ * taller than a phone screen. Scrolled to the bottom, the prompt is above the
+ * fold, so the timeline pins it — the geometry spec needs that header.
+ */
+export const BUSY_CHAT_TAIL_MESSAGES = [
+  {
+    id: 'msg_4',
+    seq: '4',
+    thread: 'main',
+    role: 1,
+    createdAt: minutesAgo(15),
+    updatedAt: minutesAgo(15),
+    contentBlocks: [{ id: 'b6', index: 0, type: 1, content: LONG_PROMPT }],
+  },
+  {
+    id: 'msg_5',
+    seq: '5',
+    thread: 'main',
+    role: 2,
+    createdAt: minutesAgo(14),
+    updatedAt: minutesAgo(14),
+    contentBlocks: [{ id: 'b7', index: 0, type: 1, content: LONG_REPLY }],
+  },
+];
+
+/**
+ * The busy chat's workflow: a running root on the main thread with a second,
+ * node-created thread under it. Two non-spawn threads make ChatHeader show
+ * its thread tabs; an ACTIVE root makes the mobile workflow pill show.
+ */
+export const BUSY_CHAT_WORKFLOW = {
+  id: 'wf_root',
+  workflowName: 'get-it-right',
+  thread: 'chat_a',
+  createdAt: minutesAgo(20),
+  messageCount: 5,
+  origin: 'main',
+  state: 'WORKFLOW_STATE_ACTIVE',
+  children: [
+    {
+      id: 'wf_review',
+      workflowName: 'reviewer',
+      thread: 'thread_review',
+      parentId: 'wf_root',
+      parentThread: 'chat_a',
+      threadTitle: 'reviewer',
+      createdAt: minutesAgo(16),
+      messageCount: 0,
+      origin: 'node',
+      originNodeId: 'review',
+      state: 'WORKFLOW_STATE_ACTIVE',
+    },
+  ],
+};
+
 /** The ask_user call's question row: pending, async, keyed by its tool call id. */
 export const ASYNC_QUESTIONS = [
   {
@@ -211,6 +298,14 @@ export interface MobileMockOptions {
    * error, as a server that refuses or drops it does.
    */
   stream?: 'ends' | 'unavailable';
+  /**
+   * Make chat_a busy: a running workflow with a second thread
+   * (BUSY_CHAT_WORKFLOW) and a long final turn that the timeline pins
+   * (BUSY_CHAT_TAIL_MESSAGES). Opt-in because the extra turn scrolls the
+   * first turn's ask_user card out of the virtualized timeline, which the
+   * mobile question specs read.
+   */
+  busyChat?: boolean;
 }
 
 export interface MobileMock {
@@ -306,8 +401,15 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
   await page.route('**/reliant.v1.ChatService/ListMessages', (route) => {
     const { chatId } = route.request().postDataJSON() as { chatId?: string };
     const id = chatId ?? 'chat_a';
-    const messages = MESSAGES.map((m) => ({ ...m, chatId: id, thread: id }));
+    const source = options.busyChat && id === 'chat_a' ? [...MESSAGES, ...BUSY_CHAT_TAIL_MESSAGES] : MESSAGES;
+    const messages = source.map((m) => ({ ...m, chatId: id, thread: id }));
     return json(route, { messages, total: messages.length, count: messages.length, hasMore: false, oldestSeq: '1' });
+  });
+  await page.route('**/reliant.v1.ChatService/GetWorkflowExecutions', (route) => {
+    const { chatId } = route.request().postDataJSON() as { chatId?: string };
+    return json(route, options.busyChat && chatId === 'chat_a'
+      ? { allRootWorkflows: [BUSY_CHAT_WORKFLOW] }
+      : {});
   });
   await page.route('**/reliant.v1.InboxService/ListInbox', (route) => {
     const blocking = inbox.filter((item) => [1, 2, 3].includes((item as { kind: number }).kind)).length;

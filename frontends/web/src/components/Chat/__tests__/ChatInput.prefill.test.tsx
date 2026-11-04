@@ -57,7 +57,7 @@ vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   usePresetsForWorkflow: () => NO_PRESETS,
   fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
-vi.mock("../settings", () => ({ ChatSettingsPopover: (props: { mobile: boolean; initialPage: string; disabled: boolean }) => <div data-testid="shared-settings" data-mobile={props.mobile} data-page={props.initialPage} data-disabled={props.disabled} /> }));
+vi.mock("../settings", () => ({ ChatSettingsPopover: (props: { isOpen: boolean; embedded: boolean; initialPage: string; disabled: boolean }) => !props.isOpen ? null : <div data-testid="shared-settings" data-embedded={props.embedded} data-page={props.initialPage} data-disabled={props.disabled} /> }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
@@ -77,12 +77,14 @@ beforeEach(() => {
 });
 
 describe("ChatInput prefill", () => {
-  it("opens authoritative all-settings from mobile options, including while streaming", async () => {
+  it("opens authoritative all-settings inside the ⊕ sheet, including while streaming", async () => {
     definitionState.result = { data: { workflow: { inputs: { goal: { type: "string", config: { case: "stringInput", value: { base: { required: true } } } } } } }, isLoading: false };
     renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput isStreaming onSend={vi.fn()} /></SurfaceProvider>);
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
     fireEvent.click(screen.getByRole("button", { name: /All settings/ }));
-    expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-mobile", "true");
+    // A page of the same sheet, not a second sheet.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-embedded", "true");
     expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-page", "main");
     expect(screen.getByTestId("shared-settings")).toHaveAttribute("data-disabled", "false");
   });
@@ -92,7 +94,7 @@ describe("ChatInput prefill", () => {
     definitionState.result = { isLoading: true, refetch };
     const ui = <SurfaceProvider surface="mobile"><ChatInput onSend={vi.fn()} /></SurfaceProvider>;
     const { rerender } = renderWithQuery(ui);
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
     expect(screen.getByText("Loading workflow settings…")).toBeInTheDocument();
     definitionState.result = { isLoading: false, error: new Error("Offline"), refetch };
     rerender(<SurfaceProvider surface="mobile"><ChatInput onSend={vi.fn()} /></SurfaceProvider>);

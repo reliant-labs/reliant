@@ -8,28 +8,33 @@ import {
   useMemo,
   forwardRef,
   useImperativeHandle,
+  type ReactElement,
 } from "react";
-import { Settings2, ChevronDown, Plus } from "lucide-react";
+import { Settings2, ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
-import { ComposerOptions } from "./ComposerOptions";
-import { ComposerWorkflowPicker } from "./ComposerWorkflowPicker";
+import { ComposerOptions, type AttachKind, type ComposerOptionsPage } from "./ComposerOptions";
+import { usePriorityFold } from "./composerPriority";
+import { useCoarsePointer } from "./useCoarsePointer";
+import { CodeContextChip } from "./CodeContextChip";
+import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { AttachmentPreview } from "./AttachmentPreview";
+import { AttachmentPreview, ComposerChip, UploadChip } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
 import { useCodeContexts, extractMarkers } from "./useCodeContexts";
 import { useSlashCommands } from "../../hooks/useSlashCommands";
+import { compactChatWithFeedback } from "./useChatActions";
 import { PromptPicker } from "./PromptPicker";
 import { useThinkingCapability } from "../../hooks/useThinkingCapability";
 import { getMessagesFromCache } from "../../hooks/message-queries";
 import { formatTranscript } from "../../lib/transcript";
 import { toast } from "../../lib/toast-manager";
-import { ButtonLayout } from "./ChatActionButtons";
+import { ComposerActionSlot } from "./ChatActionButtons";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
 import { DragDropOverlay } from "./DragDropOverlay";
@@ -39,6 +44,8 @@ import Tooltip from "../forge-ui/tooltip";
 import { getAcceptedMimeTypes } from "../../lib/filetypes";
 import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
+import type { PopoverTriggerProps } from "../forge-ui/popover";
+import { findModelParamKey, type PageId as SettingsPageId } from "./settings/ChatSettingsPopover";
 import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
@@ -77,10 +84,10 @@ import {
 } from "../../lib/paramUtils";
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
-import { COMPOSER_CONTROL } from "./composerControl";
+import { COMPOSER_CONTROL, COMPOSER_ROUND_BUTTON } from "./composerControl";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { fetchThreadWorkflowInputs } from "../../hooks/chat-pull-queries";
-import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
+import { fetchDefaultPresets, useDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
 interface WorkflowTagInfo {
@@ -184,6 +191,8 @@ interface ChatInputProps {
   prefill?: ComposerPrefill;
   /** Explicit attachment bucket for hosts creating a chat without changing active selection. */
   attachmentDraftId?: string;
+  /** Change the thread messages go to; the thread chip's × returns to main (null). */
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -201,23 +210,31 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       workflowExecution,
       prefill,
       attachmentDraftId,
+      onSelectThread,
     },
     ref
   ) {
+    // Surface is capability (what this route can do), never layout: the
+    // composer's arrangement follows its container width (chat-composer.css).
     const mobile = useSurface() === "mobile";
-    const WorkflowPicker = mobile ? ComposerWorkflowPicker : WorkflowSelector;
     const canAttach = useCapability("chatAttachments");
     const canConfigure = useCapability("chatWorkflowParams");
-    const [mobileOptionsOpen, setMobileOptionsOpen] = useState(false);
+    // How the user types and taps: Return-is-newline lives in ChatTextArea;
+    // here it keeps the model pill off the composer on touch (design doc D1).
+    const coarsePointer = useCoarsePointer();
+    // The ⊕ sheet and the page it shows; null while closed.
+    const [optionsPage, setOptionsPage] = useState<ComposerOptionsPage | null>(null);
     const sendingRef = useRef(false);
     const [sending, setSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const photoInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const toolsRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     // Guards against double-queueing from a fast second Enter while the RPC is
     // in flight. A ref, not state: it must be readable synchronously.
     const queueingRef = useRef(false);
-    const [isCompact, setIsCompact] = useState(false);
 
     // Actions offered by the "/" menu in the composer.
     const slashCommandList = useSlashCommands();
@@ -279,34 +296,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       },
       [activeChatId, paneId, attachmentDraftId]
     );
-
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      const checkCompact = () => {
-        const containerWidth = container.offsetWidth;
-        // Use container width to determine compact mode
-        // Trigger compact mode when container width < 500px
-        // The selector buttons are small (~80-100px each) so they can
-        // comfortably fit at much larger widths before needing to collapse
-        setIsCompact(containerWidth < 500);
-      };
-
-      // Initial check
-      checkCompact();
-
-      // Use ResizeObserver to watch container size changes
-      const resizeObserver = new ResizeObserver(() => {
-        checkCompact();
-      });
-
-      resizeObserver.observe(container);
-
-      return () => {
-        resizeObserver.disconnect();
-      };
-    }, []);
 
     // Use our custom hook for all state management
     const {
@@ -1248,8 +1237,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleSend = async () => {
       if (disabled || sendingRef.current || uploading || uploadQueue.hasPending()) return;
-      if (mobile && hasUnsetParams) {
-        setMobileOptionsOpen(true);
+      if (canConfigure && hasUnsetParams) {
+        // The server refuses a run missing a required input; take the user
+        // straight to where they can fill it in.
+        setSettingsPage(null);
+        setOptionsPage({ id: "settings", initial: "main" });
         toast.error("Complete the required workflow parameters before sending");
         return;
       }
@@ -1524,6 +1516,32 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       fileInputRef.current?.click();
     };
 
+    // --- The priority+ row (design doc §5.5) ---
+    //
+    // At a wide container the controls below the text fill one row in
+    // priority order, and whatever does not fit folds into ⊕ (whose sheet has
+    // a row for every one of them, so folding never removes a control). The
+    // workflow shows only before the first send: after it, it is fixed and
+    // the sheet says so. The model pill shows only with a fine pointer: on a
+    // touch layout, at any width, the model lives in ⊕ alone (D1).
+    const modelInlineAllowed = !coarsePointer && canConfigure && hasConfigurableParams;
+    const settingsInlineAllowed = canConfigure && (hasConfigurableParams || isViewingThreadParams);
+    const toolKeys = [
+      ...(isPendingChat ? ["workflow"] : []),
+      ...(canConfigure ? presetTargets.map((t) => `preset:${t.name}`) : []),
+      ...(modelInlineAllowed ? ["model"] : []),
+      ...(canConfigure ? toolbarParams.map(([name]) => `param:${name}`) : []),
+      "account",
+      ...(settingsInlineAllowed ? ["settings"] : []),
+    ];
+    const fold = usePriorityFold(toolsRef, toolKeys.join("|"));
+    const isFolded = (key: string) => {
+      const index = toolKeys.indexOf(key);
+      return !fold.shown || index < 0 || index >= fold.visible;
+    };
+    const isFoldedRef = useRef(isFolded);
+    isFoldedRef.current = isFolded;
+
     // --- Keyboard shortcuts that act on the composer's parameters ---
     //
     // These live here rather than in ModernApp because the state they touch
@@ -1535,11 +1553,17 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     useEffect(() => {
-      // Open the settings popover directly to a given page. Toggles, so
+      // Open a settings page: as the anchored popover beside its control when
+      // that control is inline, else as the ⊕ sheet's page. Toggles, so
       // pressing the same shortcut again closes it.
       const openPage = (page: "model" | "params") => () => {
         if (disabled || !isMessagingAllowed) return;
-        setSettingsPage((current) => (current === page ? null : page));
+        if (!isFoldedRef.current(page === "model" ? "model" : "settings")) {
+          setSettingsPage((current) => (current === page ? null : page));
+          return;
+        }
+        const sheetPage: ComposerOptionsPage = page === "model" ? { id: "model" } : { id: "settings", initial: "params" };
+        setOptionsPage((current) => (current?.id === sheetPage.id ? null : sheetPage));
       };
 
       const handleOpenModel = openPage("model");
@@ -1548,7 +1572,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const handleOpenWorkflow = () => {
         if (disabled || !isMessagingAllowed) return;
         // The workflow picker is its own dropdown, not a settings page.
-        setWorkflowSelectorOpen((open) => !open);
+        if (!isFoldedRef.current("workflow")) {
+          setWorkflowSelectorOpen((open) => !open);
+          return;
+        }
+        setOptionsPage((current) => (current?.id === "workflow" ? null : { id: "workflow" }));
       };
 
       // Cycle reasoning effort through the levels this model actually supports,
@@ -1599,21 +1627,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           handleAttachClick();
         },
 
-        compact: async () => {
-          if (!chatId) {
-            toast.info("Start a conversation before compacting it");
-            return;
-          }
-          try {
-            // Empty threadId targets the main thread, which is what "compact
-            // this conversation" means from the composer.
-            await chatActions.compactChat(chatId, selectedThreadId ?? "");
-            toast.success("Compacting conversation…");
-          } catch (error) {
-            logger.error("[ChatInput] Compaction failed", error);
-            toast.error("Could not compact the conversation");
-          }
-        },
+        // Empty threadId targets the main thread, which is what "compact
+        // this conversation" means from the composer.
+        compact: () => compactChatWithFeedback(chatId ?? null, selectedThreadId ?? ""),
 
         branch: async () => {
           if (!chatId) {
@@ -1698,33 +1714,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // Note: Global ESC key handling is done in ModernApp.tsx with proper priority checks
     // (checks for open modals, workflow builder, etc. before pausing chat)
 
-    // Local escape hatch: allow closing expanded settings with Escape when focus is in chat input area.
-    useEffect(() => {
-      if (settingsPage === null) return;
-
-      const handleEscapeToCloseSettings = (event: KeyboardEvent) => {
-        if (event.key !== "Escape") return;
-
-        const container = containerRef.current;
-        if (!container) return;
-
-        const activeElement = document.activeElement as HTMLElement | null;
-        if (!activeElement) return;
-
-        // Only handle ESC when focus is inside this chat input container.
-        if (!container.contains(activeElement)) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        setSettingsPage(null);
-      };
-
-      // Use capture to run before document-level handlers that may use ESC for pause/stop.
-      window.addEventListener("keydown", handleEscapeToCloseSettings, true);
-      return () => {
-        window.removeEventListener("keydown", handleEscapeToCloseSettings, true);
-      };
-    }, [settingsPage]);
+    // Escape on an open settings panel is the panel's own (forge-ui Popover
+    // claims it in the capture phase, before the global pause/stop handler).
 
     // Compute effective popover props once (used by whichever trigger renders it)
     const popoverInputs = isViewingThreadParams && threadParamsOverride
@@ -1737,14 +1728,27 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       ? handleThreadParamsChange
       : handleWorkflowParamsChange;
 
-    const renderSettingsPopover = (initialPage: 'main' | 'model' | 'preset' | 'params') => {
-      if (!popoverInputs || !canConfigure) return null;
+    const hasSettings = !!popoverInputs && canConfigure;
+
+    // The settings page tree, either anchored to a toolbar control (it renders
+    // that control as its trigger, so it renders whether or not it is open) or
+    // embedded as a page of the ⊕ sheet.
+    type SettingsShell =
+      | { embedded: { onExit: () => void } }
+      | { anchored: { open: boolean; onOpen: () => void; trigger: (props: PopoverTriggerProps) => ReactElement } };
+    const renderSettingsPopover = (initialPage: SettingsPageId, shell: SettingsShell) => {
+      const embedded = "embedded" in shell ? shell.embedded : undefined;
+      const anchored = "anchored" in shell ? shell.anchored : undefined;
+      if (embedded && !hasSettings) return null;
       return (
         <ChatSettingsPopover
-          isOpen={true}
-          onClose={() => setSettingsPage(null)}
+          isOpen={embedded ? true : !!anchored?.open && hasSettings}
+          onClose={() => (embedded ? setOptionsPage(null) : setSettingsPage(null))}
+          onOpen={anchored?.onOpen}
+          trigger={anchored?.trigger}
           initialPage={initialPage}
-          mobile={mobile}
+          embedded={!!embedded}
+          onExit={embedded?.onExit}
           disabled={disabled || !isMessagingAllowed}
           inputs={popoverInputs}
           values={popoverValues}
@@ -1759,6 +1763,124 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       );
     };
 
+    // The model the composer's params select, named the way the user's model
+    // list names it. Shown on the inline pill (fine pointer) and on the ⊕
+    // sheet's Model row.
+    const composerModel = (() => {
+      const modelValue = popoverValues?.model as Record<string, unknown> | undefined
+        ?? Object.entries(popoverValues ?? {}).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
+      const currentModelTag = (modelValue?.tags as string[])?.[0];
+      const currentModelId = modelValue?.id as string | undefined;
+      const tierModelId = currentModelTag ? tiers?.[currentModelTag]?.modelId : undefined;
+      const resolvedModel = currentModelTag
+        ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
+        : currentModelId
+          ? findPinnedModel(currentModelId, availableModels)
+          : null;
+      const provider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
+      return { name: resolvedModel?.name, pinnedId: currentModelId, provider };
+    })();
+    const providerDotColor = (driverId?: string): string => {
+      switch (driverId) {
+        case 'anthropic': case 'claude': return 'bg-orange-400';
+        case 'openai': case 'codex': return 'bg-green-500';
+        case 'gemini': case 'vertexai': return 'bg-blue-400';
+        default: return 'bg-gray-400';
+      }
+    };
+
+    const handleWorkflowChange = (wf: string | null) => {
+      // Mark the workflow user explicitly changed to - skip loading defaults for it
+      // We need to compute the effective workflow name (wf or userDefaultWorkflow)
+      const effectiveWf = wf || userDefaultWorkflow;
+      skipDefaultPresetsForWorkflowRef.current = effectiveWf;
+      setSelectedWorkflow(wf);
+      // Close settings popover when workflow changes
+      setSettingsPage(null);
+      // Clear workflow params when switching workflows
+      // This prevents stale params from a different workflow
+      // being sent to the new workflow (which would cause validation errors)
+      setWorkflowParams({});
+      setSelectedPresets({});
+      // Also clear persisted params for this chat
+      if (chatId) {
+        useChatParamsStore.getState().setChatParams(chatId, {});
+        // Clear selected_presets in the RQ cache so the
+        // useEffect doesn't reload them.
+        patchChatCaches(
+          useProjectStore.getState().currentProject?.id,
+          chatId,
+          { selectedPresets: {} }
+        );
+      } else {
+        // New chat: also clear temp params/presets so the
+        // workflow-change effect doesn't reapply stale values
+        // from a previous workflow.
+        // Note: we keep tempNewChatWorkflow in sync with the
+        // user's manual selection so the subscription in
+        // useChatInputState doesn't snap us back.
+        useChatParamsStore.getState().setTempNewChatParams({});
+        useChatParamsStore.getState().setTempNewChatPresets({});
+        useChatParamsStore.getState().setTempNewChatWorkflow(wf);
+      }
+    };
+
+    // Attach tiles in the ⊕ sheet. The input is clicked inside the tap's
+    // handler (a file picker opens only from a user gesture), after the sheet
+    // is closed so the picker's result lands on a visible composer.
+    const handleAttachPick = (kind: AttachKind) => {
+      setOptionsPage(null);
+      const input = kind === "photos" ? photoInputRef.current : kind === "camera" ? cameraInputRef.current : fileInputRef.current;
+      input?.click();
+    };
+
+    const openOptions = (page: ComposerOptionsPage = { id: "root" }) => {
+      setSettingsPage(null);
+      setWorkflowSelectorOpen(false);
+      setOptionsPage(page);
+    };
+
+    // A preset differs from the default when one is picked and it is not the
+    // workflow's default for that target: that is when the chip row says so.
+    // The defaults are read only once some preset is picked (cached per
+    // workflow, so a chat open with none pays nothing).
+    const anyPresetPicked = canConfigure && presetTargets.some((t) => !!selectedPresets[t.name]);
+    const { defaults: defaultPresets, loading: defaultsLoading } = useDefaultPresets(
+      currentProjectFromStore?.id,
+      anyPresetPicked ? workflowName : undefined,
+    );
+    const armedPresets = canConfigure
+      ? presetTargets.filter((t) => {
+          const value = selectedPresets[t.name];
+          return !!value && !defaultsLoading && value !== defaultPresets[t.name];
+        })
+      : [];
+
+    const hasText = input.trim().length > 0;
+    const hasContent = hasText || attachments.length > 0 || contexts.length > 0;
+    const sendDisabled = disabled || sending || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed;
+    const { isMac } = detectPlatform();
+    const sendKeyHint = coarsePointer ? (isMac ? "⌘↵" : "Ctrl+Enter") : "Enter";
+
+    const hasChips =
+      contexts.length > 0 ||
+      uploadQueue.uploads.length > 0 ||
+      attachments.length > 0 ||
+      !!threadBorderColor ||
+      armedPresets.length > 0;
+
+    // Each priority+ item carries `data-fold-item`, and once it does not fit,
+    // `data-folded` (chat-composer.css takes it out of the row).
+    const toolProps = (key: string) => {
+      const folded = isFolded(key);
+      return {
+        "data-fold-item": key,
+        "data-folded": folded ? "true" : undefined,
+        "aria-hidden": folded || undefined,
+        inert: folded || undefined,
+      } as const;
+    };
+
     return (
       <div
         className={`layout-stable ${
@@ -1768,22 +1890,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       >
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1200px] mx-auto">
-            <div ref={containerRef} className="mt-1 mb-1.5">
+            {/* px, not rem, for the card's inset and the band around it: the
+                one-line card is 44px controls + 1px border + 3px padding = 52
+                (design §5.3), and the band adds 7px + its hairline, at every
+                Appearance step. */}
+            <div ref={containerRef} className="composer-root mb-[4px] mt-[3px]">
               <div
-                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-warning/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={cn(
+                  "relative rounded-3xl border bg-card p-[3px] chat-input-container cursor-text transition-colors duration-200",
+                  hasPendingQuestion ? "border-warning/70" : "border-border",
+                  isDragging && "bg-[var(--chat-drag-bg,var(--transparent-button-hover))]",
+                )}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
-                style={{
-                  padding: "4px 8px",
-                  ...(threadBorderColor ? { borderColor: threadBorderColor } : {}),
-                  backgroundColor: isDragging
-                    ? "var(--chat-drag-bg, var(--transparent-button-hover))"
-                    : effectiveStreaming
-                    ? "hsl(var(--primary) / 0.05)"
-                    : "var(--chat-input-bg)",
-                  transform: isDragging ? "scale(1.002)" : "none",
-                  transition: isDragging ? "transform 0.1s" : "all 0.2s",
-                }}
                 {...handlers}
               >
                 {/* Drag overlay indicator */}
@@ -1835,22 +1954,72 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   )}
 
                   {/* Normal input UI - hidden when question prompt is shown */}
-                  {!showAskOnly && (<>
-                  {uploadQueue.uploads.map((upload) => <div key={upload.id} className="flex min-w-0 items-center gap-2 text-sm" role="status">
-                    <span className="min-w-0 flex-1 truncate">{upload.file.name} · {upload.status === "failed" ? "Upload failed" : "Uploading…"}</span>
-                    {upload.status === "failed" && <button type="button" className="min-h-[44px] px-2" onClick={() => void uploadQueue.retry(upload.id)}>Retry</button>}
-                    <button type="button" className="min-h-[44px] px-2" onClick={() => uploadQueue.cancel(upload.id)}>Cancel</button>
-                  </div>)}
-                  {/* Attachments */}
-                    <div className="pt-3 px-2">
-                      <AttachmentPreview
-                        attachments={attachments}
-                        onRemove={handleRemoveAttachment}
-                        className={attachments.length > 0 ? "" : "hidden"}
-                      />
+                  {!showAskOnly && (
+                  <div className="composer-grid">
+                    {/* Armed state, only when there is some: what this send
+                        carries beyond its text. No chips, no row. */}
+                    {hasChips && (
+                      <div className="composer-chips mb-1 flex gap-1.5 overflow-x-auto px-1 pt-1" data-testid="composer-chips">
+                        {contexts.map((context) => (
+                          <CodeContextChip
+                            key={context.id}
+                            context={context}
+                            onRemove={() => removeContext(context.id)}
+                          />
+                        ))}
+                        {uploadQueue.uploads.map((upload) => (
+                          <UploadChip
+                            key={upload.id}
+                            name={upload.file.name}
+                            failed={upload.status === "failed"}
+                            onRetry={() => void uploadQueue.retry(upload.id)}
+                            onCancel={() => uploadQueue.cancel(upload.id)}
+                          />
+                        ))}
+                        <AttachmentPreview
+                          attachments={attachments}
+                          onRemove={handleRemoveAttachment}
+                        />
+                        {threadBorderColor && (
+                          <ComposerChip
+                            icon={<GitBranch className="h-3.5 w-3.5" style={{ color: threadBorderColor }} aria-hidden />}
+                            label={threadDisplayName}
+                            onRemove={onSelectThread ? () => onSelectThread(null) : undefined}
+                            removeLabel="Send to the main thread instead"
+                          />
+                        )}
+                        {armedPresets.map((target) => (
+                          <ComposerChip
+                            key={`preset-${target.name || "workflow"}`}
+                            icon={<Layers className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
+                            label={`${target.name || "Preset"}: ${selectedPresets[target.name]}`}
+                            onOpen={() => openOptions({ id: "preset", target: target.name })}
+                            openLabel={`Change ${target.name || "the"} preset`}
+                            onRemove={() => handlePresetChange(target.name, null)}
+                            removeLabel={`Clear ${target.name || "the"} preset`}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="composer-plus" data-onboarding="chat-controls">
+                      <Tooltip content="Chat options" side="top" delay={300} triggerClassName="inline-flex">
+                        <button
+                          type="button"
+                          aria-label="Chat options"
+                          aria-haspopup="dialog"
+                          onClick={() => openOptions()}
+                          className={cn(COMPOSER_ROUND_BUTTON, "text-muted-foreground hover:bg-foreground/5 hover:text-foreground")}
+                        >
+                          <Plus className="h-5 w-5" aria-hidden />
+                          {canConfigure && hasUnsetParams && (
+                            <span data-testid="options-required-dot" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" aria-hidden />
+                          )}
+                        </button>
+                      </Tooltip>
                     </div>
 
-                    <div className="px-2">
+                    <div className="composer-text">
                       <ChatTextArea
                         ref={textareaRef}
                         value={input}
@@ -1863,241 +2032,156 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         chatId={chatId}
                         placeholder={placeholder}
                         slashCommands={slashCommandList}
-                        contexts={contexts}
-                        onRemoveContext={removeContext}
                       />
                     </div>
 
-                  {/* Thread indicator - shown when typing into a sub-thread */}
-                  {threadBorderColor && (
-                    <div className="px-3 py-0.5">
-                      <span
-                        className="text-2xs font-medium"
-                        style={{ color: threadBorderColor }}
-                      >
-                        {threadDisplayName}
-                      </span>
-                    </div>
-                  )}
+                    {/* Priority+ row: wide containers only (chat-composer.css). */}
+                    <div ref={toolsRef} className="composer-tools" data-testid="composer-tools">
+                      {isPendingChat && (
+                        <div {...toolProps("workflow")}>
+                          <WorkflowSelector
+                            isOpen={workflowSelectorOpen}
+                            onOpenChange={setWorkflowSelectorOpen}
+                            value={selectedWorkflow}
+                            onChange={handleWorkflowChange}
+                            isStreaming={effectiveStreaming}
+                            disabled={disabled}
+                          />
+                        </div>
+                      )}
 
-
-                  {/* Single Bottom Row: All Controls */}
-                  {<div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
-                    {/* Left side: Workflow selector + inline required params + expand button */}
-                    <div className={cn("flex min-w-0 items-center gap-1", !mobile && "flex-wrap")} data-onboarding="chat-controls">
-                      {mobile && <button type="button" aria-label="Add" onClick={() => setMobileOptionsOpen(true)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full hover:bg-muted"><Plus className="h-5 w-5" /></button>}
-                      <ComposerOptions mobile={mobile} open={mobileOptionsOpen} onClose={() => setMobileOptionsOpen(false)}>
-                      {mobile && canAttach && <button type="button" disabled={uploading || disabled} onClick={handleAttachClick} className="min-h-[44px] w-full rounded-lg border border-border px-3 text-left">{uploading ? "Uploading…" : "Attach files"}</button>}
-                      {/* Workflow Selector - disabled once chat has started (not pending) */}
-                      <div>
-                        <WorkflowPicker
-                          isOpen={workflowSelectorOpen}
-                          onOpenChange={setWorkflowSelectorOpen}
-                          value={selectedWorkflow}
-                          onChange={(wf) => {
-                            // Mark the workflow user explicitly changed to - skip loading defaults for it
-                            // We need to compute the effective workflow name (wf or userDefaultWorkflow)
-                            const effectiveWf = wf || userDefaultWorkflow;
-                            skipDefaultPresetsForWorkflowRef.current = effectiveWf;
-                            setSelectedWorkflow(wf);
-                            // Close settings popover when workflow changes
-                            setSettingsPage(null);
-                            // Clear workflow params when switching workflows
-                            // This prevents stale params from a different workflow
-                            // being sent to the new workflow (which would cause validation errors)
-                            setWorkflowParams({});
-                            setSelectedPresets({});
-                            // Also clear persisted params for this chat
-                            if (chatId) {
-                              useChatParamsStore.getState().setChatParams(chatId, {});
-                              // Clear selected_presets in the RQ cache so the
-                              // useEffect doesn't reload them.
-                              patchChatCaches(
-                                useProjectStore.getState().currentProject?.id,
-                                chatId,
-                                { selectedPresets: {} }
-                              );
-                            } else {
-                              // New chat: also clear temp params/presets so the
-                              // workflow-change effect doesn't reapply stale values
-                              // from a previous workflow.
-                              // Note: we keep tempNewChatWorkflow in sync with the
-                              // user's manual selection so the subscription in
-                              // useChatInputState doesn't snap us back.
-                              useChatParamsStore.getState().setTempNewChatParams({});
-                              useChatParamsStore.getState().setTempNewChatPresets({});
-                              useChatParamsStore.getState().setTempNewChatWorkflow(wf);
-                            }
-                          }}
-                          isStreaming={effectiveStreaming}
-                          disabled={
-                            disabled ||
-                            !isPendingChat
-                          }
-                          compact={isCompact}
-                        />
-                      </div>
-
-                      {/* Inline Preset Pickers - one per target (workflow or group with tag) */}
                       {/* Note: Presets and params are ALWAYS editable, even while streaming */}
-                      {canConfigure && presetTargets.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {presetTargets.map((target) => (
-                            <InlinePresetPicker
-                              key={`preset-${target.name || "workflow"}`}
-                              mobile={mobile}
-                              presets={presetsByTag.get(target.tag) || []}
-                              value={selectedPresets[target.name]}
-                              onChange={(preset) =>
-                                handlePresetChange(target.name, preset)
-                              }
-                              groupLabel={target.name || undefined} // Empty string = workflow, show "Preset"
-                              isLoading={presetsLoading}
-                              disabled={disabled || !isMessagingAllowed}
-                              isStreaming={false}
-                            />
-                          ))}
+                      {canConfigure && presetTargets.map((target) => (
+                        <div key={`preset-${target.name || "workflow"}`} {...toolProps(`preset:${target.name}`)}>
+                          <InlinePresetPicker
+                            presets={presetsByTag.get(target.tag) || []}
+                            value={selectedPresets[target.name]}
+                            onChange={(preset) =>
+                              handlePresetChange(target.name, preset)
+                            }
+                            groupLabel={target.name || undefined} // Empty string = workflow, show "Preset"
+                            isLoading={presetsLoading}
+                            disabled={disabled || !isMessagingAllowed}
+                            isStreaming={false}
+                          />
+                        </div>
+                      ))}
+
+                      {/* Model pill - opens settings popover directly to model page */}
+                      {modelInlineAllowed && (
+                        <div {...toolProps("model")}>
+                          {renderSettingsPopover('model', {
+                            anchored: {
+                              open: settingsPage === 'model',
+                              onOpen: () => setSettingsPage('model'),
+                              trigger: (triggerProps) => (
+                                <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
+                                  <button
+                                    {...triggerProps}
+                                    type="button"
+                                    className={cn(
+                                      "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5",
+                                      COMPOSER_CONTROL,
+                                      settingsPage === 'model'
+                                        ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
+                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
+                                    )}
+                                    disabled={disabled || !isMessagingAllowed}
+                                    aria-label="Model settings"
+                                  >
+                                    <span className={cn("w-1.5 h-1.5 rounded-full", providerDotColor(composerModel.provider))} />
+                                    <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
+                                    <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+                                  </button>
+                                </Tooltip>
+                              ),
+                            },
+                          })}
                         </div>
                       )}
 
                       {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
-                      {!mobile && canConfigure && toolbarParams.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {toolbarParams.map(([paramName, schema]) => (
-                            <InlineParamInput
-                              key={paramName}
-                              name={paramName}
-                              schema={schema}
-                              value={workflowParams[paramName] ?? getInputDefault(schema)}
-                              onChange={(value) =>
-                                handleWorkflowParamsChange({
-                                  ...workflowParams,
-                                  [paramName]: value,
-                                })
-                              }
-                              disabled={disabled || !isMessagingAllowed}
-                              isStreaming={false}
-                            />
-                          ))}
+                      {canConfigure && toolbarParams.map(([paramName, schema]) => (
+                        <div key={paramName} {...toolProps(`param:${paramName}`)}>
+                          <InlineParamInput
+                            name={paramName}
+                            schema={schema}
+                            value={workflowParams[paramName] ?? getInputDefault(schema)}
+                            onChange={(value) =>
+                              handleWorkflowParamsChange({
+                                ...workflowParams,
+                                [paramName]: value,
+                              })
+                            }
+                            disabled={disabled || !isMessagingAllowed}
+                            isStreaming={false}
+                          />
                         </div>
-                      )}
+                      ))}
 
-                      {mobile && canConfigure && <>
-                        {workflowDefinition.isLoading ? <p role="status">Loading workflow settings…</p> : workflowDefinition.error ? <div role="alert"><p>Could not load workflow settings.</p><button type="button" className="min-h-[44px] px-3" onClick={() => void workflowDefinition.refetch()}>Retry settings</button></div> : !popoverInputs || Object.keys(popoverInputs).length === 0 ? <p className="text-sm text-muted-foreground">This workflow has no configurable settings.</p> : <button type="button" disabled={disabled || !isMessagingAllowed} className="min-h-[44px] w-full rounded-lg border border-border px-3 text-left" onClick={() => { setMobileOptionsOpen(false); setSettingsPage('main'); }}>All settings{hasUnsetParams ? ' · Required inputs missing' : ''}</button>}
-                      </>}
-                      {mobile && <AccountUsageChip chatId={chatId} />}
-                      </ComposerOptions>
-                      {mobile && settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
-                      {/* Model pill - opens settings popover directly to model page */}
-                      {canConfigure && hasConfigurableParams && (() => {
-                        const modelValue = workflowParams?.model as Record<string, unknown> | undefined
-                          ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
-                        const currentModelTag = (modelValue?.tags as string[])?.[0];
-                        const currentModelId = modelValue?.id as string | undefined;
-                        const tierModelId = currentModelTag ? tiers?.[currentModelTag]?.modelId : undefined;
-                        const resolvedModel = currentModelTag
-                          ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
-                          : currentModelId
-                            ? findPinnedModel(currentModelId, availableModels)
-                            : null;
-                        const getProviderColor = (driverId?: string): string => {
-                          switch (driverId) {
-                            case 'anthropic': case 'claude': return 'bg-orange-400';
-                            case 'openai': case 'codex': return 'bg-green-500';
-                            case 'gemini': case 'vertexai': return 'bg-blue-400';
-                            default: return 'bg-gray-400';
-                          }
-                        };
-                        const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
-                        return (
-                          <div className="relative">
-                            <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
-<button
-                              className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
-                                COMPOSER_CONTROL,
-                                settingsPage === 'model'
-                                  ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
-                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-                              )}
-                              disabled={disabled || !isMessagingAllowed}
-                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
-                              <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
-                              <ComposerModelName name={resolvedModel?.name} pinnedId={currentModelId} />
-                              <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-                            </button>
-</Tooltip>
-                            {settingsPage === 'model' && renderSettingsPopover('model')}
-                          </div>
-                        );
-                      })()}
-
-                      {!mobile && <AccountUsageChip chatId={chatId} />}
+                      <div {...toolProps("account")}>
+                        <AccountUsageChip chatId={chatId} />
+                      </div>
 
                       {/* Settings Button - opens settings popover */}
-                      {!mobile && canConfigure && (hasConfigurableParams || isViewingThreadParams) && (
-                        <div className="relative">
-                          <Tooltip
-                            content={
-                              settingsPage !== null
-                                ? "Hide settings"
-                                : "Show all settings"
-                            }
-                            side="top"
-                          >
-                            <button
-                              data-contextual-tip="params-toggle"
-                              aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
-                              onClick={() =>
-                                setSettingsPage(settingsPage !== null ? null : 'main')
-                              }
-                              disabled={disabled || !isMessagingAllowed}
-                              className={cn(
-                                "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:h-[44px] touch:w-[44px]",
-                                COMPOSER_CONTROL,
-                                !disabled
-                                  ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
-                                  : "cursor-default opacity-60",
-                                settingsPage !== null
-                                  ? "bg-primary/20 text-primary-ink"
-                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
-                              )}
-                            >
-                              <Settings2 className="w-3.5 h-3.5" />
-                              {hasUnsetParams && (
-                                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
-                              )}
-                            </button>
-                          </Tooltip>
-                          {settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
+                      {settingsInlineAllowed && (
+                        <div {...toolProps("settings")}>
+                          {renderSettingsPopover(settingsPage && settingsPage !== 'model' ? settingsPage : 'main', {
+                            anchored: {
+                              open: settingsPage !== null && settingsPage !== 'model',
+                              onOpen: () => setSettingsPage('main'),
+                              trigger: (triggerProps) => (
+                                <Tooltip
+                                  content={settingsPage !== null ? "Hide settings" : "Show all settings"}
+                                  side="top"
+                                >
+                                  <button
+                                    {...triggerProps}
+                                    type="button"
+                                    data-contextual-tip="params-toggle"
+                                    aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
+                                    disabled={disabled || !isMessagingAllowed}
+                                    className={cn(
+                                      "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:w-[44px]",
+                                      COMPOSER_CONTROL,
+                                      !disabled
+                                        ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
+                                        : "cursor-default opacity-60",
+                                      settingsPage !== null
+                                        ? "bg-primary/20 text-primary-ink"
+                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
+                                    )}
+                                  >
+                                    <Settings2 className="w-3.5 h-3.5" />
+                                    {hasUnsetParams && (
+                                      <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ),
+                            },
+                          })}
                         </div>
                       )}
                     </div>
 
-                    {/* Right side: Action buttons + Scroll to bottom */}
-                    <div className="flex items-center gap-2">
-                      {/* Action buttons */}
-                      <ButtonLayout
-                        layout={mobile || !canAttach ? ["sendStop"] : ["attach", "sendStop"]}
+                    <div className="composer-action">
+                      <ComposerActionSlot
                         onSend={handleSend}
                         onStop={handleStop}
                         onQueue={handleQueue}
-                        canSend={
-                          input.trim().length > 0 ||
-                          attachments.length > 0
-                        }
                         isStreaming={effectiveStreaming}
-                        disabled={disabled || sending || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed}
-
-                        onAttach={handleAttachClick}
-                        uploading={uploading}
-                        compact={isCompact}
+                        hasContent={hasContent}
+                        hasText={hasText}
+                        disabled={sendDisabled}
+                        sendKeyHint={sendKeyHint}
                       />
                     </div>
-                  </div>}
-                  </>)}
+                  </div>
+                  )}
 
-                  {/* Hidden file input */}
+                  {/* Hidden file inputs: Files, Photos, and Camera (capture
+                      opens the camera directly on a phone). */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -2105,10 +2189,30 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     accept={getAcceptedMimeTypes()}
                     onChange={handleFileSelect}
                     className="hidden"
+                    data-testid="attach-files-input"
+                  />
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="attach-photos-input"
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="attach-camera-input"
                   />
 
-                  {/* Opened by the "/prompt" slash command. Inserts the prompt
-                      body into the composer so it can be edited before sending. */}
+                  {/* Opened by the "/prompt" slash command and the ⊕ sheet's
+                      Prompts row. Inserts the prompt body into the composer so
+                      it can be edited before sending. */}
                   <PromptPicker
                     isOpen={showPromptPicker}
                     projectId={currentProjectFromStore?.id}
@@ -2123,6 +2227,65 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             </div>
           </div>
         </div>
+
+        {optionsPage && (
+          <ComposerOptions
+            page={optionsPage}
+            onNavigate={setOptionsPage}
+            onClose={() => setOptionsPage(null)}
+            chatId={chatId}
+            attach={canAttach ? { camera: coarsePointer, disabled: disabled || uploading, onPick: handleAttachPick } : null}
+            configure={
+              canConfigure
+                ? {
+                    status: workflowDefinition.isLoading
+                      ? "loading"
+                      : workflowDefinition.error
+                        ? "error"
+                        : !popoverInputs || Object.keys(popoverInputs).length === 0
+                          ? "empty"
+                          : "ready",
+                    onRetry: () => void workflowDefinition.refetch(),
+                    hasUnsetParams,
+                    model: findModelParamKey(popoverInputs) ? (
+                      <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
+                    ) : null,
+                    renderSettings: (page, onExit) => renderSettingsPopover(page, { embedded: { onExit } }),
+                  }
+                : null
+            }
+            presets={
+              canConfigure
+                ? presetTargets.map((target) => ({
+                    target: target.name,
+                    label: target.name,
+                    value: selectedPresets[target.name] ?? null,
+                    presets: presetsByTag.get(target.tag) || [],
+                    loading: presetsLoading,
+                  }))
+                : []
+            }
+            onPresetChange={handlePresetChange}
+            workflow={{
+              value: selectedWorkflow,
+              locked: !isPendingChat,
+              disabled,
+              onChange: handleWorkflowChange,
+            }}
+            onPrompts={() => {
+              setOptionsPage(null);
+              setShowPromptPicker(true);
+            }}
+            commands={slashCommandList}
+            onCommand={(command) => {
+              // As if typed: the sheet steps aside and the command runs. A
+              // command that opens something (the model page, the file
+              // picker) opens it from here, inside this same tap.
+              setOptionsPage(null);
+              command.action();
+            }}
+          />
+        )}
       </div>
     );
   }
