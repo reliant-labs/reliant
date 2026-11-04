@@ -964,6 +964,11 @@ tasks:
     cmds:
       - ./scripts/test-flake-report.sh
 
+  pin:check:report:test:
+    desc: Self-test of scripts/forge-pin-report.sh (forge-pin-check.yml's verdicts and its forge-pin:red / forge-pin:broken issue transitions) against a fake gh
+    cmds:
+      - ./scripts/test-forge-pin-report.sh
+
   release:lock:test:
     desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote
     cmds:

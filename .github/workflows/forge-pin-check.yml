@@ -15,10 +15,13 @@ name: Forge pin check
 # pushes nothing and gates nothing. A pair already checked (pass) is skipped
 # with no setup, using a cache entry as the marker, so an idle hour costs a few
 # seconds of runner time. A failure opens one rolling issue (label
-# forge-pin:red, found by its hidden marker); the next pass closes it.
+# forge-pin:red, found by its hidden marker); the next pass, or a pair already
+# pinned or cached as passed, closes it. A check that cannot run at all opens
+# forge-pin:broken instead (scripts/forge-pin-report.sh).
 #
 # Where the logic lives: scripts/pin-forge.sh, the same script a laptop and
-# the release train run. This file only chooses the pair and reports.
+# the release train run. This file only chooses the pair; the report is
+# scripts/forge-pin-report.sh.
 
 on:
   schedule:
@@ -78,6 +81,7 @@ jobs:
           lookup-only: true
 
       - uses: ./.github/actions/setup
+        id: setup
         if: steps.pair.outputs.pinned != 'true' && steps.seen.outputs.cache-hit != 'true'
         with:
           node: "true"
@@ -98,32 +102,22 @@ jobs:
           path: .forge-pin-check
           key: forge-pin-check-${{ steps.pair.outputs.reliant }}-${{ steps.pair.outputs.forge }}
 
+      # Every outcome is reported, in scripts/forge-pin-report.sh (self-test:
+      # scripts/test-forge-pin-report.sh): a pass, or a pair already pinned or
+      # cached as passed, closes the rolling issue; a pin failure opens or updates
+      # it; a failure to run the check at all (pair, cache lookup, setup) goes to
+      # a separate forge-pin:broken issue naming the stage, and records nothing.
       - name: Report
-        if: always() && (steps.pin.outcome == 'success' || steps.pin.outcome == 'failure')
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-          OUTCOME: ${{ steps.pin.outcome }}
+          PAIR_OUTCOME: ${{ steps.pair.outcome }}
+          PINNED: ${{ steps.pair.outputs.pinned }}
+          SEEN_OUTCOME: ${{ steps.seen.outcome }}
+          CACHE_HIT: ${{ steps.seen.outputs.cache-hit }}
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          PIN_OUTCOME: ${{ steps.pin.outcome }}
           F: ${{ steps.pair.outputs.forge }}
           R: ${{ steps.pair.outputs.reliant }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -uo pipefail
-          mark='<!-- forge-pin-check -->'
-          num="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --label forge-pin:red --limit 20 --json number,body \
-            --jq "[.[] | select(.body | contains(\"$mark\"))][0].number // empty" 2>/dev/null || true)"
-          if [ "$OUTCOME" = success ]; then
-            [ -z "$num" ] || gh issue close "$num" -R "$GITHUB_REPOSITORY" \
-              --comment "forge \`${F:0:12}\` pins into reliant main \`${R:0:12}\` again ([run]($RUN_URL))."
-            exit 0
-          fi
-          tail="$(grep -v '^\s*$' .forge-pin-check/pin.log 2>/dev/null | tail -n 40)"
-          body="$(printf 'forge main `%s` does not pin into reliant main `%s`: `scripts/pin-forge.sh %s` failed ([run](%s)).\n\nThe release train runs the same script at every cut, so the next cut will die there until forge or reliant main is fixed.\n\n```\n%s\n```\n\n%s' \
-            "${F:0:12}" "${R:0:12}" "$F" "$RUN_URL" "$tail" "$mark")"
-          gh label create forge-pin:red -R "$GITHUB_REPOSITORY" --color B60205 \
-            --description "forge main does not pin into reliant main (forge-pin-check.yml)" >/dev/null 2>&1 || true
-          if [ -n "$num" ]; then
-            gh issue comment "$num" -R "$GITHUB_REPOSITORY" --body "$body"
-          else
-            gh issue create -R "$GITHUB_REPOSITORY" --label forge-pin:red \
-              --title "forge main does not pin into reliant main (the next RC cut will fail)" --body "$body"
-          fi
+        run: bash scripts/forge-pin-report.sh
