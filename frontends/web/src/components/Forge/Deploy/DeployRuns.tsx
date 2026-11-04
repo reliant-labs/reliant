@@ -31,7 +31,7 @@ import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
 import { Ago, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 
-const TONE: Record<DeployRunState, StatusTone> = {
+export const DEPLOY_RUN_TONE: Record<DeployRunState, StatusTone> = {
   running: "neutral",
   succeeded: "success",
   failed: "danger",
@@ -41,7 +41,7 @@ const TONE: Record<DeployRunState, StatusTone> = {
   unknown: "neutral",
 };
 
-const STATE_LABEL: Record<DeployRunState, string> = {
+export const DEPLOY_RUN_LABEL: Record<DeployRunState, string> = {
   running: "Running",
   succeeded: "Succeeded",
   failed: "Failed",
@@ -148,7 +148,7 @@ function DeployRunRow({
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />}
-        <Status tone={TONE[run.state]} label={STATE_LABEL[run.state]} size="sm" />
+        <Status tone={DEPLOY_RUN_TONE[run.state]} label={DEPLOY_RUN_LABEL[run.state]} size="sm" />
         <span className="min-w-0 flex-1 truncate text-ink">{deployHeadline(run, shortVersion)}</span>
         {showEnv && <Tag>{run.env}</Tag>}
         {run.source && <span className="hidden text-xs text-ink-muted md:inline">{run.source}</span>}
@@ -243,7 +243,7 @@ export function DeployRunsBanner({ project, deployHref }: { project: string; dep
             run.state === "running" ? "border-border bg-surface" : "border-danger-border bg-danger-surface"
           )}
         >
-          <Status tone={TONE[run.state]} label={STATE_LABEL[run.state]} size="sm" />
+          <Status tone={DEPLOY_RUN_TONE[run.state]} label={DEPLOY_RUN_LABEL[run.state]} size="sm" />
           <span className="min-w-0 flex-1 truncate text-ink">
             {deployHeadline(run, shortVersion)}
             {run.error && run.state !== "running" && <span className="text-ink-muted"> — {run.error}</span>}

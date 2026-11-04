@@ -38,42 +38,88 @@ import { DeployWithAgentButton } from "@/components/Forge/Observability/AskRelia
 import { DeployStatusUnread, deployStatusUnread } from "@/components/Forge/Console/DeployStatusUnread";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { useCloudEnvStatuses } from "@/hooks/forge-queries";
+import { useCloudEnvStatuses, useEnvironmentShapes } from "@/hooks/forge-queries";
+import { useObservabilityOrg, useReleaseHealths, useWorkloads } from "@/hooks/observability-queries";
+import { useDeployRuns, useEnvPromotions } from "@/hooks/release-queries";
+import { DEFAULT_HEALTH_WINDOW, HEALTH_WINDOW_MS } from "@/services/controlPlane/observability/deliveryTypes";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { isPlacedKind, type LiveEnv } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { ENV_ALL } from "../Console/envScope";
 import { CloudNotice } from "../SourceNotices";
-import { EnvironmentTable, type EnvironmentRow } from "./EnvironmentTable";
+import { jobRows, OVERVIEW_RANGE } from "../Workloads/workloadModel";
+import { EnvironmentList, type EnvironmentRow, type EnvLinks } from "./EnvironmentList";
+import { currentPromotion, summarizeEnvironment } from "./environmentSummary";
 
 /**
- * The table's rows for `envs`, with the platform's observation for each
- * PLACED environment. A self-managed env has no server-side observer, so
- * asking would answer for a cluster the platform has never connected to; its
- * row shows what the last render declared instead.
+ * The list's rows for `envs`: the platform's observation for each PLACED
+ * environment (a self-managed env has no server-side observer, so asking would
+ * answer for a cluster the platform has never connected to), and the rest of
+ * each one's summary (environmentSummary.ts) from reads the console already
+ * makes: the project's ListWorkloads (the Overview's, same cache entry), its
+ * deploy runs, the promotion of each environment's CURRENT release (not the
+ * ledger's newest, which can be a later rollout that never landed) and that
+ * promotion's release health. No roster field beyond GetLiveView's slim one is read; the
+ * declared workloads come from GetEnvironmentShape, only where telemetry
+ * cannot see.
  */
-export function useEnvironmentRows(envs: LiveEnv[]): EnvironmentRow[] {
+export function useEnvironmentRows(envs: LiveEnv[], project: string, linkOf: (env: string) => EnvLinks): EnvironmentRow[] {
   const placedIds = useMemo(() => envs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id), [envs]);
   const statuses = useCloudEnvStatuses(placedIds);
-  return useMemo(
-    () =>
-      envs.map((env) => {
-        const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
-        return { env, status: status?.data, statusLoading: !!status?.isLoading };
-      }),
-    [envs, statuses]
-  );
+
+  const org = useObservabilityOrg();
+  const orgId = org.orgId;
+  const projectScope = useMemo<ObsScope | null>(() => (orgId ? { orgId, projectId: project, envIds: [], filters: [] } : null), [orgId, project]);
+  const listed = useWorkloads(projectScope, OVERVIEW_RANGE);
+  const runs = useDeployRuns(project);
+  const promotions = useEnvPromotions(useMemo(() => envs.filter((env) => env.release !== "").map((env) => env.id), [envs]));
+  const current = envs
+    .map((env) => ({ envId: env.id, promotionId: currentPromotion(promotions.get(env.id)?.data, env)?.id ?? "" }))
+    .filter((item) => item.promotionId !== "");
+  const checks = useReleaseHealths(orgId, project, current, HEALTH_WINDOW_MS[DEFAULT_HEALTH_WINDOW]);
+  const shapes = useEnvironmentShapes(envs.map((env) => (env.declared && !isPlacedKind(env.kind) && env.kind !== "local" ? env.id : "")));
+
+  const workloads = listed.data ? { workloads: listed.data.workloads, jobs: jobRows(listed.data.jobs, ENV_ALL) } : undefined;
+  return envs.map((env) => {
+    const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
+    const check = checks.get(env.id);
+    const promotion = promotions.get(env.id);
+    const summary = summarizeEnvironment({
+      env,
+      status: { data: status?.data, loading: !!status?.isLoading, failed: !!status?.error },
+      workloads: { data: workloads, loading: org.isLoading || listed.isLoading, failed: !!listed.error || (!orgId && !org.isLoading) },
+      runs: { data: runs.data, loading: runs.isLoading, failed: !!runs.error },
+      check:
+        env.release === ""
+          ? null
+          : check
+            ? { data: check.data, loading: check.isLoading, failed: !!check.error }
+            : { data: undefined, loading: !!promotion?.isLoading, failed: !!promotion?.error },
+      declared: (shapes.get(env.id)?.shape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
+    });
+    return { env, status: status?.data, statusLoading: !!status?.isLoading, summary, links: linkOf(env.name) };
+  });
 }
 
 export function EnvironmentsPage() {
   const navigate = useNavigate();
-  const { roster, href } = useForgeConsole();
+  const { roster, href, forgeProject } = useForgeConsole();
   const backendEnvs = useMemo(
     () => roster.envs.filter((env) => env.source === "backend" && env.live).map((env) => env.live!),
     [roster.envs]
   );
   const checkoutEnvs = useMemo(() => roster.envs.filter((env) => env.source === "checkout"), [roster.envs]);
-  const rows = useEnvironmentRows(backendEnvs);
+  const linkOf = useCallback(
+    (env: string): EnvLinks => ({
+      dashboards: href({ kind: "obs-view", view: "dashboards" }, { env }),
+      errors: href({ kind: "obs-view", view: "errors" }, { env }),
+      alerts: href({ kind: "obs-view", view: "alerts" }, { env }),
+    }),
+    [href]
+  );
+  const rows = useEnvironmentRows(backendEnvs, forgeProject, linkOf);
   // A failed read lists nothing; it is not "no environments recorded".
   const unread = deployStatusUnread(roster.live);
 
@@ -85,7 +131,7 @@ export function EnvironmentsPage() {
   const header = (
     <PageHeader
       title="Environments"
-      meta={<span>Where each one runs, what it is on, and where that came from</span>}
+      meta={<span>What each one runs, whether it is healthy, how its last deploy went, and whether that release proved good</span>}
       className="mb-0"
     />
   );
@@ -135,7 +181,7 @@ export function EnvironmentsPage() {
           </GettingStarted>
         </div>
       ) : (
-        <EnvironmentTable rows={rows} onOpen={openEnv} />
+        <EnvironmentList rows={rows} onOpen={openEnv} />
       )}
 
       {checkoutEnvs.length > 0 && <UnregisteredEnvs envs={checkoutEnvs} onOpen={openEnv} />}
