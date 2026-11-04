@@ -2,6 +2,7 @@
 package diskwatch
 
 import (
+	"errors"
 	"go/build"
 	"io"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // A linker is known by its executable and command line, not only by a comm
@@ -121,14 +124,17 @@ func TestScanProcesses_FindsLinkerByCommandLine(t *testing.T) {
 
 // The real scan sees a process's working directory and environment.
 func TestScanProcesses_SeesCwdAndEnvironment(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "go-build777")
-	before := time.Now()
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "go-build777")
+	// fileBirth is bracketed by files written just before and after the
+	// directory: the filesystem stamps all three from one clock, so the
+	// test reads no clock of its own. creatorSlack covers a clock step
+	// between them, as it does in the proof.
+	before := stampFile(t, filepath.Join(tmp, "before"))
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	after := time.Now()
-	// The filesystem stamps a birth from the kernel's coarse clock, up to a
-	// tick behind time.Now: creatorSlack covers that, as it does in the proof.
+	after := stampFile(t, filepath.Join(tmp, "after"))
 	if b := fileBirth(dir); b.Before(before.Add(-creatorSlack)) || b.After(after.Add(creatorSlack)) {
 		t.Errorf("fileBirth = %v, want the directory's creation, between %v and %v", b, before, after)
 	}
@@ -138,6 +144,26 @@ func TestScanProcesses_SeesCwdAndEnvironment(t *testing.T) {
 	}
 }
 
+// stampFile writes an empty file at path and returns the time the filesystem
+// stamped it with.
+func stampFile(t *testing.T, path string) time.Time {
+	t.Helper()
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.ModTime()
+}
+
+// fakeStat is a /proc/<pid>/stat line for comm, started start clock ticks
+// after boot.
+func fakeStat(pid int, comm string, start int) string {
+	return strconv.Itoa(pid) + " (" + comm + ") S 1 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 " + strconv.Itoa(start) + " 0 0"
+}
+
 // fakeProc writes one process of this user's into a fake /proc root.
 func fakeProc(t *testing.T, root string, pid int, comm, cwd string) string {
 	t.Helper()
@@ -145,7 +171,7 @@ func fakeProc(t *testing.T, root string, pid int, comm, cwd string) string {
 	if err := os.MkdirAll(filepath.Join(dir, "fd"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stat := strconv.Itoa(pid) + " (" + comm + ") S 1 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 500 0 0"
+	stat := fakeStat(pid, comm, 500)
 	for name, body := range map[string]string{"stat": stat, "cmdline": comm + "\x00", "environ": "", "maps": ""} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -250,5 +276,131 @@ func TestScanProcRoot_ExitedProcessIsNotIncomplete(t *testing.T) {
 		if _, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0)); err != nil {
 			t.Fatalf("a process whose %v vanished failed the scan: %v", gone, err)
 		}
+	}
+}
+
+// changeMidRead makes the fake process at dir change under the scan: on each
+// of the scan's first n reads of its maps (the last reference readProcess
+// reads before its start time again), change(i) runs while the read is held
+// open. maps is a FIFO for those reads and a plain file after, and the scan's
+// read ends only when the FIFO's writer closes it, after change: the change
+// lands between one process's reads on every run, with no timing.
+func changeMidRead(t *testing.T, dir string, n int, change func(i int)) {
+	t.Helper()
+	maps := filepath.Join(dir, "maps")
+	next := filepath.Join(dir, "maps.next")
+	if err := os.Remove(maps); err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Mkfifo(maps, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range n {
+			w, err := os.OpenFile(maps, os.O_WRONLY, 0) // until the scan opens it
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			change(i)
+			// The next read finds a fresh FIFO (or, after the last, a plain
+			// file); this one stays open in the scan until w closes.
+			if i+1 < n {
+				err = unix.Mkfifo(next, 0o644)
+			} else {
+				err = os.WriteFile(next, nil, 0o644)
+			}
+			if err == nil {
+				err = os.Rename(next, maps)
+			}
+			_ = w.Close()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			// The scan read maps fewer times than n: open the FIFO as its
+			// reader so the writer's open returns and the goroutine ends.
+			if r, err := os.OpenFile(maps, os.O_RDONLY|unix.O_NONBLOCK, 0); err == nil {
+				_ = r.Close()
+			}
+			runtime.Gosched()
+		}
+	})
+}
+
+// A pid whose process exits mid-read and is taken by another is read again:
+// the reads before the replacement were of the old process, and judging the
+// new one by them would miss what it holds (here, a go-build* directory as
+// its working directory), proving that directory dead while it is in use.
+func TestScanProcRoot_PidReplacedMidReadIsReadAgain(t *testing.T) {
+	root := t.TempDir()
+	dir := fakeProc(t, root, 10, "sleep", "/")
+	changeMidRead(t, dir, 1, func(int) {
+		if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(fakeStat(10, "go", 900)), 0o644); err != nil {
+			t.Error(err)
+		}
+		if err := os.Remove(filepath.Join(dir, "cwd")); err != nil {
+			t.Error(err)
+		}
+		if err := os.Symlink("/tmp/go-build42", filepath.Join(dir, "cwd")); err != nil {
+			t.Error(err)
+		}
+	})
+	s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.names["go-build42"] {
+		t.Errorf("names = %v, want go-build42, the working directory of the process that took pid 10", s.names)
+	}
+	if want := time.Unix(9, 0); len(s.goStarts) != 1 || !s.goStarts[0].Start.Equal(want) {
+		t.Errorf("goStarts = %v, want the replacing go command, started %v", s.goStarts, want)
+	}
+}
+
+// A process that exits mid-read with no other taking its pid holds nothing:
+// what was read of it does not count, and the scan goes on.
+func TestScanProcRoot_PidExitedMidReadHoldsNothing(t *testing.T) {
+	root := t.TempDir()
+	fakeProc(t, root, 10, "sleep", "/")
+	dir := fakeProc(t, root, 11, "go", "/tmp/go-build1")
+	changeMidRead(t, dir, 1, func(int) {
+		if err := os.Remove(filepath.Join(dir, "stat")); err != nil {
+			t.Error(err)
+		}
+	})
+	s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.names["go-build1"] || len(s.goStarts) != 0 {
+		t.Errorf("scan = %+v, want nothing of the exited pid 11", s)
+	}
+}
+
+// A pid replaced on every read is never read whole: the scan fails, so the
+// reaper falls back to its age rule rather than judge from mixed reads.
+func TestScanProcRoot_PidReplacedOnEveryReadFailsTheScan(t *testing.T) {
+	root := t.TempDir()
+	fakeProc(t, root, 10, "sleep", "/")
+	dir := fakeProc(t, root, 11, "sleep", "/")
+	changeMidRead(t, dir, pidReadAttempts, func(i int) {
+		if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(fakeStat(11, "sleep", 600+i)), 0o644); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0)); !errors.Is(err, errProcReplaced) {
+		t.Fatalf("scan error = %v, want %v", err, errProcReplaced)
 	}
 }

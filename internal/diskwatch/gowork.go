@@ -37,7 +37,9 @@ import (
 //
 // The scan is a proof only when it read everything this user's processes
 // hold: one whose working directory, descriptors, mappings or environment
-// could not be read fails it (scanProcRoot), as if there were no /proc.
+// could not be read fails it (scanProcRoot), as if there were no /proc. Each
+// process is read between two reads of its start time, so reads that straddle
+// a pid's reuse by another process are never taken for either (readProcess).
 //
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.

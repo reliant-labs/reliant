@@ -45,6 +45,12 @@ func scanProcesses() (procSnapshot, error) {
 // to root (go, the toolchain and what they build and run are dumpable). Such
 // a process contributes what /proc shows everyone: its command line and,
 // when it is a go command or a linker, its start time.
+//
+// A pid names a process only while it lives: one that exits mid-read can be
+// replaced by another under the same pid, and reads either side of the
+// replacement would mix the two. So each process is read between two reads
+// of its start time (readProcess), and what it held counts only when both
+// name the same process.
 func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -57,56 +63,135 @@ func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		dir := filepath.Join(root, e.Name())
-		// Whose references /proc gives this user is told by who owns them,
-		// not the process: a non-dumpable process of this user's (a sandbox,
-		// ssh-agent) has root's, and is withheld from its own user too.
-		info, err := os.Lstat(filepath.Join(dir, "fd"))
-		if gone(err) {
-			continue // exited
+		p, err := readProcessStable(filepath.Join(root, e.Name()), euid)
+		if errors.Is(err, errProcExited) {
+			continue // holds nothing, and no process took its pid
 		}
 		if err != nil {
-			// Any other failure (EACCES under hidepid, an I/O error) hides
-			// whose process this is: a /proc we cannot trust.
-			return procSnapshot{}, fmt.Errorf("pid %d: reading fd: %w", pid, err)
-		}
-		own := euid == 0 || ownerUID(info) == euid
-		comm, start, err := readStat(dir)
-		if gone(err) {
-			continue // exited
-		}
-		if err != nil {
-			// stat is readable by everyone: an unreadable or malformed one
-			// may be a go command or linker we would otherwise not see.
 			return procSnapshot{}, fmt.Errorf("pid %d: %w", pid, err)
 		}
 		scanned++
-		cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
-		if incomplete(err) {
-			// cmdline is readable by everyone: an error is a /proc we
-			// cannot trust, whoever owns the process.
-			return procSnapshot{}, fmt.Errorf("pid %d: reading cmdline: %w", pid, err)
-		}
-		s.addRefs(string(cmdline))
-		var exe string
-		if own {
-			if exe, err = readRefs(&s, dir); err != nil {
-				return procSnapshot{}, fmt.Errorf("pid %d (%s): %w", pid, comm, err)
+		for n := range p.refs.names {
+			if s.names == nil {
+				s.names = map[string]bool{}
 			}
+			s.names[n] = true
 		}
-		at := boot.Add(time.Duration(start) * time.Second / clockTicks)
-		isGo, isLink := creatorKinds(comm, exe, cmdline)
+		at := boot.Add(time.Duration(p.start) * time.Second / clockTicks)
+		isGo, isLink := creatorKinds(p.comm, p.exe, p.cmdline)
 		if isGo {
-			s.goStarts = append(s.goStarts, procStart{PID: pid, Comm: comm, Start: at})
+			s.goStarts = append(s.goStarts, procStart{PID: pid, Comm: p.comm, Start: at})
 		}
 		if isLink {
-			s.linkStarts = append(s.linkStarts, procStart{PID: pid, Comm: comm, Start: at})
+			s.linkStarts = append(s.linkStarts, procStart{PID: pid, Comm: p.comm, Start: at})
 		}
 	}
 	if scanned == 0 {
 		return procSnapshot{}, errors.New("no process readable in " + root)
 	}
 	return s, nil
+}
+
+var (
+	// errProcExited: the process exited, and no other has its pid.
+	errProcExited = errors.New("process exited")
+	// errProcReplaced: the process exited and another took its pid while
+	// it was being read.
+	errProcReplaced = errors.New("pid taken by another process while it was read")
+)
+
+// pidReadAttempts bounds how often readProcessStable reads a pid whose
+// process keeps being replaced mid-read before the scan gives up.
+const pidReadAttempts = 3
+
+// readProcessStable is readProcess, read again when the pid's process was
+// replaced mid-read: the replacement is a live process like any other, and
+// is judged by a read of its own.
+func readProcessStable(dir string, euid int) (procInfo, error) {
+	var err error
+	for range pidReadAttempts {
+		var p procInfo
+		if p, err = readProcess(dir, euid); !errors.Is(err, errProcReplaced) {
+			return p, err
+		}
+	}
+	return procInfo{}, err
+}
+
+// procInfo is what one process holds and is, from one read of its /proc.
+type procInfo struct {
+	comm    string
+	start   uint64 // clock ticks since boot
+	exe     string
+	cmdline []byte
+	refs    procSnapshot // its references (names only)
+}
+
+// readProcess reads one process's /proc entry at dir, as the user euid: its
+// identity (command name and start time) and every reference it holds.
+//
+// The start time is read first and again last. Between two reads that agree,
+// every read was of that one process: its pid is not free for reuse until it
+// is reaped, after which its stat is gone or names another start. A read that
+// found an entry gone is then of a process that is exiting, whose references
+// are going with it. When the second read finds the pid free, the process
+// exited (errProcExited) and nothing read counts; when it finds another
+// process, the reads may mix the two (errProcReplaced), and the replacement
+// must be read afresh.
+func readProcess(dir string, euid int) (procInfo, error) {
+	comm, start, err := readStat(dir)
+	if gone(err) {
+		return procInfo{}, errProcExited
+	}
+	if err != nil {
+		// stat is readable by everyone: an unreadable or malformed one may
+		// be a go command or linker we would otherwise not see.
+		return procInfo{}, err
+	}
+	p := procInfo{comm: comm, start: start}
+	if err := p.read(dir, euid); err != nil {
+		return procInfo{}, err
+	}
+	_, again, err := readStat(dir)
+	switch {
+	case gone(err):
+		return procInfo{}, errProcExited
+	case err != nil:
+		return procInfo{}, err
+	case again != start:
+		return procInfo{}, errProcReplaced
+	}
+	return p, nil
+}
+
+// read fills in p's command line and, for one of euid's processes, its
+// references. Whatever is gone is skipped: readProcess decides afterwards
+// whether that was the process exiting or another taking its pid.
+func (p *procInfo) read(dir string, euid int) error {
+	// Whose references /proc gives this user is told by who owns them, not
+	// the process: a non-dumpable process of this user's (a sandbox,
+	// ssh-agent) has root's, and is withheld from its own user too.
+	info, err := os.Lstat(filepath.Join(dir, "fd"))
+	if incomplete(err) {
+		// Any other failure (EACCES under hidepid, an I/O error) hides whose
+		// process this is: a /proc we cannot trust.
+		return fmt.Errorf("reading fd: %w", err)
+	}
+	own := err == nil && (euid == 0 || ownerUID(info) == euid)
+	cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
+	if incomplete(err) {
+		// cmdline is readable by everyone: an error is a /proc we cannot
+		// trust, whoever owns the process.
+		return fmt.Errorf("reading cmdline: %w", err)
+	}
+	p.cmdline = cmdline
+	p.refs.addRefs(string(cmdline))
+	if own {
+		if p.exe, err = readRefs(&p.refs, dir); err != nil {
+			return fmt.Errorf("(%s): %w", p.comm, err)
+		}
+	}
+	return nil
 }
 
 // readRefs adds every reference one of this user's processes holds to s: its
