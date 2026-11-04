@@ -23,6 +23,9 @@ type tricklingDriver struct {
 	mockLLMDriverForIdempotency
 	every   time.Duration
 	stopped chan struct{}
+	// keepaliveOnce marks the stream live once, as a transport does for a
+	// keepalive read inside an open block, and then never again.
+	keepaliveOnce bool
 }
 
 func (d *tricklingDriver) StreamResponse(ctx context.Context, _ []string, _ []message.Message, _ []tools.Tool) <-chan llm.DriverEvent {
@@ -30,6 +33,9 @@ func (d *tricklingDriver) StreamResponse(ctx context.Context, _ []string, _ []me
 	go func() {
 		defer close(d.stopped)
 		defer close(events)
+		if d.keepaliveOnce {
+			llm.StreamLivenessFrom(ctx).Touch()
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -47,10 +53,21 @@ func (d *tricklingDriver) StreamResponse(ctx context.Context, _ []string, _ []me
 }
 
 func TestCallLLM_NoFirstTokenFailsForRetry(t *testing.T) {
+	t.Run("no keepalive", func(t *testing.T) {
+		testCallLLMNoFirstTokenFailsForRetry(t, false)
+	})
+	t.Run("a keepalive that went stale", func(t *testing.T) {
+		// One liveness mark at the start must not disarm the guard for the
+		// rest of the stream.
+		testCallLLMNoFirstTokenFailsForRetry(t, true)
+	})
+}
+
+func testCallLLMNoFirstTokenFailsForRetry(t *testing.T, keepaliveOnce bool) {
 	// The progress guard is far away and keeps being reset: only the
 	// first-token deadline can end this stream.
 	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: time.Minute, FirstToken: 150 * time.Millisecond})
-	driver := &tricklingDriver{every: 10 * time.Millisecond, stopped: make(chan struct{})}
+	driver := &tricklingDriver{every: 10 * time.Millisecond, stopped: make(chan struct{}), keepaliveOnce: keepaliveOnce}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	})
@@ -91,6 +108,26 @@ func TestFirstTokenGuard(t *testing.T) {
 		assert.Nil(t, g.C())
 		g.observe(llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Delay: time.Second}})
 		assert.Nil(t, g.C(), "a disarmed guard stays disarmed")
+	})
+
+	t.Run("a recent keepalive defers it, a stale one does not", func(t *testing.T) {
+		t.Parallel()
+		g := newFirstTokenGuard(200 * time.Millisecond)
+		defer g.stop()
+		liveness := llm.NewStreamLiveness()
+		assert.True(t, g.expired(liveness), "no keepalive was ever read")
+
+		liveness.Touch()
+		require.False(t, g.expired(liveness), "a keepalive just read inside an open block defers the deadline")
+		require.NotNil(t, g.C(), "deferring keeps the guard armed")
+		// The deferred deadline fires one timeout after the keepalive; with
+		// no further keepalive, that mark is now stale.
+		select {
+		case <-g.C():
+		case <-time.After(5 * time.Second):
+			t.Fatal("deferred guard never fired")
+		}
+		assert.True(t, g.expired(liveness), "a stale keepalive must not exempt the stream")
 	})
 
 	t.Run("fires when nothing arrives", func(t *testing.T) {

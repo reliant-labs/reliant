@@ -1836,12 +1836,9 @@ streamLoop:
 			break streamLoop
 
 		case <-firstToken.C():
-			// A provider that opened a block and keeps it alive with
-			// keepalives is generating (a redacted thinking block emits no
-			// token until it closes); the transport's mid-block deadline owns
-			// that case, exactly as it does for the progress guard above.
-			if _, ok := liveness.Since(); ok {
-				firstToken.disarm()
+			// A recent keepalive inside an open block defers the deadline;
+			// a stale one does not (see firstTokenGuard.expired).
+			if !firstToken.expired(liveness) {
 				continue
 			}
 			activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",

@@ -419,8 +419,10 @@ var ErrStreamFirstTokenTimeout = errors.New("llm stream first-token timeout: no 
 // 181s end to end and the Codex p99 was 15s. Three minutes therefore cuts only
 // a stream that has produced nothing for longer than any healthy stream took
 // to finish. A provider that opened a content block and keeps it alive with
-// keepalives (a redacted thinking block) is exempt: CallLLM sees that on the
-// request's StreamLiveness and leaves it to the transport's mid-block deadline.
+// keepalives (a redacted thinking block) is exempt only while those keepalives
+// keep arriving: CallLLM defers the deadline to one timeout after the last one
+// on the request's StreamLiveness, and the transport's mid-block deadline
+// bounds the open block. A stale keepalive exempts nothing.
 const DefaultStreamFirstTokenTimeout = 3 * time.Minute
 
 // StreamFirstTokenTimeout returns the configured first-token timeout.

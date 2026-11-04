@@ -57,6 +57,22 @@ func (g *firstTokenGuard) observe(event llm.DriverEvent) {
 	}
 }
 
+// expired is called when C fires and reports whether the stream must be cut.
+//
+// A provider that opened a block and keeps it alive with keepalives is
+// generating (a redacted thinking block emits no token until it closes), so a
+// keepalive read within the last timeout defers the deadline to one timeout
+// after that keepalive. The guard stays armed: once the keepalives stop, it
+// fires; while they continue, the transport's mid-block deadline bounds the
+// open block. A liveness mark older than the timeout exempts nothing.
+func (g *firstTokenGuard) expired(liveness *llm.StreamLiveness) bool {
+	if sinceKeepalive, ok := liveness.Since(); ok && sinceKeepalive < g.timeout {
+		g.rearm(g.timeout - sinceKeepalive)
+		return false
+	}
+	return true
+}
+
 func (g *firstTokenGuard) rearm(d time.Duration) {
 	if !g.timer.Stop() {
 		select {
