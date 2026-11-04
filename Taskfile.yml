@@ -523,16 +523,17 @@ tasks:
     # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
     # pre-commit hook is opt-in, and --no-verify skips it), the committed
     # electron/release.config.json values are shippable, the unit tests of the
-    # scripts the release and health workflows run, and the pre-commit hook's
-    # staged-file formatter.
+    # scripts the release and health workflows run, and of the pre-commit
+    # hook's staged-file formatter and binary guard.
     desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
     cmds:
-      - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
+      - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
       - ./scripts/test-fmt-staged.sh
+      - ./scripts/test-binary-files.sh
 
   test:flake:
     desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"

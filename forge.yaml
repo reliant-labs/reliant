@@ -219,4 +219,4 @@ ci:
               command: [sh, -c, "node --test .github/scripts/*.test.mjs"]
               requires: [node]
             - name: no-binaries
-              command: [.githooks/check-binary-files-ci.sh, origin/main, HEAD]
+              command: [.githooks/check-binary-files.sh, --range, origin/main, HEAD]
