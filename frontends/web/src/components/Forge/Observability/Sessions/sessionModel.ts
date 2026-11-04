@@ -198,10 +198,17 @@ export function sessionTitle(app: string | undefined, startedMs: number, options
 /** The attribute every browser span and replay record carries (forge-web-runtime / the OTel web SDK). */
 export const RUM_SESSION_ATTRIBUTE = "rum.sessionId";
 
+/**
+ * The attribute a BACKEND span carries the browser session in: forge servers
+ * copy the web runtime's `session.id` baggage onto their server span, so a
+ * trace with no browser span of its own still names the session that caused it.
+ */
+export const SESSION_ID_ATTRIBUTE = "session.id";
+
 /** The browser session a trace ran in, from any of its spans' attributes or resource. */
 export function rumSessionIdOf(spans: readonly { attributes: Record<string, string>; resource: Record<string, string> }[]): string | undefined {
   for (const span of spans) {
-    const id = span.attributes[RUM_SESSION_ATTRIBUTE] || span.resource[RUM_SESSION_ATTRIBUTE];
+    const id = span.attributes[RUM_SESSION_ATTRIBUTE] || span.resource[RUM_SESSION_ATTRIBUTE] || span.attributes[SESSION_ID_ATTRIBUTE];
     if (id) return id;
   }
   return undefined;
@@ -228,12 +235,14 @@ export function sessionLink(sessionId: string, atMs?: number): ObsSearch {
     live: undefined,
     severity: undefined,
     minDuration: undefined,
+    rsession: undefined,
     cursor: undefined,
   };
 }
 
 /** The keys Sessions owns, dropped when one of its links leaves for another view. */
 export const LEAVE_SESSIONS: ObsSearch = {
+  rsession: undefined,
   session: undefined,
   t: undefined,
   user: undefined,

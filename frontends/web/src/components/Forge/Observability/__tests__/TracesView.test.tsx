@@ -44,6 +44,54 @@ describe("trace list", () => {
     );
   });
 
+  it("shows who each trace served and where, and narrows to a user from the list or the box", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    const [first] = await screen.findAllByTestId("obs-trace-row");
+    expect(first).toHaveTextContent("u_8812");
+    expect(first).toHaveTextContent(/Berlin/);
+    await user.click(within(first).getByTestId("obs-trace-user"));
+    expect(harness.current()).toMatchObject({ user: "u_8812" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ userId: "u_8812" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(screen.getByTestId("obs-traces-user-clear"));
+    expect(harness.current().user).toBeUndefined();
+    await user.type(screen.getByTestId("obs-traces-user"), "u_42{Enter}");
+    expect(harness.current()).toMatchObject({ user: "u_42" });
+  });
+
+  it("lists one browser session's traces, says so, and links back to it", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces", rsession: "sess-001003" });
+    const bar = await screen.findByTestId("obs-traces-session");
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: "sess-001003" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(within(bar).getByTestId("obs-traces-session-open"));
+    expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
+  });
+
+  it.each([
+    ["user", { user: "u_8812" }, "can't filter traces by user"],
+    ["browser session", { rsession: "sess-001003" }, "can't filter traces by browser session"],
+  ])("never shows an older control plane's unfiltered traces as one %s's", async (_, search, copy) => {
+    const api = createFixtureApi();
+    const listTraces = api.listTraces;
+    // A control plane from before user_id/session_id: it ignores both fields, and fills neither.
+    api.listTraces = async (req, options) => {
+      const result = await listTraces({ ...req, userId: undefined, sessionId: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, userId: "", sessionId: "" })) };
+    };
+    renderPanel(api, { view: "traces", ...search });
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(copy);
+    expect(screen.queryAllByTestId("obs-trace-row")).toHaveLength(0);
+  });
+
   it("shows the root span's duration, and the whole trace's when work outlived it", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
@@ -65,7 +113,7 @@ describe("trace list", () => {
     const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
-    await user.click(within(first).getByRole("button"));
+    await user.click(within(first).getByRole("button", { name: /^Open trace/ }));
     expect(harness.current().trace).toBe(FIXTURE_TRACE_ID);
     expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
   });
@@ -162,7 +210,7 @@ describe("trace waterfall", () => {
       await screen.findAllByTestId("obs-trace-row");
       arrived = true;
       now += 16_000;
-      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button", { name: /^Open trace/ }));
       await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
       expect(getTrace).toHaveBeenCalledTimes(2);
       arrived = false;

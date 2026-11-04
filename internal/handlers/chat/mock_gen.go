@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=9251c09ec4497161be0b8db1d33f41d43172c1e440c6f68cced642d94450fa9b
+// forge:hash=f4e7d7c4bd9ac829d5571c9fccca472326df3b65823a803100cb9d9df3c38686
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -80,6 +80,7 @@ type MockRepository struct {
 	ListStepExecutionRecordsForChatFunc            func(context.Context, string, string, int) ([]*db.StepExecution, error)
 	GetLatestUpdateSequenceFunc                    func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                            func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
+	ListErrorUpdatesInRangeFunc                    func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdatesFunc               func(context.Context, string, string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                func(context.Context, string) (int64, error)
 	ListWorktreesByIDsFunc                         func(context.Context, []string) ([]*db.Worktree, error)
@@ -603,6 +604,15 @@ func (m *MockRepository) GetUpdatesSince(ctx context.Context, chatID string, sin
 		return m.GetUpdatesSinceFunc(ctx, chatID, sinceSeq, limit)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetUpdatesSince")
+}
+
+// ListErrorUpdatesInRange records the call and delegates to ListErrorUpdatesInRangeFunc when set.
+func (m *MockRepository) ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]db.ChatUpdate, error) {
+	m.Recorder.Record("ListErrorUpdatesInRange", ctx, chatID, from, thread, beforeSeq)
+	if m.ListErrorUpdatesInRangeFunc != nil {
+		return m.ListErrorUpdatesInRangeFunc(ctx, chatID, from, thread, beforeSeq)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListErrorUpdatesInRange")
 }
 
 // GetLatestWorkflowNodeUpdates records the call and delegates to GetLatestWorkflowNodeUpdatesFunc when set.

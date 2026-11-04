@@ -174,7 +174,7 @@ export function TraceDetail({
               data-testid="trace-session"
               title={`Browser session ${sessionId}`}
             >
-              <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} />
+              <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} replayPrefix />
             </Button>
           )}
         </div>

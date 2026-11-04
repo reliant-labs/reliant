@@ -76,6 +76,12 @@ func (r *terminalCommandRouter) SendDaemonCommand(ctx context.Context, _ string,
 	return json.Marshal(map[string]any{"success": true})
 }
 
+// SendDaemonCommandToDaemon records a command pinned to a machine (every
+// terminal is pinned once its machine resolves) as SendDaemonCommand does.
+func (r *terminalCommandRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *terminalCommandRouter) SubscribeTerminalOutput(context.Context, string, string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
 	// Never closed: the session produces no output and never exits, so only
 	// the connection ending can end the handler.

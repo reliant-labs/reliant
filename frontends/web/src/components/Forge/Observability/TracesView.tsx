@@ -31,12 +31,12 @@ import {
   useTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { AlertCircle, ArrowDown, ArrowUp, Search, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, MonitorPlay, Search, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
-import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { FilterUnsupportedError, obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, TraceRed, TraceRedGroup, TraceSummary } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -47,10 +47,14 @@ import { ServiceSelect } from "./LogsView";
 import { filterParam, formatFilterToken, groupLabel, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { Place } from "./Place";
+import { SessionName } from "./Sessions/SessionName";
+import { rumScopeOf, sessionLink } from "./Sessions/sessionModel";
 import { TraceDetail } from "./TraceDetail";
 import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
 import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
 import { operationName } from "./traceTitle";
+import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -88,6 +92,10 @@ export function TracesView(props: {
   groupBy?: string[];
   /** The scope's filter tokens, which a group's "narrow to it" extends. */
   filters?: FilterToken[];
+  /** Only traces of this user id (the URL's `user`). */
+  user?: string;
+  /** Only traces of this browser session (the URL's `rsession`). */
+  sessionId?: string;
   navigate: ObsNavigate;
 }) {
   if (props.traceId) {
@@ -115,6 +123,8 @@ function TraceList({
   minDuration,
   groupBy = NO_KEYS,
   filters: scopeTokens = NO_TOKENS,
+  user = "",
+  sessionId,
   navigate,
 }: {
   scope: ObsScope;
@@ -126,6 +136,8 @@ function TraceList({
   minDuration: string | undefined;
   groupBy?: string[];
   filters?: FilterToken[];
+  user?: string;
+  sessionId?: string;
   navigate: ObsNavigate;
 }) {
   const filters: TraceFilters = useMemo(
@@ -136,15 +148,19 @@ function TraceList({
       errorsOnly,
       minDurationMs: MIN_DURATION_MS[minDuration ?? ""] ?? 0,
       groupBy,
+      userId: user || undefined,
+      sessionId: sessionId || undefined,
     }),
-    [range, rootSpanName, service, errorsOnly, minDuration, groupBy]
+    [range, rootSpanName, service, errorsOnly, minDuration, groupBy, user, sessionId]
   );
   const traces = useListTraces(scope, filters);
   const rows = useMemo(() => traces.data?.pages.flatMap((page) => page.traces) ?? EMPTY, [traces.data]);
   const red = traces.data?.pages[0]?.red ?? null;
   const redGroups = traces.data?.pages[0]?.redGroups ?? [];
-  const filterError = traces.error && obsErrorKind(traces.error) === "invalid" ? obsErrorMessage(traces.error) : null;
-  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration;
+  // A filter the server ignored is drawn in place of the list (ObsError), not under the search box.
+  const filterError =
+    traces.error && obsErrorKind(traces.error) === "invalid" && !(traces.error instanceof FilterUnsupportedError) ? obsErrorMessage(traces.error) : null;
+  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!user || !!sessionId;
   const points = useMemo(() => pointsOf(rows), [rows]);
   // The brushed region belongs to the filters it was drawn over: new filters
   // load other traces, and a region kept across them would select nothing.
@@ -167,8 +183,10 @@ function TraceList({
         service={service}
         errorsOnly={errorsOnly}
         minDuration={minDuration}
+        user={user}
         navigate={navigate}
       />
+      {sessionId && <SessionFilterBar scope={scope} sessionId={sessionId} navigate={navigate} />}
       {red && red.traceCount > 0 && <RedStrip red={red} />}
       {groupBy.length > 0 && redGroups.length > 0 && (
         <RedGroups
@@ -211,7 +229,7 @@ function TraceList({
           range={range}
           filtered={filtered}
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined })}
+          onClearFilters={() => navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined, user: undefined, rsession: undefined })}
         />
       ) : region && visibleRows.length === 0 ? (
         <Card className="text-center" data-testid="obs-trace-region-empty">
@@ -229,6 +247,7 @@ function TraceList({
           loadingMore={traces.isFetchingNextPage}
           onLoadMore={() => void traces.fetchNextPage()}
           onOpen={(traceId) => navigate({ trace: traceId, span: undefined })}
+          onUser={(id) => navigate({ user: id }, { replace: true })}
         />
       ) : null}
     </div>
@@ -335,6 +354,7 @@ function TraceToolbar({
   service,
   errorsOnly,
   minDuration,
+  user,
   navigate,
 }: {
   scope: ObsScope;
@@ -344,6 +364,7 @@ function TraceToolbar({
   service: string | undefined;
   errorsOnly: boolean;
   minDuration: string | undefined;
+  user: string;
   navigate: ObsNavigate;
 }) {
   const [draft, setDraft] = useState(rootSpanName);
@@ -415,6 +436,30 @@ function TraceToolbar({
       >
         Errors only
       </Button>
+      <UserIdFilter id="obs-traces-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />
+    </div>
+  );
+}
+
+/** The session the list is narrowed to, by name, with the way back to it and out of the filter. */
+function SessionFilterBar({ scope, sessionId, navigate }: { scope: ObsScope; sessionId: string; navigate: ObsNavigate }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-ink"
+      data-testid="obs-traces-session"
+    >
+      <span>
+        Traces of browser session <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} />: its own spans and the backend requests it made.
+      </span>
+      <span className="flex gap-1">
+        <Button variant="ghost" size="sm" onClick={() => navigate(sessionLink(sessionId))} leftIcon={<MonitorPlay className="h-3.5 w-3.5" />} data-testid="obs-traces-session-open">
+          Open session
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate({ rsession: undefined }, { replace: true })} leftIcon={<X className="h-3.5 w-3.5" />} data-testid="obs-traces-session-clear">
+          All traces
+        </Button>
+      </span>
     </div>
   );
 }
@@ -426,6 +471,7 @@ function TraceTable({
   loadingMore,
   onLoadMore,
   onOpen,
+  onUser,
 }: {
   traces: TraceSummary[];
   subject: string;
@@ -433,6 +479,8 @@ function TraceTable({
   loadingMore: boolean;
   onLoadMore: () => void;
   onOpen: (traceId: string) => void;
+  /** Narrow the list to one user (a user cell's filter button). */
+  onUser: (userId: string) => void;
 }) {
   const maxDuration = useMemo(() => Math.max(...traces.map((t) => t.rootDurationMs), 1), [traces]);
   const columns = useMemo(
@@ -485,6 +533,31 @@ function TraceTable({
             </span>
           ),
         }),
+        column.accessor("userId", {
+          header: "User",
+          sortFn: "alphanumeric",
+          cell: (info) => {
+            const trace = info.row.original;
+            return (
+              <span className="flex min-w-0 flex-col leading-tight">
+                {trace.userId ? (
+                  <button
+                    type="button"
+                    onClick={() => onUser(trace.userId)}
+                    className="truncate rounded-sm text-left font-mono text-xs text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title={`Only traces of ${trace.userId}`}
+                    data-testid="obs-trace-user"
+                  >
+                    {trace.userId}
+                  </button>
+                ) : (
+                  <span className="text-xs text-ink-muted">—</span>
+                )}
+                <Place geo={trace} className="text-2xs text-ink-muted" />
+              </span>
+            );
+          },
+        }),
         column.accessor("spanCount", {
           header: "Spans",
           sortFn: "basic",
@@ -503,7 +576,7 @@ function TraceTable({
             ),
         }),
       ]),
-    [maxDuration]
+    [maxDuration, onUser]
   );
 
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -519,7 +592,7 @@ function TraceTable({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
-  // On a phone the five columns do not fit, so each trace is a stacked card
+  // On a phone the six columns do not fit, so each trace is a stacked card
   // (DataTable's STACK) whose height depends on its content: measure, don't assume.
   const narrow = useNarrowViewport();
   const virtualizer = useVirtualizer({
@@ -572,6 +645,7 @@ function TraceTable({
             <col className="w-36" />
             <col />
             <col className="w-64" />
+            <col className="w-44" />
             <col className="w-20" />
             <col className="w-24" />
           </colgroup>
@@ -605,7 +679,7 @@ function TraceTable({
           <tbody className={STACK.body}>
             {padTop > 0 && (
               <tr aria-hidden="true">
-                <td colSpan={5} style={{ height: padTop }} />
+                <td colSpan={6} style={{ height: padTop }} />
               </tr>
             )}
             {items.map((item) => {
@@ -651,7 +725,7 @@ function TraceTable({
             })}
             {padBottom > 0 && (
               <tr aria-hidden="true">
-                <td colSpan={5} style={{ height: padBottom }} />
+                <td colSpan={6} style={{ height: padBottom }} />
               </tr>
             )}
           </tbody>

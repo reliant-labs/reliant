@@ -22,7 +22,7 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -50,6 +50,7 @@ import type {
   SearchLogsResult,
   Severity,
   TimeWindow,
+  TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -233,9 +234,25 @@ export interface TraceFilters {
   errorsOnly: boolean;
   minDurationMs: number;
   groupBy?: string[];
+  /** Only traces of this user id. */
+  userId?: string;
+  /** Only traces of this browser session. */
+  sessionId?: string;
 }
 
 export const TRACE_PAGE_SIZE = 100;
+
+/**
+ * Refuse rows a control plane older than the user/session filters answered
+ * without them (it ignores the unknown fields). A server that applies a filter
+ * returns only traces with a span carrying the id, so every summary names one;
+ * an older one never fills either field, so rows with none are its signature.
+ */
+function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]) {
+  if (traces.length === 0) return;
+  if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
+  if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
+}
 
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObsReadApi();
@@ -251,9 +268,12 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         errorsOnly: filters.errorsOnly,
         minDurationMs: filters.minDurationMs,
         groupBy: filters.groupBy,
+        userId: filters.userId,
+        sessionId: filters.sessionId,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
+      assertTraceFiltersApplied(filters, result.traces);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -741,11 +761,22 @@ export interface IssueFilters {
   service?: string;
   /** Only the issues assigned to this user id (the server filters). */
   assignee?: string;
+  /** Only the issues with an event of this user id in the window (the server filters). */
+  userId?: string;
   sort: IssueSort;
   text: string;
 }
 
 export const ISSUE_PAGE_SIZE = 50;
+
+/**
+ * A user id no one has, which useIssues asks for to learn whether user_id is
+ * applied. User ids are the application's own strings, so no fixed value is
+ * reserved: each read draws a fresh random one (122 bits) nobody can hold.
+ */
+export function issueUserFilterProbe(): string {
+  return `reliant-console-filter-probe-${crypto.randomUUID()}`;
+}
 
 /**
  * One root for every issue read, so a triage (which can move an issue between
@@ -804,18 +835,28 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
     queryKey: issueKeys.list(scope, filters),
     queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
-      const result = await api.listIssues({
+      const request = {
         ...(scope as IssueScope),
         services: filters.service ? [filters.service] : [],
         window,
         statuses: filters.statuses,
         platform: filters.platform,
         assignee: filters.assignee,
+        userId: filters.userId,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
-      }, { signal });
+      };
+      // An issue row names no user, so whether the server applied user_id is
+      // asked, not inferred: the same first page for a user nobody is. A server
+      // that knows the filter answers it with nothing; one that ignores it
+      // answers with exactly the unfiltered rows the real read would get.
+      const [result, probe] = await Promise.all([
+        api.listIssues(request, { signal }),
+        filters.userId && !pageParam ? api.listIssues({ ...request, userId: issueUserFilterProbe(), pageSize: 1 }, { signal }) : null,
+      ]);
+      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,

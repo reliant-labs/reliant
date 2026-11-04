@@ -33,6 +33,7 @@ import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
@@ -270,6 +271,12 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
           </span>
         </>
       ),
+    },
+    {
+      key: "location",
+      header: "Location",
+      className: "max-w-[12rem]",
+      render: (_, { session: s }) => <Place geo={s} className="text-xs text-ink-muted" testId={`obs-session-place-${s.sessionId}`} />,
     },
     {
       key: "entry",
