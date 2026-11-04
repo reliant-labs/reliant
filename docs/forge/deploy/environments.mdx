@@ -1,0 +1,148 @@
+---
+title: "Environments"
+description: "How a forge project declares where it runs: workloads declared once, bound to a runtime per environment, and the commands that show you what an environment is"
+---
+
+A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/forge/hosting). The environments are written in KCL, a typed configuration language, and they split one question in two: *what runs* is declared once, and *where it runs* is chosen per environment.
+
+That split is what keeps `dev` and `prod` from drifting, and it is what makes the rest of this section possible. An agent that wants to know what `prod` does reads one short file, and a person who wants to move one service to their own cluster edits one line.
+
+## Declare once, bind per environment
+
+`deploy/kcl/workloads.k` declares every deployable unit with the facts that are true wherever it runs: how it is built, which subcommand it runs, its ports, and which secrets it reads.
+
+```python
+migrate = fw.Workload {
+    name = "migrate"
+    kind = "job"
+    image = "REPLACE-ME-REGISTRY.invalid/demo"
+    build = forge.GoBuild {cmd = "./cmd/demo", output_name = "demo"}
+    args = ["db", "migrate", "up"]
+    before = [fw.BEFORE_ALL]          # runs to completion before anything it gates
+    config_secrets = ["DATABASE_URL"]
+}
+```
+
+A workload is not a proto service. One binary can mount a dozen services and still be one workload, because it is one process with one image. The scaffolded `_api` workload runs the binary's `server` command, which mounts every service and worker in your project together, so a browser reaches all of them at one origin.
+
+Each environment's `deploy/kcl/<env>/main.k` then **binds** every workload to a runtime and states only the values that are true for that environment. The file's own header says it: "This file BINDS; it does not declare." A scaffolded `prod` ends with one line per workload:
+
+```python
+_workloads = [
+    _hosted(wl.migrate)   # the schema migration, run before anything it gates
+    _hosted(_api)         # the binary's `server`: every service and worker in one workload
+]
+```
+
+`_hosted` is a small function defined earlier in the same file. It applies the environment's layer (the typed config, the managed database's connection string) and sets the runtime. There is no environment-wide mode: a binding is per workload, and one environment can mix runtimes.
+
+### The runtimes
+
+| Runtime | Where it runs | What forge does with it |
+|---|---|---|
+| `forge.OnHost` | A process on your machine | `forge env up` runs it with `go run`, `air` (hot reload), a built binary, or `delve`. No image is built. |
+| `forge.OnCompose` | A service in `docker-compose.yml` | `docker compose up` for that service. |
+| `forge.OnCluster` | A Kubernetes cluster you operate | Renders Deployments, Services and the other objects shown in [What gets deployed](/forge/deploy/what-gets-deployed), and applies them to the kubectl context you name. |
+| `forge.OnHosted` | [Reliant hosting](/forge/hosting) | Publishes the workload; the platform renders and runs it under a restricted profile. |
+| `forge.BuildOnly` | Nowhere | Builds and ships the artifact (a CLI, an image others pull) and never runs it. |
+
+Frontends bind the same way, with runtimes for a dev server, hosted static hosting, your own bucket (`forge.OnBucket`) or Firebase (`forge.OnFirebase`).
+
+Environment names mean nothing to forge. `staging` is not special; any environment may bind any workload to any runtime. This is how a hosted app keeps a Kubernetes operator on a cluster it runs, since hosting refuses operators:
+
+```python
+_workloads = [
+    _hosted(wl.migrate)
+    _on_cluster(_operator)     # hosting refuses operators, so this one runs on your cluster
+    _hosted(_api)
+]
+```
+
+Rebinding is editing one of those lines. To derive a whole new environment from an existing one, use `forge env new`:
+
+```bash
+forge env new preview --from staging                      # same bindings as staging
+forge env new cloud --from prod --bind api=cluster        # api on your cluster instead
+forge env new cloud --check                               # no placeholder left, it renders, it is admissible
+```
+
+The dangerous per-environment values (a cluster context, a namespace, a bucket) come out as `REPLACE_ME_*` placeholders, so a value you forgot to set is an error at authoring time and not a value silently inherited from the wrong environment.
+
+### Connecting a cluster you operate
+
+An environment that keeps a control plane (hosted workloads, or a hosted database) but binds some workloads to your own cluster registers that cluster once, so the control plane can converge deploys into it:
+
+```bash
+forge cluster connect acme-prod --context gke_acme_us-central1_prod --env prod
+```
+
+Forge uses your own kubectl context to create a dedicated ServiceAccount in the cluster and the least-privilege RBAC the platform's apply needs, then uploads that account's token write-only. The control plane authenticates as that ServiceAccount and nothing else, on any Kubernetes distribution, with no cloud identity of ours trusted in your project. Re-running the command with the same name updates the cluster, so fixing a rotated endpoint is the same command again. Name the cluster in the environment's `ClusterTarget` with `connected_cluster = "acme-prod"`; the render refuses an unconnected one and names the command.
+
+The address the control plane dials must be public (port 443 or 6443). Private, VPC and link-local addresses are refused for ordinary organizations, so a cluster reachable only on a private network cannot be a connect target. An environment with no control plane at all does not connect anything: see [Self-hosted delivery](/forge/deploy/self-hosted-delivery).
+
+## Seeing what an environment is
+
+These commands answer "what does this environment do" without changing anything. They are the ones an agent should reach for before it edits a binding, because each is cheaper and more reliable than reading the KCL back.
+
+| Command | What it shows |
+|---|---|
+| `forge env list` | The environments `deploy/kcl/` declares. |
+| `forge env diff` | What would change in each environment compared with what is deployed. Read-only. |
+| `forge env shape <env>` | What the environment *declares*: its workloads and where each runs, its secrets by name, its domains, and a hash per object. It never contains a secret value. |
+| `forge env render <env>` | Every Kubernetes object the environment produces, and the cluster each lands on. |
+| `forge env config <env>` | The configuration each workload receives: environment variables, ports and secret references. |
+| `forge env status <env>` | What is *running*: the bound release, whether the running digests match it, rollout and health. |
+
+The difference between `shape` and `render` is size. A real environment renders to megabytes of YAML, and `shape` reduces it to what the environment is. For the scaffolded `prod`:
+
+```text
+$ forge env shape prod
+env prod (project demo): persistent
+  clusters:  hosted
+  workloads: 4
+    api (hosted)
+    demo (hosted)
+    migrate (hosted)
+    web (hosted)
+  identity:  identity (hosted, native sign-in, private)
+    application prod:api [native_broker] brokered by api
+    roles: admin, member
+    consumed by: api
+  objects:   4
+```
+
+The `demo` row is the managed database and `web` is the static frontend; both are counted as workloads because each has a runtime binding. `forge env render <env> --list` prints one line per object when you want to see exactly what lands where, and `--cluster`, `--kind` and `--target` narrow it.
+
+Rendering and shaping are read-only, and forge checks that. KCL can write files while it evaluates, so forge scans the project before and after a render and fails if the render wrote anything, naming the paths.
+
+## Local environments and port blocks
+
+`forge env up dev` starts the whole stack on your machine: Postgres, the dev identity provider, your API under hot reload, the frontend dev server, and a local observability stack. Every process's output goes to `.forge/logs/dev/`, one file per service, including your frontend's browser console. The command's output lists the URLs and log files, and it stays in the foreground with a terminal attached. Without one (a script or an agent) it starts everything and returns, and `forge env down dev` stops it.
+
+`forge env up` is local only. An environment with anything bound to a hosted runtime, a bucket, or a cluster that is not a local one (k3d, kind, Docker Desktop, minikube) is refused with a pointer to `forge env deploy`. Local and shipped environments use the same declaration, but different commands start them. On first boot against a dev environment, a fresh database is seeded with deterministic demo rows that satisfy every constraint in your schema; `--no-seed` skips that.
+
+A machine often runs several stacks at once, one per git worktree, for example when several agents work on the same project. They would all want port 5432 and port 3000, so ports are not fixed. Each port in `deploy/kcl/dev/main.k` is declared once, as a variable, and everything that dials it reads the variable:
+
+```python
+# The dev database. On a machine already running another stack on 5432 this
+# steps to 5433 and stays there, and the DSN below follows it.
+_postgres_port = plugin.resolve_port("demo-dev-postgres", 5432)
+```
+
+`resolve_port` takes the preferred port when it is free, steps to the next free one when it is not, and remembers the answer for that worktree and environment. Where a cluster pre-maps host ports, `allocate_port` instead gives each worktree a deterministic **block** of 100 ports (the primary checkout is block 0, and its ports are unchanged). The registry of blocks is `.forge/blocks.json` in the primary checkout, shared by every linked worktree, and by default a project holds at most 8 blocks, which is the primary checkout plus seven worktrees. The ceiling exists because a cluster fixes its host-port mappings when it is created; a ninth worktree would allocate fine and then fail later as an unreachable gateway.
+
+```bash
+forge env ps                      # every forge stack running on this machine, across projects
+forge env devstack list           # who holds each port block
+forge env devstack prune          # reclaim blocks for worktrees that no longer exist
+```
+
+`dev_stack.max_stacks` and `dev_stack.block_size` in `forge.yaml` change the limits. Lowering `max_stacks` never moves a block that was already issued.
+
+<Note>
+Never stop a stack by pattern-killing processes. `forge env down <env>` stops only the processes forge started for that project and environment, and refuses to stop the process that is running it, which matters when an agent runs inside the stack it started.
+</Note>
+
+## Related topics
+
+[What gets deployed](/forge/deploy/what-gets-deployed) shows the objects these bindings produce. [Releases and promotion](/forge/deploy/releases-and-promotion) covers what `forge env deploy` does with them. [Escape hatches](/forge/deploy/escape-hatches) covers everything the defaults do not. Agents can run `forge skill load deploy` for the full reference.

@@ -89,6 +89,23 @@ forge env deploy prod --from staging
 
 Then open **Apps** in the Reliant sidebar to see releases, environments, logs, traces, dashboards and alerts for the project.
 
+## Learn how it works
+
+<CardGroup cols={2}>
+  <Card title="Concepts" icon="diagram-project" href="/forge/concepts/two-sources-of-truth">
+    SQL and proto as the two inputs, contracts and injection, the request path, configuration, and which files are yours.
+  </Card>
+  <Card title="Deploy" icon="rocket" href="/forge/deploy/environments">
+    Environments, what gets deployed, releases and promotion, self-hosted delivery, and escape hatches for code forge did not write.
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/forge/observability/signals">
+    The signals every service emits, where they go, `forge obs`, alerts, and why they help an agent.
+  </Card>
+  <Card title="Linting" icon="shield-check" href="/forge/linting/overview">
+    The lanes, how new rules roll out, and every rule with its fix.
+  </Card>
+</CardGroup>
+
 ## Where to go next
 
 - [Project anatomy](/forge/project-anatomy): where code goes, and which files forge owns.

@@ -124,12 +124,56 @@
               "forge/overview",
               "forge/project-anatomy",
               "forge/adding-features",
-              "forge/environments-and-deploys",
+              {
+                "group": "Concepts",
+                "pages": [
+                  "forge/concepts/two-sources-of-truth",
+                  "forge/concepts/contracts-and-injection",
+                  "forge/concepts/middleware-and-request-path",
+                  "forge/concepts/config-system",
+                  "forge/concepts/generated-vs-yours"
+                ]
+              },
+              {
+                "group": "Deploy",
+                "pages": [
+                  "forge/environments-and-deploys",
+                  "forge/deploy/environments",
+                  "forge/deploy/what-gets-deployed",
+                  "forge/deploy/releases-and-promotion",
+                  "forge/deploy/self-hosted-delivery",
+                  "forge/deploy/escape-hatches"
+                ]
+              },
               "forge/hosting",
               "forge/secrets",
               "forge/custom-domains",
               "forge/sign-in",
-              "forge/observability",
+              {
+                "group": "Observability",
+                "pages": [
+                  "forge/observability",
+                  "forge/observability/signals",
+                  "forge/observability/where-it-goes",
+                  "forge/observability/forge-obs",
+                  "forge/observability/dashboards-and-alerts",
+                  "forge/observability/health-and-shutdown",
+                  "forge/observability/agents"
+                ]
+              },
+              {
+                "group": "Linting",
+                "pages": [
+                  "forge/linting/overview",
+                  "forge/linting/rollout",
+                  "forge/linting/rules-index",
+                  "forge/linting/rules-migrations",
+                  "forge/linting/rules-conventions",
+                  "forge/linting/rules-schema-and-writes",
+                  "forge/linting/rules-deploy-and-secrets",
+                  "forge/linting/rules-tracing-and-tests"
+                ]
+              },
               "forge/troubleshooting"
             ]
           },
