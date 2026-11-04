@@ -1,0 +1,192 @@
+{{/*
+Shared page-template partials, parsed into every CRUD page template (both the
+Next.js `pages/` set and the Vite `vite-spa-pages/` set) by loadPageTemplate.
+They render framework-neutral JSX — no next/link, no router — so one
+definition serves both trees.
+
+  formField      — one create/edit form control, built from the installed
+                   ui/ primitives. Dot is a codegen.FormFieldView.
+  fkPickerField  — a foreign-key form control. Dot is a codegen.PageField
+                   whose .FK is non-nil.
+  fkNameValue    — a foreign-key detail-row value. Dot is a
+                   codegen.EntityPageField whose .FK is non-nil.
+*/}}
+
+{{- define "fkPickerField"}}
+        <div>
+          <Label htmlFor="{{.Name}}"{{if .Required}} required{{end}}>
+            {{.Label}}
+          </Label>
+          {{- /* A foreign key is a REFERENCE, never a UUID anyone types.
+                 <EntityPicker> browses {{.FK.EntityName}} through its GENERATED list
+                 hook — paged and filtered server-side, so it works against a
+                 million rows — and hands back the id. Point optionLabel (and
+                 optionHint) at whichever column reads best to your users. */}}
+          <Controller
+            control={control}
+            name="{{.Name}}"
+            render={({ field }) => (
+              <EntityPicker
+                id="{{.Name}}"
+                value={field.value}
+                onChange={(picked) => field.onChange(picked ?? "")}
+                useList={ {{.FK.ListHook}} }
+{{- if .FK.SearchFilterField}}
+                buildRequest={(search) => ({ {{if .FK.HasPageSize}}pageSize: 20, {{end}}{{.FK.SearchFilterField}}: search || undefined })}
+{{- else}}
+                {{- /* List{{.FK.EntityName}} declares no free-text filter, so there is
+                       nowhere to put the search text — the box is turned off
+                       rather than shipped doing nothing. Add a search filter to
+                       the List request and re-scaffold to switch it on. */}}
+                buildRequest={() => ({ {{if .FK.HasPageSize}}pageSize: 20{{end}} })}
+                searchable={false}
+{{- end}}
+                itemsOf={(res) => res.{{.FK.ItemsField}}}
+{{- if .FK.NextTokenField}}
+                hasMoreOf={(res) => Boolean(res.{{.FK.NextTokenField}})}
+{{- end}}
+                optionValue={(item) => item.{{.FK.PkFieldCamel}}}
+{{- if .FK.LabelField}}
+                optionLabel={(item) => String(item.{{.FK.LabelField}})}
+{{- else}}
+                {{- /* {{.FK.EntityName}} has no name/title-shaped column, so options fall
+                       back to the id. Retarget optionLabel at the column your
+                       users recognise. */}}
+                optionLabel={(item) => String(item.{{.FK.PkFieldCamel}})}
+{{- end}}
+{{- if .FK.ResolveSelectedLabel}}
+                {{- /* The value came from the server, so the closed picker has no
+                       row to read a name from — <EntityName> resolves it. */}}
+                selectedLabel={
+                  <EntityName
+                    id={field.value}
+                    useGet={ {{.FK.GetHook}} }
+                    buildRequest={(value) => ({ {{.FK.PkFieldCamel}}: value })}
+                    nameOf={(res) => res.{{.FK.GetEntityField}}?.{{if .FK.LabelField}}{{.FK.LabelField}}{{else}}{{.FK.PkFieldCamel}}{{end}}}
+                  />
+                }
+{{- end}}
+                placeholder="Select a {{.FK.EntityLower}}"
+                invalid={Boolean(errors.{{.Name}})}
+                aria-describedby={errors.{{.Name}} ? "{{.Name}}-error" : undefined}
+              />
+            )}
+          />
+          {{- template "fieldError" .}}
+        </div>
+{{- end}}
+
+{{- define "formField"}}
+{{- if .FK}}
+{{- template "fkPickerField" .PageField}}
+{{- else if eq .Type "checkbox"}}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            className="h-4 w-4 rounded border-border-strong accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          />
+          <Label htmlFor="{{.Name}}" className="mb-0">
+            {{.Label}}
+          </Label>
+        </div>
+{{- else}}
+        <div>
+          <Label htmlFor="{{.Name}}"{{if .Required}} required{{end}}>
+            {{.Label}}{{if eq .Type "base64"}} (base64){{end}}
+          </Label>
+{{- if eq .Type "base64"}}
+          {{- /* A `bytes` column is opaque by declaration, so the scaffold
+                 edits it in the encoding it already has on the wire. If
+                 this column holds an upload, swap this for
+                 <input type="file"> and read the File into a Uint8Array —
+                 the submit handler's base64Decode goes with it. */}}
+          <Textarea
+            id="{{.Name}}"
+            rows={4}
+            {...register("{{.Name}}")}
+            {{- template "fieldA11y" .}}
+          />
+{{- else if eq .Type "textarea"}}
+          <Textarea
+            id="{{.Name}}"
+            rows={4}
+            {...register("{{.Name}}")}
+            {{- template "fieldA11y" .}}
+          />
+{{- else if eq .Type "select"}}
+          {{- /* The options are the enum's REAL members: the proto zero
+                 (UNSPECIFIED) is how the wire says "unset", the born CHECK
+                 does not admit it, so it is never a choice. On Create a NOT
+                 NULL enum starts on its column DEFAULT — the first real
+                 member, and what Create stores when the field is omitted;
+                 on Edit it starts on the record's value. An `optional` enum
+                 offers None, which submits as unset (NULL). */}}
+          <Select
+            id="{{.Name}}"
+{{- if .OnCreate}}
+            defaultValue={{if .EmptyIsUnset}}""{{else}}{ {{.EnumDefaultRef}} }{{end}}
+{{- end}}
+            {...register("{{.Name}}")}
+            {{- template "fieldA11y" .}}
+          >
+            {{- if .EmptyIsUnset}}
+            <option value="">None</option>
+            {{- end}}
+            {{- range .EnumValues}}
+            <option value={ {{.Ref}} }>{{.Label}}</option>
+            {{- end}}
+          </Select>
+{{- else}}
+          <Input
+            type="{{if eq .Type "date"}}datetime-local{{else}}{{.Type}}{{end}}"
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            {{- template "fieldA11y" .}}
+          />
+{{- end}}
+          {{- template "fieldError" .}}
+        </div>
+{{- end}}
+{{- end}}
+
+{{- define "fieldA11y"}}
+{{- /* The error is announced WITH the control: aria-invalid flags it and
+       aria-describedby points at the message, so a screen reader reading
+       the field reads why it was refused. Required is aria-required — the
+       visual asterisk on the <Label> is aria-hidden. */}}
+            invalid={Boolean(errors.{{.Name}})}
+            aria-invalid={errors.{{.Name}} ? true : undefined}
+{{- if .Required}}
+            aria-required
+{{- end}}
+            aria-describedby={errors.{{.Name}} ? "{{.Name}}-error" : undefined}
+{{- end}}
+
+{{- define "fieldError"}}
+          {errors.{{.Name}} && (
+            <p id="{{.Name}}-error" className="mt-1 text-sm text-danger">
+              {errors.{{.Name}}.message}
+            </p>
+          )}
+{{- end}}
+
+{{- define "fkNameValue"}}
+          {{- /* A foreign key resolved to a name. ONE lookup for this row —
+                 React Query caches by key — instead of printing the raw id. */}}
+          value: (
+            <EntityName
+              id={item.{{.Name}}}
+              useGet={ {{.FK.GetHook}} }
+              buildRequest={(value) => ({ {{.FK.PkFieldCamel}}: value })}
+{{- if .FK.LabelField}}
+              nameOf={(res) => res.{{.FK.GetEntityField}}?.{{.FK.LabelField}}}
+{{- else}}
+              {{- /* {{.FK.EntityName}} has no name/title-shaped column; the id is the
+                     only label available. Retarget nameOf when you add one. */}}
+              nameOf={(res) => res.{{.FK.GetEntityField}}?.{{.FK.PkFieldCamel}}}
+{{- end}}
+            />
+          ),
+{{- end}}
