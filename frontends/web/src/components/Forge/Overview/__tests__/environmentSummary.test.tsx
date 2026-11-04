@@ -16,7 +16,7 @@ import type { DeployRun } from "@/services/forge/deployAttempts";
 import type { LiveEnv } from "@/services/forge/live";
 
 import { EnvironmentList } from "../EnvironmentList";
-import { summarizeEnvironment, workloadCount, type EnvSummaryInput, type Read } from "../environmentSummary";
+import { currentPromotion, summarizeEnvironment, workloadCount, type EnvSummaryInput, type Read } from "../environmentSummary";
 
 function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
   return {
@@ -196,5 +196,27 @@ describe("the environment cards", () => {
     expect(within(card).getByTestId("env-link-dashboards-prod")).toHaveAttribute("href", "/d?env=prod");
     expect(within(card).getByTestId("env-link-errors-prod")).toHaveAttribute("href", "/e?env=prod");
     expect(within(card).getByTestId("env-link-alerts-prod")).toHaveAttribute("href", "/a?env=prod");
+  });
+});
+
+describe("the current release's promotion", () => {
+  const ledger = [
+    { id: "p3", releaseVersion: "v1.7.90", createdAt: "2026-01-03T00:00:00Z" },
+    { id: "p2", releaseVersion: "v1.7.89", createdAt: "2026-01-02T00:00:00Z" },
+    { id: "p1", releaseVersion: "v1.7.89", createdAt: "2026-01-01T00:00:00Z" },
+  ];
+
+  it("is the promotion of the bound release, not the ledger's newest", () => {
+    expect(currentPromotion(ledger, { release: "v1.7.89" })?.id).toBe("p2");
+  });
+
+  it("is the one recorded when the roster says the release was promoted", () => {
+    expect(currentPromotion(ledger, { release: "v1.7.89", promotedAt: "2026-01-01T00:00:00.000Z" })?.id).toBe("p1");
+  });
+
+  it("is none when the ledger holds no promotion of the bound release", () => {
+    expect(currentPromotion(ledger, { release: "v1.7.88" })).toBeNull();
+    expect(currentPromotion(undefined, { release: "v1.7.89" })).toBeNull();
+    expect(currentPromotion(ledger, { release: "" })).toBeNull();
   });
 });

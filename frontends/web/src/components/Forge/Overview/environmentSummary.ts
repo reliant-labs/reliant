@@ -129,6 +129,27 @@ export function workloadCount(mine: readonly Workload[], status: CloudEnvStatus 
   return null;
 }
 
+/**
+ * The ledger entry that put the environment's CURRENT release there, or null.
+ * The ledger is newest first and can hold a promotion newer than the bound
+ * release (a queued or failed rollout), so the newest entry is not the
+ * current one: match the release version, and when the roster says when the
+ * current release was promoted, prefer the entry recorded at that instant.
+ */
+export function currentPromotion<P extends { releaseVersion: string; createdAt?: string }>(
+  promotions: readonly P[] | undefined,
+  env: Pick<LiveEnv, "release" | "promotedAt">
+): P | null {
+  if (!promotions || env.release === "") return null;
+  const ofRelease = promotions.filter((p) => p.releaseVersion === env.release);
+  if (env.promotedAt) {
+    const at = Date.parse(env.promotedAt);
+    const exact = ofRelease.find((p) => p.createdAt !== undefined && Date.parse(p.createdAt) === at);
+    if (exact) return exact;
+  }
+  return ofRelease[0] ?? null;
+}
+
 /** The obs check's words: `forge obs check` exits 0 / 1 / 2 / 8 on the same verdict. */
 function checkOf(check: Read<ReleaseHealth> | null, env: LiveEnv): Fact | null {
   if (!check || env.release === "") return null;

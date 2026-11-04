@@ -51,7 +51,7 @@ import { ENV_ALL } from "../Console/envScope";
 import { CloudNotice } from "../SourceNotices";
 import { jobRows, OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { EnvironmentList, type EnvironmentRow, type EnvLinks } from "./EnvironmentList";
-import { summarizeEnvironment } from "./environmentSummary";
+import { currentPromotion, summarizeEnvironment } from "./environmentSummary";
 
 /**
  * The list's rows for `envs`: the platform's observation for each PLACED
@@ -59,8 +59,9 @@ import { summarizeEnvironment } from "./environmentSummary";
  * answer for a cluster the platform has never connected to), and the rest of
  * each one's summary (environmentSummary.ts) from reads the console already
  * makes: the project's ListWorkloads (the Overview's, same cache entry), its
- * deploy runs, each environment's newest promotion and that promotion's
- * release health. No roster field beyond GetLiveView's slim one is read; the
+ * deploy runs, the promotion of each environment's CURRENT release (not the
+ * ledger's newest, which can be a later rollout that never landed) and that
+ * promotion's release health. No roster field beyond GetLiveView's slim one is read; the
  * declared workloads come from GetEnvironmentShape, only where telemetry
  * cannot see.
  */
@@ -75,7 +76,7 @@ export function useEnvironmentRows(envs: LiveEnv[], project: string, linkOf: (en
   const runs = useDeployRuns(project);
   const promotions = useEnvPromotions(useMemo(() => envs.filter((env) => env.release !== "").map((env) => env.id), [envs]));
   const current = envs
-    .map((env) => ({ envId: env.id, promotionId: promotions.get(env.id)?.data?.[0]?.id ?? "" }))
+    .map((env) => ({ envId: env.id, promotionId: currentPromotion(promotions.get(env.id)?.data, env)?.id ?? "" }))
     .filter((item) => item.promotionId !== "");
   const checks = useReleaseHealths(orgId, project, current, HEALTH_WINDOW_MS[DEFAULT_HEALTH_WINDOW]);
   const shapes = useEnvironmentShapes(envs.map((env) => (env.declared && !isPlacedKind(env.kind) && env.kind !== "local" ? env.id : "")));
