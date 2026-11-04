@@ -9,8 +9,10 @@
 
 import { useState } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ComposeModeProvider } from "../../../lib/composeMode";
+import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { NARROW_VIEWPORT_QUERY } from "../../../hooks/useNarrowViewport";
 import {
   ComposerStatusSlot,
   RecoveryBanner,
@@ -267,6 +269,71 @@ describe("ComposerStatusSlot, wide", () => {
     renderSlot({ active: ["queued", "oom"], layout: "wide", composeMode: true });
     expect(lines()).toHaveLength(1);
     expect(screen.getByTestId("banner-oom")).not.toBeVisible();
+  });
+});
+
+/**
+ * The width classes above apply on a phone only. The desktop shell renders
+ * every band in full however narrow its chat column is (§6: "The desktop shell
+ * is unchanged"); a phone is the mobile shell or a viewport below `md`.
+ */
+describe("ComposerStatusSlot, measured", () => {
+  let rectSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 390, height: 0, top: 0, left: 0, right: 390, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+  });
+  afterEach(() => {
+    rectSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  function renderMeasured(surface: "desktop" | "mobile", narrowViewport: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: narrowViewport && query === NARROW_VIEWPORT_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    render(
+      <SurfaceProvider surface={surface}>
+        <ComposerStatusSlot
+          upper={
+            <>
+              <StatusSlotItem id="queued">
+                <FakeBanner id="queued" label={LABELS.queued} />
+              </StatusSlotItem>
+              <StatusSlotItem id="background">
+                <FakeBanner id="background" label={LABELS.background} />
+              </StatusSlotItem>
+            </>
+          }
+          approvals={null}
+          lower={null}
+        />
+      </SurfaceProvider>,
+    );
+  }
+
+  it("keeps every band inline on a narrow desktop column", () => {
+    renderMeasured("desktop", false);
+    expect(lines()).toHaveLength(0);
+    expect(screen.queryByTestId("composer-status-slot")).toBeNull();
+    expect(screen.getByTestId("banner-queued")).toBeVisible();
+    expect(screen.getByTestId("banner-background")).toBeVisible();
+  });
+
+  it.each([
+    ["the mobile shell", "mobile", false],
+    ["a viewport below the mobile breakpoint", "desktop", true],
+  ] as const)("collapses a compact column on %s", (_name, surface, narrow) => {
+    renderMeasured(surface, narrow);
+    expect(lines().map((b) => b.getAttribute("data-testid"))).toEqual([
+      "status-slot-line-queued",
+      "status-slot-line-background",
+    ]);
+    expect(screen.getByTestId("banner-queued")).not.toBeVisible();
   });
 });
 
