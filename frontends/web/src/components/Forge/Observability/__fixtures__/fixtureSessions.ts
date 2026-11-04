@@ -19,6 +19,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { ReplayPage, RrwebEvent, SessionSummary, TimelineEntry } from "@/services/controlPlane/observability/rumTypes";
+import { NO_CLIENT, type ClientInfo } from "@/services/controlPlane/observability/client";
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -55,6 +56,15 @@ export const FIXTURE_PLACES = [
   { country: "BR", region: "São Paulo", city: "São Paulo" },
 ] as const;
 
+/** Which clients fixture browsers were, as the platform derives them, plus the desktop app's own report. */
+export const FIXTURE_CLIENTS: readonly ClientInfo[] = [
+  { ...NO_CLIENT, browserName: "Chrome", browserVersion: "156.0.0", osName: "macOS", osVersion: "15.1.0", deviceType: "desktop", chromiumVersion: "156.0.0.0", viewportWidth: 1440, viewportHeight: 900, screenWidth: 2560, screenHeight: 1440 },
+  { ...NO_CLIENT, browserName: "Electron", browserVersion: "41.10.7", osName: "macOS", osVersion: "10.15.7", deviceType: "desktop", chromiumVersion: "146.0.7680.216", desktopVersion: "1.8.16", electronVersion: "41.10.7", viewportWidth: 1280, viewportHeight: 800, screenWidth: 1512, screenHeight: 982 },
+  { ...NO_CLIENT, browserName: "Mobile Safari", browserVersion: "26.6.1", osName: "iOS", osVersion: "18.7", deviceType: "mobile", viewportWidth: 390, viewportHeight: 844, screenWidth: 390, screenHeight: 844 },
+  NO_CLIENT,
+  { ...NO_CLIENT, browserName: "Firefox", browserVersion: "133.0", osName: "Windows", osVersion: "11", deviceType: "desktop", viewportWidth: 1920, viewportHeight: 969, screenWidth: 1920, screenHeight: 1080 },
+];
+
 export function fixtureSessionSummaries(t0: number): SessionSummary[] {
   const base = (n: number, over: Partial<SessionSummary>): SessionSummary => {
     const startedMs = t0 - (6 + n * 23) * MIN;
@@ -75,6 +85,7 @@ export function fixtureSessionSummaries(t0: number): SessionSummary[] {
       hasReplay: n % 9 !== 1,
       ...FIXTURE_PLACES[n % FIXTURE_PLACES.length],
       clientAddress: "",
+      client: FIXTURE_CLIENTS[n % FIXTURE_CLIENTS.length],
       ...over,
     };
   };
@@ -122,6 +133,7 @@ function synthesized(sessionId: string, t0: number): SessionSummary {
     hasReplay: true,
     ...FIXTURE_PLACES[0],
     clientAddress: "",
+    client: FIXTURE_CLIENTS[0],
   };
 }
 
@@ -322,6 +334,9 @@ export function createSessionsFixture(
         if (req.hasError) rows = rows.filter((s) => s.errors > 0);
         if (req.hasReplay) rows = rows.filter((s) => s.hasReplay);
         if (req.userId) rows = rows.filter((s) => s.userId === req.userId);
+        if (req.browser) rows = rows.filter((s) => s.client.browserName === req.browser);
+        if (req.os) rows = rows.filter((s) => s.client.osName === req.os);
+        if (req.frontendVersion) rows = rows.filter((s) => s.serviceVersion === req.frontendVersion);
         if (req.pathContains) rows = rows.filter((s) => s.entryPath.toLowerCase().includes(req.pathContains.toLowerCase()));
         const offset = req.pageToken ? Number(req.pageToken.replace(/^s:/, "")) || 0 : 0;
         const size = req.pageSize || 25;

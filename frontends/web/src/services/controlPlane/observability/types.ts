@@ -16,6 +16,7 @@
  */
 
 import type { SeriesMeta } from "./metricsTypes";
+import type { ClientInfo, ServiceBuild } from "./client";
 
 /** A resolved, absolute time window. `endMs` is exclusive. */
 export interface TimeWindow {
@@ -142,6 +143,12 @@ export interface TraceSummary extends Provenance {
   country: string;
   region: string;
   city: string;
+  /** Which client started it, from its browser spans (client.ts). NO_CLIENT when no browser did. */
+  client: ClientInfo;
+  /** The frontend build that made the call: a browser span's service.version. Empty: no browser span. */
+  frontendVersion: string;
+  /** The backend builds that served it: each server span's service and service.version. */
+  backendBuilds: ServiceBuild[];
 }
 
 /** Rate, errors and duration over every trace the filters matched in the window — not just one page. */
@@ -167,6 +174,12 @@ export interface ListTracesRequest extends ObsScope {
   userId?: string;
   /** Only traces of this browser session. Empty: every trace. */
   sessionId?: string;
+  /** Only traces a browser of this client / OS started (exact). Empty: every trace. */
+  browser?: string;
+  os?: string;
+  /** Only traces with a browser span of this frontend build, or a server span of this backend build. */
+  frontendVersion?: string;
+  backendVersion?: string;
   limit: number;
   cursor?: string;
   /** Up to 3 keys: the response gains one RED summary per group. */

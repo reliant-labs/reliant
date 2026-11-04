@@ -50,6 +50,8 @@ import type {
   Trace,
   TraceSummary,
 } from "@/services/controlPlane/observability/types";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
+import { FIXTURE_CLIENTS } from "./fixtureSessions";
 
 export const FIXTURE_ORG = "org-fixture";
 export const FIXTURE_PROJECT = "shop";
@@ -204,6 +206,13 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
       sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
       ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
+      // A browser started every other trace: its client and the build that made the call.
+      client: i % 2 === 0 ? FIXTURE_CLIENTS[(i / 2) % FIXTURE_CLIENTS.length] : NO_CLIENT,
+      frontendVersion: i % 2 === 0 ? (i % 4 === 0 ? "v1.8.3" : "1.8.16") : "",
+      backendBuilds: [
+        { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
+        { service: "worker", version: "v1.7.92" },
+      ],
       source: "",
       operatorData: false,
     };
@@ -1023,6 +1032,10 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (req.minDurationMs) traces = traces.filter((t) => t.durationMs >= req.minDurationMs);
         if (req.userId) traces = traces.filter((t) => t.userId === req.userId);
         if (req.sessionId) traces = traces.filter((t) => t.sessionId === req.sessionId);
+        if (req.browser) traces = traces.filter((t) => t.client.browserName === req.browser);
+        if (req.os) traces = traces.filter((t) => t.client.osName === req.os);
+        if (req.frontendVersion) traces = traces.filter((t) => t.frontendVersion === req.frontendVersion);
+        if (req.backendVersion) traces = traces.filter((t) => t.backendBuilds.some((b) => b.version === req.backendVersion));
         const durations = traces.map((t) => t.durationMs).sort((a, b) => a - b);
         const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
         const errors = traces.filter((t) => t.errorCount > 0).length;

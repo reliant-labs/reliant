@@ -27,7 +27,7 @@ vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/ob
 vi.mock("@rrweb/replay", async () => ({ Replayer: (await import("./fakeReplayer")).FakeReplayer }));
 vi.mock("@rrweb/replay/dist/style.css", () => ({}));
 
-type ListReq = { envIds: string[]; hasError: boolean; hasReplay: boolean; userId: string; pathContains: string; pageToken?: string };
+type ListReq = { envIds: string[]; hasError: boolean; hasReplay: boolean; userId: string; pathContains: string; browser?: string; os?: string; pageToken?: string };
 const listCalls = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([rpc]) => rpc === "ListSessions").map(([, req]) => req as ListReq);
 const rowIds = () => screen.getAllByTestId(/^obs-session-sess-/).map((row) => row.getAttribute("data-testid")!.replace("obs-session-", ""));
 
@@ -123,6 +123,38 @@ describe("the session list", () => {
     expect(harness.current()).toMatchObject({ q: "/checkout", user: "u_8812" });
     await waitFor(() => expect(listCalls(onCall).at(-1)).toMatchObject({ hasError: true, hasReplay: true, pathContains: "/checkout", userId: "u_8812" }));
     await waitFor(() => expect(rowIds()[0]).toBe(FIXTURE_STORY_SESSION));
+  });
+
+  it("shows each session's device, client and app version", async () => {
+    renderPanel(createFixtureApi(), { view: "sessions", range: "24h" }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+    // The fixture's live and story sessions are base(0): Chrome on macOS.
+    const device = screen.getByTestId(`obs-session-device-${FIXTURE_STORY_SESSION}`);
+    expect(device).toHaveTextContent("macOS 15.1");
+    expect(device).toHaveTextContent("desktop · 1440×900");
+    expect(device).toHaveAttribute("title", expect.stringContaining("derived by the platform from the request's User-Agent"));
+    expect(screen.getByTestId(`obs-session-client-${FIXTURE_STORY_SESSION}`)).toHaveTextContent("Chrome 156");
+    expect(screen.getByTestId(`obs-session-version-${FIXTURE_STORY_SESSION}`)).toHaveTextContent("v1.8.3");
+    // A desktop session: the app's own version under the build, and its Electron.
+    const desktop = screen.getAllByTestId(/^obs-session-client-/).find((cell) => cell.textContent?.startsWith("Desktop app"));
+    expect(desktop).toHaveTextContent("Desktop app 1.8.16Electron 41.10.7");
+  });
+
+  it("narrows by browser, OS and frontend build, in the URL and back to page one", async () => {
+    const onCall = vi.fn();
+    const harness = renderPanel(createFixtureApi({ onCall }), { view: "sessions", range: "24h", cursor: ["s:25"] }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+    const user = userEvent.setup();
+    await user.type(screen.getByTestId("obs-sessions-client-browser"), "Firefox");
+    await user.type(screen.getByTestId("obs-sessions-client-os"), "Windows");
+    await user.click(screen.getByTestId("obs-sessions-client-apply"));
+    expect(harness.current()).toMatchObject({ browser: "Firefox", os: "Windows" });
+    expect(harness.current().cursor).toBeUndefined();
+    await waitFor(() => expect(listCalls(onCall).at(-1)).toMatchObject({ browser: "Firefox", os: "Windows", pageToken: undefined }));
+    await waitFor(() => expect(screen.getAllByTestId(/^obs-session-client-/).every((c) => c.textContent === "Firefox 133")).toBe(true));
+    await user.click(screen.getByTestId("obs-sessions-client-clear"));
+    expect(harness.current().browser).toBeUndefined();
+    expect(harness.current().os).toBeUndefined();
   });
 
   it("explains an empty window, and an older control plane", async () => {

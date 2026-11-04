@@ -30,6 +30,7 @@ import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
 import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
+import { ClientSummary } from "../Client";
 
 export interface SessionDetailProps {
   scope: RumScope;
@@ -160,10 +161,15 @@ function SessionBody({
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
           <Place geo={session} testId="session-place" />
+          <ClientSummary client={session.client} testId="session-client" />
           <span>
             entered on <span className="font-mono text-ink">{session.entryPath || "/"}</span>
           </span>
-          {session.serviceVersion && <span className="font-mono">{session.serviceVersion}</span>}
+          {session.serviceVersion && (
+            <span className="font-mono" title="Frontend build">
+              {session.serviceVersion}
+            </span>
+          )}
           {session.envName && <span>in {session.envName}</span>}
           {session.startedMs > 0 && <span title={formatWhen(session.startedMs, now)}>started {formatAgo(session.startedMs, now)}</span>}
           <span>{formatDuration(Math.max(0, session.endedMs - session.startedMs))}</span>

@@ -161,6 +161,31 @@ Never an email, and never on a metric: these are row attributes only, so no
 series is keyed by a person or a place. Design and the GeoIP refresh:
 control-plane `docs/observability/geoip.md`.
 
+### Which device, client and build (every browser span)
+
+Collected with **Crash and Error Reporting** too, and stopped with it. Two
+sources, never mixed: what control-plane's workspace-proxy derives from the
+request's own `User-Agent` and `Sec-CH-UA*` headers (page script cannot set
+them, and the gateway deletes the page's own copies), and what the page alone
+can know:
+
+| attribute | on | where it comes from |
+| --- | --- | --- |
+| `user_agent.original` | browser resource | the request's `User-Agent` header (at most 512 bytes), stamped at ingest |
+| `user_agent.name`, `user_agent.version` | browser resource | parsed at ingest (ua-parser, uap-core rules): `Chrome 156.0.0`, `Mobile Safari 26.6.1`, `Electron 41.10.7` for the desktop renderer |
+| `os.name`, `os.version` | browser resource | parsed at ingest; refined by `Sec-CH-UA-Platform-Version` when the browser sends it (Windows 11, the real macOS version) |
+| `reliant.device.type` | browser resource | `desktop`, `mobile`, `tablet` or `bot`, at ingest (`Sec-CH-UA-Mobile`, then the UA). iPadOS Safari presents as macOS, so it is `desktop` |
+| `reliant.chromium.version` | browser resource | the `Chrome/` token of a Chromium-based client, the desktop app's included |
+| `browser.brands`, `browser.platform`, `browser.mobile` | browser resource | the page: `navigator.userAgentData`'s low-entropy hints, sanitized by forge-web-runtime (GREASE brands dropped; no `getHighEntropyValues`) |
+| `app.viewport.width/height`, `app.screen.width/height` | every browser span | the page, CSS pixels, restamped when a resize settles |
+| `app.desktop.version`, `app.desktop.electron.version`, `app.desktop.chromium.version` | browser resource; the desktop main process's resource | the desktop app: the preload exposes `window.forgeDesktop` (the app version from main via `--reliant-app-version`, Electron and Chromium from `process.versions`); `./node` stamps the same on main-process telemetry |
+| `service.version` | every span | the build: the web bundle's forge build id (`VITE_APP_VERSION`, which source maps are keyed by) or, in the desktop window, `appBuild().version`; a server span's is the server binary's release. `reliant.build` (span attribute) carries the web bundle's semantic version, `1.8.17-dev+2cd547cc` |
+
+No device id, model, fonts, plugins or other fingerprinting signal is read.
+These are row attributes, never metric labels. Stored in tenant schema v21
+(`rum_sessions.Client`/`Viewport`, `error_events.BrowserName`/…); design:
+control-plane `docs/observability/client-context.md`.
+
 ## Claim funnel (the `/claim` page)
 
 A claimable deploy is handed to a human as `…/claim#rcl_<token>`

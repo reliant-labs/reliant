@@ -58,6 +58,9 @@ import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
+import { hasClient } from "@/services/controlPlane/observability/client";
+import { clientLabel, ClientSummary } from "./Client";
+import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "./ClientFilters";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -96,6 +99,8 @@ export function TracesView(props: {
   user?: string;
   /** Only traces of this browser session (the URL's `rsession`). */
   sessionId?: string;
+  /** Only traces of this client and builds (the URL's `browser`, `os`, `fe`, `be`). */
+  client?: ClientFilterValues;
   navigate: ObsNavigate;
 }) {
   if (props.traceId) {
@@ -125,6 +130,7 @@ function TraceList({
   filters: scopeTokens = NO_TOKENS,
   user = "",
   sessionId,
+  client = NO_FILTER_VALUES,
   navigate,
 }: {
   scope: ObsScope;
@@ -138,8 +144,10 @@ function TraceList({
   filters?: FilterToken[];
   user?: string;
   sessionId?: string;
+  client?: ClientFilterValues;
   navigate: ObsNavigate;
 }) {
+  const { browser, os, fe, be } = client;
   const filters: TraceFilters = useMemo(
     () => ({
       range,
@@ -150,8 +158,12 @@ function TraceList({
       groupBy,
       userId: user || undefined,
       sessionId: sessionId || undefined,
+      browser: browser || undefined,
+      os: os || undefined,
+      frontendVersion: fe || undefined,
+      backendVersion: be || undefined,
     }),
-    [range, rootSpanName, service, errorsOnly, minDuration, groupBy, user, sessionId]
+    [range, rootSpanName, service, errorsOnly, minDuration, groupBy, user, sessionId, browser, os, fe, be]
   );
   const traces = useListTraces(scope, filters);
   const rows = useMemo(() => traces.data?.pages.flatMap((page) => page.traces) ?? EMPTY, [traces.data]);
@@ -160,7 +172,7 @@ function TraceList({
   // A filter the server ignored is drawn in place of the list (ObsError), not under the search box.
   const filterError =
     traces.error && obsErrorKind(traces.error) === "invalid" && !(traces.error instanceof FilterUnsupportedError) ? obsErrorMessage(traces.error) : null;
-  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!user || !!sessionId;
+  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!user || !!sessionId || hasClientFilters(client);
   const points = useMemo(() => pointsOf(rows), [rows]);
   // The brushed region belongs to the filters it was drawn over: new filters
   // load other traces, and a region kept across them would select nothing.
@@ -185,6 +197,12 @@ function TraceList({
         minDuration={minDuration}
         user={user}
         navigate={navigate}
+      />
+      <ClientFilters
+        id="obs-traces-client"
+        fields={TRACE_CLIENT_FIELDS}
+        values={client}
+        onApply={(next) => navigate(next, { replace: true })}
       />
       {sessionId && <SessionFilterBar scope={scope} sessionId={sessionId} navigate={navigate} />}
       {red && red.traceCount > 0 && <RedStrip red={red} />}
@@ -229,7 +247,9 @@ function TraceList({
           range={range}
           filtered={filtered}
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined, user: undefined, rsession: undefined })}
+          onClearFilters={() =>
+            navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined, user: undefined, rsession: undefined, ...NO_CLIENT_FILTERS })
+          }
         />
       ) : region && visibleRows.length === 0 ? (
         <Card className="text-center" data-testid="obs-trace-region-empty">
@@ -256,6 +276,8 @@ function TraceList({
 
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
+const NO_FILTER_VALUES: ClientFilterValues = {};
+const TRACE_CLIENT_FIELDS = ["browser", "os", "fe", "be"] as const;
 
 /** What the brushed region is, how many loaded traces it keeps, and the way out of it. */
 function RegionBar({ region, shown, loaded, onClear }: { region: TraceRegion; shown: number; loaded: number; onClear: () => void }) {
@@ -558,6 +580,51 @@ function TraceTable({
             );
           },
         }),
+        // Which client made the call and which builds ran it: the frontend
+        // build under the client, the backend builds in their own column, so a
+        // regression reads as a release.
+        column.accessor((t) => clientLabel(t.client), {
+          id: "client",
+          header: "Client",
+          sortFn: "alphanumeric",
+          cell: (info) => {
+            const trace = info.row.original;
+            if (!hasClient(trace.client) && !trace.frontendVersion) return <span className="text-xs text-ink-muted">—</span>;
+            return (
+              <span className="flex min-w-0 flex-col leading-tight">
+                <ClientSummary client={trace.client} className="text-xs text-ink" testId="obs-trace-client" />
+                {trace.frontendVersion && (
+                  <span className="truncate font-mono text-2xs text-ink-muted" title={`Frontend build ${trace.frontendVersion}`} data-testid="obs-trace-frontend-version">
+                    {trace.frontendVersion}
+                  </span>
+                )}
+              </span>
+            );
+          },
+        }),
+        column.accessor((t) => t.backendBuilds.map((b) => b.version).join(" "), {
+          id: "backend",
+          header: "Backend",
+          sortFn: "alphanumeric",
+          cell: (info) => {
+            const builds = info.row.original.backendBuilds;
+            if (builds.length === 0) return <span className="text-xs text-ink-muted">—</span>;
+            return (
+              <span className="flex min-w-0 flex-col leading-tight" data-testid="obs-trace-backend">
+                {builds.slice(0, 2).map((b) => (
+                  <span key={`${b.service}@${b.version}`} className="truncate text-2xs" title={`${b.service} ${b.version}`}>
+                    <span className="text-ink-muted">{b.service}</span> <span className="font-mono text-ink">{b.version}</span>
+                  </span>
+                ))}
+                {builds.length > 2 && (
+                  <span className="text-2xs text-ink-muted" title={builds.slice(2).map((b) => `${b.service} ${b.version}`).join("\n")}>
+                    +{builds.length - 2} more
+                  </span>
+                )}
+              </span>
+            );
+          },
+        }),
         column.accessor("spanCount", {
           header: "Spans",
           sortFn: "basic",
@@ -592,7 +659,7 @@ function TraceTable({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
-  // On a phone the six columns do not fit, so each trace is a stacked card
+  // On a phone the eight columns do not fit, so each trace is a stacked card
   // (DataTable's STACK) whose height depends on its content: measure, don't assume.
   const narrow = useNarrowViewport();
   const virtualizer = useVirtualizer({
@@ -644,9 +711,11 @@ function TraceTable({
           <colgroup className="max-md:hidden">
             <col className="w-36" />
             <col />
-            <col className="w-64" />
-            <col className="w-44" />
-            <col className="w-20" />
+            <col className="w-56" />
+            <col className="w-40" />
+            <col className="w-48" />
+            <col className="w-40" />
+            <col className="w-16" />
             <col className="w-24" />
           </colgroup>
           <thead className={cn("sticky top-0 z-10 bg-surface", STACK.head)}>

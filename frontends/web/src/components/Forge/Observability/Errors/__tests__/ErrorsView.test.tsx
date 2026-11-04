@@ -21,6 +21,9 @@ type ListReq = { envIds: string[]; statuses: string[]; platform?: string; servic
 const listCalls = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([rpc]) => rpc === "ListIssues").map(([, req]) => req as ListReq);
 const rowIds = () => screen.getAllByTestId(/^obs-issue-iss-/).map((row) => row.getAttribute("data-testid")!.replace("obs-issue-", ""));
 
+/** The fixture's browser issues: only they have events with a client. */
+const BROWSER_ISSUE = /^(iss-checkout-total|iss-cart-chunk)$/;
+
 describe("the issue list", () => {
   it("lists the open issues of the scope — browser and server — with the server's open default", async () => {
     const onCall = vi.fn();
@@ -76,6 +79,23 @@ describe("the issue list", () => {
     await screen.findByTestId("obs-errors-list");
     expect(rowIds()).toEqual(["iss-orders-deadline", "iss-checkout-total", "iss-worker-conns"]);
     expect(listCalls(onCall).some((req) => (req as ListReq & { userId?: string }).userId === "u_8812")).toBe(true);
+  });
+
+  it("narrows to the browser issues of one client", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "errors", browser: "Mobile Safari" }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    expect(rowIds().length).toBeGreaterThan(0);
+    for (const id of rowIds()) expect(id).toMatch(BROWSER_ISSUE);
+    expect(listCalls(onCall).some((req) => (req as ListReq & { browser?: string }).browser === "Mobile Safari")).toBe(true);
+  });
+
+  it("never shows an older control plane's unfiltered issues as one client's", async () => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    api.listIssues = (req, options) => listIssues({ ...req, browser: undefined }, options);
+    renderPanel(api, { view: "errors", browser: "Firefox" }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent("can't filter issues by browser");
   });
 
   it("never shows an older control plane's unfiltered issues as one user's", async () => {

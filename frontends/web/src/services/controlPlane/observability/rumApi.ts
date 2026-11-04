@@ -57,6 +57,7 @@ import type {
   TimelineRequest,
 } from "./rumTypes";
 import type { TimeWindow } from "./types";
+import { mapClient } from "./client";
 
 function client() {
   return obsClient(RumService);
@@ -97,6 +98,7 @@ export function mapSessionSummary(s: WireSummary): SessionSummary {
     region: s.region,
     city: s.city,
     clientAddress: s.clientAddress,
+    client: mapClient(s.client),
   };
 }
 
@@ -201,6 +203,9 @@ export async function listSessions(req: ListSessionsRequest, options: { signal?:
     hasReplay: req.hasReplay,
     userId: req.userId,
     pathContains: req.pathContains,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    frontendVersion: req.frontendVersion || undefined,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
   }, options);

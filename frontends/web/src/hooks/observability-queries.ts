@@ -238,6 +238,12 @@ export interface TraceFilters {
   userId?: string;
   /** Only traces of this browser session. */
   sessionId?: string;
+  /** Only traces a browser of this client / OS started (exact). */
+  browser?: string;
+  os?: string;
+  /** Only traces with a browser span of this frontend build / a server span of this backend build. */
+  frontendVersion?: string;
+  backendVersion?: string;
 }
 
 export const TRACE_PAGE_SIZE = 100;
@@ -252,6 +258,16 @@ function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]
   if (traces.length === 0) return;
   if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
   if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
+  // A server that applies these returns only traces naming the value; an older
+  // one never fills the fields at all.
+  if (filters.browser && traces.some((t) => t.client.browserName !== filters.browser)) throw new FilterUnsupportedError("browser", "traces");
+  if (filters.os && traces.some((t) => t.client.osName !== filters.os)) throw new FilterUnsupportedError("OS", "traces");
+  if (filters.frontendVersion && traces.some((t) => t.frontendVersion !== filters.frontendVersion)) {
+    throw new FilterUnsupportedError("frontend version", "traces");
+  }
+  if (filters.backendVersion && traces.some((t) => !t.backendBuilds.some((b) => b.version === filters.backendVersion))) {
+    throw new FilterUnsupportedError("backend version", "traces");
+  }
 }
 
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
@@ -270,6 +286,10 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         groupBy: filters.groupBy,
         userId: filters.userId,
         sessionId: filters.sessionId,
+        browser: filters.browser,
+        os: filters.os,
+        frontendVersion: filters.frontendVersion,
+        backendVersion: filters.backendVersion,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
@@ -763,6 +783,10 @@ export interface IssueFilters {
   assignee?: string;
   /** Only the issues with an event of this user id in the window (the server filters). */
   userId?: string;
+  /** Only the issues with an event of this browser / OS / build in the window (the server filters). */
+  browser?: string;
+  os?: string;
+  serviceVersion?: string;
   sort: IssueSort;
   text: string;
 }
@@ -843,6 +867,9 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         platform: filters.platform,
         assignee: filters.assignee,
         userId: filters.userId,
+        browser: filters.browser,
+        os: filters.os,
+        serviceVersion: filters.serviceVersion,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
@@ -852,11 +879,24 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // asked, not inferred: the same first page for a user nobody is. A server
       // that knows the filter answers it with nothing; one that ignores it
       // answers with exactly the unfiltered rows the real read would get.
+      // The client and build filters are asked the same way, each with a value
+      // nobody has, all in one probe: they shipped together.
+      const clientFilter = filters.browser ? "browser" : filters.os ? "OS" : filters.serviceVersion ? "build" : "";
+      const probing = !pageParam && (!!filters.userId || !!clientFilter);
       const [result, probe] = await Promise.all([
         api.listIssues(request, { signal }),
-        filters.userId && !pageParam ? api.listIssues({ ...request, userId: issueUserFilterProbe(), pageSize: 1 }, { signal }) : null,
+        probing
+          ? api.listIssues({
+              ...request,
+              userId: filters.userId ? issueUserFilterProbe() : undefined,
+              browser: filters.browser ? issueUserFilterProbe() : undefined,
+              os: filters.os ? issueUserFilterProbe() : undefined,
+              serviceVersion: filters.serviceVersion ? issueUserFilterProbe() : undefined,
+              pageSize: 1,
+            }, { signal })
+          : null,
       ]);
-      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
+      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError(filters.userId ? "user" : clientFilter, "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,

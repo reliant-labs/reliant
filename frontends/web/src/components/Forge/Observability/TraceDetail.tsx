@@ -39,6 +39,9 @@ import { rumScopeOf, rumSessionIdOf, sessionLink } from "./Sessions/sessionModel
 import { isBrowserSpan, traceTitle } from "./traceTitle";
 import { TraceWaterfall } from "./waterfall/TraceWaterfall";
 import { traceExtent } from "./waterfall/traceTree";
+import { hasClient } from "@/services/controlPlane/observability/client";
+import { ClientSummary } from "./Client";
+import { traceBuildsOf, type TraceBuilds } from "./traceBuilds";
 
 export function TraceDetail({
   scope,
@@ -58,6 +61,7 @@ export function TraceDetail({
   const trace = useTrace(scope, traceId, range);
   const { environments } = useObsAskContext();
   const spans = trace.data?.spans ?? [];
+  const builds = traceBuildsOf(spans);
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
   const title = traceTitle(spans);
   const selected = spans.find((span) => span.spanId === spanId) ?? null;
@@ -179,6 +183,8 @@ export function TraceDetail({
           )}
         </div>
       </div>
+
+      <TraceBuildsLine builds={builds} />
 
       {title && !title.from && spans.every(isBrowserSpan) && spans.some((span) => span.kind === "client") && (
         <p role="status" data-testid="trace-browser-only" className="rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
@@ -353,5 +359,25 @@ function Fact({ label, value, tone, mono }: { label: string; value: string; tone
       <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
       <dd className={`${mono ? "font-mono " : ""}${tone === "error" ? "text-danger-ink" : "text-ink"}`}>{value}</dd>
     </div>
+  );
+}
+
+/** Which client called and which builds served: the release a regression in this trace belongs to. */
+function TraceBuildsLine({ builds }: { builds: TraceBuilds }) {
+  if (!hasClient(builds.client) && !builds.frontendVersion && builds.backendBuilds.length === 0) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted" data-testid="trace-builds">
+      <ClientSummary client={builds.client} testId="trace-client" />
+      {builds.frontendVersion && (
+        <span>
+          frontend <span className="font-mono text-ink">{builds.frontendVersion}</span>
+        </span>
+      )}
+      {builds.backendBuilds.map((b) => (
+        <span key={`${b.service}@${b.version}`}>
+          {b.service} <span className="font-mono text-ink">{b.version}</span>
+        </span>
+      ))}
+    </p>
   );
 }

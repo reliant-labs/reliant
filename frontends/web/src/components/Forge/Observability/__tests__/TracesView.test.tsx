@@ -63,6 +63,42 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ user: "u_42" });
   });
 
+  it("shows which client called and which builds served, and narrows by them", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    const [first, second] = await screen.findAllByTestId("obs-trace-row");
+    // Fixture trace 0: a browser on Chrome / macOS made the call from build v1.8.3; api v1.7.91 and worker v1.7.92 served it.
+    expect(within(first).getByTestId("obs-trace-client")).toHaveTextContent("Chrome 156 · macOS 15.1");
+    expect(within(first).getByTestId("obs-trace-frontend-version")).toHaveTextContent("v1.8.3");
+    expect(within(first).getByTestId("obs-trace-backend")).toHaveTextContent("api v1.7.91");
+    expect(within(first).getByTestId("obs-trace-backend")).toHaveTextContent("worker v1.7.92");
+    // Trace 1: no browser started it, so no client and no frontend build.
+    expect(within(second).queryByTestId("obs-trace-client")).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId("obs-traces-client-fe"), "1.8.16");
+    await user.type(screen.getByTestId("obs-traces-client-be"), "v1.7.92");
+    await user.click(screen.getByTestId("obs-traces-client-apply"));
+    expect(harness.current()).toMatchObject({ fe: "1.8.16", be: "v1.7.92" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ frontendVersion: "1.8.16", backendVersion: "v1.7.92" }),
+        expect.objectContaining({ signal: expect.anything() })
+      )
+    );
+    await waitFor(() => expect(screen.getAllByTestId("obs-trace-frontend-version").every((c) => c.textContent === "1.8.16")).toBe(true));
+  });
+
+  it("refuses rows a control plane answered without the client filters", async () => {
+    const api = createFixtureApi();
+    const real = api.listTraces.bind(api);
+    // An older control plane ignores the unknown fields and answers unfiltered.
+    vi.spyOn(api, "listTraces").mockImplementation((req, options) => real({ ...req, browser: undefined }, options));
+    renderPanel(api, { view: "traces", browser: "Firefox" });
+    expect(await screen.findByText(/can't filter traces by browser yet/)).toBeInTheDocument();
+  });
+
   it("lists one browser session's traces, says so, and links back to it", async () => {
     const user = userEvent.setup();
     const api = createFixtureApi();
