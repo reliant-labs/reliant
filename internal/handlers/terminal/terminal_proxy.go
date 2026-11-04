@@ -4,28 +4,22 @@ package terminal
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// Every rpc forwards its request to the caller's daemon through Deps.Router:
-// a DaemonCommand (request/response), or for StreamTerminal the session's
-// input, resize and output.
+// Every rpc forwards its request to the caller's daemon through Deps.Router as
+// a DaemonCommand (request/response). Terminal I/O is the websocket
+// (TerminalWSHandler), not an rpc.
 
 func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
@@ -40,8 +34,8 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 const terminalCloseTimeout = 10 * time.Second
 
 // closeDaemonTerminalSession closes the daemon terminal session that a
-// terminal connection (TerminalWSHandler, StreamTerminal) created. Each
-// handler defers it as soon as it has a session id.
+// terminal connection (TerminalWSHandler) created. The handler defers it as
+// soon as it has a session id.
 //
 // A session is owned by the connection that created it. Every connection
 // sends terminal.create and nothing can reattach to an existing session, so
@@ -58,7 +52,9 @@ const terminalCloseTimeout = 10 * time.Second
 // best-effort: the session is often already gone (the shell exited, or the
 // client closed it through CloseSession first), and the daemon's session cap
 // is the backstop when the close cannot be delivered at all.
-func closeDaemonTerminalSession(ctx context.Context, router SessionRouter, userID, sessionID string) {
+// daemonID is the machine the session was created on ("" for default
+// resolution): a session lives on one machine.
+func closeDaemonTerminalSession(ctx context.Context, router SessionRouter, userID, daemonID, sessionID string) {
 	if sessionID == "" {
 		return
 	}
@@ -70,10 +66,19 @@ func closeDaemonTerminalSession(ctx context.Context, router SessionRouter, userI
 		logging.ErrorContext(ctx, "[Terminal] Failed to marshal session close", "error", err, "session_id", sessionID)
 		return
 	}
-	if _, err := router.SendDaemonCommand(closeCtx, userID, "terminal.close", payload, int32(terminalCloseTimeout/time.Millisecond)); err != nil {
+	if _, err := sendToMachine(closeCtx, router, userID, daemonID, "terminal.close", payload, int32(terminalCloseTimeout/time.Millisecond)); err != nil {
 		logging.DebugContext(ctx, "[Terminal] Session close on disconnect did not complete (may already be closed)",
 			"error", err, "session_id", sessionID)
 	}
+}
+
+// sendToMachine sends a daemon command to daemonID, or by default resolution
+// when it is "".
+func sendToMachine(ctx context.Context, router SessionRouter, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	if daemonID == "" {
+		return router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	}
+	return router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
 }
 
 // terminalSessionNotFound is how the daemon's terminal manager says a session
@@ -187,7 +192,7 @@ func (s *Service) CloseSession(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
+	respBytes, err := sendToMachine(ctx, s.deps.Router, userID, req.Msg.GetDaemonId(), "terminal.close", payload, 30000)
 	if err != nil {
 		// Closing a session that is already gone has achieved what close
 		// asks for. The race is built in: the terminal connection's deferred
@@ -219,210 +224,4 @@ func (s *Service) CloseSession(
 		Success: cmdResp.Success,
 		Message: msg,
 	}), nil
-}
-
-// StreamTerminal implements bidi streaming terminal I/O by forwarding data
-// between the browser stream and the daemon's terminal session via the router.
-func (s *Service) StreamTerminal(
-	ctx context.Context,
-	stream *connect.BidiStream[reliantv1.TerminalStreamInput, reliantv1.TerminalStreamOutput],
-) error {
-	userID, err := s.getUserID(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Wait for the first message — must be a Create request.
-	firstMsg, err := stream.Receive()
-	if err != nil {
-		return svcerr.WrapOr(err, svcerr.InvalidArgument("failed to receive initial message"))
-	}
-
-	createReq := firstMsg.GetCreate()
-	if createReq == nil {
-		return svcerr.InvalidArgument("first message must be a Create request")
-	}
-
-	// Create the terminal session via DaemonCommand.
-	cmdReq := map[string]any{
-		"working_dir": createReq.GetWorkingDir(),
-	}
-	payload, err := json.Marshal(cmdReq)
-	if err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("marshal create request"))
-	}
-
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
-	if err != nil {
-		// The daemon refused the directory (see terminal.resolveWorkingDir).
-		// It is the caller's to fix or wait for, not a server fault.
-		if terminal.IsWorkingDirUnavailable(err) {
-			logging.WarnContext(ctx, "[Terminal] Stream working directory unavailable",
-				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
-			text, ok := toolexec.DaemonReportedText(err)
-			if !ok {
-				text = terminal.ErrWorkingDirUnavailable.Error()
-			}
-			return svcerr.WithCause(svcerr.FailedPrecondition("create terminal session: "+text), err)
-		}
-		return daemonFailure("create terminal session", "create terminal session", err)
-	}
-
-	var createResp struct {
-		SessionID string `json:"session_id"`
-		PID       int32  `json:"pid"`
-		// Where the shell actually started. Empty only from a daemon that
-		// predates reporting it.
-		WorkingDir string `json:"working_dir"`
-	}
-	if err := json.Unmarshal(respBytes, &createResp); err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("unmarshal create response"))
-	}
-
-	sessionID := createResp.SessionID
-	logging.InfoContext(ctx, "[Terminal] Stream session created",
-		"session_id", sessionID,
-		"pid", createResp.PID,
-		"user_id", userID,
-		"requested_working_dir", createReq.GetWorkingDir(),
-		"working_dir", createResp.WorkingDir,
-	)
-	// This stream owns the session, so it closes it however the stream ends:
-	// an explicit CloseSession, a client hangup, or an early return below.
-	defer closeDaemonTerminalSession(ctx, s.deps.Router, userID, sessionID)
-
-	// Send the Created response to the client.
-	if err := stream.Send(&reliantv1.TerminalStreamOutput{
-		Output: &reliantv1.TerminalStreamOutput_Created{
-			Created: &reliantv1.TerminalSessionCreated{
-				SessionId: sessionID,
-				Pid:       createResp.PID,
-			},
-		},
-	}); err != nil {
-		return err
-	}
-
-	// Subscribe to terminal output from the daemon.
-	outputCh, unsub, err := s.deps.Router.SubscribeTerminalOutput(ctx, userID, sessionID)
-	if err != nil {
-		return daemonFailure("", "subscribe terminal output", err)
-	}
-	defer unsub()
-
-	// Use a cancellable context so either pump can stop the other.
-	pumpCtx, pumpCancel := context.WithCancel(ctx)
-	defer pumpCancel()
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Shared error from first pump to fail.
-	var pumpErr error
-	var errOnce sync.Once
-
-	setPumpErr := func(e error) {
-		errOnce.Do(func() {
-			pumpErr = e
-			pumpCancel()
-		})
-	}
-
-	// Output pump: daemon output -> browser stream. However it ends — the
-	// session closed, a send failed, the stream's context ended (a drain) —
-	// it aborts the request body on the way out (serverkit.AbortReceive;
-	// every serverkit listener serves one), which is the only thing
-	// that wakes the input pump out of a Receive while the browser is still
-	// connected; cancelling pumpCtx does not. Without it the handler waited
-	// in wg.Wait for the browser's next keystroke.
-	go func() {
-		defer wg.Done()
-		defer serverkit.AbortReceive(ctx)
-		for {
-			select {
-			case <-pumpCtx.Done():
-				return
-			case evt, ok := <-outputCh:
-				if !ok {
-					// Channel closed — subscription ended.
-					setPumpErr(nil)
-					return
-				}
-				if evt.Error != "" {
-					_ = stream.Send(&reliantv1.TerminalStreamOutput{
-						Output: &reliantv1.TerminalStreamOutput_Error{
-							Error: &reliantv1.TerminalError{
-								SessionId: sessionID,
-								Message:   evt.Error,
-							},
-						},
-					})
-					setPumpErr(nil)
-					return
-				}
-				if evt.Closed {
-					_ = stream.Send(&reliantv1.TerminalStreamOutput{
-						Output: &reliantv1.TerminalStreamOutput_Closed{
-							Closed: &reliantv1.TerminalSessionClosed{
-								SessionId: sessionID,
-								ExitCode:  evt.ExitCode,
-							},
-						},
-					})
-					setPumpErr(nil)
-					return
-				}
-				if len(evt.Data) > 0 {
-					if err := stream.Send(&reliantv1.TerminalStreamOutput{
-						Output: &reliantv1.TerminalStreamOutput_Data{
-							Data: &reliantv1.TerminalDataOutput{
-								SessionId: sessionID,
-								Data:      evt.Data,
-							},
-						},
-					}); err != nil {
-						setPumpErr(err)
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	// Input pump: browser stream -> daemon.
-	go func() {
-		defer wg.Done()
-		for {
-			msg, err := stream.Receive()
-			if err != nil {
-				if errors.Is(err, io.EOF) || pumpCtx.Err() != nil {
-					setPumpErr(nil)
-				} else {
-					setPumpErr(err)
-				}
-				return
-			}
-
-			switch input := msg.GetInput().(type) {
-			case *reliantv1.TerminalStreamInput_Data:
-				if err := s.deps.Router.SendTerminalInput(pumpCtx, userID, sessionID, input.Data.GetData()); err != nil {
-					setPumpErr(fmt.Errorf("send terminal input: %w", err))
-					return
-				}
-			case *reliantv1.TerminalStreamInput_Resize:
-				if err := s.deps.Router.SendTerminalResize(pumpCtx, userID, sessionID, input.Resize.GetCols(), input.Resize.GetRows()); err != nil {
-					setPumpErr(fmt.Errorf("send terminal resize: %w", err))
-					return
-				}
-			case *reliantv1.TerminalStreamInput_CloseSession:
-				// End the stream. The deferred closeDaemonTerminalSession
-				// closes the daemon session, exactly as it does on hangup.
-				setPumpErr(nil)
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-	return pumpErr
 }

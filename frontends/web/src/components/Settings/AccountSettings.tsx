@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuthStore } from '../../store/authStore'
 import { LogOut, User, CheckCircle, Trash2 } from 'lucide-react'
-import { Button } from '../ui/Button'
+import Button from '@/components/forge-ui/button';
 import { LinkedAccounts } from '../LinkedAccounts'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { SettingsPageHeader } from "./SettingsPageHeader";
@@ -60,8 +60,10 @@ export function AccountSettings() {
     }
   }, [authError, clearAuthError])
 
+  // Signing out loses nothing — the account and everything in it are still
+  // there at the next sign-in — so it asks nothing and is not styled as a
+  // destructive action. Delete account, below, is the destructive one.
   const handleSignOut = async () => {
-    if (!confirm('Are you sure you want to sign out?')) return
     setIsSigningOut(true)
     try {
       await signOut()
@@ -73,7 +75,7 @@ export function AccountSettings() {
       navigate({ to: '/auth', search: { redirect: undefined } })
     } catch (error) {
       console.error('Sign out failed:', error)
-      alert('Failed to sign out. Please try again.')
+      setAccountError("Couldn't sign out. Please try again.")
     } finally {
       setIsSigningOut(false)
     }
@@ -103,27 +105,27 @@ export function AccountSettings() {
         description="Your sign-in details and linked login methods. Come here to link another way of signing in, sign out, or delete your account."
       />
 
-      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         {linkSuccess && (
-          <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-3 flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-            <p className="text-sm text-green-800 dark:text-green-200">{linkSuccess}</p>
+          <div className="rounded-lg border border-success/20 bg-success/10 p-3 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-success-ink" />
+            <p className="text-sm text-success-ink">{linkSuccess}</p>
           </div>
         )}
 
         {accountError && (
-          <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-            <p className="text-sm text-red-800 dark:text-red-200">{accountError}</p>
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+            <p className="text-sm text-destructive-ink">{accountError}</p>
           </div>
         )}
 
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-muted rounded-lg">
+            <div className="p-2 rounded-lg border border-border/60 bg-background">
               <User className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="font-medium mb-1">Current Account</h3>
+              <h3 className="text-sm font-semibold mb-1">Current account</h3>
               <div className="space-y-1">
                 <p className="text-sm">{email || linkedProviders.join(', ') || 'Connected'}</p>
                 <p className="text-xs text-muted-foreground">
@@ -142,30 +144,30 @@ export function AccountSettings() {
 
         <div className="border-t border-border/40 pt-4">
           <Button
-            variant="destructive"
-            size="xs"
+            variant="secondary"
+            size="sm"
             onClick={handleSignOut}
             disabled={isSigningOut}
-            leftIcon={<LogOut className="w-3 h-3" />}
+            leftIcon={<LogOut className="w-3.5 h-3.5" />}
           >
-            {isSigningOut ? 'Signing out...' : 'Sign Out'}
+            {isSigningOut ? 'Signing out…' : 'Sign out'}
           </Button>
         </div>
       </div>
 
-      <div className="border border-destructive/30 rounded-lg p-6 space-y-4">
+      <div className="rounded-lg border border-destructive/30 bg-card p-6 space-y-4">
         <div>
-          <h3 className="font-medium mb-1">Delete account</h3>
+          <h3 className="text-sm font-semibold mb-1">Delete account</h3>
           <p className="text-sm text-muted-foreground">
             Permanently delete your projects, chats and connected provider
             accounts. This cannot be undone.
           </p>
         </div>
         <Button
-          variant="destructive"
-          size="xs"
+          variant="danger"
+          size="sm"
           onClick={() => setIsDeleteDialogOpen(true)}
-          leftIcon={<Trash2 className="w-3 h-3" />}
+          leftIcon={<Trash2 className="w-3.5 h-3.5" />}
         >
           Delete account
         </Button>

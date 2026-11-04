@@ -165,6 +165,14 @@ type Event struct {
 	// Empty on every other type.
 	Reason string `json:"reason,omitempty"`
 
+	// Build is the build the daemon reported when its stream registered. It
+	// rides on EventConnected only; nil on every other type, and nil on a
+	// connect from a daemon that predates the report. A consumer treats nil as
+	// "unknown build", never as an error, and must not read an absent Build as
+	// "unchanged" on a later connect: each connect carries the build of the
+	// stream that just attached.
+	Build *Build `json:"build,omitempty"`
+
 	// The fields below are populated only on EventLifecycle. They are on the
 	// one Event struct rather than a second payload type because the subject
 	// family, the key and the "newest wins" semantics are identical: a
@@ -196,6 +204,22 @@ type Event struct {
 	// column is the machine's age rather than the moment the registry heard
 	// of it.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+}
+
+// Build identifies the binary a daemon runs, as DaemonRegister reported it.
+// Every field is empty/zero for an unstamped build. CommitTimeUnix is the key
+// that orders builds (0 = unordered); Version is display only, since semver
+// cannot order two builds between the same pair of tags.
+type Build struct {
+	Version        string `json:"version,omitempty"`
+	Commit         string `json:"commit,omitempty"`
+	CommitTimeUnix int64  `json:"commit_time_unix,omitempty"`
+	ForgeVersion   string `json:"forge_version,omitempty"`
+}
+
+// Known reports whether the daemon identified its build at all.
+func (b Build) Known() bool {
+	return b.Version != "" || b.Commit != ""
 }
 
 // HasIdentity reports whether a lifecycle event carries enough to CREATE a

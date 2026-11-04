@@ -18,7 +18,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   rolloutModeOf,
   rolloutStateOf,
@@ -35,7 +35,7 @@ export function RolloutResults({ plan }: { plan: ForgeDeployReport }) {
 
   if (results.length === 0) {
     return (
-      <p data-testid="deploy-rollout-empty" className="text-xs text-muted-foreground">
+      <p data-testid="deploy-rollout-empty" className="text-xs text-ink-muted">
         {mode === "skip"
           ? "Forge was asked not to wait, so no resource was observed converging."
           : "No rollout results — nothing has been applied yet."}
@@ -78,11 +78,11 @@ export function RolloutResults({ plan }: { plan: ForgeDeployReport }) {
                   {style.label}
                 </span>
               </Tooltip>
-              <span className="font-mono text-2xs text-foreground">
+              <span className="font-mono text-2xs text-ink">
                 {result.kind}/{result.name}
               </span>
               {result.detail && (
-                <span className="text-2xs text-muted-foreground">{result.detail}</span>
+                <span className="text-2xs text-ink-muted">{result.detail}</span>
               )}
             </li>
           );

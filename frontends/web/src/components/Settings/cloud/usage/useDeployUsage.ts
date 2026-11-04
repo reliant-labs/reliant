@@ -1,10 +1,10 @@
 // The ONE seam between the deploy usage surface and the control plane.
 //
-// Four reads and one write, all on the PUBLIC control-plane listener
+// Read-only usage on the PUBLIC control-plane listener
 // (`publicAPIMounts()`), through the shared control-plane transport:
 //
 //   BillingService.GetCurrentUserInfraOverage   consumption, allowance, cap, rung
-//   BillingService.SetCurrentUserInfraOverage   the ceiling write
+//   Usage agreement consent/budget is separate; this surface cannot mutate it.
 //   DeployService.ListUsage                     attribution rows
 //   DeployService.ListDeployments / ListEnvironments   id → name for those rows
 //
@@ -31,7 +31,7 @@
 // error state rather than a confident zero.
 
 import { useCallback, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
@@ -42,7 +42,6 @@ import { buildUsageSummary, timestampToDate } from "./usageModel";
 
 import type {
   InfraOverageResponse,
-  OverageRequestFields,
   UsageSummary,
 } from "./usageModel";
 
@@ -59,8 +58,6 @@ export interface DeployUsageState {
   isLoading: boolean;
   error: { message?: string } | null;
   refetch: () => void;
-  saveCap: (fields: OverageRequestFields) => void;
-  isSavingCap: boolean;
   deploymentNames: Map<string, string>;
   environmentNames: Map<string, string>;
 }
@@ -147,15 +144,6 @@ export function useDeployUsage(): DeployUsageState {
     staleTime: 5 * 60_000,
   });
 
-  const saveCapMutation = useMutation({
-    mutationFn: (fields: OverageRequestFields) =>
-      getControlPlaneClient(BillingService).setCurrentUserInfraOverage({
-        budgetCents: fields.budgetCents,
-      }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: deployUsageKeys.overage }),
-  });
-
   const summary = useMemo(
     () =>
       buildUsageSummary({
@@ -180,8 +168,6 @@ export function useDeployUsage(): DeployUsageState {
     isLoading: overage.isLoading || rows.isLoading,
     error,
     refetch,
-    saveCap: (fields) => saveCapMutation.mutate(fields),
-    isSavingCap: saveCapMutation.isPending,
     deploymentNames: names.data?.deployments ?? new Map(),
     environmentNames: names.data?.environments ?? new Map(),
   };

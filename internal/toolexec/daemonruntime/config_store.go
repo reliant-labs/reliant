@@ -31,9 +31,10 @@ type storedWorkflow struct {
 }
 
 type storedPreset struct {
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	Name         string `json:"name"`
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
 }
 
 type storedScenario struct {
@@ -91,10 +92,13 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 
 	mcpConfigs := flattenMCPConfigBytes(userMCP, mergedProjectMCP, mergedLocalMCP)
 
-	layout, workflowsDir := readWorkflowLayout(projectPath)
-	workflows, _ := indexWorkflows(layout, workflowsDir)
-	presets, _ := indexPresets(projectPath)
-	scenarios, _ := indexScenarios(layout, workflowsDir)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
+	workflows, _ := indexWorkflows(workflowSources)
+	presets, _ := indexPresets(projectPath, workflowSources)
+	scenarios, _ := indexScenarios(workflowSources)
 	skills, _ := indexSkills(projectPath)
 	repoMemories, _ := collectRepoMemories(projectPath)
 
@@ -299,9 +303,10 @@ func flattenPresets(presets []*reliantv1.IndexedPreset) *string {
 	items := make([]storedPreset, 0, len(presets))
 	for _, p := range presets {
 		items = append(items, storedPreset{
-			Name:        p.Name,
-			YAMLContent: string(p.YamlContent),
-			ContentHash: p.ContentHash,
+			Name:         p.Name,
+			RelativePath: p.RelativePath,
+			YAMLContent:  string(p.YamlContent),
+			ContentHash:  p.ContentHash,
 		})
 	}
 	encoded, err := json.Marshal(items)

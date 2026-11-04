@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
@@ -80,11 +82,11 @@ func TestInlineWorkflowExecutor_BuildSubWorkflowInputs_UsesCoreInputPolicy(t *te
 	t.Run("ref policy preset merge failure is fatal", func(t *testing.T) {
 		var suite temporaltest.WorkflowTestSuite
 		env := suite.NewTestWorkflowEnvironment()
-		env.RegisterActivityWithOptions(func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+		env.RegisterActivityWithOptions(func(_ context.Context, input types.LoadPresetParamsInput) (map[string]interface{}, error) {
 			// Non-retryable so the activity's retry ladder does not wait out
 			// backoff timers; whether the error retries is not what this pins.
 			return nil, temporal.NewNonRetryableApplicationError(
-				fmt.Sprintf("preset not found: %v", input["preset_name"]), "PresetNotFound", nil)
+				fmt.Sprintf("preset not found: %v", input.PresetName), "PresetNotFound", nil)
 		}, activity.RegisterOptions{Name: "LoadPresetParams"})
 
 		var err error

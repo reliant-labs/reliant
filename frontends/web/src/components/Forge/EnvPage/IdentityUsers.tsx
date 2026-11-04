@@ -29,7 +29,7 @@ import { Link2, Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react"
 
 import Badge from "@/components/forge-ui/badge";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIdentityMutation, useIdentityUsers } from "@/hooks/identity-queries";
 import type {
   IdentityRole,
@@ -160,7 +160,7 @@ export function IdentityUsers({
   let body;
   if (!serving) {
     body = (
-      <p className="px-4 py-5 text-xs text-muted-foreground" data-testid="identity-users-not-serving">
+      <p className="px-4 py-5 text-xs text-ink-muted" data-testid="identity-users-not-serving">
         Users can be listed and managed once the sign-in service is ready.
       </p>
     );
@@ -168,10 +168,10 @@ export function IdentityUsers({
     const kind = identityErrorKind(users.error);
     body = (
       <div className="space-y-2 px-4 py-5 text-xs" role="alert" data-testid="identity-users-error">
-        <p className="text-foreground">
+        <p className="text-ink">
           {kind === "not-ready" ? "The sign-in service isn't ready for user administration yet." : "Couldn't list users."}
         </p>
-        {identityErrorMessage(users.error) && <p className="font-mono text-muted-foreground">{identityErrorMessage(users.error)}</p>}
+        {identityErrorMessage(users.error) && <p className="font-mono text-ink-muted">{identityErrorMessage(users.error)}</p>}
         <Button variant="outline" size="sm" onClick={() => void users.refetch()} loading={users.isFetching}>
           Try again
         </Button>
@@ -181,13 +181,13 @@ export function IdentityUsers({
     body = (
       <div className="space-y-2 px-4 py-4" data-testid="identity-users-loading" aria-busy="true">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-md border border-border/60 bg-background motion-reduce:animate-none" />
+          <div key={i} className="h-9 animate-pulse rounded-md border border-border/60 bg-surface-sunken motion-reduce:animate-none" />
         ))}
       </div>
     );
   } else if (rows.length === 0) {
     body = (
-      <div className="flex items-start gap-3 px-4 py-5 text-xs text-muted-foreground" data-testid="identity-users-empty">
+      <div className="flex items-start gap-3 px-4 py-5 text-xs text-ink-muted" data-testid="identity-users-empty">
         <Users className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <p>
           {query || state
@@ -234,7 +234,7 @@ export function IdentityUsers({
         actions={
           serving &&
           total !== null && (
-            <span className="text-xs text-muted-foreground" data-testid="identity-users-total">
+            <span className="text-xs text-ink-muted" data-testid="identity-users-total">
               {rows.length < total ? `${rows.length} of ${total}` : total} {total === 1 ? "user" : "users"}
             </span>
           )
@@ -246,7 +246,7 @@ export function IdentityUsers({
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
             <label className="relative min-w-[12rem] flex-1">
               <span className="sr-only">Search users by email</span>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
               <input
                 type="search"
                 value={query}
@@ -254,10 +254,10 @@ export function IdentityUsers({
                 placeholder="Search by email"
                 maxLength={200}
                 data-testid="identity-users-search"
-                className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+                className="w-full rounded-md border border-input bg-surface-sunken py-1.5 pl-8 pr-2 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
-            <div role="group" aria-label="Filter by state" className="inline-flex rounded-lg border border-border bg-background p-0.5">
+            <div role="group" aria-label="Filter by state" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
               {STATE_FILTERS.map((option) => (
                 <button
                   key={option.label}
@@ -266,7 +266,7 @@ export function IdentityUsers({
                   onClick={() => setState(option.value)}
                   className={cn(
                     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    state === option.value ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    state === option.value ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
                   )}
                 >
                   {option.label}
@@ -365,10 +365,10 @@ function UserRow({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm text-foreground">{user.email}</span>
+            <span className="truncate text-sm text-ink">{user.email}</span>
             <Badge label={USER_STATE_LABEL[user.state]} variant={USER_STATE_VARIANT[user.state]} size="sm" />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
             {user.displayName && user.displayName !== user.email && <span>{user.displayName}</span>}
             {user.createdAtMs && <span>added {new Date(user.createdAtMs).toLocaleDateString()}</span>}
             {user.lastSignInAtMs ? (
@@ -385,7 +385,7 @@ function UserRow({
                 <span
                   key={role}
                   title={declared.has(role) ? DECLARED_ROLE_NOTE : undefined}
-                  className="inline-flex items-center gap-1 rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono text-2xs text-foreground"
+                  className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-sunken px-1.5 py-0.5 font-mono text-2xs text-ink"
                 >
                   {declared.has(role) && <Lock className="h-2.5 w-2.5" aria-label="declared" />}
                   {role}
@@ -429,7 +429,7 @@ function UserRow({
             <Button
               variant="ghost"
               size="xs"
-              className="text-destructive-ink"
+              className="text-danger-ink!"
               onClick={() => onConfirm("delete")}
               disabled={holdsDeclared}
               title={holdsDeclared ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined}
@@ -463,10 +463,10 @@ function RoleEditor({
   );
   const save = useIdentityMutation(orgId, envId, (api, o, e, next: string[]) => api.setUserRoles(o, e, { userId: user.userId, roles: next }));
   return (
-    <div className="space-y-3 rounded-md border border-border/60 bg-background p-3" data-testid="identity-role-editor">
+    <div className="space-y-3 rounded-md border border-border/60 bg-surface-sunken p-3" data-testid="identity-role-editor">
       <RoleChecklist roles={roles} selected={selected} onChange={setSelected} heldDeclared={new Set(user.roles)} />
       {save.error && (
-        <p role="alert" className="text-xs text-destructive-ink">
+        <p role="alert" className="text-xs text-danger-ink">
           {identityErrorMessage(save.error) || "Couldn't save the roles."}
         </p>
       )}
@@ -511,7 +511,7 @@ function RoleChecklist({
   heldDeclared: Set<string>;
 }) {
   if (roles.length === 0) {
-    return <p className="text-xs text-muted-foreground">This environment declares no roles.</p>;
+    return <p className="text-xs text-ink-muted">This environment declares no roles.</p>;
   }
   const toggle = (key: string) => {
     const next = new Set(selected);
@@ -521,11 +521,11 @@ function RoleChecklist({
   };
   return (
     <fieldset className="space-y-1.5">
-      <legend className="mb-1 text-xs font-medium text-foreground">Roles</legend>
+      <legend className="mb-1 text-xs font-medium text-ink">Roles</legend>
       {roles.map((role) => (
         <label
           key={role.key}
-          className={cn("flex items-start gap-2 text-xs", role.declared ? "text-muted-foreground" : "text-foreground")}
+          className={cn("flex items-start gap-2 text-xs", role.declared ? "text-ink-muted" : "text-ink")}
           data-testid={`identity-role-${role.key}`}
         >
           <input
@@ -630,7 +630,7 @@ function InvitePanel({
         }}
       >
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-foreground">Email</span>
+          <span className="text-xs font-medium text-ink">Email</span>
           <input
             type="email"
             value={email}
@@ -640,13 +640,13 @@ function InvitePanel({
             placeholder="person@example.com"
             aria-invalid={touched && !valid}
             data-testid="identity-invite-email"
-            className="w-full max-w-md rounded-md border border-input bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            className="w-full max-w-md rounded-md border border-input bg-surface-sunken px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-muted focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
           />
-          {touched && !valid && email && <span className="text-xs text-destructive-ink">That doesn&apos;t look like an email address.</span>}
+          {touched && !valid && email && <span className="text-xs text-danger-ink">That doesn&apos;t look like an email address.</span>}
         </label>
         <RoleChecklist roles={roles} selected={selected} onChange={setSelected} heldDeclared={new Set()} />
         {canEmail && (
-          <label className="flex items-start gap-2 text-xs text-foreground">
+          <label className="flex items-start gap-2 text-xs text-ink">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -658,7 +658,7 @@ function InvitePanel({
           </label>
         )}
         {invite.error && !(returnCode && identityErrorKind(invite.error) === "denied") && (
-          <p role="alert" className="text-xs text-destructive-ink">
+          <p role="alert" className="text-xs text-danger-ink">
             {identityErrorMessage(invite.error) || "Couldn't send the invitation."}
           </p>
         )}
@@ -672,7 +672,7 @@ function InvitePanel({
           >
             {returnCode ? "Invite and get link" : "Send invitation"}
           </Button>
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-xs text-ink-muted">
             <ShieldCheck className="h-3 w-3" aria-hidden="true" />
             Recorded in your organization&apos;s audit log
           </span>

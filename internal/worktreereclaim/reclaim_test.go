@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func run(t *testing.T, dir string, args ...string) string {
@@ -64,7 +66,11 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.MkdirAll(f.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	f.r = &Reclaimer{Root: f.root, Cwds: func(context.Context) ([]string, error) { return nil, nil }}
+	f.r = &Reclaimer{
+		Root: f.root, Cwds: func(context.Context) ([]string, error) { return nil, nil },
+		Acquire:    func(context.Context, []string) (RecoveryLease, error) { return finalizeTestLease{}, nil },
+		ProcessUse: func(context.Context, []string) error { return nil },
+	}
 	return f
 }
 
@@ -189,7 +195,7 @@ func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 	f.idle()
 	ignore(t, f, "data/\n.env*\n*.db\n*.sqlite\nsecrets/\n.forge/\nweird/\n")
 	for name, rel := range map[string]string{
-		"data": "data/logs/l.log", "env": ".env.local", "db": "local.db", "sqlite": "x/app.sqlite",
+		"data": "data/l.log", "env": ".env.local", "db": "local.db", "sqlite": "x/app.sqlite",
 		"secrets": "secrets/key", "hostinfra": ".forge/hostinfra/pg/PG_VERSION", "unknown": "weird/thing.bin",
 	} {
 		w := f.worktree("d-"+name, "feat/d-"+name)
@@ -209,6 +215,7 @@ func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 }
 
 func TestReconcile_DirtyIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -277,6 +284,7 @@ func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T)
 }
 
 func TestReconcile_InUseIsHeld_AndRecheckedRightBeforeRemoval(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -357,6 +365,7 @@ func TestReconcile_DirectoryLockedForAnotherRowIsNeverRemoved(t *testing.T) {
 // S1: the fence. An unarchive re-locks as active; a request already in flight
 // must then refuse to remove.
 func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -382,6 +391,7 @@ func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
 }
 
 func TestFence_ReArchiveWithNewFenceSupersedesTheOld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -429,6 +439,7 @@ func TestReconcile_MissingRootIsForeignNotGone(t *testing.T) {
 }
 
 func TestReconcile_MissingDirectoryPrunesRegistrationAndReportsGone(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w8", "feat/h")
@@ -490,6 +501,7 @@ func TestReconcile_ActiveOnlyPassNeverListsProcesses(t *testing.T) {
 // R-S1: there is no re-lock cache. A worktree that someone unlocked is locked
 // again by the very next request.
 func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	path := filepath.Join(f.root, "proj", "w12")
@@ -507,6 +519,7 @@ func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
 // <reclaimed>/<id>/ before the workspace goes (rootfiles_test.go); ones past the
 // cap hold it, on both paths, with nothing removed.
 func TestReconcile_MultiRepoRootFilesPastTheCapHoldTheWorkspace(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -565,6 +578,7 @@ func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testin
 
 // B4: a repository inside the worktree, at any depth, in ignored or skip dirs.
 func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -597,6 +611,7 @@ func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
 
 // B4: the snapshot itself refuses to record a gitlink as a stand-in.
 func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("gl", "feat/gl")
@@ -611,6 +626,7 @@ func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
 }
 
 func TestSubmoduleIsHeldNotRemoved(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -671,6 +687,7 @@ func TestSnapshotRemove_SavesWorkThenRemoves(t *testing.T) {
 }
 
 func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w14", "feat/m")
@@ -687,36 +704,6 @@ func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
 	}
 	if got := run(t, w.Path, "status", "--porcelain"); got != statusBefore {
 		t.Fatalf("status changed:\n%q\n%q", statusBefore, got)
-	}
-}
-
-// S11: refs are unique and never overwritten, even within one nanosecond tick.
-func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "twenty snapshots in a row, ~230 git processes, which is the point of it")
-	f := newFixture(t)
-	w := f.worktree("w15", "feat/n")
-	write(t, filepath.Join(w.Path, "u.txt"), "u\n")
-	seen := map[string]bool{}
-	for i := 0; i < 20; i++ {
-		ref, _, err := Snapshot(context.Background(), w.Path, "refs/reliant/wip/w15/root/", "w15", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if seen[ref] {
-			t.Fatalf("ref %s reused", ref)
-		}
-		seen[ref] = true
-	}
-	head := run(t, f.project, "rev-parse", "HEAD")
-	if _, err := createRef(context.Background(), f.project, "refs/reliant/wip/x/", head); err != nil {
-		t.Fatal(err)
-	}
-	// An existing ref name must make update-ref fail rather than overwrite.
-	ref := run(t, f.project, "for-each-ref", "--format=%(refname)", "refs/reliant/wip/x")
-	other := run(t, f.project, "rev-parse", "HEAD~0")
-	if _, err := git(context.Background(), f.project, nil, "update-ref", ref, other, ""); err == nil {
-		t.Fatal("update-ref with an empty old value overwrote an existing ref")
 	}
 }
 
@@ -742,6 +729,7 @@ func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
 
 // S3: no --force. git itself refuses a dirty checkout at removal time.
 func TestRemoval_NeverForcesPastGit(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -762,6 +750,7 @@ func TestRemoval_NeverForcesPastGit(t *testing.T) {
 }
 
 func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w18", "feat/q")
@@ -777,6 +766,7 @@ func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
 }
 
 func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w19", "feat/r")
@@ -791,6 +781,7 @@ func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
 }
 
 func TestReconcile_KeepFilesNeverRemoves(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

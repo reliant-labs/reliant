@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitAccount } from "../../services/controlPlane/git";
-import { supabase } from "../../lib/supabase";
+import { connectGitHub } from "../../lib/github-connect";
 
 interface AddRepoModalProps {
   isOpen: boolean;
@@ -76,21 +77,17 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
   }, [isOpen]);
 
   const handleConnectGitHub = async () => {
-    try {
-      // Kick off the control-plane custom OAuth flow. The Supabase GitHub
-      // provider is sign-in only (0 scopes); the long-lived repo-scoped
-      // token comes from /auth/github/authorize, which writes it to
-      // git_credentials. The page will navigate away; on return, the
-      // modal's open-effect re-runs and refreshes accounts.
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) throw new Error("Control plane URL not configured");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not signed in");
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({ token: session.access_token, returnTo });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
+    // Web navigates away and the modal's open-effect re-reads accounts on
+    // return; desktop finishes in place, so re-read here.
+    const outcome = await connectGitHub();
+    if (outcome.kind === "error") setError(outcome.message);
+    if (outcome.kind === "connected") {
+      try {
+        const res = await gitService.listCredentials("github");
+        setAccounts(res.accounts ?? []);
+      } catch {
+        setAccounts([]);
+      }
     }
   };
 
@@ -137,7 +134,8 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={handleClose}
       title="Clone a repository"
       size="lg"
@@ -200,7 +198,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   onClick={() => setSelectedAccount("")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                     selectedAccount === ""
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-primary-ink"
                       : "border-border text-muted-foreground hover:border-primary/50"
                   }`}
                 >
@@ -213,7 +211,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                     onClick={() => setSelectedAccount(acct.account_login)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                       selectedAccount === acct.account_login
-                        ? "border-primary bg-primary/10 text-primary"
+                        ? "border-primary bg-primary/10 text-primary-ink"
                         : "border-border text-muted-foreground hover:border-primary/50"
                     }`}
                   >
@@ -256,7 +254,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="https://github.com/org/repo"
                   required
                   autoFocus
@@ -276,7 +274,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="main"
                   disabled={modalState === "loading" || modalState === "success"}
                 />
@@ -297,7 +295,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
                   type="text"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   placeholder="/home/workspace/projects/repo-name"
                   disabled={modalState === "loading" || modalState === "success"}
                 />

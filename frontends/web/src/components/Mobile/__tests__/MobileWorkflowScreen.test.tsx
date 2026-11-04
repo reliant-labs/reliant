@@ -11,6 +11,12 @@ import type { WorkflowExecution, StepExecution } from "../../Chat/ExecutionSideb
 import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import { runStatus } from "../../../lib/runStatus";
 
+// Where a run's nodes stood when the view opened (GetWorkflowNodeExecutions):
+// none here, so node status comes from the stream events and the tree.
+vi.mock("../../../hooks/chat-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/chat-service-hooks_gen")>()),
+  useGetWorkflowNodeExecutions: () => ({ data: undefined }),
+}));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
     <a {...props}>{children}</a>

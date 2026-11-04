@@ -114,8 +114,9 @@ func TestModelEndpointE2E(t *testing.T) {
 		Config: &typedconfig.Config{},
 		Repo:   repo,
 		Router: router,
-		// No control plane: self-hosted, so loopback is a legitimate DIRECT target.
-		ControlPlane: &configv1.ControlPlaneConfig{},
+		// Self-hosted: the operator allows private egress, so loopback is a
+		// legitimate DIRECT target.
+		Network: &configv1.NetworkConfig{AllowPrivateEgress: true},
 	})
 	require.NoError(t, err)
 
@@ -244,11 +245,12 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
 		hosted, err := model_endpoint.New(model_endpoint.Deps{
-			Logger:       slog.Default(),
-			Config:       &typedconfig.Config{},
-			Repo:         repo,
-			Router:       router,
-			ControlPlane: &configv1.ControlPlaneConfig{Url: "http://admin.cluster.local:8090"},
+			Logger: slog.Default(),
+			Config: &typedconfig.Config{},
+			Repo:   repo,
+			Router: router,
+			// Hosted: an empty network block refuses private targets.
+			Network: &configv1.NetworkConfig{},
 		})
 		require.NoError(t, err)
 		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{

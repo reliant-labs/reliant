@@ -9,7 +9,7 @@ import {
   getStepPresets,
   withWorkflowArgs,
 } from "../../../types/workflow";
-import { api } from "../../../api/client";
+import { useWorkflows } from "../../../hooks/workflow-queries";
 import { useProjectStore } from "../../../store/projectStore";
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
 import { useWorkflowInputs } from "../useWorkflowInputs";
@@ -61,17 +61,8 @@ export function WorkflowStepConfig({
 
 
   // Workflow list state (unique to this component)
-  const [existingWorkflows, setExistingWorkflows] = useState<
-    Array<{
-      name: string;
-      filename?: string;
-      title?: string;
-      description?: string;
-      step_count?: number;
-      source?: "builtin" | "user" | "project";
-    }>
-  >([]);
-  const [loadingWorkflows, setLoadingWorkflows] = useState(true);
+  // The current project's workflows (the generated ListWorkflows read).
+  const { workflows: existingWorkflows, loading: loadingWorkflows } = useWorkflows();
 
   // Use shared hook for workflow inputs logic (only when using ref mode)
   const stepInputs = getStepInputs(step);
@@ -203,25 +194,6 @@ export function WorkflowStepConfig({
       }) as WorkflowStep,
     );
   };
-
-  // Fetch existing workflows list
-  useEffect(() => {
-    if (!projectId) return;
-
-    const fetchWorkflows = async () => {
-      setLoadingWorkflows(true);
-      try {
-        const response = await api.workflows.list(projectId);
-        setExistingWorkflows(response.workflows || []);
-      } catch (error) {
-        console.error("Failed to fetch workflows:", error);
-        setExistingWorkflows([]);
-      } finally {
-        setLoadingWorkflows(false);
-      }
-    };
-    fetchWorkflows();
-  }, [projectId, step.id]);
 
   // Separate workflows by source and filter out the current workflow to prevent recursion
   const builtinWorkflows = existingWorkflows.filter(

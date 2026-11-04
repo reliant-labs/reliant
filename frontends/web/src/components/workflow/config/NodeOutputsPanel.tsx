@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { Check, Copy, ChevronDown, ChevronRight, Info } from "lucide-react";
 import type { Step } from "../../../types/workflow";
 import {
@@ -42,7 +42,7 @@ function CopyButton({ value }: { value: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <Tooltip content={`Copy: ${value}`} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+    <Tooltip content={`Copy: ${value}`} side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
       type="button"
       onClick={handleCopy}

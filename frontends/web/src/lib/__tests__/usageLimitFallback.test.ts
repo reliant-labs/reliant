@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderAccount } from "../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../types/providerAccount";
 import { earliestResettingAccount, selectedModelPick, usageLimitFallbackOf } from "../usageLimitFallback";
 
 const models = [

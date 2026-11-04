@@ -239,8 +239,10 @@ func TestBinaryToolResult_MultipleImages(t *testing.T) {
 	}
 }
 
-// TestBinaryToolResult_MultipleToolResults_Mixed verifies: first result with images
-// produces a follow-up user message; second result without images does not.
+// TestBinaryToolResult_MultipleToolResults_Mixed verifies: the images of a turn's
+// results follow as ONE user message after ALL of its tool messages. A user
+// message between two tool messages ends the run of results answering the
+// assistant's tool_calls, and the API rejects the request.
 func TestBinaryToolResult_MultipleToolResults_Mixed(t *testing.T) {
 	client := newTestClient()
 	msgs := marshalMessages(t, client, []message.Message{
@@ -261,7 +263,7 @@ func TestBinaryToolResult_MultipleToolResults_Mixed(t *testing.T) {
 		),
 	})
 
-	// Expected: tool(call-a), user(image follow-up), tool(call-b)
+	// Expected: tool(call-a), tool(call-b), user(image follow-up)
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages, got %d: %v", len(msgs), msgs)
 	}
@@ -269,15 +271,18 @@ func TestBinaryToolResult_MultipleToolResults_Mixed(t *testing.T) {
 	if role := roleOf(t, msgs[0]); role != "tool" {
 		t.Fatalf("msgs[0] role = %q, want 'tool'", role)
 	}
-	if role := roleOf(t, msgs[1]); role != "user" {
-		t.Fatalf("msgs[1] role = %q, want 'user' (image follow-up)", role)
+	if role := roleOf(t, msgs[1]); role != "tool" {
+		t.Fatalf("msgs[1] role = %q, want 'tool'", role)
 	}
-	if role := roleOf(t, msgs[2]); role != "tool" {
-		t.Fatalf("msgs[2] role = %q, want 'tool'", role)
+	if role := roleOf(t, msgs[2]); role != "user" {
+		t.Fatalf("msgs[2] role = %q, want 'user' (image follow-up)", role)
 	}
 
-	// Verify the follow-up contains the image from call-a only
-	b, _ := json.Marshal(msgs[1])
+	// Verify the follow-up contains the image from call-a, attributed to it
+	b, _ := json.Marshal(msgs[2])
+	if !strings.Contains(string(b), "From tool call call-a:") {
+		t.Fatalf("expected the image to name the call it came from, got: %s", b)
+	}
 	pngURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte{0xAB, 0xCD})
 	if !strings.Contains(string(b), pngURI) {
 		t.Fatalf("expected PNG URI from call-a in follow-up message, got: %s", b)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -98,6 +99,12 @@ const (
 // when EVERY connected daemon of the user affirmatively does not know the
 // process (or the user has no daemon at all), and never on an error: closing a
 // live dev server would be a lie the user cannot undo.
+//
+// The same question carries the server's word on each process's chat to its
+// owning daemon (chatStates): whether the chat has a run in progress, and
+// whether its workspace is archived. The daemon's idle reaper stops a
+// process left idle by a finished chat only while it keeps hearing that, so
+// the chat's state costs no round trip of its own (shell/background_reaper.go).
 func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *passStats) (int, error) {
 	daemons := r.backgroundProcessDaemons()
 	if daemons == nil {
@@ -142,7 +149,8 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
-	if _, err := r.repo.GetDaemon(ctx, daemonID); errors.Is(err, sql.ErrNoRows) {
+	row, err := r.repo.GetDaemon(ctx, daemonID)
+	if errors.Is(err, sql.ErrNoRows) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0
 		for _, call := range calls {
@@ -154,15 +162,17 @@ func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats,
 	}
 
 	withoutProcess, byProcess := splitByProcessID(calls)
-	statuses, unknown, ok := askDaemon(ctx, daemons, userID, daemonID, keys(byProcess))
+	statuses, unknown, ok := askDaemon(ctx, daemons, userID, daemonID, keys(byProcess), chatStates(byProcess))
 	if !ok {
 		return 0 // unreachable: ask again next pass
 	}
 
 	closed := 0
+	var running []*db.BackgroundedProcessCall
 	for processID, info := range statuses {
 		status, message, ended := outcomeOfProcess(info)
 		if !ended {
+			running = append(running, byProcess[processID]...)
 			continue
 		}
 		for _, call := range byProcess[processID] {
@@ -178,6 +188,11 @@ func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats,
 			}
 		}
 	}
+	daemonType := ""
+	if err == nil && row != nil && row.DaemonType != nil {
+		daemonType = *row.DaemonType
+	}
+	r.reassertHeldRunWork(ctx, userID, daemonID, daemonType, running)
 	// A recorded daemon but no process id: the backgrounding never reported
 	// one. The daemon is reachable, so it is up — but nothing addressable is
 	// left to ask about, and nothing will ever report for this call.
@@ -210,7 +225,9 @@ func (r *Reconciler) settleUnattributedProcesses(ctx context.Context, stats *pas
 	// none of them is tracking it. One silent daemon could be the owner.
 	running := map[string]*daemon.ProcessStatusInfo{}
 	for _, daemonID := range daemonIDs {
-		statuses, _, ok := askDaemon(ctx, daemons, userID, daemonID, processIDs)
+		// No chat states: nothing says which daemon runs these, and the
+		// word on a chat is meant for the one that does.
+		statuses, _, ok := askDaemon(ctx, daemons, userID, daemonID, processIDs, nil)
 		if !ok {
 			return 0
 		}
@@ -244,15 +261,38 @@ func (r *Reconciler) settleUnattributedProcesses(ctx context.Context, stats *pas
 	return closed
 }
 
-// askDaemon runs exec.bg_status on one daemon. ok is false when the daemon
-// could not answer; the caller must then treat every process as unknown-fate,
-// NOT as gone.
-func askDaemon(ctx context.Context, daemons BackgroundProcessDaemons, userID, daemonID string, processIDs []string) (map[string]*daemon.ProcessStatusInfo, []string, bool) {
+// chatStates is the word on each process's chat that exec.bg_status carries to
+// the daemon's idle reaper: a process is "running" while ANY call behind it
+// belongs to a chat with a run in progress, and its workspace archived when
+// any says so (one process backs one call in practice).
+func chatStates(byProcess map[string][]*db.BackgroundedProcessCall) map[string]daemon.ProcessChatState {
+	states := make(map[string]daemon.ProcessChatState, len(byProcess))
+	for processID, calls := range byProcess {
+		state := daemon.ProcessChatState{ProcessID: processID}
+		for _, call := range calls {
+			state.Running = state.Running || call.ChatRunning
+			state.WorkspaceArchived = state.WorkspaceArchived || call.WorkspaceArchived
+		}
+		states[processID] = state
+	}
+	return states
+}
+
+// askDaemon runs exec.bg_status on one daemon, telling it what chats holds
+// about each process's chat. ok is false when the daemon could not answer;
+// the caller must then treat every process as unknown-fate, NOT as gone.
+func askDaemon(ctx context.Context, daemons BackgroundProcessDaemons, userID, daemonID string, processIDs []string, chats map[string]daemon.ProcessChatState) (map[string]*daemon.ProcessStatusInfo, []string, bool) {
 	statuses := map[string]*daemon.ProcessStatusInfo{}
 	var unknown []string
 	for start := 0; start < len(processIDs); start += bgStatusBatchSize {
 		end := min(start+bgStatusBatchSize, len(processIDs))
-		payload, err := json.Marshal(daemon.ProcessStatusRequest{ProcessIDs: processIDs[start:end]})
+		req := daemon.ProcessStatusRequest{ProcessIDs: processIDs[start:end]}
+		for _, id := range req.ProcessIDs {
+			if state, ok := chats[id]; ok {
+				req.Chats = append(req.Chats, state)
+			}
+		}
+		payload, err := json.Marshal(req)
 		if err != nil {
 			return nil, nil, false
 		}
@@ -386,4 +426,79 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ── A held run's background work keeps its machine awake ──────────────
+
+// HeldRunActivity is where a held run's background work is published as
+// machine activity. *daemonstate.Publisher is one; declared here, at the
+// consumer.
+type HeldRunActivity interface {
+	Activity(daemonID, userID, daemonType, reason string)
+}
+
+type heldRunActivityHolder struct{ pub HeldRunActivity }
+
+// SetHeldRunActivity enables reassertHeldRunWork. Safe to call while the poll
+// loop runs.
+func (r *Reconciler) SetHeldRunActivity(pub HeldRunActivity) {
+	if pub == nil {
+		r.heldRunActivity.Store(nil)
+		return
+	}
+	r.heldRunActivity.Store(&heldRunActivityHolder{pub: pub})
+}
+
+const (
+	// heldRunAwakeFor bounds how long one usage-limit hold keeps its
+	// background work's machine awake: a little over the 5-hour window most
+	// holds are. A longer hold (a weekly limit) lets the machine sleep; the
+	// run wakes it when it resumes.
+	heldRunAwakeFor = 6 * time.Hour
+	// heldRunProcessMaxAge bounds the process side: a backgrounded process
+	// older than this (a dev server, a `while true` loop) is not the kind of
+	// finite work a hold should keep alive.
+	heldRunProcessMaxAge = 12 * time.Hour
+)
+
+// reassertHeldRunWork keeps daemonID awake while a process an agent
+// backgrounded on it is still running and the agent's run is held on a
+// provider usage limit (daemonactivity.ReasonHeldRunBackgroundWork).
+//
+// Without it the machine went idle 30 minutes into every hold: a held run
+// sends the machine nothing, and a backgrounded process's own traffic is
+// rightly not activity. On 2026-10-28 that suspended the machine three times
+// in one night and killed a prod deploy mid-apply. running is the calls whose
+// process the daemon just reported running, so this costs one SELECT on a pass
+// that found running processes, and none otherwise.
+func (r *Reconciler) reassertHeldRunWork(ctx context.Context, userID, daemonID, daemonType string, running []*db.BackgroundedProcessCall) {
+	h := r.heldRunActivity.Load()
+	if h == nil || len(running) == 0 {
+		return
+	}
+	now := time.Now().UTC()
+	var chatIDs []string
+	seen := map[string]bool{}
+	for _, call := range running {
+		if call.RequestedAt.Before(now.Add(-heldRunProcessMaxAge)) || seen[call.ChatID] {
+			continue
+		}
+		seen[call.ChatID] = true
+		chatIDs = append(chatIDs, call.ChatID)
+	}
+	if len(chatIDs) == 0 {
+		return
+	}
+	held, err := r.repo.ChatsHeldOnUsageLimit(ctx, chatIDs, now.Add(-heldRunAwakeFor))
+	if err != nil {
+		logging.WarnContext(ctx, "[Reconciler] Could not read usage-limit holds; not keeping a held run's machine awake this pass",
+			"daemonID", daemonID, "error", err)
+		return
+	}
+	if len(held) == 0 {
+		return
+	}
+	h.pub.Activity(daemonID, userID, daemonType, daemonactivity.ReasonHeldRunBackgroundWork)
+	logging.DebugContext(ctx, "[Reconciler] Held run's background work keeps its machine awake",
+		"daemonID", daemonID, "chats", held)
 }

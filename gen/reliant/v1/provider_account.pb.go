@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1142,7 +1143,7 @@ var File_reliant_v1_provider_account_proto protoreflect.FileDescriptor
 const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\n" +
 	"!reliant/v1/provider_account.proto\x12\n" +
-	"reliant.v1\"\xca\x01\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\xca\x01\n" +
 	"\vUsageWindow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12(\n" +
@@ -1245,14 +1246,22 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x18USAGE_SOURCE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14USAGE_SOURCE_HEADERS\x10\x01\x12\x1a\n" +
 	"\x16USAGE_SOURCE_USAGE_API\x10\x02\x12\x1c\n" +
-	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x032\xb5\x06\n" +
+	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x032\xdb\t\n" +
 	"\x16ProviderAccountService\x12k\n" +
-	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x00\x12n\n" +
-	"\x15UpdateProviderAccount\x12(.reliant.v1.UpdateProviderAccountRequest\x1a).reliant.v1.UpdateProviderAccountResponse\"\x00\x12t\n" +
-	"\x17ReorderProviderAccounts\x12*.reliant.v1.ReorderProviderAccountsRequest\x1a+.reliant.v1.ReorderProviderAccountsResponse\"\x00\x12n\n" +
-	"\x15DeleteProviderAccount\x12(.reliant.v1.DeleteProviderAccountRequest\x1a).reliant.v1.DeleteProviderAccountResponse\"\x00\x12b\n" +
-	"\x11AddProviderAPIKey\x12$.reliant.v1.AddProviderAPIKeyRequest\x1a%.reliant.v1.AddProviderAPIKeyResponse\"\x00\x12\x80\x01\n" +
-	"\x1bRefreshProviderAccountUsage\x12..reliant.v1.RefreshProviderAccountUsageRequest\x1a/.reliant.v1.RefreshProviderAccountUsageResponse\"\x00\x12q\n" +
+	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x00\x12\xbc\x01\n" +
+	"\x15UpdateProviderAccount\x12(.reliant.v1.UpdateProviderAccountRequest\x1a).reliant.v1.UpdateProviderAccountResponse\"N\xa2\xbb\x18J:H\n" +
+	"\x06update\x126\n" +
+	"\x10provider_account\x12\n" +
+	"account_id\x1a\x16response.account.label*\x06paused\x12\xe9\x01\n" +
+	"\x17ReorderProviderAccounts\x12*.reliant.v1.ReorderProviderAccountsRequest\x1a+.reliant.v1.ReorderProviderAccountsResponse\"u\xa2\xbb\x18q:o:mrouting preference: the priority order among one provider's accounts, which the Providers list shows directly\x12\x9c\x01\n" +
+	"\x15DeleteProviderAccount\x12(.reliant.v1.DeleteProviderAccountRequest\x1a).reliant.v1.DeleteProviderAccountResponse\".\xa2\xbb\x18*:(\n" +
+	"\x06delete\x12\x1e\n" +
+	"\x10provider_account\x12\n" +
+	"account_id\x12\xb8\x01\n" +
+	"\x11AddProviderAPIKey\x12$.reliant.v1.AddProviderAPIKeyRequest\x1a%.reliant.v1.AddProviderAPIKeyResponse\"V\xa2\xbb\x18R:P\n" +
+	"\x03add\x12?\n" +
+	"\x10provider_account\x12\x13response.account.id\x1a\x16response.account.label*\bprovider\x12\xdb\x01\n" +
+	"\x1bRefreshProviderAccountUsage\x12..reliant.v1.RefreshProviderAccountUsageRequest\x1a/.reliant.v1.RefreshProviderAccountUsageResponse\"[\xa2\xbb\x18W:U:Sre-reads usage from the provider (throttled); changes only the cached usage windows\x12q\n" +
 	"\x16GetChatProviderAccount\x12).reliant.v1.GetChatProviderAccountRequest\x1a*.reliant.v1.GetChatProviderAccountResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

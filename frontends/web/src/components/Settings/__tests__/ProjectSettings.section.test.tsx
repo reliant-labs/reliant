@@ -10,16 +10,19 @@
  */
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { useAuthStore } from "@/store/authStore";
 import type { Project } from "@/store/projectStore";
+import { listProjectsResponse } from "@/test/projectList";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
 function makeProject(overrides: Partial<Project> & Pick<Project, "id" | "name" | "path">): Project {
   return {
     is_git_repo: true,
     default_branch: "main",
-    worktree_count: 0,
     last_active: "2025-01-01T00:00:00Z",
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
@@ -31,7 +34,6 @@ function makeProject(overrides: Partial<Project> & Pick<Project, "id" | "name" |
 const state = vi.hoisted(() => ({
   store: {} as Record<string, unknown>,
   navigate: vi.fn(),
-  navigateToPicker: vi.fn(),
 }));
 
 vi.mock("@/store/projectStore", () => ({
@@ -42,10 +44,6 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
 }));
 
-vi.mock("@/hooks/useNavigateToProjectPicker", () => ({
-  useNavigateToProjectPicker: () => state.navigateToPicker,
-}));
-
 vi.mock("@/hooks/chat-queries", () => ({
   useChatList: () => ({ data: [] }),
 }));
@@ -53,6 +51,12 @@ vi.mock("@/hooks/chat-queries", () => ({
 vi.mock("@/store/worktreeStore", () => ({
   useWorktreeStore: (selector: (s: unknown) => unknown) =>
     selector({ worktrees: [], loadWorktrees: vi.fn(), switchWorktreeContext: vi.fn() }),
+}));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("@/hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/worktree-queries")>()),
+  ...(await import("@/test/worktreeQueriesMock")).worktreeQueriesMock(() => ({ worktrees: [], loadWorktrees: vi.fn(), switchWorktreeContext: vi.fn() })),
 }));
 
 vi.mock("@/store/chatStore", () => ({
@@ -63,13 +67,10 @@ vi.mock("@/store/chatNavigationStore", () => ({
   useChatNavigationStore: (selector: (s: unknown) => unknown) => selector({ navigateToChat: vi.fn() }),
 }));
 
-vi.mock("@/api/project-grpc", () => ({
-  projectGrpc: { getGitInfo: vi.fn(async () => { throw new Error("offline"); }) },
-}));
-
 vi.mock("@/lib/toast-manager", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { ProjectsSection } from "@/components/Settings/ProjectsSection";
+import { useAddProjectDialogStore } from "@/store/addProjectDialogStore";
 
 const alpha = makeProject({
   id: "p-alpha",
@@ -86,13 +87,16 @@ const beta = makeProject({
   last_active: "2025-04-01T00:00:00Z",
 });
 
-function setStore(overrides: Record<string, unknown>) {
+// The project list is ListProjects' answer (the page reads it through
+// useProjects); `listProjects` answers each call in turn.
+let listProjects: () => unknown;
+
+function setStore({ projects = [], ...overrides }: { projects?: Project[] } & Record<string, unknown>) {
+  listProjects = () => listProjectsResponse(projects);
   state.store = {
-    projects: [],
     currentProject: null,
-    isLoading: false,
-    loadProjects: vi.fn(async () => {}),
-    selectProject: vi.fn(async () => {}),
+    setProjectFilter: vi.fn(async () => {}),
+    updateProject: vi.fn(async () => {}),
     deleteProject: vi.fn(async () => {}),
     refreshCurrentProject: vi.fn(async () => {}),
     ...overrides,
@@ -101,7 +105,19 @@ function setStore(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   state.navigate.mockReset();
-  state.navigateToPicker.mockReset();
+  useAddProjectDialogStore.setState({ isOpen: false, method: null });
+  useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(
+    mockTransport({
+      "ProjectService.ListProjects": () => listProjects(),
+      "ProjectService.GetProjectGitInfo": { error: "offline" },
+    }),
+  );
+});
+
+afterEach(() => {
+  setTransport(null);
+  useAuthStore.setState({ session: null });
 });
 
 describe("Settings → Projects", () => {
@@ -123,20 +139,20 @@ describe("Settings → Projects", () => {
     expect(within(rows[1]).getByText("Folder")).toBeInTheDocument();
   });
 
-  it("offers Add project in the header, which goes to the picker", async () => {
+  it("offers Add project in the header, which opens the Add project dialog", async () => {
     setStore({ projects: [alpha], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByTestId("settings-projects-add"));
-    expect(state.navigateToPicker).toHaveBeenCalledTimes(1);
+    await userEvent.click(await screen.findByTestId("settings-projects-add"));
+    expect(useAddProjectDialogStore.getState().isOpen).toBe(true);
   });
 
-  it("switches to another project and leaves Settings for it", async () => {
+  it("opens another project — filtered to it — and leaves Settings for it", async () => {
     setStore({ projects: [alpha, beta], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Open beta" }));
-    await waitFor(() => expect(state.store.selectProject).toHaveBeenCalledWith(beta));
+    await userEvent.click(await screen.findByRole("button", { name: "Open beta" }));
+    await waitFor(() => expect(state.store.setProjectFilter).toHaveBeenCalledWith("p-beta"));
     expect(state.navigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: "/project/$projectId", params: { projectId: "p-beta" } }),
     );
@@ -146,7 +162,7 @@ describe("Settings → Projects", () => {
     setStore({ projects: [alpha, beta], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove beta from Reliant" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove beta from Reliant" }));
     // Nothing is removed until the user confirms.
     expect(state.store.deleteProject).not.toHaveBeenCalled();
     expect(screen.getByText(/nothing on disk is deleted/i)).toBeInTheDocument();
@@ -155,22 +171,45 @@ describe("Settings → Projects", () => {
     await waitFor(() => expect(state.store.deleteProject).toHaveBeenCalledWith("p-beta"));
   });
 
+  it("renames a project inline", async () => {
+    setStore({ projects: [alpha, beta], currentProject: alpha });
+    renderWithQuery(<ProjectsSection />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Rename beta" }));
+    const input = screen.getByTestId("settings-project-rename-input-p-beta");
+    await userEvent.clear(input);
+    await userEvent.type(input, "gamma{Enter}");
+    await waitFor(() => expect(state.store.updateProject).toHaveBeenCalledWith("p-beta", { name: "gamma" }));
+  });
+
+  it("does not show a cloud machine's checkout path", async () => {
+    const cloud = makeProject({ id: "p-cloud", name: "cloudy", path: "/home/workspace/projects/cloudy" });
+    setStore({ projects: [cloud] });
+    renderWithQuery(<ProjectsSection />);
+
+    const row = await screen.findByTestId("settings-project-row-p-cloud");
+    expect(row).toHaveTextContent("On a cloud machine");
+    expect(row).not.toHaveTextContent("/home/workspace");
+  });
+
   it("shows a designed empty state with Add project when there are no projects", async () => {
     setStore({ projects: [] });
     renderWithQuery(<ProjectsSection />);
 
     expect(await screen.findByText("No projects yet")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-projects-table")).toBeNull();
-    // Header action + empty-state action both lead to the picker.
+    // Header action + empty-state action both open the Add project dialog.
     expect(screen.getAllByRole("button", { name: /add project/i })).toHaveLength(2);
   });
 
   it("shows an error with a retry when projects fail to load", async () => {
-    const loadProjects = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("daemon unreachable"))
-      .mockResolvedValueOnce(undefined);
-    setStore({ projects: [], loadProjects });
+    setStore({ projects: [] });
+    let calls = 0;
+    listProjects = () => {
+      calls += 1;
+      if (calls === 1) throw new Error("daemon unreachable");
+      return listProjectsResponse([]);
+    };
     renderWithQuery(<ProjectsSection />);
 
     const alert = await screen.findByRole("alert");
@@ -178,6 +217,6 @@ describe("Settings → Projects", () => {
     expect(screen.queryByText("No projects yet")).toBeNull();
 
     await userEvent.click(within(alert).getByRole("button", { name: /try again/i }));
-    await waitFor(() => expect(loadProjects).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(calls).toBe(2));
   });
 });

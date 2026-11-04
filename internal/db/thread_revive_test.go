@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // TestReviveThread is the inverse of TestReapOrphanedThreads, and pins the
@@ -23,6 +25,7 @@ import (
 // completed)". Measured on the live DB at the time of the fix: 3 chats with a
 // RUNNING workflow and a terminal main thread.
 func TestReviveThread(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)

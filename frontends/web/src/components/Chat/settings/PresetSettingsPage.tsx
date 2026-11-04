@@ -2,7 +2,7 @@
 
 import { ChevronLeft, X, Check, Layers } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { Preset } from "../../../store/globalDataStore";
+import type { Preset } from "../../../hooks/preset-queries";
 
 interface PresetSettingsPageProps {
   presets: Preset[];
@@ -10,6 +10,8 @@ interface PresetSettingsPageProps {
   onPresetChange: (preset: Preset | null) => void;
   onBack: () => void;
   onClose: () => void;
+  /** Embedded in a host sheet that has its own close: no close button here. */
+  hideClose?: boolean;
 }
 
 export function PresetSettingsPage({
@@ -18,6 +20,7 @@ export function PresetSettingsPage({
   onPresetChange,
   onBack,
   onClose,
+  hideClose = false,
 }: PresetSettingsPageProps) {
   const userPresets = presets.filter((p) => p.source === "user");
   const projectPresets = presets.filter((p) => p.source === "project");
@@ -35,9 +38,11 @@ export function PresetSettingsPage({
           <ChevronLeft className="w-4 h-4 text-muted-foreground" />
         </button>
         <h3 className="text-sm font-semibold flex-1">Preset</h3>
-        <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center p-1 rounded hover:bg-accent transition-colors">
-          <X className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        {!hideClose && (
+          <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center p-1 rounded hover:bg-accent transition-colors">
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        )}
       </div>
 
       {/* Scrollable content */}
@@ -51,7 +56,7 @@ export function PresetSettingsPage({
           )}
         >
           <span className="text-muted-foreground">None (use defaults)</span>
-          {!selectedPreset && <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />}
+          {!selectedPreset && <Check className="w-3.5 h-3.5 text-primary-ink flex-shrink-0" />}
         </button>
 
         {/* User Presets */}
@@ -132,7 +137,7 @@ function PresetGroup({
               )}
             </div>
             {selectedPreset === preset.name && (
-              <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+              <Check className="w-3.5 h-3.5 text-primary-ink flex-shrink-0 mt-0.5" />
             )}
           </div>
         </button>

@@ -2,10 +2,12 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Worktree } from "../../../store/worktreeStore";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { WorkspaceRecoveryMenuItems } from "../WorkspaceRecoveryMenuItems";
+import { type Worktree } from "../../../hooks/worktree-queries";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
 const state = vi.hoisted(() => ({
   recreate: vi.fn(),
@@ -14,12 +16,8 @@ const state = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock("@/api/worktree-grpc", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  worktreeGrpc: { recreate: (id: string) => state.recreate(id) },
-}));
-vi.mock("@/api/client", () => ({
-  api: { chatsV2: { update: (chatId: string, updates: unknown) => state.update(chatId, updates) } },
+vi.mock("@/hooks/worktree-actions", () => ({
+  recreateWorktree: (id: string) => state.recreate(id),
 }));
 vi.mock("@/lib/toast-manager", () => ({
   toast: { success: state.success, error: state.error },
@@ -49,9 +47,14 @@ beforeEach(() => {
   state.update.mockReset();
   state.success.mockReset();
   state.error.mockReset();
+  // `state.update(request)` answers UpdateChat with the chat it updated.
+  setTransport(
+    mockTransport({ "ChatService.UpdateChat": async (req: unknown) => ({ chat: await state.update(req) }) }),
+  );
 });
 
 afterEach(() => {
+  setTransport(null);
   vi.restoreAllMocks();
 });
 
@@ -87,7 +90,7 @@ describe("WorkspaceRecoveryMenuItems", () => {
     fireEvent.click(screen.getByText("Move to main checkout"));
 
     expect(confirmSpy.mock.calls[0][0]).toContain("/home/workspace/projects/reliant-labs");
-    await waitFor(() => expect(state.update).toHaveBeenCalledWith("chat-1", { worktree_id: "wt-main" }));
+    await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ chatId: "chat-1", worktreeId: "wt-main" })));
     await waitFor(() => expect(state.success).toHaveBeenCalled());
   });
 
@@ -107,7 +110,7 @@ describe("WorkspaceRecoveryMenuItems", () => {
 
     fireEvent.click(screen.getByText("Move to main checkout"));
 
-    await waitFor(() => expect(state.update).toHaveBeenCalledWith("chat-1", { worktree_id: "" }));
+    await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ chatId: "chat-1", worktreeId: "" })));
   });
 
   it("offers nothing for a chat that is already on the main checkout", () => {
@@ -115,5 +118,25 @@ describe("WorkspaceRecoveryMenuItems", () => {
 
     expect(screen.queryByText("Recreate workspace")).toBeNull();
     expect(screen.queryByText("Move to main checkout")).toBeNull();
+  });
+
+  it("merges a host's itemClassName onto every item, overriding the dropdown sizing", () => {
+    renderWithQuery(
+      <WorkspaceRecoveryMenuItems
+        chatId="chat-1"
+        worktree={worktree()}
+        mainWorktree={main}
+        itemClassName="min-h-[44px] gap-3 px-4"
+      />,
+    );
+
+    for (const label of ["Recreate workspace", "Move to main checkout"]) {
+      const item = screen.getByRole("button", { name: label });
+      expect(item).toHaveClass("min-h-[44px]", "gap-3", "px-4");
+      // tailwind-merge drops the dropdown's own padding and gap, rather than
+      // leaving both in the class list for the cascade to pick.
+      expect(item).not.toHaveClass("px-3");
+      expect(item).not.toHaveClass("gap-2");
+    }
   });
 });

@@ -11,7 +11,7 @@
  */
 import { StrictMode, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -26,18 +26,16 @@ import {
 const mocks = vi.hoisted(() => ({
   createWorkflowDraft: vi.fn(),
   saveWorkflow: vi.fn(),
-  listWorkflowsWithErrors: vi.fn(),
-  getWorkflowWithDraftId: vi.fn(),
+  fetchWorkflow: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: {
-    createWorkflowDraft: mocks.createWorkflowDraft,
-    saveWorkflow: mocks.saveWorkflow,
-    listWorkflowsWithErrors: mocks.listWorkflowsWithErrors,
-  },
-  getWorkflowWithDraftId: mocks.getWorkflowWithDraftId,
+vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+  createWorkflowDraft: mocks.createWorkflowDraft,
+  saveWorkflow: mocks.saveWorkflow,
+  fetchWorkflow: mocks.fetchWorkflow,
+  useWorkflowList: () => ({ data: { workflows: [], invalidWorkflows: [] } }),
 }));
 
 vi.mock("sonner", () => ({
@@ -62,15 +60,6 @@ vi.mock("../../../store/projectStore", () => {
   return { useProjectStore };
 });
 
-vi.mock("../../../store/globalDataStore", () => {
-  const state = { presets: [{ name: "general" }], refetchPresets: vi.fn(), refetchWorkflows: vi.fn(async () => undefined) };
-  const useGlobalDataStore = Object.assign(
-    (selector?: (s: typeof state) => unknown) => (selector ? selector(state) : state),
-    { getState: () => state },
-  );
-  return { useGlobalDataStore, useWorkflows: () => ({ workflows: [] }) };
-});
-
 vi.mock("../WorkflowHeader", () => ({ WorkflowHeader: () => null }));
 
 // The canvas is out of scope here; the stub exposes what the page hands it
@@ -79,17 +68,22 @@ vi.mock("../WorkflowBuilder", () => ({
   WorkflowBuilder: (props: {
     initialWorkflow?: { name?: string };
     onSave: (workflow: { name: string }) => Promise<unknown>;
+    onBack?: () => void;
   }) => (
     <div data-testid="builder-stub">
       <span data-testid="builder-workflow">{props.initialWorkflow?.name ?? ""}</span>
       <button type="button" onClick={() => void props.onSave({ ...props.initialWorkflow, name: "renamed-flow" })}>
         save renamed
       </button>
+      <button type="button" onClick={() => props.onBack?.()}>
+        back
+      </button>
     </div>
   ),
 }));
 
 import { WorkflowPage } from "../WorkflowPage";
+import { builderReturnState } from "../../../lib/routeParent";
 
 function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -102,6 +96,12 @@ function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
       path: "/workflows/library",
       component: () => <div data-testid="at-library" />,
     }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/workflows/library/$workflowName",
+      component: () => <div data-testid="at-workflow-page" />,
+    }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <div data-testid="at-chat" /> }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
@@ -120,7 +120,6 @@ function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
-  mocks.listWorkflowsWithErrors.mockResolvedValue({ workflows: [], invalidWorkflows: [] });
 });
 
 describe("New workflow", () => {
@@ -135,7 +134,7 @@ describe("New workflow", () => {
   it("creates exactly one draft per Create, then opens it at its slug", async () => {
     let resolveCreate: (value: unknown) => void = () => {};
     mocks.createWorkflowDraft.mockReturnValue(new Promise((resolve) => (resolveCreate = resolve)));
-    mocks.getWorkflowWithDraftId.mockResolvedValue({
+    mocks.fetchWorkflow.mockResolvedValue({
       workflow: { name: "triage-issues", title: "Triage issues" },
       draftId: "d1",
       version: 1,
@@ -160,7 +159,7 @@ describe("New workflow", () => {
 
   it("offers the Agent loop as a labelled template, not as a silent default", async () => {
     mocks.createWorkflowDraft.mockResolvedValue({ draftId: "d2", slug: "my-agent", name: "my-agent", title: "My agent" });
-    mocks.getWorkflowWithDraftId.mockResolvedValue({ workflow: { name: "my-agent" }, version: 1, status: "draft", source: "user", validationErrors: [] });
+    mocks.fetchWorkflow.mockResolvedValue({ workflow: { name: "my-agent" }, version: 1, status: "draft", source: "user", validationErrors: [] });
     renderAt("/workflow/new");
 
     await userEvent.type(await screen.findByLabelText("Name"), "My agent");
@@ -175,7 +174,7 @@ describe("New workflow", () => {
 describe("Rename, then save", () => {
   it("moves the URL to the new slug in place and keeps the canvas", async () => {
     let renamed = false;
-    mocks.getWorkflowWithDraftId.mockImplementation(async (_projectId: string, name: string) => {
+    mocks.fetchWorkflow.mockImplementation(async (_projectId: string, { name }: { name: string }) => {
       // After the save the server knows the workflow only by its new slug.
       if (name === "old-flow" && renamed) throw new Error("[not_found] workflow not found: old-flow");
       return {
@@ -206,7 +205,59 @@ describe("Rename, then save", () => {
     expect(screen.queryByTestId("at-library")).toBeNull();
     expect(mocks.toastError).not.toHaveBeenCalled();
     // The canvas already holds the saved workflow; the route change reloads nothing.
-    expect(mocks.getWorkflowWithDraftId).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchWorkflow).toHaveBeenCalledTimes(1);
+    // The editor loads past the cache: its version gates the save.
+    expect(mocks.fetchWorkflow).toHaveBeenCalledWith("proj-1", { name: "old-flow" }, { fresh: true });
     expect(mocks.saveWorkflow).toHaveBeenCalledWith("proj-1", expect.objectContaining({ name: "renamed-flow" }), 1, undefined, "d1", undefined);
+  });
+});
+
+// Opened from a chat's workflow viewer, Back returns to the chat, not to the
+// workflow's page the user never visited (#624).
+describe("Back", () => {
+  function serveWorkflows() {
+    mocks.fetchWorkflow.mockImplementation(async (_projectId: string, { name }: { name: string }) => ({
+      workflow: { name },
+      draftId: "d1",
+      version: 1,
+      status: "draft",
+      source: "user",
+      validationErrors: [],
+    }));
+  }
+
+  it("returns to the chat the builder was opened from, even after a rename", async () => {
+    serveWorkflows();
+    mocks.saveWorkflow.mockResolvedValue({ success: true, message: "", isValid: true, validationErrors: [], id: "d1", slug: "renamed-flow", version: 2, status: "draft" });
+    const router = renderAt("/?chat=c1");
+    expect(await screen.findByTestId("at-chat")).toBeInTheDocument();
+
+    // What the chat's workflow viewer does on Edit.
+    await act(() =>
+      router.navigate({
+        to: "/workflow/$workflowName",
+        params: { workflowName: "old-flow" },
+        state: builderReturnState(router.state.location.href),
+      } as never),
+    );
+    expect(await screen.findByTestId("builder-workflow")).toHaveTextContent("old-flow");
+    // A save that renames replaces the URL; where Back goes must survive it.
+    await userEvent.click(screen.getByRole("button", { name: "save renamed" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/renamed-flow"));
+
+    await userEvent.click(screen.getByRole("button", { name: "back" }));
+
+    await waitFor(() => expect(router.state.location.href).toBe("/?chat=c1"));
+    expect(screen.getByTestId("at-chat")).toBeInTheDocument();
+  });
+
+  it("steps back to the workflow's page when the entry recorded nowhere", async () => {
+    serveWorkflows();
+    const router = renderAt("/workflow/old-flow");
+    expect(await screen.findByTestId("builder-workflow")).toHaveTextContent("old-flow");
+
+    await userEvent.click(screen.getByRole("button", { name: "back" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library/old-flow"));
   });
 });

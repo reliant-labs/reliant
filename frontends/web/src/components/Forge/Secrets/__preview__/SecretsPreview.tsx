@@ -38,10 +38,6 @@ const SCHEMES = [
   "refined-neutral",
   "modern-teal",
   "slate",
-  "forest",
-  "vibrant-pink",
-  "energetic-orange",
-  "bold-red",
   "purple-classic",
   "pure-black",
 ] as const;
@@ -286,7 +282,7 @@ export default function SecretsPreview() {
             setCaseId(e.target.value);
             setSelected(null);
           }}
-          className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+          className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
         >
           {CASES.map((c) => (
             <option key={c.id} value={c.id}>
@@ -298,7 +294,7 @@ export default function SecretsPreview() {
           data-testid="preview-scheme"
           value={scheme}
           onChange={(e) => applyScheme(e.target.value)}
-          className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+          className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
         >
           {SCHEMES.map((s) => (
             <option key={s} value={s}>
@@ -310,7 +306,7 @@ export default function SecretsPreview() {
           type="button"
           data-testid="preview-dark"
           onClick={() => applyDark(!dark)}
-          className="rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground"
+          className="rounded-md border border-border bg-surface px-3 py-1 text-sm text-ink"
         >
           {dark ? "Dark" : "Light"}
         </button>
@@ -318,7 +314,7 @@ export default function SecretsPreview() {
           data-testid="preview-step-up"
           value={stepUpCase}
           onChange={(e) => setStepUpCase(e.target.value)}
-          className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+          className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
         >
           <option value="">step-up: closed</option>
           {Object.keys(STEP_UP_CASES).map((id) => (
@@ -331,7 +327,7 @@ export default function SecretsPreview() {
           type="button"
           data-testid="preview-modal"
           onClick={() => setModalOpen(true)}
-          className="rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground"
+          className="rounded-md border border-border bg-surface px-3 py-1 text-sm text-ink"
         >
           Open set-secret modal
         </button>

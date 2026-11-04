@@ -19,7 +19,10 @@ import (
 // The terminal websocket is a plain HTTP route outside the Connect chain, so
 // none of the chain's otelconnect span, rpc.server.* metrics or trace-stamped
 // logs reach it. This file gives it the equivalent: one server span per
-// connection, continuing the browser's trace, and a reliant.terminal.* meter.
+// authenticated connection, continuing the browser's trace, and a
+// reliant.terminal.* meter. A request refused before authentication is only
+// counted (sessions.rejected): until the token is valid the caller chooses
+// nothing this process records, neither a trace parent nor an attribute.
 //
 // Both come from the process's global providers, which forge's observe.Setup
 // installs in every server role: the same tracer and meter providers the
@@ -36,9 +39,15 @@ const terminalTelemetryScope = "github.com/reliant-labs/reliant/internal/handler
 // sessions.ended and session.duration metrics. A closed set, so it is safe as
 // a metric attribute.
 const (
-	// Refused before the upgrade: no session started.
+	// Refused before the upgrade: no session started. An unauthenticated
+	// request has no span, only the rejected metric (see reject).
 	outcomeUnauthenticated = "unauthenticated"
 	outcomeUpgradeFailed   = "upgrade_failed"
+
+	// The workspace could not be placed on a machine.
+	outcomeCheckoutMissing   = wsErrorCheckoutMissing // the project is not checked out on the machine
+	outcomeWorkspaceNotFound = "workspace_not_found"  // the chat, project or worktree is not the caller's
+	outcomePlacementFailed   = "placement_failed"     // resolving the workspace's machine failed
 
 	// The daemon could not open the shell.
 	outcomeWorkingDirUnavailable = wsErrorWorkingDirUnavailable
@@ -62,6 +71,7 @@ const (
 // rather than the user's state or a normal end: their span's status is Error.
 var errorOutcomes = map[string]bool{
 	outcomeUpgradeFailed:   true,
+	outcomePlacementFailed: true,
 	outcomeCreateFailed:    true,
 	outcomeSubscribeFailed: true,
 	outcomeDaemonError:     true,
@@ -207,12 +217,20 @@ type terminalWSSession struct {
 	exitCode *int32
 }
 
-// begin starts the connection's server span as a child of the browser's
-// trace context (the Connect chain trusts the browser's traceparent the same
-// way, otelconnect.WithTrustRemote) and returns the context the connection
-// runs under, which every log line and daemon command of the connection
-// carries.
-func (t *terminalWSTelemetry) begin(r *http.Request, reconnect bool, projectID, worktreeID string) (context.Context, *terminalWSSession) {
+// reject counts a request refused before authentication. It starts no span
+// and reads nothing from the request: an unauthenticated caller must not be
+// able to choose a trace parent or put an identifier into telemetry.
+func (t *terminalWSTelemetry) reject(ctx context.Context, outcome string) {
+	t.rejected.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+// begin starts an authenticated connection's server span as a child of the
+// browser's trace context and returns the context the connection runs under,
+// which every log line and daemon command of the connection carries. Called
+// only after the token is valid: an authenticated caller's traceparent is
+// adopted the way the Connect user chain adopts it
+// (otelconnect.WithTrustRemote in internal/grpc/user_chain.go).
+func (t *terminalWSTelemetry) begin(r *http.Request, reconnect bool) (context.Context, *terminalWSSession) {
 	ctx := t.propagator.Extract(r.Context(), traceCarrier(r))
 	route := r.Pattern
 	if route == "" {
@@ -224,15 +242,20 @@ func (t *terminalWSTelemetry) begin(r *http.Request, reconnect bool, projectID, 
 		attribute.String("http.route", route),
 		attribute.Bool(attrReconnect, reconnect),
 	}
-	if projectID != "" {
-		attrs = append(attrs, attribute.String(attrProjectID, projectID))
-	}
-	if worktreeID != "" {
-		attrs = append(attrs, attribute.String(attrWorktreeID, worktreeID))
-	}
 	ctx, span := t.tracer.Start(ctx, "terminal.session",
 		trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(attrs...))
 	return ctx, &terminalWSSession{t: t, span: span, start: time.Now(), reconnect: reconnect}
+}
+
+// placed records the project and worktree once placement has checked they
+// are the caller's: before that they are only what the query claimed.
+func (s *terminalWSSession) placed(projectID, worktreeID string) {
+	if projectID != "" {
+		s.span.SetAttributes(attribute.String(attrProjectID, projectID))
+	}
+	if worktreeID != "" {
+		s.span.SetAttributes(attribute.String(attrWorktreeID, worktreeID))
+	}
 }
 
 // opened records the upgrade: from here the connection counts as a session.

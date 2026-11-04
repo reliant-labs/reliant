@@ -20,7 +20,7 @@
  * module also converts between the two.
  */
 
-import type { Preset } from "@/api/preset-grpc";
+import type { Preset } from "@/hooks/preset-queries";
 import type { InputDef } from "@/lib/inputHelpers";
 import { getInputDefault, getInputMinItems, getInputMulti, isInputMarkedRequired, isIntegrationInput } from "@/lib/inputHelpers";
 import type { InputGroupDef } from "../WorkflowInputGroup";
@@ -185,7 +185,10 @@ export function coerceInputValue(schema: InputDef, raw: unknown): unknown {
   // An emptied list is "no override", so the default (or the required error) applies.
   if (isIntegrationInput(schema)) {
     if (Array.isArray(raw)) return raw.length === 0 ? undefined : raw.map(String);
-    return raw === "" ? undefined : raw;
+    if (raw === "") return undefined;
+    // A multi input always sends a list: a single value (a stored selection,
+    // a prefilled param) is a one-item list, never a bare string.
+    return getInputMulti(schema) ? [String(raw)] : raw;
   }
   switch (schema.type) {
     case "model":

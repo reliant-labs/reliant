@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
  * via a getter over a hoisted mutable so both the available and
  * "cloud not configured" branches can be exercised.
  *
- * Assertions target STABLE structure: the PageHeader h1 and the empty-state
+ * Assertions target STABLE structure: the absence of a page h1 and the empty-state
  * headings — never marketing copy, which other agents are editing.
  */
 
@@ -72,12 +72,12 @@ describe('ReliantAISection', () => {
     mocks.available = true
   })
 
-  it('renders the header and the no-data empty state when overview/wallet are empty', () => {
+  it('renders under Billing\'s header, with no page header of its own, and the no-data empty state', () => {
     renderSection()
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: /reliant ai/i }),
-    ).toBeInTheDocument()
+    // Billing (its host) owns the page heading; a second h1 here was the
+    // "different, bigger title under the tabs" defect.
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
 
     // overview + wallet both undefined, not loading → "No access data".
     expect(
@@ -89,9 +89,6 @@ describe('ReliantAISection', () => {
     mocks.available = false
     renderSection()
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: /reliant ai/i }),
-    ).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { level: 3, name: /cloud not configured/i }),
     ).toBeInTheDocument()

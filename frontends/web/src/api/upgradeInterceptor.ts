@@ -1,18 +1,31 @@
 /**
  * Backend-signalled-modal Connect interceptor — shared by every Connect
- * transport in the app (`api/grpc-client.ts` and
- * `services/controlPlane/client.ts`).
+ * transport in the app (every route `lib/connect.ts` builds, through
+ * `buildInterceptors` in `api/transport.ts`).
  *
  * Background: control-plane signals two kinds of "UI should intervene"
  * conditions via the reason on Connect errors (lib/errorReasons.ts):
  *
  *   1. Quota exhausted (Code.ResourceExhausted with a reason)
- *      -> opens UpgradeRequiredModal with the reason; its CTA routes to
- *      billing by reason.
+ *      -> opens UpgradeRequiredModal with the reason; it takes the payment
+ *      in place and then offers to repeat the refused request.
  *   2. Billing email missing (Code.InvalidArgument, reason
- *      billing_email_missing)
- *      -> opens BillingEmailRequiredModal so the user can call
- *      BillingService.UpdateBillingEmail and retry.
+ *      billing_email_missing): the account has no email — the backend falls
+ *      back from the confirmed billing email to the user's own and then the
+ *      session's — so the fix is the one account prompt. UpgradeRequiredModal
+ *      renders LinkIdentityModal for it and re-runs the request on its own
+ *      once the account has an email.
+ *
+ * Both carry `retry`: the refused request, re-issued. A unary request is
+ * self-contained, so sending it again is exactly "do what the user asked,
+ * now that the refusal is fixed". It runs only behind an explicit click after
+ * a payment (the request may be billable); after an account link it runs by
+ * itself, because the requests that need an email create checkout intents,
+ * which charge nothing.
+ *
+ * The checkout surfaces' own intent calls (`CreateCurrentUser*`) are left to
+ * them: they render the account prompt in place (isCheckoutIdentityRequired)
+ * and remount to retry, so a global modal on top would ask twice.
  *
  * Without this interceptor on a given transport, the user sees only a raw
  * error toast on that transport's calls — which is exactly how the project
@@ -50,9 +63,11 @@ export const upgradeInterceptor: Interceptor = (next) => async (req) => {
       error.code === Code.InvalidArgument &&
       hasErrorReason(error, "billing_email_missing")
     ) {
-      if (!_backendModalInFlight) {
-        openModalOnce("billing-email-required", {
+      if (!_backendModalInFlight && !isCheckoutIntent(req.method.name)) {
+        openModalOnce({
+          reason: "billing_email_missing",
           message: error.rawMessage || error.message,
+          retry: retryOf(next, req),
         });
       }
       throw error;
@@ -60,9 +75,11 @@ export const upgradeInterceptor: Interceptor = (next) => async (req) => {
 
     if (error.code === Code.ResourceExhausted && hasErrorReason(error, ENTITLEMENT_REASONS)) {
       if (!_backendModalInFlight) {
-        openModalOnce("upgrade-required", {
+        openModalOnce({
           reason: errorReason(error) ?? "",
           message: error.rawMessage || error.message,
+          retry: retryOf(next, req),
+          retryLabel: RETRY_LABELS[req.method.name],
         });
       }
       throw error;
@@ -72,13 +89,37 @@ export const upgradeInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
-function openModalOnce<K extends "upgrade-required" | "billing-email-required">(
-  id: K,
+/** The checkout surfaces' intent RPCs, which handle the account ask themselves. */
+function isCheckoutIntent(method: string | undefined): boolean {
+  return !!method && method.startsWith("CreateCurrentUser");
+}
+
+/** What the retry button says, for the requests whose action has a name. */
+const RETRY_LABELS: Record<string, string> = {
+  ResumeDaemon: "Start my machine",
+  CreateDaemon: "Create the machine",
+  ResizeDaemon: "Resize the machine",
+  GrowDaemonDisk: "Grow the disk",
+};
+
+type Next = Parameters<Interceptor>[0];
+type Req = Parameters<Next>[0];
+
+/** Re-issue a refused unary request. Streams cannot be replayed; none is offered. */
+function retryOf(next: Next, req: Req): (() => Promise<unknown>) | undefined {
+  if (req.stream) return undefined;
+  return () => next(req);
+}
+
+const UPGRADE_MODAL = "upgrade-required";
+
+function openModalOnce(
   // Lazy-typed because we can't import the heavy modalStore types here
   // without creating an eager dependency cycle (modalStore -> components
   // -> transport -> interceptor -> modalStore).
   data: unknown,
 ): void {
+  const id = UPGRADE_MODAL;
   _backendModalInFlight = true;
   void (async () => {
     try {

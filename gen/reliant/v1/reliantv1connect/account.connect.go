@@ -49,6 +49,10 @@ type AccountServiceClient interface {
 	// destroying anything. The UI shows these counts in the confirmation dialog
 	// so the user sees the actual scale of what they are about to lose rather
 	// than a generic warning.
+	//
+	// It only reads (row counts here, the wallet quote from the control plane),
+	// and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
+	// it forge generates a mutation hook for it.
 	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
 	// DeleteAccount permanently removes every row reliant holds for the caller.
 	// Irreversible: there is no soft-delete and no undo.
@@ -75,6 +79,7 @@ func NewAccountServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+AccountServicePreviewAccountDeletionProcedure,
 			connect.WithSchema(accountServiceMethods.ByName("PreviewAccountDeletion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteAccount: connect.NewClient[v1.DeleteAccountRequest, v1.DeleteAccountResponse](
@@ -108,6 +113,10 @@ type AccountServiceHandler interface {
 	// destroying anything. The UI shows these counts in the confirmation dialog
 	// so the user sees the actual scale of what they are about to lose rather
 	// than a generic warning.
+	//
+	// It only reads (row counts here, the wallet quote from the control plane),
+	// and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
+	// it forge generates a mutation hook for it.
 	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
 	// DeleteAccount permanently removes every row reliant holds for the caller.
 	// Irreversible: there is no soft-delete and no undo.
@@ -130,6 +139,7 @@ func NewAccountServiceHandler(svc AccountServiceHandler, opts ...connect.Handler
 		AccountServicePreviewAccountDeletionProcedure,
 		svc.PreviewAccountDeletion,
 		connect.WithSchema(accountServiceMethods.ByName("PreviewAccountDeletion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accountServiceDeleteAccountHandler := connect.NewUnaryHandler(

@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
-import type { WorkflowResponse } from "@/api/workflow-grpc";
+import type { WorkflowResponse } from "@/hooks/workflow-queries";
 import {
   CelStringSchema,
   LoopArgsSchema,

@@ -31,7 +31,8 @@ const ENTRY_POINTS = [
   "MobileWorkflowScreen.tsx",
   "MobileWorkflowCatalog.tsx",
   "MobileWorkflowParamsView.tsx",
-  "MobileWorkflowExecutionEntry.tsx",
+  // The Chat sheet's workflow row replaced MobileWorkflowExecutionEntry.
+  "MobileChatSheet.tsx",
 ];
 
 // Matches `import ... from '...'` / `import '...'` but not `import type ...`.

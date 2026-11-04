@@ -50,21 +50,18 @@ func RoundTrip(t testing.TB, err error) *connect.Error {
 	return ce
 }
 
-// Want is what a client must see. Legacy, when set, is the value expected
-// under the pre-svcerr X-Reliant-Reason header (expand/contract, R3w2 drops it;
-// in reliant only forge_api_disabled ever sent it).
+// Want is what a client must see.
 type Want struct {
 	Code    connect.Code
 	Message string
 	Reason  string
-	Legacy  string
 	// Meta is any further metadata the error must carry (scopes, say).
 	Meta map[string]string
 }
 
-// LegacyReasonHeader is the header a reason was sent under before
-// svcerr.ReasonHeader, and still is beside it until R3w2.
-const LegacyReasonHeader = "X-Reliant-Reason"
+// retiredReasonHeader is the header a reason was sent under before
+// svcerr.ReasonHeader. R3w2 retired it; no error may carry it.
+const retiredReasonHeader = "X-Reliant-Reason"
 
 // Assert round-trips err and checks the client saw exactly want. The message
 // is compared byte for byte: desktop builds already in the field still match
@@ -81,8 +78,8 @@ func Assert(t testing.TB, err error, want Want) {
 	if got := ce.Meta().Get(svcerr.ReasonHeader); got != want.Reason {
 		t.Errorf("%s = %q, want %q", svcerr.ReasonHeader, got, want.Reason)
 	}
-	if got := ce.Meta().Get(LegacyReasonHeader); got != want.Legacy {
-		t.Errorf("%s = %q, want %q", LegacyReasonHeader, got, want.Legacy)
+	if got := ce.Meta().Get(retiredReasonHeader); got != "" {
+		t.Errorf("%s = %q, want it absent (retired)", retiredReasonHeader, got)
 	}
 	for k, v := range want.Meta {
 		if got := ce.Meta().Get(k); got != v {

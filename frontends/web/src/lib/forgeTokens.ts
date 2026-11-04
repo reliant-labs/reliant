@@ -14,7 +14,7 @@
  *     references a token the bridge does not declare, which is how a forge
  *     upgrade that adds a token shows up first — add it here then.
  *   - colorSchemeTokenContract.test.ts resolves every token below, through
- *     the bridge, to a concrete HSL color in each of the ten schemes, light and
+ *     the bridge, to a concrete HSL color in each scheme, light and
  *     dark, inside and outside `.forge-ui`. e2e/color-schemes.spec.ts checks
  *     the same thing in a real browser.
  */
@@ -55,16 +55,60 @@ export const FORGE_COLOR_TOKENS = [
 
 export type ForgeColorToken = (typeof FORGE_COLOR_TOKENS)[number];
 
-/** The ten values `data-color-scheme` takes (themes/professional-themes.css). */
+/** The values `data-color-scheme` takes (themes/professional-themes.css). */
 export const COLOR_SCHEMES = [
+  "reliant",
   "professional-blue",
   "refined-neutral",
-  "modern-teal",
   "slate",
-  "forest",
-  "vibrant-pink",
-  "energetic-orange",
-  "bold-red",
+  "modern-teal",
   "purple-classic",
   "pure-black",
 ] as const;
+
+export type ColorSchemeAttr = (typeof COLOR_SCHEMES)[number];
+
+/**
+ * The scheme everyone gets unless they pick another: the brand. index.html's
+ * pre-hydration bootstrap cannot import this and repeats it
+ * (reliantSchemeDefault.test.ts holds the two equal).
+ */
+export const DEFAULT_COLOR_SCHEME = "reliant";
+export const DEFAULT_COLOR_SCHEME_ATTR: ColorSchemeAttr = "reliant";
+
+/**
+ * The stored appearance setting (`appearance.colorScheme`, a short id) to the
+ * `data-color-scheme` attribute. forest, pink, orange and red were retired on
+ * 2026-10-24 (their action colors collided with a status color or could not
+ * carry a legible label); a user who had picked one lands on the nearest
+ * surviving scheme rather than an unstyled page.
+ *
+ * `black` was retired on 2026-11-02, when Reliant replaced Pure Black as the
+ * default. It was the default's id, and the Appearance picker writes the
+ * selection back on mount, so most users who hold it never chose it: they all
+ * move to Reliant. Pure Black is still a choice, under the id `pure-black`.
+ */
+export const COLOR_SCHEME_ATTR: Record<string, ColorSchemeAttr> = {
+  reliant: "reliant",
+  blue: "professional-blue",
+  neutral: "refined-neutral",
+  slate: "slate",
+  teal: "modern-teal",
+  purple: "purple-classic",
+  "pure-black": "pure-black",
+  // retired
+  black: "reliant",
+  forest: "modern-teal",
+  pink: "purple-classic",
+  orange: "refined-neutral",
+  red: "professional-blue",
+};
+
+/** The short id a retired choice now means (for the settings picker's selection). */
+export const RETIRED_COLOR_SCHEME_IDS: Record<string, string> = {
+  black: "reliant",
+  forest: "teal",
+  pink: "purple",
+  orange: "neutral",
+  red: "blue",
+};

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -40,6 +41,29 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 	return store.GetChat(ctx, r.ORM(), id)
 }
 
+// GetChatRow reads a chat's own row from the chats table — no activity view —
+// for a caller that needs none of the activity-derived fields (ChatRow).
+func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return store.GetChatRow(ctx, r.ORM(), id)
+}
+
+// GetChatRowWithUserCheck is an ownership check that reads only the chats
+// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
+// another user's. GetChatWithUserCheck is the same check over the activity
+// view, for a caller that needs a derived field.
+func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
 	if id == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -49,6 +73,18 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 	}
 
 	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
+// GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
+// or an empty string when it is unused.
+func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
+}
+
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
+// chat whose run is pending or active.
+func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
+	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
 
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
@@ -85,6 +121,12 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
+// ListUnlaunchedTriggerEvents is the run log's other half: the trigger
+// events that started no run, under the same filters and keyset as ListRuns.
+func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
+	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
+}
+
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
@@ -93,14 +135,11 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 
 // CreateMessage creates a message record in the database.
 //
-// WARNING: Prefer SaveMessageToThread for most use cases outside workflow activities.
-// This low-level function requires you to manually set Ordinal and ContextSequence,
-// which is error-prone. SaveMessageToThread handles these automatically and correctly
-// inherits context_sequence for forked workflows.
-//
-// Only use CreateMessage directly when:
-// - You're inside a workflow activity that manages its own ordinal/context_sequence
-// - You need very specific control over message placement (rare)
+// WARNING: Prefer SaveMessageToThread for most use cases outside workflow activities,
+// and CreateNumberedMessage for a message you build yourself. This low-level
+// function writes the Ordinal and Seq you set, which must come from
+// AllocateMessageOrder (never from the highest number already written); it
+// raises the counters to them, so a counter is never behind a row.
 func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("message cannot be nil")
@@ -111,7 +150,11 @@ func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return store.InsertMessage(ctx, r.ORM(), msg)
+	// One transaction: the insert raises the ordinal and seq counters to the
+	// row's numbers, and the two must not land apart.
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.InsertMessage(ctx, r.ORM(), msg)
+	})
 }
 
 // CreateMessageOnce creates a message record unless a row already holds its id,
@@ -130,7 +173,13 @@ func (r *Repo) CreateMessageOnce(ctx context.Context, msg *Message) (bool, error
 	if msg.ChatID == "" {
 		return false, fmt.Errorf("message ChatID cannot be empty")
 	}
-	return store.InsertMessageOnce(ctx, r.ORM(), msg)
+	var created bool
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		created, err = store.InsertMessageOnce(ctx, r.ORM(), msg)
+		return err
+	})
+	return created, err
 }
 
 // SaveMessageToThread atomically creates a message with text and optional image content blocks.
@@ -227,16 +276,13 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 		// starts over.
 		savedMsg, created = nil, true
 
-		// Get next ordinal for the thread
-		ordinal, err := r.GetNextOrdinal(txCtx, thread)
+		// The thread's ordinal and the chat's seq come from
+		// message_order_counters, never from the highest number already
+		// written (store.AllocateMessageOrder). When an id already taken makes
+		// a once-save write nothing, the numbers it took are a gap.
+		ordinal, seq, err := store.AllocateMessageOrder(txCtx, r.ORM(), thread, chatID)
 		if err != nil {
-			return fmt.Errorf("failed to get next ordinal: %w", err)
-		}
-
-		// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-		seq, err := r.GetNextSeq(txCtx, chatID, thread)
-		if err != nil {
-			return fmt.Errorf("failed to get next seq: %w", err)
+			return err
 		}
 
 		// Get the current context_sequence for the thread
@@ -464,28 +510,42 @@ func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {
 	return msg, nil
 }
 
-func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, error) {
+// AllocateMessageOrder takes the next ordinal of threadID and the next seq of
+// chatID from their counters (store.AllocateMessageOrder), for a message the
+// caller writes with CreateMessage. In the caller's transaction the numbers
+// follow commit order and a rollback returns them; outside one they are spent
+// as soon as they are taken.
+func (r *Repo) AllocateMessageOrder(ctx context.Context, threadID, chatID string) (ordinal, seq int64, err error) {
 	if threadID == "" {
-		return 0, fmt.Errorf("thread ID cannot be empty")
+		return 0, 0, fmt.Errorf("thread ID cannot be empty")
 	}
-
-	// Get the next ordinal from messages in this thread (all context windows)
-	// NOTE: For workflow forks, each workflow has its own ordinal space.
-	// Context inheritance is handled separately at LLM context resolution time.
-	return store.NextOrdinalInThread(ctx, r.ORM(), threadID)
+	if chatID == "" {
+		return 0, 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		ordinal, seq, err = store.AllocateMessageOrder(ctx, r.ORM(), threadID, chatID)
+		return err
+	})
+	return ordinal, seq, err
 }
 
-// GetNextSeq returns the next chat-global seq for a message being written to
-// threadID in chatID. threadID is required because a branched chat displays
-// inherited history it does not own; the allocator has to clear that
-// history's seqs or the branch restarts at 0 and new messages sort beneath
-// everything shown above them. See 20260802000000_add_message_seq.sql for
-// what seq is and why it exists alongside the per-thread Ordinal.
-func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
+// CreateNumberedMessage writes msg as the next message of its thread and chat:
+// it allocates msg.Ordinal and msg.Seq (AllocateMessageOrder) and inserts the
+// row in one transaction, joining the caller's when ctx carries one. It is
+// how a writer outside SaveMessageAtomic and SaveMessageToThread (a repair, a
+// denial) appends a message it builds itself.
+func (r *Repo) CreateNumberedMessage(ctx context.Context, msg *Message) error {
+	if msg == nil {
+		return fmt.Errorf("message cannot be nil")
 	}
-	return store.NextSeqInChat(ctx, r.ORM(), chatID, threadID)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		ordinal, seq, err := r.AllocateMessageOrder(ctx, msg.ThreadID, msg.ChatID)
+		if err != nil {
+			return err
+		}
+		msg.Ordinal, msg.Seq = ordinal, seq
+		return r.CreateMessage(ctx, msg)
+	})
 }
 
 func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error) {
@@ -554,25 +614,33 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
-// HasMessagesBeforeInContextWindow reports whether any message in this
-// context window precedes beforeSeq.
-func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
-	if contextWindowID == "" {
-		return false, fmt.Errorf("context window ID cannot be empty")
+// ListTranscriptSiblingMessagesInRange returns, ascending, every message of
+// the chat on a thread other than mainThreadID that is not a spawn thread,
+// with seq >= fromSeq and, when toSeq is set, seq < toSeq; with limit > 0, the
+// newest limit of them. It is the sibling half of a ListMessages page, from the
+// same filter the chat snapshot uses.
+func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if mainThreadID == "" {
+		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return store.HasMessagesBeforeInContextWindow(ctx, r.ORM(), contextWindowID, beforeSeq)
+	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq, limit)
 }
 
-// ListMessagesInContextWindowRange returns messages in a single context
-// window with seq >= fromSeq, ascending. toSeq is an exclusive upper
-// bound, or nil for unbounded above.
-func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
-	if contextWindowID == "" {
-		return nil, fmt.Errorf("context window ID cannot be empty")
+// CountMessagesInChatOutsideThread counts the chat's messages that sit on
+// threads other than threadID.
+func (r *Repo) CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return store.ListMessagesInContextWindowRange(ctx, r.ORM(), contextWindowID, fromSeq, toSeq)
+	return store.CountMessagesInChatOutsideThread(ctx, r.ORM(), chatID, threadID)
 }
 
 func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error) {
@@ -854,7 +922,7 @@ func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Appro
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
 func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
 	var resolvedAt *time.Time
-	if status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED) || status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED) {
+	if status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
 		now := time.Now()
 		resolvedAt = &now
 	}
@@ -1035,6 +1103,24 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
+// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+// daemon's clones queued while it was away, now that it has connected.
+func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
+}
+
+// FailProjectDaemonInstall settles a clone still installing as failed: one
+// whose outcome was lost.
+func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+}
+
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1064,6 +1150,11 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 // immutable once the row exists.
 var ErrDaemonOwnedByAnotherUser = svcerr.PermissionDenied("daemon is owned by another user")
 
+// ErrDaemonRequiresBoundToken is returned when an unbound write (a daemon
+// connecting with a login token) names an id its owner's row reserves for
+// daemon-bound credentials (Daemon.RequiresBoundToken).
+var ErrDaemonRequiresBoundToken = svcerr.PermissionDenied("daemon id is reserved for daemon-bound credentials")
+
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
 		return fmt.Errorf("daemon cannot be nil")
@@ -1083,10 +1174,16 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
-	// The conflict branch only fires for the row's own owner, so a conflict
-	// against a different owner writes nothing — in a single statement, with
-	// no read-then-write window.
+	// The conflict branch only fires for the row's own owner, and for an
+	// unbound write only on a row not reserved for bound credentials, so
+	// either refusal writes nothing — in a single statement, with no
+	// read-then-write window. The read below only names which refusal it
+	// was; it decides nothing.
 	if !wrote {
+		if existing, getErr := store.GetDaemon(ctx, r.ORM(), daemon.ID); getErr == nil &&
+			existing.UserID == daemon.UserID && existing.RequiresBoundToken && !daemon.RequiresBoundToken {
+			return fmt.Errorf("%w: daemon %s", ErrDaemonRequiresBoundToken, daemon.ID)
+		}
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
 	return nil
@@ -1124,6 +1221,27 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 		return false, fmt.Errorf("failed to apply daemon lifecycle for %s: %w", lc.DaemonID, err)
 	}
 	return applied, nil
+}
+
+// SetDefaultDaemon makes daemonID the user's default machine, replacing any
+// previous one; "" clears it. A machine the user does not own (or that does
+// not exist) is svcerr.NotFound, and nothing changes.
+func (r *Repo) SetDefaultDaemon(ctx context.Context, userID, daemonID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	// ReadCommitted: store.SetDefaultDaemon locks the user's rows first, and
+	// that lock is what makes the clear-then-set correct.
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		owned, err := store.SetDefaultDaemon(txCtx, r.ORM(), userID, daemonID)
+		if err != nil {
+			return fmt.Errorf("failed to set default daemon for user %s: %w", userID, err)
+		}
+		if !owned {
+			return svcerr.NotFound("daemon")
+		}
+		return nil
+	})
 }
 
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
@@ -1604,6 +1722,12 @@ func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktre
 	return store.ListWorktreesByIDs(ctx, r.ORM(), ids)
 }
 
+// ListMainWorktreesForUser returns the main workspace of each of the user's
+// projects, or of the one project when projectID is set and the user owns it.
+func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*Worktree, error) {
+	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projectID)
+}
+
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree == nil {
 		return fmt.Errorf("worktree cannot be nil")
@@ -1643,9 +1767,18 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
+// archived row that still has no machine on record.
+func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("worktree ID cannot be empty")
+	}
+	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
+}
+
+func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
-		return fmt.Errorf("worktree and daemon IDs cannot be empty")
+		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
@@ -2283,6 +2416,13 @@ func (r *Repo) countMessages(ctx context.Context, opts ...orm.QueryOption) (int,
 //
 // Returns 0 if no token data exists (caller should estimate if needed).
 func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *int64) (int64, error) {
+	return r.threadTokenCount(ctx, thread, maxSeq, nil)
+}
+
+// threadTokenCount is GetThreadTokenCount for a caller that has already
+// resolved the thread's current context sequence (knownContextSeq), saving the
+// repeat lookup. Inherited parents resolve their own.
+func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int64, knownContextSeq *int) (int64, error) {
 	if thread == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
@@ -2299,8 +2439,10 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Get current context sequence for the thread
-	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
-	if err != nil {
+	var contextSeq int
+	if knownContextSeq != nil {
+		contextSeq = *knownContextSeq
+	} else if contextSeq, err = r.getMaxContextSequenceInThread(ctx, thread); err != nil {
 		logging.WarnContext(ctx, "[GetThreadTokenCount] Error getting context sequence",
 			"thread", thread,
 			"error", err)
@@ -2384,21 +2526,42 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 		return nil, fmt.Errorf("thread cannot be empty")
 	}
 
-	// Get token count using unified function (handles fork inheritance)
-	tokens, err := r.GetThreadTokenCount(ctx, thread, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get thread token count: %w", err)
-	}
-
-	// Get current context sequence
+	// The current context sequence is the same for all three reads below.
 	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
 
+	// The common case: the thread's current window has a message carrying
+	// token data. That one row is both the count (its token_count) and the
+	// denominator (the threshold of the model that produced it), so read it
+	// once. The general path below reads it twice, behind a thread lookup it
+	// only needs for fork inheritance — four serial round trips on the chat
+	// open path where this is two.
+	if msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), nil); err == nil &&
+		msg != nil && msg.TokenCount != nil && *msg.TokenCount > 0 {
+		threshold := models.UnknownModelCompactionFloor
+		if msg.Model != nil {
+			threshold = models.CompactionThresholdForModel(*msg.Model)
+		}
+		return &ContextUsage{
+			ThreadTokenCount:    int64(*msg.TokenCount),
+			CompactionThreshold: int64(threshold),
+			CurrentContextSeq:   int64(contextSeq),
+		}, nil
+	}
+
+	// No local token data: the count and the threshold are inherited from a
+	// fork's parent, or are zero. Get token count using unified function
+	// (handles fork inheritance)
+	tokens, err := r.threadTokenCount(ctx, thread, nil, &contextSeq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get thread token count: %w", err)
+	}
+
 	return &ContextUsage{
 		ThreadTokenCount:    tokens,
-		CompactionThreshold: int64(r.resolveThreadCompactionThreshold(ctx, thread, nil)),
+		CompactionThreshold: int64(r.resolveThreadCompactionThreshold(ctx, thread, nil, &contextSeq)),
 		CurrentContextSeq:   int64(contextSeq),
 	}, nil
 }
@@ -2409,14 +2572,19 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 // the same model the trigger evaluates. Falls back to the global default when
 // no model-bearing message is found. maxSeq bounds inheritance to a fork
 // point, the same way maxOrdinal used to -- see GetThreadTokenCount.
-func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64) int {
+func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64, knownContextSeq *int) int {
 	if thread == "" {
 		return models.UnknownModelCompactionFloor
 	}
 
-	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
-	if err != nil {
-		contextSeq = 0
+	var contextSeq int
+	if knownContextSeq != nil {
+		contextSeq = *knownContextSeq
+	} else {
+		var err error
+		if contextSeq, err = r.getMaxContextSequenceInThread(ctx, thread); err != nil {
+			contextSeq = 0
+		}
 	}
 
 	msg, err := r.GetLatestMessageWithTokensInThread(ctx, thread, contextSeq)
@@ -2440,7 +2608,7 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 	if err != nil {
 		return models.UnknownModelCompactionFloor
 	}
-	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
+	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq, nil)
 }
 
 // ==================== Workflows ====================
@@ -2488,9 +2656,20 @@ func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []stri
 	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
 }
 
+// workflowStatusWrite is the transaction a workflow status write runs in when
+// its caller has none. READ COMMITTED is enough: each write is ONE UPDATE of
+// one row by id — a CAS keeps its expected status in the UPDATE's own WHERE,
+// which Postgres re-checks against the row it waited for — and the read that
+// follows only finds the chat to announce, after the commit. SERIALIZABLE
+// added nothing to that and made every status write a party to predicate-lock
+// conflicts with whatever else was inserting workflows, so under load a run's
+// status writes (its launch's mark-active, its terminal status) failed with
+// SQLSTATE 40001. Called inside a caller's transaction, they join it.
+var workflowStatusWrite = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+
 func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error) {
 	var swapped bool
-	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
 		ok, err := store.CompareAndSwapWorkflowStatus(txCtx, r.ORM(), id, newStatus, expectedStatus)
 		if err != nil {
 			return err
@@ -2511,8 +2690,53 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 	return swapped, err
 }
 
+// MarkWorkflowStartFailed records that a PENDING workflow's start attempt
+// failed (Workflow.StartFailedAt). No chat-activity emit: the row is still
+// PENDING, so whether the chat is busy has not changed.
+func (r *Repo) MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error) {
+	return store.MarkWorkflowStartFailed(ctx, r.ORM(), id)
+}
+
+// ClaimWorkflowStart clears a PENDING workflow's failed-start stamp before a
+// retry of its start, reporting whether it is still PENDING (see
+// store.ClaimWorkflowStart).
+func (r *Repo) ClaimWorkflowStart(ctx context.Context, id string) (bool, error) {
+	return store.ClaimWorkflowStart(ctx, r.ORM(), id)
+}
+
+// AbandonFailedWorkflowStart moves a PENDING workflow whose start failed to
+// STOPPED/FAILED, reporting whether it did (see
+// store.AbandonFailedWorkflowStart). Inside a caller's transaction it joins
+// it, and the chat's activity is announced after that commits.
+func (r *Repo) AbandonFailedWorkflowStart(ctx context.Context, id string) (bool, error) {
+	var abandoned bool
+	err := r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
+		ok, err := store.AbandonFailedWorkflowStart(txCtx, r.ORM(), id)
+		abandoned = ok
+		if err != nil || !ok {
+			return err
+		}
+		wf, err := r.GetWorkflow(txCtx, id)
+		if err != nil {
+			return err
+		}
+		if wf.ChatID == "" {
+			return nil
+		}
+		return r.emitChatActivityIfChanged(txCtx, wf.ChatID)
+	})
+	return abandoned, err
+}
+
+// ListStrandedWorkflowStarts is the PENDING roots whose launch committed
+// before cutoff and whose start was never recorded as failed (see
+// store.ListStrandedWorkflowStarts).
+func (r *Repo) ListStrandedWorkflowStarts(ctx context.Context, cutoff time.Time, limit int) ([]*Workflow, error) {
+	return store.ListStrandedWorkflowStarts(ctx, r.ORM(), cutoff, limit)
+}
+
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
-	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	return r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
@@ -2534,6 +2758,11 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 // change whether the chat is busy, only what the finished run means.
 func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
+}
+
+// SetWorkflowFailureDetail records why a run failed, on the run.
+func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
+	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
 }
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
@@ -2651,11 +2880,33 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
 
+// mapTriggerNameConflict turns a unique violation on the trigger's
+// (user, project, name) key into core.ErrTriggerNameTaken: AlreadyExists to the
+// caller instead of an opaque Internal "database error". Like
+// mapWorkflowSlugConflict, the PgError is not wrapped (%w), so the retry ladder
+// does not re-run a permanent conflict.
+func mapTriggerNameConflict(err error, name string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == store.TriggerConstraintUserIDProjectIDNameKey {
+		return fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, name)
+	}
+	return err
+}
+
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return store.InsertTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
+			return mapTriggerNameConflict(err, t.Name)
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "create", nil, after)
+	})
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
@@ -2691,7 +2942,26 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.ReplaceTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
+			return mapTriggerNameConflict(err, t.Name)
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "update", before, after)
+	})
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
@@ -2705,7 +2975,38 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		op := "pause"
+		if enabled {
+			op = "enable"
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
+	})
+}
+
+func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
+	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
+}
+
+func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
+	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
@@ -2774,6 +3075,11 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
+}
+
+// SetLaunchEventRunFailureDetail records why the launch run failed.
+func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
+	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
 }
 
 // SetLaunchEventRunStatus records how the run a trigger fired ended, on
@@ -2978,12 +3284,12 @@ func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
-func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
 
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
@@ -3030,6 +3336,17 @@ func (r *Repo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string)
 // activities. model.InternalActivities crosses into SQL here and only here.
 func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
 	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
+}
+
+// ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
+func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
+	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
+}
+
+// MarkDeclaredFailureNode records that a run's top-level node declared the
+// run's outcome: failure (store.MarkDeclaredFailureNode).
+func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
+	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
 }
 
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
@@ -3092,6 +3409,10 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return store.GetThread(ctx, r.ORM(), id)
+}
+
+func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
+	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
@@ -3254,7 +3575,30 @@ func (r *Repo) CreateContextWindow(ctx context.Context, cw *ContextWindow) (*Con
 	if cw.ThreadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return store.InsertContextWindow(ctx, r.ORM(), cw)
+	// One transaction: the insert raises the thread's context_window counter.
+	var created *ContextWindow
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		created, err = store.InsertContextWindow(ctx, r.ORM(), cw)
+		return err
+	})
+	return created, err
+}
+
+// AllocateContextWindowSequence takes the sequence of threadID's next context
+// window from its counter (store.AllocateContextWindowSequence), never from
+// the highest window already written.
+func (r *Repo) AllocateContextWindowSequence(ctx context.Context, threadID string) (int, error) {
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
+	}
+	var seq int64
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		seq, err = store.AllocateContextWindowSequence(ctx, r.ORM(), threadID)
+		return err
+	})
+	return int(seq), err
 }
 
 func (r *Repo) GetContextWindow(ctx context.Context, id string) (*ContextWindow, error) {

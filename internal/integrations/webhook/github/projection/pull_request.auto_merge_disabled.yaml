@@ -1,0 +1,17 @@
+# Pull request auto-merge disabled: the projection of the GitHub `pull_request.auto_merge_disabled` webhook.
+id: pull_request.auto_merge_disabled
+event: pull_request.auto_merge_disabled
+display_name: Pull request auto-merge disabled
+summary: Auto-merge was turned off on a pull request.
+description: >-
+  Fires when auto-merge is disabled on a pull request: by a person or a
+  workflow (gh pr merge --disable-auto), because a push by someone without
+  write access disabled it, or because GitHub could not merge it. data.reason
+  is GitHub's reason, when it gives one.
+keywords: [pr, auto-merge, auto merge, disabled, merge queue]
+attributes:
+  - { group: pr }
+data:
+  number: integer
+  reason: { kind: string, description: "Why auto-merge was disabled, as GitHub reports it." }
+  pull_request: { kind: object, object: pr }

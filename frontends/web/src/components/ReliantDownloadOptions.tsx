@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
+import { loadConfig } from "@/lib/config_gen";
 
 /**
  * "How do I get Reliant onto this machine?" — the single answer, shared by
@@ -20,8 +21,7 @@ import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
  * disagreeing about which build a Mac should get.
  */
 
-const DOWNLOAD_BASE =
-  import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
+const DOWNLOAD_BASE = loadConfig().DOWNLOAD_BASE_URL;
 
 export type DetectedOS =
   "mac-arm64" | "mac-x64" | "windows" | "linux" | "unknown";

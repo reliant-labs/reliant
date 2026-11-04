@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -99,7 +100,7 @@ type DatabaseConfig struct {
 // the tuning half of its config's DatabaseConfig. A zero field takes its
 // default.
 type Pool struct {
-	// MaxOpenConns and MaxIdleConns size the pool; 0 is 25 / 10. Dev caps
+	// MaxOpenConns and MaxIdleConns size the pool; 0 is 25 / 20. Dev caps
 	// them low: the dev Postgres is SHARED by N parallel stacks (one per git
 	// worktree), and reliant's api + worker pools count against the same
 	// instance's max_connections alongside control-plane's services.
@@ -115,12 +116,27 @@ type Pool struct {
 	// SchemaWait bounds how long a MigrateWait process waits for the schema;
 	// 0 is DefaultSchemaWait.
 	SchemaWait time.Duration
+
+	// KeepIdleWarm keeps MaxIdleConns connections open and idle (see
+	// keepIdleWarm). Servers set it; a one-shot CLI process does not, since
+	// it would only pay for connections it never uses.
+	KeepIdleWarm bool
 }
 
 // Pool defaults, for a zero Pool field.
+//
+// The idle default is what keepIdleWarm holds dialled, and it is sized for a
+// chat open: the snapshot fans out about ten reads at once while the page's
+// other reads (GetChat, approvals, the execution tree, ...) land beside it.
+// At 10 the open regularly found the warm set used up and dialled the rest
+// itself: prod db.connect spans on StreamChatUpdates, p50 58ms / p95 125ms,
+// 61 in 24h (2026-11-04). Behind PgBouncer these are client connections,
+// which cost the instance nothing (transaction mode: server connections are
+// capped by the pooler's max_db_connections), and six pods at 20 are well
+// inside its max_client_conn of 1000.
 const (
 	defaultMaxOpenConns = 25
-	defaultMaxIdleConns = 10
+	defaultMaxIdleConns = 20
 )
 
 func orDefault(v, def int) int {
@@ -162,7 +178,7 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	// Pool settings: cfg.Pool (see Pool). Dev sets
 	// RELIANT_DB_MAX_OPEN_CONNS=8 / RELIANT_DB_MAX_IDLE_CONNS=2 (control-plane
 	// deploy/kcl/dev/main.k _reliant_host_env); prod sets neither and keeps
-	// 25/10.
+	// 25/20.
 	db, err := serverkit.OpenDB(context.Background(), "pgx", cfg.URL,
 		serverkit.DBPoolTuning{
 			MaxOpenConns:    orDefault(cfg.Pool.MaxOpenConns, defaultMaxOpenConns),
@@ -172,6 +188,10 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 		serverkit.ConnectPolicy{Timeout: cfg.Pool.ConnectTimeout, Logger: slog.Default()})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
+	}
+
+	if cfg.Pool.KeepIdleWarm {
+		go keepIdleWarm(db, min(orDefault(cfg.Pool.MaxIdleConns, defaultMaxIdleConns), orDefault(cfg.Pool.MaxOpenConns, defaultMaxOpenConns)), idleWarmInterval)
 	}
 
 	// Register OTel for DB stats metrics
@@ -230,4 +250,75 @@ func openSessionPool(url string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to the direct (session) database URL: %w", err)
 	}
 	return pool, nil
+}
+
+// idleWarmInterval is how often keepIdleWarm tops the pool up. Short: a
+// burst past MaxIdleConns closes the excess, and ConnMaxLifetime retires
+// connections dialled together at about the same moment, so the warm set can
+// empty between checks, and the next chat open pays each dial. A check that
+// finds the set full is one Stats() call.
+const idleWarmInterval = 2 * time.Second
+
+// keepIdleWarm holds the pool at n idle connections until db is closed.
+// TODO(forge pin bump): forge's serverkit now owns this as DBPoolTuning.SpareConns; set it in connectPostgres and delete keepIdleWarm/warmIdle.
+//
+// database/sql has no minimum-idle setting: it opens a connection when a
+// caller finds none idle, and that caller waits for the dial (TLS and auth,
+// through PgBouncer) — measured in prod as 85-336ms db.connect spans on chat
+// opens, whose snapshot fans out to ~10 concurrent reads at once. Connections
+// leave the idle set all the time without anyone asking for fewer:
+// ConnMaxLifetime retires them, a burst past MaxIdleConns closes the excess,
+// and a fresh process starts with none. So this tops the idle set back up,
+// off the request path, by checking out connections — the pool hands back its
+// idle ones first and dials the rest — and returning them, which leaves them
+// idle (n is at most MaxIdleConns). It never takes a connection a request
+// could need: it asks only for what fits beside the ones in use.
+func keepIdleWarm(db *sql.DB, n int, every time.Duration) {
+	if n <= 0 {
+		return
+	}
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		if !warmIdle(db, n) {
+			return // closed
+		}
+		<-ticker.C
+	}
+}
+
+// warmIdle tops db up to n idle connections, best-effort. It reports false
+// once db is closed.
+func warmIdle(db *sql.DB, n int) bool {
+	st := db.Stats()
+	if st.Idle >= n {
+		return true
+	}
+	want := n
+	if st.MaxOpenConnections > 0 && st.InUse+want > st.MaxOpenConnections {
+		want = st.MaxOpenConnections - st.InUse
+	}
+	if want <= st.Idle {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conns := make([]*sql.Conn, 0, want)
+	defer func() {
+		for _, c := range conns {
+			_ = c.Close() // back to the pool, idle
+		}
+	}()
+	for range want {
+		c, err := db.Conn(ctx)
+		if errors.Is(err, sql.ErrConnDone) || (err != nil && strings.Contains(err.Error(), "database is closed")) {
+			return false
+		}
+		if err != nil {
+			logging.Debug("could not warm a database connection", "error", err)
+			return true
+		}
+		conns = append(conns, c)
+	}
+	return true
 }

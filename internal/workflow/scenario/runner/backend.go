@@ -37,6 +37,8 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/sdk/workflow"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -104,9 +106,16 @@ type Runner struct {
 	// mock, so the catch-all can be exercised.
 	omitActivity string
 
+	// versionOverrides pins workflow.GetVersion for these change ids — a
+	// test seam standing in for a run recorded before a versioned change.
+	versionOverrides map[string]versionOverride
+
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
 }
+
+// versionOverride is what GetVersion(changeID, DefaultVersion, max) returns.
+type versionOverride struct{ max, returns workflow.Version }
 
 // NewRunner builds a scenario runner for a workflow that resolves only
 // builtin refs.
@@ -729,11 +738,24 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	if err := r.registerActivities(env, rec, events, guard, sc); err != nil {
 		return errorResult(sc, err, start)
 	}
+	// Mocks may only follow registration.
+	for changeID, o := range r.versionOverrides {
+		env.OnGetVersion(changeID, workflow.DefaultVersion, o.max).Return(o.returns)
+	}
 
 	// project_path is a real production input, not harness scaffolding: it is
 	// what ChatService.buildWorkflowInputs injects, and preset loading fails
 	// terminally without it. A scenario may override it like any other input.
 	inputs := map[string]interface{}{"project_path": scenarioProjectPath}
+	if sc.Trigger != nil {
+		fired, err := triggerInputs(r.workflow, sc.Trigger)
+		if err != nil {
+			return errorResult(sc, err, start)
+		}
+		for k, v := range fired {
+			inputs[k] = v
+		}
+	}
 	for k, v := range sc.Inputs {
 		inputs[k] = v
 	}
@@ -1054,6 +1076,9 @@ var infrastructureActivities = []string{
 	"EmitStreamFinalized",
 	"EmitToolCallStatus",
 	"PreflightDaemonCheck",
+	// A scenario has no machine or connections: its requirements are what
+	// the run would check, not what a scenario tests.
+	"PreflightRequirements",
 	"MachineResumeWake",
 	"ValidateThreadOwnership",
 	// QuestionCreate is NOT here: it resolves an ask_question node from the
@@ -1674,14 +1699,17 @@ func (r *Runner) registerActivities(
 	// under test actually runs; see transparentRefs for why that gate is keyed
 	// by name and why opening every ref by default does not terminate.
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, in map[string]string) (runtime.LoadedWorkflow, error) {
+		// Typed like the real activity: the root load sends the struct (a
+		// local activity since #1930), the inline loaders a map of the same
+		// JSON shape, and only the struct decodes both.
+		func(_ context.Context, in types.LoadWorkflowInput) (runtime.LoadedWorkflow, error) {
 			if err := guard.check(); err != nil {
 				return runtime.LoadedWorkflow{}, err
 			}
 			// A ref is written "builtin://agent" while the loaded workflow is
 			// named "agent", so compare on the bare name — otherwise a workflow
 			// requesting ITSELF is misread as a sub-workflow, and vice versa.
-			ref := in["workflow_name"]
+			ref := in.WorkflowName
 			name := bareWorkflowName(ref)
 			if ref == "" || name == r.workflow.GetName() {
 				return runtime.LoadedWorkflow{WorkflowJSON: wfJSON}, nil

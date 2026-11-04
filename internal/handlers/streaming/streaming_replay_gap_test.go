@@ -2,19 +2,14 @@ package streaming
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
@@ -73,35 +68,26 @@ type noopSubscription struct{}
 func (noopSubscription) Events() <-chan streaming.StreamingDelta { return nil }
 func (noopSubscription) Unsubscribe()                            {}
 
-// firstChatSyncEvent opens a stream subscribed to the chat at chatSinceSeq and
-// returns the first event that carries chat state: a snapshot or a batch.
-func firstChatSyncEvent(t *testing.T, repo Repository, chatSinceSeq int64) *reliantv1.UserStreamEvent {
+// firstChatSyncEvent opens a chat stream at chatSinceSeq and returns the
+// first event that carries chat state: a snapshot or a batch.
+func firstChatSyncEvent(t *testing.T, repo Repository, chatSinceSeq int64) *reliantv1.ChatStreamEvent {
 	t.Helper()
 
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
-	mux.Handle(path, authInjector(handler))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
 
-	chatID := raceTestChatID
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{
-			SubscribeChatId: &chatID,
-			ChatSinceSeq:    chatSinceSeq,
+	stream, err := streamingTestClient(t, svc).
+		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+			ChatId:   raceTestChatID,
+			SinceSeq: chatSinceSeq,
 		}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
 	for stream.Receive() {
 		msg := stream.Msg()
-		if msg.GetChatSyncSnapshot() != nil || msg.GetChatUpdates() != nil {
+		if msg.GetSnapshot() != nil || msg.GetUpdates() != nil {
 			return msg
 		}
 	}
@@ -118,13 +104,13 @@ func newReplayGapRepo(latest int64) *replayGapRepo {
 	}
 }
 
-func TestStreamUserUpdates_ReplayGapBeyondCapSendsSnapshot(t *testing.T) {
+func TestStreamChatUpdates_ReplayGapBeyondCapSendsSnapshot(t *testing.T) {
 	const cursor = 10
 	repo := newReplayGapRepo(cursor + maxChatReplayGap + 1)
 
 	event := firstChatSyncEvent(t, repo, cursor)
 
-	snapshot := event.GetChatSyncSnapshot()
+	snapshot := event.GetSnapshot()
 	require.NotNil(t, snapshot,
 		"a cursor %d updates behind must get a snapshot, not a replay; got %T", maxChatReplayGap+1, event.GetEvent())
 	require.Equal(t, repo.latestChatSeq, snapshot.GetLatestSequence(),
@@ -132,12 +118,12 @@ func TestStreamUserUpdates_ReplayGapBeyondCapSendsSnapshot(t *testing.T) {
 	require.Zero(t, repo.replayReads.Load(), "no replay reads should run once the snapshot is chosen")
 }
 
-func TestStreamUserUpdates_CursorAheadOfChatSendsSnapshot(t *testing.T) {
+func TestStreamChatUpdates_CursorAheadOfChatSendsSnapshot(t *testing.T) {
 	repo := newReplayGapRepo(50)
 
 	event := firstChatSyncEvent(t, repo, 5000)
 
-	snapshot := event.GetChatSyncSnapshot()
+	snapshot := event.GetSnapshot()
 	require.NotNil(t, snapshot,
 		"a cursor ahead of the chat's latest sequence cannot be replayed from and must get a snapshot; got %T",
 		event.GetEvent())
@@ -147,13 +133,13 @@ func TestStreamUserUpdates_CursorAheadOfChatSendsSnapshot(t *testing.T) {
 
 // Inside the cap, a reconnect keeps the cheap incremental path — including
 // exactly AT the cap.
-func TestStreamUserUpdates_ReplayGapWithinCapReplays(t *testing.T) {
+func TestStreamChatUpdates_ReplayGapWithinCapReplays(t *testing.T) {
 	const cursor = 10
 	repo := newReplayGapRepo(cursor + maxChatReplayGap)
 
 	event := firstChatSyncEvent(t, repo, cursor)
 
-	batch := event.GetChatUpdates()
+	batch := event.GetUpdates()
 	require.NotNil(t, batch, "a gap of exactly maxChatReplayGap must replay; got %T", event.GetEvent())
 	require.Equal(t, int64(cursor+1), batch.GetUpdates()[0].GetSequenceNumber())
 	require.Positive(t, repo.replayReads.Load())

@@ -10,7 +10,7 @@
  * themselves, and know nothing about routing — which is what lets the preview
  * and the tests mount them on fixtures.
  *
- * Promoting goes through the existing plan flow (PromoteDialog): forge plans
+ * Promoting goes through the shared plan flow (usePromoteFlow): forge plans
  * the promotion against the checkout, the reader sees the diff — a move to an
  * older release labelled as a rollback — and only the confirmed plan applies.
  * That plan needs a daemon on the project's checkout, so a console opened on
@@ -18,18 +18,19 @@
  * promote them, and says so.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-
-import { useProjectStore } from "@/store/projectStore";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
-import { PromoteDialog } from "../Promote/PromoteDialog";
+import { DeployRunsPanel } from "../Deploy/DeployRuns";
+import { ENV_ALL } from "../Console/envScope";
+import { usePromoteFlow } from "../Promote/usePromoteFlow";
+import { usePromoterNames } from "./useReleaseData";
 import { ReleaseDetail, type ReleaseDetailSearch } from "./ReleaseDetail";
-import { ReleasesList, type PromoteControl, type PromoteRequest, type ReleasesSearch } from "./ReleasesList";
-import { shortVersion, type ReleaseEnv } from "./releaseModel";
+import { ReleasesList, type ReleasesSearch } from "./ReleasesList";
+import type { ReleaseEnv } from "./releaseModel";
 
 /** The roster's recorded, deployed environments, as the Releases pages need them: prod first, previews apart. */
 function useReleaseEnvs(): { envs: ReleaseEnv[]; loading: boolean } {
@@ -59,39 +60,6 @@ function useReleaseEnvs(): { envs: ReleaseEnv[]; loading: boolean } {
   return { envs, loading: roster.isLoading || roster.resolvingName };
 }
 
-/** The promote flow: the request the reader made, and the plan dialog that carries it out. */
-function usePromote(): { control: PromoteControl; dialog: React.ReactNode } {
-  const { projectId } = useForgeConsole();
-  const projectName = useProjectStore((state) => state.projects.find((project) => project.id === projectId)?.name);
-  const [request, setRequest] = useState<PromoteRequest | null>(null);
-  const control = useMemo<PromoteControl>(
-    () => ({
-      onPromote: setRequest,
-      blockedReason: projectId
-        ? null
-        : "Promoting plans the change against this project's checkout. Open the project in Reliant, with its daemon running, to promote from here.",
-    }),
-    [projectId]
-  );
-  const dialog =
-    request && projectId ? (
-      <PromoteDialog
-        isOpen
-        onClose={() => setRequest(null)}
-        projectId={projectId}
-        env={request.env}
-        release={request.version}
-        projectName={projectName}
-        title={
-          request.intent === "rollback"
-            ? `Roll back ${request.env} to ${shortVersion(request.version)}`
-            : `Promote ${shortVersion(request.version)} to ${request.env}`
-        }
-      />
-    ) : null;
-  return { control, dialog };
-}
-
 /** Merge `next` into the current search, dropping cleared keys, without a history entry. */
 function useSearchUpdater<T extends object>() {
   const navigate = useNavigate();
@@ -107,11 +75,12 @@ function useSearchUpdater<T extends object>() {
 }
 
 export function ReleasesPage() {
-  const { forgeProject, env, setEnv, roster, href } = useForgeConsole();
+  const { forgeProject, env, roster, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as ReleasesSearch;
   const onSearch = useSearchUpdater<ReleasesSearch>();
   const { envs, loading } = useReleaseEnvs();
-  const { control, dialog } = usePromote();
+  const { control, dialog } = usePromoteFlow();
+  const names = usePromoterNames(forgeProject);
   const releaseHref = useCallback(
     (version: string, extra?: Record<string, unknown>) => href({ kind: "release", version }, extra),
     [href]
@@ -127,8 +96,15 @@ export function ReleasesPage() {
         search={search}
         onSearch={onSearch}
         releaseHref={releaseHref}
-        onSelectEnv={setEnv}
         promote={control}
+        scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
+      />
+      <DeployRunsPanel
+        project={forgeProject}
+        env={env === ENV_ALL ? null : env}
+        names={names}
+        hrefs={{ release: (version) => href({ kind: "release", version }) }}
+        openId={search.deploy ?? null}
       />
       {dialog}
     </div>
@@ -141,7 +117,7 @@ export function ReleasePage() {
   const search = useSearch({ strict: false }) as ReleaseDetailSearch;
   const onSearch = useSearchUpdater<ReleaseDetailSearch>();
   const { envs, loading } = useReleaseEnvs();
-  const { control, dialog } = usePromote();
+  const { control, dialog } = usePromoteFlow();
   const releaseHref = useCallback(
     (other: string, extra?: Record<string, unknown>) => href({ kind: "release", version: other }, extra),
     [href]

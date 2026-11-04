@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const LONG_PRESS_MS = 500;
 // Movement past this many px cancels the press — without it, the start of a
@@ -35,8 +35,11 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const firedRef = useRef(false);
+  const removeListenersRef = useRef<(() => void) | null>(null);
 
   const clear = useCallback(() => {
+    removeListenersRef.current?.();
+    removeListenersRef.current = null;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -44,22 +47,36 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
     startRef.current = null;
   }, []);
 
+  useEffect(() => clear, [clear]);
+
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      clear();
+      firedRef.current = false;
       const touch = e.touches[0];
-      if (!touch) return;
+      if (!touch || e.touches.length !== 1) return;
+      // Global cancellation exists only for the active gesture, never per
+      // mounted transcript row. Capture catches nested scrollers too.
+      document.addEventListener("scroll", clear, true);
+      window.addEventListener("blur", clear);
+      document.addEventListener("visibilitychange", clear);
+      removeListenersRef.current = () => {
+        document.removeEventListener("scroll", clear, true);
+        window.removeEventListener("blur", clear);
+        document.removeEventListener("visibilitychange", clear);
+      };
       startRef.current = { x: touch.clientX, y: touch.clientY };
       firedRef.current = false;
       timerRef.current = setTimeout(() => {
+        clear();
         firedRef.current = true;
-        timerRef.current = null;
         // Drop any selection the browser already began for this press, so it
         // can't survive under the sheet that is about to open.
         window.getSelection()?.removeAllRanges();
         onLongPress();
       }, LONG_PRESS_MS);
     },
-    [onLongPress],
+    [onLongPress, clear],
   );
 
   const onTouchMove = useCallback(

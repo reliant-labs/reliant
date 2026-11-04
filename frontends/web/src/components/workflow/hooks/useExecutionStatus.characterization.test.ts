@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import {
   useExtendedExecutionStatus,
@@ -15,6 +15,20 @@ import {
   NodeExecutionEventType,
   NodeExecutionStatus as ProtoNodeExecutionStatus,
 } from '../../../gen/reliant/v1/streaming_pb'
+
+/**
+ * GetWorkflowNodeExecutions, answered from `started`: what the run's nodes
+ * were when the view opened. Unset, the run has none and the stream is the
+ * only source.
+ */
+let started: { updates: { data: string; sequenceNumber: bigint }[] } | undefined
+vi.mock('../../../hooks/chat-service-hooks_gen', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/chat-service-hooks_gen')>()),
+  useGetWorkflowNodeExecutions: (
+    _req: unknown,
+    opts: { enabled: boolean; select: (r: never) => unknown },
+  ) => ({ data: opts.enabled && started ? opts.select(started as never) : undefined }),
+}))
 
 // ---------------------------------------------------------------------------
 // Characterization tests for useExecutionStatus (Phase 2).
@@ -101,7 +115,18 @@ function render(
 beforeEach(() => {
   stepUid = 0
   seedStream([])
+  started = undefined
 })
+
+/** A started answer carrying these events, as the server stores them. */
+function startWith(events: NodeExecutionUpdate[]) {
+  started = {
+    updates: events.map((e) => {
+      const { sequence_number, update_type: _type, ...data } = e
+      return { data: JSON.stringify(data), sequenceNumber: BigInt(sequence_number ?? 0) }
+    }),
+  }
+}
 
 describe('useExecutionStatus (characterization — Phase 2 stream source)', () => {
   it('returns an empty contract when there is no execution', () => {
@@ -140,6 +165,30 @@ describe('useExecutionStatus (characterization — Phase 2 stream source)', () =
     expect(statusMap['a']).toBe('completed')
     expect(statusMap['b']).toBe('failed')
     expect(statusMap['c']).toBeUndefined()
+  })
+
+  // The chat snapshot carries no node state: a view of a run reads where its
+  // nodes stood (GetWorkflowNodeExecutions) and the stream's live events go
+  // on top, newest per node winning whichever source it came from.
+  it('a run starts from GetWorkflowNodeExecutions, and live events go on top', () => {
+    startWith([
+      nodeEvent('a', NodeExecutionEventType.COMPLETED, 1),
+      nodeEvent('b', NodeExecutionEventType.STARTED, 2),
+    ])
+    seedStream([nodeEvent('b', NodeExecutionEventType.FAILED, 3)])
+    const exec = execution({ status: 'failed' })
+
+    const { statusMap } = render(exec, ['a', 'b', 'c'])
+
+    expect(statusMap['a']).toBe('completed')
+    expect(statusMap['b']).toBe('failed')
+    expect(statusMap['c']).toBeUndefined()
+  })
+
+  it('without a chat, nothing is read for the run', () => {
+    startWith([nodeEvent('a', NodeExecutionEventType.COMPLETED, 1)])
+    const { statusMap } = render(execution({ status: 'completed' }), ['a'], null)
+    expect(statusMap['a']).toBeUndefined()
   })
 
   it('loop: currentIteration + iterationStatuses stay tree-derived (structure)', () => {

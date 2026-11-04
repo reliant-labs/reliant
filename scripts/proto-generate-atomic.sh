@@ -42,6 +42,14 @@ for dir in "$@"; do
   esac
 done
 
+# Always execute the generator. Pins and version strings do not identify the
+# installed executable/runtime closure (local Node plugins, Go toolchain/module
+# replacements, GOWORK/GOFLAGS and arbitrary BUF commands). Until that closure
+# can be proven, a result cache is not evidence of current generation. Go's own
+# compiled-tool cache remains available; no generated-output verdict is reused.
+# Required inputs are read by buf/plugins and errors propagate without a
+# best-effort fingerprint that could bless a partially read input set.
+
 # The scratch dir lives inside the repo (gitignored tmp/) so the final mv is a
 # same-filesystem rename, not a cross-device copy.
 mkdir -p tmp
@@ -60,7 +68,11 @@ else
   buf_version=$(GOWORK=off go list -m -f '{{.Version}}' github.com/bufbuild/buf)
   buf=(env GOWORK=off GOFLAGS=-trimpath go run "github.com/bufbuild/buf/cmd/buf@${buf_version}")
 fi
-"${buf[@]}" generate --template "$template" -o "$staging"
+# Buf's short default includes local `go tool` plugin compilation. Cold builds on
+# a shared host can exceed it (observed ~4m) before any generated output exists.
+# Bound the whole invocation, but allow a caller to choose a tighter budget.
+# This is not the heavy-slot queue timeout; it starts when buf actually runs.
+"${buf[@]}" --timeout "${BUF_TIMEOUT:-10m}" generate --template "$template" -o "$staging"
 
 for dir in "$@"; do
   if [[ ! -d "$staging/$dir" ]] || [[ -z "$(ls -A "$staging/$dir")" ]]; then

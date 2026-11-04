@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 )
 
 // newFixture's repos are built once per test binary and copied per test.
@@ -38,7 +40,7 @@ var fixtureTemplate struct {
 // the repo's 2s line for a -short test; and with every heavy slot busy the
 // machine sustains only ~30 execs a second across ALL its processes. Under
 // -short the package ran ~3100 git processes and took 44-108s, then timed out
-// at make test-affected's 60s with ~2100. The reaper's own git work per pass
+// at task test:affected's 60s with ~2100. The reaper's own git work per pass
 // is already cut and pinned (gitbudget_test.go) — one full pass is ~31 — so
 // what is left in -short is the tests below a full pass plus the two guards,
 // TestGitProcessesPerPass and TestGitFileReadersAgreeWithGit.
@@ -53,6 +55,10 @@ func heavyUnderShort(t *testing.T, why string) {
 var templateRoot string
 
 func TestMain(m *testing.M) {
+	// This binary also stands in for the reliant binary as credsandbox's init,
+	// and for an undumpable process (process_uninspectable_linux_test.go).
+	credsandbox.Dispatch()
+	runTestHelper()
 	code := m.Run()
 	if templateRoot != "" {
 		_ = os.RemoveAll(templateRoot)

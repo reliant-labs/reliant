@@ -69,6 +69,7 @@ import { MobileInboxBadgeSync } from "./MobileInboxBadgeSync";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
+import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 
@@ -77,9 +78,7 @@ export function MobileShell() {
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
 
   const currentProject = useProjectStore((s) => s.currentProject);
-  const projects = useProjectStore((s) => s.projects);
-  const selectProject = useProjectStore((s) => s.selectProject);
-  const loadProjects = useProjectStore((s) => s.loadProjects);
+  const { projects } = useProjects();
 
   const needsOnboarding =
     !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
@@ -95,35 +94,37 @@ export function MobileShell() {
     navigate({ to: "/onboarding", search: (prev) => prev, replace: true });
   }, [isUserLoading, needsOnboarding, navigate]);
 
-  useEffect(() => {
-    if (needsOnboarding) return;
-    if (projects.length === 0) void loadProjects();
-  }, [needsOnboarding, projects.length, loadProjects]);
-
-  // Pick the project the way the desktop shell does: restore the last one the
-  // user had open, and only then fall back to the first. Phone browsers discard
-  // and reload tabs constantly, so "no project selected yet" is the normal
-  // state on mobile, and landing on projects[0] each time put the update stream
-  // on the wrong project. Guarded on `currentProject` being unset, so an
-  // explicit selection via `/m/projects` always sticks, and attempted once so
-  // a failed restore cannot loop.
+  // Pick the context project the way the desktop shell does: the last one the
+  // user had open, else the most recently used (restoreLastProject). Phone
+  // browsers discard and reload tabs constantly, so "no project selected yet"
+  // is the normal state on mobile. Guarded on `currentProject` being unset, so
+  // a project opened since always sticks, and attempted once so a failed
+  // restore cannot loop.
+  //
+  // Only the PROJECT is restored, never the desktop workspace inside it
+  // (restoreWorkspace: false): that would select the desktop's last active
+  // chat on every mobile load — marking it read and subscribing the update
+  // stream to it — while the route shows a different chat or none.
   const restoreLastProject = useProjectStore((s) => s.restoreLastProject);
   const initialSelectionAttempted = useRef(false);
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
     if (initialSelectionAttempted.current) return;
     initialSelectionAttempted.current = true;
-    void (async () => {
-      if (await restoreLastProject()) return;
-      if (useProjectStore.getState().currentProject) return;
-      // The fallback is not a choice the user made: do not let it replace the
-      // remembered project.
-      await selectProject(projects[0]!, { skipWorkspaceStateSave: true });
-    })();
-  }, [currentProject, projects, selectProject, restoreLastProject]);
+    void restoreLastProject({ restoreWorkspace: false });
+  }, [currentProject, projects, restoreLastProject]);
 
+  // The chat list spans every project (or the /m/projects filter's one) and
+  // does not follow the context project: load it once, then keep the stream
+  // on it.
+  const chatListRequested = useRef(false);
+  useEffect(() => {
+    if (isUserLoading || needsOnboarding || chatListRequested.current) return;
+    chatListRequested.current = true;
+    void useChatStore.getState().loadChats();
+  }, [isUserLoading, needsOnboarding]);
   const chatsLoaded = useChatStore((s) => s.hasLoaded);
-  useUpdateStreamConnection(currentProject?.id, chatsLoaded);
+  useUpdateStreamConnection(chatsLoaded);
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);

@@ -13,7 +13,7 @@
  * which old builds are still out there.
  */
 
-import * as Sentry from "@sentry/react";
+import { reportFailure } from "../lib/errorReporting";
 import { logger } from "../lib/logger";
 
 let _modalShown = false;
@@ -23,9 +23,9 @@ export function noteVersionSkew(serviceTypeName: string, methodName: string): vo
   const procedure = `${serviceTypeName}/${methodName}`;
   if (!_reported.has(procedure)) {
     _reported.add(procedure);
-    Sentry.captureMessage(`version-skew: ${procedure} is not served`, {
-      level: "warning",
-      tags: { grpc_service: serviceTypeName, grpc_method: methodName },
+    reportFailure(`version-skew: ${procedure} is not served`, {
+      grpc_service: serviceTypeName,
+      grpc_method: methodName,
     });
   }
   if (_modalShown) return;

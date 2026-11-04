@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { devHarnessPresent } from './devHarness';
-import { mockMobileBackend, PHONE } from './mobileMocks';
+import { mockMobileBackend, PHONE, STREAM_ERROR_MESSAGE } from './mobileMocks';
 
 // The phone: 390×844, touch. Every surface the desktop sidebar offers must be
 // reachable from the mobile drawer, a desktop link must land on its mobile
@@ -41,7 +41,7 @@ test.describe('mobile surface', () => {
     const drawer = page.getByRole('dialog', { name: 'Navigation' });
     await expect(drawer.getByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/m/inbox');
     await expect(drawer.getByTestId('drawer-inbox-count')).toHaveText('3');
-    await expect(drawer.getByRole('link', { name: /^Apps/ })).toHaveAttribute('href', '/forge');
+    await expect(drawer.getByRole('link', { name: /^Apps/ })).toHaveAttribute('href', '/apps');
     await expect(drawer.getByRole('link', { name: /^Observability/ })).toHaveAttribute('href', '/forge/observability');
 
     await drawer.getByRole('link', { name: /^Inbox/ }).click();
@@ -147,12 +147,12 @@ test.describe('mobile surface', () => {
 
   test('Diagnostics shows the stream state and copies a report', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await mockMobileBackend(page);
+    await mockMobileBackend(page, { stream: 'unavailable' });
     await page.goto('/m/diagnostics');
     const screen = page.getByTestId('mobile-diagnostics');
-    await expect(screen.getByText('Update stream')).toBeVisible(LOADED);
+    await expect(screen.getByText('Update stream', { exact: true })).toBeVisible(LOADED);
     // The mocked stream fails, and the failure is recorded on the device.
-    await expect(screen.getByTestId('diagnostics-error').first()).toBeVisible();
+    await expect(screen.getByTestId('diagnostics-error').filter({ hasText: STREAM_ERROR_MESSAGE }).first()).toBeVisible();
     await screen.getByRole('button', { name: 'Copy diagnostics' }).click();
     await expect(screen.getByRole('button', { name: 'Copied' })).toBeVisible();
     const copied = await page.evaluate(() => navigator.clipboard.readText());

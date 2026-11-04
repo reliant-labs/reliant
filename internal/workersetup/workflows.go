@@ -74,3 +74,33 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 	logger.Info("GenerateTitleWorkflow completed with fallback title", "chatID", chatID)
 	return nil
 }
+
+// DraftAutomationWorkflowName is TriggerService.DraftAutomation's workflow.
+const DraftAutomationWorkflowName = "DraftAutomationWorkflow"
+
+// draftLLMAttempts bounds the model requests one draft may take. A second
+// sample usually fixes a draft the normalizer refused (a malformed cron); a
+// third would keep a person waiting at a form for no better odds.
+const draftLLMAttempts = 2
+
+// DraftAutomationWorkflow drafts an automation from a description: one
+// DraftAutomation activity, retried once. It stores nothing — the api-server
+// waits on its result and hands the draft to the automation dialog. It runs
+// as a workflow only because the model call must run on the worker (the
+// api-server has no LLM drivers), exactly like GenerateTitleWorkflow.
+func DraftAutomationWorkflow(ctx workflow.Context, input map[string]interface{}) (map[string]interface{}, error) {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 45 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Second,
+			MaximumAttempts:    draftLLMAttempts,
+		},
+	})
+	var output map[string]interface{}
+	if err := workflow.ExecuteActivity(ctx, "DraftAutomation", input).Get(ctx, &output); err != nil {
+		return nil, err
+	}
+	return output, nil
+}

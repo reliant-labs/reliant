@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, FolderGit2 } from "lucide-react";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { InitializeGitModal } from "./InitializeGitModal";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";

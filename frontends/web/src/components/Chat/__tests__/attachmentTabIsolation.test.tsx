@@ -16,6 +16,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file1.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-1',
     }
 
@@ -24,6 +25,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file2.txt',
       size: 200,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-2',
     }
 
@@ -70,6 +72,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'temp.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-temp',
     }
 
@@ -94,6 +97,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file1.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-1',
     }
 
@@ -102,6 +106,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file2.txt',
       size: 200,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-2',
     }
 
@@ -130,6 +135,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file1.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-1',
     }
 
@@ -138,6 +144,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file2.txt',
       size: 200,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-2',
     }
 
@@ -170,6 +177,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file1.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-1',
     }
 
@@ -178,6 +186,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file2.txt',
       size: 200,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-2',
     }
 
@@ -221,6 +230,7 @@ describe('Attachment Tab Isolation', () => {
       filename: 'file1.txt',
       size: 100,
       mime_type: 'text/plain',
+      attachment_type: 'file_reference' as const,
       url: '/attachments/att-1',
     }
 

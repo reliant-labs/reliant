@@ -95,12 +95,15 @@ func TestWorkflowSideSave_LoopNodeSaveErrorFailsRun(t *testing.T) {
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
-	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "WorkflowError", "EmitToolCallStatus", "Cleanup"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	for _, name := range []string{"WorkflowStatus", "WorkflowError", "EmitToolCallStatus", "Cleanup"} {
 		env.RegisterActivityWithOptions(
 			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 				return map[string]interface{}{"success": true}, nil

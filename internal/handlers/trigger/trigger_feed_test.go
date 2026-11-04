@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -222,6 +223,7 @@ func (c *triggerQueryCounter) RecentTriggerFirings(ctx context.Context, userID s
 }
 
 func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -317,6 +319,7 @@ func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
 }
 
 func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -328,6 +331,7 @@ func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
 }
 
 func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)

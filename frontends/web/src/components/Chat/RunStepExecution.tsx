@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useRef, useEffect } from "react";
 import {
   ChevronDown,
@@ -13,7 +13,8 @@ import {
   Folder,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { LightweightCodeViewer } from "./LightweightCodeViewer";
 import type { RunOutputUpdate } from "../../types/streaming";
 
@@ -178,7 +179,7 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
                 <span className="text-xs font-mono text-muted-foreground">
                   {runOutput.output.length.toLocaleString()} chars
                 </span>
-                <Tooltip content="Expand in modal" placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content="Expand in modal" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -234,7 +235,9 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
 
       {/* Modal for expanded view */}
       <Modal
-        isOpen={showModal}
+        size="xl"
+        open={showModal}
+        fallbackFocus={focusChatInput}
         onClose={() => setShowModal(false)}
         title={`Run: ${formatCommand(runOutput.command)} - ${getStatusText()}`}
       >

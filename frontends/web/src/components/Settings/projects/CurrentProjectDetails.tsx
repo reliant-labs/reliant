@@ -1,13 +1,12 @@
 import { useEffect, useMemo, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Card from "@/components/forge-ui/card";
 import Status from "@/components/forge-ui/status";
-import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
-import { projectGrpc } from "@/api/project-grpc";
+import Button from "@/components/forge-ui/button";
+import Tooltip from "@/components/forge-ui/tooltip";
+import { useProjectGitInfo, type ProjectGitInfo } from "@/hooks/project-queries";
 import { useChatList } from "@/hooks/chat-queries";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
@@ -21,6 +20,7 @@ import { useWorktreeStore } from "@/store/worktreeStore";
 import type { Chat } from "@/types/chat";
 
 import { describeRemote } from "./projectSource";
+import { resolveWorktree, useWorktreeList } from "../../../hooks/worktree-queries";
 
 /**
  * The current project at a glance: its repository state, how many workspaces
@@ -47,10 +47,6 @@ export interface CurrentProjectDetailsProps {
 const RECENT_CHAT_LIMIT = 5;
 const SECTION_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
-export function gitInfoQueryKey(projectId: string) {
-  return ["projects", projectId, "git-info"] as const;
-}
-
 export function CurrentProjectDetails({
   project,
   onChatOpened,
@@ -59,10 +55,7 @@ export function CurrentProjectDetails({
   className,
 }: CurrentProjectDetailsProps) {
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const hasMoreWorkspaces = useWorktreeStore((state) => state.nextPageToken !== "");
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
+  const { worktrees, hasMore: hasMoreWorkspaces } = useWorktreeList(project.id);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
@@ -70,17 +63,10 @@ export function CurrentProjectDetails({
 
   useEffect(() => {
     void refreshCurrentProject();
-    void loadWorktrees(project.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh once per project, not per store identity
   }, [project.id]);
 
-  const gitInfo = useQuery({
-    queryKey: gitInfoQueryKey(project.id),
-    queryFn: () => projectGrpc.getGitInfo(project.id),
-    enabled: project.is_git_repo,
-    staleTime: 10_000,
-    retry: false,
-  });
+  const gitInfo = useProjectGitInfo(project);
 
   const activeWorkspaceCount = useMemo(
     () => worktrees.filter((w) => !w.is_main && !w.deleted_at && (!w.project_id || w.project_id === project.id)).length,
@@ -154,7 +140,7 @@ export function CurrentProjectDetails({
               Repository
             </h3>
             {project.is_git_repo && (
-              <Tooltip content="Refresh git status" placement="left" delay={300}>
+              <Tooltip content="Refresh git status" side="left" delay={300}>
                 <button
                   type="button"
                   aria-label="Refresh git status"
@@ -192,7 +178,7 @@ export function CurrentProjectDetails({
                   <button
                     type="button"
                     onClick={onManageWorkspaces}
-                    className="rounded-sm text-xs text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-sm text-xs text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Manage
                   </button>
@@ -249,16 +235,16 @@ interface GitFactsProps {
   project: Project;
   loading: boolean;
   failed: boolean;
-  info: Awaited<ReturnType<typeof projectGrpc.getGitInfo>> | undefined;
+  info: ProjectGitInfo | undefined;
 }
 
 function GitFacts({ project, loading, failed, info }: GitFactsProps) {
-  const remoteUrl = info?.remote_url || project.remote_url;
+  const remoteUrl = info?.remoteUrl || project.remote_url;
   const remote = remoteUrl ? describeRemote(remoteUrl) : null;
 
-  const branch = info?.current_branch || (loading || failed ? project.default_branch : undefined);
+  const branch = info?.currentBranch || (loading || failed ? project.default_branch : undefined);
   const changeCount = info
-    ? (info.staged_files?.length ?? 0) + (info.unstaged_files?.length ?? 0) + (info.untracked_files?.length ?? 0)
+    ? info.stagedFiles.length + info.unstagedFiles.length + info.untrackedFiles.length
     : 0;
 
   return (
@@ -299,7 +285,7 @@ function GitFacts({ project, loading, failed, info }: GitFactsProps) {
               href={remote.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-1 rounded-sm font-mono text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex max-w-full items-center gap-1 rounded-sm font-mono text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="truncate">{remote.repo}</span>
               <ExternalLink className="h-3 w-3 flex-shrink-0" aria-hidden="true" />

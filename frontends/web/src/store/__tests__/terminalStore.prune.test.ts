@@ -8,9 +8,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../api/terminal-grpc", () => ({
-  terminalApi: { closeSession: vi.fn(() => Promise.resolve({ success: true, message: "" })) },
-}));
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
@@ -21,6 +20,9 @@ vi.mock("../workspaceStateStore", () => ({
 import { useTerminalStore } from "../terminalStore";
 
 beforeEach(() => {
+  setTransport(
+    mockTransport({ "TerminalService.CloseSession": { response: { success: true, message: "" } } }),
+  );
   useTerminalStore.setState({ sessions: [], activeSessionId: null, activeSessionPerWorktree: {} });
   localStorage.clear();
 });

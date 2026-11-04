@@ -14,8 +14,8 @@ import { useId, useState } from "react";
 import { BellOff, Plus, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useAlertingMutation, useSilences } from "@/hooks/observability-queries";
 import type { CreateSilenceInput, Matcher, Silence } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
@@ -25,7 +25,7 @@ import { formatAgo, formatWhen } from "./format";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 
 const FIELD =
-  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** The label the server scopes every silence by; shown, never editable. */
 const ORG_MATCHER = "reliant_org_id";
@@ -64,7 +64,7 @@ export function AlertSilences({ orgId, readOnly, onDenied }: { orgId: string; re
         <Button variant="primary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} disabled={readOnly} onClick={() => setCreating(true)} data-testid="obs-silence-new">
           New silence
         </Button>
-        <label className="inline-flex items-center gap-2 text-xs text-foreground">
+        <label className="inline-flex items-center gap-2 text-xs text-ink">
           <input
             type="checkbox"
             checked={includeExpired}
@@ -75,17 +75,17 @@ export function AlertSilences({ orgId, readOnly, onDenied }: { orgId: string; re
           Show expired
         </label>
         {expireError && (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-xs text-danger-ink">
             {expireError}
           </p>
         )}
       </div>
       {list.length === 0 ? (
-        <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5" role="status" data-testid="obs-silences-none">
-          <BellOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5" role="status" data-testid="obs-silences-none">
+          <BellOff className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">No {includeExpired ? "" : "active "}silences</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm font-medium text-ink">No {includeExpired ? "" : "active "}silences</p>
+            <p className="text-xs text-ink-muted">
               Silence an alert during planned work so it stops notifying. Every silence ends on its own at the time you set, and only ever
               applies to this organization.
             </p>
@@ -127,22 +127,22 @@ function SilenceRow({ silence, readOnly, expiring, onExpire }: { silence: Silenc
           <span
             className={cn(
               "rounded px-1.5 py-px text-2xs font-medium uppercase tracking-wide ring-1 ring-inset",
-              silence.state === "active" ? "bg-primary/10 text-primary ring-primary/30" : "text-muted-foreground ring-border"
+              silence.state === "active" ? "bg-primary/10 text-primary-ink ring-primary/30" : "text-ink-muted ring-border"
             )}
           >
             {silence.state}
           </span>
           {own.map((m, i) => (
-            <code key={i} className="rounded bg-background px-1.5 py-px font-mono text-2xs text-foreground ring-1 ring-inset ring-border/60">
+            <code key={i} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-2xs text-ink ring-1 ring-inset ring-border/60">
               {matcherText(m)}
             </code>
           ))}
-          <span className="rounded px-1.5 py-px text-2xs text-muted-foreground ring-1 ring-inset ring-border/60" title={`${ORG_MATCHER}, added by Reliant`}>
+          <span className="rounded px-1.5 py-px text-2xs text-ink-muted ring-1 ring-inset ring-border/60" title={`${ORG_MATCHER}, added by Reliant`}>
             this organization only
           </span>
         </div>
-        <p className="text-sm text-foreground">{silence.comment}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-ink">{silence.comment}</p>
+        <p className="text-xs text-ink-muted">
           {silence.state === "expired"
             ? `Ended ${formatAgo(silence.endsAtMs, now)}`
             : silence.state === "pending"
@@ -222,14 +222,14 @@ export function SilenceDialog({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={title} size="lg">
+    <Modal open onClose={onClose} title={title} size="lg">
       <div className="space-y-4" data-testid="obs-silence-dialog">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           Matching alerts keep being evaluated and recorded; they stop notifying until the silence ends. It applies to this organization
           only.
         </p>
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium text-foreground">Matchers</legend>
+          <legend className="text-sm font-medium text-ink">Matchers</legend>
           {matchers.map((m, i) => (
             <div key={i} className="grid grid-cols-[1fr_auto_1.4fr_auto] items-center gap-2" data-testid="obs-silence-matcher">
               <input aria-label={`Matcher ${i + 1} label`} value={m.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="alertname" className={cn(FIELD, "font-mono")} />
@@ -250,7 +250,7 @@ export function SilenceDialog({
                 type="button"
                 aria-label={`Remove matcher ${i + 1}`}
                 onClick={() => setMatchers((prev) => prev.filter((_, j) => j !== i))}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded p-1.5 text-ink-muted hover:bg-ink/5 hover:text-danger-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -267,7 +267,7 @@ export function SilenceDialog({
         </fieldset>
         <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
           <div>
-            <label htmlFor={durationId} className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label htmlFor={durationId} className="mb-1 block text-xs font-medium text-ink-muted">
               For
             </label>
             <select id={durationId} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className={FIELD} data-testid="obs-silence-duration">
@@ -279,14 +279,14 @@ export function SilenceDialog({
             </select>
           </div>
           <div>
-            <label htmlFor={commentId} className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label htmlFor={commentId} className="mb-1 block text-xs font-medium text-ink-muted">
               Why
             </label>
             <input id={commentId} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Database maintenance until 14:00" className={FIELD} data-testid="obs-silence-comment" />
           </div>
         </div>
         {problems.length > 0 && (
-          <ul role="alert" className="space-y-0.5 rounded-md border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive" data-testid="obs-silence-problems">
+          <ul role="alert" className="space-y-0.5 rounded-md border border-danger-border bg-surface-sunken px-3 py-2 text-xs text-danger-ink" data-testid="obs-silence-problems">
             {problems.map((p) => (
               <li key={p}>{p}</li>
             ))}

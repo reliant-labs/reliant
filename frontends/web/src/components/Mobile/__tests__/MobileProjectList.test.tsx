@@ -1,12 +1,17 @@
 /**
- * `/m/projects` — the project switcher. Pins that selecting a project calls
- * `selectProject` (not some local re-implementation) and returns to the chat
- * list, and that the current project is marked without needing a round trip.
+ * `/m/projects` — the chat list's project filter. Pins that a row sets the
+ * filter through `setProjectFilter` (not a local re-implementation) and
+ * returns to the chat list, that "All projects" is a choice of its own, and
+ * that the active scope is marked without a round trip.
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { seedProjects, type ProjectFixture } from "@/test/projectList";
+import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 const navigate = vi.fn();
 
@@ -14,110 +19,121 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-const loadProjects = vi.fn();
-const selectProject = vi.fn(() => Promise.resolve());
-
-interface StoreState {
-  projects: Array<{
-    id: string;
-    name: string;
-    path: string;
-    worktree_count?: number;
-    last_active?: string;
-  }>;
-  currentProject: { id: string; name: string; path: string } | null;
-  isLoading: boolean;
-  loadProjects: typeof loadProjects;
-  selectProject: typeof selectProject;
-}
-
-let storeState: StoreState;
+const setProjectFilter = vi.fn((_scope: string | null, _options?: unknown) => Promise.resolve());
 
 vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) => selector(storeState),
+  useProjectStore: (selector: (s: unknown) => unknown) => selector({ setProjectFilter }),
 }));
+
+// The project list (ListProjects, read through useProjects).
+let projects: ProjectFixture[];
+
+function renderList() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  seedProjects(client, projects);
+  return render(
+    <QueryClientProvider client={client}>
+      <MobileProjectList />
+    </QueryClientProvider>,
+  );
+}
 
 const { MobileProjectList } = await import("../MobileProjectList");
 
+const rowOf = (text: string) => screen.getByText(text).closest("button")!;
+const isChecked = (row: HTMLElement) => row.querySelector("svg.lucide-check") !== null;
+
 beforeEach(() => {
   navigate.mockReset();
-  loadProjects.mockReset();
-  selectProject.mockClear();
-  storeState = {
-    projects: [
-      {
-        id: "p1",
-        name: "reliant",
-        path: "/home/user/reliant",
-        worktree_count: 3,
-        last_active: new Date(Date.now() - 3600_000).toISOString(),
-      },
-      { id: "p2", name: "forge", path: "/home/user/forge" },
-    ],
-    currentProject: { id: "p1", name: "reliant", path: "/home/user/reliant" },
-    isLoading: false,
-    loadProjects,
-    selectProject,
-  };
+  setProjectFilter.mockClear();
+  projects = [
+    {
+      id: "p1",
+      name: "reliant",
+      path: "/home/user/reliant",
+      last_active: new Date(Date.now() - 3600_000).toISOString(),
+    },
+    { id: "p2", name: "forge", path: "/home/workspace/projects/forge" },
+  ];
+  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
 });
 
 describe("MobileProjectList", () => {
-  it("marks the current project with a check mark, not the other one", () => {
-    render(<MobileProjectList />);
-    const reliantRow = screen.getByText("reliant").closest("button")!;
-    const forgeRow = screen.getByText("forge").closest("button")!;
-    expect(reliantRow.querySelector("svg.lucide-check")).not.toBeNull();
-    expect(forgeRow.querySelector("svg.lucide-check")).toBeNull();
+  it("marks the filtered project with a check mark, not the others", () => {
+    renderList();
+    expect(isChecked(rowOf("reliant"))).toBe(true);
+    expect(isChecked(rowOf("forge"))).toBe(false);
+    expect(isChecked(rowOf("All projects"))).toBe(false);
   });
 
-  it("lists every project", () => {
-    render(<MobileProjectList />);
-    expect(screen.getByText("reliant")).toBeInTheDocument();
-    expect(screen.getByText("forge")).toBeInTheDocument();
+  it("marks All projects when there is no filter", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+    renderList();
+    expect(isChecked(rowOf("All projects"))).toBe(true);
   });
 
-  it("selects a different project and navigates back to the chat list", async () => {
+  it("filters to a different project and navigates back to the chat list", async () => {
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
     await user.click(screen.getByText("forge"));
 
-    expect(selectProject).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "p2", name: "forge" }),
-    );
+    expect(setProjectFilter).toHaveBeenCalledWith("p2", { restoreWorkspace: false });
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("navigating back without selecting doesn't call selectProject", async () => {
+  // The freeze: the switch used to be awaited before navigating, behind a row
+  // spinner, so every serial RPC it made (chats, worktree, main worktree, the
+  // remembered chat) — none with a timeout — held the user on this screen. A
+  // switch that never settles must still take the user to the chat list.
+  it("navigates without waiting for the switch to finish", async () => {
+    setProjectFilter.mockImplementationOnce(() => new Promise<void>(() => {}));
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
-    await user.click(screen.getByRole("button", { name: "Back to chats" }));
+    await user.click(screen.getByText("forge"));
 
-    expect(selectProject).not.toHaveBeenCalled();
+    expect(setProjectFilter).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
+    // No row is left disabled behind a pending switch.
+    expect(rowOf("forge")).not.toBeDisabled();
+  });
+
+  it("shows every project with All projects", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByText("All projects"));
+
+    expect(setProjectFilter).toHaveBeenCalledWith(null, { restoreWorkspace: false });
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("tapping the already-current project just navigates back", async () => {
+  it("tapping the active scope just navigates back", async () => {
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
     await user.click(screen.getByText("reliant"));
 
-    expect(selectProject).not.toHaveBeenCalled();
+    expect(setProjectFilter).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("shows workspace count and last-active for a project that has them", () => {
-    render(<MobileProjectList />);
-    expect(screen.getByText(/3 workspaces/)).toBeInTheDocument();
-    expect(screen.getByText(/active 1h ago/i)).toBeInTheDocument();
+  it("navigating back without choosing changes nothing", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByRole("button", { name: "Back to chats" }));
+
+    expect(setProjectFilter).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("omits the metadata line entirely for a project with none of it", () => {
-    render(<MobileProjectList />);
-    const forgeRow = screen.getByText("forge").closest("button")!;
-    expect(forgeRow.textContent).not.toMatch(/workspace/);
-    expect(forgeRow.textContent).not.toMatch(/active/i);
+  it("hides a cloud machine's checkout path, and shows last-active when there is one", () => {
+    renderList();
+    expect(screen.getByText("/home/user/reliant")).toBeInTheDocument();
+    expect(rowOf("forge").textContent).not.toContain("/home/workspace");
+    expect(screen.getByText(/active 1h ago/i)).toBeInTheDocument();
+    expect(rowOf("forge").textContent).not.toMatch(/active/i);
   });
 });

@@ -6,13 +6,18 @@
  * own bundle knew what it was the whole time.
  */
 
-import { render, screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
+
+// The server's Version RPC, answered through the real transport seam.
 const version = vi.fn();
-vi.mock("../../../api/system-grpc", () => ({
-  systemGrpc: { version: () => version() },
-}));
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "SystemService.Version": () => version() }),
+  });
 const appBuild = vi.fn();
 vi.mock("../../../lib/appBuild", () => ({ appBuild: () => appBuild() }));
 
@@ -53,7 +58,9 @@ describe("VersionDetails", () => {
 
     expect(screen.getByTestId("about-app-version")).toHaveTextContent("v1.8.1");
     expect(screen.getByTestId("about-server-version")).toHaveTextContent("…");
-    expect(await screen.findByTestId("about-server-version")).toHaveTextContent("v1.8.1");
+    await waitFor(() =>
+      expect(screen.getByTestId("about-server-version")).toHaveTextContent("v1.8.1"),
+    );
     // No forge release outside one (the desktop app): no empty row.
     expect(screen.queryByTestId("about-release")).not.toBeInTheDocument();
   });

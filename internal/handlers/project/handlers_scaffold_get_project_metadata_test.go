@@ -30,7 +30,7 @@ func TestGetProjectMetadata_Generated(t *testing.T) {
 			Ctx:  project.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectMetadataResponse]) {
 				m := resp.Msg
-				if m.GetProjectId() != "p-1" || m.GetName() != "proj" || m.GetPath() != "/work" || !m.GetIsGitRepo() || m.GetDefaultBranch() != "main" {
+				if m.GetProjectId() != "p-1" || m.GetName() != "proj" || m.GetPath() != creatorPath || !m.GetIsGitRepo() || m.GetDefaultBranch() != "main" {
 					t.Fatalf("metadata = %v, want p-1's", m)
 				}
 			},

@@ -4,7 +4,10 @@
 // link-local and cloud-metadata addresses, in two forms: Policy (URL/host
 // checks plus a dial-time Control hook, for user-supplied endpoint URLs) and
 // Guard (a dialer that vets resolved IPs, for integration/MCP HTTP clients).
-// It must not import os/exec.
+// Both decide with one predicate, IPBlocked, which delegates to forge's
+// netguard.Refused: the refused ranges, the IPv4 decoding of IPv6 transition
+// forms and the NAT64 refusal live there, not here. It must not import
+// os/exec.
 //
 // Guard.DialContext dials, so forge's exclusion gate reads the package as an
 // outbound boundary. It is a dialer primitive instead: the DialContext of the
@@ -27,12 +30,39 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	forgenetguard "github.com/reliant-labs/forge/pkg/netguard"
 )
 
 // ErrBlockedAddress is returned (wrapped) when a destination is refused by
 // policy. Callers show it to the user as-is; it never mentions internals
 // beyond the address the user themselves typed.
 var ErrBlockedAddress = errors.New("address is not allowed")
+
+// IPBlocked reports whether ip is not a routable public unicast address: the
+// one predicate behind both Policy and Guard, so the two cannot disagree. It
+// is forge's netguard.Refused, so it refuses the IPv4 addresses hidden inside
+// IPv6 transition forms, the Private Google Access VIPs, and the NAT64
+// well-known prefix whole. A nil or malformed ip is blocked.
+func IPBlocked(ip net.IP) bool {
+	_, refused := forgenetguard.Refused(addrOf(ip))
+	return refused
+}
+
+// addrOf converts ip to a netip.Addr; a nil or malformed ip becomes the zero
+// Addr, which forge's netguard refuses.
+func addrOf(ip net.IP) netip.Addr {
+	addr, _ := netip.AddrFromSlice(ip)
+	return addr
+}
+
+// loopbackOnly admits loopback and nothing else of the refused set. The
+// exception applies to the address itself, so a transition address that merely
+// embeds loopback stays refused.
+var loopbackOnly = forgenetguard.Policy{Allow: []netip.Prefix{
+	netip.MustParsePrefix("127.0.0.0/8"),
+	netip.MustParsePrefix("::1/128"),
+}}
 
 // Policy decides which network destinations a user-supplied URL may reach.
 //
@@ -51,17 +81,17 @@ type Policy struct {
 	LookupIP func(ctx context.Context, host string) ([]net.IP, error)
 }
 
-// ForDeployment is the policy for user-supplied model endpoint URLs, chosen
-// from the deployment kind. controlPlaneURL is the configured control plane
-// (ControlPlaneConfig, "" when self-hosted):
-// the same signal that makes the token authority choose its store. A
-// configured control plane means a HOSTED, multi-tenant deployment, where the
-// shared worker must not be pointed at its own network. None means a
-// self-hosted deployment on the user's own machine or network, where localhost
-// and LAN addresses are exactly what they mean. One signal, not a second flag,
-// so a hosted deployment cannot ship open by forgetting to set it.
-func ForDeployment(controlPlaneURL string) Policy {
-	return Policy{AllowPrivate: controlPlaneURL == ""}
+// ForDeployment is the policy for the user-steerable dials of a server role
+// (`reliant server api|worker|gateway`): fetch, websearch, sourcegraph and
+// user-supplied model endpoints. It fails CLOSED. A server role dials from a
+// shared process that sits next to databases, brokers and a cloud metadata
+// service, so private, loopback, link-local and metadata targets are refused
+// unless the operator explicitly opted a self-hosted deployment in
+// (ServerProcessConfig.network.allow_private_egress). Nothing else may imply
+// it: in particular a missing control-plane URL, which is how a
+// misconfigured hosted deployment looks, is not a reason to open the network.
+func ForDeployment(allowPrivateEgress bool) Policy {
+	return Policy{AllowPrivate: allowPrivateEgress}
 }
 
 func (p Policy) lookup(ctx context.Context, host string) ([]net.IP, error) {
@@ -71,51 +101,12 @@ func (p Policy) lookup(ctx context.Context, host string) ([]net.IP, error) {
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
 }
 
-var blockedPrefixes = mustPrefixes(
-	"0.0.0.0/8",      // "this network"
-	"10.0.0.0/8",     // RFC 1918
-	"100.64.0.0/10",  // CGNAT / shared address space (Tailscale lives here)
-	"127.0.0.0/8",    // loopback
-	"169.254.0.0/16", // link-local, incl. the 169.254.169.254 metadata service
-	"172.16.0.0/12",  // RFC 1918
-	"192.0.0.0/24",   // IETF protocol assignments
-	"192.168.0.0/16", // RFC 1918
-	"198.18.0.0/15",  // benchmarking
-	"224.0.0.0/4",    // multicast
-	"240.0.0.0/4",    // reserved
-	"::/128",         // unspecified
-	"::1/128",        // loopback
-	"fc00::/7",       // unique local, incl. fd00:ec2::254 (AWS IMDS over IPv6)
-	"fe80::/10",      // link-local
-	"ff00::/8",       // multicast
-)
-
-func mustPrefixes(cidrs ...string) []netip.Prefix {
-	out := make([]netip.Prefix, len(cidrs))
-	for i, c := range cidrs {
-		out[i] = netip.MustParsePrefix(c)
-	}
-	return out
-}
-
 // IPAllowed reports whether ip may be dialed under p.
 func (p Policy) IPAllowed(ip net.IP) bool {
 	if p.AllowPrivate {
 		return true
 	}
-	addr, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return false
-	}
-	// ::ffff:10.0.0.1 is 10.0.0.1; checking the mapped form against v4
-	// prefixes would miss it.
-	addr = addr.Unmap()
-	for _, prefix := range blockedPrefixes {
-		if prefix.Contains(addr) {
-			return false
-		}
-	}
-	return true
+	return !IPBlocked(ip)
 }
 
 func blocked(host string, ip net.IP) error {
@@ -202,48 +193,6 @@ func (p Policy) Transport() *http.Transport {
 	}
 }
 
-var blockedNets = mustCIDRs(
-	"0.0.0.0/8",     // "this" network
-	"100.64.0.0/10", // carrier-grade NAT
-	"192.0.0.0/24",  // IETF protocol assignments
-	"198.18.0.0/15", // benchmarking
-	"240.0.0.0/4",   // reserved
-	"64:ff9b::/96",  // NAT64
-	"fc00::/7",      // unique local
-)
-
-func mustCIDRs(cidrs ...string) []*net.IPNet {
-	out := make([]*net.IPNet, 0, len(cidrs))
-	for _, c := range cidrs {
-		_, n, err := net.ParseCIDR(c)
-		if err != nil {
-			panic(err)
-		}
-		out = append(out, n)
-	}
-	return out
-}
-
-// IPBlocked reports whether ip is not a routable public address.
-func IPBlocked(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
-		return true
-	}
-	for _, n := range blockedNets {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
 // Guard dials only public addresses.
 type Guard struct {
 	// AllowLoopback permits 127.0.0.0/8 and ::1. For tests that talk to httptest servers only.
@@ -266,8 +215,9 @@ func New() *Guard {
 }
 
 func (g *Guard) blocked(ip net.IP) bool {
-	if g.AllowLoopback && ip.IsLoopback() {
-		return false
+	if g.AllowLoopback {
+		_, refused := loopbackOnly.Refused(addrOf(ip))
+		return refused
 	}
 	return IPBlocked(ip)
 }

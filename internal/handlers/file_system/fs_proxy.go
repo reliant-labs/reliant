@@ -19,12 +19,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -63,18 +63,46 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 // Every client reaches these RPCs with a project id (frontends/web/src/api/fileSystem.ts
 // returns early when there is no current project), so nothing legitimate
 // depended on the passthrough.
-func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
+//
+// The base is a branch worktree's path, or else the project's main checkout ON
+// THE MACHINE the request runs on (target): projects.path is the creating
+// machine's path. A machine with no checkout is projectcheckout's refusal,
+// whose ProjectCheckoutMissing detail the Files tab renders with its action.
+//
+// resolvedOn is the machine the main checkout was resolved on, so a request
+// left to default resolution is pinned to the machine whose path it carries;
+// "" when a branch worktree scoped it.
+func (s *Service) requireProjectBase(ctx context.Context, userID, projectID string, worktreeID *string, chatID *string, target machinewake.Target) (basePath, resolvedOn string, err error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
+		return "", "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
 	}
-	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
+	mainCheckout := func(ctx context.Context) (string, error) {
+		project, err := s.deps.Repo.GetProject(ctx, projectID)
+		if err != nil {
+			return "", err
+		}
+		// A request left to default resolution is resolved on the machine
+		// that resolution names, so the path is that machine's checkout.
+		machine := target.DaemonID
+		if machine == "" && !target.NoMachine && s.deps.Router != nil {
+			machine, _ = s.deps.Router.ResolveDaemonID(ctx, userID)
+		}
+		machines, _ := s.deps.Router.(daemonplacement.Machines)
+		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, machine, "browse its files")
+		if err != nil {
+			return "", err
+		}
+		resolvedOn = checkout.DaemonID
+		return checkout.Path, nil
+	}
+	basePath, err = filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID, mainCheckout)
 	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
+		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
 	if strings.TrimSpace(basePath) == "" {
-		return "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
+		return "", "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
 	}
-	return basePath, nil
+	return basePath, resolvedOn, nil
 }
 
 // workspaceScope is where a workspace-scoped request acts: the directory it
@@ -92,13 +120,19 @@ type workspaceScope struct {
 // here, so a file tree, a preview and a save of the same file cannot land on
 // different machines.
 func (s *Service) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
-	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
-	if err != nil {
-		return workspaceScope{}, err
-	}
 	target, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
 	if err != nil {
 		return workspaceScope{}, err
+	}
+	basePath, resolvedOn, err := s.requireProjectBase(ctx, userID, projectID, worktreeID, chatID, target)
+	if err != nil {
+		return workspaceScope{}, err
+	}
+	if target.DaemonID == "" && !target.NoMachine && resolvedOn != "" {
+		// The path is that machine's: every command of the request goes
+		// there, not to a second default resolution that could pick another
+		// (the tree, a preview and a delete all scope through here).
+		target.DaemonID = resolvedOn
 	}
 	return workspaceScope{basePath: basePath, target: target}, nil
 }
@@ -108,63 +142,29 @@ func (s *Service) resolveScope(ctx context.Context, userID, projectID string, wo
 // request was made for a chat that has no machine: such a request must never
 // wake one (see machinewake).
 //
-// The files exist on one machine. For a request made for a chat (chat_id) it
-// is the chat's machine: its pinned daemon, else its worktree's owner
-// (daemonplacement.ChatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
-// Files tab and the preview must show the files the chat's tools read and
-// write. Default resolution picks the user's default machine instead, which is
-// the wrong disk for any chat on another machine, main checkout included.
-//
-// A request that names a worktree some machine owns, other than the chat's
-// own, is about that worktree, and goes to its owner: no other machine has the
-// checkout. Without a chat, an owned worktree goes to its owner too. Anything
-// else (the main checkout, legacy rows that record no owner) keeps default
-// resolution.
+// The files exist on one machine, and daemonplacement.WorkspaceDaemon names
+// it: an owned worktree's owner, else the chat's machine (the precedence
+// ExecuteTools routes the chat's tools by), else default resolution. The Files
+// tab, the preview and the terminal share that one rule, so they cannot show
+// two different disks.
 func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
-	var worktree *db.Worktree
-	if worktreeID != nil && *worktreeID != "" {
-		wt, err := s.deps.Repo.GetWorktree(ctx, *worktreeID)
-		switch {
-		case errors.Is(err, core.ErrWorktreeNotFound):
-			// A missing row means "no owner", as it does for tool routing.
-		case err != nil:
-			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
-		default:
-			worktree = wt
-		}
-	}
-	owner := daemonplacement.WorktreeOwner(worktree)
-
-	if chatID == nil || *chatID == "" {
-		return machinewake.Target{DaemonID: owner}, nil
-	}
-	chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, projectID, deref(worktreeID), deref(chatID))
 	switch {
-	case errors.Is(err, core.ErrChatNotFound):
-		// The UI can still name a chat it has just deleted. Degrade to the
-		// routing a request without a chat gets rather than fail the tree.
-		return machinewake.Target{DaemonID: owner}, nil
-	case err != nil:
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	case chat.UserID != userID:
+	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")
-	case chat.ProjectID != projectID:
-		// A chat from another project says nothing about this project's
-		// files. It is stale UI context (a project switch racing the tree),
-		// and ResolveBasePath ignores it the same way.
-		return machinewake.Target{DaemonID: owner}, nil
+	case errors.Is(err, daemonplacement.ErrForeignWorkspace):
+		return machinewake.Target{}, svcerr.NotFound("worktree")
+	case err != nil:
+		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
-	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
-		return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return machinewake.Target{DaemonID: ws.DaemonID, NoMachine: ws.NoMachine}, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
 	}
-	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
-	if err != nil {
-		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
-	}
-	if daemonID != "" {
-		return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
-	}
-	return machinewake.Target{DaemonID: owner, NoMachine: chat.NoMachine}, nil
+	return *s
 }
 
 // resolve turns a client path into the absolute, confined path the daemon
@@ -172,9 +172,10 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 //
 // The "" | "/" == workspace root rule and the confinement check are NOT
 // reimplemented here: both come from filepreview.ValidatePathScoped via
-// validateWorkspacePath. ScopeBaseOnly is deliberate — this service serves a
-// user whose files live on a remote daemon, so an absolute path outside the
-// workspace is refused rather than honoured.
+// validateWorkspacePath. ScopeBaseOnly is deliberate — every rpc that lists,
+// writes, creates, deletes, copies or searches stays inside the workspace, so
+// an absolute path outside it is refused rather than honoured. The read-only
+// viewer rpcs use resolveForView instead.
 //
 // The returned path is always absolute, so "" and "/" never cross the wire to
 // the daemon.
@@ -185,6 +186,55 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 // refused traversal as a missing file.
 func (w workspaceScope) resolve(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeBaseOnly)
+}
+
+// resolveForView is resolve for the read-only viewer rpcs (GetFileContent,
+// GetFileMetadata, GetFilePreviewInfo, GetFilePreview): it also honours an
+// absolute path outside the workspace.
+//
+// The daemon those rpcs reach is the requesting user's own machine (or cloud
+// machine), whose files their agents already read with a shell, so viewing a
+// file they named there grants nothing new — and a path an agent mentioned
+// outside the workspace (a sibling repo, the module cache, ~/.config) is
+// exactly what the viewer is asked to open. A RELATIVE path that climbs out
+// of the workspace is still refused: it is resolved against a base the user
+// did not choose, so escaping it can only be a traversal.
+//
+// What the viewer never opens is a credential store (~/.ssh, ~/.aws, browser
+// profiles, …), wherever a path or its symlinks lead. Only the daemon can
+// resolve links on its disk, so each viewer rpc sends the workspace root as
+// "viewer_root" and the daemon refuses the read (daemonpolicy.DenyViewerRead);
+// fsProxyDaemonError reports that as PermissionDenied.
+func (w workspaceScope) resolveForView(requestedPath string) (string, error) {
+	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeAllowAbsolute)
+}
+
+// requireViewerGuard refuses to show a file outside the workspace unless the
+// daemon's reply says it applied the credential guard (viewer_guarded, which
+// cmd_fs.go sets on every reply to a viewer_root request).
+//
+// A daemon from before the guard ignores viewer_root and would return
+// ~/.ssh/id_rsa like any other file, so a server deploy alone protects
+// nobody whose machine has not updated. Until it updates, such a daemon may
+// show files of the workspace only (a symlink in the project to a store still
+// leaks there, which is what updating fixes), and an absolute path outside it
+// is FailedPrecondition, naming the fix. The warning below is how adoption is
+// verified after a release: it counts, per daemon, the viewer reads an
+// outdated daemon was refused, and falls to zero once every active machine
+// runs a daemon with the guard.
+func (w workspaceScope) requireViewerGuard(ctx context.Context, resolvedPath string, guarded bool) error {
+	if guarded || insideWorkspace(w.basePath, resolvedPath) {
+		return nil
+	}
+	logging.WarnContext(ctx, "[FSProxy] refused a viewer read outside the workspace: the daemon predates the credential guard",
+		"daemon_id", w.target.DaemonID, "path", resolvedPath)
+	return svcerr.FailedPrecondition("this machine's daemon is out of date: update it to view files outside the workspace")
+}
+
+// insideWorkspace reports whether resolvedPath lies at or beneath basePath.
+func insideWorkspace(basePath, resolvedPath string) bool {
+	rel, err := filepath.Rel(filepath.Clean(basePath), filepath.Clean(resolvedPath))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // validateWorkspacePath is the single place this package applies the shared
@@ -306,6 +356,12 @@ func fsProxyDaemonError(commandType string, err error) error {
 			text = "path not found on this machine"
 		}
 		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, text), err)
+	}
+	// A credential store the daemon refused to open (DenyViewerRead,
+	// DenyCredentialFile) is a refusal, not a server failure.
+	if reported && (strings.Contains(text, daemonpolicy.ErrViewerCredential.Error()) ||
+		strings.Contains(text, daemonpolicy.ErrCredentialFile.Error())) {
+		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrPermissionDenied, text), err)
 	}
 	msg := "daemon command " + commandType + " failed"
 	if reported {
@@ -439,22 +495,27 @@ func (s *Service) GetFileContent(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	cmdReq := map[string]any{
-		"path": resolvedPath,
+		"path":        resolvedPath,
+		"viewer_root": scope.basePath,
 	}
 
 	var cmdResp struct {
-		Content    string `json:"content"`
-		TotalLines int    `json:"total_lines"`
-		Truncated  bool   `json:"truncated"`
-		Size       int64  `json:"size"`
+		Content       string `json:"content"`
+		TotalLines    int    `json:"total_lines"`
+		Truncated     bool   `json:"truncated"`
+		Size          int64  `json:"size"`
+		ViewerGuarded bool   `json:"viewer_guarded"`
 	}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -515,13 +576,14 @@ func (s *Service) GetFileMetadata(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	cmdReq := map[string]any{
-		"path": resolvedPath,
+		"path":        resolvedPath,
+		"viewer_root": scope.basePath,
 	}
 
 	var cmdResp struct {
@@ -530,8 +592,13 @@ func (s *Service) GetFileMetadata(
 		ModTime time.Time `json:"mod_time"`
 		IsDir   bool      `json:"is_dir"`
 		Mode    string    `json:"mode"`
+
+		ViewerGuarded bool `json:"viewer_guarded"`
 	}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 
@@ -570,12 +637,12 @@ func (s *Service) GetFilePreviewInfo(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	info, err := s.previewInfo(ctx, userID, scope.target, resolvedPath, req.Msg.Path)
+	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -606,22 +673,28 @@ type fsProxyPreviewInfo struct {
 	MIMEType   string `json:"mime_type"`
 	IsBinary   bool   `json:"is_binary"`
 	IsEditable bool   `json:"is_editable"`
+
+	ViewerGuarded bool `json:"viewer_guarded"`
 }
 
 // previewInfo asks the machine holding resolvedPath to stat and classify it.
 // requestedPath is the client's path, used only in the log line.
-func (s *Service) previewInfo(ctx context.Context, userID string, target machinewake.Target, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
+func (s *Service) previewInfo(ctx context.Context, userID string, scope workspaceScope, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
 	var info fsProxyPreviewInfo
-	if err := s.sendCommand(ctx, userID, target, "fs.preview_info", map[string]any{"path": resolvedPath}, &info, 30000); err != nil {
+	cmdReq := map[string]any{"path": resolvedPath, "viewer_root": scope.basePath}
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.preview_info", cmdReq, &info, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
-		// a typed FailedPrecondition so it stays out of ERROR logs / Sentry.
+		// a typed FailedPrecondition so it stays out of ERROR logs (and issues).
 		// The daemon-side error text is the contract
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {
 			logging.DebugContext(ctx, "[FSProxy] preview requested for a directory", "path", requestedPath)
 			return nil, svcerr.FailedPrecondition("path is a directory")
 		}
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, info.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	return &info, nil
@@ -664,12 +737,12 @@ func (s *Service) GetFilePreview(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	info, err := s.previewInfo(ctx, userID, scope.target, resolvedPath, req.Msg.Path)
+	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Msg.Path)
 	if err != nil {
 		if strings.Contains(err.Error(), "file not found") {
 			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("file not found: %s", req.Msg.Path))
@@ -686,14 +759,18 @@ func (s *Service) GetFilePreview(
 	}
 
 	var bin struct {
-		Data string `json:"data"`
+		Data          string `json:"data"`
+		ViewerGuarded bool   `json:"viewer_guarded"`
 	}
-	cmdReq := map[string]any{"path": resolvedPath, "max_bytes": maxFilePreviewBytes}
+	cmdReq := map[string]any{"path": resolvedPath, "max_bytes": maxFilePreviewBytes, "viewer_root": scope.basePath}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_binary_file", cmdReq, &bin, filePreviewTimeoutMs); err != nil {
 		// The file grew past the cap between the stat and the read.
 		if strings.Contains(err.Error(), "exceeds maximum of") {
 			return nil, filePreviewTooLarge(info.Size)
 		}
+		return nil, err
+	}
+	if err := scope.requireViewerGuard(ctx, resolvedPath, bin.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	content, err := base64.StdEncoding.DecodeString(bin.Data)

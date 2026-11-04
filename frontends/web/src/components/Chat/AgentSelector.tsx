@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Users, ChevronDown, Check, Workflow } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
-import { useWorkflows } from "../../store/globalDataStore";
+import Tooltip from "../forge-ui/tooltip";
+import { useWorkflows } from "../../hooks/workflow-queries";
 import { isRunnable } from "../workflow/workflowDraftStatus";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)
@@ -75,7 +75,7 @@ export function AgentSelector({
   return (
     <div className={`relative ${className}`} ref={dropdownRef} data-dropdown-open={isOpen}>
       {/* Selector Button */}
-      <Tooltip content={getTooltipContent()} placement="top">
+      <Tooltip content={getTooltipContent()} side="top">
         <button
           // Compact mode is icon-only, so the label must come from here.
           aria-label={getTooltipContent()}
@@ -136,9 +136,9 @@ export function AgentSelector({
                   <div className="flex items-center gap-2">
                     <Users className="w-3 h-3 opacity-50 flex-shrink-0" />
                     <span>General</span>
-                    <span className="text-3xs text-primary opacity-70">(default)</span>
+                    <span className="text-3xs text-primary-ink opacity-70">(default)</span>
                   </div>
-                  {isGeneralAgent && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                  {isGeneralAgent && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
                 </div>
               </button>
 
@@ -177,7 +177,7 @@ export function AgentSelector({
                             </div>
                           </div>
                           {isSelected && (
-                            <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                            <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                           )}
                         </div>
                       </button>

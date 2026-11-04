@@ -5,11 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedUser builds a realistic account: a project with a repo, a chat with a
@@ -114,6 +116,11 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
+
+	exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, created_at)
+	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
+	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, purpose, calls)
+	      VALUES ($1,$2,'anthropic','m','byok','chat',1)`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -124,6 +131,8 @@ var ownershipCount = map[string]string{
 	"projects":                `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
 	"chats":                   `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
 	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
+	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
+	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
 	"claude_auth_tokens":      `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
 	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
 	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
@@ -178,7 +187,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	// Includes the join-reached tables (messages, threads, tool_calls,
 	// worktrees) — the ones a user_id-only purge would silently orphan.
 	for _, table := range append([]string{
-		"projects", "chats", "worktrees", "settings",
+		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
 		"messages", "threads", "tool_calls",
 		"provider_account_limits", "thread_provider_accounts",
 	}, credentialTables...) {
@@ -447,5 +456,131 @@ func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
 	t.Helper()
 	if _, err := d.Exec(q, args...); err != nil {
 		t.Fatalf("exec %q: %v", q, err)
+	}
+}
+
+// A model call that is still in flight when its account is deleted finishes
+// afterwards and records its usage. That must not bring the user's usage back:
+// the purge fences the user, and the ledger refuses a fenced user. Run with the
+// writer racing the purge so both orderings are exercised: a write that lands
+// first is deleted by the purge, a write that lands after is refused.
+func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "user-in-flight"
+	seedUser(t, rawDB, userID)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+				ID: fmt.Sprintf("late-%d", i), UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
+				AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
+			})
+			if err != nil {
+				t.Errorf("RecordLLMCallUsage: %v", err)
+			}
+		}()
+	}
+	close(start)
+	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	wg.Wait()
+
+	// Writers that were still running after the purge committed are refused, and
+	// those that finished before it were deleted by it.
+	for _, table := range []string{"llm_call_usage", "llm_call_usage_daily"} {
+		if n := countRows(t, rawDB, table, userID); n != 0 {
+			t.Errorf("%s: %d rows for a purged account, want 0", table, n)
+		}
+	}
+
+	// A call that finishes long after the purge is refused too.
+	written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+		ID: "much-later", UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
+		Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
+	})
+	if err != nil || written {
+		t.Fatalf("a call after the purge: written=%v err=%v, want refused", written, err)
+	}
+	if n := countRows(t, rawDB, "llm_call_usage_daily", userID); n != 0 {
+		t.Errorf("rollup recreated after the purge: %d rows", n)
+	}
+}
+
+// The reviewer's reproduction: a call that STARTS after the purge transaction
+// began, while the purge is still running, and commits after it. The purge's
+// fence timestamp is the transaction's start, so any comparison of times lets
+// this call through. The purge holds the user's lock; the call is started
+// during that window and must be refused once the purge commits.
+func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "user-mid-purge"
+	seedUser(t, rawDB, userID)
+
+	// The purge's lock, fence and ledger deletes, held open: what a concurrent
+	// writer can observe of Purge before it commits.
+	tx, err := rawDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_usage_purged_users (user_id) VALUES ($1)`, userID); err != nil {
+		t.Fatalf("fence: %v", err)
+	}
+	for _, table := range []string{"llm_call_usage", "llm_call_usage_daily"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE user_id = $1`, userID); err != nil {
+			t.Fatalf("delete %s: %v", table, err)
+		}
+	}
+	time.Sleep(50 * time.Millisecond) // the purge transaction is now older than the call below
+
+	type result struct {
+		written bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+			ID: "started-mid-purge", UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
+			AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1,
+			CreatedAt: time.Now(), // later than the purge transaction's start
+		})
+		done <- result{written, err}
+	}()
+
+	select {
+	case r := <-done:
+		t.Fatalf("the call did not wait for the purge's lock: %+v", r)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	r := <-done
+	if r.err != nil {
+		t.Fatalf("RecordLLMCallUsage: %v", r.err)
+	}
+	if r.written {
+		t.Error("a call that started during the purge was recorded after it")
+	}
+	if n := countRows(t, rawDB, "llm_call_usage", userID); n != 0 {
+		t.Errorf("llm_call_usage: %d rows after the purge, want 0", n)
+	}
+	if n := countRows(t, rawDB, "llm_call_usage_daily", userID); n != 0 {
+		t.Errorf("llm_call_usage_daily: %d rows after the purge, want 0", n)
 	}
 }

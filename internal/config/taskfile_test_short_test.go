@@ -16,10 +16,8 @@ import (
 //
 // Its Make predecessor shipped broken: the target read its scope from PKG,
 // which the Makefile already defined as the version package for -ldflags, so a
-// bare `make test-short` silently tested internal/version alone and reported a
-// green run over one package. The scope is `--` arguments now; while the
-// Makefile forwards to task (P8, one merge), `make test-short PKGS=...` must
-// still reach them.
+// bare `task test:short` silently tested internal/version alone and reported a
+// green run over one package. The scope is `--` arguments now.
 func TestTaskTestShortCoversTheRepoByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("execs task, which evaluates the Taskfile's sh: vars (~2-3s a run); skipped under -short")
@@ -29,11 +27,10 @@ func TestTaskTestShortCoversTheRepoByDefault(t *testing.T) {
 		t.Skip("task is not installed")
 	}
 	root := repoRootFromTest(t)
-	// Read the Taskfile and Makefile in-process: `task` and `make` below are
-	// child processes, and Go's test cache keys only on files the test process
-	// itself opens, so without these reads a cached pass would outlive an edit.
+	// Read the Taskfile in-process: `task` below is a child process, and Go's
+	// test cache keys only on files the test process itself opens, so without
+	// this read a cached pass would outlive an edit.
 	readRepoFile(t, filepath.Join(root, "Taskfile.yml"))
-	readRepoFile(t, filepath.Join(root, "Makefile"))
 
 	cases := []struct {
 		name string
@@ -59,23 +56,6 @@ func TestTaskTestShortCoversTheRepoByDefault(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("make test-short PKGS= forwards the scope", func(t *testing.T) {
-		makeBin, err := exec.LookPath("make")
-		if err != nil {
-			t.Skip("make is not installed")
-		}
-		cmd := exec.Command(makeBin, "-n", "-s", "test-short", "PKGS=./internal/config/...")
-		cmd.Dir = root
-		cmd.Env = withoutEnv(os.Environ(), "PKGS", "PKG", "MAKEFLAGS")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("make -n test-short: %v\n%s", err, out)
-		}
-		if !strings.Contains(string(out), "test:short -- ./internal/config/...") {
-			t.Fatalf("make test-short PKGS=./internal/config/... must run `task test:short -- ./internal/config/...`, got:\n%s", out)
-		}
-	})
 }
 
 // goTestLine returns the single `go test` command task printed.

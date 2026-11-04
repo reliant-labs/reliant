@@ -1,5 +1,26 @@
 import '@testing-library/jest-dom'
-import { afterEach, vi } from 'vitest'
+import { configure } from '@testing-library/react'
+import { afterEach, beforeEach, vi } from 'vitest'
+import { resetConfigForTests } from '@/lib/config_gen'
+
+// Runtime config: every test starts from an EMPTY config.js document, i.e.
+// config_gen.ts's defaults (the self-hosted app). An absent document is not
+// the same thing under vitest: config_gen.ts would fall back to reading
+// process.env, so whatever API_URL / AUTH_MODE the shell running the tests
+// exports would leak into them. Set before any test file imports a module
+// that reads the config at module scope; tests override it with
+// src/test/runtimeConfig.ts setRuntimeConfig().
+window.__FORGE_CONFIG__ = {}
+beforeEach(() => {
+  window.__FORGE_CONFIG__ = {}
+  resetConfigForTests()
+})
+
+// findBy*/waitFor budget, scaled with host load like the test timeout (see
+// "Vitest sizing" in vite.config.ts). The fixed 1s default failed tests on a
+// loaded host while the element they waited for was still rendering.
+const asyncUtilTimeout = Number(import.meta.env.RELIANT_ASYNC_UTIL_TIMEOUT_MS)
+if (asyncUtilTimeout > 0) configure({ asyncUtilTimeout })
 
 // Web Storage polyfill.
 //
@@ -60,7 +81,7 @@ vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
   originalConsoleError(...args)
 })
 
-// Stub supabase so that importing grpc-client (which eagerly calls createClient)
+// Stub supabase so that importing the Connect transport (lib/connect)
 // doesn't throw "supabaseKey is required" in the test environment.
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -89,14 +110,11 @@ vi.mock('@/api/grpc-unauth', () => ({
 }))
 
 // Keep attachment-store tests deterministic by stubbing network deletion.
-vi.mock('@/api/attachment-grpc', async () => {
-  const actual = await vi.importActual<typeof import('@/api/attachment-grpc')>('@/api/attachment-grpc')
+vi.mock('@/hooks/attachment-queries', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/attachment-queries')>('@/hooks/attachment-queries')
   return {
     ...actual,
-    attachmentGrpc: {
-      ...actual.attachmentGrpc,
-      deleteAttachment: vi.fn(async () => undefined),
-    },
+    deleteAttachment: vi.fn(async () => undefined),
   }
 })
 
@@ -114,10 +132,7 @@ const WebSocketMock = vi.fn().mockImplementation(() => ({
 }))
 
 // Add static constants to the constructor
-WebSocketMock.CONNECTING = 0
-WebSocketMock.OPEN = 1
-WebSocketMock.CLOSING = 2
-WebSocketMock.CLOSED = 3
+Object.assign(WebSocketMock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 })
 
 global.WebSocket = WebSocketMock as unknown as typeof WebSocket
 // ── Unit tests do not reach the network ────────────────────────────────────

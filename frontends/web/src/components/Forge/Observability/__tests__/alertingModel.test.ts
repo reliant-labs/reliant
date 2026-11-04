@@ -140,7 +140,7 @@ describe("receiver forms", () => {
   it("summarizes each type's destination", () => {
     expect(settingsSummary({ type: "slack", settings: {} })).toBe("the webhook's default channel");
     expect(settingsSummary({ type: "webhook", settings: { url: "https://x.example.com" } })).toBe("https://x.example.com");
-    expect(settingsSummary({ type: "inapp", settings: {} })).toContain("Reliant console");
+    expect(settingsSummary({ type: "inapp", settings: {} })).toContain("Notifications in Reliant");
   });
 });
 

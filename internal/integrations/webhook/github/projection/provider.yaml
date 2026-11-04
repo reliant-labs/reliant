@@ -11,7 +11,7 @@ catalog: internal/integrations/catalog/github
 hooks: hooks.go
 
 # Every kept path is checked against this definition of the event. A bump is a
-# new file, a new version and sha256 here, then `make generate-integrations`.
+# new file, a new version and sha256 here, then `task generate:forge`.
 upstream:
   package: "@octokit/webhooks-schemas"
   version: 7.6.1

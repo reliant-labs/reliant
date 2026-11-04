@@ -1,5 +1,5 @@
 import { cn } from "../../../lib/utils";
-import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../types/providerAccount";
 import { planLabel } from "./accountFormat";
 
 /** "Max 20×", "Pro", "Plus"… — renders nothing when the plan is unknown. */

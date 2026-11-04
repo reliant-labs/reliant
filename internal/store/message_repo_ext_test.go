@@ -319,18 +319,26 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	if page, _ := store.ListRecentMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 7, 5); ids(page) != "[m4]" {
 		t.Fatalf("recent before 7 = %s; want [m4]", ids(page))
 	}
-	if more, err := store.HasMessagesBeforeInContextWindow(ctx, o, f.mainCW1, 7); err != nil || !more {
-		t.Fatalf("has before 7 = %v, %v; want true", more, err)
+	// Sibling ranges: the snapshot's filter (not main, never spawn), bounded
+	// on both sides, ascending, uncapped.
+	to := int64(5)
+	if r, err := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil, 0); err != nil || ids(r) != "[n2 n5]" {
+		t.Fatalf("sibling range [0,∞) = %s, %v; want [n2 n5]", ids(r), err)
 	}
-	if more, _ := store.HasMessagesBeforeInContextWindow(ctx, o, f.mainCW1, 4); more {
-		t.Fatal("has before 4 = true; want false")
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 3, nil, 0); ids(r) != "[n5]" {
+		t.Fatalf("sibling range [3,∞) = %s; want [n5]", ids(r))
 	}
-	to := int64(7)
-	if r, _ := store.ListMessagesInContextWindowRange(ctx, o, f.nodeCW, 0, nil); ids(r) != "[n2 n5]" {
-		t.Fatalf("range [0,∞) = %s; want [n2 n5]", ids(r))
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, &to, 0); ids(r) != "[n2]" {
+		t.Fatalf("sibling range [0,5) = %s; want [n2]", ids(r))
 	}
-	if r, _ := store.ListMessagesInContextWindowRange(ctx, o, f.mainCW1, 4, &to); ids(r) != "[m4]" {
-		t.Fatalf("range [4,7) = %s; want [m4]", ids(r))
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil, 1); ids(r) != "[n5]" {
+		t.Fatalf("sibling range [0,∞) limit 1 = %s; want the newest, [n5]", ids(r))
+	}
+	if twin, _ := f.env.Repo.ListTranscriptSiblingMessagesInRange(ctx, f.chat, f.main, 0, nil, 0); ids(twin) != "[n2 n5]" {
+		t.Fatalf("Repo sibling range = %s; want [n2 n5]", ids(twin))
+	}
+	if n, err := store.CountMessagesInChatOutsideThread(ctx, o, f.chat, f.main); err != nil || n != 4 {
+		t.Fatalf("messages outside the main thread = %d, %v; want 4 (2 node + 2 spawn)", n, err)
 	}
 
 	// Counts through the generated CountMessage, as the Repository reads them.
@@ -352,18 +360,13 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 		t.Fatalf("CountMessage(chat) = %d, %v; want 8", n, err)
 	}
 
-	// Allocators that still read the table.
-	if next, err := store.NextOrdinalInThread(ctx, o, f.main); err != nil || next != 4 {
-		t.Fatalf("NextOrdinalInThread = %d, %v; want 4", next, err)
+	// Every insert raised the counters to its numbers, so the next allocation
+	// follows the transcript without reading it.
+	if ord, seq, err := f.env.Repo.AllocateMessageOrder(ctx, f.main, f.chat); err != nil || ord != 4 || seq != 8 {
+		t.Fatalf("AllocateMessageOrder = (%d, %d), %v; want (4, 8)", ord, seq, err)
 	}
-	if next, err := store.NextOrdinalInThread(ctx, o, "no-thread"); err != nil || next != 0 {
-		t.Fatalf("NextOrdinalInThread(empty) = %d, %v; want 0", next, err)
-	}
-	if next, err := store.NextSeqInChat(ctx, o, f.chat, f.main); err != nil || next != 8 {
-		t.Fatalf("NextSeqInChat = %d, %v; want 8", next, err)
-	}
-	if twin, err := f.env.Repo.GetNextSeq(ctx, f.chat, f.main); err != nil || twin != 8 {
-		t.Fatalf("Repo.GetNextSeq = %d, %v; want 8", twin, err)
+	if ord, _, err := f.env.Repo.AllocateMessageOrder(ctx, "no-thread", f.chat); err != nil || ord != 0 {
+		t.Fatalf("AllocateMessageOrder(new thread) ordinal = %d, %v; want 0", ord, err)
 	}
 
 	// Per-thread activity: the newest created_at of each thread.
@@ -373,10 +376,11 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	}
 }
 
-// TestNextSeqInChat_ClearsInheritedForkHistory: a branched chat's own rows are
-// empty, but the seq it allocates must clear what its thread inherits through
-// the context-window chain.
-func TestNextSeqInChat_ClearsInheritedForkHistory(t *testing.T) {
+// TestSeedSeqCounterForFork_ClearsInheritedForkHistory: a branched chat's own
+// rows are empty, but the seq it allocates must clear what its thread inherits
+// through the context-window chain. The fork raises its counter to the
+// parent's, which every parent row raised.
+func TestSeedSeqCounterForFork_ClearsInheritedForkHistory(t *testing.T) {
 	f := newMsgFixture(t, "chat-msg-fork")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -393,11 +397,7 @@ func TestNextSeqInChat_ClearsInheritedForkHistory(t *testing.T) {
 	if _, err := f.env.Repo.CreateContextWindow(ctx, &db.ContextWindow{ID: branch + ":cw", ThreadID: branch, ParentContextWindowID: &f.mainCW1, CreatedAt: t0}); err != nil {
 		t.Fatal(err)
 	}
-	if next, err := store.NextSeqInChat(ctx, f.env.ORM, branch, branch); err != nil || next != 8 {
-		t.Fatalf("NextSeqInChat(branch) = %d, %v; want 8 (past inherited m7)", next, err)
-	}
-
-	// Seeding the branch's counter from the fork chain: monotonic, repeatable.
+	// Seeding the branch's counter from its parent's: monotonic, repeatable.
 	if err := store.SeedSeqCounterForFork(ctx, f.env.ORM, branch, branch+":cw"); err != nil {
 		t.Fatal(err)
 	}
@@ -438,13 +438,6 @@ func TestMessageUpdates_AcrossLayers(t *testing.T) {
 	}
 	if err := store.UpdateMessageUsage(ctx, o, "absent", ip(1), nil); err != nil {
 		t.Fatalf("UpdateMessageUsage(absent) = %v; want nil", err)
-	}
-
-	if err := store.UpdateMessageFields(ctx, o, "m0", map[string]any{"model": "renamed", "token_count": 7}); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ = f.env.Repo.GetMessage(ctx, "m0"); *got.Model != "renamed" || *got.TokenCount != 7 || !got.UpdatedAt.After(t0.Add(time.Hour)) {
-		t.Fatalf("after UpdateMessageFields: model %v tokens %v updated %v", *got.Model, got.TokenCount, got.UpdatedAt)
 	}
 
 	if err := store.RemoveMessage(ctx, o, "n2"); err != nil {

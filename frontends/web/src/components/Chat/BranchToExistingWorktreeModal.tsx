@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
+import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 
 interface BranchToExistingWorktreeModalProps {
   isOpen: boolean;
@@ -26,7 +28,7 @@ export function BranchToExistingWorktreeModal({
 }: BranchToExistingWorktreeModalProps) {
   const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const { worktrees } = useWorktreeList(projectId, { enabled: isOpen });
   
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [isBranching, setIsBranching] = useState(false);
@@ -110,7 +112,8 @@ export function BranchToExistingWorktreeModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title="Branch to Existing Workspace"
       size="md"
@@ -163,7 +166,7 @@ export function BranchToExistingWorktreeModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             disabled={isBranching}
           >
             Cancel
@@ -172,7 +175,7 @@ export function BranchToExistingWorktreeModal({
             type="button"
             onClick={handleBranch}
             disabled={isBranching || !selectedWorktreeId || sortedWorktrees.length === 0}
-            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <FolderSync className="w-4 h-4" />
             {isBranching ? "Branching..." : "Branch Chat"}

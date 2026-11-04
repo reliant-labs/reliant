@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setRuntimeConfig } from '@/test/runtimeConfig'
 
 import { getAppURL } from '@/lib/constants'
 
@@ -9,7 +10,7 @@ import { getAppURL } from '@/lib/constants'
  * identity provider can redirect back to.
  */
 
-type TestWindow = Window & { electronAPI?: unknown }
+type TestWindow = Omit<Window, 'electronAPI'> & { electronAPI?: unknown }
 
 const setOrigin = (origin: string) => {
   Object.defineProperty(window, 'location', {
@@ -24,17 +25,16 @@ const runAsElectron = () => {
 
 afterEach(() => {
   delete (window as TestWindow).electronAPI
-  vi.unstubAllEnvs()
 })
 
 describe('getAppURL', () => {
-  it('uses the build-time override when one is configured', () => {
-    vi.stubEnv('VITE_APP_URL', 'https://staging.example.test')
+  it("uses the runtime config's APP_URL when one is configured", () => {
+    setRuntimeConfig({ APP_URL: 'https://staging.example.test' })
     expect(getAppURL()).toBe('https://staging.example.test')
   })
 
   it('strips a trailing slash from the override so callers can append a path', () => {
-    vi.stubEnv('VITE_APP_URL', 'https://staging.example.test/')
+    setRuntimeConfig({ APP_URL: 'https://staging.example.test/' })
     expect(getAppURL()).toBe('https://staging.example.test')
   })
 

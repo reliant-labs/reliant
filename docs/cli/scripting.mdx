@@ -31,13 +31,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: stable
       - run: go install github.com/reliant-labs/reliant/cmd/reliant@latest
-      - run: reliant workflow validate
+      - run: reliant workflow validate --base origin/${{ github.base_ref }}
       - run: reliant workflow scenario run
 ```
+
+`--base` also compares the declared triggers with the ones on the branch the pull request merges into, and reports a change that existing activations cannot follow (a workflow with triggers deleted, a trigger renamed or removed, a trigger changed to another kind) under **Breaks activations**. The checkout needs the base branch's history for it, hence `fetch-depth: 0`.
 
 [Workflows from the terminal](/cli/workflows) shows what each command checks and what its failures look like.
 
@@ -52,7 +56,7 @@ These commands take `--json` and print a single JSON document on stdout:
 | `reliant project list` | Your projects |
 | `reliant version` | `version`, `commit`, `forge`, `go`, `os`, `arch`, … |
 | `reliant workflow list` | One object per workflow: `name`, `source`, `file`, `nodes`, `inputs` |
-| `reliant workflow validate`, `validate-tree` | One result per workflow: `file`, `name`, `valid`, node and edge counts, errors |
+| `reliant workflow validate`, `validate-tree` | One result per workflow: `file`, `name`, `valid`, node and edge counts, errors, warnings, and with `--base` `activation_breaks` |
 | `reliant workflow scenario list`, `scenario run` | Scenarios per workflow, with `status` and `duration_ms` after a run |
 | `reliant workflow eval` | The value and its type |
 | `reliant workflow status` | The run's status, outcome, node tree and open gates |

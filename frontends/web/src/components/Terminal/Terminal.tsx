@@ -8,7 +8,6 @@ import "@xterm/xterm/css/xterm.css";
 import { logger } from "../../lib/logger";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
-import { isDaemonConnectingError, isNoMachineError } from "../../lib/daemon-errors";
 import { MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
@@ -16,16 +15,28 @@ import { DaemonWaitState } from "../DaemonWaitState";
 import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { getGRPCBaseURLPublic } from "../../api/grpc-client";
+import { reliantApiBaseUrl } from "../../lib/connect";
+import { daemonLabel } from "../Automations/daemonChoices";
+import { isAwakeMachine } from "../../lib/chatMachine";
 import { pageActivity } from "../../lib/pageActivity";
-import { startTerminalSessionSpan, type TerminalSessionSpan } from "./terminalTrace";
+import {
+  redactedTerminalWSURL,
+  startTerminalSessionSpan,
+  type TerminalSessionSpan,
+} from "./terminalTrace";
 
 interface TerminalProps {
   sessionId: string;
   workingDir?: string;
   worktreeId?: string;
-  /** The project the terminal belongs to. Sent so the server can log it. */
+  /** The project the terminal belongs to. */
   projectId?: string;
+  /**
+   * The chat the terminal was opened beside. The server opens a terminal on
+   * the machine holding its workspace: a branch workspace's own machine, and
+   * for the main checkout this chat's machine.
+   */
+  chatId?: string;
   /**
    * This is the terminal the user is looking at: the panel is open, this tab is
    * selected, and it belongs to the current workspace. Only the active
@@ -76,12 +87,24 @@ const WORKING_DIR_UNAVAILABLE_CODE = "working_dir_unavailable";
 // retried it forever: one hidden terminal for a removed worktree retried every
 // ~12s for five hours in prod (2026-10-08, 905 server WARNs).
 const WORKING_DIR_MISSING_CODE = "working_dir_missing";
-// The account has no machine at all. The server sends the router's
-// "no daemon available" text today; a dedicated code is accepted ahead of it.
+// The account has no machine at all (internal/handlers/terminal wsErrorNoMachine).
 const TERMINAL_NO_MACHINE_CODE = "no_machine";
-// The machine is asleep or still starting. Typed so the client stops matching
-// the message prose (which the server still sends, for older clients).
+// The machine is starting, asleep or not connected (wsErrorDaemonUnavailable).
+// The code is the signal; the message text is display copy.
 const DAEMON_UNAVAILABLE_CODE = "daemon_unavailable";
+// The machine is connected but did not open the shell within the server's
+// bound (wsErrorMachineNotAnswering) — saturated or wedged. Shown with the
+// machine's name and a retry; not retried on a timer, which on a machine at
+// load 220 only adds load.
+const MACHINE_NOT_ANSWERING_CODE = "machine_not_answering";
+// The terminal's machine has no checkout of the project (wsErrorCheckoutMissing).
+// The server's message names the machine and the way out.
+const CHECKOUT_MISSING_CODE = "checkout_missing";
+// How long one connection attempt may take, from asking for the auth token to
+// the server's "init" or "error". The server bounds the session create at 30s;
+// past this nothing is coming (the API server is unreachable, or a proxy holds
+// the upgrade), and the terminal says so instead of spinning forever.
+export const TERMINAL_CONNECT_TIMEOUT_MS = 45_000;
 // Retry cadence while waiting for that directory. Polling is the only signal
 // that it has appeared, so the cap stays short enough that the shell opens
 // soon after a clone lands. Not counted against WS_MAX_RECONNECT_ATTEMPTS: a
@@ -99,6 +122,9 @@ const WORKING_DIR_RETRY_MAX_DELAY = 10000;
  * - waiting_for_directory: the working directory is not on the machine (yet); retrying until it is
  * - folder_missing:        the working directory no longer exists and will not come back; no retry
  * - no_machine:            the account has no machine at all; offers to connect one, reconnects when one appears
+ * - checkout_missing:      the terminal's machine has no checkout of the project; says which, offers a retry
+ * - machine_not_answering: the machine is connected but did not open a shell in time; names it, offers a retry
+ * - timed_out:             no answer at all within TERMINAL_CONNECT_TIMEOUT_MS; offers a retry
  * - disconnected:          terminal ended or retries exhausted; manual reconnect offered
  */
 type TerminalConnectionState =
@@ -109,9 +135,12 @@ type TerminalConnectionState =
   | "waiting_for_directory"
   | "folder_missing"
   | "no_machine"
+  | "checkout_missing"
+  | "machine_not_answering"
+  | "timed_out"
   | "disconnected";
 
-export function Terminal({ sessionId, workingDir, worktreeId, projectId, active = false, className }: TerminalProps) {
+export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId, active = false, className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -130,8 +159,16 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   const workingDirAttemptsRef = useRef(0);
   // Set when the server says this attempt's working directory is gone for good.
   const workingDirMissingRef = useRef(false);
-  // Set when the server says the account has no machine at all (lib/daemon-errors isNoMachineError).
+  // Set when the server says the account has no machine at all (code no_machine).
   const noMachineRef = useRef(false);
+  // Set when the server says the machine did not answer, or has no checkout;
+  // refusalMessage is the server's sentence for the latter.
+  const machineNotAnsweringRef = useRef(false);
+  const checkoutMissingRef = useRef(false);
+  const [refusalMessage, setRefusalMessage] = useState<string | undefined>(undefined);
+  // Armed for each connection attempt until the server answers. See
+  // TERMINAL_CONNECT_TIMEOUT_MS.
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Armed while the daemon looks offline but has not yet been offline long
   // enough to act on. See DAEMON_OFFLINE_GRACE_DELAY.
   const daemonOfflineGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,6 +185,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   const socketCreatedAtRef = useRef(0);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
   const setDaemonSessionId = useTerminalStore((state) => state.setDaemonSessionId);
+  const setSessionMachine = useTerminalStore((state) => state.setSessionMachine);
   const activeSessionId = useTerminalStore((state) => state.activeSessionId);
 
   const updateConnectionState = useCallback((next: TerminalConnectionState) => {
@@ -160,10 +198,28 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   // dropped", and to reconnect promptly when the daemon comes online instead
   // of hammering the server while it is down. While the status is still
   // loading we assume online — the server's own error is the stronger signal.
-  const { activeDaemon, loading: daemonStatusLoading, refresh: refreshDaemonStatus } = useDaemonStatus();
+  const { activeDaemon, daemons, loading: daemonStatusLoading, refresh: refreshDaemonStatus } = useDaemonStatus();
+  // The machine the server sent this terminal to, when the workspace decided
+  // it ("init" and machine errors carry it). Named in the overlays, so "this
+  // folder no longer exists" says where it was looked for.
+  const [reachedMachineId, setReachedMachineId] = useState<string | undefined>(undefined);
+  // The server's name for it, for a machine the daemon list has not loaded.
+  const [reachedMachineName, setReachedMachineName] = useState<string | undefined>(undefined);
+  const reachedListed = reachedMachineId ? daemons.find((d) => d.daemonId === reachedMachineId) : undefined;
+  const reachedMachine = reachedMachineId
+    ? reachedListed
+      ? daemonLabel(reachedListed, reachedMachineId)
+      : (reachedMachineName ?? daemonLabel(undefined, reachedMachineId))
+    : undefined;
   const refreshDaemonStatusRef = useRef(refreshDaemonStatus);
   refreshDaemonStatusRef.current = refreshDaemonStatus;
-  const daemonOnline = !!activeDaemon || daemonStatusLoading;
+  // Once the server has said which machine holds this terminal, that machine's
+  // state is the only one that matters: another machine being up keeps nothing
+  // here alive, and this one dropping while another stays active must still
+  // read as offline. Until then, any connected machine stands in for it.
+  const reachedDaemon = reachedMachineId ? daemons.find((d) => d.daemonId === reachedMachineId) : undefined;
+  const daemonOnline =
+    daemonStatusLoading || (reachedMachineId ? !!reachedDaemon && isAwakeMachine(reachedDaemon) : !!activeDaemon);
   const daemonOnlineRef = useRef(daemonOnline);
 
   useEffect(() => {
@@ -198,9 +254,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     // daemon, ever corrected it.
     //
     // Deliberately debounced rather than immediate: see
-    // DAEMON_OFFLINE_GRACE_DELAY. `daemonOnline` is `!!activeDaemon ||
-    // daemonStatusLoading` — true while status is LOADING by design, so this
-    // never fires on the gap before the first poll lands.
+    // DAEMON_OFFLINE_GRACE_DELAY. `daemonOnline` is true while status is
+    // LOADING by design, so this never fires on the gap before the first poll
+    // lands.
     if (wasOnline && !daemonOnline) {
       const state = connectionStateRef.current;
       if (state === "connected" || state === "connecting") {
@@ -272,6 +328,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     workingDirUnavailableRef.current = false;
     workingDirMissingRef.current = false;
     noMachineRef.current = false;
+    machineNotAnsweringRef.current = false;
+    checkoutMissingRef.current = false;
     workingDirAttemptsRef.current = 0;
     shellExitedRef.current = false;
     updateConnectionState("connecting");
@@ -279,6 +337,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     // Latest connect call wins: a call that finds a newer one started while it
     // awaited the auth token drops out instead of opening a second socket.
     let connectSeq = 0;
+
+    const clearConnectTimeout = () => {
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
+    };
 
     // Get theme colors from CSS variables
     const getColor = (variable: string) => {
@@ -481,12 +546,43 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       workingDirUnavailableRef.current = false;
       workingDirMissingRef.current = false;
       noMachineRef.current = false;
+      machineNotAnsweringRef.current = false;
+      checkoutMissingRef.current = false;
       closedForDaemonOfflineRef.current = false;
       shellExitedRef.current = false;
 
+      // Bound the whole attempt: the token, the upgrade, and the server's
+      // session create. With no answer by then, retire the socket and say so
+      // — the terminal used to sit on "Connecting…" for as long as the socket
+      // stayed open.
+      clearConnectTimeout();
+      let attemptTimedOut = false;
+      connectTimeoutRef.current = setTimeout(() => {
+        connectTimeoutRef.current = null;
+        if (disposed || seq !== connectSeq) return;
+        attemptTimedOut = true;
+        logger.warn("[Terminal] No answer to the terminal connection, giving up on this attempt", {
+          sessionId,
+          timeoutMs: TERMINAL_CONNECT_TIMEOUT_MS,
+        });
+        const stuck = wsRef.current;
+        if (stuck) {
+          stuck.onopen = null;
+          stuck.onmessage = null;
+          stuck.onerror = null;
+          stuck.onclose = null;
+          if (stuck.readyState === WebSocket.OPEN || stuck.readyState === WebSocket.CONNECTING) {
+            stuck.close();
+          }
+          wsRef.current = null;
+        }
+        updateConnectionState("timed_out");
+      }, TERMINAL_CONNECT_TIMEOUT_MS);
+
       // Use the main gRPC base URL for terminal WebSocket connections.
-      const baseURL = getGRPCBaseURLPublic();
+      const baseURL = reliantApiBaseUrl();
       if (!baseURL) {
+        clearConnectTimeout();
         logger.error("[Terminal] No gRPC base URL configured, terminal unavailable");
         term.writeln("\r\n\x1b[91mTerminal unavailable — no base URL configured.\x1b[0m");
         updateConnectionState("disconnected");
@@ -500,12 +596,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
-      if (disposed || seq !== connectSeq) return () => {};
+      if (disposed || seq !== connectSeq || attemptTimedOut) return () => {};
 
       const params = new URLSearchParams();
       if (workingDir) params.append("workingDir", workingDir);
       if (worktreeId) params.append("worktreeId", worktreeId);
       if (projectId) params.append("projectId", projectId);
+      if (chatId) params.append("chatId", chatId);
       if (token) params.append("token", token);
       // Adds the trace context the server's span continues, and whether this
       // replaces an earlier connection of this terminal.
@@ -515,9 +612,12 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         worktreeId,
       });
 
-      const wsUrl = `${protocol}//${host}/api/v2/terminal/ws?${params.toString()}`;
+      const wsBase = `${protocol}//${host}/api/v2/terminal/ws`;
+      const wsUrl = `${wsBase}?${params.toString()}`;
 
-      logger.info("[Terminal] Connecting to WebSocket", { url: wsUrl.replace(token, "***") });
+      // Every query value is redacted: the token, the trace context and the
+      // working directory are none of the log's business.
+      logger.info("[Terminal] Connecting to WebSocket", { url: redactedTerminalWSURL(wsBase, params) });
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -562,6 +662,16 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
           // Check if it's a structured message (object with type property)
           // This prevents raw characters like digits from being parsed as JSON numbers
           if (data && typeof data === 'object' && typeof data.type === 'string') {
+            const reportedMachine = typeof data.daemon_id === "string" && data.daemon_id ? data.daemon_id : undefined;
+            const reportedName =
+              typeof data.machine_name === "string" && data.machine_name ? data.machine_name : undefined;
+            if (reportedMachine) {
+              setReachedMachineId(reportedMachine);
+              setReachedMachineName(reportedName);
+              setSessionMachine(sessionId, reportedMachine, reportedName);
+            }
+            // The server answered this attempt, one way or the other.
+            if (data.type === "init" || data.type === "error") clearConnectTimeout();
             if (data.type === "init") {
               // Session created on the daemon — the connection is healthy.
               // This (not ws.onopen) is the success signal: reset the backoff.
@@ -577,22 +687,18 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
               // Bind the daemon's session id. Until this lands the store only
               // knows the local id, which cannot close the PTY.
               if (typeof data.session_id === "string" && data.session_id) {
-                setDaemonSessionId(sessionId, data.session_id);
+                setDaemonSessionId(sessionId, data.session_id, reportedMachine);
               }
             } else if (data.type === "pong") {
               // Answer to a wake-time liveness ping; handled above.
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
-              if (
-                data.code === TERMINAL_NO_MACHINE_CODE ||
-                isNoMachineError(data.data)
-              ) {
-                // No machine at all. Checked before daemon_unavailable, which
-                // the server also sends for this today: waiting for a machine
-                // that does not exist would spin forever. The overlay offers
-                // to connect one; the daemon-status subscription reconnects
-                // when one appears.
+              if (data.code === TERMINAL_NO_MACHINE_CODE) {
+                // No machine at all: waiting for a machine that does not
+                // exist would spin forever. The overlay offers to connect
+                // one; the daemon-status subscription reconnects when one
+                // appears.
                 noMachineRef.current = true;
                 logger.info("[Terminal] No machine connected to this account", { sessionId });
               } else if (data.code === WORKING_DIR_MISSING_CODE) {
@@ -617,10 +723,21 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
                   workingDir,
                   detail: data.data,
                 });
-              } else if (
-                data.code === DAEMON_UNAVAILABLE_CODE ||
-                isDaemonConnectingError(data.data)
-              ) {
+              } else if (data.code === MACHINE_NOT_ANSWERING_CODE) {
+                // Connected but too busy to open a shell. The overlay names
+                // the machine; the user retries when they choose to.
+                machineNotAnsweringRef.current = true;
+                logger.info("[Terminal] Machine did not answer", { sessionId, machine: reportedMachine });
+              } else if (data.code === CHECKOUT_MISSING_CODE) {
+                // The project is not on this machine. The server's sentence
+                // names the machine and the way out; the overlay shows it.
+                checkoutMissingRef.current = true;
+                setRefusalMessage(typeof data.data === "string" ? data.data : undefined);
+                logger.info("[Terminal] Project not checked out on the terminal's machine", {
+                  sessionId,
+                  machine: reportedMachine,
+                });
+              } else if (data.code === DAEMON_UNAVAILABLE_CODE) {
                 // "no daemon connected" — expected while the daemon is
                 // offline. The waiting overlay owns the messaging; writing a
                 // red error per retry was spamming the buffer.
@@ -655,6 +772,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         // Intentionally closed (component unmount / effect re-run): the
         // terminal instance is disposed, do nothing.
         if (disposed) return;
+        clearConnectTimeout();
 
         // The close answers any pending liveness ping, and its handling below
         // owns the retry.
@@ -683,6 +801,20 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         // before everything else, for the same reason as the case below.
         if (workingDirMissingRef.current) {
           updateConnectionState("folder_missing");
+          return;
+        }
+
+        // Not on this machine: a retry cannot put it there. The overlay says
+        // what can.
+        if (checkoutMissingRef.current) {
+          updateConnectionState("checkout_missing");
+          return;
+        }
+
+        // Connected but too busy to open a shell: say so and wait for the
+        // user, rather than ask the saturated machine again on a timer.
+        if (machineNotAnsweringRef.current) {
+          updateConnectionState("machine_not_answering");
           return;
         }
 
@@ -820,6 +952,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         clearTimeout(probeTimerRef.current);
         probeTimerRef.current = null;
       }
+      clearConnectTimeout();
 
       resizeObserver.disconnect();
 
@@ -839,7 +972,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       if (xtermRef.current === term) xtermRef.current = null;
       if (fitAddonRef.current === fitAddon) fitAddonRef.current = null;
     };
-  }, [sessionId, workingDir, worktreeId, projectId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
+  }, [sessionId, workingDir, worktreeId, projectId, chatId, updateSessionPID, setDaemonSessionId, setSessionMachine, updateConnectionState]); // updateConnectionState is a stable setter
 
   // The page came back from sleep, a background stretch, or an offline spell.
   //
@@ -858,6 +991,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       workingDirUnavailableRef.current = false;
       workingDirMissingRef.current = false;
       noMachineRef.current = false;
+      machineNotAnsweringRef.current = false;
+      checkoutMissingRef.current = false;
     };
 
     const reconnectNow = (reason: string) => {
@@ -1073,6 +1208,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     workingDirUnavailableRef.current = false;
     workingDirMissingRef.current = false;
     noMachineRef.current = false;
+    machineNotAnsweringRef.current = false;
+    checkoutMissingRef.current = false;
+    setRefusalMessage(undefined);
     workingDirAttemptsRef.current = 0;
     updateConnectionState("connecting");
     void connectWebSocketRef.current?.();
@@ -1118,7 +1256,69 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
               aria-live="polite"
             >
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-              Connecting to terminal...
+              {reachedMachine ? `Connecting to terminal on ${reachedMachine}...` : "Connecting to terminal..."}
+            </div>
+          )}
+          {connectionState === "machine_not_answering" && (
+            <div
+              className="pointer-events-auto flex max-w-md flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-center text-foreground shadow-lg"
+              role="alert"
+            >
+              <span className="text-xs font-medium">
+                {reachedMachine ? `${reachedMachine} isn't answering` : "The machine isn't answering"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                It&rsquo;s connected but didn&rsquo;t open a shell in time, so it may be overloaded. Try again once
+                it has caught up.
+              </span>
+              <button
+                onClick={handleReconnectClick}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {connectionState === "timed_out" && (
+            <div
+              className="pointer-events-auto flex max-w-md flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-center text-foreground shadow-lg"
+              role="alert"
+            >
+              <span className="text-xs font-medium">Couldn&rsquo;t open the terminal</span>
+              <span className="text-xs text-muted-foreground">
+                No answer from {reachedMachine ?? "the server"} after {TERMINAL_CONNECT_TIMEOUT_MS / 1000} seconds.
+              </span>
+              <button
+                onClick={handleReconnectClick}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {connectionState === "checkout_missing" && (
+            <div
+              className="pointer-events-auto flex max-w-md flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-center text-foreground shadow-lg"
+              role="alert"
+            >
+              <span className="text-xs font-medium">
+                {reachedMachine ? `This project isn't on ${reachedMachine}` : "This project isn't on this machine"}
+              </span>
+              {refusalMessage && <span className="text-xs text-muted-foreground">{refusalMessage}</span>}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReconnectClick}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-background hover:bg-accent transition-colors"
+                >
+                  Try again
+                </button>
+                <button
+                  onClick={handleCloseClick}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Close terminal
+                </button>
+              </div>
             </div>
           )}
           {connectionState === "reconnecting" && (
@@ -1154,7 +1354,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
                 <code className="break-all font-mono text-xs text-muted-foreground">{workingDir}</code>
               )}
               <span className="text-xs text-muted-foreground">
-                It doesn&rsquo;t exist on this machine yet. If the project is still cloning, the
+                It doesn&rsquo;t exist on {reachedMachine ?? "this machine"} yet. If the project is still cloning, the
                 terminal opens here as soon as it&rsquo;s ready.
               </span>
               <button
@@ -1184,8 +1384,17 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
                 <code className="break-all font-mono text-xs text-muted-foreground">{workingDir}</code>
               )}
               <span className="text-xs text-muted-foreground">
-                Its workspace was archived or removed from the machine, so this terminal can&rsquo;t
-                reopen here.
+                {reachedMachine ? (
+                  <>
+                    It isn&rsquo;t on {reachedMachine}, where this workspace lives: it was archived or
+                    removed there, so this terminal can&rsquo;t reopen.
+                  </>
+                ) : (
+                  <>
+                    Its workspace was archived or removed from the machine, so this terminal can&rsquo;t
+                    reopen here.
+                  </>
+                )}
               </span>
               <button
                 onClick={handleCloseClick}

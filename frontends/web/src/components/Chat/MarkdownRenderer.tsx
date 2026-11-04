@@ -250,7 +250,7 @@ function createMarkdownComponents(
     ),
 
     p: ({ children, ...props }) => (
-      <p className="text-foreground leading-relaxed mb-3 last:mb-0" {...props}>
+      <p className="text-foreground leading-[var(--chat-prose-leading,1.625)] mb-3 last:mb-0" {...props}>
         {children}
       </p>
     ),
@@ -363,9 +363,16 @@ export function MarkdownRenderer({
   return (
     <>
     <div className={cn(
-      "prose prose-sm max-w-none",
+      // min-w-0 + break-words: a long unbreakable token (a URL, a bold
+      // identifier) wraps at the column edge instead of running past it and
+      // scrolling the whole transcript sideways. break-words (overflow-wrap:
+      // break-word), not `anywhere`, so a table keeps its natural column
+      // widths and scrolls inside its own container.
+      "prose prose-sm max-w-none min-w-0 break-words",
       "prose-headings:font-semibold prose-headings:text-foreground prose-headings:mb-3 prose-headings:mt-4",
-      "prose-p:text-foreground prose-p:leading-relaxed prose-p:mb-3",
+      // Paragraph leading is `leading-relaxed` unless the caller sets
+      // --chat-prose-leading (the mobile transcript's larger type, ChatMessage).
+      "prose-p:text-foreground prose-p:leading-[var(--chat-prose-leading,1.625)] prose-p:mb-3",
       "prose-strong:text-foreground prose-strong:font-semibold",
       "prose-em:text-foreground",
       "prose-blockquote:text-muted-foreground prose-blockquote:border-l-border prose-blockquote:my-3",

@@ -24,6 +24,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -187,13 +188,20 @@ func (d *Derivation) reapLoop(ctx context.Context) {
 	ticker := time.NewTicker(attachmentReapInterval)
 	defer ticker.Stop()
 
-	d.reapOnce(ctx)
+	// One trace per sweep, so its queries nest under it.
+	reap := func() {
+		_ = observe.RunRoot(ctx, "gateway.daemonstate.reap", func(ctx context.Context) error {
+			d.reapOnce(ctx)
+			return nil
+		})
+	}
+	reap()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			d.reapOnce(ctx)
+			reap()
 		}
 	}
 }

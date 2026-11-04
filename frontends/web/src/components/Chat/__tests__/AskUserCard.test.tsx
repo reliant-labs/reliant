@@ -10,7 +10,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { queryClient } from "../../../lib/query-client";
 
 const { listAsyncQuestionsMock, resolveQuestionMock } = vi.hoisted(() => ({
@@ -18,13 +20,6 @@ const { listAsyncQuestionsMock, resolveQuestionMock } = vi.hoisted(() => ({
   resolveQuestionMock: vi.fn(),
 }));
 
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: listAsyncQuestionsMock,
-    resolveQuestion: resolveQuestionMock,
-  },
-}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { AskUserCard, askUserCardMode } from "../AskUserCard";
@@ -45,15 +40,16 @@ const input = {
 
 function asyncQuestion(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
   return {
-    question_id: "q-1",
-    chat_id: CHAT_ID,
-    workflow_id: CHAT_ID,
-    thread_id: CHAT_ID,
-    step_id: "execute_tools",
+    $typeName: "reliant.v1.QuestionInfo",
+    questionId: "q-1",
+    chatId: CHAT_ID,
+    workflowId: CHAT_ID,
+    threadId: CHAT_ID,
+    stepId: "execute_tools",
     status: "pending",
-    created_at: "2026-10-22T00:00:00Z",
+    createdAt: "2026-10-22T00:00:00Z",
     async: true,
-    tool_call_id: TOOL_CALL,
+    toolCallId: TOOL_CALL,
     ...overrides,
   };
 }
@@ -69,7 +65,23 @@ function renderCard(finished = false, cardInput: unknown = input) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient.clear();
-  resolveQuestionMock.mockResolvedValue({ success: true });
+  // Like the server: once answered, the async list reports it answered. An
+  // answer invalidates the list, so a fake that kept saying "pending" would
+  // put the form back.
+  resolveQuestionMock.mockImplementation(async (questionId: string, _action: string, responseData?: string) => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion({ questionId, status: "resolved", responseData })]);
+    return { success: true };
+  });
+  setTransport(
+    mockTransport({
+      "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+      "QuestionService.ListAsyncQuestions": async () => ({ questions: await listAsyncQuestionsMock() }),
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return resolveQuestionMock(questionId, action, responseData);
+      },
+    }),
+  );
 });
 afterEach(() => queryClient.clear());
 
@@ -102,7 +114,7 @@ describe("AskUserCard", () => {
     listAsyncQuestionsMock.mockResolvedValue([
       asyncQuestion({
         status: "resolved",
-        response_data: JSON.stringify({ answers: [{ question: "Which database?", selected: ["Postgres (Recommended)"] }] }),
+        responseData: JSON.stringify({ answers: [{ question: "Which database?", selected: ["Postgres (Recommended)"] }] }),
       }),
     ]);
     const user = userEvent.setup();
@@ -116,7 +128,7 @@ describe("AskUserCard", () => {
 
   it("shows a question its agent withdrew, with the reason and no form", async () => {
     listAsyncQuestionsMock.mockResolvedValue([
-      asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres; the schema is migrated" }),
+      asyncQuestion({ status: "resolved", withdrawnReason: "Went with Postgres; the schema is migrated" }),
     ]);
     const user = userEvent.setup();
     renderCard();
@@ -233,7 +245,7 @@ describe("AskUserCard once settled", () => {
   const answered = () =>
     asyncQuestion({
       status: "resolved",
-      response_data: JSON.stringify({ answers: [{ question: "Which database?", selected: ["SQLite"] }] }),
+      responseData: JSON.stringify({ answers: [{ question: "Which database?", selected: ["SQLite"] }] }),
     });
 
   it("collapses an answered question to one line: the question, then the answer", async () => {
@@ -285,7 +297,7 @@ describe("AskUserCard once settled", () => {
 
   it("collapses a withdrawn question to the question and the reason", async () => {
     listAsyncQuestionsMock.mockResolvedValue([
-      asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres" }),
+      asyncQuestion({ status: "resolved", withdrawnReason: "Went with Postgres" }),
     ]);
     renderCard();
 

@@ -26,6 +26,9 @@ import (
 // by the handler that is about to touch the file, so it covers the operation
 // that actually happens.
 func ResolveFile(ctx context.Context, path string) (string, error) {
+	if err := DenyCredentialFile(path); err != nil {
+		return "", err
+	}
 	p := FromContext(ctx)
 	if p == nil {
 		return path, nil
@@ -36,6 +39,9 @@ func ResolveFile(ctx context.Context, path string) (string, error) {
 // ResolveDir is ResolveFile for a path that must be a directory, or that a
 // handler is about to create.
 func ResolveDir(ctx context.Context, path string) (string, error) {
+	if err := DenyCredentialFile(path); err != nil {
+		return "", err
+	}
 	p := FromContext(ctx)
 	if p == nil {
 		return path, nil

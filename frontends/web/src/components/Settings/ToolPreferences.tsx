@@ -265,7 +265,7 @@ export function ToolPreferences({ providers }: ToolPreferencesProps) {
       </div>
 
       {availableProviders.length === 0 ? (
-        <p className="rounded-lg border border-border/50 bg-muted/30 p-3 text-xs text-muted-foreground">
+        <p className="rounded-lg border border-border/60 bg-background p-3 text-xs text-muted-foreground">
           No configured provider can generate images yet. Add an OpenAI key,
           connect ChatGPT, or enable Reliant credits, and this choice will
           appear.

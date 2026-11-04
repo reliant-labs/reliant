@@ -48,7 +48,7 @@ func TestServerTools_SeeTheWorktreesMachine(t *testing.T) {
 	require.False(t, result.IsError, result.Content)
 
 	line := logs.String()
-	assert.Contains(t, line, "LLM bug report")
+	assert.Contains(t, line, "issue.source=llm_bug_report", "the report is filed as an issue event")
 	assert.Contains(t, line, "daemon_id=daemon-b", "the worktree's machine reached the tool")
 	assert.Contains(t, line, "worktree_id=wt-1")
 }

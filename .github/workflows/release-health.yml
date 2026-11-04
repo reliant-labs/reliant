@@ -46,7 +46,7 @@
 # A workflow has one `workflow_run` trigger, with one `branches` filter for all
 # of its `workflows`. gate-health.yml filters to `branches: [main]`, which
 # drops every tag run (a tag run's head branch is the tag). Lifting the filter
-# would start gate-health.yml after every PR CI run, hundreds a week, only for
+# would start gate-health.yml after every CI run, hundreds a week, only for
 # each one to be skipped.
 
 name: Release health

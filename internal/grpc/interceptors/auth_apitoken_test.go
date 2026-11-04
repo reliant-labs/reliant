@@ -56,6 +56,10 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 		p, ok := auth.MachineTokenFromContext(authedCtx)
 		require.True(t, ok)
 		require.Equal(t, apiToken.TokenID, p.TokenID)
+		// The CLI login is this kind of token, and every agent shell holds
+		// it: a human-only action must be able to tell (reliant #2123).
+		require.Equal(t, auth.CredentialAccessToken, auth.CredentialFromContext(authedCtx))
+		require.Error(t, auth.RequirePerson(authedCtx, "decide an approval"))
 	})
 
 	t.Run("daemon:connect token is refused (scope separation)", func(t *testing.T) {
@@ -77,6 +81,7 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 		require.NotEmpty(t, claims.Sub)
 		_, isMachine := auth.MachineTokenFromContext(authedCtx)
 		require.False(t, isMachine)
+		require.Equal(t, auth.CredentialSharedKey, auth.CredentialFromContext(authedCtx))
 	})
 
 	t.Run("unknown access token rejected", func(t *testing.T) {
@@ -134,6 +139,7 @@ func TestAuthInterceptorUnreachableAuthorityIsNotARejection(t *testing.T) {
 	_, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err),
 		"an authority that could not be reached has not rejected anything")
+	assertOutageWithheld(t, err, "token verification unavailable")
 
 	tokenauthority.SetMemoryUnavailable(authority, false)
 	unknown, err := fat.Mint()

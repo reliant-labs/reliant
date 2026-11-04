@@ -32,8 +32,8 @@ import (
 // aborts the surrounding transaction the way a duplicate-key violation
 // (SQLSTATE 25P02) would.
 //
-// It writes the columns a new run has: the outcome and the worker stamps
-// start NULL whatever w carries.
+// It writes the columns a new run has: the outcome, the worker stamps and
+// the failed-start stamp start NULL whatever w carries.
 func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflow) error {
 	state := w.Status.State
 	row := &Workflow{
@@ -51,7 +51,7 @@ func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflo
 		OwnerUserID:     w.OwnerUserID,
 	}
 	_, err := db.Bun().NewInsert().Model(row).
-		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt).
+		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt, WorkflowFieldStartFailedAt, WorkflowFieldFailureDetail).
 		On("CONFLICT (id) DO NOTHING").
 		Returning("NULL").
 		Exec(ctx)
@@ -114,16 +114,6 @@ func ListRootWorkflows(ctx context.Context, db orm.Context, chatID string) ([]*c
 func ListWorkflowsByStatus(ctx context.Context, db orm.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
 	return selectWorkflows(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
 		return q.Where("state = ?", status.State).Where("stop_reason = ?", status.StopReason).Order("created_at ASC")
-	})
-}
-
-// ListRootWorkflowsByStatus is ListWorkflowsByStatus narrowed to roots, the
-// entry points that need dedicated workers.
-func ListRootWorkflowsByStatus(ctx context.Context, db orm.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	return selectWorkflows(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("parent_id IS NULL").
-			Where("state = ?", status.State).Where("stop_reason = ?", status.StopReason).
-			Order("created_at ASC")
 	})
 }
 
@@ -211,7 +201,11 @@ func setWorkflowStatus(q *bun.UpdateQuery, status core.WorkflowStatus) *bun.Upda
         WHEN ?0 = 3 AND ?1 <> 3 THEN NOW()
         WHEN ?0 IN (1, 2) THEN NULL
         ELSE completed_at
-    END`, status.State, status.StopReason)
+    END`, status.State, status.StopReason).
+		// A row that is live again belongs to a new run of the chat (its
+		// root workflow id is reused), which has not failed: the last run's
+		// reason must not read as this one's.
+		Set(`failure_detail = CASE WHEN ?0 IN (1, 2) THEN NULL ELSE failure_detail END`, status.State)
 }
 
 // UpdateWorkflowStatus moves a workflow to status. A missing workflow is
@@ -240,6 +234,115 @@ func CompareAndSwapWorkflowStatus(ctx context.Context, db orm.Context, id string
 	return n > 0, err
 }
 
+// MarkWorkflowStartFailed stamps start_failed_at on a PENDING workflow whose
+// start attempt failed, reporting whether it did. A workflow that already
+// left PENDING (the run got there first) or already carries a stamp is left
+// alone: the stamp is the time the start was first found failed.
+func MarkWorkflowStartFailed(ctx context.Context, db orm.Context, id string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("start_failed_at = NOW()").
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Where("start_failed_at IS NULL").
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// ClaimWorkflowStart clears a PENDING workflow's failed-start stamp before a
+// retry of its start, reporting whether the workflow is still PENDING. False
+// means the start is no longer this caller's to make: the run started, or a
+// later trigger fire abandoned it (AbandonFailedWorkflowStart). One UPDATE,
+// so it serializes with that abandon on the row lock: whichever commits
+// first wins, and the other matches nothing.
+//
+// A root that holds a workflow-capacity slot is first stamped as a new start
+// attempt, under its trigger event's row lock, BEFORE the root is claimed.
+// That stamp is what keeps capacity recovery from releasing the slot while
+// this start is in flight (ReleaseUnboundTriggerCapacity requires it to be
+// older than core.StartAttemptBound). If recovery released the slot first,
+// the start is no longer the caller's to make, and false is returned without
+// claiming the root.
+func ClaimWorkflowStart(ctx context.Context, db orm.Context, id string) (bool, error) {
+	var released []bool
+	if err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_start_attempt_at = clock_timestamp()
+ WHERE capacity_workflow_id = ? AND outcome = 'launched' RETURNING capacity_released`, id).Scan(ctx, &released); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("stamp workflow capacity start attempt: %w", err)
+	}
+	for _, r := range released {
+		if r {
+			return false, nil
+		}
+	}
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("start_failed_at = NULL").
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// AbandonFailedWorkflowStart moves a PENDING workflow whose start failed to
+// STOPPED/FAILED, reporting whether it did. False means it is not stranded:
+// it left PENDING, or a retry of its start has claimed it (ClaimWorkflowStart
+// cleared the stamp), so its run is starting.
+func AbandonFailedWorkflowStart(ctx context.Context, db orm.Context, id string) (bool, error) {
+	res, err := setWorkflowStatus(db.Bun().NewUpdate().Model((*Workflow)(nil)), core.Failed()).
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Where("start_failed_at IS NOT NULL").
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// strandedStartsSQL is every PENDING root workflow whose launch committed (its
+// chat has a launched trigger event) before cutoff and that no failed start
+// has been recorded for. The launch time is the later of the root's creation
+// and its event's: a branch's root is created when it is branched, long
+// before its first send records the event and starts it.
+var strandedStartsSQL = `
+SELECT ` + columnsOf[Workflow]("w") + `
+FROM workflows w
+WHERE w.parent_id IS NULL
+  AND w.state = ?0
+  AND w.start_failed_at IS NULL
+  AND w.created_at < ?1
+  AND EXISTS (
+      SELECT 1 FROM trigger_events e
+      WHERE e.chat_id = w.chat_id
+        AND e.outcome = ?2
+        AND e.created_at < ?1
+  )
+ORDER BY w.created_at ASC
+LIMIT ?3`
+
+// ListStrandedWorkflowStarts is the PENDING roots whose launch committed
+// before cutoff and whose start was never recorded as failed: either their
+// start is still in flight (a slow one, or one the bound is shorter than) or
+// whoever was starting them died between the commit and the Temporal start.
+// The reconciler tells the two apart by asking Temporal.
+func ListStrandedWorkflowStarts(ctx context.Context, db orm.Context, cutoff time.Time, limit int) ([]*core.Workflow, error) {
+	var rows []*Workflow
+	if err := db.Bun().NewRaw(strandedStartsSQL,
+		core.WorkflowStatePending, cutoff, core.TriggerEventLaunched, limit,
+	).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		out[i] = workflowToCore(row)
+	}
+	return out, nil
+}
+
+// rowsChanged reports whether an UPDATE matched a row.
+func rowsChanged(res sql.Result, err error) (bool, error) {
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // SetWorkflowOutcome records the run's verdict, the Node.outcome of the
 // terminal node it reached; "" clears it. Written once at completion and
 // never reconciled from Temporal, unlike status: a graph that routes to its
@@ -252,6 +355,22 @@ func SetWorkflowOutcome(ctx context.Context, db orm.Context, id, outcome string)
 	}
 	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
 		Set("outcome = ?", stored).
+		Where("id = ?", id).
+		Exec(ctx)
+	return requireOneRow(res, err, "workflow")
+}
+
+// SetWorkflowFailureDetail records why the run failed, on the run (see
+// core.Workflow.FailureDetail). It is written in the transaction that writes
+// the FAILED status; the next status that makes the row live again clears it
+// (setWorkflowStatus). A missing workflow is svcerr.NotFound.
+func SetWorkflowFailureDetail(ctx context.Context, db orm.Context, id, detail string) error {
+	var stored *string
+	if detail != "" {
+		stored = &detail
+	}
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("failure_detail = ?", stored).
 		Where("id = ?", id).
 		Exec(ctx)
 	return requireOneRow(res, err, "workflow")
@@ -442,38 +561,6 @@ func ResumeWorkflowsByChat(ctx context.Context, db orm.Context, chatID string) e
 	return err
 }
 
-// MarkWorkflowWorkerStarted records that a worker started for the workflow
-// and clears its stop stamp. The reconciler skips the stuck check for a
-// recently started worker.
-func MarkWorkflowWorkerStarted(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
-		Set("worker_started_at = NOW()").
-		Set("worker_stopped_at = NULL").
-		Where("id = ?", workflowID).
-		Exec(ctx)
-	return err
-}
-
-// MarkWorkflowWorkerStopped records that the workflow's worker stopped.
-func MarkWorkflowWorkerStopped(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
-		Set("worker_stopped_at = NOW()").
-		Where("id = ?", workflowID).
-		Exec(ctx)
-	return err
-}
-
-// RemoveWorkflow deletes one workflow; a missing one is not an error.
-func RemoveWorkflow(ctx context.Context, db orm.Context, id string) error {
-	return ignoreNotFound(DeleteWorkflow(ctx, db, id))
-}
-
-// RemoveChatWorkflows deletes every workflow of a chat.
-func RemoveChatWorkflows(ctx context.Context, db orm.Context, chatID string) error {
-	_, err := db.Bun().NewDelete().Model((*Workflow)(nil)).Where("chat_id = ?", chatID).Exec(ctx)
-	return err
-}
-
 func workflowToCore(row *Workflow) *core.Workflow {
 	w := &core.Workflow{
 		ID:              row.ID,
@@ -488,7 +575,9 @@ func workflowToCore(row *Workflow) *core.Workflow {
 		CompletedAt:     row.CompletedAt,
 		WorkerStartedAt: row.WorkerStartedAt,
 		WorkerStoppedAt: row.WorkerStoppedAt,
+		StartFailedAt:   row.StartFailedAt,
 		Outcome:         row.Outcome,
+		FailureDetail:   row.FailureDetail,
 		OwnerUserID:     row.OwnerUserID,
 	}
 	if row.State != nil {

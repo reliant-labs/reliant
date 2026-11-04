@@ -51,18 +51,18 @@ export interface CertaintyStyle {
 export const CERTAINTY_STYLES: Record<Certainty, CertaintyStyle> = {
   // Solid, filled, continuous border: measured, and it matched.
   "known-good": {
-    container: "bg-success/15 border border-solid border-success/40",
+    container: "bg-success-surface border border-solid border-success-border",
     foreground: "text-success-ink",
   },
   // Solid, filled, continuous border: measured, and it did not match.
   "known-bad": {
-    container: "bg-destructive/15 border border-solid border-destructive/40",
-    foreground: "text-destructive-ink",
+    container: "bg-danger-surface border border-solid border-danger-border",
+    foreground: "text-danger-ink",
   },
   // No fill, DASHED border: nothing was measured. Must not read as either above.
   unknown: {
     container: "bg-transparent border border-dashed border-border",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
   },
 };
 

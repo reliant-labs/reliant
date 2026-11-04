@@ -66,3 +66,20 @@ func TestValidUTF8(t *testing.T) {
 		t.Fatalf("validUTF8 changed valid content to %q", got)
 	}
 }
+
+// PostgreSQL text refuses NUL even though it is valid UTF-8 ("invalid byte
+// sequence for encoding \"UTF8\": 0x00"); a NUL in a tool result ended a prod
+// sub-agent when save_message exhausted its retries on it (2026-10-19).
+func TestValidUTF8ReplacesNUL(t *testing.T) {
+	got := validUTF8("before\x00after\xe2..")
+	if strings.IndexByte(got, 0) >= 0 || !utf8.ValidString(got) {
+		t.Fatalf("validUTF8 returned %q, want no NUL and valid UTF-8", got)
+	}
+	if got != "before\uFFFDafter\uFFFD.." {
+		t.Fatalf("validUTF8 = %q", got)
+	}
+	nul := "a\x00b"
+	if p := validUTF8Ptr(&nul); p == &nul || *p != "a\uFFFDb" {
+		t.Fatalf("validUTF8Ptr kept the NUL: %q", *p)
+	}
+}

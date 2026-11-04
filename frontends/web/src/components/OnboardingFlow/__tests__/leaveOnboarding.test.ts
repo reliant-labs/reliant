@@ -48,6 +48,7 @@ import {
   type OnboardingExitReason,
 } from "../leaveOnboarding";
 import { TOUR_FIRST_STEP_ID } from "../leaveOnboarding";
+import { START_APP } from "@/components/Apps/appStart";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -81,6 +82,19 @@ describe("onboardingExitTarget — where each reason lands the user", () => {
     for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
       expect(onboardingExitTarget(reason).to).toBe("/");
       expect(resolveSearch(reason)).toEqual({ tour: TOUR_FIRST_STEP_ID });
+    }
+  });
+
+  it("lands a user who chose to build an app on the app-building composer", () => {
+    // The choice is a peer of "just chat" in onboarding; finishing it must not
+    // drop the user on the same blank chat as everyone else.
+    for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
+      const target = onboardingExitTarget(reason, "build_app");
+      expect(target.to).toBe("/");
+      expect(target.search).toEqual({ tour: TOUR_FIRST_STEP_ID, start: START_APP });
+    }
+    for (const landing of ["chat", "existing_codebase", undefined] as const) {
+      expect(onboardingExitTarget("completed_cloud_gate_continue", landing).search).toEqual({ tour: TOUR_FIRST_STEP_ID });
     }
   });
 

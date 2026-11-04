@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -18,7 +18,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { InboxItemKind, InboxItemSchema, InboxStorageSchema, type InboxItem, type InboxStorage } from "@/gen/reliant/v1/inbox_pb";
+import { InboxItemKind, InboxItemSchema, InboxStorageSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 
@@ -55,7 +55,10 @@ const base = {
   waitingSince: new Date(Date.now() - 20 * 60_000).toISOString(),
 };
 
-export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"): InboxItem {
+/** A fixture's overrides: any fields but the message's own type tag. */
+type Overrides<T> = Partial<Omit<T, "$typeName">>;
+
+export function approvalItem(overrides: Overrides<InboxItem> = {}, id = "appr-1"): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.APPROVAL,
@@ -72,7 +75,7 @@ export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"):
   });
 }
 
-export function questionItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function questionItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.QUESTION,
@@ -93,7 +96,7 @@ export function questionItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function waitingItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.WAITING_FOR_MACHINE,
@@ -103,7 +106,7 @@ export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function failingItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_FAILING,
     itemId: "automation_failing:evt-9",
@@ -128,7 +131,7 @@ export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function launchFailedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_LAUNCH_FAILED,
     itemId: "automation_launch_failed:evt-5",
@@ -146,7 +149,7 @@ export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem 
   });
 }
 
-export function needsSetupItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function needsSetupItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_NEEDS_SETUP,
     itemId: "automation_needs_setup:trg-4:repos",
@@ -164,21 +167,26 @@ export function needsSetupItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function runPausedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
-    kind: InboxItemKind.RUN_FINISHED,
-    itemId: "run_finished:chat-1",
-    triggerId: "trg-3",
-    triggerName: "Nightly triage",
-    payload: { case: "runFinished", value: {} },
+    kind: InboxItemKind.AUTOMATION_RUN_PAUSED,
+    itemId: "automation_run_paused:chat-1@20261030T082500.000000",
+    triggerId: "trg-4",
+    triggerName: "cp-merge",
+    payload: {
+      case: "automationRunPaused",
+      value: { reason: "machine e164d47d did not answer the gate command" },
+    },
     ...overrides,
   });
 }
 
 export function storageItem(
-  overrides: Partial<InboxItem> = {},
-  storage: Partial<InboxStorage> = {},
+  overrides: Overrides<InboxItem> = {},
+  // An init shape, not Overrides: its nested messages (volumes, held,
+  // processes.top) are written as plain objects, which create() fills in.
+  storage: MessageInitShape<typeof InboxStorageSchema> = {},
 ): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.STORAGE,

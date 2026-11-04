@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
@@ -10,6 +11,7 @@ import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
+  appsSearchSchema,
   authSearchSchema,
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -26,6 +28,8 @@ import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundar
 import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
+import { AutomationDialogHost } from './components/Automations/dialog/AutomationDialogHost'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
@@ -33,6 +37,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { PageVisitTracker } from './components/PageVisitTracker'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -71,6 +76,8 @@ const EmailVerification = lazyRoute(
   () => import('./components/EmailVerification'), 'EmailVerification')
 const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
+const ClaimPage = lazyRoute(
+  () => import('./components/Claim/ClaimPage'), 'ClaimPage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -86,11 +93,17 @@ const ForgePanePreview = lazyRoute(
 // no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
+const ObservabilityBillingPreview = lazyRoute(
+  () => import('./components/Forge/Observability/__preview__/ObservabilityBillingPreview'), 'default')
+const TraceLatencyPreview = lazyRoute(
+  () => import('./components/Forge/Observability/traceScatter/__preview__/TraceLatencyPreview'), 'default')
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
 const DashboardsPreview = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
+const MetricsExplorerPreview = lazyRoute(
+  () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
@@ -101,28 +114,30 @@ const ConnectorConsentPage = lazyRoute(
   () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
 const WorkflowPage = lazyRoute(
   () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
-const AutomationsListPage = lazyRoute(
-  () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
-const AutomationDetailPage = lazyRoute(
-  () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
+const AutomationRedirectPage = lazyRoute(
+  () => import('./components/workflows/AutomationRedirectPage'), 'AutomationRedirectPage')
 const RunsPage = lazyRoute(
   () => import('./components/runs/RunsPage'), 'RunsPage')
 const RunDetailPage = lazyRoute(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
 const WorkflowsLayout = lazyRoute(
   () => import('./components/workflows/WorkflowsShell'), 'WorkflowsLayout')
-const LibraryPage = lazyRoute(
-  () => import('./components/workflows/library/LibraryPage'), 'LibraryPage')
+const WorkflowsListPage = lazyRoute(
+  () => import('./components/workflows/list/WorkflowsListPage'), 'WorkflowsListPage')
 const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
+const AppsPage = lazyRoute(
+  () => import('./components/Apps/AppsPage'), 'AppsPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
   () => import('./components/Mobile/MobileShell'), 'MobileShell')
-const MobileChatList = lazyRoute(
-  () => import('./components/Mobile/MobileChatList'), 'MobileChatList')
+const MobileSplitLayout = lazyRoute(
+  () => import('./components/Mobile/MobileSplitLayout'), 'MobileSplitLayout')
+const MobileChatsEmptyDetail = lazyRoute(
+  () => import('./components/Mobile/MobileSplitLayout'), 'MobileChatsEmptyDetail')
 const MobileChatScreen = lazyRoute(
   () => import('./components/Mobile/MobileChatScreen'), 'MobileChatScreen')
 const MobileNewChat = lazyRoute(
@@ -141,6 +156,10 @@ const MobileWorkflowCatalog = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
 const MobileInboxScreen = lazyRoute(
   () => import('./components/Mobile/MobileInboxScreen'), 'MobileInboxScreen')
+const MobileRunsScreen = lazyRoute(
+  () => import('./components/Mobile/MobileRunsScreen'), 'MobileRunsScreen')
+const MobileAutomationRedirect = lazyRoute(
+  () => import('./components/Mobile/MobileAutomationRedirect'), 'MobileAutomationRedirect')
 const MobileDiagnosticsRoute = lazyRoute(
   () => import('./components/Mobile/MobileDiagnosticsRoute'), 'MobileDiagnosticsRoute')
 const MobileSettingsScreen = lazyRoute(
@@ -163,8 +182,6 @@ const ForgeConsoleReleasesPage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage')
 const ForgeConsoleReleasePage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage')
-const ForgeConsoleObservabilityPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityOverviewPage')
 const ForgeConsoleObservabilityViewPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
 const ForgeConsoleDashboardsPage = lazyRoute(
@@ -173,10 +190,6 @@ const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
-const ForgeConsoleMonitoringPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'MonitoringSettingsPage')
-const ForgeConsoleSettingsPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ProjectSettingsPage')
 const ForgeConsoleActivityPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ActivityPage')
 const ForgeEnvironmentsPage = lazyRoute(
@@ -189,8 +202,10 @@ const ForgeLandingRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
 const ForgeLegacyEnvRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
-const ForgeLegacyObservabilityRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyObservabilityRoute')
+const ForgeOrgObservabilityRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute')
+const ForgeOrgLayout = lazyRoute(
+  () => import('./components/Forge/Org'), 'OrgConsoleLayout')
 const ForgeLegacyDomainsRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
 const ForgeLegacyCommandRoute = lazyRoute(
@@ -253,7 +268,7 @@ function RootShell() {
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
-      navigate({ href: mobilePathFor(pathname), replace: true });
+      navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
   }, [pathname, search, navigate]);
 
@@ -264,10 +279,17 @@ function RootShell() {
   // /m/*); ModernApp and the workflow builder contribute their handlers to it.
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
+      <ActiveOrgBinding />
+      <PageVisitTracker />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>
       <ModalLayer />
+      {/* Add project opens over any route (the sidebar, Settings, the
+          new-chat project chip, the shortcut, the tray). */}
+      <AddProjectDialogHost />
+      {/* openAutomationDialog: one automation dialog for every page, chat card and builder panel. */}
+      <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
@@ -368,6 +390,15 @@ const cliLoginRoute = createRoute({
   component: lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin'),
 })
 
+// Self-hosted machine pairing (`reliant daemon start` prints this link with
+// its code). Root-level and unguarded like /oauth/cli: the page signs the user
+// in itself and keeps the code across that detour.
+const devicePairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/device',
+  component: lazyRoute(() => import('./components/Auth/DevicePairing'), 'DevicePairing'),
+})
+
 const proxyAuthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/proxy',
@@ -429,6 +460,17 @@ const upgradeRoute = createRoute({
   ),
 })
 
+// Claim a no-signup deploy (`/claim#rcl_<token>`, handed over by an agent).
+// Root-level and unguarded: the page shows what is being claimed to someone
+// with no session, and a layout redirect to /auth would lose the claim. The
+// token never reaches the router: lib/claimLinkBoot moves it out of the
+// fragment before the router is built. See components/Claim/ClaimPage.tsx.
+const claimRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/claim',
+  component: ClaimPage,
+})
+
 // Pathless layout route that owns the App shell + its shared search schema.
 // Children `/` and `/project/$projectId` both render <App />; placing the
 // validateSearch + AuthGuard on the parent means components inside App can
@@ -455,17 +497,17 @@ const indexRoute = createRoute({
   component: App,
 })
 
-// Project routes — the URL is the source of truth for the currently-selected
-// project. `/project/$projectId` deep-links into a specific project; the App
-// component reads the param via useParams and calls selectProject. `/project`
-// (no id) redirects to `/` (the project picker view inside App).
+// Project routes — the URL carries the sidebar's project filter.
+// `/project/$projectId` shows one project (App reads the param via useParams
+// and calls setProjectFilter); `/` shows every project. `/project` (no id)
+// redirects to `/`.
 const projectRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: 'project/$projectId',
   component: App,
 })
 
-const projectPickerRedirectRoute = createRoute({
+const projectRootRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/project',
   component: () => <Navigate to="/" search={{}} />,
@@ -526,7 +568,16 @@ const forgePanePreviewRoute = createRoute({
 const forgeObservabilityPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-observability-preview',
-  component: () => <DevOnlyRoute><ObservabilityPreview /></DevOnlyRoute>,
+  component: () => <DevOnlyRoute>{new URLSearchParams(window.location.search).has('billingCase') ? <ObservabilityBillingPreview /> : <ObservabilityPreview />}</DevOnlyRoute>,
+})
+
+// The traces page's latency chart (scatter + histogram) in every state, on
+// seeded synthetic traces — a busy hour, the newest page of many, a brushed
+// region, loading, error, empty — in every scheme, no backend.
+const forgeTraceLatencyPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-trace-latency-preview',
+  component: () => <DevOnlyRoute><TraceLatencyPreview /></DevOnlyRoute>,
 })
 
 const consolePrimitivesPreviewRoute = createRoute({
@@ -562,6 +613,14 @@ const forgeDashboardsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
+// The metrics explorer, inside the real console chrome, against the explorer's
+// fixture app — every state in every scheme, no backend.
+const forgeMetricsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-metrics-preview',
+  component: () => <DevOnlyRoute><MetricsExplorerPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -586,7 +645,7 @@ const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticate
   consent: ConnectorConsentPage,
 })
 
-// /settings/$section and /settings/environments/$machineId. Defined in
+// /settings/$section and /settings/machines/$machineId. Defined in
 // settingsSectionRoutes.tsx so the route tests mount the same definitions; an
 // unknown slug redirects to /settings with a notice rather than throwing.
 const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {
@@ -616,17 +675,16 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
-// The Workflows area — Library, Runs, Automations — and the redirects from
+// The Workflows area — Workflows and Runs — and the redirects from
 // the paths it replaced. Defined in workflowsAreaRoutes.tsx so the route tests
 // mount the same definitions.
 const workflowsAreaRoutes = createWorkflowsAreaRoutes(() => authenticatedLayoutRoute, {
   layout: WorkflowsLayout,
-  library: LibraryPage,
+  library: WorkflowsListPage,
   workflowDetail: WorkflowDetailPage,
   runs: RunsPage,
   runDetail: RunDetailPage,
-  automations: AutomationsListPage,
-  automationDetail: AutomationDetailPage,
+  automationRedirect: AutomationRedirectPage,
 })
 
 // Inbox: everything waiting on the user, across every chat and project
@@ -657,7 +715,7 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// The forge console (research/console-v3/PROPOSAL.md §3.2): /forge/p/$project/…
+// The forge console: /forge/p/$project/…
 // for every page, addressed by the FORGE project name, plus /forge and the
 // retired URLs, which resolve a project and redirect so bookmarks and
 // notification deep links keep working. Defined in forgeConsoleRoutes.tsx so
@@ -680,7 +738,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   workload: gated(ForgeConsoleWorkloadPage),
   releases: gated(ForgeConsoleReleasesPage),
   release: gated(ForgeConsoleReleasePage),
-  observability: gated(ForgeConsoleObservabilityPage),
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
@@ -688,12 +745,11 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
   domains: gated(ForgeDomainsPage),
-  monitoring: gated(ForgeConsoleMonitoringPage),
-  settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
+  orgLayout: gated(ForgeOrgLayout),
+  orgObservability: gated(ForgeOrgObservabilityRoute),
   landing: gated(ForgeLandingRoute),
   legacyEnv: gated(ForgeLegacyEnvRoute),
-  legacyObservability: gated(ForgeLegacyObservabilityRoute),
   legacyDomains: gated(ForgeLegacyDomainsRoute),
   legacyCommand: gated(ForgeLegacyCommandRoute),
 })
@@ -704,6 +760,17 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 // without the conditional. /onboarding owns: reset-onboarding signal, GitHub
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
+// Apps: everything the user has built and deployed, with its live links
+// (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
+// /forge, land here. Behind ForgeGate like every forge surface: it is the way
+// into the console, and the Developer off-switch has to turn it off too.
+const appsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/apps',
+  validateSearch: appsSearchSchema,
+  component: gated(AppsPage),
+})
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/onboarding',
@@ -730,14 +797,24 @@ const mobileLayoutRoute = createRoute({
   component: MobileShell,
 })
 
-const mobileChatsRoute = createRoute({
+// The chats routes share one layout: single pane on a phone, list–detail at
+// 840px and up, where the list stays mounted beside the routed chat (see
+// MobileSplitLayout). Pathless, so the chat routes keep their paths and the
+// layout owns the list: `/m/chats` itself is only the empty detail pane.
+const mobileChatsLayoutRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
+  id: '_chats',
+  component: MobileSplitLayout,
+})
+
+const mobileChatsRoute = createRoute({
+  getParentRoute: () => mobileChatsLayoutRoute,
   path: '/m/chats',
-  component: MobileChatList,
+  component: MobileChatsEmptyDetail,
 })
 
 const mobileChatRoute = createRoute({
-  getParentRoute: () => mobileLayoutRoute,
+  getParentRoute: () => mobileChatsLayoutRoute,
   path: '/m/chats/$chatId',
   component: MobileChatScreen,
 })
@@ -804,6 +881,21 @@ const mobileInboxRoute = createRoute({
   component: MobileInboxScreen,
 })
 
+// The run log, and an automation link resolved to its workflow: so a desktop
+// /workflows/runs or automation link opened on a phone lands on its target
+// (lib/mobileRedirect.ts, mobilePathFor) instead of the chat list.
+const mobileRunsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/runs',
+  component: MobileRunsScreen,
+})
+
+const mobileAutomationRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/automations/$triggerId',
+  component: MobileAutomationRedirect,
+})
+
 // Settings → Diagnostics at its own URL, for a support link.
 const mobileDiagnosticsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
@@ -814,6 +906,10 @@ const mobileDiagnosticsRoute = createRoute({
 const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
+  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string } => ({
+    section: typeof search.section === 'string' ? search.section : undefined,
+    returnTo: typeof search.returnTo === 'string' ? search.returnTo : undefined,
+  }),
   component: MobileSettingsScreen,
 })
 
@@ -851,25 +947,28 @@ const routeTree = rootRoute.addChildren([
   connectionOAuthCallbackRoute,
   oauthConsentRoute,
   cliLoginRoute,
+  devicePairingRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
   upgradeRoute,
+  claimRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,
+  forgeTraceLatencyPreviewRoute,
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
-  projectPickerRedirectRoute,
+  forgeMetricsPreviewRoute,
+  projectRootRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
     mobileLayoutRoute.addChildren([
-      mobileChatsRoute,
-      mobileChatRoute,
+      mobileChatsLayoutRoute.addChildren([mobileChatsRoute, mobileChatRoute]),
       mobileNewChatRoute,
       mobileDaemonsRoute,
       mobileDaemonRoute,
@@ -882,6 +981,8 @@ const routeTree = rootRoute.addChildren([
       mobileSettingsRoute,
       mobileGitHubRoute,
       mobileInboxRoute,
+      mobileRunsRoute,
+      mobileAutomationRoute,
       mobileDiagnosticsRoute,
     ]),
     onboardingRoute,
@@ -893,6 +994,7 @@ const routeTree = rootRoute.addChildren([
     workflowBuilderRoute,
     ...workflowsAreaRoutes,
     inboxRoute,
+    appsRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

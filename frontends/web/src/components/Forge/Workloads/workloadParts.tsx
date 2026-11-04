@@ -27,7 +27,7 @@ import { causeNote, healthDetailText, healthLine } from "./plainHealth";
 /** The share of the limit at which a meter turns to the warning tone (the mockup's 85%). */
 export const USAGE_HOT = 0.85;
 
-/** The server's verdict, as a dot and a word; the reason on hover. The word is tinted only when it is not fine (D8). */
+/** The server's verdict, as a dot and a word; the reason on hover. The word is tinted only when it is not fine. */
 export function HealthStatus({
   workload,
   withReason = false,
@@ -122,8 +122,8 @@ export function DriftTag({ workload }: { workload: Pick<ForgeHostedWorkload, "ob
 }
 
 /**
- * A confirm dialog for a workload action that names its environment (D1).
- * The confirm button is the primary action, never a status colour (D8): the
+ * A confirm dialog for a workload action that names its environment.
+ * The confirm button is the primary action, never a status colour: the
  * consequence is in the words, not in amber.
  */
 export function ActionDialog({
@@ -216,7 +216,7 @@ export function UsageMeter({ usage, format, what }: { usage: ResourceUsage | nul
 // ── Toolbar chips (the Releases list's, in the same shape) ─────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 
 export function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: () => void; children: ReactNode; title?: string; testId?: string }) {

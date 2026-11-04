@@ -13,4 +13,5 @@ import (
 // adapts to config.StoredConfigStore.
 type ConfigRecordReader interface {
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
+	GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*db.ProjectConfigRecord, bool, error)
 }

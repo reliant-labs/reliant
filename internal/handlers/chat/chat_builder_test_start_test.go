@@ -103,6 +103,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	chat, err := f.repo.GetChat(f.ctx, chatID)
 	require.NoError(t, err)
 	assert.False(t, chat.ListInSidebar)
+	assert.Equal(t, core.ChatOriginBuilderTest, chat.Origin)
 }
 
 // The same draft started the ordinary way is still refused: builder_test is

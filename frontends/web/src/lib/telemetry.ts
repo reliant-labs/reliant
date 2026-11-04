@@ -2,9 +2,9 @@
  * Browser telemetry on forge's web runtime (the HyperDX / ClickStack SDK).
  *
  * Errors, page loads, fetch/XHR spans and masked session replay go to the
- * ingest URL in VITE_OTEL_ENDPOINT. Nothing starts unless that is set AND the
- * `clickstack` sink is on (telemetrySinks.ts), so a build that configures
- * neither is unchanged. Sentry runs beside this until it is removed.
+ * runtime config's OTEL_ENDPOINT. Nothing starts unless that is set
+ * (telemetryEndpoint.ts). A failure the app catches itself is reported through
+ * errorReporting.ts.
  *
  * Consent: init only when crash reporting is on. Turning it off mid-session
  * calls the runtime's disableTelemetry(). The SDK has no off switch for its own
@@ -16,20 +16,19 @@
  * can hold chat content.
  */
 
-import {
-  disableTelemetry,
-  reportException,
-  setTelemetryUser,
-} from "@reliantlabs/forge-web-runtime";
+import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
-import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
+import { privacyConsent, subscribePrivacyConsent } from "../hooks/privacy-queries";
 import { appBuild } from "./appBuild";
+import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
-import { clickstackEnabled } from "./telemetrySinks";
+import { reportError } from "./errorReporting";
+import { clickstackEnabled } from "./telemetryEndpoint";
+import { SERVICE_NAME } from "./otel_gen";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
 
@@ -98,8 +97,20 @@ export function replaySampleRate(input: ReplayRateInput): number {
 }
 
 export interface TelemetryConfigInput {
-  env: Record<string, string | undefined>;
+  /** The runtime config's fields this module reads (config_gen.ts). */
+  config: Partial<
+    Pick<
+      ReliantWebConfig,
+      | "OTEL_ENDPOINT"
+      | "OTEL_REPLAY"
+      | "API_URL"
+      | "CONTROL_PLANE_API_URL"
+      | "GATEWAY_URL"
+    >
+  >;
   prerelease: boolean;
+  /** forge's frontend build id (VITE_APP_VERSION), when forge built the bundle. */
+  appVersion?: string;
   /** This bundle's baked build version (appBuild().version). */
   buildVersion: string;
   /** True in the Electron renderer (window.electronAPI is present). */
@@ -108,21 +119,36 @@ export interface TelemetryConfigInput {
   extraApiOrigins?: Array<string | undefined>;
 }
 
+/**
+ * The forge frontend names this bundle reports as (`forge.frontend`). They are
+ * the names control-plane files the build's source maps under, and the key the
+ * issues enrichment worker looks them up by: a bundle that reports none cannot
+ * be symbolicated. The hosted SPA is the `reliant-web` frontend of the
+ * `prod-web` env; the packaged app's keyed ingest key is the `desktop`
+ * frontend (deploy/kcl/lib/env.k, reliant_desktop_ingest_keys).
+ */
+export const WEB_FRONTEND = "reliant-web";
+export const DESKTOP_FRONTEND = "desktop";
+
 /** The runtime config for this build. Pure; the privacy-relevant options are fixed here. */
 export function buildTelemetryConfig(
   input: TelemetryConfigInput,
 ): BrowserTelemetryConfig {
-  const { env } = input;
+  const { config } = input;
   return {
-    serviceName: "reliant-web",
-    serviceVersion: env.VITE_APP_VERSION || input.buildVersion,
+    // forge's derivation for this frontend ("<project>-<frontend>"), the
+    // service.name the generated dashboards and alert defaults filter on
+    // (deploy/observability/). A literal here drifted from it once, and every
+    // web alert matched nothing.
+    serviceName: SERVICE_NAME,
+    frontend: input.desktop ? DESKTOP_FRONTEND : WEB_FRONTEND,
+    serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
-    endpoint: env.VITE_OTEL_ENDPOINT,
+    endpoint: config.OTEL_ENDPOINT || undefined,
     apiOrigins: [
-      env.VITE_API_URL,
-      env.VITE_GRPC_URL,
-      env.VITE_CONTROL_PLANE_API_URL,
-      env.VITE_GATEWAY_URL,
+      config.API_URL || undefined,
+      config.CONTROL_PLANE_API_URL || undefined,
+      config.GATEWAY_URL || undefined,
       ...(input.extraApiOrigins ?? []),
     ],
     // The product-event contract's client tag (dev-docs/product-events.md).
@@ -131,7 +157,7 @@ export function buildTelemetryConfig(
     appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
-    replay: env.VITE_OTEL_REPLAY === "true",
+    replay: config.OTEL_REPLAY === "true",
     replaySampleRate: input.replayRate,
   };
 }
@@ -175,7 +201,7 @@ let unsubscribeConsent: (() => void) | null = null;
 export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
-  if (!getPrivacySettings().crashReportingEnabled) return Promise.resolve(false);
+  if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
 
   started = start().catch((err) => {
     console.warn("[telemetry] init failed:", err);
@@ -185,7 +211,7 @@ export function initTelemetry(): Promise<boolean> {
 }
 
 async function start(): Promise<boolean> {
-  const env = import.meta.env as Record<string, string | undefined>;
+  const runtime = loadConfig();
   const desktop = typeof window !== "undefined" && !!window.electronAPI;
 
   let prerelease = false;
@@ -198,18 +224,24 @@ async function start(): Promise<boolean> {
   }
 
   // Consent may have been withdrawn while the version was being read.
-  if (!getPrivacySettings().crashReportingEnabled) return false;
+  if (!privacyConsent().crashReportingEnabled) return false;
 
   const buildVersion = appBuild()?.version ?? "unknown";
   const config = buildTelemetryConfig({
-    env,
+    config: runtime,
+    // BUILD-TIME ON PURPOSE, the one VITE_ read left: forge stamps its
+    // frontend build id when it builds the bundle. It names these bytes, so
+    // it is the same in every environment the build is promoted to, and the
+    // runtime config (per environment) is the wrong home for it.
+    // forge:lint-disable-next-line forgeconv-frontend-process-env: a build stamp, not deployment config
+    appVersion: import.meta.env.VITE_APP_VERSION as string | undefined,
     prerelease,
     buildVersion,
     desktop,
     replayRate: replaySampleRate({
       prerelease,
-      policy: env.VITE_OTEL_REPLAY_SAMPLE_POLICY,
-      rateOverride: env.VITE_OTEL_REPLAY_SAMPLE_RATE,
+      policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,
+      rateOverride: runtime.OTEL_REPLAY_SAMPLE_RATE,
       now: Date.now(),
       local: safeStorage("localStorage"),
       session: safeStorage("sessionStorage"),
@@ -224,8 +256,8 @@ async function start(): Promise<boolean> {
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
 
-  unsubscribeConsent = usePrivacyStore.subscribe((state) => {
-    if (!state.crashReportingEnabled) disableTelemetry();
+  unsubscribeConsent = subscribePrivacyConsent((consent) => {
+    if (!consent.crashReportingEnabled) disableTelemetry();
   });
 
   try {
@@ -251,8 +283,19 @@ function safeStorage(
   }
 }
 
-/** Attach the signed-in user's id (never the email) to telemetry, or clear it. */
+/**
+ * Attach the signed-in user's id (never the email) to telemetry, or clear it:
+ * this page's, and the Electron main process's, whose own telemetry cannot see
+ * the renderer's user.
+ */
 export function setTelemetryUserId(user: { id: string } | null): void {
+  if (!isDev) {
+    try {
+      void window.electronAPI?.setTelemetryUser?.(user ? user.id : null)?.catch(() => {});
+    } catch {
+      // Best-effort.
+    }
+  }
   if (!clickstackEnabled()) return;
   setTelemetryUser(user ? user.id : null);
 }
@@ -265,9 +308,8 @@ export function reportErrorToTelemetry(
   error: unknown,
   componentStack?: string | null,
 ): void {
-  if (!clickstackEnabled()) return;
-  if (!getPrivacySettings().crashReportingEnabled) return;
-  reportException(
+  if (!privacyConsent().crashReportingEnabled) return;
+  reportError(
     error,
     componentStack
       ? { componentStack: componentStack.slice(0, MAX_COMPONENT_STACK_CHARS) }

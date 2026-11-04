@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,6 +88,7 @@ func TestGetThreadTokenCount_EmptyThread(t *testing.T) {
 
 // TestGetThreadTokenCount_SingleMessage tests token count from a single message.
 func TestGetThreadTokenCount_SingleMessage(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -342,6 +343,7 @@ func TestGetThreadTokenCount_MaxOrdinal(t *testing.T) {
 
 // TestGetThreadTokenCount_ForkInheritance tests that forked threads inherit tokens from parent.
 func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -747,7 +749,7 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 	msgs, err := repo.GetMessagesByContextWindow(ctx, cwID, nil)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
-	_, err = store.UpdateThreadForkPoint(ctx, repo.ORM(), threadID, &msgs[0].ID)
+	_, err = repo.ORM().Bun().NewUpdate().Table("threads").Set("fork_at_message_id = ?", msgs[0].ID).Where("id = ?", threadID).Exec(ctx)
 	require.NoError(t, err)
 
 	// Should return 0 without infinite loop
@@ -762,6 +764,7 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 
 // TestGetThreadTokenCount_PostCompaction tests token counting after compaction.
 func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -972,6 +975,7 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 
 // TestGetThreadTokenCount_CrossConversationFork tests token inheritance across different conversations.
 func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1071,6 +1075,7 @@ func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
 
 // TestGetThreadTokenCount_EmptyThreadID tests that empty thread ID returns error.
 func TestGetThreadTokenCount_EmptyThreadID(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1084,6 +1089,7 @@ func TestGetThreadTokenCount_EmptyThreadID(t *testing.T) {
 
 // TestGetThreadTokenCount_NonExistentThread tests handling of non-existent thread.
 func TestGetThreadTokenCount_NonExistentThread(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1098,6 +1104,7 @@ func TestGetThreadTokenCount_NonExistentThread(t *testing.T) {
 
 // TestGetThreadTokenCount_OnlyUserMessages tests thread with only user messages (no token data).
 func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1159,6 +1166,7 @@ func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
 
 // TestGetThreadTokenCount_ZeroTokenValues tests messages with explicit zero token values.
 func TestGetThreadTokenCount_ZeroTokenValues(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()

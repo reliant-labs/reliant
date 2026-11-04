@@ -7,9 +7,9 @@ describe('workflow-flow switch behavior', () => {
     const workflow: Workflow = {
       name: 'event-scoped-switches',
       nodes: [
-        { id: 'run-1', type: 'run', command: 'echo run' },
-        { id: 'success', type: 'run', command: 'echo success' },
-        { id: 'failure', type: 'run', command: 'echo failure' },
+        { id: 'run-1', type: 'run' },
+        { id: 'success', type: 'run' },
+        { id: 'failure', type: 'run' },
       ],
       edges: [
         {
@@ -42,7 +42,7 @@ describe('workflow-flow switch behavior', () => {
   it('should not render orphan switches that only exist in ui.switches metadata', () => {
     const workflow: Workflow = {
       name: 'orphan-switch-metadata',
-      nodes: [{ id: 'step-1', type: 'run', command: 'echo 1' }],
+      nodes: [{ id: 'step-1', type: 'run' }],
       edges: [],
       ui: {
         switches: {
@@ -157,7 +157,7 @@ describe('workflow-flow switch behavior', () => {
   it('should honor workflowStartLabel for the workflow start node', () => {
     const workflow: Workflow = {
       name: 'inline-loop-body',
-      nodes: [{ id: 'step-1', type: 'run', command: 'echo 1' }],
+      nodes: [{ id: 'step-1', type: 'run' }],
       edges: [],
     }
 

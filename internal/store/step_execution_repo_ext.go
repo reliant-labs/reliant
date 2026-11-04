@@ -64,26 +64,12 @@ func ListWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID 
 	})
 }
 
-// ListStepExecutionsByStep is every execution of one step of a workflow,
-// oldest first, for CEL history queries.
-func ListStepExecutionsByStep(ctx context.Context, db orm.Context, workflowID, stepID string) ([]*core.StepExecution, error) {
-	return selectStepExecutions(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("workflow_id = ?", workflowID).Where("step_id = ?", stepID).Order("created_at ASC")
-	})
-}
-
 func selectStepExecutions(ctx context.Context, db orm.Context, apply func(*bun.SelectQuery) *bun.SelectQuery) ([]*core.StepExecution, error) {
 	var rows []*StepExecution
 	if err := apply(db.Bun().NewSelect().Model(&rows)).Scan(ctx); err != nil {
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
-}
-
-// RemoveWorkflowStepExecutions deletes every step of a workflow.
-func RemoveWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewDelete().Model((*StepExecution)(nil)).Where("workflow_id = ?", workflowID).Exec(ctx)
-	return err
 }
 
 // stepExecutionRecordsForChatSQL is the full record of a chat's steps —
@@ -124,6 +110,86 @@ func ListStepExecutionRecordsForChat(ctx context.Context, db orm.Context, chatID
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
+}
+
+// ListRunNodeExecutions reads one workflow subtree, never a different root
+// run in the same chat. Inspect octet_length before any JSON cast: complete
+// output/error values over 16 KiB, or over the 128 KiB cumulative scan budget,
+// are omitted whole. Never take an unsanitized prefix/tail (it could split a
+// secret). Only then extract streams, the safe skipped boolean and, for a
+// save_message NODE, the text it wrote (a failure-outcome node's text is the
+// run's explanation). Resolved inputs and arbitrary output fields never leave
+// Postgres.
+//
+// A save_message node is a graph node like any other — a run that ends at a
+// `outcome: failure` save_message has no other trace of where it ended — so
+// only the "<node>-save" companion rows (the message an agent/LLM step wrote,
+// already shown as that step) are dropped with the bookkeeping activities.
+func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID string, limit int) ([]*core.StepExecution, error) {
+	if limit <= 0 || limit > 201 {
+		limit = 201
+	}
+	var rows []*StepExecution
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), picked AS (
+ SELECT `+columnsOf[StepExecution]("se")+` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+ WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
+   AND NOT (se.activity_name = 'SaveMessage' AND right(se.step_id, 5) = '-save')
+ ORDER BY se.created_at DESC, se.id DESC LIMIT ?1
+), budgeted AS (
+ SELECT `+columnsOf[StepExecution]("picked")+`, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
+ OVER (ORDER BY created_at DESC, id DESC) AS scan_bytes FROM picked
+)
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.exit_code, se.success, se.duration_ms, se.created_at,
+       se.loop_node_id, se.loop_iteration, se.attempt, se.node_path,
+       CASE WHEN coalesce(octet_length(se.error_message), 0) = 0 THEN se.error_message
+         WHEN octet_length(se.error_message) > 16384 OR se.scan_bytes > 131072
+         THEN '[error omitted: safe diagnostic limit]' ELSE se.error_message END AS error_message,
+       CASE WHEN octet_length(se.output_json) > 16384 OR se.scan_bytes > 131072
+         THEN '{"_diagnostic_omitted":true}'
+         WHEN se.output_json IS JSON OBJECT THEN json_build_object(
+           'skipped', se.output_json::jsonb->'skipped' = 'true'::jsonb,
+           'stdout', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stdout' END,
+           'stderr', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stderr' END,
+           'message', CASE WHEN se.activity_name = 'SaveMessage' THEN se.output_json::jsonb#>>'{message,text}' END)::text
+         ELSE NULL END AS output_json
+FROM budgeted se
+ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	return stepExecutionsToCore(rows), nil
+}
+
+// DeclaredFailureError is the error MarkDeclaredFailureNode records on the
+// node a run ended at with outcome: failure. rundiagnostics appends the text
+// a save_message node wrote.
+const DeclaredFailureError = "declared the run's outcome: failure"
+
+// MarkDeclaredFailureNode records, on the newest attempt of the top-level node
+// nodeID of workflow workflowID, that it declared the run failed. A run that
+// routes to an `outcome: failure` node completes with no error anywhere — the
+// node's own activity succeeded — so without this every diagnostic surface
+// (get_run, trigger health, the automation failure message) finds no failed
+// node and says "declared failure without a recorded node error". A row that
+// already carries an error keeps it. Reports whether a row was marked: a node
+// that runs no activity (compute, a sub-workflow) has none.
+func MarkDeclaredFailureNode(ctx context.Context, db orm.Context, workflowID, nodeID string) (bool, error) {
+	res, err := db.Bun().NewRaw(`UPDATE step_executions SET success = 0, error_message = ?2
+WHERE id = (
+    SELECT id FROM step_executions
+    WHERE workflow_id = ?0 AND step_id = ?1 AND (node_path IS NULL OR node_path = ?1)
+      AND activity_name <> 'SkippedStep'
+    ORDER BY created_at DESC, id DESC LIMIT 1)
+  AND coalesce(error_message, '') = ''`, workflowID, nodeID, DeclaredFailureError).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // chatStepExecutionsSQL is every step of every workflow of one chat, in one
@@ -170,7 +236,7 @@ func ListChatStepExecutions(ctx context.Context, db orm.Context, chatID string, 
 	return scanChatStepExecutions(ctx, db.Bun().NewRaw(chatStepExecutionsSQL, chatID, pgdialect.Array(internalActivities)))
 }
 
-// basicChatStepExecutionsSQL is the steps the chat timeline renders, for
+// BasicChatStepExecutionsSQL is the steps the chat timeline renders, for
 // ChatService/GetWorkflowExecutions in its BASIC view: each USER-FACING step,
 // plus its "-save" sibling when that recorded a message (the step then
 // renders AS that message). On chat 8bb0a875 that is 6 of 93,568 step rows:
@@ -185,11 +251,21 @@ func ListChatStepExecutions(ctx context.Context, db orm.Context, chatID string, 
 // pins all three.
 //
 // The second arm finds each visible step's "-save" sibling by
-// (workflow_id, step_id || '-save', loop scope) through
-// idx_step_executions_saves. Loop scope is matched with IS NOT DISTINCT FROM
-// so iteration 3's step never picks up iteration 2's save. Save rows carry
-// no output_json, as in the FULL view.
-const basicChatStepExecutionsSQL = `
+// (workflow_id, step_id || '-save', loop scope), so iteration 3's step never
+// picks up iteration 2's save. Save rows carry no output_json, as in the FULL
+// view.
+//
+// The loop scope is compared as ONE array, ARRAY[loop_node_id,
+// loop_iteration::text], spelled exactly as idx_step_executions_save_scope's
+// third key. Array equality treats NULL elements as equal, so it is the
+// null-safe match a step outside any loop needs, and unlike IS NOT DISTINCT
+// FROM it is an index condition. With IS NOT DISTINCT FROM the probe keyed
+// only (workflow_id, step_id) and filtered the scope: an agent loop writes
+// one execute_tools-save per turn under one step id, so every probe walked
+// the run's whole history to keep one row (prod, chat 9fbaace8: 1,958 entries
+// per probe, 1.3-3.9s per open). TestBasicStepSaveProbeUsesScopeIndex pins
+// the index condition under a generic plan.
+const BasicChatStepExecutionsSQL = `
 SELECT u.id, u.workflow_id, u.step_id, u.activity_name,
        u.exit_code, u.success, u.duration_ms,
        u.loop_node_id, u.loop_iteration, u.created_at,
@@ -217,8 +293,8 @@ FROM (
     JOIN step_executions sv
       ON sv.workflow_id = vis.workflow_id
      AND sv.step_id = vis.step_id || '-save'
-     AND sv.loop_node_id IS NOT DISTINCT FROM vis.loop_node_id
-     AND sv.loop_iteration IS NOT DISTINCT FROM vis.loop_iteration
+     AND ARRAY[sv.loop_node_id, sv.loop_iteration::text]
+         = ARRAY[vis.loop_node_id, vis.loop_iteration::text]
      AND sv.saved_message_id IS NOT NULL
     WHERE vw.chat_id = ?0
       AND vis.activity_name NOT IN (
@@ -229,7 +305,7 @@ ORDER BY u.workflow_id, u.created_at ASC`
 
 // ListBasicChatStepExecutions loads only the steps the chat timeline renders.
 func ListBasicChatStepExecutions(ctx context.Context, db orm.Context, chatID string) ([]*core.ChatStepExecution, error) {
-	return scanChatStepExecutions(ctx, db.Bun().NewRaw(basicChatStepExecutionsSQL, chatID))
+	return scanChatStepExecutions(ctx, db.Bun().NewRaw(BasicChatStepExecutionsSQL, chatID))
 }
 
 // chatStepExecutionRow is one row of the chat-wide step reads.

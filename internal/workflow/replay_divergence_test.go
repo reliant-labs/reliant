@@ -84,7 +84,7 @@ func TestResetInterruptedWorkflow_ReplayDivergedRun_NeverCallsReset(t *testing.T
 		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	_, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	_, err := ResetInterruptedWorkflow(context.Background(), mc, "", "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	assert.ErrorIs(t, err, ErrReplayDiverged)
 	assert.False(t, mc.resetCalled, "a reset of a diverged history wedges the new run exactly like the old one")
 }

@@ -30,8 +30,8 @@ import {
   usedFraction,
   volumeUsage,
 } from "@/lib/machineDisk";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import ProgressBar from "../forge-ui/progress_bar";
 import { CardInset } from "../forge-ui/card";
 
@@ -85,7 +85,7 @@ export function FreeDiskSpaceDialog({ isOpen, onClose, daemonId, machineLabel, v
 
   const pct = Math.round(usedFraction(volume) * 100);
   return (
-    <Modal isOpen={isOpen} onClose={() => !clear.isPending && onClose()} title={`Free up space on ${machineLabel}`} size="md">
+    <Modal open={isOpen} onClose={() => !clear.isPending && onClose()} title={`Free up space on ${machineLabel}`} size="md">
       <div className="flex flex-col gap-4" data-testid="free-disk-space-dialog">
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-foreground">{volumeUsage(volume)}</p>

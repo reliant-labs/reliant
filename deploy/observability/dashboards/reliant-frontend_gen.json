@@ -22,7 +22,7 @@
             "alias": "errors"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -48,7 +48,7 @@
             "alias": "sessions"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != ''",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -74,7 +74,7 @@
             "alias": "views"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('documentLoad', 'routeChange')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('documentLoad', 'routeChange')",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -100,7 +100,7 @@
             "alias": "failures"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request') AND toFloat64OrZero(SpanAttributes['http.status_code']) \u003e= 400",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request') AND toFloat64OrZero(SpanAttributes['http.status_code']) \u003e= 400",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -126,7 +126,7 @@
             "alias": "errors"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
         "whereLanguage": "sql",
         "granularity": "auto",
         "numberFormat": {
@@ -154,7 +154,7 @@
             "alias": "lcp p75"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['lcp'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['lcp'] != ''",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -182,7 +182,7 @@
             "alias": "inp p75"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['inp'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['inp'] != ''",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -210,7 +210,7 @@
             "alias": "cls p75"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['cls'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['cls'] != ''",
         "whereLanguage": "sql"
       }
     },
@@ -232,7 +232,7 @@
             "alias": "fcp p75"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['fcp'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['fcp'] != ''",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -260,7 +260,7 @@
             "alias": "ttfb p75"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['ttfb'] != ''",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['ttfb'] != ''",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -313,7 +313,7 @@
             "alias": "samples"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals'",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals'",
         "whereLanguage": "sql",
         "groupBy": "SpanAttributes['location.href']"
       }
@@ -335,7 +335,7 @@
             "alias": "errors"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
         "whereLanguage": "sql",
         "groupBy": "ResourceAttributes['service.version']",
         "granularity": "auto",
@@ -376,7 +376,7 @@
             "alias": "p99"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'documentLoad'",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'documentLoad'",
         "whereLanguage": "sql",
         "granularity": "auto",
         "numberFormat": {
@@ -417,7 +417,7 @@
             "alias": "p99"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
         "whereLanguage": "sql",
         "granularity": "auto",
         "numberFormat": {
@@ -458,7 +458,7 @@
             "alias": "p95"
           }
         ],
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
         "whereLanguage": "sql",
         "groupBy": "SpanAttributes['http.url']"
       }
@@ -474,7 +474,7 @@
         "source": "Traces",
         "displayType": "search",
         "select": "Timestamp, ServiceName, SpanName, SpanAttributes['error.message']",
-        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('console.error', 'console.warn', 'onerror', 'unhandledrejection')",
+        "where": "ServiceName IN ('reliant-web') AND ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('console.error', 'console.warn', 'onerror', 'unhandledrejection')",
         "whereLanguage": "sql"
       }
     }

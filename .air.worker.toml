@@ -4,7 +4,7 @@
 #
 # NOTE: the Temporal SDK reads the binary for its checksum on worker start
 # (initBinaryChecksum) — the atomic .tmp+mv below is what keeps that read
-# from racing a rebuild, same as the legacy .air.toml documented.
+# from racing a rebuild.
 root = "."
 testdata_dir = "testdata"
 tmp_dir = "tmp/air-worker"

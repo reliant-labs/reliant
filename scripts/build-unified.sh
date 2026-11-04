@@ -164,7 +164,7 @@ print_step "Installing web dependencies..."
 cd "$WEB_DIR"
 if [ ! -d "node_modules" ]; then
     echo "Installing web dependencies..."
-    run_cmd npm ci --legacy-peer-deps
+    run_cmd pnpm install --frozen-lockfile
 fi
 
 # Generate protobuf code with the pinned buf and local plugins
@@ -172,9 +172,9 @@ fi
 print_step "Generating protobuf code..."
 cd "$PROJECT_ROOT"
 if [[ "$VERBOSE" == "true" ]]; then
-    make proto-generate
+    task generate:forge
 else
-    make proto-generate > /dev/null 2>&1
+    task generate:forge > /dev/null 2>&1
 fi
 print_success "Protobuf code generated"
 
@@ -241,7 +241,7 @@ if [[ "$SKIP_WEB_BUILD" != "true" ]]; then
     
     if [ ! -d "node_modules" ]; then
         echo "Installing web dependencies..."
-        run_cmd npm ci --legacy-peer-deps
+        run_cmd pnpm install --frozen-lockfile
     fi
     
     echo "Building web application..."

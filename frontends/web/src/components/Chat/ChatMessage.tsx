@@ -9,16 +9,18 @@ import {
   Fragment,
   type JSX,
 } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
-import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
+import { GitBranch, FolderSync, Copy, Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
+import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
+import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
@@ -32,7 +34,8 @@ import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageAc
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
@@ -40,12 +43,11 @@ import {
   useToolCallStates,
   useChat,
 } from "../../store/chatStoreHooks";
-import { useSurface } from "../../lib/surfaceContext";
-import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress";
+import { useSurface, useCapability } from "../../lib/surfaceContext";
+
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-import { api } from "../../api/client";
 import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
@@ -53,6 +55,8 @@ import {
   type ToolResultData as ProcessedToolResultData,
   type MessageSegment,
 } from "../../lib/messageProcessor";
+import * as chatActions from "../../hooks/chat-actions";
+import { isQuietToolRun } from "./thread-views/transcriptPresentation";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -75,9 +79,25 @@ const PINNED_MESSAGE_MAX_HEIGHT = "1.5rem";
 /** Fades the last line of a clipped message out instead of cutting it mid-glyph. */
 const COLLAPSED_FADE_MASK = "linear-gradient(to bottom, #000 60%, transparent 100%)";
 
+/**
+ * Transcript prose type: user bubbles and assistant markdown.
+ *
+ * Desktop keeps its dense `text-sm`. The mobile surface reads at 16px with
+ * 1.55 leading (`dev-docs/design/mobile-chat-redesign.md` §7.1). Spelled in
+ * rem against the mobile root (`MOBILE_FONT_SIZE_MAP`, 17px at the default
+ * step), so it is 16px by default and still moves with the Appearance step —
+ * a px size would freeze it. Raising the whole mobile root instead would
+ * enlarge every control on `/m/*` to get one band of text right.
+ *
+ * `--chat-prose-leading` reaches MarkdownRenderer's paragraphs, which set
+ * their own leading.
+ */
+const MOBILE_PROSE_TYPE_CLASS = "text-[0.9412rem] leading-[1.55] [--chat-prose-leading:1.55]";
+const DESKTOP_PROSE_TYPE_CLASS = "text-sm leading-relaxed";
+
 interface ChatMessageProps {
   message: Message;
-  approvals?: ToolApprovalRequest[];
+  approvals?: Approval[];
   hideToolExecutions?: boolean;
   isLatestMessage?: boolean;
   isStreaming?: boolean;
@@ -101,7 +121,7 @@ interface ParsedContent {
   toolExecutions?: Array<{
     call: ToolCallData;
     result?: LocalToolResultData;
-    approval?: ToolApprovalRequest;
+    approval?: Approval;
   }>;
   // Ordered text/tool timeline — the canonical render order. Empty for older
   // pre-processed store entries that predate segments (handled at render).
@@ -151,7 +171,7 @@ function renderTextWithContextPills(
 interface EnhancedToolExecution {
   call: ToolCallData;
   result?: ToolResultData;
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   status?:
     | "pending" // Queued but not started
     | "preparing" // LLM is writing the tool request
@@ -219,6 +239,7 @@ function ChatMessageComponent({
   ] = useState(false);
   const surface = useSurface();
   const isMobile = surface === "mobile";
+  const canBranch = useCapability("chatBranching");
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -272,10 +293,10 @@ function ChatMessageComponent({
 
   // OPTIMIZED: Memoize approvals by content_block_id to avoid re-filtering on every render
   const approvalsByContentBlockId = useMemo(() => {
-    const map = new Map<string, ToolApprovalRequest>();
+    const map = new Map<string, Approval>();
     for (const approval of approvals) {
-      if (approval.content_block_id) {
-        map.set(approval.content_block_id, approval);
+      if (approval.entityId) {
+        map.set(approval.entityId, approval);
       }
     }
     return map;
@@ -284,7 +305,7 @@ function ChatMessageComponent({
   // Helper to find approval - matches by content_block_id (unique identifier for each content block)
   // This handles both: 1) approvals embedded by backend, 2) approvals that arrive via WebSocket after message
   const getApprovalStatus = useCallback(
-    (contentBlockId: string): ToolApprovalRequest | undefined => {
+    (contentBlockId: string): Approval | undefined => {
       return approvalsByContentBlockId.get(contentBlockId);
     },
     [approvalsByContentBlockId],
@@ -339,6 +360,14 @@ function ChatMessageComponent({
       }
 
       if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
+        // A large result is held as a preview: copy the full output instead.
+        const resultContents = await Promise.all(
+          parsed.toolExecutions.map((execution) =>
+            execution.result?.truncated && chatId
+              ? fetchFullToolResult(chatId, execution.call.id)
+              : Promise.resolve(execution.result?.content),
+          ),
+        );
         parsed.toolExecutions.forEach((execution, index) => {
           // Format tool call with parameters like Claude does
           let toolCallText = `Tool: ${execution.call.name}`;
@@ -382,8 +411,9 @@ function ChatMessageComponent({
           }
 
           contentToCopy += `${toolCallText}\n`;
-          if (execution.result && execution.result.content) {
-            contentToCopy += execution.result.content + "\n";
+          const resultContent = resultContents[index];
+          if (resultContent) {
+            contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
           }
@@ -518,7 +548,7 @@ function ChatMessageComponent({
           },
           onConvertToBackground: async (toolCallId: string) => {
             if (chatId) {
-              await api.toolCalls.convertToBackground(toolCallId);
+              await chatActions.convertToolCallToBackground(toolCallId);
             }
           },
         };
@@ -554,15 +584,6 @@ function ChatMessageComponent({
     }
   });
 
-  // Long-press is wired unconditionally (before the early return, per Rules
-  // of Hooks); the handlers are only spread onto message markup on mobile.
-  const handleLongPress = useCallback(() => {
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      navigator.vibrate(10);
-    }
-    setShowActionsSheet(true);
-  }, []);
-  const longPressHandlers = useLongPress(handleLongPress);
 
   const hasAttachments = Boolean(message.attachments?.length);
 
@@ -572,7 +593,10 @@ function ChatMessageComponent({
   // whose cards render whatever the tool rows show.
   const hasUserCards = Boolean(
     enhancedToolExecutions?.some(
-      (exec) => exec.call.name === "ask_user" || isRequestMachineTool(exec.call.name),
+      (exec) =>
+        exec.call.name === "ask_user" ||
+        isRequestMachineTool(exec.call.name) ||
+        (isDraftAutomationTool(exec.call.name) && !!exec.result && !exec.result.is_error),
     ),
   );
   const hasVisibleContent =
@@ -605,6 +629,22 @@ function ChatMessageComponent({
     keyPrefix: string,
   ): JSX.Element | null => {
     if (executions.length === 0) return null;
+    // Mobile keeps original run order and ownership. Only successful, settled
+    // work may recede; approvals, errors and live work stay directly visible.
+    if (isMobile) {
+      if (isQuietToolRun(executions)) {
+        return <ToolExecutionGroup executions={executions} messageId={message.id}
+          chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread}
+          density={toolDensity} />;
+      }
+      return <div className="space-y-1">{executions.map((exec) => (
+        <ToolExecution key={exec.call.content_block_id || exec.call.id}
+          toolCall={exec.call} toolResult={exec.result} status={exec.status}
+          onCancel={exec.onCancel} onConvertToBackground={exec.onConvertToBackground}
+          approval={exec.approval} chatId={chatId || undefined} showRichContent
+          onSelectThread={onSelectThread} density={toolDensity} />
+      ))}</div>;
+    }
     const readOnlyTools = executions.filter((exec) =>
       isReadOnlyTool(exec.call.name),
     );
@@ -653,7 +693,6 @@ function ChatMessageComponent({
             <ToolExecutionGroup
               executions={otherTools}
               messageId={message.id}
-              defaultCollapsed={true}
               chatId={chatId || undefined}
               showRichContent={true}
               onSelectThread={onSelectThread}
@@ -701,7 +740,7 @@ function ChatMessageComponent({
           icon: copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />,
           onSelect: () => void handleCopy(),
         },
-        {
+        ...(canBranch ? [{
           key: "branch",
           label: "Branch in place",
           icon: <GitBranch className="h-4 w-4" />,
@@ -714,7 +753,7 @@ function ChatMessageComponent({
           icon: <FolderSync className="h-4 w-4" />,
           disabled: isOptimistic,
           onSelect: handleBranchToExistingWorkspace,
-        },
+        }] : []),
       ]
     : [];
 
@@ -741,7 +780,7 @@ function ChatMessageComponent({
       )}
       {/* Separates the timestamp (information) from the buttons (actions). */}
       {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
-      <Tooltip content={copied ? "Copied" : "Copy message"} placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content={copied ? "Copied" : "Copy message"} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -749,7 +788,7 @@ function ChatMessageComponent({
         }}
         aria-label={copied ? "Copied" : "Copy message"}
         className={cn(
-          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
           revealedControl,
           copied && "text-success-ink"
         )}
@@ -766,9 +805,9 @@ function ChatMessageComponent({
               ? "Waiting for message to save"
               : "Branch from this message"
         }
-        placement="top"
+        side="top"
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
       <button
         onClick={(e) => {
@@ -779,7 +818,7 @@ function ChatMessageComponent({
         aria-label="Branch from message"
         data-contextual-tip="branch-button"
         className={cn(
-          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
           revealedControl,
           isOptimistic && "cursor-not-allowed opacity-50"
         )}
@@ -822,7 +861,9 @@ function ChatMessageComponent({
   // anchoring it to the message's top hid it above the fold exactly when the
   // message was long enough to need it. The sticky offset clears the pinned
   // user-message header the timeline floats over the top of the transcript
-  // (`--chat-pinned-header-h`, 0 when there is no header or no timeline).
+  // (`--chat-pinned-header-h`, 0 when there is no header or no timeline), and
+  // under floating chrome the top bar it sits below (`--chat-top-inset`, 0
+  // where the chrome docks).
   //
   // Anchored to the message ROW — the full content column — for both roles,
   // never to the message's own box. A user bubble is only as wide as its text,
@@ -883,7 +924,7 @@ function ChatMessageComponent({
           "group-hover:opacity-100",
           "group-focus-within:opacity-100"
         )}
-        style={{ top: "var(--chat-pinned-header-h, 0px)" }}
+        style={{ top: "calc(var(--chat-top-inset, 0px) + var(--chat-pinned-header-h, 0px))" }}
       >
         {actionControls}
       </div>
@@ -892,7 +933,7 @@ function ChatMessageComponent({
 
   // The pin is a breadcrumb of a message that already exists below; it gets no
   // toolbar at all.
-  const showInlineActions = isLatestMessage && !pinned;
+  const showInlineActions = isLatestMessage && !pinned && !isMobile;
 
   // Only the floating variant overlaps the message, so only it needs the column
   // to reserve the band. Charging it unconditionally would push every message
@@ -950,10 +991,18 @@ function ChatMessageComponent({
             <div
               className={cn(
                 "group/usermsg relative flex flex-col items-start",
-                pinned ? "w-full" : "inline-flex max-w-[85%] sm:max-w-2xl"
+                // The smaller of 85% of the column and 42rem (max-w-2xl), as ONE
+                // max-width. `max-w-[85%] sm:max-w-2xl` replaced the 85% with a
+                // fixed 42rem from `sm` up, so a bubble in a narrow column (the
+                // file and terminal panels open) overflowed the transcript and
+                // scrolled the whole chat sideways.
+                pinned ? "w-full" : "inline-flex max-w-[min(85%,42rem)]"
               )}
             >
-              <div className={cn("relative", pinned && "w-full")}>
+              {/* max-w-full: a cross-axis item of an items-start column sizes
+                  to its content's min-content, which a long URL makes as wide
+                  as the URL; capped here, the text wraps inside the bubble. */}
+              <div className={cn("relative max-w-full", pinned && "w-full")}>
                 <div
                   ref={bubbleRef}
                   className={cn(
@@ -963,10 +1012,10 @@ function ChatMessageComponent({
                       : "cursor-pointer hover:border-primary/35 hover:bg-primary/20",
                     !pinned && timelineVariant === "card" && "shadow-md",
                     !pinned && timelineVariant === "minimal" && "shadow-none",
-                    isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
+                    isMobile && "select-text"
                   )}
                   onClick={() => {
-                    if (pinned) return;
+                    if (pinned || isMobile || window.getSelection()?.toString()) return;
                     setIsExpanded((prev) => {
                       const willExpand = !prev;
                       if (willExpand) {
@@ -979,14 +1028,14 @@ function ChatMessageComponent({
                       return willExpand;
                     });
                   }}
-                  {...(isMobile && !pinned ? longPressHandlers : {})}
                 >
                   {/* Text Content - show exactly as sent */}
                   {parsed.text && (
                     <div
                       ref={contentRef}
                       className={cn(
-                        "text-sm leading-relaxed text-foreground",
+                        isMobile ? MOBILE_PROSE_TYPE_CLASS : DESKTOP_PROSE_TYPE_CLASS,
+                        "text-foreground",
                         // Expanded messages scroll inside the bubble instead of
                         // growing without bound — a pasted log should not push
                         // the whole conversation off screen.
@@ -995,7 +1044,7 @@ function ChatMessageComponent({
                       style={{
                         maxHeight: pinned
                           ? PINNED_MESSAGE_MAX_HEIGHT
-                          : isExpanded
+                          : isMobile ? undefined : isExpanded
                             ? EXPANDED_MESSAGE_MAX_HEIGHT
                             : COLLAPSED_MESSAGE_MAX_HEIGHT,
                         // Truncation reads as text fading out rather than a
@@ -1003,7 +1052,7 @@ function ChatMessageComponent({
                         // than the teaser it labelled. A mask is used instead of
                         // a gradient overlay because the bubble is a translucent
                         // tint — an opaque gradient would not match it.
-                        ...(!pinned && !isExpanded && isOverflowing
+                        ...(!pinned && !isMobile && !isExpanded && isOverflowing
                           ? { maskImage: COLLAPSED_FADE_MASK, WebkitMaskImage: COLLAPSED_FADE_MASK }
                           : {}),
                       }}
@@ -1033,7 +1082,7 @@ function ChatMessageComponent({
                   {/* Expand/collapse affordance — a single compact chevron row.
                       Also renders when expanded so a long message can be closed
                       without scrolling back to find the top of the bubble. */}
-                  {!pinned && (isOverflowing || isExpanded) && (
+                  {!pinned && !isMobile && (isOverflowing || isExpanded) && (
                     <div className="flex items-center gap-1 pt-0.5 text-xs font-medium text-muted-foreground/80">
                       <ChevronDown
                         className={cn(
@@ -1059,9 +1108,8 @@ function ChatMessageComponent({
                 compactToolSpacing && "py-0",
                 timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
                 timelineVariant === "minimal" && "px-0",
-                isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
+                isMobile && "select-text"
               )}
-              {...(isMobile && !pinned ? longPressHandlers : {})}
             >
               {/* Ordered content: text and tool runs interleaved exactly as
                   they occurred in the message, so a mid-message tool call
@@ -1083,7 +1131,7 @@ function ChatMessageComponent({
                             isUser={false}
                             isStreaming={isStreaming}
                             worktreeId={chatWorktreeId}
-                            className="text-sm w-full"
+                            className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : "text-sm", "w-full")}
                           />
                         </div>
                       )}
@@ -1121,7 +1169,18 @@ function ChatMessageComponent({
                       finished={exec.result !== undefined}
                     />
                   ));
-                const userCards = [...machineRequestCards, ...askUserCards];
+                // A drafted automation is a decision for the user too: its card
+                // ("Review & create") shows once the draft is back and valid.
+                const draftCards = allRunExecutions
+                  .filter((exec) => isDraftAutomationTool(exec.call.name) && exec.result && !exec.result.is_error)
+                  .map((exec) => (
+                    <DraftAutomationCard
+                      key={`${message.id}-seg-${segIdx}-draft-automation-${exec.call.id}`}
+                      chatId={chatId || undefined}
+                      metadata={exec.result?.metadata}
+                    />
+                  ));
+                const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
                 if (hideToolExecutions) {
                   return userCards.length > 0 ? (
                     <Fragment key={`${message.id}-seg-${segIdx}`}>{userCards}</Fragment>
@@ -1175,7 +1234,15 @@ function ChatMessageComponent({
           {/* Rendered once, outside the role branches, so it anchors to the
               content column rather than to the user bubble or the assistant
               block. The pin is a breadcrumb and gets no toolbar at all. */}
-          {!pinned && !showInlineActions && floatingMessageActions}
+          {!pinned && !isMobile && !showInlineActions && floatingMessageActions}
+          {isMobile && !pinned && (
+            <button type="button" aria-label="Message actions" aria-haspopup="dialog"
+              aria-expanded={showActionsSheet}
+              onClick={() => setShowActionsSheet(true)}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1214,8 +1281,7 @@ function ChatMessageComponent({
         />
       )}
 
-      {/* Mobile long-press actions sheet — the touch substitute for the
-          desktop hover toolbar (see the long-press wiring above). */}
+      {/* Explicit mobile actions leave native prose selection untouched. */}
       {isMobile && (
         <MessageActionsSheet
           isOpen={showActionsSheet}

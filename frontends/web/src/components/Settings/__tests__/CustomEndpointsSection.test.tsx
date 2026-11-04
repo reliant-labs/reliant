@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { DaemonInfoSchema, DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
@@ -10,6 +11,9 @@ import {
   ModelEndpointSchema,
 } from "../../../gen/reliant/v1/model_endpoint_pb";
 import { LocalModelEndpointSchema, LocalModelInfoSchema } from "../../../gen/reliant/v1/tools_daemon_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport, renderWithTransport } from "../../../lib/test-utils";
+import { serviceHandlers } from "../../../test/serviceTransport";
 
 const mocks = vi.hoisted(() => ({
   daemons: [] as DaemonInfo[],
@@ -23,16 +27,24 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: mocks.daemons, loading: false, refresh: vi.fn() }),
 }));
-vi.mock("../../../api/grpc-client", () => ({ getTransport: () => ({}) }));
-vi.mock("@connectrpc/connect", () => ({
-  createClient: () => ({
-    listModelEndpoints: mocks.list,
-    createModelEndpoint: mocks.create,
-    updateModelEndpoint: mocks.update,
-    deleteModelEndpoint: mocks.remove,
-    testModelEndpoint: mocks.test,
-  }),
-}));
+
+// ModelEndpointService is reached through its generated hooks, so it answers
+// at the transport; each render gets a fresh query cache.
+function render(ui: ReactElement) {
+  return renderWithTransport(ui, {
+    transport: mockTransport(
+      serviceHandlers("ModelEndpointService", {
+        listModelEndpoints: (req) => mocks.list(req),
+        createModelEndpoint: (req) => mocks.create(req),
+        updateModelEndpoint: (req) => mocks.update(req),
+        deleteModelEndpoint: (req) => mocks.remove(req),
+        testModelEndpoint: (req) => mocks.test(req),
+      }),
+    ),
+  });
+}
+
+afterEach(() => setTransport(null));
 
 import { CustomEndpointsSection } from "../CustomEndpointsSection";
 
@@ -57,7 +69,7 @@ const endpoint = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 
-const daemon = (over: Partial<DaemonInfo> = {}) =>
+const daemon = (over: Partial<Omit<DaemonInfo, "$typeName">> = {}) =>
   create(DaemonInfoSchema, { daemonId: "d1", hostname: "Sean's MacBook", daemonType: "self_hosted", status: DaemonStatus.ACTIVE, ...over });
 
 beforeEach(() => {
@@ -127,7 +139,8 @@ describe("add / edit form", () => {
     expect(input).toMatchObject({ name: "Lab", baseUrl: "https://llm.example.com/v1", route: ModelEndpointRoute.DIRECT, daemonId: "" });
     expect(input.apiKey).toBeUndefined();
     await waitFor(() => expect(screen.queryByRole("form", { name: /new custom endpoint/i })).toBeNull());
-    expect(mocks.list).toHaveBeenCalledTimes(2);
+    // The generated create refetches the list.
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
   });
 
   it("explains both routes and requires a machine for the second", async () => {
@@ -157,15 +170,17 @@ describe("add / edit form", () => {
     expect(screen.getByText(/All your machines are offline/)).toBeTruthy();
   });
 
-  it("disables the key and header fields with a coming-soon note, and never sends a key", async () => {
+  it("leaves the key field out, with a one-line reason, when the server cannot store keys", async () => {
     await openAddForm();
-    expect((screen.getByLabelText("API key") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Custom headers") as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByTestId("credential-note").textContent).toMatch(/sealed credential store/);
+    expect(screen.queryByLabelText("API key")).toBeNull();
+    expect(screen.queryByLabelText("Custom headers")).toBeNull();
+    expect(screen.getByTestId("credential-note").textContent).toMatch(/can't store endpoint API keys/);
+    expect(screen.getByTestId("credential-note").textContent).not.toMatch(/coming/i);
   });
 
-  it("enables the key field once the store is available, and sends the key", async () => {
-    render(<CustomEndpointsSection credentialsAvailable />);
+  it("offers the key field when the server reports a credential store, and sends the key", async () => {
+    mocks.list.mockResolvedValue({ endpoints: [], credentialsAvailable: true });
+    render(<CustomEndpointsSection />);
     await screen.findByTestId("no-endpoints");
     await userEvent.click(screen.getByRole("button", { name: /add custom endpoint/i }));
     expect((screen.getByLabelText("API key") as HTMLInputElement).disabled).toBe(false);

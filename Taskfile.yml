@@ -4,8 +4,8 @@ version: '3'
 # │ reliant's tasks. Born from `forge project rescaffold          │
 # │ Taskfile.yml`, then edited for this repo (P8 lane L1,         │
 # │ research/forge-migration/12-p8-devtooling-plan.md §2/§3).     │
-# │ The Makefile is a set of one-line `make → task` forwarders    │
-# │ for one merge; this file is where the behaviour lives.        │
+# │ This file is where every build, test, generate, lint, pin     │
+# │ and release command lives; there is no Makefile.              │
 # │                                                              │
 # │   task test:affected     Only what your diff reaches (start)  │
 # │   task test:short        Inner loop: Go, -short, cached       │
@@ -14,6 +14,8 @@ version: '3'
 # │   task test:e2e          e2e/stories (Temporal dev server)    │
 # │   task ci                The whole local gate, one table      │
 # │   task ci:checks         Static + build lane of it            │
+# │   task ci:merge          The merge tier (~5 min, affected)    │
+# │   task release:gate      The slow tier, on main, per sha      │
 # │   task generate          forge generate (+ hooks), then docs  │
 # │   task generate:check    Pinned forge generate is a no-op     │
 # │   task generate:docs:check  Docs generators are a no-op       │
@@ -141,12 +143,26 @@ tasks:
   # ── Dependencies ──────────────────────────────────────────────────────
 
   deps:
-    desc: Install Go modules and the web, electron and protoc-gen-es npm packages
+    desc: Install Go modules and the web (pnpm), electron and protoc-gen-es (npm) packages
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
-      - cd frontends/web && npm ci
-      - cd electron && npm ci
+      - task: deps:web
+      - task: deps:electron
+
+  deps:web:
+    desc: Install the web app's packages (frontends/web, pnpm install --frozen-lockfile)
+    dir: frontends/web
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  deps:electron:
+    # Not --ignore-scripts: electron's postinstall fetches the Electron binary
+    # its tests and the package build load.
+    desc: Install the electron app's npm packages (electron, npm ci)
+    dir: electron
+    cmds:
+      - npm ci --no-audit --no-fund
 
   deps:protoc-gen-es:
     # npm ci rewrites node_modules/.package-lock.json, so it doubles as the
@@ -157,6 +173,20 @@ tasks:
       - test tools/protoc-gen-es/node_modules/.package-lock.json -nt tools/protoc-gen-es/package-lock.json
     cmds:
       - npm ci --prefix tools/protoc-gen-es --ignore-scripts --no-audit --no-fund --loglevel=error
+
+  deps:go-protoc-plugins:
+    # buf runs protoc-gen-go and protoc-gen-connect-go as `go tool <name>`,
+    # which compiles the tool on first use, and forge runs `buf generate`
+    # without --timeout, so buf's default 2m deadline covered that compile.
+    # Cold, on a 4-core runner beside the merge gate's other phases, it ran
+    # out and buf killed the plugins ("plugin go tool protoc-gen-connect-go:
+    # signal: killed", PR #1771). Built here first, the executables are in
+    # the build cache and the deadline covers only generation; a cached run
+    # is a no-op of about a second.
+    desc: Build the `go tool` protoc plugins buf.gen.yaml runs, before buf's deadline starts
+    cmds:
+      - '{{.GEN_GO}} tool protoc-gen-go --version'
+      - '{{.GEN_GO}} tool protoc-gen-connect-go --version'
 
   # ── Build ─────────────────────────────────────────────────────────────
 
@@ -194,6 +224,8 @@ tasks:
         sh: ./scripts/release-identity.sh 2>/dev/null || echo unknown
       COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      COMMIT_TIME:
+        sh: ./scripts/release-identity.sh --commit-time 2>/dev/null || echo 0
       DATE:
         sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
       BRANCH:
@@ -205,8 +237,17 @@ tasks:
       - mkdir -p dist
       - >-
         {{if .GOOS}}GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{end}}go {{.GO_ARGS}} -buildvcs=false
-        -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}}"
+        -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}} -X {{.PKG}}.CommitTime={{.COMMIT_TIME}}"
         ./cmd/reliant/
+
+  build:packages:
+    # Every package compiled, nothing linked, no test variants: the build
+    # cache CI saves on main for every job to restore (-trimpath, so it is a
+    # hit in any checkout). The e2e stories' imports are compiled too.
+    desc: Compile every package (and what the e2e stories import) into the Go build cache
+    cmds:
+      - go build ./...
+      - go test -tags e2e -c -o /dev/null ./e2e/stories
 
   build:dev-cli:
     desc: Build dist/reliant-dev, the internal forensics CLI (reads the DB directly)
@@ -304,10 +345,9 @@ tasks:
     # says nothing about them. Integration and e2e tests are guarded by the
     # `integration` and `e2e` build tags, so they are excluded here.
     #
-    # -timeout 300s per package is what the Makefile's `make test` used; P8
-    # moves it toward forge's 120s once the overruns are measured and gated.
-    # Unlike `make test` this never runs `make stop`, which stopped other
-    # agents' environments.
+    # -timeout 300s per package (the retired Makefile's budget); P8 moves it
+    # toward forge's 120s once the overruns are measured and gated. It stops
+    # nothing: other agents' environments are not this task's to touch.
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
@@ -317,9 +357,16 @@ tasks:
         if: '[ -z "{{.CLI_ARGS}}" ]'
 
   test:integration:
-    desc: Run integration tests (-tags=integration)
+    # Only the packages with integration-tagged test files
+    # (scripts/integration-packages.sh); `--` args replace them. `./...` re-ran
+    # every unit test under an unused tag, since no file carries it.
+    desc: Run integration tests (-tags=integration) in the packages that have them
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - |
+        pkgs="{{.CLI_ARGS}}"
+        [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
+        if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
+        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
@@ -401,18 +448,6 @@ tasks:
     cmds:
       - npm test --silent
 
-  postgres:up:
-    # The docker-compose dev Postgres (scripts/dev.sh's stack). No test uses
-    # it; it goes with docker-compose.yml (P8 L5).
-    desc: Start this repo's compose dev Postgres on localhost:5433 (scripts/dev.sh's stack; tests do not use it)
-    cmds:
-      - docker compose up -d postgres
-
-  postgres:down:
-    desc: Stop this repo's compose dev Postgres
-    cmds:
-      - docker compose stop postgres
-
   # ── The gate ──────────────────────────────────────────────────────────
 
   ci:
@@ -434,6 +469,203 @@ tasks:
     desc: "Static + build lane of the gate (forge ci gate checks)"
     cmds:
       - '{{.FORGE}} ci gate checks'
+
+  ci:merge:
+    # The MERGE tier, the one the merge queue runs on every branch: only what
+    # the diff from origin/main can affect, in about five minutes, inside ONE
+    # host heavy slot. tools/test-affected decides the Go/web/electron tests
+    # and whether forge generate / the docs generators must be checked; then
+    # go build, forge lint --scope <changed dirs> and (for a migration)
+    # migration-safety run at the same time. Prints a per-phase table: slot
+    # wait vs run. `-- --base <rev>` moves the diff base.
+    # dev-docs/merge-and-release-gates.md.
+    desc: "The merge tier: affected tests + build + scoped lint (+ generate/docs checks when their inputs changed), ~5 min"
+    cmds:
+      - ./scripts/merge-gate.sh {{.CLI_ARGS}}
+
+  release:gate:
+    # The SLOW tier: everything ci:merge leaves out (unscoped lint, the full
+    # -race suite with every slow test, integration, e2e, generate and docs
+    # drift), on a commit of main (default origin/main) in a private checkout,
+    # recorded per sha. release:tag refuses a commit without a green record.
+    # 40-70 minutes on a loaded host: run it in the background.
+    desc: "The release gate: the whole suite on origin/main (or `-- <rev>`), recorded per sha; release:tag requires it"
+    cmds:
+      - ./scripts/release-gate.sh run {{.CLI_ARGS}}
+
+  release:gate:check:
+    desc: "Is HEAD (or `-- <rev>`) release-ready? exit 0 green | 1 red | 3 no record"
+    cmds:
+      - ./scripts/release-gate.sh check {{.CLI_ARGS}}
+
+  # ── What CI adds to the two gates ─────────────────────────────────────
+  # .github/workflows/ci.yml is a thin wrapper: a pull request runs
+  # `task ci:merge`, main and the nightly run `task release:gate`, and the
+  # lanes below are the rest, each one task. Every one runs on a laptop too.
+
+  ci:lanes:
+    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, cp_contract): -- --base <rev> | --full"
+    cmds:
+      - ./scripts/ci-lanes.sh {{.CLI_ARGS}}
+
+  ci:migration-order:
+    # Every CI event, labelled or not (ci.yml's migration-order job), so a PR
+    # merged without the merge queue is still judged (reliant#1970: #1666
+    # merged 20261027140617 under prod's 20261029064544 with the merge gate
+    # skipped). A PR or merge group is judged against a freshly fetched
+    # origin/main; a push to main against the commit before it (BASE), which
+    # fails main's release record before a release can carry the file.
+    desc: "Fail a migration added since BASE (default: a fresh origin/main) whose version is at or below BASE's newest"
+    cmds:
+      - '{{if .BASE}}MIGRATION_ORDER_OFFLINE=1 go run ./tools/test-affected migration-order --base {{.BASE}}{{else}}go run ./tools/test-affected migration-order{{end}}'
+
+  ci:repo-checks:
+    # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
+    # pre-commit hook is opt-in, and --no-verify skips it), the committed
+    # electron/release.config.json values are shippable, the unit tests of the
+    # scripts the release and health workflows run, and the pre-commit hook's
+    # staged-file formatter.
+    desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
+    vars:
+      BASE: '{{.BASE | default "origin/main"}}'
+    cmds:
+      - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
+      - node .github/scripts/sync-release-config.mjs --check
+      - node --test .github/scripts/*.test.mjs
+      - ./scripts/test-fmt-staged.sh
+
+  test:flake:
+    desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"
+    cmds:
+      - ./scripts/test-flake.sh {{.CLI_ARGS}}
+
+  build:web:verify:
+    # The release's renderer build and artifact gate, exactly as release.yml's
+    # prepare job runs them (.github/scripts/verify-bundle.test.mjs pins the
+    # two together). `npm run build` is `tsc -b && vite build`, so a type
+    # error fails it. NODE_ENV=production is on the build command only: npm
+    # reads it too, and on an install it would skip devDependencies.
+    desc: Lint, then build the renderer exactly as a release does (production, no config) and verify the bundle
+    cmds:
+      - cd frontends/web && npm run lint
+      - cd frontends/web && NODE_ENV=production npm run build
+      - node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
+
+  test:web:e2e:
+    desc: Run desktop Chromium and representative touch Chromium/WebKit against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium webkit
+          PROJECTS: --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix). The
+  # split follows the install cost: WebKit's system packages (GStreamer, GTK 4,
+  # ~114 MB from the Ubuntu mirror) took 6.5 of a 15-minute budget on a slow
+  # mirror, and the desktop suite, which needs none of them, timed out behind
+  # that install. Each half now pays only for the browsers it runs.
+  test:web:e2e:desktop:
+    desc: Run the desktop Chromium Playwright suite against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium
+          PROJECTS: --project=chromium
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  test:web:e2e:responsive:
+    desc: Run the touch Chromium and WebKit phone/tablet Playwright projects against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium webkit
+          PROJECTS: --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  web:e2e:run:
+    # Playwright against the built renderer, no Go backend, one worker (the
+    # tests share one preview server). The runtime config document is the
+    # public KCL-sourced renderer config committed in
+    # electron/release.config.json; `vite preview` serves it as config.js.
+    # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
+    # packages (CI does; it needs sudo).
+    internal: true
+    requires:
+      vars: [BROWSERS, PROJECTS]
+    cmds:
+      - |
+        set -euo pipefail
+        config_dir="$(mktemp -d)"
+        trap 'rm -rf "$config_dir"' EXIT
+        doc="$config_dir/config.js"
+        printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
+        cd frontends/web
+        npm run build:alpha
+        npx playwright install {{.BROWSERS}} {{.PLAYWRIGHT_DEPS}}
+        CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- {{.PROJECTS}} {{.CLI_ARGS}}
+
+  build:electron:smoke:
+    # dist:pr runs with-release-config -> build:config -> build:web:alpha ->
+    # electron-builder --dir: the same config path a release takes (the class
+    # of defect that shipped v1.7.5). It compiles no Go and signs nothing.
+    desc: Package the electron app without publishing (npm run dist:pr)
+    dir: electron
+    env:
+      CI: 'true'
+    cmds:
+      - npm run dist:pr
+
+  contract:controlplane:check:
+    # proto-vendor/controlplane/ is a generated `buf export` of control-plane's
+    # public protos, and its SOURCE names the control-plane commit it came
+    # from. This judges the tree against that declaration, never against
+    # control-plane's moving main: the tree must be exactly SOURCE's export,
+    # and SOURCE must be on control-plane main. CONTROL_PLANE_DIR is a
+    # control-plane checkout holding that commit (default ../control-plane);
+    # control-plane is private, so CI reads it with a deploy key. --require: a
+    # missing sibling, commit or buf fails rather than reporting a pass that
+    # checked nothing.
+    desc: "Fail unless proto-vendor/controlplane/ is exactly what its SOURCE control-plane commit exports, and SOURCE is on control-plane main (CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs --check --require
+
+  contract:controlplane:drift:
+    # How far proto-vendor/controlplane/ is behind CONTROL_PLANE_DIR's checked-
+    # out tree (control-plane main). The script exits 3 when behind (Task
+    # reports that as 201; `task --exit-code` keeps the 3). Never a gate:
+    # .github/workflows/cp-contract-drift.yml runs the script directly and
+    # turns it into one open issue.
+    desc: "Report whether proto-vendor/controlplane/ is behind control-plane main (exit 3 when it is; CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs --upstream --require {{.CLI_ARGS}}
+
+  contract:controlplane:sync:
+    # Pull control-plane main's public contract into proto-vendor/controlplane/
+    # (a `buf export` over its proto/public-api.txt, plus SOURCE naming the
+    # commit), then regenerate the clients from it. CONTROL_PLANE_DIR must be a
+    # clean checkout of a commit on control-plane main.
+    desc: "Re-vendor control-plane's public protos into proto-vendor/controlplane/ and regenerate the clients (CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs
+      - task: generate:controlplane
+
+  licenses:
+    desc: "Every Go and npm dependency is on the license allowlist (.license-allowlist, .license-allowlist-npm)"
+    cmds:
+      - task: licenses:go
+      - task: licenses:npm
+
+  licenses:go:
+    desc: Every Go dependency's license is allowlisted (scripts/check-licenses.sh)
+    cmds:
+      - go mod download
+      - ./scripts/check-licenses.sh {{.CLI_ARGS}}
+
+  licenses:npm:
+    desc: Every npm dependency of frontends/web is allowlisted (scripts/check-npm-licenses.sh)
+    cmds:
+      - ./scripts/check-npm-licenses.sh {{.CLI_ARGS}} frontends/web
 
   # ── Lint and format ───────────────────────────────────────────────────
 
@@ -460,8 +692,8 @@ tasks:
       - '{{.BUF}} lint'
 
   fmt:
-    # go fmt only: .githooks/pre-commit runs `make fmt` on every commit, so it
-    # must stay fast and must not rewrite go.mod.
+    # The whole repo. The pre-commit hook formats only the staged files
+    # (.githooks/fmt-staged.sh, tested in `task ci:repo-checks`).
     desc: Format Go code (go fmt)
     cmds:
       - go fmt ./...
@@ -498,7 +730,7 @@ tasks:
     # control-plane client, the YAML bindings, the tool catalog, the
     # integration manifest schema, the integration event projections).
     desc: Run the pinned forge generate (protos, ORM, mocks and the forge.yaml generate hooks)
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} {{.FORGE}} generate'
 
@@ -508,7 +740,7 @@ tasks:
     # touches a forge input. `-- --github` adds CI annotations. FORGE=<binary>
     # in the environment uses a prebuilt forge, refused unless it is the pin.
     desc: Run the pinned forge generate and fail, naming each file, if it changes anything
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} ./scripts/check-forge-generate.sh {{.CLI_ARGS}}'
 
@@ -516,10 +748,10 @@ tasks:
     # The `controlplane-client` generate hook, alone: the control-plane clients
     # (Go + TS) from proto-vendor/controlplane/, a generated export of
     # control-plane's public contract. To pull a new contract first:
-    # node .github/scripts/sync-controlplane-proto.mjs. Both output dirs are
+    # task contract:controlplane:sync (which also runs this). Both output dirs are
     # replaced wholesale, but only after buf succeeds.
     desc: Regenerate the control-plane clients (gen/controlplane, frontends/web/src/gen/controlplane) from proto-vendor/
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane frontends/web/src/gen/controlplane'
 
@@ -625,6 +857,16 @@ tasks:
     cmds:
       - '{{.GEN_GO}} run ./tools/docgen/changelog/... {{.MINTLIFY_DOCS_DIR}}/data/releases {{.MINTLIFY_DOCS_DIR}}/changelog.mdx'
 
+  generate:docs:changelog:draft:
+    # What the release workflow runs before ./scripts/release.sh (control-plane
+    # scripts/release-chain/reliant-bump.sh). Deterministic; refuses to replace an
+    # existing file (FORCE=1 does).
+    desc: Write docs/data/releases/VERSION.yaml from the PR titles merged since SINCE_TAG, grouped by conventional-commit type
+    requires:
+      vars: [VERSION, SINCE_TAG]
+    cmds:
+      - '{{.GEN_GO}} run ./tools/releasenotes --version {{.VERSION}} --since {{.SINCE_TAG}} --to {{.TO | default "HEAD"}} --out {{.MINTLIFY_DOCS_DIR}}/data/releases/{{.VERSION}}.yaml{{if .FORCE}} --force{{end}}'
+
   generate:docs:mintlify-reference:
     desc: Convert the generated reference markdown into Mintlify .mdx pages
     cmds:
@@ -642,10 +884,19 @@ tasks:
     # `forge lint --migration-safety` fails it until it says one, with a
     # reason.
     desc: "Create a new forge migration (NAME=my_changes), then: write the SQL and its compat declaration, task generate:check, queries in internal/store (internal/db/SCHEMA.md)"
+    #
+    # The version must clear origin/main's NEWEST migration, not the wall
+    # clock: a long-lived branch, a skewed clock or a future-dated main head
+    # otherwise mints a version under one that already merged, which is never
+    # applied and crash-loops the migrator (reliant#1399). So origin/main is
+    # refreshed first (forge allocates above its tip), and the result is checked
+    # against it after, whatever forge pin is installed.
     requires:
       vars: [NAME]
     cmds:
+      - git fetch -q origin main || echo "WARNING - could not refresh origin/main; the version is checked against the ref as it is" >&2
       - '{{.GEN_ENV}} {{.FORGE}} db migration new {{.NAME}}'
+      - MIGRATION_ORDER_OFFLINE=1 go run ./tools/test-affected migration-order
 
   migrate:
     desc: Apply pending database migrations (wraps `reliant db migrate up`)
@@ -662,14 +913,17 @@ tasks:
       - ./scripts/pin-forge.sh {{.CLI_ARGS}}
 
   pin:drift:
-    desc: Report how many commits behind forge's main the pin has fallen
+    desc: "Report how many commits behind forge's main the pin has fallen (-- --github for CI annotations)"
     cmds:
-      - ./scripts/pin-drift.sh
+      - ./scripts/pin-drift.sh {{.CLI_ARGS}}
 
   pin:ancestry:
-    desc: Fail if the forge pin is not a commit on forge's main
+    # The self-test first: a detector that can pass vacuously is worse than
+    # none, so prove it still FAILS on an off-main pin before trusting it.
+    desc: "Fail if the forge pin is not a commit on forge's main (-- --github for CI annotations)"
     cmds:
-      - ./scripts/check-pin-ancestry.sh
+      - ./scripts/test-pin-ancestry.sh
+      - ./scripts/check-pin-ancestry.sh {{.CLI_ARGS}}
 
   # A release is TWO steps. `release:<bump>` opens the version-bump PR;
   # `release:tag` tags the commit once that PR has MERGED. They are separate
@@ -704,6 +958,29 @@ tasks:
     desc: Preview which commit release:tag would tag, creating nothing
     cmds:
       - ./scripts/release-tag.sh --dry-run
+
+  flake:report:test:
+    desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
+    cmds:
+      - ./scripts/test-flake-report.sh
+
+  pin:check:report:test:
+    desc: Self-test of scripts/forge-pin-report.sh (forge-pin-check.yml's verdicts and its forge-pin:red / forge-pin:broken issue transitions) against a fake gh
+    cmds:
+      - ./scripts/test-forge-pin-report.sh
+
+  release:lock:test:
+    desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote
+    cmds:
+      - ./scripts/test-release-lock.sh
+
+  release:lock:sync:
+    desc: Copy scripts/release-lock.sh and its self-test from the pinned forge, their one source (TestReleaseLockIsForgesCopy holds them identical)
+    cmds:
+      - |
+        dir="$(go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/reliant-labs/forge)"
+        install -m 0644 "$dir/scripts/release-lock.sh" scripts/release-lock.sh
+        install -m 0755 "$dir/scripts/test-release-lock.sh" scripts/test-release-lock.sh
 
   release:check-tags:
     desc: Verify every release tag is an ancestor of main

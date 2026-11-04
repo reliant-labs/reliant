@@ -49,6 +49,8 @@
 # to move the floor past the mistake.
 
 set -euo pipefail
+# shellcheck source=rc-shape.sh
+. "$(dirname "${BASH_SOURCE[0]}")/rc-shape.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -143,6 +145,18 @@ for tag in $TAGS; do
     if git merge-base --is-ancestor "$commit" "$MAIN_REF" 2>/dev/null; then
         ON_MAIN=$((ON_MAIN + 1))
         say "  ${GREEN}✓${NC} $tag  ${commit:0:9}  on ${MAIN_REF}"
+        continue
+    fi
+
+    # The RC train's shape (scripts/rc-shape.sh; control-plane docs/design/gitops-promotion.md):
+    # the tag is on the head of an RC branch release/vX.Y.Z-rc.N that is main, the train's one
+    # pin commit, then any fix commits a red set was fixed with in place, gated as it is.
+    # Anything else off main still fails.
+    if rc_shaped "$commit" "$MAIN_REF" \
+        && git for-each-ref --points-at "$commit" --format='%(refname:lstrip=3)' refs/remotes/origin/release/ \
+            | grep -Eq '^release/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'; then
+        ON_MAIN=$((ON_MAIN + 1))
+        say "  ${GREEN}✓${NC} $tag  ${commit:0:9}  heads an RC branch cut off ${MAIN_REF}"
         continue
     fi
 

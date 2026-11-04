@@ -1,25 +1,24 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The one thing to do about an automation's state (automation-ux-spec.md
- * §4.1), as a button, wired. The health vocabulary (lib/automationHealth.ts)
- * names the action; this is the only place that knows what each one does, so
- * the Automations list, the workflow page, the Inbox and the trigger page
- * all act the same way on the same words.
+ * The one thing to do about a trigger's state, as a button, wired. The health
+ * vocabulary (lib/automationHealth.ts) names the action; this is the only
+ * place that knows what each one does, so the Workflows list, the workflow
+ * page's Triggers card and the Inbox all act the same way on the same words.
  */
 
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
-import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
+import { triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
 import { useDeleteTrigger, useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import type { AutomationCtaKind, AutomationCtaSpec } from "@/lib/automationHealth";
-import { workflowEditHref } from "@/lib/workflowsArea";
+import { automationHref, workflowEditHref } from "@/lib/workflowsArea";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
-import { SetupDialogFor } from "./SetupDialogFor";
+import { openAutomationDialog } from "./dialog/openAutomationDialog";
 
 export interface AutomationCtaProps {
   cta: AutomationCtaSpec;
@@ -55,16 +54,16 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
   const navigate = useNavigate();
   const setEnabled = useSetTriggerEnabled();
   const remove = useDeleteTrigger();
-  const [dialog, setDialog] = useState<"finish" | "settings" | "run" | "remove" | null>(null);
+  const [dialog, setDialog] = useState<"run" | "remove" | null>(null);
   const label = subject ? `${cta.label} for ${subject}` : undefined;
 
   const act = () => {
     switch (cta.kind) {
       case "finish_setup":
-        setDialog("finish");
+        openAutomationDialog({ workflowRef, projectId, mode: "finish", showOpenWorkflow: true });
         return;
       case "fix_settings":
-        setDialog("settings");
+        openAutomationDialog({ workflowRef, projectId, mode: "settings", showOpenWorkflow: true });
         return;
       case "try_now":
       case "run_now":
@@ -80,12 +79,12 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
       case "open_run": {
         const chatId = newestRunChat(triggers);
         if (chatId) void navigate({ to: "/workflows/runs/$runId", params: { runId: chatId } });
-        else void navigate({ to: "/workflows/automations/$triggerId", params: { triggerId: triggers[0]!.id } });
+        else void navigate({ href: automationHref(triggers[0]!) });
         return;
       }
       case "see_why": {
         const t = subjectTrigger(triggers, cta.kind);
-        if (t) void navigate({ to: "/workflows/automations/$triggerId", params: { triggerId: t.id } });
+        if (t) void navigate({ href: automationHref(t) });
         return;
       }
       case "resume":
@@ -115,9 +114,6 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
       >
         {cta.label}
       </Button>
-      {(dialog === "finish" || dialog === "settings") && (
-        <SetupDialogFor workflowRef={workflowRef} projectId={projectId} mode={dialog} onClose={() => setDialog(null)} />
-      )}
       {dialog === "run" && <RunNowDialog open projectId={projectId} workflowRef={workflowRef} onClose={() => setDialog(null)} />}
       {broken && (
         <ConfirmationDialog
@@ -127,7 +123,7 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
           confirmLabel="Remove trigger"
           loading={remove.isPending}
           onConfirm={() =>
-            remove.mutate(broken.id, {
+            remove.mutate({ id: broken.id }, {
               onSuccess: () => {
                 setDialog(null);
                 toast.success(`Removed ${broken.name}`);

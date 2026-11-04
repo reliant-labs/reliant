@@ -21,8 +21,8 @@ const workflow: Workflow = {
   description: 'Triage new issues',
   entry: ['fetch'],
   nodes: [
-    { id: 'fetch', type: 'run', command: 'gh issue list' },
-    { id: 'summarise', type: 'run', command: 'echo done' },
+    { id: 'fetch', type: 'run' },
+    { id: 'summarise', type: 'run' },
   ],
   edges: [{ from: 'fetch', default: ['summarise'] }],
   ui: {

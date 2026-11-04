@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // both plays the server for an automatic pass and returns the two phases'
@@ -29,25 +31,8 @@ func commit(t *testing.T, checkout, file, content string) string {
 	return run(t, checkout, "rev-parse", "HEAD")
 }
 
-// savedAt asserts one of refs is a saved-commit ref of kind ("head" or
-// "reflog") holding exactly sha in the project, and returns it.
-func savedAt(t *testing.T, f *fixture, refs []string, kind, sha string) string {
-	t.Helper()
-	for _, ref := range refs {
-		if strings.Contains(ref, "/orphans/"+kind+"-") && run(t, f.project, "rev-parse", ref) == sha {
-			if !strings.HasPrefix(ref, "refs/reliant/wip/") {
-				t.Fatalf("%s is outside the snapshot namespace", ref)
-			}
-			return ref
-		}
-	}
-	t.Fatalf("no %s ref holding %s among %v", kind, sha, refs)
-	return ""
-}
-
-// A detached HEAD with commits no branch or remote has: the commits are saved
-// under a ref, then the worktree is removed.
-func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
+// A detached unpublished HEAD must not be reclaimed using a local-only ref.
+func TestReconcile_DetachedUnpushedCommitsRequireRemoteRecovery(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "detached unpushed commits saved, then a full reclaim (~62 git processes)")
 	f := newFixture(t)
@@ -58,23 +43,19 @@ func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 	sha := commit(t, w.Path, "only-here.txt", "exists nowhere else\n")
 
 	first, second := f.both(w)
-	if first.Outcome != OutcomeClaimed || second.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v then %+v, want claimed then removed", first, second)
+	if first.Outcome != OutcomeHeld || second.Outcome != OutcomeHeld || !exists(w.Path) {
+		t.Fatalf("got %+v then %+v, want held with original retained", first, second)
 	}
-	ref := savedAt(t, f, first.SnapshotRefs, "head", sha)
-	if !strings.HasPrefix(ref, SnapshotRefPrefix("det")+"root/orphans/") {
-		t.Fatalf("ref %s is not this worktree's", ref)
+	if len(first.SnapshotRefs) != 0 || run(t, w.Path, "rev-parse", "HEAD") != sha {
+		t.Fatal("automatic reclaim must not substitute local snapshots for remote proof")
 	}
-	if got := run(t, f.project, "show", ref+":only-here.txt"); got != "exists nowhere else" {
-		t.Fatalf("saved commit has %q", got)
-	}
-	for _, r := range SnapshotRefsOnRow(first.SnapshotRefs) {
-		t.Fatalf("a saved commit is never applied as a snapshot: %s", r)
+	if got := run(t, w.Path, "show", "HEAD:only-here.txt"); got != "exists nowhere else" {
+		t.Fatalf("original content changed: %q", got)
 	}
 }
 
-// A branch with commits on no remote: saved and removed; the branch survives.
-func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
+// An unpublished branch and its original checkout survive absent remote proof.
+func TestReconcile_UnpushedBranchCommitsRequireRemoteRecovery(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "unpushed branch commits saved, then a full reclaim (~61 git processes)")
 	f := newFixture(t)
@@ -84,18 +65,19 @@ func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 	sha := commit(t, w.Path, "b.txt", "b\n")
 
 	first, second := f.both(w)
-	if second.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v then %+v, want removed", first, second)
+	if first.Outcome != OutcomeHeld || second.Outcome != OutcomeHeld || !exists(w.Path) {
+		t.Fatalf("got %+v then %+v, want held with original retained", first, second)
 	}
-	savedAt(t, f, first.SnapshotRefs, "head", sha)
+	if len(first.SnapshotRefs) != 0 || run(t, w.Path, "rev-parse", "HEAD") != sha {
+		t.Fatal("local ref must not replace remote recovery proof")
+	}
 	if run(t, f.project, "rev-parse", "refs/heads/feat/br") != sha {
 		t.Fatal("the branch must survive")
 	}
 }
 
-// Commits only the worktree's own reflog reaches (here: reset away) are saved
-// before its admin directory, and with it the reflog, goes.
-func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
+// Reflog-only history must remain in its original admin directory without proof.
+func TestReconcile_ReflogOnlyCommitsRequireRemoteRecovery(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "reflog-only commits saved, then a full reclaim (~73 git processes)")
 	f := newFixture(t)
@@ -106,14 +88,23 @@ func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 	run(t, w.Path, "reset", "-q", "--hard", "HEAD~1")
 
 	first, second := f.both(w)
-	if second.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v then %+v, want removed", first, second)
+	if first.Outcome != OutcomeHeld || second.Outcome != OutcomeHeld || !exists(w.Path) {
+		t.Fatalf("got %+v then %+v, want held with original retained", first, second)
 	}
-	savedAt(t, f, first.SnapshotRefs, "reflog", lost)
+	if len(first.SnapshotRefs) != 0 {
+		t.Fatal("automatic local snapshot fallback is forbidden")
+	}
+	if got := run(t, w.Path, "reflog", "--format=%H"); !strings.Contains(got, lost) {
+		t.Fatal("original reflog history was lost")
+	}
+	if got := run(t, w.Path, "show", lost+":lost.txt"); got != "reset away" {
+		t.Fatalf("original history content changed: %q", got)
+	}
 }
 
 // Saving is idempotent: a second pass reuses the refs it made.
 func TestSaveCommits_ReusesItsRefs(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("idem", "feat/idem")
@@ -133,6 +124,7 @@ func TestSaveCommits_ReusesItsRefs(t *testing.T) {
 
 // Uncommitted work still holds: nothing is saved and nothing removed.
 func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -152,6 +144,7 @@ func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
 
 // "Keep everything" removes nothing, so nothing is saved either.
 func TestReconcile_KeepEverythingDoesNotSaveOrRemove(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

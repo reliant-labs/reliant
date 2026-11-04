@@ -1,31 +1,30 @@
 import { create } from "zustand";
-import {
-  api,
-  type Chat,
-  type Message,
-  type ToolApprovalRequest,
-} from "../api/client";
+import type { Chat, Message } from "../api/client";
 import type { ContentBlock } from "../types/chat";
 import {
   MessageRole,
   ContentBlockType,
   StreamingState,
   ChatState,
+  AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
+import { ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
   foldToolResultMessage,
+  resolvedToolResultFromBlock,
   getProcessedMessage,
 } from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
+import { registerToolResultSink } from "../lib/toolResultSink";
 import {
   CHAT_MARKER_KINDS,
   extractChatMarker,
   stripChatMarker,
 } from "../lib/chatMarkers";
 import {
+  applyHistoricalErrors,
   applyLogSlice,
   applyToolCallStateUpdates,
   bySequenceNumber,
@@ -38,9 +37,9 @@ import {
   toolStatusSurvivesStreamAbort,
 } from "../lib/chatStreamReducers";
 
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 
-// Chat streaming is handled via the unified gRPC stream in globalUpdatesStore
+// Chat streaming is handled by the per-chat stream globalUpdatesStore owns
 import type {
   ChatUpdate,
   ProtoMessageUpdate,
@@ -90,7 +89,6 @@ import { useProjectStore } from "./projectStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
-import { useTasksStore } from "./tasksStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatParamsStore } from "./chatParamsStore";
@@ -117,13 +115,10 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
-import {
-  approvalKeys,
-  upsertApprovalInCache,
-  applyQuestionUpdate,
-  resolvePendingQuestion,
-} from "../hooks/approval-queries";
+import { approvalsFromCache, approvalStatusFromFeed, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
+import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
+import { invalidatePlanTasks } from "../hooks/task-queries";
 import {
   chatKeys,
   seedChatDetail,
@@ -143,13 +138,15 @@ import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
 } from "../hooks/message-queries";
-import { chatDetailKeys } from "../hooks/chat-detail-keys";
-import { DEFAULT_WORKFLOW } from "./preferencesStore";
+import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
+import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
+import { DEFAULT_WORKFLOW } from "../hooks/settings-queries";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
   STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
 import { trackEvent } from "../lib/analytics";
+import * as chatActions from "../hooks/chat-actions";
 
 // Lazy getter to avoid circular dependency with globalUpdatesStore.
 // `var` (not `let`) is intentional: globalUpdatesStore.ts calls
@@ -173,30 +170,19 @@ export function initGlobalUpdatesStoreRef(mod: typeof import("./globalUpdatesSto
   _globalUpdatesStoreModule = mod;
 }
 
-function toApprovalStatus(
-  status: "pending" | "approved" | "denied",
-): ApprovalStatus {
-  switch (status) {
-    case "approved":
-      return ApprovalStatus.APPROVED;
-    case "denied":
-      return ApprovalStatus.DENIED;
-    default:
-      return ApprovalStatus.PENDING;
-  }
-}
-
 /**
  * What a streamed approval carries besides its status. Only the fields the
  * update actually has: a status-only update (approved, denied) is merged over
  * the cached approval and must not blank its title.
  */
-function approvalFields(update: ToolApprovalUpdate): Partial<ToolApprovalRequest> {
-  const fields: Partial<ToolApprovalRequest> = {};
+function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
+  const fields: ApprovalFields = {};
   if (update.title) fields.title = update.title;
   // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
   const kind: unknown = update.approval_type;
-  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approval_type = ApprovalType.WORKFLOW_STEP;
+  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
+  if (kind === "tool_call" || kind === ApprovalType.TOOL_CALL) fields.approvalType = ApprovalType.TOOL_CALL;
+  if (update.batch_id) fields.batchId = update.batch_id;
   return fields;
 }
 
@@ -247,7 +233,7 @@ const streamingBuffers = new Map<string, StreamingBuffer>();
 
 // Single-fire guard: a burst of error events (one per workflow retry attempt
 // before the workflow gives up) opens exactly one modal, not N. Mirrors the
-// upgradeInterceptor pattern in api/grpc-client.ts. Reset when the modal
+// upgradeInterceptor pattern in api/upgradeInterceptor.ts. Reset when the modal
 // closes so a later quota hit in a different chat still surfaces a modal.
 let _reliantManagedQuotaModalInFlight = false;
 
@@ -518,7 +504,8 @@ const applyNodeExecutionUpdates = (
   isSnapshot: boolean,
 ): NodeExecutionUpdate[] =>
   applyLogSlice(existing, updates, isSnapshot, {
-    key: (n) => `${n.node_id}:${n.event_type}`,
+    // Per run: two runs of one workflow share every node id.
+    key: (n) => `${n.workflow_id}:${n.node_id}:${n.event_type}`,
     sort: bySequenceNumber,
   });
 
@@ -713,18 +700,14 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
   return allAttachments;
 }
 
-// Track which task-related tool call IDs have already been processed
-// to prevent duplicate API calls when messages are reprocessed (cross-matching, streaming updates)
-const processedTaskToolCallIds = new Set<string>();
-
 // How many older messages loadOlderMessages fetches per scroll-back page.
 // Smaller than the 200-message initial snapshot bound: paging happens while the
 // user is actively scrolling, so a smaller page keeps each round-trip cheap.
 const OLDER_MESSAGES_PAGE_SIZE = 100;
 
-// Chats with an older-messages page in flight. Module-scoped (not store state)
-// for the same reason the streaming buffers are: it is transient request
-// bookkeeping that no component renders, so it must not trigger re-renders.
+// Chats with an older-messages page in flight: the synchronous concurrency
+// guard. Its reactive mirror is the store's olderLoadingByChat, which the UI
+// reads for the loading indicator; the two are always written together.
 const olderMessagesInFlight = new Set<string>();
 
 // Per-chat stream resume cursor: the chat update sequence this store's cached
@@ -800,6 +783,7 @@ export interface ToolCallState {
     | "executing" // Currently executing
     | "cancelling" // Cancellation requested
     | "cancelled" // Cancelled by user
+    | "backgrounded" // Detached; its real outcome streams in later
     | "completed" // Successfully completed
     | "denied" // Denied approval
     | "failed"; // Execution failed
@@ -819,7 +803,7 @@ export interface ToolCallState {
   childWorkflowId?: string;
   error?: string;
   // Unified approval state
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   needsApproval?: boolean;
   // Tool call data from messages (for UI rendering)
   toolCall?: {
@@ -886,6 +870,11 @@ interface ChatStoreState {
   // message blocks.
   toolResultsByCallId: Record<string, ToolResultsByCallId>;
 
+  // Chats with an older-messages page in flight (scroll-back paging). The
+  // store owns this so every caller sees the real fetch: a duplicate call that
+  // returns early at the in-flight guard never touches it.
+  olderLoadingByChat: Record<string, boolean>;
+
   // Track which chat is currently active (for UI purposes)
   activeChatId: string | null;
 
@@ -897,7 +886,7 @@ interface ChatStoreState {
   pendingStatusFetches: Record<string, Promise<unknown>>;
 
   // Methods for chat management
-  loadChats: (projectId?: string) => Promise<void>;
+  loadChats: () => Promise<void>;
   startChat: (
     worktreeId?: string,
     firstMessage?: string,
@@ -927,7 +916,11 @@ interface ChatStoreState {
 
   // Methods for active chat
   setActiveChat: (chatId: string | null) => void;
-  selectChat: (chat: Chat) => void;
+  // deferPersist skips recording the chat as the worktree's active chat: a
+  // caller still resolving the chat's worktree context calls persistActiveChat
+  // once that context is current (see selectChatWithWorktreeContext).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => void;
+  persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
   // Message methods
@@ -960,8 +953,12 @@ interface ChatStoreState {
   // Resolves to true when more history may still remain, false when the top of
   // the chat has been reached (or nothing could be loaded).
   loadOlderMessages: (chatId: string) => Promise<boolean>;
+  // Merge the tool results of messages read outside this store (the React
+  // Query seed and single-thread reads) into toolResultsByCallId. Known
+  // entries are kept: a result is written once.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => void;
 
-  // Stream methods (chat detail events are delivered via the unified global stream)
+  // Stream methods (chat detail events are delivered by the per-chat stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
   // Clears streaming placeholders/buffers for a chat. Called when the chat's
   // activity goes IDLE — the authoritative "nothing is streaming" signal —
@@ -998,7 +995,9 @@ interface ChatStoreState {
 
   // Branch chat
   _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => void;
-  branchChat: (chatId: string, messageId: string) => Promise<void>;
+  // Return the created chat so route-owned surfaces can open it without
+  // coupling this store to browser paths or the router.
+  branchChat: (chatId: string, messageId: string) => Promise<Chat | undefined>;
   // "Continue without machine": a no-machine branch that carries the
   // conversation and leaves the original chat as it is. Navigates to it.
   branchChatWithoutMachine: (chatId: string, messageId: string) => Promise<Chat>;
@@ -1013,7 +1012,7 @@ interface ChatStoreState {
       filesCopied?: string[];
       copyFilesEnabled?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<Chat | undefined>;
 
   // Connection management
   onConnectionRestored: () => void;
@@ -1062,7 +1061,7 @@ interface ChatStoreState {
           | "completed"
           | "denied"
           | "failed";
-        approval?: ToolApprovalRequest;
+        approval?: Approval;
         needsApproval?: boolean;
       }
     | undefined;
@@ -1189,6 +1188,7 @@ function applyFirstSend(chat: Chat, projectId: string): void {
   seedChatDetail(chat);
   upsertChatInListCache(projectId, chat);
   void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null) });
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1209,25 +1209,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   finalizedStreamIds: {}, // Delta identity: finalized assistant message ids per chat
   contextUsage: {}, // Context usage tracking for compaction indicator
   toolResultsByCallId: {}, // Normalized tool results per chat, keyed by tool_call_id
+  olderLoadingByChat: {}, // Chats with a scroll-back page in flight
   activeChatId: null,
   chatSyncPendingId: null,
   hasLoaded: false,
   error: null,
   pendingStatusFetches: {},
 
-  // Load all chats (with singleflight deduplication to prevent parallel API calls)
+  // Load the sidebar's chat list — the filter's project, or every project —
+  // with singleflight deduplication to prevent parallel API calls.
   loadChats: async () => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      return;
-    }
+    const scope = useWorkspaceStateStore.getState().projectFilterId;
 
-    // Use singleflight to ensure only one load per project runs at a time
-    // The key includes projectId to allow different projects to load simultaneously
-    return singleflight(`loadChats:${projectId}`, async () => {
+    // Use singleflight to ensure only one load per scope runs at a time
+    return singleflight(`loadChats:${scope ?? "*"}`, async () => {
       set({ error: null });
       try {
-        const response = await api.chatsV2.list(projectId);
+        const response = await chatActions.listChats(scope ?? undefined);
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
@@ -1324,7 +1322,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       firstMessage,
       attachmentIds ?? [],
     ]);
-    const chat = await api.chatsV2.start({
+    const chat = await chatActions.startChat({
       project_id: projectId,
       messages: firstMessage
         ? [{ role: MessageRole.USER, content: firstMessage }]
@@ -1399,7 +1397,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       // The chat names its own project; the selected project may be a different
       // one (deep link, cross-project tab), and the server rejects a mismatch.
-      chat = await api.chatsV2.start({
+      chat = await chatActions.startChat({
         chat_id: chatId,
         messages: [{ role: MessageRole.USER, content: firstMessage }],
         attachments: attachmentIds,
@@ -1462,7 +1460,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1537,22 +1535,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // NOTE: viewerStore no longer has its own worktreeId state
     // The worktree context is managed by worktreeStore (single source of truth)
-    // Browser viewers are filtered based on worktreeStore.currentWorktree?.id
+    // Browser viewers are filtered based on worktreeStore.currentWorktreeId
 
-    // Save to workspace state for persistence
-    // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
-    // This ensures state is saved to where the user is currently viewing (e.g., __main__)
-    // so it can be properly restored on reload
-    const projectId = useProjectStore.getState().currentProject?.id;
-    const currentWorktreeId =
-      useWorktreeStore.getState().currentWorktree?.id ?? null;
-    if (projectId) {
-      useWorkspaceStateStore
-        .getState()
-        .setActiveChatId(projectId, currentWorktreeId, chat.id);
-      useWorkspaceStateStore
-        .getState()
-        .addToChatQueue(projectId, currentWorktreeId, chat.id);
+    // Save to workspace state for persistence (see persistActiveChat).
+    if (!options?.deferPersist) {
+      get().persistActiveChat(chat.id);
     }
 
     // New chats already had their empty message-list cache seeded by
@@ -1600,7 +1587,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     // Start WebSocket for real-time updates (synchronous setup, async connection)
-    // Subscribe to per-chat detail events via the unified global stream
+    // Subscribe to per-chat detail events (the per-chat stream; the user stream is untouched)
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
@@ -1609,29 +1596,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
 
-    // Load plan and tasks for this chat (fire-and-forget, cached)
-    void (async () => {
-      try {
-        const { useTasksStore } = await import("./tasksStore");
-        const { loadPlanAndTasks } = useTasksStore.getState();
-        await loadPlanAndTasks(chat.id);
-      } catch (error) {
-        logger.error("[ChatStore] Failed to load plan/tasks:", error);
-        Sentry.captureMessage('Failed to load plan and tasks', {
-          level: 'warning',
-          tags: { component: 'chat', operation: 'load_plan_tasks' },
-        });
-      }
-    })();
-
-    // Pending approvals and the pending question are server data owned by the
-    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestions
-    // fetch them on mount and the chat stream patches the cache live (see
-    // approval-queries.ts). No store-side prefetch needed here.
+    // The plan and its tasks, pending approvals and pending questions are
+    // server data owned by the React Query cache: their hooks fetch them on
+    // mount and the chat stream patches or invalidates the cache live (see
+    // task-queries.ts, approval-queries.ts, question-queries.ts). No
+    // store-side prefetch needed here.
 
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
     }
+  },
+
+  // Record the chat as the active and most recent chat of the worktree the
+  // user is viewing.
+  // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
+  // This ensures state is saved to where the user is currently viewing (e.g., __main__)
+  // so it can be properly restored on reload
+  persistActiveChat: (chatId: string) => {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (!projectId) return;
+    const currentWorktreeId =
+      useWorktreeStore.getState().currentWorktreeId ?? null;
+    useWorkspaceStateStore
+      .getState()
+      .setActiveChatId(projectId, currentWorktreeId, chatId);
+    useWorkspaceStateStore
+      .getState()
+      .addToChatQueue(projectId, currentWorktreeId, chatId);
   },
 
   // Clear the current chat selection
@@ -1644,7 +1635,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Determine the target worktree context
     const targetWorktreeId =
-      worktreeId ?? useWorktreeStore.getState().currentWorktree?.id ?? null;
+      worktreeId ?? useWorktreeStore.getState().currentWorktreeId ?? null;
 
     // NOTE: viewerStore no longer has its own worktreeId state
     // The worktree context is managed by worktreeStore (single source of truth)
@@ -1703,7 +1694,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       id: clientMessageId,
       body: content,
       created_at: sentAt,
-      sender_kind: QUEUED_SENDER_KIND_HUMAN,
+      sender_kind: AgentMessageKind.HUMAN_MESSAGE,
       attachments: attachmentIds ?? [],
     };
     sendPayloads.set(clientMessageId, { chatId, content, attachmentIds, options: sendOptions });
@@ -1786,12 +1777,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         client_message_id: clientMessageId,
       };
 
-      let response: Awaited<ReturnType<typeof api.chatsV2.sendMessage>>;
+      let response: Awaited<ReturnType<typeof chatActions.sendMessage>>;
       // In the transcript, the strip must not show the server's row a second
       // time while the request is in flight.
       if (!showInQueue) beginPendingSend(clientMessageId);
       try {
-        response = await api.chatsV2.sendMessage(
+        response = await chatActions.sendMessage(
           chatId,
           content,
           attachmentIds,
@@ -1979,7 +1970,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logger.debug(
         `[ChatStore] Loading messages for chat ${chatId.slice(0, 8)}`,
       );
-      const response = await api.chatsV2.listMessages(chatId);
+      const response = await chatActions.listMessages(chatId);
       // Canonical order — chat-global seq, a true total order across threads.
       const messages = sortMessagesForDisplay(
         (response.messages || []).map(normalizeMessageAttachmentFields),
@@ -2012,14 +2003,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This is critical - without this, each ChatMessage parses JSON on every render
       // which causes 800ms+ delays when switching to chats with many messages
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       // Build the normalized tool-result index from the loaded TOOL messages,
       // merged over anything already known for this chat, so processMessage can
-      // resolve call→result the same way the live stream path does. (Loaded
-      // assistant messages may also carry a backend-embedded matchedResult;
-      // processMessage falls back to that when the index has no entry.)
+      // resolve call→result the same way the live stream path does. The server
+      // does not copy a result onto its call block: this index is the join.
       const loadedToolResults: ToolResultsByCallId = {
         ...(state.toolResultsByCallId[chatId] || {}),
       };
@@ -2065,17 +2053,28 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
     } catch (error) {
       logger.error("[ChatStore] Failed to load messages:", error);
-      Sentry.captureMessage('Failed to load chat messages', {
-        level: 'warning',
-        tags: { component: 'chat', operation: 'load_messages' },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: 'chat', operation: 'load_messages', chat_id: chatId });
     }
   },
 
   // Scroll-back paging. The initial snapshot is bounded to the newest N
   // messages, so this is how the rest of a long chat becomes reachable: fetch
   // the page immediately older than what we hold and PREPEND it.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => {
+    const found: ToolResultsByCallId = {};
+    for (const message of messages) {
+      if (message.role === MessageRole.TOOL) foldToolResultMessage(message, found);
+    }
+    const existing = get().toolResultsByCallId[chatId] || {};
+    const added = Object.keys(found).filter((id) => !(id in existing));
+    if (added.length === 0) return;
+    const merged: ToolResultsByCallId = { ...existing };
+    for (const id of added) merged[id] = found[id];
+    set((state) => ({
+      toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: merged },
+    }));
+  },
+
   loadOlderMessages: async (chatId: string) => {
     // Concurrency guard. Virtuoso can fire startReached several times in quick
     // succession (each prepend re-renders the list near the top edge), and
@@ -2102,6 +2101,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (beforeSeq <= 0) return false;
 
     olderMessagesInFlight.add(chatId);
+    set((state) => ({
+      olderLoadingByChat: { ...state.olderLoadingByChat, [chatId]: true },
+    }));
     try {
       logger.debug("[ChatStore] Loading older messages", {
         chatId: chatId.slice(0, 8),
@@ -2109,7 +2111,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         pageSize: OLDER_MESSAGES_PAGE_SIZE,
       });
 
-      const response = await api.chatsV2.listMessages(chatId, {
+      const response = await chatActions.listMessages(chatId, {
         recent: OLDER_MESSAGES_PAGE_SIZE,
         beforeSeq,
       });
@@ -2118,15 +2120,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         normalizeMessageAttachmentFields,
       );
 
-      // TERMINATION IS DRIVEN BY THE EMPTY PAGE, NOT BY has_more.
-      //
-      // The server computes hasMore as
-      //   len(messages) < totalCount || beforeSeq > 0
-      // (internal/grpc/services/chat_crud.go). That second disjunct makes it
-      // permanently TRUE for every paged request — we always pass a positive
-      // beforeSeq — so a loop that trusted it would never terminate and
-      // would keep re-requesting past the top of the chat. An empty page is the
-      // only trustworthy end-of-history signal from this RPC.
+      // End of history is read off the page itself: an empty page means
+      // nothing lies below the cursor, and a page shorter than requested
+      // (below) means this one consumed the remainder. The server's has_more
+      // is accurate on this path, but the page answers the same question
+      // without a second source of truth to disagree with.
       if (older.length === 0) {
         logger.debug("[ChatStore] Reached the start of chat history", {
           chatId: chatId.slice(0, 8),
@@ -2155,9 +2153,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // inserted rows render from cached parses instead of parsing during the
       // scroll that requested them.
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       for (const message of older) {
         getProcessedMessage(message, pageToolResults, approvals);
       }
@@ -2182,24 +2178,46 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         reachedStart,
       });
 
+      // The page's own errors: the snapshot carries only the errors of its
+      // window, so an older error arrives with the history it belongs to and
+      // renders at its place in the timeline. Merged by id, never replacing a
+      // newer attempt the snapshot or the stream already delivered.
+      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      if (pageErrors.length > 0) {
+        set((s) => ({
+          errorEvents: {
+            ...s.errorEvents,
+            [chatId]: applyHistoricalErrors(s.errorEvents[chatId] || [], pageErrors),
+          },
+        }));
+      }
+
       return !reachedStart;
     } catch (error) {
       logger.error("[ChatStore] Failed to load older messages:", error);
-      Sentry.captureMessage("Failed to load older chat messages", {
-        level: "warning",
-        tags: { component: "chat", operation: "load_older_messages" },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: "chat", operation: "load_older_messages", chat_id: chatId });
       // Leave hasMore alone: this is a transient failure, not end-of-history.
       // The next startReached retries.
       return true;
     } finally {
       olderMessagesInFlight.delete(chatId);
+      set((state) => {
+        if (!state.olderLoadingByChat[chatId]) return state;
+        const { [chatId]: _done, ...rest } = state.olderLoadingByChat;
+        return { olderLoadingByChat: rest };
+      });
     }
   },
 
 
-  // Process chat detail events from the unified global stream.
+  // Process chat detail events from the per-chat stream.
   // Called by globalUpdatesStore when per-chat events arrive.
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot = false) => {
     // Helper to process streaming deltas and build/update a temporary streaming message
@@ -2407,6 +2425,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             const refetchType = (u as unknown as { type: string }).type as RefetchType;
             if (refetchType) {
               triggerRefetch(refetchType, chatId);
+              // The plan and its tasks are on the generated hooks: the
+              // signal marks their reads stale directly.
+              if (refetchType === "plan_tasks") invalidatePlanTasks();
             }
           }
         }
@@ -2707,11 +2728,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   return;
                 }
                 batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
-                batchToolResults[block.toolCallId] = {
-                  content: block.content || "",
-                  is_error: block.isError,
-                  tool_name: block.toolName,
-                };
+                batchToolResults[block.toolCallId] = resolvedToolResultFromBlock(block);
               }
             });
 
@@ -2864,10 +2881,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             duplicatesInBatch: inBatchDuplicateCount,
           });
         }
-        const updatedToolResults: ToolResultsByCallId = {
-          ...existingToolResults,
-          ...batchToolResults,
-        };
+        // A batch that adds no result keeps the index's identity. Every
+        // rendered ChatMessage subscribes to it and re-parses its content when
+        // it changes reference, so a fresh copy per batch re-processed the
+        // whole visible transcript on every streaming delta.
+        const updatedToolResults: ToolResultsByCallId =
+          Object.keys(batchToolResults).length === 0
+            ? existingToolResults
+            : { ...existingToolResults, ...batchToolResults };
 
         // Gather all streaming messages: newly processed ones merged with existing ones
         // Thread-aware: each thread can have its own streaming message
@@ -3351,7 +3372,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
         // ---- External writes (post-commit) ----
         // Everything below writes to stores OTHER than this one (RQ caches,
-        // threadActivityStore, tasksStore). They run after the Zustand commit
+        // threadActivityStore). They run after the Zustand commit
         // but in the same synchronous task, so React batches all of it into
         // one render — same observable ordering as before.
 
@@ -3389,6 +3410,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             );
             get().clearStreamingState(chatId);
           }
+          // A snapshot carries no node state and replaced the live node
+          // events: an open run-status view re-reads where its run stands,
+          // or the events the snapshot skipped past would be missing.
+          void queryClient.invalidateQueries({
+            queryKey: chatServiceKeys.getWorkflowNodeExecutions({ chatId }),
+          });
         }
 
         // Keep any open thread-scoped reader (a spawn preview, a selected
@@ -3404,19 +3431,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // client-side select, so one list upsert updates both. The patch IS
         // the sync; no invalidate/refetch round-trip.
         allApprovals.forEach((approvalUpdate) => {
-          const approval: ToolApprovalRequest = {
+          upsertApprovalInCache(chatId, {
             id: approvalUpdate.id,
-            chat_id: approvalUpdate.chat_id,
-            content_block_id:
-              approvalUpdate.content_block_id || approvalUpdate.entity_id,
-            status: toApprovalStatus(approvalUpdate.status),
-            denial_reason: approvalUpdate.denial_reason,
-            created_at: approvalUpdate.created_at,
-            responded_at: approvalUpdate.responded_at,
-            action_taken: approvalUpdate.action_taken, // Which action was clicked
+            chatId: approvalUpdate.chat_id,
+            entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
+            status: approvalStatusFromFeed(approvalUpdate.status),
+            denialReason: approvalUpdate.denial_reason,
+            createdAt: approvalUpdate.created_at,
+            resolvedAt: approvalUpdate.resolved_at ?? approvalUpdate.responded_at,
+            actionTaken: approvalUpdate.action_taken, // Which action was clicked
             ...approvalFields(approvalUpdate),
-          };
-          upsertApprovalInCache(chatId, approval);
+          });
         });
 
         // Question updates patch the chat's pending-question list (server
@@ -3442,8 +3467,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
 
         // Pre-parse message content so the render layer reads from the
-        // reference-keyed processMessage memo without reparsing, and drive
-        // the real-time task side effects (tasksStore writes). Rendering
+        // reference-keyed processMessage memo without reparsing. Rendering
         // invalidation is handled by the memo itself (keyed on message /
         // tool-result index / approvals references), so there is no
         // store-side parsed cache to keep in sync.
@@ -3452,52 +3476,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // (including this batch's upserts above) to embed approval status
         // into processed tool calls.
         const approvalsForProcessing =
-          queryClient.getQueryData<ToolApprovalRequest[]>(
-            approvalKeys.list(chatId),
-          ) ?? [];
+          approvalsFromCache(chatId);
         messagesToProcess.forEach((message) => {
-          const processed = getProcessedMessage(
-            message,
-            updatedToolResults,
-            approvalsForProcessing,
-          );
-
-          // Process task-related tool calls in real-time as messages arrive
-          // This ensures tasks appear immediately in the sidebar without needing ChatMessage to render
-          // Only process each tool result once (messages may be reprocessed on cross-matching)
-          if (
-            processed.toolExecutions &&
-            processed.toolExecutions.length > 0
-          ) {
-            const tasksStore = useTasksStore.getState();
-            processed.toolExecutions.forEach((exec) => {
-              const toolCallId = exec.call?.id;
-              if (!toolCallId) return;
-              const toolName = exec.call?.name?.toLowerCase?.();
-              const content = exec.result?.content;
-              if (!content || typeof content !== "string") return;
-
-              // Skip if we've already processed this tool result
-              if (processedTaskToolCallIds.has(toolCallId)) return;
-
-              if (toolName === "update_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processUpdateTaskContent(chatId, content);
-              } else if (toolName === "add_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processAddTaskContent(chatId, content);
-              } else if (toolName === "create_subtask") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreateSubtaskContent(chatId, content);
-              } else if (toolName === "list_tasks") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processListTasksContent(chatId, content);
-              } else if (toolName === "create_plan") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreatePlanContent(chatId, content);
-              }
-            });
-          }
+          getProcessedMessage(message, updatedToolResults, approvalsForProcessing);
         });
 
         // CRITICAL FIX: Clear streaming buffers when complete messages arrive
@@ -3635,7 +3616,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Then make the API call to actually cancel the workflow
     try {
-      await api.chatsV2.cancel(chatId);
+      await chatActions.cancelChat(chatId);
     } catch (error) {
       logger.error("Failed to cancel chat:", error);
       // UI state already updated optimistically, so no need to update again
@@ -3693,7 +3674,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Make the API call to actually pause the workflow. Registered so a send
     // issued after this pause waits for it (see pausesInFlight).
-    const pausing = api.chatsV2.pause(chatId).then(
+    const pausing = chatActions.pauseChat(chatId).then(
       () => undefined,
       (error) => {
         logger.error("Failed to pause chat:", error);
@@ -3724,7 +3705,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Make the API call to actually resume the workflow
     try {
-      await api.chatsV2.resume(chatId);
+      await chatActions.resumeChat(chatId);
     } catch (error) {
       logger.error("Failed to resume chat:", error);
       // Revert optimistic update on error
@@ -3736,10 +3717,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     await resolvePendingQuestion(chatId, questionId, action, responseData);
   },
 
-  // Refresh chat - reconnects the unified stream to re-fetch data
+  // Refresh chat - re-asserts the chat stream
   refreshChat: async (chatId: string) => {
-    // Data refreshes via the unified global stream reconnection
-    // Re-subscribing to the chat triggers a fresh sync snapshot
+    // Re-subscribing restores a dropped chat stream (resuming from its
+    // cursor); it is a no-op while the stream is already up.
     getGlobalUpdatesStore()?.subscribeToChatDetails(chatId);
   },
 
@@ -3759,7 +3740,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity in the dedicated store
     useThreadActivityStore.getState().clearThreads(chatId);
     // Approvals are server data in the RQ cache; reconcile from the server.
-    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
+    queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
 
     // Mark any incomplete messages as finished in the RQ message cache.
     patchMessagesCache(chatId, (msgs) =>
@@ -3798,7 +3779,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const baselineSeq = useActivityStore.getState().maxSeenSeq;
 
       // Use the get endpoint to check if chat exists and get its state
-      const chat = await api.chatsV2.get(chatId);
+      const chat = await chatActions.getChat(chatId);
 
       // NOTE: auto_approve and is_planning_mode were removed from backend
       // Mode is tracked in chatParamsStore, not on chat object.
@@ -3833,7 +3814,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       // Branch using message ID - the backend will look up the message directly
       // This works for both local messages and inherited messages from parent chats
-      const { chat: newChat } = await api.chatsV2.branch(chatId, {
+      const { chat: newChat } = await chatActions.branchChat(chatId, {
         messageId,
       });
 
@@ -3846,8 +3827,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Select the new chat
       get().selectChat(newChat);
 
-      // Navigate to the branched chat
+      // Preserve desktop navigation; route-owned surfaces use the returned
+      // chat to update their URL after creation has succeeded.
       get()._navigateToBranchedChat(newChat);
+      return newChat;
     } catch (error) {
       // Extract error message from ConnectError or other error types
       const errorMessage =
@@ -3865,7 +3848,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   branchChatWithoutMachine: async (chatId: string, messageId: string) => {
-    const { chat: newChat } = await api.chatsV2.branch(chatId, {
+    const { chat: newChat } = await chatActions.branchChat(chatId, {
       messageId,
       noMachine: true,
     });
@@ -3880,7 +3863,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   connectChatToMachine: async (chatId: string, daemonId: string) => {
-    const updated = await api.chatsV2.setDaemon(chatId, daemonId);
+    const updated = await chatActions.setChatDaemon(chatId, daemonId);
     // The response is the connected chat (no_machine cleared). Install it now
     // rather than waiting on chat_config_changed, so the pill, the composer
     // hint and the request_machine card all flip on this render.
@@ -3908,7 +3891,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     try {
       // Branch using message ID - the backend will look up the message directly
-      const { chat: newChat } = await api.chatsV2.branch(chatId, {
+      const { chat: newChat } = await chatActions.branchChat(chatId, {
         messageId,
         worktreeId,
       });
@@ -3922,8 +3905,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Select the new chat
       get().selectChat(newChat);
 
-      // Navigate to the branched chat
+      // Route-owned surfaces can navigate independently of creation errors.
       get()._navigateToBranchedChat(newChat, worktreeId);
+      return newChat;
     } catch (error) {
       logger.error("Failed to branch chat to worktree:", error);
       throw error;
@@ -3933,7 +3917,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Connection restored - streaming is managed by globalUpdatesStore
   onConnectionRestored: () => {
     set({ error: null });
-    // The unified global stream reconnects automatically via globalUpdatesStore
+    // Both streams reconnect on their own (globalUpdatesStore)
   },
 
   // Clear error
@@ -4036,7 +4020,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   cancelToolCall: async (_chatId: string, toolCallId: string) => {
     try {
-      await api.toolCalls.cancel(toolCallId);
+      await chatActions.cancelToolCall(toolCallId);
       logger.info("Tool call cancelled successfully", toolCallId);
     } catch (error) {
       logger.error("Failed to cancel tool call", toolCallId, error);
@@ -4046,7 +4030,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   convertToBackground: async (_chatId: string, toolCallId: string) => {
     try {
-      const result = await api.toolCalls.convertToBackground(toolCallId);
+      const result = await chatActions.convertToolCallToBackground(toolCallId);
       logger.info(
         "Tool call converted to background successfully",
         toolCallId,
@@ -4087,7 +4071,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     try {
-      const result = await api.chatsV2.dismiss(chatId);
+      const result = await chatActions.dismissChat(chatId);
 
       // If state actually changed, update local state immediately for responsiveness
       // (global WebSocket will also deliver this update)
@@ -4131,7 +4115,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     clearMessagesCache(chatId);
     // The execution tree is retained exactly as long as the messages (gcTime:
     // Infinity, see useWorkflowExecutions), so it is released with them.
-    queryClient.removeQueries({ queryKey: chatDetailKeys.workflowExecutions(chatId) });
+    queryClient.removeQueries({ queryKey: workflowExecutionsOfChat(chatId) });
     // A page may still be in flight for the evicted chat; its finally-block
     // delete would otherwise be the only thing clearing this, and an aborted
     // teardown would leave a tombstone that blocks paging if the chat returns.
@@ -4155,6 +4139,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       streamingMessages: omit(state.streamingMessages),
       finalizedStreamIds: omit(state.finalizedStreamIds),
       toolResultsByCallId: omit(state.toolResultsByCallId),
+      olderLoadingByChat: omit(state.olderLoadingByChat),
       contextUsage: omit(state.contextUsage),
     }));
   },
@@ -4168,7 +4153,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     streamingBuffers.clear();
 
-    // Unsubscribe from chat details in the unified stream
+    // Unsubscribe from chat details (closes the chat stream)
     try {
       getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
     } catch {
@@ -4178,8 +4163,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity store
     useThreadActivityStore.getState().clearAll();
 
-    // Clear module-scoped set that tracks processed task tool calls
-    processedTaskToolCallIds.clear();
     olderMessagesInFlight.clear();
     chatStreamCursors.clear();
     sendPayloads.clear();
@@ -4187,6 +4170,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.
     queryClient.removeQueries({ queryKey: chatKeys.all });
+    queryClient.removeQueries({ queryKey: chatServiceKeys.archivedChat });
     // Messages are homed in the RQ cache — drop all their entries too.
     clearAllMessagesCache();
 
@@ -4200,6 +4184,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       finalizedStreamIds: {},
       contextUsage: {},
       toolResultsByCallId: {},
+      olderLoadingByChat: {},
       toolCallStates: {},
       activeChatId: null,
       chatSyncPendingId: null,
@@ -4209,3 +4194,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 }));
+
+registerToolResultSink((chatId, messages) =>
+  useChatStore.getState().ingestToolResultMessages(chatId, messages),
+);

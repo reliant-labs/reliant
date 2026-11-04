@@ -101,7 +101,7 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	shared := resumePausedRunSource(t)
 	signalAt := strings.Index(shared, "s.runs.Resume(")
 	require.Positive(t, signalAt, "resumePausedRun must resume via the run-lifecycle service")
-	markRunningAt := strings.Index(shared, "db.Active())")
+	markRunningAt := strings.Index(shared, "workflow.MarkWokenRunActive(")
 	require.Positive(t, markRunningAt, "resumePausedRun must mark the workflow running")
 	assert.Less(t, signalAt, markRunningAt,
 		"ResumeWorkflow must be called BEFORE the workflow is marked running — "+

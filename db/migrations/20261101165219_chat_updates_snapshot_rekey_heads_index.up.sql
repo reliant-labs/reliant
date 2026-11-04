@@ -1,0 +1,29 @@
+-- forge:backward-compatible — additive index; the previous release's snapshot query keeps reading idx_chat_updates_snapshot_rekeyed, which this leaves in place.
+
+-- Migration: chat_updates_snapshot_rekey_heads_index
+--
+-- The chat snapshot's update heads (store.SnapshotHeadsSQL) re-key THREAD (3)
+-- and QUESTION (18) updates: a thread by the `thread` field of its payload, a
+-- question by its id without the trailing "-<n>". The re-keyed half read
+-- EVERY thread and question update the chat ever wrote, parsed each payload
+-- as JSON, and sorted them to keep the newest per key. Those rows are spread
+-- across the whole table, so on a cold cache that is one random heap read per
+-- row. Prod, chat 9fbaace8 (2,847 thread/question rows, 457 keys): 2,142 heap
+-- blocks, 1.65k of them read from disk, 1.86s of a 1.86s heads read; the chat
+-- open waited 1.3-3.4s on it (v1.8.14).
+--
+-- Keying the re-key expression lets the read be a skip scan like the entity
+-- heads: one probe per key, each landing on that key's newest row, so only
+-- the rows the snapshot returns are touched (454 heap blocks on that chat).
+-- The expression is store.SnapshotRekeyKeySQL character for character, which
+-- TestSnapshotHeadsQueryMatchesPartialIndex pins: the planner matches an
+-- expression index only to the same expression.
+--
+-- Every THREAD and QUESTION payload is written by json.Marshal, and prod has
+-- none that does not parse (checked 2026-11-01: 0 of 19,364), so the jsonb
+-- cast the index evaluates on write cannot fail an insert.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file. idx_chat_updates_snapshot_rekeyed is dropped by a
+-- later migration, once no release reads through it.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chat_updates_snapshot_rekey_heads ON public.chat_updates USING btree (chat_id, (CASE WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id))) ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id) END), sequence_number DESC) WHERE update_type = ANY (ARRAY[3, 18]);

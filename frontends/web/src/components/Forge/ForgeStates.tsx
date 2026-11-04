@@ -53,9 +53,9 @@ function StateShell({ icon: Icon, title, children, testId, unknown }: ShellProps
         unknown ? "border border-dashed border-border" : "border border-border"
       )}
     >
-      <Icon className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-      <h2 className="text-base font-medium text-foreground">{title}</h2>
-      <div className="space-y-2 text-sm text-muted-foreground">{children}</div>
+      <Icon className="h-8 w-8 text-ink-muted" aria-hidden="true" />
+      <h2 className="text-base font-medium text-ink">{title}</h2>
+      <div className="space-y-2 text-sm text-ink-muted">{children}</div>
     </div>
   );
 }
@@ -73,7 +73,7 @@ const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNo
     body: (
       <>
         Every environment is declared in the repo.{" "}
-        <code className="font-mono text-foreground">forge env deploy</code> records the release,
+        <code className="font-mono text-ink">reliant forge env deploy</code> records the release,
         applies it and waits until it is healthy. Domains, secrets and promotions are managed here.
       </>
     ),
@@ -85,7 +85,7 @@ const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNo
       <>
         Generated API stubs, ORM, frontend hooks and wiring mean your agent writes the business
         logic, not the boilerplate. Skills and{" "}
-        <code className="font-mono text-foreground">forge project</code> introspection hand it the
+        <code className="font-mono text-ink">forge project</code> introspection hand it the
         project&apos;s shape instead of making it rediscover it file by file.
       </>
     ),
@@ -96,7 +96,7 @@ const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNo
     body: (
       <>
         Built-in skills teach your agent forge&apos;s conventions, and{" "}
-        <code className="font-mono text-foreground">forge lint</code> checks them, so drift fails a
+        <code className="font-mono text-ink">forge lint</code> checks them, so drift fails a
         check instead of slipping through to review.
       </>
     ),
@@ -105,8 +105,8 @@ const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNo
 
 /**
  * Not a StateShell: this one carries a pitch, and a centered max-w-lg column
- * turns a list into a ragged wall of text. The panel is a surface (bg-card)
- * so the call to action can sit in an inset (bg-background) beneath it —
+ * turns a list into a ragged wall of text. The panel is a surface (bg-surface)
+ * so the call to action can sit in an inset (bg-surface-sunken) beneath it —
  * see the elevation rule in components/forge-ui/card.tsx.
  */
 export function NotForgeProject({ projectName }: { projectName?: string }) {
@@ -114,22 +114,22 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
     <section
       data-testid="forge-not-project"
       aria-labelledby="forge-not-project-heading"
-      className="mx-auto max-w-2xl space-y-6 rounded-lg border border-border bg-card px-6 py-8"
+      className="mx-auto max-w-2xl space-y-6 rounded-lg border border-border bg-surface px-6 py-8"
     >
       <div className="flex items-start gap-3">
-        <PackageOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <p data-testid="forge-not-project-fact" className="text-sm text-muted-foreground">
-          {projectName ? <span className="font-mono text-foreground">{projectName}</span> : "This project"}{" "}
-          has no <span className="font-mono text-foreground">forge.yaml</span> at its root, so there is
+        <PackageOpen className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+        <p data-testid="forge-not-project-fact" className="text-sm text-ink-muted">
+          {projectName ? <span className="font-mono text-ink">{projectName}</span> : "This project"}{" "}
+          has no <span className="font-mono text-ink">forge.yaml</span> at its root, so there is
           no release ledger or environment topology to show.
         </p>
       </div>
 
       <div className="space-y-2">
-        <h2 id="forge-not-project-heading" className="text-lg font-semibold text-foreground">
+        <h2 id="forge-not-project-heading" className="text-lg font-semibold text-ink">
           Ship this project with forge
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ink-muted">
           forge is the framework built into Reliant. It scaffolds a production-ready app and gives
           your agent the conventions to keep it that way.
         </p>
@@ -138,10 +138,10 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
       <ul className="space-y-4">
         {FORGE_PITCH_POINTS.map(({ icon: Icon, title, body }) => (
           <li key={title} className="flex items-start gap-3">
-            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" aria-hidden="true" />
             <div className="space-y-1">
-              <h3 className="text-sm font-medium text-foreground">{title}</h3>
-              <p className="text-sm text-muted-foreground">{body}</p>
+              <h3 className="text-sm font-medium text-ink">{title}</h3>
+              <p className="text-sm text-ink-muted">{body}</p>
             </div>
           </li>
         ))}
@@ -149,16 +149,16 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
 
       <div
         data-testid="forge-not-project-cta"
-        className="space-y-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
+        className="space-y-1 rounded-md border border-border/60 bg-surface-sunken px-4 py-3 text-sm text-ink-muted"
       >
         <p>
-          <span className="font-medium text-foreground">To start,</span> run the{" "}
-          <span className="font-medium text-foreground">Forge Migrate</span> workflow in a chat on this
+          <span className="font-medium text-ink">To start,</span> run the{" "}
+          <span className="font-medium text-ink">Forge Migrate</span> workflow in a chat on this
           project. It reads the code, writes a migration plan and waits for your approval before it
           scaffolds anything.
         </p>
         <p>
-          Starting from scratch? <code className="font-mono text-foreground">forge project new</code>{" "}
+          Starting from scratch? <code className="font-mono text-ink">forge project new</code>{" "}
           creates a forge project.
         </p>
       </div>
@@ -203,12 +203,12 @@ export function ForgeCannotRender({
     >
       <p>
         Your daemon is reachable, but the forge on it —{" "}
-        <span className="font-mono text-foreground">{forgeVersion || "an unknown version"}</span> —
+        <span className="font-mono text-ink">{forgeVersion || "an unknown version"}</span> —
         cannot render, deploy or bring up any environment.
       </p>
       {reason && <p className="font-mono text-xs">{reason}</p>}
       {detail && (
-        <pre className="whitespace-pre-wrap break-words text-left font-mono text-xs text-muted-foreground">
+        <pre className="whitespace-pre-wrap break-words text-left font-mono text-xs text-ink-muted">
           {detail}
         </pre>
       )}
@@ -225,7 +225,7 @@ export function ForgeUnsupported({ meta }: { meta: ForgeReportMeta }) {
     <StateShell icon={Wrench} title="This forge is too old for the topology view" testId="forge-unsupported">
       <p>
         The forge on your daemon is{" "}
-        <span className="font-mono text-foreground">{meta.forgeVersion || "an unknown version"}</span>
+        <span className="font-mono text-ink">{meta.forgeVersion || "an unknown version"}</span>
         , which does not support the command this screen needs.
       </p>
       {meta.unsupportedReason && (
@@ -247,7 +247,7 @@ export function ForgeUnreachable({ meta }: { meta: ForgeReportMeta }) {
       </p>
       {meta.unreachableReason && <p className="font-mono text-xs">{meta.unreachableReason}</p>}
       <p>
-        This is <span className="text-foreground">not</span> evidence of a problem with any release.
+        This is <span className="text-ink">not</span> evidence of a problem with any release.
         It means the measurement did not happen.
       </p>
     </StateShell>

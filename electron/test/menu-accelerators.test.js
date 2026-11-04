@@ -40,6 +40,7 @@ const CONTEXT_RESOLVED = [
   "nextRightSidebarTab",
   "prevRightSidebarTab",
   "clearTerminal",
+  "findInPage",
 ];
 
 test("toElectronAccelerator maps Cmd to CmdOrCtrl", () => {
@@ -115,6 +116,19 @@ test("Clear Terminal leaves Cmd+Shift+L to the workflow canvas, and reclaims it 
 
   const freed = resolveMenuAccelerators({ ...yaml, connectSelectedSteps: "Cmd+Alt+L" });
   assert.strictEqual(freed.clearTerminal, "CmdOrCtrl+Shift+L");
+});
+
+test("Edit › Find leaves Cmd+F to the conversation search and the editor's find", () => {
+  // As a native accelerator, Cmd+F would reach the menu before the renderer
+  // could tell a conversation or the editor has focus, and open the page's
+  // find bar over both.
+  const yaml = yamlDesktopBindings();
+  assert.strictEqual(yaml.findInPage, "Cmd+F");
+  assert.strictEqual(resolveMenuAccelerators(yaml).findInPage, undefined);
+  assert.strictEqual(defaultAccelerators().findInPage, undefined);
+
+  const freed = resolveMenuAccelerators({ ...yaml, chatSearch: "Cmd+Alt+F", editorFind: "" });
+  assert.strictEqual(freed.findInPage, "CmdOrCtrl+F");
 });
 
 test("re-sending the same chord for a context-resolved item does not reclaim it", () => {

@@ -1,0 +1,8 @@
+name: queued_pr
+trigger:
+  name: queued
+  payload: {data: {label: 'merge:queue', pull_request: {number: 42}}}
+events: []
+expect:
+  outcome: completed
+  completed: [done]

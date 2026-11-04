@@ -117,9 +117,13 @@ const (
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
 
-	// list_triggers shows the user's triggers. There is no tool that creates
-	// or enables one: the user does that in the app.
-	ToolListTriggers = "list_triggers"
+	// Activation mutations require an interactive owner approval. These
+	// constants are the read/manual-fire half; activation_tools.go owns writes.
+	// draft_automation only proposes a draft for review in the app.
+	ToolListTriggers      = "list_triggers"
+	ToolFireTrigger       = "fire_trigger"
+	ToolListTriggerEvents = "list_trigger_events"
+	ToolDraftAutomation   = "draft_automation"
 
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
@@ -160,8 +164,75 @@ const (
 	PlacementServer Placement = "server"
 
 	// PlacementAny means the tool has no special requirements.
-	// It can run on either side (e.g., network-only tools like fetch/websearch).
+	// It can run on either side (e.g., network-only tools like websearch).
+	// RemoteExecutor runs it on the server, whether or not the run has a daemon.
 	PlacementAny Placement = "any"
+
+	// PlacementPreferDaemon is a tool implemented on BOTH sides that should run
+	// on the run's machine when there is one, and on the server when there is
+	// not. It is the primitive for work that is safer or more faithful off the
+	// shared worker (user-steered network egress: fetch) but that a run without
+	// a machine must still be able to do.
+	//
+	// Where it runs (RemoteExecutor.executePreferDaemon):
+	//   - daemon: the run has a machine (not a no-machine run) and the executor
+	//     has a daemon router. The call is dispatched exactly like a
+	//     PlacementDaemon tool.
+	//   - server: the run has no machine (nomachine.Is) or there is no router.
+	//     The tool then runs in the worker like a PlacementAny tool.
+	//
+	// When dispatch to the daemon fails the call is run on the server instead of
+	// being failed, so the conversation keeps going. A dispatch failure is one
+	// where no answer from the tool came back: the daemon is disconnected,
+	// suspended or still starting, the request did not complete a round trip
+	// (IsTransportErrorCode), or the daemon does not know the tool (version
+	// skew, TOOL_NOT_FOUND). The attempt does NOT wait for a disconnected
+	// daemon to reconnect (a server fallback exists, so waiting buys nothing),
+	// and is NOT retried on the server when the call was abandoned (context
+	// done). A tool that ran on the daemon and reported its own failure is
+	// returned as that failure: it is an answer, not a dispatch failure.
+	// Because a DAEMON_INTERRUPTED call may already have run on the daemon, only
+	// declare this placement for tools that are safe to run twice (reads).
+	//
+	// The result has the same shape either way: the tool's code is the same on
+	// both sides, so Content, Metadata and error codes are identical for the
+	// same input. Where the call actually ran is reported out of band:
+	// ToolResult.ExecutedAt, the PlacementMetadataKey ("_placement") entry in
+	// object-shaped Metadata, and the reliant_tool_placement_total metric.
+	//
+	// A tool declares it by putting PlacementPreferDaemon in its registry row:
+	// nothing in the executor, the daemon runtime or the capability lists
+	// branches on a tool name. The tool must be constructible by the daemon's
+	// ToolsFactory (the same registry), need no server-only dependency
+	// (database, vault, NATS, a connection's credentials) and apply its own
+	// limits, since they travel with the code. Its network policy is chosen by
+	// the process that executes it (ToolsOptions.FetchNetwork on the daemon,
+	// netguard.ForDeployment on the server).
+	//
+	// Network reach on the daemon (fetch, the first user): fetch is usually
+	// auto-approved and fetched content can steer the next fetch, so the
+	// daemon's policy (FetchNetwork, daemonruntime.fetchNetwork) is:
+	//   - link-local and cloud-metadata destinations (169.254.0.0/16, fe80::/10,
+	//     the metadata hostnames, fd00:ec2::254, ...) are refused on every
+	//     daemon, with no setting that unblocks them;
+	//   - loopback and private ranges are refused by default, local daemons
+	//     included. A user opts in with RELIANT_FETCH_ALLOW_PRIVATE_NETWORK=true
+	//     (DaemonConfig.fetch_allow_private_network), and a refused fetch names
+	//     that setting in its non-fatal tool error;
+	//   - a managed daemon stays strict whatever that setting says.
+	//
+	// Rate on the daemon: the server's egress limiter (internal/egresslimit)
+	// wraps only server-executed calls, so the daemon bounds its own
+	// (toolexec.LocalToolExecutor.SetEgressLimiter; daemonruntime.daemonEgressLimits):
+	// the server's defaults on a managed daemon, a higher user-configurable
+	// ceiling on a local one. A call over it returns the same EGRESS_RATE_LIMITED
+	// result and is not retried on the server. It is an abuse brake for a
+	// well-behaved daemon, not a security boundary.
+	//
+	// It does not need the user's machine: NeedsMachine is false and static
+	// preflight does not treat it as daemon-bound, so a no-machine run is
+	// still offered the tool.
+	PlacementPreferDaemon Placement = "prefer-daemon"
 )
 
 // ToolTag is a label a workflow can name to reach a group of tools at once.
@@ -594,6 +665,11 @@ func GetToolRegistry() []ToolDefinition {
 		// demand: it is needed exactly when a machine tool has just failed, and
 		// a model that must first discover it ends its turn instead.
 		{ToolWaitForMachine, (*ToolsFactory).WaitForMachine, []ToolTag{TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer, true},
+		// The user's own machines, through the control plane as the user
+		// (machine_tools.go). Loaded on demand; manage_machine's start and
+		// resize need an approval card.
+		{ToolListMachines, (*ToolsFactory).ListMachines, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolManageMachine, (*ToolsFactory).ManageMachine, nil, PlacementServer, false},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon, false},
 
 		// prove_test reverts the fix, runs a test expecting failure, restores,
@@ -617,7 +693,7 @@ func GetToolRegistry() []ToolDefinition {
 		// node's filter as proof the whole workflow needs a daemon. With TagCodingDefault on
 		// both, `tag:coding:default` alone was enough to fire the preflight gate and refuse a
 		// workflow that never touches the user's machine.
-		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementAny, false},
+		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementPreferDaemon, false},
 		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementAny, false},
 
 		// Media tools. Deliberately NOT TagCodingDefault: generating an image costs
@@ -722,6 +798,15 @@ func GetToolRegistry() []ToolDefinition {
 		// enabled. Beside the editing tools because an agent that wrote a
 		// triggers: block reaches for it next.
 		{ToolListTriggers, (*ToolsFactory).ListTriggers, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
+		{ToolFireTrigger, (*ToolsFactory).FireTrigger, []ToolTag{TagWorkflow, TagRuns}, PlacementServer, false},
+		{ToolCreateTriggerActivation, (*ToolsFactory).CreateTriggerActivation, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolUpdateTriggerActivation, (*ToolsFactory).UpdateTriggerActivation, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolEnableTrigger, (*ToolsFactory).EnableTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolPauseTrigger, (*ToolsFactory).PauseTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolListTriggerEvents, (*ToolsFactory).ListTriggerEvents, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
+		// Proposes an automation; the user reviews it in the app and presses
+		// Create. Pure validation, so it runs anywhere.
+		{ToolDraftAutomation, (*ToolsFactory).DraftAutomation, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
 
 		// Workflow discovery tools
 		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},

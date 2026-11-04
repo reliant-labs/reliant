@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "controlplane/v1/deploy.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/claimable/v1;claimablev1";
+
+// === ClaimableService ===
+//
+// Claimable deploys: an agent with no Reliant account publishes a deploy, gets
+// a live URL and a claim link, and hands the link to its human. Unless a human
+// claims it the deploy expires (72h live, then 7 days suspended, then deleted).
+// Claiming is signing up. The design is docs/design/claimable-deploys.md; this
+// file is its §11 "wire contract", and W4 (forge) and W5b (reliant web) build
+// against it before the server exists.
+//
+// THREE KINDS OF CALLER, AND WHY FOUR OF THE FIVE RPCS ARE auth_required:false
+//
+//   - the AGENT's CLI has no credential yet. StartClaimableDeploy is how it
+//     gets one, so it cannot require one. It is paid for with rate limits and a
+//     proof of work instead (GetClaimableChallenge).
+//   - the claimant's BROWSER has only the claim token, which rides in the URL
+//     fragment (https://app.reliant.dev/claim#rcl_<token>) and is sent in a
+//     request body, never in a URL, a header, or a log. The token IS the
+//     authority for GetClaim and OpenClaimSession.
+//   - a SIGNED-IN human calls CompleteClaim as themselves, because completion
+//     has to bind the claim to a real, non-anonymous user.
+//
+// CLAIM TOKEN. 256 bits, `rcl_` + base64url. Only its sha256 is stored
+// (claimable_deploys.claim_token_hash). It stays valid until a claim COMPLETES;
+// completion is one compare-and-set, so the first completion wins and every
+// later attempt answers FailedPrecondition with reason claimable_claimed.
+//
+// ERROR VOCABULARY. Every refusal a client must tell apart carries a stable
+// reason code in the x-forge-error-reason metadata (internal/claimable
+// Reason* constants are the Go spelling):
+//
+//	claimable_throttled    ResourceExhausted  our rate limits or GoTrue's
+//	                       anonymous sign-up limit; carries a ClaimableThrottle
+//	                       error detail with the retry-after. Nothing was
+//	                       created. Clients must NOT retry on their own.
+//	claimable_unavailable  Unavailable        a switch is off, or a dependency
+//	                       is missing (GoTrue's anonymous sign-up, the claim
+//	                       secret, the content scan). The message names every
+//	                       cause; metadata x-forge-error-unavailable-cause
+//	                       (disabled | dependency_unavailable | not_supported)
+//	                       and x-forge-error-unavailable-component carry the
+//	                       first. GetClaimableAvailability lists them all.
+//	claimable_claimed      FailedPrecondition the deploy was already claimed
+//	claimable_expired      FailedPrecondition expired and purged (or past
+//	                       purge_after and no longer revivable)
+//	claimable_taken_down   FailedPrecondition removed by an administrator;
+//	                       never claimable
+//	claimable_session_released
+//	                       FailedPrecondition the anonymous session was already
+//	                       handed to a browser; continue there, or sign in to
+//	                       an existing account
+//	claimable_invalid_pow  InvalidArgument    the proof of work is missing,
+//	                       stale, or wrong
+//	claimable_not_found    NotFound           no such claim token. Deliberately
+//	                       the same answer for "never existed" and "wrong".
+service ClaimableService {
+  option (forge.v1.service) = {
+    name: "ClaimableService"
+    version: "1.0.0"
+    description: "No-signup deploys that a human can claim before they expire"
+  };
+
+  // StartClaimableDeploy mints (or, idempotently, finds) the anonymous
+  // identity for one (device_id, project, env): an anonymous GoTrue user that
+  // owns an ordinary personal org, plus a narrow `rlat_` token the CLI deploys
+  // with, plus the claim link.
+  //
+  // IDEMPOTENT per (device_id, project, env) while the row is live or
+  // suspended: a retry or redeploy returns the same user, org, token and claim
+  // link with reused=true, and DOES NOT extend expires_at. A second env is a
+  // second claimable deploy with its own anonymous user.
+  //
+  // Throttled: ResourceExhausted, reason claimable_throttled, with a
+  // ClaimableThrottle detail.
+  rpc StartClaimableDeploy(StartClaimableDeployRequest) returns (StartClaimableDeployResponse) {
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "the caller is an anonymous machine with no account yet; the claimable_deploys row is the record"}
+    };
+  }
+
+  // GetClaimableChallenge hands out a fresh proof-of-work challenge for
+  // StartClaimableDeploy. Stateless on the server (the challenge is signed and
+  // time-boxed), so it creates nothing and is cheap to call.
+  rpc GetClaimableChallenge(GetClaimableChallengeRequest) returns (GetClaimableChallengeResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
+  // GetClaimableAvailability says whether a claimable deploy can start right
+  // now, and if not, every reason why: an operator's switch, or a dependency
+  // this deployment lacks. Separately, whether an unclaimed SERVICE or
+  // DATABASE could run, which a static site does not need. It reads only
+  // configuration and the kill switches, creates nothing and solves no proof
+  // of work, so forge calls it before any build (`forge env deploy
+  // --claimable`) and in the local preview (`--claimable --plan-only`).
+  rpc GetClaimableAvailability(GetClaimableAvailabilityRequest) returns (GetClaimableAvailabilityResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
+  // GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
+  // what is being claimed, whether it still can be, and when it expires. It
+  // returns no secret and no token of any kind.
+  rpc GetClaim(GetClaimRequest) returns (GetClaimResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
+  // OpenClaimSession releases the vaulted anonymous GoTrue session to the
+  // claimant's browser, so it can setSession() and then upgrade the anonymous
+  // user in place. Released AT MOST ONCE: the server redeems its vaulted
+  // refresh token (which rotates it), returns the fresh session, deletes its
+  // copy and stamps session_released_at. A second call answers
+  // FailedPrecondition, reason claimable_session_released, unless it is a
+  // retry with the first call's retry_key (see OpenClaimSessionRequest); one
+  // that arrives while the first is still running answers Unavailable,
+  // reason claimable_unavailable: retry shortly.
+  rpc OpenClaimSession(OpenClaimSessionRequest) returns (OpenClaimSessionResponse) {
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "the caller holds only the claim token and is not yet a user; the claimable_deploys row is the record"}
+    };
+  }
+
+  // CompleteClaim binds the claim to the signed-in human. REFUSED for an
+  // anonymous caller (PermissionDenied): a claim by someone who has not yet
+  // upgraded would claim nothing.
+  //
+  // Path "upgrade": the caller IS the anonymous user, now upgraded in place
+  // (same user id, now with an email). Path "membership": the caller is a
+  // different, existing user. In the claim's own transaction they become an
+  // owner member of the anonymous org and organizations.owner_id moves to
+  // them (this is the only way an org's owner changes; there is no general
+  // transfer). The anonymous user and its sign-in identity are then retired.
+  // The org is one more org the caller belongs to; it is not made their
+  // default.
+  //
+  // FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
+  // (docs/orgs.md). If the caller already has one and the claimed deploy brings
+  // another, the claim needs to know which keeps the slot: set free_site to
+  // FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
+  // is refused (FailedPrecondition, claimable_free_site_choice_required, with a
+  // FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
+  // is no default. The choice is re-checked inside the claim's transaction: if
+  // the other site is gone or the caller subscribed meanwhile, the real state is
+  // applied and the response's free_site_outcome says what happened. To keep
+  // both sites, subscribe first (the claim link stays valid); no choice is
+  // needed afterwards.
+  //
+  // Completion is ONE compare-and-set on the claimable_deploys row; the first
+  // completion wins. It revokes the CLI's token.
+  rpc CompleteClaim(CompleteClaimRequest) returns (CompleteClaimResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "claim"
+        target: {
+          kind: "org"
+          id: "response.org_id"
+        }
+        scope: "response.org_id"
+      }
+    };
+  }
+
+  // GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
+  // claiming would put a second site on their one free slot, and names both
+  // sites. GetClaim cannot say: it is public and does not know who is asking.
+  // Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+  rpc GetClaimFreeSite(GetClaimFreeSiteRequest) returns (GetClaimFreeSiteResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a read of the claim preview for the signed-in caller; the claimable_deploys row is the record"}
+    };
+  }
+}
+
+message StartClaimableDeployRequest {
+  // The project name (forge.yaml name). Part of the idempotency key.
+  string project = 1;
+  // The environment being deployed. Part of the idempotency key.
+  string env = 2;
+  // A stable per-machine identifier the CLI generates once. Only its sha256 is
+  // stored. Part of the idempotency key, and the unit of the "3 live per
+  // device" limit.
+  string device_id = 3;
+  // The challenge from GetClaimableChallenge, returned verbatim.
+  string pow_challenge = 4;
+  // The solution. See GetClaimableChallengeResponse for the exact rule.
+  string pow_nonce = 5;
+}
+
+message StartClaimableDeployResponse {
+  // An ordinary `rlat_` token for the anonymous user's personal org, scoped
+  // to deploy:read and deploy:write only, expiring at purge_after. The CLI
+  // stores it under the credential client id "forge-cli-claimable", never
+  // under "forge-cli".
+  string access_token = 1;
+  // The anonymous user's personal org: the org every deploy lands in.
+  string org_id = 2;
+  // https://app.reliant.dev/claim#rcl_<token>. Hand it to a human; whoever
+  // claims first owns the deploy. Returned again, identical, on every reused
+  // call, so `forge env status --claimable` can show it.
+  string claim_url = 3;
+  // When the deploy goes offline (state live -> suspended).
+  google.protobuf.Timestamp expires_at = 4;
+  // When the suspended deploy is deleted for good.
+  google.protobuf.Timestamp purge_after = 5;
+  // True when this call found an existing live or suspended row instead of
+  // creating one.
+  bool reused = 6;
+}
+
+// ClaimableThrottle is the error detail (svcerr.WithDetail) on a
+// ResourceExhausted/claimable_throttled refusal. The same facts are also in
+// metadata so a client that ignores details still has them:
+// x-forge-error-retry-after-seconds and x-forge-error-throttle-scope.
+message ClaimableThrottle {
+  // How long to wait before trying again. Exact for scope network and device
+  // (we know our own window); GoTrue's Retry-After, or the configured window,
+  // for scope platform.
+  int64 retry_after_seconds = 1;
+  // "network" (too many from this /24 or /64), "device" (3 live per device)
+  // or "platform" (a global breaker, or GoTrue's anonymous sign-up limit).
+  string scope = 2;
+}
+
+message GetClaimableChallengeRequest {}
+
+message GetClaimableAvailabilityRequest {}
+
+message GetClaimableAvailabilityResponse {
+  // A start would be admitted as far as switches and configuration go (the
+  // rate limits and the proof of work are judged per request). Enough for an
+  // anonymous static site.
+  bool available = 1;
+  // Why not, when available is false. Empty otherwise.
+  repeated ClaimableUnavailableCause causes = 2;
+  // An unclaimed service and database could run too (needs available).
+  bool compute_available = 3;
+  // Why not, when compute_available is false, beyond causes.
+  repeated ClaimableUnavailableCause compute_causes = 4;
+  // The anonymous plan's caps: the numbers admission and the operators
+  // enforce. forge reads them here rather than compiling its own copy, so
+  // its checks and the platform's cannot disagree. Set whether or not a
+  // deploy is available.
+  ClaimableLimits limits = 5;
+}
+
+// ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
+// cap and zero means none allowed. "Per workload" holds for the service and,
+// separately, its migration job: each runs with request = limit (no burst).
+message ClaimableLimits {
+  // Static sites, and what the site may store (live copy and archives).
+  int32 max_static_sites = 1;
+  int32 max_static_stored_mib = 2;
+
+  // Services (one replica each, no autoscaling) and pre-rollout migration
+  // jobs. No other workload kind is admitted.
+  int32 max_services = 3;
+  int32 max_replicas = 4;
+  int32 max_migration_jobs = 5;
+  // Per workload: CPU and memory request = limit, and scratch disk.
+  int32 workload_cpu_millicores = 6;
+  int32 workload_memory_mib = 7;
+  int32 workload_ephemeral_storage_mib = 8;
+
+  // Managed Postgres: how many, and each one's own server (it is not a
+  // database on a shared server): instances, CPU and memory request = limit,
+  // provisioned storage (WAL included) and max_connections. No backups.
+  int32 max_databases = 9;
+  int32 database_instances = 10;
+  int32 database_cpu_millicores = 11;
+  int32 database_memory_mib = 12;
+  int32 database_storage_mib = 13;
+  int32 database_max_connections = 14;
+  // The largest storage_gib a ManagedDatabase may declare (its spec counts
+  // whole GiB); the platform provisions database_storage_mib whatever it
+  // declares.
+  int32 database_declared_storage_gib = 15;
+}
+
+// ClaimableUnavailableCause is one reason claimable deploys, or their compute,
+// are unavailable.
+message ClaimableUnavailableCause {
+  // "disabled" (an operator's switch, its configured default or a runtime
+  // override), "dependency_unavailable" (component names what is missing), or
+  // "not_supported" (this build of the platform cannot do it yet).
+  string code = 1;
+  // The switch (claimable_deploys.enabled, claimable_deploys.compute) or the
+  // dependency: admission, claim_secret, anonymous_signup, account_store,
+  // claim_page, content_scan_web_risk, content_scan_clamav, network_policing.
+  string component = 2;
+  // A sentence a person can read. Names components, never values or secrets.
+  string message = 3;
+}
+
+// GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
+// the server verifies and forge's solver implements:
+//
+//	find a decimal string nonce such that
+//	SHA-256(challenge || ":" || nonce) has at least difficulty_bits leading
+//	zero bits
+//
+// where challenge is the UTF-8 bytes of the string below and nonce is the
+// UTF-8 bytes of its decimal text. A challenge is single-use, expires at
+// expires_at, and is not tied to a device (CAPTCHA is impossible: the caller
+// is an agent). About 2 seconds of hashing at the default difficulty.
+message GetClaimableChallengeResponse {
+  // Opaque and signed by the server. Return it verbatim.
+  string challenge = 1;
+  // Leading zero bits required of the hash.
+  uint32 difficulty_bits = 2;
+  // After this instant the challenge is refused (claimable_invalid_pow).
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message GetClaimRequest {
+  string claim_token = 1;
+}
+
+// ClaimableState is the lifecycle of one claimable deploy
+// (claimable_deploys.state), in wire form.
+enum ClaimableState {
+  CLAIMABLE_STATE_UNSPECIFIED = 0;
+  // Serving; unclaimed; before expires_at.
+  CLAIMABLE_STATE_LIVE = 1;
+  // Past expires_at: unpublished, kept until purge_after. Still claimable.
+  CLAIMABLE_STATE_SUSPENDED = 2;
+  // A human claimed it. An ordinary org from here on.
+  CLAIMABLE_STATE_CLAIMED = 3;
+  // Removed by an administrator. Never claimable.
+  CLAIMABLE_STATE_TAKEN_DOWN = 4;
+  // Past purge_after: the anonymous account and its data are deleted.
+  CLAIMABLE_STATE_EXPIRED = 5;
+}
+
+// GetClaimResponse is preview metadata for the claim page. It carries no
+// secret: not the access token, not the session, not the token hash.
+message GetClaimResponse {
+  ClaimableState state = 1;
+  // Whether CompleteClaim can succeed now (state live or suspended).
+  bool claimable = 2;
+  string project = 3;
+  string env = 4;
+  // The deploy's public hostnames, so the page can show the site it is about
+  // to hand over. Empty once the account is purged.
+  repeated string hostnames = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp purge_after = 7;
+  // When the claim happened; unset unless state is claimed.
+  google.protobuf.Timestamp claimed_at = 8;
+}
+
+message OpenClaimSessionRequest {
+  string claim_token = 1;
+  // retry_key makes a lost response recoverable. A random value the browser
+  // makes once per claim attempt (at least 128 bits, 22 to 128 base64url
+  // characters) and sends again on a retry. A retry carrying the same key
+  // within two minutes of the release gets the SAME session again, instead of
+  // claimable_session_released; every other caller is still refused. Optional:
+  // without it a release is answered once, as before. Malformed is
+  // InvalidArgument.
+  string retry_key = 2;
+}
+
+// OpenClaimSessionResponse is a Supabase GoTrue session for the anonymous
+// user, for supabase.auth.setSession({access_token, refresh_token}).
+message OpenClaimSessionResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  // Seconds until access_token expires.
+  int64 expires_in = 3;
+}
+
+// Which site keeps the claimer's one free static slot.
+enum FreeSiteChoice {
+  FREE_SITE_CHOICE_UNSPECIFIED = 0;
+  // The claimed site is live; the caller's existing free site is paused.
+  FREE_SITE_CHOICE_CLAIMED = 1;
+  // The caller's existing free site stays live; the claimed site is claimed but
+  // paused.
+  FREE_SITE_CHOICE_EXISTING = 2;
+}
+
+// What a membership claim did about the free slot.
+enum FreeSiteOutcome {
+  FREE_SITE_OUTCOME_UNSPECIFIED = 0;
+  // Nothing was paused: the caller had no other free site, or the situation
+  // changed since they chose (the other site was deleted, or they subscribed).
+  FREE_SITE_OUTCOME_NO_CONFLICT = 1;
+  // The claimed site is live; paused_site is the caller's other site.
+  FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE = 2;
+  // The caller's other site is live; paused_site is the claimed site.
+  FREE_SITE_OUTCOME_EXISTING_SITE_LIVE = 3;
+}
+
+// One static site, named for a person deciding which to keep.
+message FreeSite {
+  string deployment_id = 1;
+  string org_id = 2;
+  string project = 3;
+  // The environment's name and the deployment's.
+  string env = 4;
+  string name = 5;
+  // The platform URL (with scheme); empty until one is allocated.
+  string url = 6;
+}
+
+// FreeSiteChoiceRequired is the error detail (svcerr.WithDetail) on a
+// FailedPrecondition/claimable_free_site_choice_required refusal.
+message FreeSiteChoiceRequired {
+  // The caller's site that holds their free slot now.
+  FreeSite existing_site = 1;
+  // The site the claim would add.
+  FreeSite claimed_site = 2;
+}
+
+message CompleteClaimRequest {
+  string claim_token = 1;
+  // Which site keeps the free slot when the caller already has a free site.
+  // Ignored (and may be unset) when they do not.
+  FreeSiteChoice free_site = 2;
+}
+
+message GetClaimFreeSiteRequest {
+  string claim_token = 1;
+}
+
+message GetClaimFreeSiteResponse {
+  // True when claiming now needs a free_site choice.
+  bool choice_required = 1;
+  // Set when choice_required.
+  FreeSite existing_site = 2;
+  FreeSite claimed_site = 3;
+}
+
+message CompleteClaimResponse {
+  // The org the caller now owns.
+  string org_id = 1;
+  // "upgrade" or "membership" (claimable_deploys.claim_path).
+  string claim_path = 2;
+  // The deploy's hostnames after the re-home to the claimed domains.
+  repeated string hostnames = 3;
+  // Open holds on the claimed org's deploys, if any: the claimed org is
+  // ordinary, so billing rules apply from here on.
+  repeated DeployHold holds = 4;
+  // Path "membership" only: what the claim did about the caller's one free
+  // static slot. This is what happened, which can differ from what was asked
+  // when the situation changed between the choice and the claim.
+  FreeSiteOutcome free_site_outcome = 5;
+  // The site that is paused because of it (the other one holds the slot). Unset
+  // unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
+  // it runs again when the person subscribes or deletes the other site.
+  FreeSite paused_site = 6;
+}

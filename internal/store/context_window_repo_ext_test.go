@@ -98,9 +98,6 @@ func TestContextWindowQueries(t *testing.T) {
 	}
 
 	// The fork's window, with its thread's chat, parent and fork point.
-	if _, err := store.UpdateThreadForkPoint(ctx, env.ORM, "cw-fork", nil); err != nil {
-		t.Fatalf("UpdateThreadForkPoint: %v", err)
-	}
 	cw, chatID, parent, forkAt, err := store.GetContextWindowWithThread(ctx, env.ORM, "cw-f0")
 	if err != nil || cw.ID != "cw-f0" || chatID != "cw-chat" || parent == nil || *parent != "cw-main" || forkAt != nil {
 		t.Fatalf("GetContextWindowWithThread = %+v, %q, %v, %v, %v", cw, chatID, parent, forkAt, err)
@@ -137,20 +134,6 @@ func TestContextWindowQueries(t *testing.T) {
 		t.Fatalf("SetCompactionSummaryMessage(\"\") = %+v, %v; want cleared", cleared, err)
 	}
 
-	// Deletes.
-	if err := store.RemoveContextWindow(ctx, env.ORM, "cw-f0"); err != nil {
-		t.Fatalf("RemoveContextWindow: %v", err)
-	}
-	if err := store.RemoveContextWindow(ctx, env.ORM, "cw-f0"); err != nil {
-		t.Fatalf("RemoveContextWindow(again) = %v, want a no-op", err)
-	}
-	mustExecConv(t, env, `DELETE FROM messages WHERE id = 'msg-sum'`)
-	if err := store.DeleteContextWindowsByThread(ctx, env.ORM, "cw-main"); err != nil {
-		t.Fatalf("DeleteContextWindowsByThread: %v", err)
-	}
-	if left, err := env.Repo.ListContextWindowsByThread(ctx, "cw-main"); err != nil || len(left) != 0 {
-		t.Fatalf("Repo.ListContextWindowsByThread after delete = %+v, %v", left, err)
-	}
 }
 
 func requireSameWindow(t *testing.T, label string, got, want *core.ContextWindow) {

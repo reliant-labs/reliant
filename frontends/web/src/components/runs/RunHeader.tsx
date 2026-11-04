@@ -20,16 +20,17 @@ import { Link } from "@tanstack/react-router";
 import { CalendarClock, MessageSquarePlus, Pause, Play, RotateCcw, Square, Workflow } from "lucide-react";
 
 import type { Chat } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
-import { Button } from "../ui/Button";
+import { automationHref } from "@/lib/workflowsArea";
+import Button from "@/components/forge-ui/button";
 import { RunStatusBadge } from "./RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { RunDuration } from "./RunRow";
 
 export interface RunHeaderActions {
@@ -47,6 +48,8 @@ export interface RunHeaderActions {
   onRerun?: () => void;
   /** Fire this run's automation now; omitted unless it is a live automation's run. */
   onRunAutomationNow?: () => void;
+  /** Make an automation of this run (offered once it succeeded). */
+  onSchedule?: () => void;
 }
 
 interface RunHeaderProps {
@@ -136,8 +139,14 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
               leftIcon={<RotateCcw className="h-4 w-4" />}
               onClick={actions.onRerun}
               disabled={busy}
+              title="Runs it again with the workflow's current definition"
             >
-              Re-run (current definition)
+              Re-run
+            </Button>
+          )}
+          {actions.onSchedule && (status.key === "succeeded" || status.key === "completed") && (
+            <Button size="sm" variant="ghost" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={actions.onSchedule} disabled={busy}>
+              Run this on a schedule
             </Button>
           )}
           {actions.onRunAutomationNow && (
@@ -147,8 +156,9 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
               leftIcon={<CalendarClock className="h-4 w-4" />}
               onClick={actions.onRunAutomationNow}
               disabled={busy}
+              title="Fires the trigger that started this run, under its own settings"
             >
-              Run automation now
+              Fire trigger now
             </Button>
           )}
           {actions.onToggleDiagram && (
@@ -228,13 +238,12 @@ function StartedBy({
     return (
       <>
         {parts.lead}
-        <Link
-          to="/workflows/automations/$triggerId"
-          params={{ triggerId: chat.triggerId }}
-          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        <a
+          href={automationHref({ id: chat.triggerId, workflow: chat.workflowName, projectId: chat.projectId })}
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {parts.automation}
-        </Link>
+        </a>
         {parts.trail}
       </>
     );
@@ -247,7 +256,7 @@ function StartedBy({
         <Link
           to="/workflows/runs/$runId"
           params={{ runId: parent.chatId }}
-          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {parent.title || "another run"}
         </Link>

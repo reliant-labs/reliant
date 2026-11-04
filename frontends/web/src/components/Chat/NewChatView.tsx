@@ -1,6 +1,6 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef, type ReactNode } from "react";
-import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
+import { AddMachineSheet } from "../Machines/AddMachineSheet";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -22,8 +22,29 @@ import {
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
+import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
+import {
+  canChoose,
+  canSetUpElsewhere,
+  isSettingUpAnywhere,
+  preferredDaemonIds,
+  projectPlacement,
+  startBlockedReason,
+} from "@/lib/projectPlacement";
+import { describeCloneError } from "../Projects/cloneTargets";
+import {
+  choiceLeavesWorkspace,
+  resolveChatMachine,
+  startChoice,
+  workspaceFilterMachine,
+  workspaceMachine,
+  workspacesOnMachine,
+} from "@/lib/workspaceMachine";
+import { daemonLabel } from "../Automations/daemonChoices";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { NewChatProjectChip } from "./NewChatProjectChip";
 import { MachinePicker } from "./MachinePicker";
+import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
@@ -37,15 +58,17 @@ import {
   Search,
   FolderPlus,
   CloudOff,
+  Loader2,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
+import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -64,6 +87,19 @@ interface NewChatViewProps {
    */
   emptyState?: (context: { noMachine: boolean }) => ReactNode;
   composerPrefill?: ComposerPrefill;
+  /**
+   * The home host's additions to the welcome block, for a pane with no host
+   * empty state: a heading under the mark, and a panel under the workspace
+   * controls (the app shell puts the project's apps there — Apps/HomeNewChat).
+   */
+  heading?: ReactNode;
+  welcomePanel?: ReactNode;
+  /**
+   * Show the project chip (the chat window's global New chat picks a project
+   * and lets the user change it). Off for a host whose chat belongs to one
+   * thing already, like the workflow editor's.
+   */
+  showProjectChip?: boolean;
 }
 
 export function NewChatView({
@@ -72,6 +108,9 @@ export function NewChatView({
   onChatCreated,
   emptyState,
   composerPrefill,
+  heading,
+  welcomePanel,
+  showProjectChip = false,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -85,7 +124,7 @@ export function NewChatView({
   useEffect(() => {
     setRestoredPrefill(null);
   }, [composerPrefill?.id]);
-  const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
+  const [showAddMachine, setShowAddMachine] = useState(false);
   const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
   const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
@@ -95,13 +134,14 @@ export function NewChatView({
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const currentWorktree = useCurrentWorktree();
+  const currentProject = useProjectStore((state) => state.currentProject);
+  // The workspaces the app already holds (main, the selection, whatever a
+  // picker has paged in); opening the picker loads the list itself.
+  const worktrees = useCachedWorktrees(currentProject?.id);
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const currentProject = useProjectStore((state) => state.currentProject);
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
@@ -123,6 +163,21 @@ export function NewChatView({
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
+  // The machine a new chat lands on is the one the project is installed on
+  // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
+  // While a clone onto one of them is landing, the rows are re-read so the
+  // machine turns ready (and the composer opens) without a reload.
+  const [installsPollMs, setInstallsPollMs] = useState<number | false>(false);
+  const installs = useProjectDaemonInstalls(true, installsPollMs);
+  const installRows = installs.data ?? [];
+  // Which of the user's machines have this project (lib/projectPlacement.ts):
+  // the picker offers those, and sets the project up on any other first.
+  const placement = projectPlacement(installRows, currentProject?.id);
+  const settingUpAnywhere = isSettingUpAnywhere(installRows, currentProject?.id);
+  useEffect(() => {
+    setInstallsPollMs(settingUpAnywhere ? 3_000 : false);
+  }, [settingUpAnywhere]);
+  const { makeDefault } = useMakeDefaultMachine();
   // Until the registry has answered, nothing is known about the user's
   // machines — including when the first read failed (a tab waking with a dead
   // connection). An empty list then is not "no machine", and No machine is a
@@ -132,10 +187,80 @@ export function NewChatView({
     loading: !daemonsAnswered,
     awaitingBundledDaemon,
   });
-  const machine = (canPickMachine ? machineChoice : null) ?? defaultMachine ?? DEFAULT_MACHINE;
+  // A different project is a different set of checkouts: its new chat starts
+  // from the default machine again, unless the user picked a machine first
+  // and the new project is on it (or being set up there) — the project
+  // picker offers exactly those for a picked machine (NewChatProjectChip).
+  const [machineChoiceProjectId, setMachineChoiceProjectId] = useState(currentProject?.id);
+  if (machineChoiceProjectId !== currentProject?.id) {
+    setMachineChoiceProjectId(currentProject?.id);
+    const keep =
+      machineChoice !== null &&
+      machineChoice !== DEFAULT_MACHINE &&
+      machineChoice !== NO_MACHINE &&
+      placement.known &&
+      canChoose(placement, machineChoice);
+    if (!keep) setMachineChoice(null);
+  }
+  // A branch workspace is a checkout on one machine, so selecting one selects
+  // its machine (lib/workspaceMachine.ts); the server refuses anything else.
+  const machineIds = new Set(daemons.map((d) => d.daemonId));
+  const selectedWorkspace = selectedWorkspaceId
+    ? (worktrees.find((w) => w.id === selectedWorkspaceId) ?? getCachedWorktree(selectedWorkspaceId))
+    : undefined;
+  const effectiveChoice = canPickMachine ? machineChoice : null;
+  const resolvedMachine = resolveChatMachine({
+    choice: effectiveChoice,
+    fallback: defaultMachine ?? DEFAULT_MACHINE,
+    workspaceDaemonId: workspaceMachine(selectedWorkspace, machineIds),
+  });
+  const machine = resolvedMachine.value;
   const noMachine = machine === NO_MACHINE;
+  // The machine the workspace list is narrowed to, and that a workspace made
+  // or adopted from here goes on; undefined leaves both to the server.
+  const workspaceMachineId = workspaceFilterMachine(effectiveChoice, resolvedMachine);
   // A chat on a machine still waits for one to be connected, as before.
   const machineReady = noMachine || daemonConnected;
+
+  // The machine "default" names: where the project is (or is landing), by
+  // the server's own default order (lib/chatMachine defaultMachineDaemon).
+  const defaultDaemon = defaultMachineDaemon(daemons, preferredDaemonIds(installRows, currentProject?.id));
+  const machineName = (daemonId: string) =>
+    daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId);
+  // The machine the chat will run on, when it is one: the pick, else what the
+  // default resolves to. A workspace's machine has the project by definition.
+  const runsOnDaemonId = noMachine
+    ? undefined
+    : machine === DEFAULT_MACHINE
+      ? defaultDaemon?.daemonId
+      : machine;
+  // Never a send that fails: a machine the project is not set up on (or is
+  // still landing on) holds the composer, and says what to do.
+  const placementBlock =
+    canPickMachine && currentProject && runsOnDaemonId && !resolvedMachine.lockedBy
+      ? startBlockedReason({
+          placement,
+          daemonId: runsOnDaemonId,
+          projectName: currentProject.name,
+          machineName: machineName(runsOnDaemonId),
+        })
+      : null;
+  const placementSettingUp = Boolean(runsOnDaemonId) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
+
+  // Set the project up on a machine that lacks it: the same clone "Clone it
+  // onto <machine>" runs (CreateProjectFromRepo), into the project's path. A
+  // plain folder has nothing to clone from, so it is only explained.
+  const setUpProjectOn =
+    currentProject && canSetUpElsewhere(currentProject)
+      ? async (daemonId: string) => {
+          await createProjectFromRepo({
+            cloneUrl: currentProject.remote_url ?? "",
+            daemonId,
+            name: currentProject.name,
+            path: currentProject.path,
+          });
+        }
+      : undefined;
 
   const daemonWait = useDaemonWait({
     waiting: !machineReady && !daemonLoading,
@@ -145,8 +270,14 @@ export function NewChatView({
   // Find the main worktree for this project
   const mainWorktree = worktrees.find((w) => w.is_main === true);
 
-  // Filter out the main worktree and archived ones from the dropdown list
-  const nonMainWorktrees = worktrees.filter((w) => !w.is_main && !w.deleted_at);
+  // Filter out the main worktree and archived ones from the dropdown list, and
+  // the workspaces on a machine other than the chosen one.
+  const nonMainWorktrees = workspacesOnMachine(
+    worktrees.filter((w) => !w.is_main && !w.deleted_at),
+    workspaceMachineId,
+  );
+  // With several machines and none chosen, each workspace says where it is.
+  const showWorkspaceMachines = daemons.length > 1 && !workspaceMachineId;
 
   // Auto-focus input when new chat view is shown
   useEffect(() => {
@@ -230,6 +361,10 @@ export function NewChatView({
       });
       return;
     }
+    if (placementBlock) {
+      toast.error("Not set up on that machine yet", { description: placementBlock });
+      return;
+    }
     if ((!content.trim() && !attachmentIds?.length) || isCreating) return;
 
     setIsCreating(true);
@@ -240,7 +375,7 @@ export function NewChatView({
       // A chat with no machine runs in the project's main checkout: a branch
       // workspace is a checkout on one machine.
       const chatWorktreeId = noMachine ? mainWorktree?.id : selectedWorkspaceId || mainWorktree?.id;
-      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(machine);
+      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(startChoice(resolvedMachine));
 
       if (!chatWorktreeId) {
         const error = `Cannot create chat: No worktree found. worktrees.length=${worktrees.length}, mainWorktree=${mainWorktree?.id}`;
@@ -314,18 +449,14 @@ export function NewChatView({
     await handleWorkspaceSelect(worktreeId);
   };
 
-  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
-  };
+  // importWorktree refreshes the workspace lists itself.
+  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {};
 
   const handleWorkspaceSelect = async (worktreeId: string | null) => {
-    // Read from the store rather than the render closure: a workspace created
-    // moments ago is already in the store but not yet in this render's list.
-    const latestWorktrees = useWorktreeStore.getState().worktrees;
+    // Read from the cache rather than the render closure: a workspace created
+    // moments ago is already cached but not yet in this render's list.
     if (worktreeId && currentProject) {
-      const worktree = latestWorktrees.find((w) => w.id === worktreeId);
+      const worktree = getCachedWorktree(worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
         setSelectedWorkspaceId(worktreeId);
@@ -337,6 +468,15 @@ export function NewChatView({
     setShowWorkspaceDropdown(false);
   };
 
+  // Choosing a machine that does not hold the selected workspace falls back to
+  // the main checkout, which every machine has.
+  const handleMachineChange = (next: ChatMachineChoice) => {
+    setMachineChoice(next);
+    if (choiceLeavesWorkspace(next, resolvedMachine.lockedBy)) {
+      void handleWorkspaceSelect(mainWorktree?.id ?? null);
+    }
+  };
+
   // Get display name for selected workspace
   const selectedWorkspaceName = selectedWorkspaceId
     ? worktrees.find((w) => w.id === selectedWorkspaceId)?.branch ||
@@ -344,7 +484,7 @@ export function NewChatView({
       (currentWorktree?.id === selectedWorkspaceId
         ? currentWorktree.branch || currentWorktree.name
         : null) ||
-      "Select Workspace"
+      "Select workspace"
     : currentProject?.default_branch || "main";
 
   return (
@@ -384,18 +524,46 @@ export function NewChatView({
                   <ReliantIcon className="h-10 w-10" />
                 </div>
               )}
+              {!emptyState && heading}
 
               {/* Workspace controls */}
               <div
                 className="w-full flex flex-wrap items-center justify-center gap-3"
                 data-onboarding="workspace-buttons"
               >
+                {/* The project the chat starts in: the global New chat picks
+                    it (filter, open chat, last used); change it here. */}
+                {showProjectChip && (
+                  <NewChatProjectChip
+                    disabled={isCreating}
+                    // A machine the user picked themselves: the projects on
+                    // it come first, the rest are set up there on the way.
+                    machine={
+                      canPickMachine && effectiveChoice && effectiveChoice !== NO_MACHINE
+                        ? { daemonId: effectiveChoice, name: machineName(effectiveChoice) }
+                        : undefined
+                    }
+                    installs={installRows}
+                  />
+                )}
+
                 {canPickMachine && (
                   <MachinePicker
                     value={machine}
-                    onChange={setMachineChoice}
+                    onChange={handleMachineChange}
                     daemons={daemons}
-                    defaultDaemon={defaultMachineDaemon(daemons)}
+                    defaultDaemon={defaultDaemon}
+                    onMakeDefault={makeDefault}
+                    project={
+                      currentProject
+                        ? {
+                            name: currentProject.name,
+                            placement,
+                            onSetUp: setUpProjectOn,
+                            describeError: describeCloneError,
+                          }
+                        : undefined
+                    }
                     disabled={isCreating}
                   />
                 )}
@@ -407,8 +575,8 @@ export function NewChatView({
                 {/* Workspace Selector */}
                 <div className="relative" ref={workspaceDropdownRef}>
                   <Tooltip
-                    content="Workspaces are isolated copies of your codebase, powered by git worktrees — run multiple agents in parallel without conflicts."
-                    placement="top"
+                    content="Workspaces are isolated copies of the project, powered by git worktrees — run several agents in parallel without conflicts."
+                    side="top"
                   >
                     <button
                       onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
@@ -439,7 +607,7 @@ export function NewChatView({
                               <div className="text-xs opacity-60">Main workspace</div>
                             </div>
                             {selectedWorkspaceId === mainWorktree?.id && (
-                              <Check className="w-3 h-3 text-primary flex-shrink-0" />
+                              <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />
                             )}
                           </div>
                         </button>
@@ -455,9 +623,16 @@ export function NewChatView({
                             )}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium">{worktree.branch || worktree.name}</span>
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{worktree.branch || worktree.name}</div>
+                                {showWorkspaceMachines && worktree.daemon_id && (
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    On {machineName(worktree.daemon_id)}
+                                  </div>
+                                )}
+                              </div>
                               {selectedWorkspaceId === worktree.id && (
-                                <Check className="w-3 h-3 text-primary flex-shrink-0" />
+                                <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />
                               )}
                             </div>
                           </button>
@@ -465,7 +640,9 @@ export function NewChatView({
 
                         {nonMainWorktrees.length === 0 && (
                           <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-                            No additional workspaces
+                            {workspaceMachineId && daemons.length > 1
+                              ? `No other workspaces on ${machineName(workspaceMachineId)}`
+                              : "No additional workspaces"}
                           </div>
                         )}
                         <LoadMoreWorktreesRow projectId={currentProject?.id} />
@@ -480,7 +657,7 @@ export function NewChatView({
                           }}
                           className="w-full px-3 py-2 text-xs text-center border-b"
                         >
-                          <div className="flex items-center justify-center gap-2 text-primary">
+                          <div className="flex items-center justify-center gap-2 text-primary-ink">
                             <Search className="w-3 h-3" />
                             <span className="font-medium">Discover workspace</span>
                           </div>
@@ -494,7 +671,7 @@ export function NewChatView({
                           }}
                           className="w-full px-3 py-2 text-xs text-center"
                         >
-                          <div className="flex items-center justify-center gap-2 text-primary">
+                          <div className="flex items-center justify-center gap-2 text-primary-ink">
                             <FolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
                             <span className="font-medium leading-none">New workspace</span>
                           </div>
@@ -507,7 +684,7 @@ export function NewChatView({
                 {/* Quick create workspace */}
                 <Tooltip
                   content="Create an isolated copy of your codebase (a git worktree) so another agent can work in parallel without conflicts."
-                  placement="top"
+                  side="top"
                 >
                   <button
                     onClick={() => setShowCreateWorktreeModal(true)}
@@ -521,6 +698,29 @@ export function NewChatView({
                 )}
               </div>
 
+              {/* Why the machine moved with the workspace. */}
+              {canPickMachine && resolvedMachine.lockedBy && daemons.length > 1 && (
+                <p role="note" data-testid="new-chat-workspace-machine-note" className="text-xs text-muted-foreground">
+                  Runs on {machineName(resolvedMachine.lockedBy)}, where this workspace lives.
+                </p>
+              )}
+
+              {/* Why the composer is holding: the project is not on the
+                  chosen machine yet. The picker has the action. */}
+              {placementBlock && (
+                <p
+                  role="status"
+                  data-testid="new-chat-placement-note"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                >
+                  {placementSettingUp && (
+                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  )}
+                  {placementBlock}
+                </p>
+              )}
+
+              {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}
             </div>
           </div>
 
@@ -549,7 +749,7 @@ export function NewChatView({
             onRetry={
               capabilities.cloudDaemons
                 ? daemonWait.retryNow
-                : () => setShowConnectDaemonModal(true)
+                : () => setShowAddMachine(true)
             }
           />
           {/* The machine is unavailable; the chat does not have to wait for it. */}
@@ -559,7 +759,7 @@ export function NewChatView({
                 type="button"
                 onClick={() => setMachineChoice(NO_MACHINE)}
                 data-testid="new-chat-continue-without-machine"
-                className="font-medium text-primary hover:underline"
+                className="font-medium text-primary-ink hover:underline"
               >
                 Continue without machine
               </button>{" "}
@@ -583,7 +783,7 @@ export function NewChatView({
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating || !machineReady}
+            disabled={isCreating || !machineReady || Boolean(placementBlock)}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
             prefill={restoredPrefill ?? composerPrefill}
           />
@@ -602,20 +802,21 @@ export function NewChatView({
             onClose={() => setShowCreateWorktreeModal(false)}
             onWorktreeCreated={handleWorktreeCreated}
             projectId={currentProject.id}
+            daemonId={workspaceMachineId}
           />
           <DiscoverWorktreesModal
             isOpen={showDiscoverWorktreeModal}
             onClose={() => setShowDiscoverWorktreeModal(false)}
             onWorktreesImported={handleWorktreesImported}
             projectId={currentProject.id}
+            daemonId={workspaceMachineId}
           />
         </>
       )}
 
-      <ConnectDaemonModal
-        isOpen={showConnectDaemonModal}
-        onClose={() => setShowConnectDaemonModal(false)}
-      />
+      {showAddMachine && (
+        <AddMachineSheet open onClose={() => setShowAddMachine(false)} onReady={() => refreshDaemons()} />
+      )}
     </div>
   );
 }

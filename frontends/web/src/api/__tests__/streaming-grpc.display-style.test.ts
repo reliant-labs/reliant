@@ -4,7 +4,7 @@ import { MessageSchema, DisplayStyle } from "../../gen/reliant/v1/chat_pb";
 
 /**
  * A live message update is a raw Go `encoding/json` payload parsed straight
- * into the proto Message (convertChatUpdateData in streaming-grpc.ts). The
+ * into the proto Message (convertChatUpdateData in chat-streaming-grpc.ts). The
  * transcript hides LLM-context-only messages by checking
  * `displayStyle === DisplayStyle.HIDDEN`, so that check only works if the
  * snake_case integer the backend emits survives this parse.

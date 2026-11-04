@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/runs"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -100,8 +101,8 @@ func mustChatProject(t *testing.T, ctx context.Context, repo *db.Repo, chatID st
 	return chat.ProjectID
 }
 
-// The wire carries the chat's origin, and exclude_automations hides schedule
-// chats unless one is waiting on a human.
+// The wire carries the chat's origin, and ListChats leaves out every schedule
+// chat, one waiting on a human included (that one is the Inbox's).
 func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +143,7 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 		})
 		require.NoError(t, err)
 		require.True(t, created)
+		dbtest.SetChatOrigin(t, repo, chatID, core.ChatOriginOf(kind))
 	}
 	record(quiet.chatID, core.TriggerEventKindSchedule, &triggerID)
 	record("wire-interactive", core.TriggerEventKindChatStart, nil)
@@ -156,19 +158,14 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 	assert.Equal(t, "schedule", *getResp.Msg.Chat.LaunchKind)
 	require.NotNil(t, getResp.Msg.Chat.TriggerId)
 	assert.Equal(t, triggerID, *getResp.Msg.Chat.TriggerId)
+	assert.Equal(t, reliantv1.ChatOrigin_CHAT_ORIGIN_AUTOMATION, getResp.Msg.Chat.GetOrigin())
 
-	list := func(exclude bool) map[string]bool {
-		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID, SidebarOnly: &exclude}))
-		require.NoError(t, err)
-		ids := map[string]bool{}
-		for _, c := range resp.Msg.Chats {
-			ids[c.Id] = true
-		}
-		return ids
+	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	require.NoError(t, err)
+	filtered := map[string]bool{}
+	for _, c := range resp.Msg.Chats {
+		filtered[c.Id] = true
 	}
-	assert.True(t, list(false)[quiet.chatID])
-
-	filtered := list(true)
 	assert.False(t, filtered[quiet.chatID], "a quiet scheduled chat is hidden")
 	assert.True(t, filtered["wire-interactive"])
 	assert.False(t, filtered["wire-needs-approval"], "a scheduled chat awaiting approval surfaces in the Inbox, not the sidebar")
@@ -193,6 +190,7 @@ func seedScheduledChat(t *testing.T, ctx context.Context, repo *db.Repo, chatID 
 	})
 	require.NoError(t, err)
 	require.True(t, created)
+	dbtest.SetChatOrigin(t, repo, chatID, db.ChatOrigin(core.ChatOriginAutomation))
 }
 
 // Adoption means a human is now present: the continuation's root run is
@@ -254,9 +252,8 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	assert.Equal(t, first.Msg.Chat.GetAdoptedAt(), second.Msg.Chat.GetAdoptedAt())
 
 	list := func() map[string]bool {
-		yes := true
 		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{
-			ProjectId: mustChatProject(t, ctx, repo, fx.chatID), SidebarOnly: &yes,
+			ProjectId: mustChatProject(t, ctx, repo, fx.chatID),
 		}))
 		require.NoError(t, err)
 		ids := map[string]bool{}

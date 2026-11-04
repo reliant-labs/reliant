@@ -38,6 +38,7 @@ export const TRIGGER_KINDS = [
   'integration',
   'workflow_event',
   'manual.run',
+  'cli.run',
 ] as const
 
 /**

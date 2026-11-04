@@ -1,14 +1,22 @@
 /**
  * MobileSettingsScreen is the section list for `/m/settings`. Pins that
  * sections respect their capability gate, billing is hidden without
- * control-plane, drill-in swaps to the section (not a route push), and each
- * section's own back button returns to the list.
+ * control-plane, the open section is the URL's `?section=` (so a deep link
+ * lands on it and Back returns to the list), and each section's own back
+ * button returns to the list.
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
+
+let routeSearch: Record<string, string> = {};
+const navigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigate,
+  useSearch: () => routeSearch,
+}));
 
 let hasControlPlane = true;
 vi.mock("../../../services/controlPlane/config", () => ({
@@ -34,7 +42,12 @@ vi.mock("../MobileAISettingsScreen", () => ({
   ),
 }));
 vi.mock("../MobileBillingScreen", () => ({
-  MobileBillingScreen: () => <div>billing-section</div>,
+  MobileBillingScreen: ({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) => (
+    <div>
+      <button onClick={onBack}>{backLabel ?? "back-from-billing"}</button>
+      billing-section
+    </div>
+  ),
 }));
 vi.mock("../MobileGitHubScreen", () => ({
   MobileGitHubScreen: () => <div>github-section</div>,
@@ -60,15 +73,28 @@ vi.mock("../MobileDiagnosticsScreen", () => ({
 
 const { MobileSettingsScreen } = await import("../MobileSettingsScreen");
 
+const tree = () => (
+  <SurfaceProvider surface="mobile">
+    <MobileSettingsScreen />
+  </SurfaceProvider>
+);
+
+// The mocked router: navigate({ href }) becomes the next render's search.
+let rerenderTree: (() => void) | undefined;
 function renderMobile() {
-  return render(
-    <SurfaceProvider surface="mobile">
-      <MobileSettingsScreen />
-    </SurfaceProvider>,
-  );
+  const result = render(tree());
+  rerenderTree = () => result.rerender(tree());
+  return result;
 }
 
 beforeEach(() => {
+  routeSearch = {};
+  navigate.mockReset();
+  navigate.mockImplementation(({ href }: { href: string }) => {
+    const url = new URL(href, "http://app.test");
+    routeSearch = Object.fromEntries(url.searchParams);
+    rerenderTree?.();
+  });
   hasControlPlane = true;
 });
 
@@ -82,7 +108,7 @@ describe("MobileSettingsScreen", () => {
     expect(screen.getByText("Notifications")).toBeInTheDocument();
     expect(screen.getByText("Privacy")).toBeInTheDocument();
     expect(screen.getByText("Appearance")).toBeInTheDocument();
-    expect(screen.getByText("Workspace preferences")).toBeInTheDocument();
+    expect(screen.getByText("Branches")).toBeInTheDocument();
     expect(screen.getByText("About")).toBeInTheDocument();
     expect(screen.getByText("Diagnostics")).toBeInTheDocument();
   });
@@ -111,7 +137,7 @@ describe("MobileSettingsScreen", () => {
   it("notes top-level mobile management and what remains desktop-only", () => {
     renderMobile();
     expect(
-      screen.getByText(/Machines and GitHub are available from the main menu/i),
+      screen.getByText(/Machines are in the main menu/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/MCP servers, prompts, keyboard shortcuts/i),
@@ -135,12 +161,31 @@ describe("MobileSettingsScreen", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("drills into a section on tap without a route push", async () => {
+  it("the footer does not call GitHub unavailable while listing it", () => {
+    renderMobile();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+    expect(screen.queryByText(/GitHub are available from the main menu/i)).not.toBeInTheDocument();
+  });
+
+  it("opens a section by putting it in the URL", async () => {
     const user = userEvent.setup();
     renderMobile();
     await user.click(screen.getByText("AI providers"));
+    expect(navigate).toHaveBeenCalledWith({ href: "/m/settings?section=ai" });
     expect(screen.getByText("ai-section")).toBeInTheDocument();
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
+  });
+
+  it("opens the section a deep link names", () => {
+    routeSearch = { section: "notifications" };
+    renderMobile();
+    expect(screen.getByText("notifications-section")).toBeInTheDocument();
+  });
+
+  it("shows the list for a section it does not have", () => {
+    routeSearch = { section: "mcp" };
+    renderMobile();
+    expect(screen.getByText("Account")).toBeInTheDocument();
   });
 
   it("returns to the list from a section's own back button", async () => {
@@ -162,5 +207,23 @@ describe("MobileSettingsScreen", () => {
     );
     expect(screen.queryByText("Account")).not.toBeInTheDocument();
     expect(screen.queryByText("AI providers")).not.toBeInTheDocument();
+  });
+});
+
+describe("MobileSettingsScreen opened with a way back (the claim page's Subscribe)", () => {
+  it("opens on billing and its back control returns to where the person came from", async () => {
+    routeSearch = { section: "billing", returnTo: "/claim" };
+    renderMobile();
+    expect(screen.getByText("billing-section")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Back to your claim" }));
+    expect(navigate).toHaveBeenCalledWith({ href: "/claim" });
+  });
+
+  it("ignores a way back that leaves the app, and falls back to the list", async () => {
+    routeSearch = { section: "billing", returnTo: "//evil.example/x" };
+    renderMobile();
+    await userEvent.click(screen.getByRole("button", { name: "back-from-billing" }));
+    expect(navigate).toHaveBeenCalledWith({ href: "/m/settings" });
+    expect(screen.getByText("Account")).toBeInTheDocument();
   });
 });

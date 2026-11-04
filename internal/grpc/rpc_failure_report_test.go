@@ -14,13 +14,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
-	"github.com/getsentry/sentry-go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,85 +25,29 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// One failed RPC is one Sentry issue, grouped by the procedure that failed.
+// One failed RPC is one ERROR record, naming the procedure that failed.
 //
-// These drive a failing handler through the real interceptor chain
-// (NewUserChain: forge's Trace → Recovery → RequestID → Logging → … and Reliant's
-// layers) over HTTP, with the process logger installed the way every server
-// installs it (logging.Setup: forge's error-class policy, the metrics and
-// Sentry bridges), a live SentryReporter, and a Sentry transport the test
-// reads. So they pin what Sentry receives for a failed RPC, not what one layer
-// hands the next.
+// An ERROR record is the unit of a server error: the control plane's issues
+// worker groups them by fingerprint (forge's sfp1: the logging function, the
+// procedure, the message and the error type). These drive a failing handler
+// through the real interceptor chain (NewUserChain: forge's Trace → Recovery →
+// RequestID → Logging → … and Reliant's layers) over HTTP, with the process
+// logger installed the way every server installs it (logging.Setup: forge's
+// error-class policy and the metrics bridge), and read the lines it writes.
+// So they pin what becomes an issue for a failed RPC, not what one layer hands
+// the next.
 //
 // Before, one failed GetFileTree (prod, 2026-10-10T20:52:28Z) was three
-// issues: forge's "rpc failed", forwarded by the bridge and grouped with every
-// other procedure's failure (ELECTRON-CH); the ErrorReporterInterceptor's
-// duplicate "[gRPC] Request error" line (ELECTRON-CJ); and its exception
-// capture (ELECTRON-AW).
+// issues: forge's "rpc failed", the ErrorReporterInterceptor's duplicate
+// "[gRPC] Request error" line, and an exception capture.
 
 const (
 	getFileTreeProcedure = "/reliant.v1.FileSystemService/GetFileTree"
 	sendMessageProcedure = "/reliant.v1.ChatService/SendMessage"
 	watchFilesProcedure  = "/reliant.v1.FileSystemService/WatchFiles"
-
-	// reportSettle is how long a test waits, after the reports it expects,
-	// for one it does not: the bridge reports from its own goroutine.
-	reportSettle = 200 * time.Millisecond
 )
 
-// sentryRecorder is a Sentry transport that keeps what the client would send.
-type sentryRecorder struct {
-	mu     sync.Mutex
-	events []*sentry.Event
-	sent   chan struct{}
-}
-
-func (r *sentryRecorder) Flush(time.Duration) bool              { return true }
-func (r *sentryRecorder) FlushWithContext(context.Context) bool { return true }
-func (r *sentryRecorder) Configure(sentry.ClientOptions)        {}
-func (r *sentryRecorder) Close()                                {}
-func (r *sentryRecorder) SendEvent(event *sentry.Event) {
-	r.mu.Lock()
-	r.events = append(r.events, event)
-	r.mu.Unlock()
-	r.sent <- struct{}{}
-}
-
-// awaitExactly waits for n more events, then for reportSettle, and fails if
-// any further event arrives. It returns every event recorded so far.
-func (r *sentryRecorder) awaitExactly(t *testing.T, n int) []*sentry.Event {
-	t.Helper()
-	for i := range n {
-		select {
-		case <-r.sent:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("expected %d Sentry event(s), got %d", n, i)
-		}
-	}
-	select {
-	case <-r.sent:
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		last := r.events[len(r.events)-1]
-		t.Fatalf("expected %d Sentry event(s), got another: %q (exception=%v, fingerprint=%v)",
-			n, last.Message, exceptionTypes(last), last.Fingerprint)
-	case <-time.After(reportSettle):
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]*sentry.Event(nil), r.events...)
-}
-
-func exceptionTypes(event *sentry.Event) []string {
-	var types []string
-	for _, exception := range event.Exception {
-		types = append(types, exception.Type)
-	}
-	return types
-}
-
-// syncBuffer is the process log output: the bridge's goroutines and the
-// servers' write to it concurrently.
+// syncBuffer is the process log output: the servers write to it concurrently.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -118,41 +59,46 @@ func (b *syncBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
-// records returns every JSON log line with the given message.
-func (b *syncBuffer) records(t *testing.T, message string) []map[string]any {
-	t.Helper()
+// matching returns every JSON log line keep accepts.
+func (b *syncBuffer) matching(keep func(map[string]any) bool) []map[string]any {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []map[string]any
 	scanner := bufio.NewScanner(bytes.NewReader(b.buf.Bytes()))
+	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 	for scanner.Scan() {
 		var record map[string]any
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
 			continue
 		}
-		if record["msg"] == message {
+		if keep(record) {
 			out = append(out, record)
 		}
 	}
 	return out
 }
 
-// installProcessReporting installs the process logger as the servers do,
-// writing JSON lines to the returned buffer, and makes the process reporter a
-// live SentryReporter whose events land on the returned recorder. Everything
-// is restored when the test ends.
-func installProcessReporting(t *testing.T) (*sentryRecorder, *syncBuffer) {
+// records returns every JSON log line with the given message.
+func (b *syncBuffer) records(t *testing.T, message string) []map[string]any {
+	t.Helper()
+	return b.matching(func(r map[string]any) bool { return r["msg"] == message })
+}
+
+// errors returns every ERROR line: each one is an issue event.
+func (b *syncBuffer) errors() []map[string]any {
+	return b.matching(func(r map[string]any) bool { return r["level"] == "ERROR" })
+}
+
+// installProcessLogging installs the process logger as the servers do,
+// writing JSON lines to the returned buffer. Everything is restored when the
+// test ends.
+func installProcessLogging(t *testing.T) *syncBuffer {
 	t.Helper()
 
 	previousLogger := slog.Default()
 	previousOutput := logging.DefaultOutput
 	previousTrace := logging.TraceEnabled
-	hub := sentry.CurrentHub()
-	previousClient := hub.Client()
-	previousReporter := telemetry.GetReporter()
 	t.Cleanup(func() {
-		telemetry.SetReporter(previousReporter)
-		hub.BindClient(previousClient)
 		logging.DefaultOutput = previousOutput
 		logging.TraceEnabled = previousTrace
 		slog.SetDefault(previousLogger)
@@ -161,25 +107,7 @@ func installProcessReporting(t *testing.T) (*sentryRecorder, *syncBuffer) {
 	lines := &syncBuffer{}
 	logging.DefaultOutput = lines
 	logging.Setup(logging.Settings{Format: "json"}, slog.LevelInfo)
-
-	reporter, err := telemetry.NewSentryReporter(telemetry.SentryConfig{
-		Enabled: true,
-		DSN:     "https://public@example.ingest.sentry.io/1",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, reporter)
-	recorder := &sentryRecorder{sent: make(chan struct{}, 64)}
-	client, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "https://public@example.ingest.sentry.io/1",
-		Transport: recorder,
-		// Without a release the SDK derives one by running git, a child
-		// process that costs most of a second.
-		Release: "reliant@test",
-	})
-	require.NoError(t, err)
-	hub.BindClient(client)
-	telemetry.SetReporter(reporter)
-	return recorder, lines
+	return lines
 }
 
 // failingAPI serves each procedure in fail with a handler that returns its
@@ -231,8 +159,8 @@ func daemonFault(id string) error {
 		id, errors.New("decode tree: unexpected EOF")))
 }
 
-func TestFailedRPCIsOneSentryEventGroupedByProcedure(t *testing.T) {
-	recorder, _ := installProcessReporting(t)
+func TestFailedRPCIsOneErrorRecordNamingItsProcedure(t *testing.T) {
+	lines := installProcessLogging(t)
 
 	const firstID, secondID = "2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40", "66a045ce-5872-4efe-a510-910f63fcb8a6"
 	api := newFailingAPI(t, map[string]error{getFileTreeProcedure: daemonFault(firstID)})
@@ -242,31 +170,24 @@ func TestFailedRPCIsOneSentryEventGroupedByProcedure(t *testing.T) {
 	})
 
 	require.Equal(t, connect.CodeInternal, api.call(t, getFileTreeProcedure, "34699621-e7ef-4eb9-985c-911e84222c8c"))
-	events := recorder.awaitExactly(t, 1)
-	first := events[0]
-	assert.Equal(t, "rpc failed", first.Message, "the report is forge's record of the failed call")
-	assert.Empty(t, first.Exception, "a failed RPC is not also captured as an exception (ELECTRON-AW)")
-	require.Len(t, first.Fingerprint, 5)
-	assert.Equal(t, []string{getFileTreeProcedure, "internal"}, first.Fingerprint[3:],
-		"grouped by the procedure that failed and its code, not only by the interceptor that logged it")
-	assert.Equal(t, "FileSystemService/GetFileTree", first.Transaction)
-	assert.Equal(t, getFileTreeProcedure, first.Tags["procedure"])
+	errs := lines.errors()
+	require.Len(t, errs, 1, "one failed call is one issue event, not one per layer: %v", errs)
+	first := errs[0]
+	assert.Equal(t, "rpc failed", first["msg"], "the report is forge's record of the failed call")
+	assert.Equal(t, getFileTreeProcedure, first["procedure"], "grouped by the procedure that failed")
+	assert.Equal(t, "internal", first["code"])
 
-	// The same procedure failing the same way for another daemon and
-	// request: other ids, the same issue.
+	// Another procedure failing with the same error: its own record, naming
+	// its own procedure, so its own issue.
 	require.Equal(t, connect.CodeInternal, again.call(t, getFileTreeProcedure, "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0"))
-	events = recorder.awaitExactly(t, 1)
-	assert.Equal(t, first.Fingerprint, events[1].Fingerprint, "ids and error text do not split a procedure's issue")
-
-	// Another procedure failing with the same error: another issue.
 	require.Equal(t, connect.CodeInternal, again.call(t, sendMessageProcedure, "34699621-e7ef-4eb9-985c-911e84222c8c"))
-	events = recorder.awaitExactly(t, 1)
-	assert.NotEqual(t, first.Fingerprint, events[2].Fingerprint, "another procedure failing is another issue")
-	assert.Equal(t, []string{sendMessageProcedure, "internal"}, events[2].Fingerprint[3:])
+	errs = lines.errors()
+	require.Len(t, errs, 3)
+	assert.Equal(t, sendMessageProcedure, errs[2]["procedure"])
 }
 
-func TestFailedStreamIsOneSentryEvent(t *testing.T) {
-	recorder, _ := installProcessReporting(t)
+func TestFailedStreamIsOneErrorRecord(t *testing.T) {
+	lines := installProcessLogging(t)
 	api := newFailingAPI(t, map[string]error{watchFilesProcedure: daemonFault("2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40")})
 
 	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, api.url+watchFilesProcedure)
@@ -277,17 +198,17 @@ func TestFailedStreamIsOneSentryEvent(t *testing.T) {
 	require.Equal(t, connect.CodeInternal, svcerr.Code(stream.Err()))
 	require.NoError(t, stream.Close())
 
-	events := recorder.awaitExactly(t, 1)
-	assert.Equal(t, "stream failed", events[0].Message)
-	assert.Empty(t, events[0].Exception)
-	assert.Equal(t, []string{watchFilesProcedure, "internal"}, events[0].Fingerprint[3:])
+	errs := lines.errors()
+	require.Len(t, errs, 1, "%v", errs)
+	assert.Equal(t, "stream failed", errs[0]["msg"])
+	assert.Equal(t, watchFilesProcedure, errs[0]["procedure"])
 }
 
 // The prod failure itself, as the fs proxy now answers it: a connected machine
 // that did not answer before the caller's deadline is DeadlineExceeded, which
-// forge writes at WARN and the bridge never forwards.
-func TestDaemonTimeoutRPCIsNotASentryEvent(t *testing.T) {
-	recorder, lines := installProcessReporting(t)
+// forge writes at WARN, so it is never an issue.
+func TestDaemonTimeoutRPCIsNotAnErrorRecord(t *testing.T) {
+	lines := installProcessLogging(t)
 	timeout := connect.NewError(connect.CodeDeadlineExceeded, fmt.Errorf(
 		"daemon command fs.get_tree (subject reliant.daemon.2aab1465.command) via NATS failed: %w: %w",
 		toolexec.ErrDaemonTimeout, context.DeadlineExceeded))
@@ -297,11 +218,10 @@ func TestDaemonTimeoutRPCIsNotASentryEvent(t *testing.T) {
 	})
 
 	require.Equal(t, connect.CodeDeadlineExceeded, api.call(t, getFileTreeProcedure, "req-timeout"))
-	// A failure that is reported, after the one that must not be: once its
-	// event is in, the timeout's would have been too.
 	api.call(t, sendMessageProcedure, "req-fault")
-	events := recorder.awaitExactly(t, 1)
-	assert.Equal(t, sendMessageProcedure, events[0].Tags["procedure"], "only the real fault reaches Sentry")
+	errs := lines.errors()
+	require.Len(t, errs, 1, "only the real fault is an ERROR: %v", errs)
+	assert.Equal(t, sendMessageProcedure, errs[0]["procedure"])
 
 	record := rpcFailedRecord(t, lines, getFileTreeProcedure)
 	assert.Equal(t, "WARN", record["level"], "visible and retryable, never a page")
@@ -315,7 +235,7 @@ func TestDaemonTimeoutRPCIsNotASentryEvent(t *testing.T) {
 // the process handler, which then trusts it, so the classifier has to be the
 // logging interceptor's own.
 func TestBenignWorkflowFailureRPCIsLoggedAtUserLevel(t *testing.T) {
-	recorder, lines := installProcessReporting(t)
+	lines := installProcessLogging(t)
 	benign := temporal.NewApplicationErrorWithOptions("AI provider usage limit reached", "ProviderUsageLimit",
 		temporal.ApplicationErrorOptions{NonRetryable: true, Category: temporal.ApplicationErrorCategoryBenign})
 	api := newFailingAPI(t, map[string]error{
@@ -325,8 +245,9 @@ func TestBenignWorkflowFailureRPCIsLoggedAtUserLevel(t *testing.T) {
 
 	require.Equal(t, connect.CodeInternal, api.call(t, sendMessageProcedure, "req-benign"), "the wire code is the handler's")
 	api.call(t, getFileTreeProcedure, "req-fault")
-	events := recorder.awaitExactly(t, 1)
-	assert.Equal(t, getFileTreeProcedure, events[0].Tags["procedure"], "only the real fault reaches Sentry")
+	errs := lines.errors()
+	require.Len(t, errs, 1, "only the real fault is an ERROR: %v", errs)
+	assert.Equal(t, getFileTreeProcedure, errs[0]["procedure"])
 
 	record := rpcFailedRecord(t, lines, sendMessageProcedure)
 	assert.Equal(t, "INFO", record["level"])

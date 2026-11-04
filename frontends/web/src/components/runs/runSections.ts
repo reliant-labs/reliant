@@ -6,7 +6,7 @@
  */
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 
 export interface RunSections {
   /** Awaiting input, or blocked on a machine. Rendered only when non-empty. */

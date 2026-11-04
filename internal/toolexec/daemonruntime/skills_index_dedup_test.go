@@ -48,6 +48,7 @@ func writeClone(t *testing.T, dir string) {
 // Identical copies are indexed once; a same-path skill whose content differs
 // is still indexed, and a skill only one checkout has is still there.
 func TestBuildSkillsIndex_IndexesEachDistinctSkillOnce(t *testing.T) {
+	t.Parallel() // its own temp dirs and servers; off the package's serial phase
 	if testing.Short() {
 		t.Skip("enumerates forge's embedded skill catalog once per checkout (~2s); runs in the full lane")
 	}

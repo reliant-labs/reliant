@@ -64,7 +64,9 @@ type API struct {
 	// KeySweep is nil without a control plane.
 	KeySweep  *ReliantKeySweep
 	PayloadGC *PayloadGC
-	Router    *APIDaemonRouter
+	// LLMUsageRetention prunes per-call LLM usage past its retention period.
+	LLMUsageRetention *LLMUsageRetention
+	Router            *APIDaemonRouter
 	// Feed publishes the repository's user and chat updates; it has no
 	// lifecycle, and orders the hubs after the router.
 	Feed      *RepoUpdateFeed

@@ -17,9 +17,9 @@
  */
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
 
 const CHAT_ID = "chat-abc";
 const SPAWN_A = "thread-spawn-a";
@@ -37,10 +37,6 @@ const { sendAgentMessageMock, answerQuestionMock, pending } = vi.hoisted(() => (
   pending: { questions: [] as QuestionInfo[] },
 }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
@@ -55,8 +51,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
     getChatFromCache: () => undefined,
   };
 });
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: pending.questions, isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: pending.questions }, isLoading: false }),
   answerQuestion: answerQuestionMock,
 }));
 
@@ -64,32 +60,51 @@ const NO_PRESETS = { presets: [] as never[], loading: false };
 const NO_MODELS = { models: [] as never[] };
 const NO_SLASH_COMMANDS: never[] = [];
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => NO_PRESETS,
   useModels: () => NO_MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => NO_SLASH_COMMANDS }));
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
-}));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: { getDefaultPresets: vi.fn().mockResolvedValue({}), listPresets: vi.fn().mockResolvedValue([]) },
+// The selected workflow has no inputs. One stable result, as React Query
+// returns one: a fresh object per render re-derives the params every render.
+vi.mock("../../../hooks/workflow-queries", async (importActual) => {
+  const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
+    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+  };
+});
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => NO_PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
+afterEach(() => setTransport(null));
 
 function askUser(id: string, threadId: string, prompt: string): QuestionInfo {
   return {
-    question_id: id,
-    chat_id: CHAT_ID,
-    workflow_id: `wf-${threadId}`,
-    thread_id: threadId,
-    step_id: "ask_user",
+    $typeName: "reliant.v1.QuestionInfo",
+    async: false,
+    toolCallId: "",
+    questionId: id,
+    chatId: CHAT_ID,
+    workflowId: `wf-${threadId}`,
+    threadId: threadId,
+    stepId: "ask_user",
     status: "pending",
-    created_at: "",
+    createdAt: "",
     metadata: JSON.stringify({
       type: "ask_user",
       questions: [{ question: prompt, options: [{ label: "Yes", description: "" }] }],
@@ -139,7 +154,7 @@ describe("the composer answers the question of the thread in view", () => {
     expect(screen.queryByText("Spawn A: which schema?")).toBeNull();
   });
 
-  it("leaves the main thread's composer alone when only spawns are waiting", () => {
+  it("leaves the main thread's composer alone when only spawns are waiting", async () => {
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={true} />);
 
     expect(screen.queryByText("Spawn A: which schema?")).toBeNull();
@@ -151,12 +166,10 @@ describe("the composer answers the question of the thread in view", () => {
     fireEvent.input(editor);
     fireEvent.keyDown(editor, { key: "Enter", shiftKey: false, metaKey: false, ctrlKey: false });
 
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      CHAT_ID,
-      "keep going",
-      [],
-      expect.any(String),
+    await waitFor(() =>
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: CHAT_ID, threadId: CHAT_ID, message: "keep going", attachments: [], clientMessageId: expect.any(String) }),
+      ),
     );
     expect(answerQuestionMock).not.toHaveBeenCalled();
   });

@@ -1,10 +1,10 @@
 import { AlertCircle, Pause, Play, RefreshCw, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ConfigScope } from "../../api/mcp-grpc";
+import { ConfigScope } from "../../hooks/mcp-queries";
 import { cn } from "../../lib/utils";
 import Badge from "../forge-ui/badge";
 import Tag from "../forge-ui/tag";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { MCPAvatar } from "./mcpAvatar";
 
 const SCOPE_LABELS: Record<ConfigScope, string> = {
@@ -150,7 +150,7 @@ export function MCPServerListItem({
             {error && (
               <div className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive/5 px-2 py-1 text-xs text-destructive-ink">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span className="line-clamp-2 break-words" data-sentry-mask>{error}</span>
+                <span className="line-clamp-2 break-words">{error}</span>
               </div>
             )}
           </div>
@@ -160,21 +160,20 @@ export function MCPServerListItem({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
+            size="md"
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
             onClick={() => setSettingsOpen((prev) => !prev)}
+            icon={<Settings />}
             aria-label={`Server settings for ${title}`}
             aria-expanded={settingsOpen}
             aria-haspopup="menu"
             disabled={disabled}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          />
 
           {settingsOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-xl"
             >
               <div className="space-y-3">
                 <div className="space-y-1.5">
@@ -196,8 +195,8 @@ export function MCPServerListItem({
                   <Button
                     type="button"
                     size="sm"
-                    variant={needsSetup ? "default" : "outline"}
-                    className="justify-start"
+                    variant={needsSetup ? "primary" : "outline"}
+                    className="justify-start!"
                     leftIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onConfigure)}
                     disabled={disabled || configureDisabled || loadingAction === "scope"}
@@ -210,7 +209,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={enabled ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(() => onToggleEnabled?.(!enabled))}
                     disabled={disabled || !onToggleEnabled || loadingAction === "scope"}
@@ -223,7 +222,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onRestart)}
                     disabled={disabled || !enabled}
@@ -236,7 +235,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={<Trash2 className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onRemove)}
                     disabled={disabled}

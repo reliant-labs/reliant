@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Layers } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare, Plug } from "lucide-react";
+import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import type { SettingsSection } from "../../routeSchemas";
@@ -14,15 +14,9 @@ interface SettingsNavigationProps {
 }
 
 interface SectionItem {
-  /**
-   * Stable key. For in-app sections this is a routable {@link SettingsSection}.
-   * For `external` items it's only used as a React key + collapsed-nav filter —
-   * the click opens an external URL and never calls `onSectionChange`.
-   */
-  id: SettingsSection | string;
+  id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  external?: boolean;
 }
 
 interface SectionGroup {
@@ -30,94 +24,100 @@ interface SectionGroup {
   items: SectionItem[];
 }
 
+/**
+ * Five groups, each a real category rather than a priority ("Essentials") or a
+ * backend ("Cloud"):
+ *   Account          who you are and what you pay for;
+ *   AI               what your agents run on and the prompts and tools they get;
+ *   Workflows        how runs are set up and when they need your approval;
+ *   Machines & code  where agents work: machines, repositories and branches;
+ *   App              how this app looks and behaves.
+ */
 const sectionGroups: SectionGroup[] = [
   {
-    label: "Essentials",
+    label: "Account",
     items: [
-      { id: "general", label: "AI", icon: Sparkles },
+      { id: "account", label: "Account", icon: User },
+      // Cloud-only: both need a control-plane backend, and a self-hosted
+      // deployment has no organization to grant permissions within.
+      ...(hasControlPlane
+        ? [
+            { id: "billing" as const, label: "Billing & usage", icon: CreditCard },
+            { id: "member-permissions" as const, label: "Members", icon: Shield },
+          ]
+        : []),
+    ],
+  },
+  {
+    label: "AI",
+    items: [
+      { id: "ai", label: "AI providers", icon: Sparkles },
+      { id: "mcp", label: "MCP servers", icon: McpIcon },
+      { id: "prompts", label: "Prompts", icon: List },
+    ],
+  },
+  {
+    label: "Workflows",
+    items: [
+      { id: "presets", label: "Presets", icon: Layers },
+      { id: "automations", label: "Automation approvals", icon: Zap },
+    ],
+  },
+  {
+    label: "Machines & code",
+    items: [
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
-      { id: "environments", label: "Machines", icon: Server },
-      { id: "account", label: "Account", icon: User },
-    ],
-  },
-  {
-    label: "Cloud",
-    items: [
-      // In-app cloud settings. These replaced the old external "Manage cloud
-      // account" portal link — the overview / environments / billing nav now
-      // lives inside the app as first-party /settings sections backed by
-      // controlplane.v1 public RPCs. Gated on hasControlPlane because they're
-      // meaningless without a control-plane backend.
-      ...(hasControlPlane
-        ? [
-            { id: "billing", label: "Billing", icon: CreditCard },
-            // What each member of the org may do. Cloud-only: a self-hosted
-            // deployment has no organization to grant permissions within.
-            { id: "member-permissions", label: "Member Permissions", icon: Shield },
-          ]
-        : []),
+      { id: "machines", label: "Machines", icon: Server },
+      // Tokens exist to let a self-hosted machine or headless daemon connect,
+      // so they sit with Machines.
+      { id: "tokens", label: "Access tokens", icon: KeyRound },
       { id: "git-connections", label: "GitHub", icon: Github },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      { id: "workspaces", label: "Workspaces", icon: FolderGit2 },
+      // The connections automations and workflow steps act through (Slack,
+      // Gmail, Twilio, HTTP, GitHub's integration), to find, test or revoke.
+      { id: "integrations", label: "Integrations", icon: Plug },
       { id: "projects", label: "Projects", icon: FolderOpen },
+      { id: "branches", label: "Branches", icon: GitBranch },
     ],
   },
   {
-    label: "AI & Tools",
-    items: [
-      { id: "mcp", label: "MCP Servers", icon: McpIcon },
-      { id: "browser", label: "Web Browser", icon: Globe },
-      { id: "prompts", label: "Prompts", icon: List },
-      { id: "presets", label: "Presets", icon: Layers },
-    ],
-  },
-  {
-    label: "Preferences",
+    label: "App",
     items: [
       { id: "appearance", label: "Appearance", icon: Monitor },
-      { id: "shortcuts", label: "Keyboard Shortcuts", icon: Keyboard },
+      { id: "chat-editor", label: "Chat & editor", icon: MessageSquare },
+      // Reliant's own browser is app behaviour, not something agents run on.
+      { id: "browser", label: "Built-in browser", icon: Globe },
       { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "privacy", label: "Privacy", icon: Shield },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      { id: "tokens", label: "Access Tokens", icon: KeyRound },
+      { id: "shortcuts", label: "Keyboard shortcuts", icon: Keyboard },
+      { id: "privacy", label: "Privacy", icon: Lock },
       { id: "about", label: "About", icon: Info },
       { id: "developer", label: "Developer", icon: Code },
     ],
   },
 ];
 
-function isDevBuild(): boolean {
-  const isElectron = window.RELIANT_CONFIG?.isElectron;
-  return isElectron ? Boolean(window.RELIANT_CONFIG?.isDev) : true;
+/**
+ * Developer settings (Restart Backend, the mock driver, experimental flags)
+ * are for people building Reliant: a Vite dev server, or a runtime config
+ * that says it is a dev build (an unpackaged Electron app sets isDev). A
+ * production web build is neither, so its users never see the section —
+ * SettingsViewerTab sends a deep link to /settings/developer to the first
+ * visible section instead.
+ */
+export function showDeveloperSettings(): boolean {
+  return import.meta.env.DEV || Boolean(window.RELIANT_CONFIG?.isDev);
 }
 
 /** True if the item should appear in the sidebar for the current build. */
 function isItemVisible(item: SectionItem): boolean {
-  if (item.id === "developer") return isDevBuild();
+  if (item.id === "developer") return showDeveloperSettings();
   return true;
 }
 
-/**
- * Routable section IDs in sidebar display order; used for keyboard nav.
- * External items (which open an external URL and never call `onSectionChange`)
- * are intentionally excluded so arrow-key nav never lands on a non-routable id.
- */
+/** Section IDs in sidebar display order; used for keyboard nav. */
 export function getVisibleSettingsSectionIds(): SettingsSection[] {
-  return sectionGroups.flatMap((group) =>
-    group.items
-      .filter((section) => !section.external && isItemVisible(section))
-      .map((section) => section.id as SettingsSection)
-  );
+  return sectionGroups.flatMap((group) => group.items.filter(isItemVisible).map((section) => section.id));
 }
 
 export function SettingsNavigation({
@@ -135,7 +135,7 @@ export function SettingsNavigation({
           return (
             <div key={group.label}>
               {!isCollapsed && (
-                <div className="px-3 pb-1 pt-3 text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+                <div className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
                   {group.label}
                 </div>
               )}
@@ -145,32 +145,25 @@ export function SettingsNavigation({
                   const item = (
                     <button
                       key={section.id}
-                      onClick={() => onSectionChange(section.id as SettingsSection)}
+                      onClick={() => onSectionChange(section.id)}
                       aria-label={section.label}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
                         isCollapsed ? "flex items-center justify-center px-2" : "text-left",
                         isActive
-                          ? "border-primary bg-primary/10 text-primary font-medium"
-                          : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          ? "border-primary bg-primary/10 text-primary-ink font-medium"
+                          : "border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
                       )}
                     >
                       <div className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-2.5")}>
                         <section.icon className="h-4 w-4 flex-shrink-0" />
-                        {!isCollapsed && (
-                          <div className="flex flex-1 items-center justify-between">
-                            <div className="font-medium">{section.label}</div>
-                            {section.external && (
-                              <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-50" />
-                            )}
-                          </div>
-                        )}
+                        {!isCollapsed && <div className="font-medium">{section.label}</div>}
                       </div>
                     </button>
                   );
                   return isCollapsed ? (
-                    <Tooltip key={section.id} content={section.label} placement="right" wrapperClassName="block w-full">
+                    <Tooltip key={section.id} content={section.label} side="right" triggerClassName="block w-full">
                       {item}
                     </Tooltip>
                   ) : (

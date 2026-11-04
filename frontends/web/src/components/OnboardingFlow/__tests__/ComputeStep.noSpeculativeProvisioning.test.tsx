@@ -236,7 +236,7 @@ describe("ComputeStep never provisions", () => {
   // it must not do is act on that decision. It records `compute` and advances;
   // the machine is started later, once, at the commit point.
   it("records the cloud choice and advances without creating a machine", async () => {
-    const updatePlan = vi.fn(async () => {});
+    const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
     const onNext = vi.fn();
     renderStep({ updatePlan, onNext });
 
@@ -277,11 +277,11 @@ describe("ComputeStep never provisions", () => {
   // shortcut — it writes the plan and nothing else — so it stays, but it must
   // still not provision.
   it("auto-skipping to local when a daemon appears provisions nothing", async () => {
-    const updatePlan = vi.fn(async () => {});
+    const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
     const onNext = vi.fn();
 
     await act(async () => {
-      setDaemons([makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })]);
+      setDaemons([makeDaemon({ daemonId: "d-1", status: DaemonStatus.ACTIVE })]);
       renderStep({ updatePlan, onNext });
     });
 

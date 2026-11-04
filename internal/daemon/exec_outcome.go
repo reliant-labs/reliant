@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
@@ -214,6 +215,13 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stdout, stderr string, mem OOMChe
 			out.ExitCode = 1
 		}
 		out.Stderr = appendStderr(out.Stderr, waitErrorText(cmdErr, out.TimedOut))
+		// The shell itself could not be forked: the machine's process
+		// table is full. On its own the error reads as a transient tool
+		// failure, and agents answered it with wait_for_machine, which
+		// said "connected" 44 times while nothing could fork (#1919).
+		if errors.Is(cmdErr, syscall.EAGAIN) {
+			out.Stderr = appendStderr(out.Stderr, ProcessTableFullMessage)
+		}
 	}
 
 	// A wall-clock timeout fires after far less runtime than the timeout, so
@@ -256,6 +264,15 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stdout, stderr string, mem OOMChe
 // with a cause, so that Err() is context.Canceled — the mechanism, not the
 // reason — whichever clock the deadline fired on. Name the reason, so a
 // timeout reads the same as it did when the context was a plain deadline.
+// ProcessTableFullMessage explains a command that could not start because
+// the kernel refused to fork (EAGAIN): the machine's process limit is used
+// up. The machine is connected, so waiting for it does not help.
+const ProcessTableFullMessage = "[process table full] This machine could not start the command: the kernel refused to create a new process " +
+	"(\"resource temporarily unavailable\"), because the machine's process limit is used up by the processes already running. " +
+	"The machine is connected, so waiting for it (wait_for_machine) or retrying will not help. " +
+	"Stop the commands that are no longer needed (shell_list, then shell_kill), and if commands still cannot start, " +
+	"tell the user the machine's process table is full and ask them to restart the machine."
+
 func waitErrorText(cmdErr error, timedOut bool) string {
 	if timedOut && (errors.Is(cmdErr, context.Canceled) || errors.Is(cmdErr, context.DeadlineExceeded)) {
 		return context.DeadlineExceeded.Error()
@@ -273,6 +290,14 @@ func (o *ExecOutcome) NoteHeavyTimeout(heavy bool) {
 	if heavy && o.TimedOut && heavyjob.WaitedFor(o.Stderr) {
 		o.Stderr = appendStderr(o.Stderr, heavyjob.TimeoutNote)
 	}
+}
+
+// NoteThreadLimit appends what the command's process tree reports about
+// threads the kernel refused it at a thread limit (proctree.Tree.LimitNote),
+// whatever the exit status: a command that exits 0 after a child failed to
+// start a thread still has output the note explains.
+func (o *ExecOutcome) NoteThreadLimit(note string) {
+	o.Stderr = appendStderr(o.Stderr, note)
 }
 
 func appendStderr(stderr, msg string) string {

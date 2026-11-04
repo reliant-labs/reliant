@@ -18,5 +18,8 @@ func emptyQuestionRepo() *question.MockRepository {
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+		},
 	}
 }

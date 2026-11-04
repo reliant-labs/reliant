@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
@@ -25,6 +25,8 @@ import {
 } from "@/gen/reliant/v1/catalog_pb";
 import { ConnectionAuthKind, IntegrationAuthMethodSchema, IntegrationSchema } from "@/gen/reliant/v1/connection_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
@@ -32,16 +34,19 @@ const listCatalogIntegrations = vi.fn();
 const listNodes = vi.fn();
 const listIntegrations = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    catalog: () => ({ searchCatalog, getCatalogEntry, listCatalogIntegrations }),
-    connection: () => ({ listIntegrations }),
-  },
-  getCatalogClient: () => ({ listNodes }),
-  getGRPCBaseURLPublic: () => null,
-}));
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.ListNodes": (req) => listNodes(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "CatalogService.ListCatalogIntegrations": (req) => listCatalogIntegrations(req),
+    "ConnectionService.ListIntegrations": (req) => listIntegrations(req),
+  }),
+);
 
 import { StepPalette, type StepPaletteProps } from "../StepPalette";
+import { CATALOG_SEARCH_DEBOUNCE_MS } from "../useCatalogSearch";
 
 const DISPLAY: Record<string, string> = { github: "GitHub", slack: "Slack", gmail: "Gmail" };
 
@@ -155,7 +160,6 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(within(list).queryByText("Generic action")).not.toBeInTheDocument();
     expect(listCatalogIntegrations).toHaveBeenCalledWith(
       expect.objectContaining({ kinds: [CatalogEntryKind.ACTION], pageSize: 20, pageToken: "" }),
-      expect.anything(),
     );
     // Browsing lists integrations; it does not fetch a page of raw entries.
     expect(searchCatalog).not.toHaveBeenCalled();
@@ -178,7 +182,6 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(await screen.findByText("Create issue")).toBeInTheDocument();
     expect(searchCatalog).toHaveBeenCalledWith(
       expect.objectContaining({ query: "", integration: "github", kinds: [CatalogEntryKind.ACTION] }),
-      expect.anything(),
     );
     expect(optionNamed("GitHub")).toHaveTextContent("expanded");
     // Nested under GitHub, so the row does not repeat GitHub's name or logo.
@@ -335,7 +338,7 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(within(list).getByText("Webhook")).toBeInTheDocument();
     expect(within(list).getByText("When a workflow finishes")).toBeInTheDocument();
     expect(await within(list).findByText("1 trigger · Engineering")).toBeInTheDocument();
-    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ kinds: [CatalogEntryKind.TRIGGER] }), expect.anything());
+    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ kinds: [CatalogEntryKind.TRIGGER] }));
 
     await user.keyboard("{Enter}");
     expect(handlers.onChooseBuiltinTrigger).toHaveBeenCalledWith("schedule");
@@ -348,19 +351,35 @@ describe("StepPalette: browsing (nothing typed)", () => {
 
 describe("StepPalette: searching", () => {
   it("debounces the query and sends it to SearchCatalog, narrowing built-ins locally", async () => {
-    const user = userEvent.setup();
     searchCatalog.mockImplementation((req: SearchCatalogRequest) =>
       Promise.resolve(page(req.query === "issue" ? [entry("github/issue.create@1", { name: "Create issue" })] : [])),
     );
     renderPalette();
     await screen.findByText("Call LLM");
+    expect(searchCatalog).not.toHaveBeenCalled();
 
-    await user.type(input(), "issue");
+    // Real user.type yields between keystrokes: on a loaded host those gaps
+    // can exceed the debounce, legitimately searching for "i" before "issue".
+    // Control only this test's input clock, testing the actual boundary AND
+    // cancellation of each earlier keystroke's timer, not CPU scheduling.
+    vi.useFakeTimers();
+    try {
+      for (const value of ["i", "is", "iss", "issu", "issue"]) {
+        fireEvent.change(input(), { target: { value } });
+        await act(async () => { await vi.advanceTimersByTimeAsync(CATALOG_SEARCH_DEBOUNCE_MS - 1); });
+        expect(searchCatalog).not.toHaveBeenCalled();
+      }
+      expect(screen.queryByText("Call LLM")).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const queries = searchCatalog.mock.calls.map(([req]) => (req as SearchCatalogRequest).query);
+      expect(queries).toEqual(["issue"]);
+      // Let the query observer publish its resolved response without another
+      // keystroke or a real-time waitFor advancing our debounce clock.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    } finally {
+      vi.useRealTimers();
+    }
     await screen.findByText("Create issue");
-    const queries = searchCatalog.mock.calls.map(([req]) => (req as SearchCatalogRequest).query);
-    // One request for the settled query: not one per keystroke, and none for the empty browse.
-    expect(queries).toEqual(["issue"]);
-    expect(screen.queryByText("Call LLM")).not.toBeInTheDocument();
     // A search result names its integration, since it is not under one.
     expect(within(optionNamed("Create issue")).getByText("GitHub")).toBeInTheDocument();
   });
@@ -419,7 +438,7 @@ describe("StepPalette: searching", () => {
 
     for (let i = 0; i < 5; i++) await user.keyboard("{ArrowDown}");
     await screen.findByText("Last action");
-    expect(searchCatalog).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "p2" }), expect.anything());
+    expect(searchCatalog).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "p2" }));
     expect(screen.getByText(/6 of 6/)).toBeInTheDocument();
   });
 
@@ -496,13 +515,20 @@ describe("StepPalette: searching", () => {
 
   it("shows designed error-with-retry and empty states", async () => {
     const user = userEvent.setup();
-    searchCatalog.mockRejectedValueOnce(new Error("down"));
+    // Fail the "zzzz" search itself, not whichever call comes first: under
+    // load the debounce can settle on a prefix mid-typing, and a one-shot
+    // rejection would land on that stale search instead.
+    let down = true;
+    searchCatalog.mockImplementation(async (req: SearchCatalogRequest) => {
+      if (down && req.query === "zzzz") throw new Error("down");
+      return page([]);
+    });
     renderPalette();
     await screen.findByText("Call LLM");
 
     await user.type(input(), "zzzz");
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't search integrations.");
-    searchCatalog.mockResolvedValue(page([]));
+    down = false;
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No steps match “zzzz”")).toBeInTheDocument();
   });

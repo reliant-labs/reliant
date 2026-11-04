@@ -18,11 +18,13 @@ import {
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
+import { ON_WORKFLOWS_HREF } from "../../lib/workflowsArea";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { useShortcutHost } from "../../hooks/useShortcutHost";
 import type { SettingsSection } from "../../routeSchemas";
+import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 
 interface Command {
   id: string;
@@ -144,12 +146,12 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
       {
         id: "automations",
         title: "Automations",
-        description: "Workflows that run on a schedule",
+        description: "Workflows that run by themselves, in every project",
         icon: <CalendarClock className="w-4 h-4" />,
         category: "navigation",
         keywords: ["schedule", "trigger", "cron", "automation"],
-        available: !isAt("/workflows/automations"),
-        action: () => navigate({ to: '/workflows/automations' }),
+        available: true,
+        action: () => navigate({ href: ON_WORKFLOWS_HREF }),
       },
       {
         id: "inbox",
@@ -209,8 +211,8 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         icon: <Bot className="w-4 h-4" />,
         category: "settings",
         keywords: ["api", "key", "openai", "anthropic", "claude"],
-        available: pathname !== "/settings/general",
-        action: goTo('general'),
+        available: pathname !== "/settings/ai",
+        action: goTo('ai'),
       },
       {
         id: "privacy",
@@ -229,7 +231,8 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         icon: <Code className="w-4 h-4" />,
         category: "settings",
         keywords: ["debug", "dev", "advanced"],
-        available: pathname !== "/settings/developer",
+        // Same rule as the settings nav: dev builds only.
+        available: pathname !== "/settings/developer" && showDeveloperSettings(),
         action: goTo('developer'),
       },
       {
@@ -432,7 +435,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
                         >
                           <div className={cn(
                             "flex-shrink-0",
-                            highlightedIndex === globalIndex ? "text-primary" : "text-muted-foreground"
+                            highlightedIndex === globalIndex ? "text-primary-ink" : "text-muted-foreground"
                           )}>
                             {cmd.icon}
                           </div>

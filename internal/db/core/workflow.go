@@ -19,6 +19,14 @@ type Workflow struct {
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	WorkerStartedAt *time.Time     `json:"worker_started_at,omitempty"`
 	WorkerStoppedAt *time.Time     `json:"worker_stopped_at,omitempty"`
+	// StartFailedAt is when the last attempt to start this PENDING run in
+	// Temporal failed, and nil while no failed attempt is outstanding. It is
+	// what tells a stranded launch (PENDING, set) from a start in flight
+	// (PENDING, nil): the launcher sets it on a failed start and clears it
+	// when a retry of that start begins, and the reconciler sets it on a
+	// PENDING root whose run never reached Temporal within its bound. It means
+	// nothing once the run has left PENDING.
+	StartFailedAt *time.Time `json:"start_failed_at,omitempty"`
 	// OwnerUserID is who this run belongs to.
 	//
 	// A run has to know its own owner: activities need an identity to load API
@@ -39,6 +47,12 @@ type Workflow struct {
 	// judgement. nil means the workflow declared no outcome, which is NOT a
 	// failure — most workflows declare nothing.
 	Outcome *string `json:"outcome,omitempty"`
+
+	// FailureDetail is why the run FAILED: the error it ended with, written
+	// with the failed status and cleared when the row goes live again. It is
+	// the only record of a run that failed before any node ran, which has no
+	// node attempt to carry its error. nil when the run did not fail.
+	FailureDetail *string `json:"failure_detail,omitempty"`
 }
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last
@@ -47,11 +61,14 @@ type Workflow struct {
 // run at position when the next user message starts a fresh Temporal run.
 // One row per workflow ID (workflow IDs are reused across runs for a chat).
 type WorkflowCheckpoint struct {
-	WorkflowID    string    `json:"workflow_id"`
-	ChatID        string    `json:"chat_id"`
-	NodeID        string    `json:"node_id"`
-	LoopIteration int64     `json:"loop_iteration"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	WorkflowID    string `json:"workflow_id"`
+	ChatID        string `json:"chat_id"`
+	NodeID        string `json:"node_id"`
+	LoopIteration int64  `json:"loop_iteration"`
+	// CatalogPin is the workflow catalog the run at this position started
+	// with (db.Repo.PinProjectCatalog); "" for a run with no pin.
+	CatalogPin string    `json:"catalog_pin,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // StepExecution represents a single execution of a workflow step.

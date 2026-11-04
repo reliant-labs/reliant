@@ -38,8 +38,5 @@ describe("isModalAllowedOnRoute", () => {
     // explain why it failed. Suppressing them would turn a clear error into a
     // silent no-op, which is worse than the overlap.
     expect(isModalAllowedOnRoute("upgrade-required", "/onboarding")).toBe(true);
-    expect(isModalAllowedOnRoute("billing-email-required", "/onboarding")).toBe(
-      true,
-    );
   });
 });

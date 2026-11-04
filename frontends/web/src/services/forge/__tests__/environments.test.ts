@@ -297,7 +297,7 @@ describe("daemonSideOf", () => {
     const disabled = new ConnectError(
       "the forge API is disabled in this deployment",
       Code.FailedPrecondition,
-      new Headers({ "x-reliant-reason": "forge_api_disabled" })
+      new Headers({ "x-forge-error-reason": "forge_api_disabled" })
     );
     expect(daemonSideOf(undefined, disabled)).toBe("disabled");
     // Without the reason it is not the switch: FailedPrecondition alone is

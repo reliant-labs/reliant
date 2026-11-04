@@ -3,6 +3,8 @@ package toolexec
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -11,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // daemonCancelPushTimeout bounds the detached "stop that tool" push sent when a
@@ -70,6 +73,13 @@ type RemoteExecutor struct {
 	// preemptGrace overrides defaultPreemptReplyGrace. Zero means the default;
 	// tests shorten it.
 	preemptGrace time.Duration
+
+	// placementOf resolves a tool's placement. Nil means tools.PlacementOf;
+	// tests substitute it to declare a tool the registry does not have.
+	placementOf func(name string) (tools.Placement, error)
+
+	// egress bounds the egress tools executeOnServer runs; nil admits all.
+	egress EgressLimiter
 }
 
 // ToolExecutionRequest is the payload sent to daemon over WebSocket
@@ -120,7 +130,8 @@ func (e *RemoteExecutor) SetDaemonRouter(router DaemonRouter) {
 }
 
 // ExecuteTool executes a tool via server-side or daemon-side execution based on the tool's placement.
-// PlacementDaemon tools are dispatched to the user's daemon; server/any tools execute in-process.
+// PlacementDaemon tools are dispatched to the user's daemon; server/any tools execute in-process;
+// PlacementPreferDaemon tools try the daemon and fall back to the server (executePreferDaemon).
 func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*ToolResult, error) {
 	startTime := time.Now()
 
@@ -174,7 +185,11 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 		ctx = WithDaemonReconnectWait(ctx, nil)
 	}
 
-	placement, err := tools.PlacementOf(req.ToolName)
+	resolvePlacement := e.placementOf
+	if resolvePlacement == nil {
+		resolvePlacement = tools.PlacementOf
+	}
+	placement, err := resolvePlacement(req.ToolName)
 	if err != nil {
 		return nil, err
 	}
@@ -194,14 +209,97 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 			}, nil
 		}
 		return e.executeOnDaemon(ctx, req, startTime)
+	case tools.PlacementPreferDaemon:
+		return e.executePreferDaemon(ctx, req, startTime)
 	case tools.PlacementServer, tools.PlacementAny:
 		return e.executeOnServer(ctx, req, startTime)
 	}
 	return nil, fmt.Errorf("unexpected placement %q for tool %q", placement, req.ToolName)
 }
 
+// executePreferDaemon runs a PlacementPreferDaemon tool on the run's machine
+// when it has one and on the server otherwise; the semantics are documented on
+// tools.PlacementPreferDaemon. It never fails a call for want of a daemon.
+func (e *RemoteExecutor) executePreferDaemon(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	switch {
+	case nomachine.Is(ctx):
+		return e.runPreferDaemonOnServer(ctx, req, startTime, FallbackNoMachine)
+	case e.router == nil:
+		return e.runPreferDaemonOnServer(ctx, req, startTime, FallbackNoRouter)
+	}
+
+	// The server can run this tool, so do not wait for a disconnected daemon
+	// to come back (rideOutDisconnect): fail over at once.
+	res, err := e.executeOnDaemon(WithoutDaemonReconnectWait(ctx), req, startTime)
+	if err != nil {
+		return nil, err
+	}
+	// An abandoned call stays the daemon's: re-running it on the server would
+	// do the work nobody is waiting for.
+	if !preferDaemonDispatchFailed(res) || ctx.Err() != nil {
+		noteDaemonRefusal(req.ToolName, res)
+		return notePlacement(req.ToolName, res, ExecutedAtDaemon, ""), nil
+	}
+	logging.WarnContext(ctx, "Prefer-daemon tool could not run on the daemon; running it on the server",
+		"toolName", req.ToolName, "toolCallID", req.ToolCallID, "errorCode", res.ErrorCode, "error", res.ErrorMessage)
+	return e.runPreferDaemonOnServer(ctx, req, startTime, FallbackDispatchFailed)
+}
+
+// preferDaemonDispatchFailed reports whether a daemon attempt produced no
+// answer from the tool itself: the round trip did not complete, or the daemon
+// does not have the tool. A tool's own failure is an answer and is returned.
+func preferDaemonDispatchFailed(res *ToolResult) bool {
+	return IsTransportErrorCode(res.ErrorCode) || res.ErrorCode == "TOOL_NOT_FOUND"
+}
+
+func (e *RemoteExecutor) runPreferDaemonOnServer(ctx context.Context, req *ToolRequest, startTime time.Time, reason string) (*ToolResult, error) {
+	res, err := e.executeOnServer(ctx, req, startTime)
+	if err != nil {
+		return nil, err
+	}
+	return notePlacement(req.ToolName, res, ExecutedAtServer, reason), nil
+}
+
+// notePlacement records where a prefer-daemon call ran: on the result, in the
+// "_placement" key of its metadata document, and on the placement metric. The
+// note goes into object-shaped (or empty) Metadata and leaves any other
+// Metadata untouched, like the truncation note (tools.withTruncationMetadata);
+// every other field of the result is identical wherever the call ran.
+func notePlacement(toolName string, res *ToolResult, ranAt, reason string) *ToolResult {
+	res.ExecutedAt, res.FallbackReason = ranAt, reason
+	observability.ToolPlacementTotal.WithLabelValues(toolName, ranAt, reason).Inc()
+
+	doc := map[string]any{}
+	if res.Metadata != "" {
+		if err := json.Unmarshal([]byte(res.Metadata), &doc); err != nil || doc == nil {
+			return res
+		}
+	}
+	if _, taken := doc[tools.PlacementMetadataKey]; taken {
+		return res
+	}
+	note := map[string]any{"ran_at": ranAt}
+	if reason != "" {
+		note["fallback_reason"] = reason
+	}
+	doc[tools.PlacementMetadataKey] = note
+	if merged, err := json.Marshal(doc); err == nil {
+		res.Metadata = string(merged)
+	}
+	return res
+}
+
 // executeOnServer runs a tool in-process via the server executor.
 func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	// Every egress tool passes here, so this is the one place its rate and
+	// concurrency are bounded. A refusal is a tool result, not an error: the
+	// model reads "rate limited, retry after Ns" and the run continues.
+	releaseEgress, refusal := e.admitEgress(ctx, req, startTime)
+	if refusal != nil {
+		return refusal, nil
+	}
+	defer releaseEgress()
+
 	timeoutMs := 0
 	if req.Timeout > 0 {
 		timeoutMs = int(req.Timeout.Milliseconds())
@@ -283,8 +381,16 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 		}
 		contextMap["repos"] = repos
 	}
+	if req.RunStep {
+		contextMap[RunStepContextKey] = true
+	}
 	return contextMap
 }
+
+// RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
+// executing tool (rctx.ToolContext.RunStep). The context map is built here,
+// from server-side fields only; a model's tool input never reaches it.
+const RunStepContextKey = "run_step"
 
 // executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
 // Used for tools that must run in the user's environment (e.g., bash, shell commands).
@@ -376,8 +482,12 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 			ErrorMessage:  err.Error(),
 			ErrorCode:     ErrorCodeDaemonUnreached,
 			DaemonPending: IsDaemonPending(err),
-			StartTime:     startTime,
-			EndTime:       time.Now(),
+			NotDispatched: errors.Is(err, ErrNotDispatched),
+			// The machine it was addressed to: no daemon answered, so this
+			// names the one a caller would wait for.
+			DaemonID:  NotDispatchedDaemonID(err),
+			StartTime: startTime,
+			EndTime:   time.Now(),
 		}, nil
 	}
 
@@ -400,8 +510,9 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		// A transport failure the gateway answered for — the daemon's
 		// connection dropped under the request, or the gateway was too busy
 		// to deliver it — is a reply, but not from the daemon: it proves
-		// nothing about the machine being reachable.
-		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode),
+		// nothing about the machine being reachable. A restarted daemon's
+		// "interrupted by restart" is from the daemon, so it does.
+		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode) || resp.ErrorCode == ErrorCodeDaemonRestarted,
 		DaemonID:     resp.DaemonID,
 		StartTime:    startTime,
 		EndTime:      time.Now(),

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +32,7 @@ func worktreeIDs(ws []*Worktree) []string {
 // The active list never carries archived rows, the archived list carries only
 // them, and main_only finds the main workspace without paging the rest.
 func TestListWorktrees_ActiveArchivedAndMainAreSeparateQueries(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

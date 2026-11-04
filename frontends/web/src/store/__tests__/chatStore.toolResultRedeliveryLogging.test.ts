@@ -186,7 +186,7 @@ describe("tool-result re-delivery logging", () => {
     // individual lines the old code emitted. Other debug logging on this path
     // is unrelated, so count only the aggregate.
     const aggregates = debugSpy.mock.calls.filter(
-      (call) =>
+      (call: unknown[]) =>
         typeof call[0] === "string" && /re-delivered tool results/i.test(call[0]),
     );
     expect(aggregates).toHaveLength(3);

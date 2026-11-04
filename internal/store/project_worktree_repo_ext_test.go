@@ -186,15 +186,6 @@ func TestRepoQueries(t *testing.T) {
 		t.Fatalf("ListReposByProject = %v, %v; want [root a b]", list, err)
 	}
 
-	if err := store.ReplaceRepo(ctx, env.ORM, &core.Repo{ID: "repo-a", Name: "a2", RemoteURL: strp("https://t@github.com/acme/a.git")}); err != nil {
-		t.Fatalf("ReplaceRepo: %v", err)
-	}
-	if r, _ := env.Repo.GetRepo(ctx, "repo-a"); r.Name != "a2" || *r.RemoteURL != "https://github.com/acme/a.git" || r.RelativePath != "a" || !r.UpdatedAt.After(base) {
-		t.Fatalf("after ReplaceRepo = %+v", r)
-	}
-	if err := store.ReplaceRepo(ctx, env.ORM, &core.Repo{ID: "repo-missing", Name: "x"}); err != nil {
-		t.Fatalf("ReplaceRepo(missing): %v", err)
-	}
 	if err := store.RemoveRepo(ctx, env.ORM, "repo-a"); err != nil {
 		t.Fatalf("RemoveRepo: %v", err)
 	}
@@ -313,12 +304,6 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 	m, err := store.ListVisibilityOverrides(ctx, env.ORM, "u", wf)
 	if err != nil || len(m) != 2 || m["s0"] || !m["s1"] {
 		t.Fatalf("ListVisibilityOverrides = %v, %v", m, err)
-	}
-	if err := store.RemoveVisibilityOverride(ctx, env.ORM, "u", wf, "s1"); err != nil {
-		t.Fatalf("RemoveVisibilityOverride: %v", err)
-	}
-	if v, _ := env.Repo.GetVisibilityOverride(ctx, "u", int32(wf), "s1"); v != nil {
-		t.Fatalf("override survived RemoveVisibilityOverride: %v", *v)
 	}
 
 	p := storetest.SeedProjectID
@@ -517,7 +502,7 @@ func TestWorktreeQueries(t *testing.T) {
 	}
 	reclaim, err := store.ListWorktreesForReclaim(ctx, env.ORM)
 	if err != nil || len(reclaim) != 2 || reclaim[0].Worktree.ID != "wt-b" || reclaim[1].Worktree.ID != "wt-a" ||
-		reclaim[0].OwnerUserID != storetest.SeedUserID || reclaim[0].ProjectPath == "" || reclaim[0].Worktree.CleanupMetadata == nil {
+		reclaim[0].OwnerUserID != storetest.SeedUserID || reclaim[0].ProjectPath != "" || reclaim[0].Worktree.CleanupMetadata == nil {
 		t.Fatalf("ListWorktreesForReclaim = %+v, %v", reclaim, err)
 	}
 	twinReclaim, err := env.Repo.ListWorktreesForReclaim(ctx)
@@ -544,12 +529,16 @@ func TestWorktreeQueries(t *testing.T) {
 		t.Fatalf("cleanup metadata not cleared: %+v", w.CleanupMetadata)
 	}
 
-	// Adopt fills daemon_id once.
-	if err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-2"); err != nil {
-		t.Fatalf("AdoptWorktreeDaemon: %v", err)
+	// Adopt fills daemon_id once, and every caller learns the persisted
+	// winner: a second resolver nominating another machine is told the first.
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-2"); err != nil || got != "daemon-2" {
+		t.Fatalf("AdoptWorktreeDaemon = %q, %v; want daemon-2", got, err)
 	}
-	if err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-3"); err != nil {
-		t.Fatalf("AdoptWorktreeDaemon(again): %v", err)
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-b", "daemon-3"); err != nil || got != "daemon-2" {
+		t.Fatalf("AdoptWorktreeDaemon(again) = %q, %v; want the recorded daemon-2", got, err)
+	}
+	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-missing", "daemon-3"); err != nil || got != "" {
+		t.Fatalf("AdoptWorktreeDaemon(missing row) = %q, %v; want \"\"", got, err)
 	}
 	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.DaemonID == nil || *w.DaemonID != "daemon-2" {
 		t.Fatalf("after adopt = %v", w.DaemonID)
@@ -602,5 +591,65 @@ func TestWorktreeQueries(t *testing.T) {
 	var n int
 	if err := env.ORM.QueryRow(ctx, `SELECT count(*) FROM worktrees WHERE id = 'wt-b'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("wt-b rows = %d, %v; want a hard delete", n, err)
+	}
+}
+
+// The repository a reclaim runs git in is the owner's INSTALLED checkout of
+// the project, and nothing else: not projects.path (another machine's path),
+// not a clone still landing or one that failed, and nothing at all for a row
+// with no owner. Those list with no path, and the sweep skips every step that
+// needs one.
+func TestReclaimListsOnlyTheOwnersInstalledCheckout(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+
+	owned := func(id, owner string) {
+		w := newWorktree(id, id, "feat/"+id, base)
+		if owner != "" {
+			w.DaemonID = strp(owner)
+		}
+		if err := store.InsertWorktree(ctx, env.ORM, w); err != nil {
+			t.Fatalf("InsertWorktree(%s): %v", id, err)
+		}
+	}
+	owned("wt-installed", "d-installed")
+	owned("wt-cloning", "d-cloning")
+	owned("wt-failed", "d-failed")
+	owned("wt-norow", "d-norow")
+	owned("wt-noowner", "")
+	p := storetest.SeedProjectID
+	if err := store.RecordProjectDaemonInstalled(ctx, env.ORM, p, "d-installed", "/srv/checkout", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordProjectDaemonQueued(ctx, env.ORM, p, "d-cloning", "/srv/landing", nil, "req-c"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordProjectDaemonQueued(ctx, env.ORM, p, "d-failed", "/srv/failed", nil, "req-f"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveQueuedProjectDaemon(ctx, env.ORM, "req-f", "clone failed"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.ListWorktreesForReclaim(ctx, env.ORM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]string{}
+	for _, c := range got {
+		paths[c.Worktree.ID] = c.ProjectPath
+	}
+	want := map[string]string{
+		"wt-installed": "/srv/checkout",
+		"wt-cloning":   "",
+		"wt-failed":    "",
+		"wt-norow":     "",
+		"wt-noowner":   "",
+	}
+	for id, path := range want {
+		if p, ok := paths[id]; !ok || p != path {
+			t.Errorf("%s: project path = %q (listed %v), want %q", id, p, ok, path)
+		}
 	}
 }

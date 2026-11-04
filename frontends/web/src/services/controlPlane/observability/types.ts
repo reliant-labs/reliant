@@ -15,6 +15,8 @@
  * component.
  */
 
+import type { SeriesMeta } from "./metricsTypes";
+
 /** A resolved, absolute time window. `endMs` is exclusive. */
 export interface TimeWindow {
   startMs: number;
@@ -38,6 +40,11 @@ export interface ObsScope {
   projectId?: string;
   /** control-plane environment ids (stamped on telemetry as `reliant.env.id`). Empty: every environment. */
   envIds: string[];
+  /**
+   * Read platform telemetry, which belongs to no environment (a platform
+   * dashboard's signals). Names no environment or project; tenant zero only.
+   */
+  platformScope?: boolean;
   /** ANDed attribute predicates over allowlisted keys (attributes.ts). */
   filters: AttributeFilter[];
 }
@@ -123,6 +130,18 @@ export interface TraceSummary extends Provenance {
   spanCount: number;
   errorCount: number;
   services: string[];
+  /** The user the trace served: a backend span's authenticated user.id, else the id the page reported. Empty: none. */
+  userId: string;
+  /** The browser session the trace belongs to. Empty: no browser started it. */
+  sessionId: string;
+  /**
+   * Where the browser was: derived by the platform at ingest from the address it
+   * connected from, never reported by the page. ISO 3166-1 alpha-2 country and
+   * English region/city names; empty when unknown.
+   */
+  country: string;
+  region: string;
+  city: string;
 }
 
 /** Rate, errors and duration over every trace the filters matched in the window — not just one page. */
@@ -144,6 +163,10 @@ export interface ListTracesRequest extends ObsScope {
   services: string[];
   errorsOnly: boolean;
   minDurationMs: number;
+  /** Only traces of this user id. Empty: every trace. */
+  userId?: string;
+  /** Only traces of this browser session. Empty: every trace. */
+  sessionId?: string;
   limit: number;
   cursor?: string;
   /** Up to 3 keys: the response gains one RED summary per group. */
@@ -186,6 +209,8 @@ export interface Span extends Provenance {
   attributes: Record<string, string>;
   resource: Record<string, string>;
   events: SpanEvent[];
+  /** OTel links are causal references, not parent/child edges. */
+  links?: { traceId: string; spanId: string }[];
 }
 
 export interface Trace {
@@ -193,6 +218,9 @@ export interface Trace {
   spans: Span[];
   /** The server capped the span count; the waterfall is a lower bound. */
   truncated: boolean;
+  /** Spans in other traces that link to this trace, within the same authorized scope. */
+  relatedTraces?: { traceId: string; spanId: string; linkedSpanId: string }[];
+  relatedTracesTruncated?: boolean;
 }
 
 // ── Panels ───────────────────────────────────────────────────────────────────
@@ -204,6 +232,8 @@ export interface Series {
   group: Record<string, string>;
   timestamps: number[];
   values: (number | null)[];
+  /** Metrics panels: which points' buckets are still open (draw dashed). Absent on every other signal. */
+  partial?: boolean[];
   /** A number panel's value. */
   value: number | null;
 }
@@ -217,6 +247,8 @@ export interface QueryPanelRequest extends ObsScope {
   stepSeconds: number;
   /** Non-empty REPLACES the panel's own group-by (the in-place control). Max 3. */
   groupBy?: string[];
+  /** Compile the panel without running it: the result carries `compiledSql` and no data. */
+  explain?: boolean;
 }
 
 /**
@@ -239,6 +271,40 @@ export interface PanelResult {
   issues: PanelIssue[];
   /** sessions panels: browser sessions that started in the window, newest first. */
   sessions: PanelSession[];
+  /** Metrics panels: what each entry of `series` measures, in order. Empty for every other signal. */
+  seriesMeta: SeriesMeta[];
+  /** Series (groups) that matched before the cap; 0 when unknown. Compare with `series.length`. */
+  seriesTotal: number;
+  /**
+   * Non-fatal notes, "<code>" or "<code>: <detail>": mixed_bounds, mixed_temporality, step_raised,
+   * metric_stored_as_n_kinds, metric_kind_mismatch, and metric_absent (a series' metric has no data
+   * in the scope and range; its series is empty).
+   */
+  warnings: string[];
+  /** With `explain`: the statements the panel compiles to. Empty otherwise. */
+  compiledSql: CompiledStatement[];
+  /** The window this answers, so a chart's x axis is the window asked for, not the extent of what came back. */
+  window?: TimeWindow;
+  /** sql time series: the width of one bucket in seconds as the statement produced it; 0 or absent when unknown. */
+  bucketSeconds?: number;
+  /** sql time series: "UTC" when the points are calendar dates (labelled as that date, never converted); absent for instants. */
+  bucketTimezone?: string;
+  /** heatmap panels: the non-empty cells, by time then value. */
+  heatmap?: HeatmapCellResult[];
+}
+
+/** One heatmap cell: the events whose value fell in [low, high) in the bucket starting at `timeSec`. */
+export interface HeatmapCellResult {
+  timeSec: number;
+  low: number;
+  high: number;
+  count: number;
+}
+
+/** One statement a panel compiles to: SQL with {name:Type} placeholders and the parameter values. */
+export interface CompiledStatement {
+  sql: string;
+  params: Record<string, string>;
 }
 
 /** One step of a funnel panel: how many journeys reached it (and every step before it). */
@@ -343,8 +409,27 @@ export interface SeriesIntent {
 
 /** traces | metrics | logs */
 export type Signal = string;
-/** number | line | table | bar | heatmap | sql | search | funnel | issues | sessions */
+/** number | line | table | bar | heatmap | sql | search | funnel | issues | sessions | postgres | text — any other string is a kind a newer forge added, drawn as "not yet". */
 export type PanelKind = string;
+
+/**
+ * How a line, bar, number or sql panel is drawn (forge dashspec Display). It
+ * never changes the query. A style this console does not know is drawn as the
+ * kind's default, so a spec from a newer forge still renders.
+ */
+export interface PanelDisplay {
+  /** line/sql: line | area | bars; bar: bar | pie | donut; number: stat | gauge; sql also: funnel. */
+  style?: string;
+  /** Stack the series (area or bars; a bar panel's bars). */
+  stack?: boolean;
+  /** A bar panel's bars along the y axis. */
+  horizontal?: boolean;
+  /** A gauge's scale; min defaults to 0, max to 1 for a percent panel. */
+  min?: number;
+  max?: number;
+  /** Series (or slices) drawn before the rest fold into "Other". */
+  topN?: number;
+}
 
 /**
  * What a funnel panel draws (forge.Funnel): product event names in order,
@@ -359,8 +444,30 @@ export interface PanelFunnel {
 }
 export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
+/**
+ * What a postgres panel draws (forge dashspec PostgresQuery): one read-only
+ * statement run live against one of the environment's databases, as the
+ * database's dashboard role. $1 (from), $2 (to) and $3 (step seconds) are
+ * bound, never spliced.
+ */
+export interface PanelPostgres {
+  /** The database's name, as `forge db query` takes it. */
+  database: string;
+  sql: string;
+  /** auto (or empty) | line | number | table | bar. */
+  draw?: string;
+  /** The result column holding each row's timestamp; a line needs it. */
+  time?: string;
+  /** The numeric result columns to plot; empty is every one that is not time or a group. */
+  values?: string[];
+  /** The result columns that split rows into series. */
+  group?: string[];
+}
+
 export interface Panel {
   id: string;
+  /** Optional dashboard section; viewer visibility never edits this association. */
+  section?: string;
   title: string;
   description?: string;
   kind: PanelKind;
@@ -380,6 +487,14 @@ export interface Panel {
   limit?: number;
   /** sql panels only: one read-only SELECT, under the alert-rule guard and limits. */
   sql?: string;
+  /** sql panels only: the narrowest bucket the statement produces ("1d"); a window shorter than it is widened. */
+  minStep?: string;
+  /** text panels only: Markdown, drawn with no query. */
+  markdown?: string;
+  /** postgres panels only: the statement and how its result is drawn. */
+  postgres?: PanelPostgres;
+  /** How the panel's data is drawn; absent is the kind's default. */
+  display?: PanelDisplay;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;
@@ -387,6 +502,8 @@ export interface Panel {
 }
 
 export interface DashboardFilter {
+  /** Empty or absent targets all panels. Never infer targeting from panel titles. */
+  panelIds?: string[];
   id: string;
   label: string;
   field: string;
@@ -405,12 +522,21 @@ export interface DashboardAnnotation {
 }
 
 export interface Dashboard {
+  /**
+   * Which telemetry the panels read. `project` (absent): the selected
+   * environments of the route's project. `org`: every project's environments.
+   * `platform`: the signals belong to no environment, so none is filtered on.
+   */
+  scope?: "project" | "org" | "platform";
+  sections?: { id: string; title: string }[];
   id: string;
   title: string;
   description?: string;
   filters: DashboardFilter[];
   /** Declared marker series; empty when the dashboard declares none. */
   annotations?: DashboardAnnotation[];
+  /** The range the dashboard opens on when the URL names none ("7d"), rounded up to a preset. */
+  defaultRange?: string;
   panels: Panel[];
 }
 
@@ -456,6 +582,34 @@ export interface Flamegraph {
   /** The types this service has in the window, for the picker. */
   availableProfileTypes: string[];
   /** The heaviest stacks were kept and the rest cut. */
+  truncated: boolean;
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+/** The signals a service has a view of its own for (GetServiceSignals). */
+export const SERVICE_SIGNALS = ["logs", "traces", "profiles"] as const;
+export type ServiceSignal = (typeof SERVICE_SIGNALS)[number];
+
+export interface GetServiceSignalsRequest extends ObsScope {
+  window: TimeWindow;
+}
+
+/** One service: what it sends, and what the current release of its environments switches on. */
+export interface ServiceSignals {
+  service: string;
+  /** Signals with data from the service in the window. */
+  emitting: ServiceSignal[];
+  /** Signals the release declares on; meaningful only when `declarationKnown`. */
+  declared: ServiceSignal[];
+  /** False: no environment in scope records the workload's spec, so nothing is known of what it declares. */
+  declarationKnown: boolean;
+}
+
+export interface ServiceSignalsResult {
+  /** By service name. */
+  services: ServiceSignals[];
+  /** More services sent data than the server lists (500). */
   truncated: boolean;
 }
 

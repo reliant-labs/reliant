@@ -23,7 +23,12 @@ type ProjectConfigRecord struct {
 	// "gvisor"); nil for local/unknown daemons. Captured from the pushing
 	// daemon's registration label at config-snapshot persist time.
 	RuntimeType *string
-	PushedAt    time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// RepoStatesJSON is the git state the pushing machine's .reliant files
+	// were read from (config.SyncedRepoState JSON array). It is the
+	// machine's, kept on its catalog row (project_machine_catalogs), never
+	// on the project's record.
+	RepoStatesJSON *string
+	PushedAt       time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }

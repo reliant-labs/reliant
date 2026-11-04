@@ -50,43 +50,6 @@ func kindForScopes(scopes []string) reliantv1.TokenKind {
 	return kind
 }
 
-// daemonCeiling is the authority a DAEMON credential is given where the
-// control plane can clip it: daemon:connect, plus the control-plane authority
-// ExchangeToken may derive for forge. It matches what `reliant daemon
-// register` asks for and the control-plane half of what control-plane
-// provisions for a managed daemon (requestedDaemonScopes), so the app's daemon
-// is not the one machine where a deploy needs a second login. Not reliant:api:
-// a daemon's credential stays a daemon's, not an API credential.
-func daemonCeiling() fat.Set {
-	set := fat.SetOf(fat.ScopeDaemonConnect)
-	for _, s := range exchangeableScopes {
-		set[s] = struct{}{}
-	}
-	return set
-}
-
-// widenDaemonCredential gives a just-minted daemon credential the user's own
-// control-plane authority, clipped by the control plane to their org grants.
-//
-// TWO STEPS, NARROW FIRST, ON PURPOSE. MintForUser does not clip, so minting
-// the ceiling directly would hand a member without a deploy grant a token that
-// has one. UpdateForUser does clip (control-plane's access_token_internal), so
-// mint narrow, then widen through the clip. A failed widen leaves a working,
-// narrower daemon credential and is logged, never surfaced: the daemon still
-// connects, and ExchangeToken will say what it lacks.
-func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
-	if !s.deps.ControlPlane.ClipsGrants {
-		return nil
-	}
-	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
-	if err != nil {
-		logging.WarnContext(ctx, "daemon credential minted without control-plane authority", "user_id", userID,
-			"token_id", tokenID, "error", tokenauthority.Describe(err))
-		return nil
-	}
-	return info.Scopes
-}
-
 // callerUser returns the authenticated user and whether the caller is a
 // machine credential rather than an interactive session.
 func callerUser(ctx context.Context) (string, bool, error) {
@@ -175,18 +138,18 @@ func (s *Service) CreateToken(
 		expiresAt = &at
 	}
 
+	// The kind's one scope, and nothing else. A DAEMON credential minted by
+	// the control plane holds EVERY scope its person holds from that alone,
+	// resolved at each use (control-plane accesstoken/wildcard.go), so no
+	// list named here can go stale when forge adds a scope; a self-hosted
+	// store mints exactly daemon:connect.
 	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
 		UserID: userID, Name: name, Scopes: []fat.Scope{scope}, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		return nil, authorityError("create", err)
 	}
-	scopes := []string{string(scope)}
-	if scope == fat.ScopeDaemonConnect {
-		if widened := s.widenDaemonCredential(ctx, userID, minted.TokenID); widened != nil {
-			scopes = widened
-		}
-	}
+	scopes := minted.Scopes
 	logging.InfoContext(ctx, "access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
 	return connect.NewResponse(&reliantv1.CreateTokenResponse{
 		Info: &reliantv1.TokenInfo{
@@ -196,8 +159,8 @@ func (s *Service) CreateToken(
 			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:   formatTime(minted.ExpiresAt),
 			Kind:        req.Msg.GetKind(),
-			// What the token carries: the kind's scope, or a daemon
-			// credential's clipped ceiling. Built by hand rather than through
+			// What the token carries, as the authority reports it — for a
+			// daemon credential, its resolved wildcard. Built by hand rather than through
 			// tokenInfoProto because a mint returns Minted, not TokenInfo —
 			// which is exactly why this field was missing while the list
 			// reported it.

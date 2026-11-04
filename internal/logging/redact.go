@@ -57,7 +57,9 @@ var secretValuePatterns = []struct {
 	// sentence about a token, not a token.
 	{regexp.MustCompile(`(?i)\b((?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token)=)("[^"]*"|'[^']*'|[^\s,;&]+)`), "${1}" + redacted},
 	// "name":"value" for the same names, as JSON or a Go %#v dump.
-	{regexp.MustCompile(`(?i)("(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|authorization)"\s*:\s*)"[^"]*"`), `${1}"` + redacted + `"`},
+	{regexp.MustCompile(`(?i)("(?:[a-z0-9_-]*[_-])?(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|authorization|cookie|set-cookie|credentials?|private[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*"`), `${1}"` + redacted + `"`},
+	{regexp.MustCompile(`(?i)\b((?:[a-z0-9_-]*[_-])(?:secret|password|token|credential|private[_-]?key)=)("[^"]*"|'[^']*'|[^\s,;&]+)`), "${1}" + redacted},
+	{regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----.*?-----END (?:[A-Z ]*PRIVATE KEY)-----`), redacted},
 }
 
 // secretKeyPattern matches an attribute key that names a secret, whatever its
@@ -108,6 +110,16 @@ func (redactor) replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	default:
 		return a
 	}
+}
+
+// RedactText masks the same credential patterns as structured logs. Callers
+// exposing diagnostic text must also bound the result; unlike log attributes,
+// command tails need to preserve multiple lines.
+func RedactText(s string) string {
+	for _, p := range secretValuePatterns {
+		s = p.re.ReplaceAllString(s, p.repl)
+	}
+	return s
 }
 
 // sanitize masks secrets in s and then bounds it to limit bytes. Masking comes

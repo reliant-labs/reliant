@@ -10,6 +10,7 @@ import (
 	"time"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/observe"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -171,7 +172,13 @@ func HealReliantKey(ctx context.Context, userID string) (key string, configured 
 // RunReliantKeySweeps sweeps once immediately and then every interval until ctx ends.
 func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time.Duration) {
 	run := func() {
-		healed, failed, err := h.Sweep(ctx)
+		var healed, failed int
+		// One trace per sweep, so its queries and control-plane calls nest under it.
+		err := observe.RunRoot(ctx, "reliant_key.sweep", func(ctx context.Context) error {
+			var err error
+			healed, failed, err = h.Sweep(ctx)
+			return err
+		})
 		if err != nil {
 			logging.WarnContext(ctx, "Reliant key sweep failed", "error", err)
 			return

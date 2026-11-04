@@ -8,14 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -23,50 +20,15 @@ import (
 
 // error_class_test.go — a user error is written, counted, and pages nobody.
 //
-// Measured in prod over five days: the ERROR stream — what Sentry and the
-// alerts route on — was dominated by "no daemon connected for user" (the user's
+// Measured in prod over five days: the ERROR stream — what issues and the
+// alerts are built from — was dominated by "no daemon connected for user" (the user's
 // machine was closed) and "AI provider usage limit reached" (the user's
 // subscription was spent). Nobody on our side could act on either.
 
-// recordingReporter records every exception it is sent; the Sentry bridge
-// reports from a goroutine, so it is safe for concurrent use.
-type recordingReporter struct {
-	telemetry.NoopReporter
-	mu   sync.Mutex
-	errs []error
-}
-
-func (r *recordingReporter) CaptureExceptionWithContext(err error, _ map[string]string, _ map[string]interface{}) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.errs = append(r.errs, err)
-	return "event"
-}
-
-// CaptureLogEvent records a forwarded log record by its error, or its
-// message when it carries none: the Sentry bridge sends log events.
-func (r *recordingReporter) CaptureLogEvent(event telemetry.LogEvent) string {
-	err := event.Err
-	if err == nil {
-		err = errors.New(event.Message)
-	}
-	return r.CaptureExceptionWithContext(err, event.Tags, event.Extra)
-}
-
-func (r *recordingReporter) captured() []error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]error(nil), r.errs...)
-}
-
 // policyLogger is the process logger install builds, writing JSON to buf.
-func policyLogger(t *testing.T, buf *bytes.Buffer) (*slog.Logger, *recordingReporter) {
+func policyLogger(t *testing.T, buf *bytes.Buffer) *slog.Logger {
 	t.Helper()
-	previous := telemetry.GetReporter()
-	reporter := &recordingReporter{}
-	telemetry.SetReporter(reporter)
-	t.Cleanup(func() { telemetry.SetReporter(previous) })
-	return slog.New(withReporting(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo}))), reporter
+	return slog.New(withReporting(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 }
 
 func lineFor(t *testing.T, buf *bytes.Buffer, msg string) map[string]any {
@@ -82,9 +44,10 @@ func lineFor(t *testing.T, buf *bytes.Buffer, msg string) map[string]any {
 	return nil
 }
 
-func TestWithReporting_UserErrorsAreInfoAndNeverReachSentry(t *testing.T) {
+// Only an ERROR record becomes an issue, so a user error must not stay one.
+func TestWithReporting_UserErrorsAreInfo(t *testing.T) {
 	var buf bytes.Buffer
-	logger, reporter := policyLogger(t, &buf)
+	logger := policyLogger(t, &buf)
 
 	machineOffline := svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)
 	// What the workflow side logs after Temporal serialized an activity's
@@ -95,13 +58,6 @@ func TestWithReporting_UserErrorsAreInfoAndNeverReachSentry(t *testing.T) {
 	logger.Error("[TerminalWS] create terminal session failed", "error", fmt.Errorf("create terminal session: %w", machineOffline))
 	logger.Error("[StepExecutor] Activity failed after retry exhaustion", "error", fmt.Errorf("activity error: %w", usageLimit))
 	logger.Error("[Cache] Failed to create cache directory", "error", errors.New("mkdir /.config: read-only file system"))
-
-	require.Eventually(t, func() bool { return len(reporter.captured()) > 0 }, 2*time.Second, 5*time.Millisecond,
-		"the server error must still reach Sentry")
-	time.Sleep(50 * time.Millisecond) // let any stray report land before counting
-	captured := reporter.captured()
-	require.Len(t, captured, 1, "only the server error may reach Sentry, got %v", captured)
-	assert.Contains(t, captured[0].Error(), "read-only file system")
 
 	for _, msg := range []string{"[TerminalWS] create terminal session failed", "[StepExecutor] Activity failed after retry exhaustion"} {
 		line := lineFor(t, &buf, msg)
@@ -121,7 +77,7 @@ func TestWithReporting_UserErrorsAreCounted(t *testing.T) {
 	t.Cleanup(func() { SetDeadEndErrorCounter(previous) })
 
 	var buf bytes.Buffer
-	logger, _ := policyLogger(t, &buf)
+	logger := policyLogger(t, &buf)
 	logger.Error("plan limit hit", "error", svcerr.PlanLimit("seat cap"))
 	logger.Info("ordinary info")
 	logger.Error("caller went away", "error", fmt.Errorf("stream: %w", svcerr.ErrCanceled))

@@ -53,8 +53,24 @@ function parseShellOutput(content: string): ParsedShellOutput {
   return { type: 'legacy' };
 }
 
+/**
+ * A copy of one part of a previewed output reads that part from the FULL
+ * output (ctx.loadFullResult), so the clipboard never gets the preview.
+ */
+function fullPart(
+  loadFullResult: (() => Promise<string>) | undefined,
+  pick: (full: string) => string,
+): (() => Promise<string>) | undefined {
+  return loadFullResult ? async () => pick(await loadFullResult()) : undefined;
+}
+
+function structuredField(full: string, field: 'stdout' | 'stderr'): string {
+  const parsed = parseShellOutput(full);
+  return parsed.type === 'structured' ? parsed.data[field] : full;
+}
+
 function ShellToolRendererComponent({ ctx }: ToolContentProps) {
-  const { input, result } = ctx;
+  const { input, result, loadFullResult } = ctx;
   
   // Extract command
   let command = '';
@@ -165,7 +181,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               <div className="px-2 py-1 text-3xs text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center justify-between">
                 <span>output</span>
                 {!result.is_error && result.content && (
-                  <CopyButton content={result.content} className="opacity-100" />
+                  <CopyButton content={result.content} resolveContent={loadFullResult} className="opacity-100" />
                 )}
               </div>
               {result.is_error ? (
@@ -198,7 +214,11 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                 )}
                 <span className="flex-1" />
                 {hasStdout && (
-                  <CopyButton content={structured.stdout} className="opacity-100" />
+                  <CopyButton
+                    content={structured.stdout}
+                    resolveContent={fullPart(loadFullResult, (full) => structuredField(full, 'stdout'))}
+                    className="opacity-100"
+                  />
                 )}
               </div>
 
@@ -219,7 +239,11 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                 <div className={hasStdout ? "border-t border-border/50" : ""}>
                   <div className="px-2 py-0.5 text-3xs text-[hsl(var(--warning)/0.8)] uppercase tracking-wider bg-warning/5 flex items-center justify-between">
                     <span>stderr</span>
-                    <CopyButton content={structured.stderr} className="opacity-100" />
+                    <CopyButton
+                      content={structured.stderr}
+                      resolveContent={fullPart(loadFullResult, (full) => structuredField(full, 'stderr'))}
+                      className="opacity-100"
+                    />
                   </div>
                   <div className="px-2 py-1.5 text-xs text-warning-ink bg-warning/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
                     {structured.stderr}

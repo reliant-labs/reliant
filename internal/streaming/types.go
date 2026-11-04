@@ -104,6 +104,22 @@ func (d StreamingDelta) coalesce(next StreamingDelta) StreamingDelta {
 	return merged
 }
 
+// CoalesceDeltas merges each run of adjacent text deltas of one block into a
+// single delta (see canCoalesceWith) and leaves every other delta, and the
+// order, as it was. A consumer that drained a backlog sends the result as one
+// batch instead of one frame per token.
+func CoalesceDeltas(deltas []StreamingDelta) []StreamingDelta {
+	out := make([]StreamingDelta, 0, len(deltas))
+	for _, d := range deltas {
+		if n := len(out); n > 0 && out[n-1].canCoalesceWith(d) {
+			out[n-1] = out[n-1].coalesce(d)
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 // MarshalJSON ensures update_type is always "streaming_delta" for wire format
 func (d StreamingDelta) MarshalJSON() ([]byte, error) {
 	type Alias StreamingDelta

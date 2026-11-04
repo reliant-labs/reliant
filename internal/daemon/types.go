@@ -234,6 +234,28 @@ type RunCommandRequest struct {
 	// heavy slots like the commands the daemon recognizes by itself (see
 	// internal/heavyjob). There is no way to declare a command light.
 	Heavy bool `json:"heavy,omitempty"`
+	// WorktreeID tags a background process with the workspace it was started
+	// for (a package command from the Commands panel), so exec.bg_list can
+	// report it and the workspace's process list can find it. Empty for an
+	// agent's own background commands.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand marks a process the Commands panel starts, so exec.bg_list
+	// reports it as a package command whether or not it names a workspace
+	// (a path-only RunCommand has none). An agent's commands never set it.
+	PackageCommand bool `json:"package_command,omitempty"`
+	// ChatID is the agent (chat or sub-agent thread) whose tool call runs the
+	// command. The daemon attributes the command's processes to it, so a
+	// machine near its process limit can say whose they are
+	// (internal/procguard). Informational only: it grants nothing.
+	ChatID string `json:"chat_id,omitempty"`
+	// ThreadID is the thread of ChatID whose tool call runs the command,
+	// recorded on a background process so a reap can name it.
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive exempts a background process from the idle reaper, which
+	// otherwise stops it once it has been idle for the reaper's window and
+	// its chat has no run in progress (shell.ReaperConfig). For an
+	// intentional long-lived server.
+	KeepAlive bool `json:"keep_alive,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.
@@ -281,6 +303,17 @@ type OutputOpts struct {
 	TailLines int `json:"tail_lines,omitempty"`
 	// Regex filters output to lines matching this pattern. Cannot be combined with TailLines.
 	Regex string `json:"regex,omitempty"`
+	// Lines asks for the whole output as ProcessOutput.Lines, each line with
+	// the stream it came from, instead of Output. Offset, Limit, TailLines and
+	// Regex do not apply. The Commands panel colours stderr.
+	Lines bool `json:"lines,omitempty"`
+}
+
+// ProcessOutputLine is one line of a background process's output.
+type ProcessOutputLine struct {
+	// Stream is "stdout" or "stderr".
+	Stream string `json:"stream"`
+	Text   string `json:"text"`
 }
 
 // ProcessOutput is a slice of output from a background process.
@@ -293,6 +326,9 @@ type ProcessOutput struct {
 	NextOffset int `json:"next_offset"`
 	// TotalBytes is the total output size available.
 	TotalBytes int `json:"total_bytes"`
+	// Lines is the whole output, line by line, when OutputOpts.Lines asked
+	// for it.
+	Lines []ProcessOutputLine `json:"lines,omitempty"`
 }
 
 // PortInfo describes a network port a background process is listening on.
@@ -334,12 +370,61 @@ type ProcessInfo struct {
 	// env-aware proxied preview URL (empty for a fully-local/in-process daemon,
 	// whose loopback is already reachable by the user).
 	DaemonID string `json:"daemon_id,omitempty"`
+	// WorkingDir is the directory the process runs in.
+	WorkingDir string `json:"working_dir,omitempty"`
+	// WorktreeID is the workspace the process was started for
+	// (RunCommandRequest.WorktreeID); empty for an agent's own commands.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand is RunCommandRequest.PackageCommand: a Commands-panel
+	// process, listed by the panel even with no workspace.
+	PackageCommand bool `json:"package_command,omitempty"`
+	// ChatID and ThreadID name the agent whose tool call started it; empty
+	// for a Commands-panel process.
+	ChatID   string `json:"chat_id,omitempty"`
+	ThreadID string `json:"thread_id,omitempty"`
+	// KeepAlive is RunCommandRequest.KeepAlive.
+	KeepAlive bool `json:"keep_alive,omitempty"`
+	// LastActive is when it last wrote output or an agent touched it (read
+	// its output, waited on, listed or killed it). Zero from an older daemon.
+	LastActive time.Time `json:"last_active,omitzero"`
+	// StopsAfter is the earliest the daemon's idle reaper stops a running
+	// process if nothing touches it: LastActive plus the idle window, and
+	// only once its chat has no run in progress. Nil when the reaper never
+	// will; StopExempt then says why ("keep_alive", "not started by a chat",
+	// "idle reaping is off").
+	StopsAfter *time.Time `json:"stops_after,omitempty"`
+	StopExempt string     `json:"stop_exempt,omitempty"`
+	// ChatRunning is the server's latest word on whether its chat has a run
+	// in progress; nil when the daemon has none recent.
+	ChatRunning *bool `json:"chat_running,omitempty"`
+}
+
+// ProcessChatState is the server's word on the chat that started one
+// background process, carried on exec.bg_status (ProcessStatusRequest.Chats).
+// The daemon's idle reaper acts only on a recent one.
+type ProcessChatState struct {
+	ProcessID string `json:"process_id"`
+	// Running: the chat has a run in progress (pending or active).
+	Running bool `json:"running,omitempty"`
+	// WorkspaceArchived: the chat's (or its thread's) workspace is archived
+	// or deleted; the daemon stops the process at once.
+	WorkspaceArchived bool `json:"workspace_archived,omitempty"`
+}
+
+// TouchProcessesRequest is the payload of exec.bg_touch.
+type TouchProcessesRequest struct {
+	ProcessIDs []string `json:"process_ids"`
 }
 
 // ProcessStatusRequest is the payload of exec.bg_status: which background
 // processes the caller wants the outcome of.
 type ProcessStatusRequest struct {
 	ProcessIDs []string `json:"process_ids"`
+	// Chats is the server's word on the chat behind each of ProcessIDs: the
+	// daemon's idle reaper stops a process only while the server keeps
+	// saying its chat has no run in progress. Absent from a caller that
+	// does not know; a connector's (grant-scoped) is ignored.
+	Chats []ProcessChatState `json:"chats,omitempty"`
 }
 
 // ProcessStatusResponse answers exec.bg_status.

@@ -29,3 +29,7 @@ data/
 *.njsproj
 *.sln
 *.sw?
+# The DEV runtime config document. `forge generate` renders it from
+# deploy/kcl/dev/config.k (machine-local ports) or the config proto's defaults;
+# every deployed environment serves its own copy. Never committed.
+/public/config.js

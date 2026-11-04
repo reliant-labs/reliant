@@ -28,7 +28,19 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service TokenService {
   // CreateToken mints a token acting as the caller. The raw secret is
   // returned exactly once. Session (JWT) only.
-  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {}
+  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "token"
+          id: "response.info.id"
+          label: "response.info.name"
+        }
+        detail: ["kind"]
+      }
+    };
+  }
   // ListTokens returns the caller's live tokens of one kind (or all kinds).
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
   // RevokeToken revokes one of the caller's tokens, immediately.
@@ -37,7 +49,17 @@ service TokenService {
   // credential is permanent, so revocation is the only thing that ends its
   // authority, and leaving it connected would show a revoked token beside a
   // daemon that still looks healthy.
-  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "token"
+          id: "id"
+        }
+      }
+    };
+  }
 
   // UpdateToken changes one of the caller's tokens' name and/or permissions.
   //
@@ -50,7 +72,18 @@ service TokenService {
   //
   // New permissions are clipped to what the caller holds, exactly as a mint
   // is, so editing can never widen past the person's own authority.
-  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse) {}
+  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "token"
+          id: "id"
+          label: "response.info.name"
+        }
+      }
+    };
+  }
 
   // ExchangeToken trades the CALLING access token for a short-lived one that
   // carries only control-plane authority — what forge presents to the control
@@ -77,7 +110,10 @@ service TokenService {
   // the authority and uncached, because it must admit a daemon's session
   // credential, which the interceptor (reliant:api only) refuses by design.
   rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {
-    option (forge.v1.method) = {auth_required: false};
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "per-command credential exchange: forge mints one short-lived, attenuated token for each control-plane call, so an event per exchange is noise"}
+    };
   }
 
   // GetGitToken returns the CALLING session's acting user's CURRENT token for a
@@ -108,6 +144,36 @@ service TokenService {
   // auth_required: false for the same reason as ExchangeToken: the handler,
   // not the interceptor, authenticates the caller.
   rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
+  // GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
+  // ONE repository, so an agent on a daemon can review, label and merge as
+  // the App's bot (`reliant-labs[bot]`) instead of as the user: `reliant
+  // github token --as app --repo owner/name` and `reliant github gh`.
+  //
+  // It is the interactive twin of an automation acting as the app. The same
+  // safety rule holds, enforced by control-plane at the mint: the CALLING
+  // session's acting user must have push access to the repository, so the bot
+  // is never a way past the user's own permissions. The token is scoped to
+  // that one repository and to the requested permissions (issues,
+  // pull_requests, contents; default all three at write), expires within an
+  // hour, and is never stored or logged here. control-plane's audit log
+  // records each mint.
+  //
+  // Daemon credential only, exactly as GetGitToken and for the same reason.
+  //
+  // Errors:
+  //   - UNAUTHENTICATED / PERMISSION_DENIED: not a live daemon credential.
+  //   - INVALID_ARGUMENT: owner or repo is missing or malformed, or a
+  //     permission is outside the three or a level other than read/write.
+  //   - FAILED_PRECONDITION, by `x-forge-error-reason`:
+  //     `git_credential_no_control_plane`, `github_app_not_configured`,
+  //     `github_app_not_installed`, `github_app_permissions`,
+  //     `git_credential_not_connected`, `git_credential_needs_reconnect`.
+  //   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
+  //   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+  rpc GetGitHubBotToken(GetGitHubBotTokenRequest) returns (GetGitHubBotTokenResponse) {
     option (forge.v1.method) = {auth_required: false};
   }
 }
@@ -195,6 +261,11 @@ message ExchangeTokenRequest {
   // scopes requested. Empty asks for every exchangeable scope the calling
   // token holds.
   repeated string scopes = 2;
+  // org_id is the org the minted token acts in, which must be one the calling
+  // session's person belongs to. Unset: the org the calling session itself
+  // acts in. The control plane checks membership and clips the scopes to the
+  // person's grants IN that org.
+  optional string org_id = 3;
 }
 
 message ExchangeTokenResponse {
@@ -202,6 +273,7 @@ message ExchangeTokenResponse {
   string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
   string expires_at = 3;    // RFC 3339
   repeated string scopes = 4;  // What was actually granted
+  string org_id = 5;           // The org the token acts in
 }
 
 message GetGitTokenRequest {
@@ -216,4 +288,30 @@ message GetGitTokenResponse {
   // expires_at is when access_token stops working (RFC 3339). Empty for a token
   // the provider never said expires.
   string expires_at = 2;
+}
+
+message GetGitHubBotTokenRequest {
+  // owner and repo name the one repository the token is scoped to.
+  string owner = 1;
+  string repo = 2;
+  // permissions narrows the token: issues, pull_requests, contents -> read or
+  // write. Empty means all three at write.
+  map<string, string> permissions = 3;
+}
+
+message GetGitHubBotTokenResponse {
+  // token is the plaintext installation token. A credential: apply it to the
+  // requests you make, never log or persist it.
+  string token = 1;
+  // expires_at is when token stops working (RFC 3339; GitHub issues
+  // one-hour tokens).
+  string expires_at = 2;
+  // bot_login is who GitHub shows as the author of writes made with token,
+  // e.g. `reliant-labs[bot]`.
+  string bot_login = 3;
+  // acting_for_login is the caller's own GitHub login, whose push access
+  // gated the mint.
+  string acting_for_login = 4;
+  // repository is the owner/name the token is scoped to, as GitHub spells it.
+  string repository = 5;
 }

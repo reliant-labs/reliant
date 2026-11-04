@@ -19,8 +19,8 @@
 // fixtures/frozen/<set>/ holds histories recorded before a command-sequence
 // change; they are never regenerated and must keep replaying through the
 // change's workflow.GetVersion gate. See fixtures/README.md for what each
-// fixture pins, how to regenerate (make replay-fixtures) and how to freeze the
-// old shape first (make freeze-replay-fixtures).
+// fixture pins, how to regenerate (task replay-fixtures) and how to freeze the
+// old shape first (task replay-fixtures:freeze).
 //
 // Everything else in this package is a _test.go file: this doc is the only
 // non-test source, which is also where forge reads package markers from.

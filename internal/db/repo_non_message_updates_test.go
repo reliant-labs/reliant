@@ -170,11 +170,9 @@ func TestGetLatestNonMessageUpdatesPerEntity_ThreadAnnouncementSurvivesWorkflowS
 	require.Contains(t, string(threadUpdate.Data), `"origin":"fork"`)
 	require.Contains(t, string(threadUpdate.Data), threadID)
 
-	// Deduping thread updates by thread id must not weaken workflow_status
-	// dedup: its own latest-wins collapse still has to hold.
-	require.NotNil(t, workflowStatus, "the latest workflow_status must still be delivered")
-	require.Contains(t, string(workflowStatus.Data), `"status":"completed"`,
-		"workflow_status must still collapse to its newest row")
+	// Workflow status is workflow state, which the snapshot does not carry
+	// (TestGetLatestNonMessageUpdatesPerEntity_CarriesNoWorkflowState).
+	require.Nil(t, workflowStatus, "the snapshot must not carry workflow_status")
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_CollapsesThreadToLatestStatus(t *testing.T) {
@@ -284,11 +282,14 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesAgentMessagesDrained(t *tes
 	require.Equal(t, "approval-1", updates[0].EntityID)
 }
 
-// The skip-scan collapses by entity_id, but thread updates share their entity_id
-// (the workflow id) with workflow_status rows. Reading both through the
-// skip-scan would let the newest evict the other (measured: 198 workflow_status
-// rows lost on a real chat), so both must survive side by side.
-func TestGetLatestNonMessageUpdatesPerEntity_WorkflowStatusSurvivesThreadOnSameWorkflowID(t *testing.T) {
+// Workflow state — a run's status and its nodes' executions — is keyed per
+// workflow and per workflow node, so every run a chat ever made adds entities
+// to it; the snapshot read all of them on every open (prod: p50 0.2s, p95
+// 2.5s, max 11s) for state nothing a chat open renders reads. It is not
+// snapshot state: a run-status view reads its one run's nodes
+// (GetLatestWorkflowNodeUpdates). Thread updates that share the workflow id
+// as entity_id still come back, each thread's latest.
+func TestGetLatestNonMessageUpdatesPerEntity_CarriesNoWorkflowState(t *testing.T) {
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)
@@ -300,25 +301,147 @@ func TestGetLatestNonMessageUpdatesPerEntity_WorkflowStatusSurvivesThreadOnSameW
 
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID, `{"status":"running"}`))
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID, `{"thread":"t-1","status":"running"}`))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeNodeExecution, workflowID+":call_llm", `{"node_id":"call_llm"}`))
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID, `{"status":"completed"}`))
-	// Newest row on the shared entity_id is a thread update; the status row must still come back.
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID, `{"thread":"t-2","status":"running"}`))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 
 	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
 	require.NoError(t, err)
 
-	var statuses, threads []string
+	var threads []string
 	for _, u := range updates {
-		switch u.UpdateType {
-		case UpdateTypeWorkflowStatus:
-			statuses = append(statuses, string(u.Data))
-		case UpdateTypeThread:
+		require.NotEqual(t, UpdateTypeWorkflowStatus, u.UpdateType, "workflow_status is not snapshot state")
+		require.NotEqual(t, UpdateTypeNodeExecution, u.UpdateType, "node_execution is not snapshot state")
+		if u.UpdateType == UpdateTypeThread {
 			threads = append(threads, string(u.Data))
 		}
 	}
-	require.Equal(t, []string{`{"status":"completed"}`}, statuses)
 	require.Len(t, threads, 2, "each thread keeps its own latest row")
+	require.Len(t, updates, 3)
 	for i := 1; i < len(updates); i++ {
 		require.Less(t, updates[i-1].SequenceNumber, updates[i].SequenceNumber)
 	}
+}
+
+// A run-status view's node read: the newest update of each node of exactly
+// the workflow asked for. Workflow ids that are prefixes of one another, or
+// that sort between one workflow's nodes in a linguistic collation, must not
+// leak in; nor may the workflow's status row, or another chat's run.
+func TestGetLatestWorkflowNodeUpdates_OneRunsNewestPerNode(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+	otherChat := seedChatForUpdates(t, repo, ctx)
+
+	const wf = "8b2f0c1e-5d6a-4f7b-9c3d-2e1f0a9b8c7d"
+	node := func(chat, workflow, nodeID, event string) {
+		t.Helper()
+		require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeNodeExecution, workflow+":"+nodeID,
+			`{"workflow_id":"`+workflow+`","node_id":"`+nodeID+`","event_type":"`+event+`"}`))
+	}
+	node(chatID, wf, "call_llm", "started")
+	node(chatID, wf+"0", "call_llm", "started") // a longer id sharing the prefix
+	node(chatID, wf[:len(wf)-1], "call_llm", "started")
+	node(chatID, wf, "tools", "started")
+	node(chatID, wf, "call_llm", "completed")
+	node(chatID, wf, "call_llm", "started") // the agent loop's next turn: newest wins
+	node(otherChat, wf, "review", "completed")
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, wf, `{"status":"running"}`))
+
+	updates, err := repo.GetLatestWorkflowNodeUpdates(ctx, chatID, wf)
+	require.NoError(t, err)
+	got := map[string]string{}
+	for i, u := range updates {
+		require.Equal(t, UpdateTypeNodeExecution, u.UpdateType)
+		require.Equal(t, chatID, u.ChatID)
+		got[u.EntityID] = string(u.Data)
+		if i > 0 {
+			require.Less(t, updates[i-1].SequenceNumber, u.SequenceNumber)
+		}
+	}
+	require.Equal(t, map[string]string{
+		wf + ":call_llm": `{"workflow_id":"` + wf + `","node_id":"call_llm","event_type":"started"}`,
+		wf + ":tools":    `{"workflow_id":"` + wf + `","node_id":"tools","event_type":"started"}`,
+	}, got)
+
+	none, err := repo.GetLatestWorkflowNodeUpdates(ctx, chatID, "no-such-run")
+	require.NoError(t, err)
+	require.Empty(t, none)
+}
+
+// The re-keyed half of the snapshot heads is a skip scan over its key
+// (store.SnapshotRekeyKeySQL), one probe per thread or question. It replaced a
+// DISTINCT ON over every thread and question update the chat ever wrote; the
+// two must pick the same rows. The oracle below is that DISTINCT ON, written
+// out independently, over a chat whose keys interleave in sequence and whose
+// thread payloads exercise every branch of the key: a `thread` field, an empty
+// one, none at all. A second chat's updates, sharing keys, must not leak in.
+func TestGetLatestNonMessageUpdatesPerEntity_RekeyedSkipScanMatchesDistinctOn(t *testing.T) {
+	t.Parallel()
+
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+	otherChatID := seedChatForUpdates(t, repo, ctx)
+
+	threads := []string{uuid.New().String(), uuid.New().String(), uuid.New().String()}
+	questions := []string{uuid.New().String(), uuid.New().String()}
+	for round := 0; round < 4; round++ {
+		for _, chat := range []string{chatID, otherChatID} {
+			for i, thread := range threads {
+				// One workflow entity carries several threads, so the payload,
+				// not the entity, must decide the key.
+				data := fmt.Sprintf(`{"thread":%q,"status":"r%d"}`, thread, round)
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeThread, "wf-shared", data))
+				// No usable `thread`: the entity is the key.
+				payload := []string{`{"thread":"","status":"r%d"}`, `{"status":"r%d"}`}[i%2]
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeThread,
+					fmt.Sprintf("wf-%d", i), fmt.Sprintf(payload, round)))
+			}
+			for _, q := range questions {
+				require.NoError(t, repo.CreateChatUpdate(ctx, chat, UpdateTypeQuestion,
+					fmt.Sprintf("question-%s-%d", q, round), fmt.Sprintf(`{"status":"r%d"}`, round)))
+			}
+		}
+	}
+
+	rows, err := raw.QueryContext(ctx, `
+		SELECT DISTINCT ON (k) sequence_number
+		  FROM (SELECT sequence_number,
+		               CASE WHEN update_type = 18
+		                    THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
+		                    ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
+		               END AS k
+		          FROM chat_updates
+		         WHERE chat_id = $1 AND update_type IN (3, 18)) x
+		 ORDER BY k, sequence_number DESC`, chatID)
+	require.NoError(t, err)
+	defer rows.Close()
+	var want []int64
+	for rows.Next() {
+		var seq int64
+		require.NoError(t, rows.Scan(&seq))
+		want = append(want, seq)
+	}
+	require.NoError(t, rows.Err())
+	// Three payload-keyed threads, three entity-keyed ones, two questions.
+	require.Len(t, want, len(threads)+len(threads)+len(questions))
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+	var got []int64
+	for _, u := range updates {
+		require.Equal(t, chatID, u.ChatID, "another chat's update leaked into the snapshot")
+		if u.UpdateType == UpdateTypeThread || u.UpdateType == UpdateTypeQuestion {
+			got = append(got, u.SequenceNumber)
+		}
+	}
+	require.ElementsMatch(t, want, got)
 }

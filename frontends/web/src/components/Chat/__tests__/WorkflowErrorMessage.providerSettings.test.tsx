@@ -52,7 +52,7 @@ describe('WorkflowErrorMessage → Settings → Providers', () => {
 
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: '/settings/$section',
-      params: { section: 'general' },
+      params: { section: 'ai' },
     })
   })
 

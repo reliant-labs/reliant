@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -170,10 +171,16 @@ func (x *DiscoverReposRequest) GetMaxDepth() int32 {
 }
 
 type DiscoverReposResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Discovered    []*Repo                `protobuf:"bytes,1,rep,name=discovered,proto3" json:"discovered,omitempty"` // repos found on disk (not yet persisted)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Discovered []*Repo                `protobuf:"bytes,1,rep,name=discovered,proto3" json:"discovered,omitempty"` // repos found on disk (not yet persisted)
+	// truncated is set when the machine's scan stopped before covering the
+	// project (its entry budget or deadline): discovered is then what it found
+	// until then, and truncated_reason says why ("it ran out of time"). Show the
+	// list as partial; never present it, or an empty one, as the whole answer.
+	Truncated       bool   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	TruncatedReason string `protobuf:"bytes,3,opt,name=truncated_reason,json=truncatedReason,proto3" json:"truncated_reason,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DiscoverReposResponse) Reset() {
@@ -211,6 +218,20 @@ func (x *DiscoverReposResponse) GetDiscovered() []*Repo {
 		return x.Discovered
 	}
 	return nil
+}
+
+func (x *DiscoverReposResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *DiscoverReposResponse) GetTruncatedReason() string {
+	if x != nil {
+		return x.TruncatedReason
+	}
+	return ""
 }
 
 type ListReposRequest struct {
@@ -658,7 +679,7 @@ var File_reliant_v1_repo_proto protoreflect.FileDescriptor
 const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/repo.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xcb\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xcb\x01\n" +
 	"\x04Repo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -674,11 +695,13 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\x14DiscoverReposRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
-	"\tmax_depth\x18\x02 \x01(\x05R\bmaxDepth\"I\n" +
+	"\tmax_depth\x18\x02 \x01(\x05R\bmaxDepth\"\x92\x01\n" +
 	"\x15DiscoverReposResponse\x120\n" +
 	"\n" +
 	"discovered\x18\x01 \x03(\v2\x10.reliant.v1.RepoR\n" +
-	"discovered\"9\n" +
+	"discovered\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12)\n" +
+	"\x10truncated_reason\x18\x03 \x01(\tR\x0ftruncatedReason\"9\n" +
 	"\x10ListReposRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\";\n" +
@@ -711,13 +734,18 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\x06behind\x18\t \x01(\x05R\x06behind\x12\x1d\n" +
 	"\n" +
 	"remote_url\x18\n" +
-	" \x01(\tR\tremoteUrl2\xa1\x03\n" +
-	"\vRepoService\x12V\n" +
-	"\rDiscoverRepos\x12 .reliant.v1.DiscoverReposRequest\x1a!.reliant.v1.DiscoverReposResponse\"\x00\x12J\n" +
-	"\tListRepos\x12\x1c.reliant.v1.ListReposRequest\x1a\x1d.reliant.v1.ListReposResponse\"\x00\x12D\n" +
-	"\aAddRepo\x12\x1a.reliant.v1.AddRepoRequest\x1a\x1b.reliant.v1.AddRepoResponse\"\x00\x12M\n" +
+	" \x01(\tR\tremoteUrl2\x89\x04\n" +
+	"\vRepoService\x12Y\n" +
+	"\rDiscoverRepos\x12 .reliant.v1.DiscoverReposRequest\x1a!.reliant.v1.DiscoverReposResponse\"\x03\x90\x02\x01\x12J\n" +
+	"\tListRepos\x12\x1c.reliant.v1.ListReposRequest\x1a\x1d.reliant.v1.ListReposResponse\"\x00\x12\x89\x01\n" +
+	"\aAddRepo\x12\x1a.reliant.v1.AddRepoRequest\x1a\x1b.reliant.v1.AddRepoResponse\"E\xa2\xbb\x18A:?\n" +
+	"\x03add\x12,\n" +
+	"\x04repo\x12\x10response.repo.id\x1a\x12response.repo.name*\n" +
+	"project_id\x12l\n" +
 	"\n" +
-	"RemoveRepo\x12\x1d.reliant.v1.RemoveRepoRequest\x1a\x1e.reliant.v1.RemoveRepoResponse\"\x00\x12Y\n" +
+	"RemoveRepo\x12\x1d.reliant.v1.RemoveRepoRequest\x1a\x1e.reliant.v1.RemoveRepoResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
+	"\x06remove\x12\x0f\n" +
+	"\x04repo\x12\arepo_id\x12Y\n" +
 	"\x0eGetRepoGitInfo\x12!.reliant.v1.GetRepoGitInfoRequest\x1a\".reliant.v1.GetRepoGitInfoResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

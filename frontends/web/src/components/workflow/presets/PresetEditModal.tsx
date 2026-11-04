@@ -8,15 +8,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Modal from '../../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
 import { ModelSelector } from '../../Chat/ModelSelector'
 import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'
-import { MultiSelectDropdown } from '../../ui/MultiSelectDropdown'
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
-import { workflowGrpc, type WorkflowResponse } from '../../../api/workflow-grpc'
+import Combobox from '../../forge-ui/combobox'
+import { createPreset, updatePreset, type Preset } from '../../../hooks/preset-queries'
+import { fetchWorkflowList, fetchWorkflow, type WorkflowResponse } from '../../../hooks/workflow-queries'
 import { formatValueForDisplay } from '../../../lib/paramUtils'
 import { ProtoFieldRenderer } from '../ProtoFieldRenderer'
 import { inputDefToSchema } from '../../../lib/nodeFieldAdapter'
@@ -137,7 +136,9 @@ function ParamField({
             )}
           </div>
         ) : (
-          <MultiSelectDropdown
+          <Combobox
+            multiple
+            aria-label={label}
             options={options}
             value={Array.isArray(value) ? value : []}
             onChange={onChange}
@@ -177,7 +178,7 @@ function ParamField({
           checked={value}
           onChange={(e) => onChange(e.target.checked)}
           disabled={readOnly}
-          className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-ring/20"
+          className="h-4 w-4 rounded border-border bg-background text-primary-ink focus:ring-ring"
         />
       </div>
     )
@@ -202,7 +203,7 @@ function ParamField({
                             onChange(newItems)
                         }}
                         disabled={readOnly}
-                        className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                        className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                     />
                     {!readOnly && (
                         <button
@@ -259,7 +260,7 @@ function ParamField({
             onChange={(e) => onChange(e.target.value)}
             disabled={readOnly}
             rows={5}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring font-mono resize-y"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring font-mono resize-y"
         />
       ) : (
         <input
@@ -267,7 +268,7 @@ function ParamField({
             value={value}
             onChange={(e) => onChange(typeof value === 'number' ? Number(e.target.value) : e.target.value)}
             disabled={readOnly}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
         />
       )}
     </div>
@@ -344,7 +345,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     const fetchSchemas = async () => {
       try {
         // List workflows to find available params
-        const workflows = await workflowGrpc.listWorkflows(projectId)
+        const { workflows } = await fetchWorkflowList(projectId)
         if (!mounted || !workflows.length) return
 
         // Prioritize builtin workflows as they're most likely to define standard params
@@ -361,7 +362,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
         
         await Promise.all(workflowsToFetch.map(async (wf: WorkflowResponse) => {
           try {
-            const details = await workflowGrpc.getWorkflow(projectId, { name: wf.name })
+            const details = await fetchWorkflow(projectId, { name: wf.name })
             const workflowInputs = details.workflow?.inputs
             if (workflowInputs) {
               // Merge inputs into schema
@@ -398,7 +399,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsSaving(true)
     try {
       // Use preset.name for the API call (works for both user and project presets)
-      const result = await presetGrpc.updatePreset(projectId, preset.name, {
+      const result = await updatePreset(projectId, preset.name, {
         newName: name !== preset.name ? name : undefined,
         newDescription: description !== preset.description ? description : undefined,
         newTag: tag !== (preset.tag || '') ? tag : undefined,
@@ -429,7 +430,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsCopying(true)
     try {
       // Create new preset with same params/description
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: copyName,
         description: preset.description,
         params: preset.params || {},
@@ -489,7 +490,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={isEditable ? `Edit Preset: ${preset.name}` : `View Preset: ${preset.name}`}
       size="lg"
@@ -516,7 +517,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!isEditable || isSaving}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
           />
           {!isEditable && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -533,7 +534,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             onChange={(e) => setDescription(e.target.value)}
             disabled={!isEditable || isSaving}
             rows={2}
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed resize-none"
           />
         </div>
 
@@ -546,7 +547,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
             onChange={(e) => setTag(e.target.value)}
             disabled={!isEditable || isSaving}
             placeholder="e.g. agent, orchestration"
-            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-muted-foreground mt-1">
             Presets are filtered by tag when configuring workflows. Matches workflow/group tags.
@@ -591,7 +592,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
                 <select
                   value={paramToAdd}
                   onChange={(e) => setParamToAdd(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select parameter to add...</option>
                   {availableParamsToAdd.map(key => (
@@ -622,7 +623,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
                 value={copyName}
                 onChange={(e) => setCopyName(e.target.value)}
                 placeholder="New preset name"
-                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 onKeyDown={(e) => e.key === 'Enter' && handleCopy()}
               />
               <Button onClick={handleCopy} disabled={isCopying || !copyName.trim()}>

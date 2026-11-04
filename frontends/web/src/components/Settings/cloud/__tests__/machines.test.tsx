@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -14,16 +14,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
  * Assertions target STABLE structure: the PageHeader h1, the two tab buttons,
  * the empty state, and the capability-gated fallback — never marketing copy.
  *
- * The section also renders the shared SelfHostedDaemonConnect panel (the same
- * download/setup instructions onboarding shows). That panel reaches for the
- * event bus and the daemon-registry hook, both stubbed below; the assertion
- * on it is deliberately structural (its heading), since the point of the
- * shared component is that this page never owns the copy.
+ * The section also renders the shared PairMachinePanel (the same install and
+ * pairing steps onboarding and the Add machine sheet show), stubbed below:
+ * the point of the shared component is that this page never owns the copy.
+ * Add machine opens the shared AddMachineSheet, also stubbed.
  */
 
 const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
-  listDaemons: vi.fn(async () => ({ daemons: [] })),
+  listDaemons: vi.fn(async () => ({ daemons: [] as unknown[] })),
   getComputeSubscription: vi.fn(async () => ({})),
   getComputeEligibility: vi.fn(async () => ({
     eligible: true,
@@ -31,9 +30,8 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
-  listDaemonTokens: vi.fn(async () => []),
   navigate: vi.fn(),
   search: {} as Record<string, string>,
 }))
@@ -58,6 +56,13 @@ vi.mock('@/hooks/useDaemonStatus', () => ({
     loading: false,
     refresh: vi.fn(),
   }),
+}))
+
+vi.mock('@/components/Machines/PairMachinePanel', () => ({
+  PairMachinePanel: ({ mode }: { mode?: string }) => <div data-testid="pair-machine-panel" data-mode={mode} />,
+}))
+vi.mock('@/components/Machines/AddMachineSheet', () => ({
+  AddMachineSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Add a machine" /> : null),
 }))
 
 vi.mock('@/services/controlPlane/capabilities', () => ({
@@ -92,7 +97,6 @@ vi.mock('@/services/controlPlane/environments', () => ({
   portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: vi.fn(),
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
@@ -101,23 +105,16 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
-}))
-
-// The machine LIST comes from reliant's daemon registry
-// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
-// the tests already drive, so their setup calls keep working unchanged.
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
 }))
 
 import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -141,9 +138,8 @@ describe('MachinesSection', () => {
       hasActiveSubscription: true,
       grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute Small',
-      allowedDaemonSizes: ['small'],
+      allowedDaemonSizes: ['m'],
     })
-    mocks.listDaemonTokens.mockResolvedValue([])
   })
 
   it('renders the header, then the empty machines state', async () => {
@@ -173,7 +169,7 @@ describe('MachinesSection', () => {
     expect(
       await screen.findByRole('heading', { level: 3, name: /no machines/i }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /new machine/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add machine/i })).not.toBeInTheDocument()
     expect(mocks.getComputeEligibility).not.toHaveBeenCalled()
     expect(mocks.getComputeSubscription).not.toHaveBeenCalled()
   })
@@ -189,10 +185,27 @@ describe('MachinesSection', () => {
         name: /run reliant on your own machine/i,
       }),
     ).toBeInTheDocument()
-    // Rendered by SelfHostedDaemonConnect, not by this page.
-    expect(
-      screen.getByRole('heading', { name: /install reliant daemon/i }),
-    ).toBeInTheDocument()
+    // Rendered by the shared panel, in reference mode, not by this page.
+    expect(screen.getByTestId('pair-machine-panel')).toHaveAttribute('data-mode', 'reference')
+  })
+
+  // One Add machine, always offered with a control plane: the sheet shows
+  // which sizes the plan runs and takes payment in place for the rest, so
+  // an unfunded account is not sent off to billing to start.
+  it('opens the shared Add machine sheet, funded or not', async () => {
+    mocks.getComputeEligibility.mockResolvedValue({
+      eligible: false,
+      reason: 1,
+      hasActiveSubscription: false,
+      grantedSmallDaemonSecondsRemaining: 0,
+      planName: '',
+      allowedDaemonSizes: [],
+    })
+    renderSection()
+    const [add] = await screen.findAllByRole('button', { name: /add machine/i })
+    fireEvent.click(add!)
+    expect(screen.getByRole('dialog', { name: 'Add a machine' })).toBeInTheDocument()
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
   it('still renders the self-hosted setup instructions without a control plane', async () => {
@@ -220,7 +233,7 @@ describe('MachinesSection', () => {
       daemonType: 'managed',
       status: DaemonStatus.ACTIVE,
       platform: '',
-      size: 'medium',
+      size: 'l',
     }
     const externalDaemon = {
       daemonId: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
@@ -230,7 +243,7 @@ describe('MachinesSection', () => {
       status: DaemonStatus.ACTIVE,
       platform: 'darwin',
       // A self-hosted machine genuinely has no size. control-plane's row
-      // carried an invented 'medium' placeholder to satisfy a NOT NULL column;
+      // carried an invented 'l' placeholder to satisfy a NOT NULL column;
       // the registry reports the truth, and nothing renders.
       size: '',
     }
@@ -285,7 +298,7 @@ describe('MachinesSection', () => {
             status: DaemonStatus.PENDING,
             lifecyclePhase: DaemonLifecyclePhase.PROVISIONING,
             platform: '',
-            size: 'small',
+            size: 'm',
           },
         ],
       })
@@ -311,7 +324,7 @@ describe('MachinesSection', () => {
 
       fireEvent.click(await screen.findByText('onboarding-daemon'))
       expect(mocks.navigate).toHaveBeenCalledWith({
-        to: '/settings/environments/$machineId',
+        to: '/settings/machines/$machineId',
         params: { machineId: managedDaemon.daemonId },
       })
     })

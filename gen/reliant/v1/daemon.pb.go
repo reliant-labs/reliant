@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -331,7 +332,7 @@ var File_reliant_v1_daemon_proto protoreflect.FileDescriptor
 const file_reliant_v1_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/daemon.proto\x12\n" +
-	"reliant.v1\"7\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"7\n" +
 	"\x16OpenOAuthHelperRequest\x12\x1d\n" +
 	"\n" +
 	"web_origin\x18\x01 \x01(\tR\twebOrigin\"j\n" +
@@ -347,11 +348,11 @@ const file_reliant_v1_daemon_proto_rawDesc = "" +
 	"\x16StartOAuthFlowResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12!\n" +
-	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri2\xa9\x02\n" +
-	"\rDaemonService\x12Y\n" +
-	"\x0eStartOAuthFlow\x12!.reliant.v1.StartOAuthFlowRequest\x1a\".reliant.v1.StartOAuthFlowResponse\"\x00\x12\\\n" +
-	"\x0fOpenOAuthHelper\x12\".reliant.v1.OpenOAuthHelperRequest\x1a#.reliant.v1.OpenOAuthHelperResponse\"\x00\x12_\n" +
-	"\x10CloseOAuthHelper\x12#.reliant.v1.CloseOAuthHelperRequest\x1a$.reliant.v1.CloseOAuthHelperResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri2\xf9\x04\n" +
+	"\rDaemonService\x12\xd2\x01\n" +
+	"\x0eStartOAuthFlow\x12!.reliant.v1.StartOAuthFlowRequest\x1a\".reliant.v1.StartOAuthFlowResponse\"y\xa2\xbb\x18u:s:qan OAuth handshake still in flight on the daemon: the provider connection it completes is what records the change\x12\xc7\x01\n" +
+	"\x0fOpenOAuthHelper\x12\".reliant.v1.OpenOAuthHelperRequest\x1a#.reliant.v1.OpenOAuthHelperResponse\"k\xa2\xbb\x18g:e:copens the daemon's loopback OAuth helper for one linking session: handshake transport, not a change\x12\xc8\x01\n" +
+	"\x10CloseOAuthHelper\x12#.reliant.v1.CloseOAuthHelperRequest\x1a$.reliant.v1.CloseOAuthHelperResponse\"i\xa2\xbb\x18e:c:acloses the loopback OAuth helper when its linking session ends: handshake transport, not a changeB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_proto_rawDescOnce sync.Once

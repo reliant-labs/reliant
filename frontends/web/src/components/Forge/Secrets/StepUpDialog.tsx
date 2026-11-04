@@ -76,7 +76,7 @@ export function StepUpPanel({ gate, env }: StepUpPanelProps) {
           }}
           id={`${codeId}-form`}
         >
-          <label htmlFor={codeId} className="block text-sm font-medium text-foreground">
+          <label htmlFor={codeId} className="block text-sm font-medium text-ink">
             Code
           </label>
           <input
@@ -96,14 +96,14 @@ export function StepUpPanel({ gate, env }: StepUpPanelProps) {
             aria-describedby={`${codeId}-hint`}
             aria-invalid={state.phase === "entering" && state.notice === "invalid"}
             className={cn(
-              "w-full rounded-md border bg-background px-3 py-2 font-mono text-sm uppercase tracking-[0.2em] text-foreground",
-              "placeholder:text-muted-foreground/40",
-              "focus:outline-none focus:ring-2 focus:ring-primary/40",
-              "disabled:cursor-not-allowed disabled:text-muted-foreground",
-              state.phase === "entering" && state.notice === "invalid" ? "border-destructive/60" : "border-border"
+              "w-full rounded-md border bg-surface-sunken px-3 py-2 font-mono text-sm uppercase tracking-[0.2em] text-ink",
+              "placeholder:text-ink-subtle",
+              "focus:outline-none focus:ring-2 focus:ring-ring",
+              "disabled:cursor-not-allowed disabled:text-ink-muted",
+              state.phase === "entering" && state.notice === "invalid" ? "border-danger-border" : "border-border"
             )}
           />
-          <p id={`${codeId}-hint`} className="text-xs text-muted-foreground">
+          <p id={`${codeId}-hint`} className="text-xs text-ink-muted">
             {STEP_UP_CODE_LENGTH} characters. Case, spaces and dashes don&apos;t matter.
           </p>
         </form>
@@ -119,7 +119,7 @@ export function StepUpPanel({ gate, env }: StepUpPanelProps) {
             type="button"
             onClick={gate.cancel}
             data-testid="step-up-cancel"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="rounded-md px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
           >
             {state.phase === "failed" ? "Close" : "Cancel"}
           </button>
@@ -149,12 +149,12 @@ function Lead({
         {state.reason === "forbidden" ? (
           <>
             Only an organization admin can change secrets in{" "}
-            <span className="font-mono text-foreground">{env}</span>, because it is protected. Ask an
+            <span className="font-mono text-ink">{env}</span>, because it is protected. Ask an
             admin to make this change.
           </>
         ) : (
           <>
-            <span className="font-mono text-foreground">{env}</span> is protected, and this deployment
+            <span className="font-mono text-ink">{env}</span> is protected, and this deployment
             cannot send confirmation codes, so its secrets are read-only here. Nothing was changed.
           </>
         )}
@@ -163,8 +163,8 @@ function Lead({
   }
   if (state.phase === "retrying") {
     return (
-      <p className="flex items-center gap-2 text-sm text-foreground" data-testid="step-up-retrying">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+      <p className="flex items-center gap-2 text-sm text-ink" data-testid="step-up-retrying">
+        <Loader2 className="h-4 w-4 animate-spin text-ink-muted" aria-hidden="true" />
         Confirmed. Saving your change…
       </p>
     );
@@ -172,7 +172,7 @@ function Lead({
   if (state.phase === "intro" || (state.phase === "sending" && !code)) {
     return (
       <Inset icon={Lock} testId="step-up-intro">
-        <span className="text-foreground">
+        <span className="text-ink">
           <span className="font-mono">{env}</span> is protected.
         </span>{" "}
         Changing its secrets needs a one-time code, sent to the email on your account. Once you
@@ -187,7 +187,7 @@ function Lead({
     <Inset icon={Mail} testId="step-up-sent">
       {code.sentTo ? (
         <>
-          We sent a code to <span className="font-mono text-foreground">{code.sentTo}</span>.
+          We sent a code to <span className="font-mono text-ink">{code.sentTo}</span>.
         </>
       ) : (
         <>A code was sent to the email on your account a moment ago.</>
@@ -197,7 +197,7 @@ function Lead({
         : expiresIn !== null && (
             <>
               It expires in{" "}
-              <span className="tabular-nums text-foreground" data-testid="step-up-expires-in">
+              <span className="tabular-nums text-ink" data-testid="step-up-expires-in">
                 {formatCountdown(expiresIn)}
               </span>
               .
@@ -248,7 +248,7 @@ function Notice({ state }: { state: StepUpState }) {
     case "rate-limited":
       // Not an error: the code from a moment ago is in the inbox and good.
       return (
-        <p className="text-xs text-muted-foreground" data-testid="step-up-rate-limited">
+        <p className="text-xs text-ink-muted" data-testid="step-up-rate-limited">
           A code was sent less than a minute ago, so no new one was sent. Use the code from that email.
         </p>
       );
@@ -265,7 +265,7 @@ function ResendButton({ state, now, onSend }: { state: StepUpState; now: number;
       onClick={onSend}
       disabled={!canSend(state, now)}
       data-testid="step-up-resend"
-      className="rounded-md px-1 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+      className="rounded-md px-1 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
     >
       {wait > 0 ? (
         <>
@@ -356,19 +356,19 @@ function Inset({
   testId: string;
   children: React.ReactNode;
 }) {
-  // An inset on the modal surface: bg-background + border-border/60 per the
+  // An inset on the modal surface: bg-surface-sunken + border-border/60 per the
   // elevation rules, never bg-muted.
   return (
-    <div data-testid={testId} className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5">
-      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>
+    <div data-testid={testId} className="flex gap-2.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2.5">
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+      <p className="text-xs leading-relaxed text-ink-muted">{children}</p>
     </div>
   );
 }
 
 function ErrorLine({ testId, children }: { testId: string; children: React.ReactNode }) {
   return (
-    <p role="alert" data-testid={testId} className="flex gap-2 text-xs leading-relaxed text-destructive-ink">
+    <p role="alert" data-testid={testId} className="flex gap-2 text-xs leading-relaxed text-danger-ink">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       <span>{children}</span>
     </p>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isSpawnOrigin } from "../threadUtils";
-import type { ThreadOrigin } from "../../../../types/streaming";
+import type { ThreadOrigin } from "../../ExecutionSidebar/types";
 
 // Mirrors the augmentation rule in InterleavedTimeline: the stream may only
 // FILL a missing origin, never override one that came from the workflow tree.

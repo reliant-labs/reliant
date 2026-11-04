@@ -39,6 +39,20 @@ import (
 // always-on machine nobody is using, which is the failure this file exists to
 // prevent.
 
+// ReasonHeldRunBackgroundWork is the reason the server re-asserts while a
+// process an agent backgrounded is still running and the agent's run is held
+// on a provider usage limit. The run is not abandoned, only parked off-machine
+// until the limit resets, and the process is its work in progress: a deploy or
+// a build that a suspend would kill mid-apply (2026-10-28, three times in one
+// night). Bounded on both sides, so an agent-started `while true` loop cannot
+// pin a machine (see the 2026-10-11 rule above): it counts only while the
+// hold is younger than reconciliation.heldRunAwakeFor and the process younger
+// than reconciliation.heldRunProcessMaxAge. A process of a run that is not held
+// (finished, or waiting on the user) never counts. When nothing is running the
+// machine sleeps through the hold and the run wakes it on resume
+// (toolexec.WakeForRun). See Reconciler.reassertHeldRunWork.
+const ReasonHeldRunBackgroundWork = "background process of a run held on a provider usage limit"
+
 // ReasonToolCallInFlight is the reason the gateway re-asserts while an agent's
 // tool call is still running on the machine, so a long test run or build is
 // never mistaken for idleness. See ToolsDaemonService.reassertInFlightActivity.
@@ -128,6 +142,9 @@ var userActionCommands = map[string]bool{
 	"git.publish":         true,
 	"git.publish_prepare": true,
 	"git.remove":          true,
+	// Explicit retained-recovery deletion and separate workspace restoration.
+	"git.recovery_delete":       true,
+	"worktree.recovery_restore": true,
 
 	"localmodels.set_endpoints": true,
 
@@ -168,11 +185,25 @@ var userActionCommands = map[string]bool{
 var backgroundCommands = map[string]bool{
 	"auth.close_oauth_helper": true,
 
+	// The gateway's link probe, sent on every reconnect: session plumbing.
+	"daemon.ping": true,
+
+	// Automatic preservation/verification/reclamation is housekeeping, not
+	// evidence of a human or agent actively using the machine.
+	"git.recovery_publish":       true,
+	"git.recovery_verify":        true,
+	"worktree.recovery_observe":  true,
+	"worktree.recovery_capture":  true,
+	"worktree.recovery_finalize": true,
+
 	// exec.bg_status is the reconciler's 30s poll that kept a machine awake
 	// for hours with nobody on it.
 	"exec.bg_list":   true,
 	"exec.bg_output": true,
 	"exec.bg_status": true,
+	// exec.bg_touch rides along with an agent's tool call, which is the
+	// activity; the touch itself says nothing more.
+	"exec.bg_touch": true,
 
 	"forge.deploy_plan":       true,
 	"forge.deploy_status":     true,

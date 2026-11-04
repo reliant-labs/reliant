@@ -1,17 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Globe, X, Plus, Star, Trash2 } from "lucide-react";
 import { useBrowserStore, type BrowserTab } from "../../store/browserStore";
-import { useBookmarksStore, type Bookmark } from "../../store/bookmarksStore";
+import { useBookmarkActions, useBookmarks, type Bookmark } from "../../hooks/settings-queries";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { toast } from "../../lib/toast-manager";
-import { logger } from "../../lib/logger";
 import {
   SidebarSection,
   SidebarEmptyState,
 } from "../RightSidebar/shared";
+
+import { resolveWorktree } from "../../hooks/worktree-queries";
 
 interface BrowserSidebarContentProps {
   worktreeId?: string;
@@ -28,10 +29,8 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const closeWorktreeTabs = useBrowserStore((state) => state.closeWorktreeTabs);
   
   // Bookmarks state
-  const bookmarks = useBookmarksStore((state) => state.bookmarks);
-  const loadBookmarks = useBookmarksStore((state) => state.loadBookmarks);
-  const addBookmark = useBookmarksStore((state) => state.addBookmark);
-  const removeBookmark = useBookmarksStore((state) => state.removeBookmark);
+  const bookmarks = useBookmarks();
+  const { addBookmark, removeBookmark } = useBookmarkActions();
   
   // Viewer state
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
@@ -39,19 +38,11 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const closeViewer = useViewerStore((state) => state.closeViewer);
   const currentProject = useProjectStore((state) => state.currentProject);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
 
   // Filter tabs by worktree
   const worktreeTabs = worktreeId 
     ? tabs.filter(t => t.worktreeId === worktreeId)
     : tabs;
-
-  // Load bookmarks on mount
-  useEffect(() => {
-    loadBookmarks().catch((error) => {
-      logger.error("[BrowserSidebarContent] Failed to load bookmarks:", error);
-    });
-  }, [loadBookmarks]);
 
   const handleTabClick = async (tab: BrowserTab) => {
     if (!currentProject?.id || !worktreeId) return;
@@ -172,7 +163,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
           onToggle={() => setTabsExpanded(!tabsExpanded)}
           actions={
             <>
-              <Tooltip content="New tab" placement="left">
+              <Tooltip content="New tab" side="left">
                 <button
                   onClick={handleNewTab}
                   className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
@@ -181,7 +172,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                 </button>
               </Tooltip>
               {worktreeTabs.length > 1 && (
-                <Tooltip content="Close all tabs" placement="left">
+                <Tooltip content="Close all tabs" side="left">
                   <button
                     onClick={handleCloseAllTabs}
                     className="p-1 text-muted-foreground hover:text-destructive-ink hover:bg-destructive/10 rounded transition-colors"
@@ -237,7 +228,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {!isBookmarked(tab.url) && (
-                      <Tooltip content="Add to bookmarks" placement="left">
+                      <Tooltip content="Add to bookmarks" side="left">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -249,7 +240,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                         </button>
                       </Tooltip>
                     )}
-                    <Tooltip content="Close tab" placement="left">
+                    <Tooltip content="Close tab" side="left">
                       <button
                         onClick={(e) => handleCloseTab(e, tab.id)}
                         className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"
@@ -315,7 +306,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Tooltip content="Remove bookmark" placement="left">
+                    <Tooltip content="Remove bookmark" side="left">
                       <button
                         onClick={(e) => handleRemoveBookmark(e, bookmark.id)}
                         className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"

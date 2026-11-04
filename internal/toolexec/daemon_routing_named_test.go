@@ -138,3 +138,23 @@ func TestResolveDaemonIDForSelector_ForeignDaemonIDIsNotFound(t *testing.T) {
 	assert.Equal(t, absentErr.Error(), foreignErr.Error(), "a foreign id must be indistinguishable from an absent one")
 	assert.False(t, IsDaemonPending(foreignErr), "not-found, not the retryable 'still starting'")
 }
+
+// A request a daemon received and never answered may have run: its failure
+// must not claim it never reached a machine, or a run step would send a shell
+// command twice.
+func TestToolRequest_UnansweredRequestIsNotMarkedNotDispatched(t *testing.T) {
+	nc := startPayloadTestNATS(t)
+	router := NewNATSDaemonRouter(nc, WithResolver(twoDaemonResolver()))
+	received := subscribeSubject(t, nc, daemonSubject(toolRequestSyncSubject, "user-1", "daemon-B"))
+	require.NoError(t, nc.Flush())
+
+	ctx, stop := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer stop()
+	_, err := router.SendToolRequestSyncWithSelector(ctx, "user-1",
+		&ToolExecutionRequest{RequestID: "req-1", ToolName: "shell", ToolInput: `{"command":"git push"}`},
+		&DaemonSelector{ID: "daemon-B"})
+
+	require.Error(t, err)
+	require.Len(t, received, 1, "the daemon got the request")
+	assert.NotErrorIs(t, err, ErrNotDispatched)
+}

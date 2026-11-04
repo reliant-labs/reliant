@@ -10,7 +10,7 @@
  * thread never drains.
  */
 
-import type { QuestionInfo } from "../api/question-grpc";
+import type { QuestionInfo } from "../gen/reliant/v1/question_pb";
 
 /**
  * Whether a thread id names the chat's main thread. The main thread's id is
@@ -23,7 +23,7 @@ function isMainThread(threadId: string | null | undefined, chatId: string, mainT
 
 /** The thread a question was asked on, with the main thread canonicalized to the chat id. */
 export function questionThreadId(question: QuestionInfo, chatId: string, mainThreadId?: string | null): string {
-  return isMainThread(question.thread_id, chatId, mainThreadId) ? chatId : question.thread_id;
+  return isMainThread(question.threadId, chatId, mainThreadId) ? chatId : question.threadId;
 }
 
 /** The thread in view: a selected side thread, else the main thread (as the chat id). */

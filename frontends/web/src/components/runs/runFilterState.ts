@@ -7,7 +7,7 @@
  * rather than by a rendered page.
  */
 
-import { RUN_STATE_FILTERS } from "@/api/run-grpc";
+import { RUN_STATE_FILTERS } from "@/hooks/run-queries";
 import { launchKindDisplay } from "@/lib/runStatus";
 import {
   RUN_KIND_FILTER_KEYS,
@@ -32,21 +32,16 @@ export const RUN_STATE_OPTIONS: Array<{ value: RunStateFilterKey; label: string 
   (filter) => ({ value: filter.key, label: filter.label }),
 );
 
-/** "builder.test" reads "Tests": a test run from the builder, not a launch kind a user names. */
+/**
+ * "Started by": every launch kind, attended and unattended — a webhook, an
+ * app event (GitHub, Gmail, Slack…) and another workflow's event included.
+ * "builder.test" reads "Tests": a test run from the builder, not a launch
+ * kind a user names.
+ */
 export const RUN_KIND_OPTIONS: Array<{ value: string; label: string }> = RUN_KIND_FILTER_KEYS.map((kind) => ({
   value: kind,
   label: kind === "builder.test" ? "Tests" : launchKindDisplay(kind).shortLabel,
 }));
-
-export type RunProjectScope = "current" | "all";
-
-/**
- * Which projects the list covers. With no current project there is nothing to
- * scope to, so it is "all" whatever the URL says.
- */
-export function runProjectScope(search: RunsSearch, hasCurrentProject: boolean): RunProjectScope {
-  return search.allProjects || !hasCurrentProject ? "all" : "current";
-}
 
 /** Whether any filter narrows the list beyond its defaults. */
 export function hasActiveRunFilters(search: RunsSearch): boolean {
@@ -70,11 +65,6 @@ export function applyRunFilter(search: RunsSearch, patch: Partial<RunsSearch>): 
   if (next.range === DEFAULT_RUN_RANGE) next.range = undefined;
   if (next.allProjects === false) next.allProjects = undefined;
   return compactRunsSearch(next);
-}
-
-/** The project scope as a search patch. */
-export function scopePatch(scope: RunProjectScope): Partial<RunsSearch> {
-  return { allProjects: scope === "all" ? true : undefined };
 }
 
 /**

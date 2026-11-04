@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
@@ -36,7 +37,19 @@ service RunService {
   // engine invariant: WorkflowInput carries no message field, and the start
   // event is emitted with no content. A message reaches the agent as thread
   // history, which is a property of running WITH a session.
-  rpc StartRun(StartRunRequest) returns (StartRunResponse) {}
+  rpc StartRun(StartRunRequest) returns (StartRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "start"
+        target: {
+          kind: "run"
+          id: "response.run.id"
+          label: "response.run.title"
+        }
+        detail: ["workflow"]
+      }
+    };
+  }
 
   // SignalRun delivers an event to a run that is already going. It never
   // starts one.
@@ -44,7 +57,11 @@ service RunService {
   // This is the half of ChatService.SendMessage that is not "start": that RPC
   // means both, disambiguated by the run's status rather than by anything in
   // the request, which is why callers cannot express which they intended.
-  rpc SignalRun(SignalRunRequest) returns (SignalRunResponse) {}
+  rpc SignalRun(SignalRunRequest) returns (SignalRunResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "delivers messages into a live run: per-turn agent traffic the run's history records"}
+    };
+  }
 
   // GetRun returns one run's current state.
   rpc GetRun(GetRunRequest) returns (GetRunResponse) {}
@@ -65,23 +82,63 @@ service RunService {
   // the response's meaning (one row per workflow, no paging, no total), and a
   // flag that changes what a response means is how a caller ends up paging a
   // result that cannot be paged.
-  rpc LastRunPerWorkflow(LastRunPerWorkflowRequest) returns (LastRunPerWorkflowResponse) {}
+  //
+  // It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+  // verb, so without it forge generates a mutation hook for it.
+  rpc LastRunPerWorkflow(LastRunPerWorkflowRequest) returns (LastRunPerWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // PauseRun parks a run. It stays live and resumable — see
   // WORKFLOW_STOP_REASON_PAUSED.
-  rpc PauseRun(PauseRunRequest) returns (PauseRunResponse) {}
+  rpc PauseRun(PauseRunRequest) returns (PauseRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "pause"
+        target: {
+          kind: "run"
+          id: "run_id"
+        }
+      }
+    };
+  }
 
   // ResumeRun continues a paused run from its recorded position.
-  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse) {}
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "resume"
+        target: {
+          kind: "run"
+          id: "run_id"
+          label: "response.run.title"
+        }
+      }
+    };
+  }
 
   // CancelRun hard-stops a run. Terminal by intent: the position checkpoint is
   // dropped, so there is nothing to resume.
-  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse) {}
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "cancel"
+        target: {
+          kind: "run"
+          id: "run_id"
+        }
+      }
+    };
+  }
 
   // InterruptRun stops what the run is doing now without ending it — the
   // in-flight LLM call and any executing tools are cancelled, and the run
   // parks. Distinct from Cancel, which ends it.
-  rpc InterruptRun(InterruptRunRequest) returns (InterruptRunResponse) {}
+  rpc InterruptRun(InterruptRunRequest) returns (InterruptRunResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcome"}
+    };
+  }
 }
 
 // Run is one workflow execution.
@@ -182,6 +239,13 @@ message Run {
   // its own. Filled by the cross-cutting list like title above. An archived
   // run is history, still listed when the request asks for archived runs.
   bool archived = 23;
+
+  // FailureDetail is why a FAILED run failed: the error it ended with,
+  // recorded on the run with its status. It is the only account of a run
+  // that failed before any node ran (input validation, a definition that
+  // would not load), which has no node attempt to carry the error. Empty
+  // for a run that did not fail.
+  string failure_detail = 24;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run
@@ -275,6 +339,31 @@ message GetRunRequest {
 
 message GetRunResponse {
   Run run = 1;
+  // Newest attempts first, including nested workflows. Inputs and arbitrary
+  // outputs are never included; command streams are redacted, bounded tails.
+  repeated RunNodeExecution nodes = 2;
+  bool nodes_truncated = 3;
+}
+
+// One recorded node attempt, not an aggregate that hides earlier failures.
+message RunNodeExecution {
+  string id = 1;
+  string workflow_id = 2;
+  string node_id = 3;
+  string node_path = 4;
+  string activity = 5;
+  // completed, failed, or skipped. These are persisted attempts, not live events.
+  string status = 6;
+  optional int64 duration_ms = 7;
+  string error = 8;
+  optional int32 exit_code = 9;
+  string stdout_tail = 10;
+  string stderr_tail = 11;
+  string started_at = 12;
+  string completed_at = 13;
+  int32 attempt = 14;
+  string loop_node_id = 15;
+  optional int32 loop_iteration = 16;
 }
 
 message ListRunsRequest {
@@ -337,6 +426,17 @@ message ListRunsRequest {
   // narrowed by any root-only default: an agent-started run is the root run of
   // its own chat. Archived children are hidden unless include_archived is set.
   optional string parent_chat_id = 16;
+
+  // IncludeUnlaunchedEvents also returns the caller's trigger events that
+  // started no run (skipped, or could not start), in unlaunched_events, so
+  // "why didn't last night's run happen" is answered in the run log. The
+  // page is then ONE time-ordered log of both: limit counts runs and events
+  // together, and next_page_token continues both. Cross-cutting list only.
+  // An event carries no state, title or parent, so none are returned when
+  // display_states or parent_chat_id is set; project_id, workflow,
+  // trigger_id, launch_kind (the event's kind) and the time bounds apply,
+  // and query matches the trigger's name.
+  optional bool include_unlaunched_events = 17;
 }
 
 message ListRunsResponse {
@@ -349,6 +449,43 @@ message ListRunsResponse {
 
   // NextPageToken is set when more runs follow. Empty on the last page.
   string next_page_token = 3;
+
+  // UnlaunchedEvents are the page's trigger events that started no run,
+  // newest first, when include_unlaunched_events was set. Interleave them
+  // with runs by occurred_at_ms / created_at_ms: the two lists partition one
+  // time-ordered page.
+  repeated UnlaunchedTriggerEvent unlaunched_events = 4;
+}
+
+// UnlaunchedTriggerEventOutcome is why a trigger event started no run.
+enum UnlaunchedTriggerEventOutcome {
+  UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED = 0;
+  // SKIPPED: deliberately not started — the trigger was off, or its previous
+  // run was still going under overlap SKIP.
+  UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED = 1;
+  // FAILED: it tried to start and could not. outcome_detail says why.
+  UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED = 2;
+}
+
+// UnlaunchedTriggerEvent is one firing of a stored trigger that started no
+// run, with the trigger columns the run log shows.
+message UnlaunchedTriggerEvent {
+  // The trigger event's id.
+  string id = 1;
+  string trigger_id = 2;
+  string trigger_name = 3;
+  // The workflow the trigger runs, as stored on the trigger.
+  string workflow_name = 4;
+  string project_id = 5;
+  // The kind of firing, in the launch-kind vocabulary a run it started would
+  // carry: "schedule", "webhook", "integration", "workflow_event", ...
+  string launch_kind = 6;
+  // When the firing was FOR (a replayed scheduled fire keeps its slot time).
+  int64 occurred_at_ms = 7;
+  UnlaunchedTriggerEventOutcome outcome = 8;
+  string outcome_detail = 9;
+  // The declared trigger this is an activation of; empty for a hand-made one.
+  string workflow_trigger = 10;
 }
 
 message LastRunPerWorkflowRequest {

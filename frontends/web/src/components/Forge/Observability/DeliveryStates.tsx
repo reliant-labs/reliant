@@ -16,20 +16,20 @@
 import type { ReactNode } from "react";
 import { Lock, ServerOff } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { deliveryErrorKind } from "@/services/controlPlane/observability/errors";
 
 import { ObsError } from "./ObsStates";
 
 function Frame({ icon, title, testId, children, actions }: { icon: ReactNode; title: string; testId: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5">
-      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
+    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
+      <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <div className="space-y-1.5 text-xs text-muted-foreground">{children}</div>
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <div className="space-y-1.5 text-xs text-ink-muted">{children}</div>
         {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
       </div>
     </div>

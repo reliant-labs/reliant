@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 )
 
-var runToolNames = []string{ToolStartRun, ToolListRuns, ToolGetRun, ToolControlRun, ToolSendToRun}
+var runToolNames = []string{ToolStartRun, ToolListRuns, ToolGetRun, ToolControlRun, ToolSendToRun, ToolFireTrigger}
 
 // Every run-management tool must be in the registry, reachable through the
 // factory under its own name, and known to the name validator workflow YAML is

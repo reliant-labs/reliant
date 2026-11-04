@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
@@ -104,6 +105,22 @@ type CredentialError struct {
 func (e *CredentialError) Error() string { return e.Message }
 func (e *CredentialError) Unwrap() error { return e.Err }
 
+// ErrorClass implements svcerr.Classed. With a cause the cause decides (the
+// same failed_precondition carries both "GitHub is not connected", the user's
+// to fix, and "the control plane has no App key", ours). Without one, a code
+// the caller acts on is a user error; any other has no opinion.
+func (e *CredentialError) ErrorClass() svcerr.Class {
+	if e.Err != nil {
+		return svcerr.ClassNone
+	}
+	switch e.Code {
+	case CodeFailedPrecondition, CodeNeedsReauth, CodeNotFound, CodeInvalidArgument:
+		return svcerr.ClassUser
+	default:
+		return svcerr.ClassNone
+	}
+}
+
 // CallSite identifies one call for authorization and audit.
 type CallSite struct {
 	RunID      string
@@ -112,6 +129,13 @@ type CallSite struct {
 	// ActingIdentity and Automation: see CredentialRequest.
 	ActingIdentity string
 	Automation     string
+	// StepCredential is a credential the calling step brings itself: a
+	// workflow's declared secret, in an http/request header slot or through an
+	// integration's api_key method. With no connection named it is the call's
+	// credential; with one (the generic HTTP integration only, which the caller
+	// enforces) it is applied after the connection's. Either way the call is
+	// held to https and to the host it started at, as with a connection.
+	StepCredential Credential
 }
 
 // ConnectionParam is the action parameter that names a saved connection.
@@ -137,7 +161,12 @@ func (r *Runner) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationM
 	case !needs && ref != "":
 		return nil, &CredentialError{Code: CodeInvalidArgument, Message: fmt.Sprintf("%s/%s does not accept a connection", m.GetId(), a.GetId())}
 	case !needs, conn.GetAuthOptional() && ref == "":
-		return r.run(ctx, m, a, params, nil)
+		return r.run(ctx, m, a, params, withStepCredential(nil, site.StepCredential))
+	}
+	// The step brings its own credential (a declared secret through the
+	// integration's api_key method): it stands in for the connection.
+	if ref == "" && site.StepCredential != nil {
+		return r.run(ctx, m, a, params, site.StepCredential)
 	}
 	if src == nil {
 		return nil, &CredentialError{Code: CodeFailedPrecondition, Message: "connections are not available in this process"}
@@ -160,7 +189,35 @@ func (r *Runner) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationM
 	if cred == nil {
 		return nil, &CredentialError{Code: CodeInternal, Message: "the connection resolved to no credential"}
 	}
-	return r.run(ctx, m, a, params, cred)
+	return r.run(ctx, m, a, params, withStepCredential(cred, site.StepCredential))
+}
+
+// withStepCredential is the credential a call is sent with: the connection's,
+// the step's, or both applied in turn. Either may be nil.
+func withStepCredential(conn, step Credential) Credential {
+	switch {
+	case step == nil:
+		return conn
+	case conn == nil:
+		return step
+	}
+	return stackedCredential{conn: conn, step: step}
+}
+
+// stackedCredential applies a connection and then a step's own credential. It
+// is a plain Credential: the generic HTTP integration's connections (api_key,
+// basic) neither attribute nor refresh, and only that integration takes a step
+// credential.
+type stackedCredential struct{ conn, step Credential }
+
+func (c stackedCredential) ConnectionID() string      { return c.conn.ConnectionID() }
+func (c stackedCredential) Params() map[string]string { return c.conn.Params() }
+func (c stackedCredential) Scrub(s string) string     { return c.step.Scrub(c.conn.Scrub(s)) }
+func (c stackedCredential) Apply(req *http.Request) error {
+	if err := c.conn.Apply(req); err != nil {
+		return err
+	}
+	return c.step.Apply(req)
 }
 
 // connectionVars is the `connection` template variable: the credential's
@@ -259,4 +316,35 @@ func applyAttribution(body any, a *Attribution) any {
 		}
 	}
 	return signed
+}
+
+// APIKeyPlacement is where an integration's api_key auth method sends a key:
+// its header and the prefix written before the key. It is the one place a
+// workflow's declared secret may authenticate an integration action, so an
+// integration with no api_key method, one that sends the key in the query
+// string (where it would be part of the URL), one that leaves the header to
+// each connection (the generic HTTP integration, whose header slots take a
+// secret instead), or one whose connection carries required settings has none.
+func APIKeyPlacement(m *reliantv1.IntegrationManifest) (header, prefix string, err error) {
+	// A secret is only a key: settings a connection carries alongside it (a
+	// Sentry organization in the base URL) have nowhere to come from.
+	for _, p := range m.GetConnection().GetConnectionParams() {
+		if p.GetDefaultValue() == "" {
+			return "", "", fmt.Errorf("%s needs connection settings (%s) that a secret does not carry: use a saved connection", m.GetId(), p.GetName())
+		}
+	}
+	for _, a := range m.GetConnection().GetAuth() {
+		k := a.GetApiKey()
+		if k == nil {
+			continue
+		}
+		switch {
+		case k.GetIn() == "" && k.GetName() == "":
+			return "", "", fmt.Errorf("%s takes no credential: it names no header for a key (put the secret in a header value instead)", m.GetId())
+		case k.GetIn() != "header" || k.GetName() == "":
+			return "", "", fmt.Errorf("%s sends its key in the query string, so it cannot take a secret as its credential", m.GetId())
+		}
+		return http.CanonicalHeaderKey(k.GetName()), k.GetPrefix(), nil
+	}
+	return "", "", fmt.Errorf("%s has no api_key auth method, so it cannot take a secret as its credential", m.GetId())
 }

@@ -3,6 +3,8 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -180,6 +182,22 @@ type StoppedSpawnAgent struct {
 	// under (ToolCallID#resume-N), 0 when none has: the next resume reports
 	// past it.
 	Resumes int `json:"resumes,omitempty"`
+	// LastFailure is the FailureReportDigest of the latest failure report the
+	// agent's parent received from it (any of its report slots), "" when
+	// there is none: a resumed run that fails with the same report does not
+	// send it again (runtime.SpawnHandoff.LastFailure).
+	LastFailure string `json:"last_failure,omitempty"`
+}
+
+// FailureReportDigest identifies a sub-agent's failure report by its body,
+// so a repeat of the same failure can be told from a new one without carrying
+// the report itself through workflow state. Empty for an empty body.
+func FailureReportDigest(body string) string {
+	if body == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:16])
 }
 
 // resumeSlotSeparator joins a spawn's tool call id to the number of a resumed
@@ -226,6 +244,10 @@ func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string
 			resumes = n
 		}
 	}
+	lastFailure, err := store.LatestSpawnFailureReport(ctx, r.ORM(), chatID, run.ToolCallID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &StoppedSpawnAgent{
 		ToolCallID:        run.ToolCallID,
@@ -237,7 +259,28 @@ func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string
 		SpawnDepth:        run.SpawnDepth,
 		WorktreePath:      run.WorktreePath,
 		Resumes:           resumes,
+		LastFailure:       FailureReportDigest(lastFailure),
 	}, nil
+}
+
+// ListStoppedSpawnAgents lists only the latest failed spawn per thread.
+// Completed and user-cancelled agents are never resurrected by chat resume.
+func (r *Repo) ListStoppedSpawnAgents(ctx context.Context, chatID string) ([]*StoppedSpawnAgent, error) {
+	rows, err := store.ListStoppedSpawnRecords(ctx, r.ORM(), chatID)
+	if err != nil {
+		return nil, err
+	}
+	agents := make([]*StoppedSpawnAgent, 0, len(rows))
+	for _, row := range rows {
+		agents = append(agents, &StoppedSpawnAgent{
+			ToolCallID: row.ToolCallID, ParentThreadID: row.ParentThreadID, ToolInput: row.ToolInput,
+			ChildThreadID: row.ChildThreadID, ChildWorkflowID: row.ChildWorkflowID,
+			IssuingWorkflowID: row.IssuingWorkflowID, SpawnDepth: row.SpawnDepth,
+			WorktreePath: row.WorktreePath, Resumes: row.Resumes,
+			LastFailure: FailureReportDigest(row.LastFailure),
+		})
+	}
+	return agents, nil
 }
 
 // ListLiveBackgroundSpawns returns every background spawn issued anywhere in

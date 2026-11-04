@@ -1,0 +1,144 @@
+---
+title: "Forge quick start"
+description: "From a prompt to a deployed URL: build an app with Reliant and Forge, run it locally, and ship it to Reliant hosting"
+---
+
+This page takes you from an empty directory to an app running on a URL. There are two ways through it, and they end in the same place: ask a Reliant agent to do it, or run the commands yourself. The agent runs exactly the commands in the second half of this page, so reading it first also tells you what the agent is doing on your behalf.
+
+If you want to know what Forge is before you start, read the [overview](/forge/overview).
+
+## Option 1: start from a prompt
+
+Open a chat in Reliant, pick the **Build an App** workflow in the workflow selector, and describe what you want:
+
+```text
+Build a bookmarks app. I can save a URL with a title, list my bookmarks,
+and mark one done. Use a Go service and a web frontend.
+```
+
+The workflow scopes the app with you, scaffolds it as a Forge project, builds it, and verifies the running result. When you are happy with it, say so in the same chat:
+
+```text
+Deploy it.
+```
+
+The agent takes the path described in [Deploy it](#deploy-it) below: it deploys to `staging`, waits for the rollout to be healthy, and checks the release. Open **Apps** in the Reliant sidebar to see the environment and the URL it was given.
+
+If you would rather do the steps yourself, or want to see what just happened, continue below.
+
+## Option 2: run the commands
+
+### Before you start
+
+Inside Reliant, Forge is built in: run it as `reliant forge …`. Agents' shells have it too, already signed in to your account. This page writes `forge` for short. Outside Reliant, install the standalone binary with `go install github.com/reliant-labs/forge/cmd/forge@latest`; deploying to Reliant hosting then needs the [sign-in](/forge/sign-in) that `reliant forge` handles for you.
+
+You need Go and Docker on the machine that runs the project, and Node.js if it has a frontend. If you are unsure what is missing, `forge doctor` checks the project and the tools it depends on and says how to fix what it finds.
+
+### Create a project
+
+```bash
+forge project new bookmarks --mod github.com/you/bookmarks --service bookmark --frontend web
+cd bookmarks
+```
+
+`--service` names a first Go service (name it after a domain thing like `bookmark` or `order`, not after the app) and `--frontend` adds a Next.js frontend. Both are optional and can be added later with `forge scaffold service <name>` and `forge scaffold frontend <name>`. Creating the project installs the frontend's dependencies and generates the first round of code, so this step can take a few minutes.
+
+The project already builds and runs. The binary serves health checks, `dev`, `staging` and `prod` environments are declared, and CI workflows are in place.
+
+### Give it data
+
+Describe an entity in the service's proto file, `proto/services/bookmark/v1/bookmark.proto`, by marking a message with `// forge:entity`:
+
+```protobuf
+// forge:entity
+message Bookmark {
+  string url = 2;
+  string title = 3;
+  bool done = 4;
+}
+```
+
+Then run bare `forge scaffold`, which creates everything your protos imply:
+
+```bash
+forge scaffold
+```
+
+From that one marker you get a SQL migration creating the `bookmarks` table, the five CRUD methods (`CreateBookmark`, `GetBookmark`, `UpdateBookmark`, `DeleteBookmark`, `ListBookmarks`) added to your service, the generated data access and handler wiring, a test that runs the CRUD lifecycle against a real Postgres, and CRUD pages in the frontend. Field numbers start at 2 because forge adds `id`, `created_at` and `updated_at` itself.
+
+### Run it locally
+
+```bash
+forge env up dev
+```
+
+This builds and starts the whole dev loop on your machine: Postgres, your migrations applied, the database seeded with realistic rows, your API with hot reload, the frontend dev server, and a local observability stack (ClickStack, with the HyperDX UI). It ends with a table of URLs and a log file for every process. With a terminal attached it stays in the foreground until Ctrl-C; pass `--background` to detach and return, which is also what happens when an agent or script runs it.
+
+Every process's output is also written to `.forge/logs/dev/`, one file per service, including the browser console of your frontend:
+
+```bash
+tail -f .forge/logs/dev/*.log
+forge env status dev          # what is running, on which port, and whether it is healthy
+forge env down dev            # stop it
+```
+
+### Check your work
+
+Before you call a change done, run the same gate CI runs:
+
+```bash
+forge generate && forge lint && go build ./... && task test
+```
+
+`forge generate` is safe to run at any time, and `forge lint` checks architecture, migrations and generated-file drift as well as style. [Adding a feature](/forge/adding-features) walks through this everyday loop.
+
+### Deploy it
+
+A new project's `staging` and `prod` environments already point at [Reliant hosting](/forge/hosting), so there is nothing to configure first:
+
+```bash
+forge env deploy staging
+```
+
+Forge builds your images and frontend, cuts an immutable release, prints a plan of what will change, and after you confirm deploys it and waits until it is healthy. Your service gets a managed Postgres, and every workload and site gets a generated hostname. Run from a script or an agent, with no terminal to answer the prompt, the command refuses rather than guess; add `--yes` to say "I read the plan".
+
+If your organization has no compute plan yet, the deploy is queued rather than refused. The command prints what it is waiting on and exits with code 7, and the deploy goes live by itself once billing is set up. Add `--wait` to block until then. [Hosting on Reliant](/forge/hosting) explains queued deploys, and the [pricing page](https://reliantlabs.io/pricing) lists current plans.
+
+Then prove the release is good rather than assuming it:
+
+```bash
+forge obs check staging --wait
+```
+
+It compares the minutes after the release with the minutes before it, and exits `0` when the release passed and `1` when it made things worse. An exit code of `2` means it could not tell, which is "not proven good", not a pass. [Observability](/forge/observability) covers what it reads.
+
+When staging looks right, promote the same release to prod without rebuilding anything:
+
+```bash
+forge env deploy prod --from staging
+```
+
+Open **Apps** in the Reliant sidebar to find the URL of each environment, along with its releases, logs, traces, dashboards and alerts. To serve the app on a domain you own, see [Custom domains](/forge/custom-domains).
+
+<Note>
+No account yet? `forge env deploy <env> --claimable` deploys without one, for an environment of a single static site or a single service with one database. Forge prints a live URL and a claim link to give to a person. Unless someone opens the link, the deploy goes offline after 72 hours; opening it signs them up for free and makes the deploy theirs. It is refused when you are already signed in.
+</Note>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Project anatomy" icon="folder-tree" href="/forge/project-anatomy">
+    Where code goes, and which files forge owns.
+  </Card>
+  <Card title="Adding a feature" icon="plus" href="/forge/adding-features">
+    Services, RPCs, entities, migrations, tests.
+  </Card>
+  <Card title="Environments & deploys" icon="rocket" href="/forge/environments-and-deploys">
+    Releases, plans, promotion, scoped deploys, your own cluster.
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/forge/troubleshooting">
+    When something does not come up.
+  </Card>
+</CardGroup>
+
+A static site with no backend, such as a landing page, uses the same project shape with one frontend and no services; agents can load the `deploy/static-site` skill for it.

@@ -13,9 +13,11 @@ import { SkillToolRenderer } from './SkillToolRenderer';
 import { LoadToolRenderer } from './LoadToolRenderer';
 import { GenericToolRenderer } from './GenericToolRenderer';
 import { SpawnToolRenderer } from './SpawnToolRenderer';
+import { SpawnSendToolRenderer } from './SpawnSendToolRenderer';
 import { RunToolRenderer } from './RunToolRenderer';
 import { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 import { RequestMachineToolRenderer } from './RequestMachineToolRenderer';
+import { DraftAutomationToolRenderer, isDraftAutomationTool } from './DraftAutomationToolRenderer';
 import { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';
 import {
   isShellTool,
@@ -26,6 +28,7 @@ import {
   isSkillTool,
   isLoadToolTool,
   isSpawnTool,
+  isSpawnSendTool,
   isRunLinkTool,
   isGenerateVideoTool,
   isRequestMachineTool,
@@ -78,6 +81,10 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <SpawnToolRenderer ctx={ctx} />;
   }
 
+  if (isSpawnSendTool(toolName)) {
+    return <SpawnSendToolRenderer ctx={ctx} />;
+  }
+
   if (isRunLinkTool(toolName)) {
     return <RunToolRenderer ctx={ctx} />;
   }
@@ -86,6 +93,9 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <GenerateVideoToolRenderer ctx={ctx} />;
   }
 
+  if (isDraftAutomationTool(toolName)) {
+    return <DraftAutomationToolRenderer ctx={ctx} />;
+  }
   if (isRequestMachineTool(toolName)) {
     return <RequestMachineToolRenderer ctx={ctx} />;
   }
@@ -105,7 +115,9 @@ export { SkillToolRenderer } from './SkillToolRenderer';
 export { LoadToolRenderer } from './LoadToolRenderer';
 export { GenericToolRenderer } from './GenericToolRenderer';
 export { SpawnToolRenderer } from './SpawnToolRenderer';
+export { SpawnSendToolRenderer } from './SpawnSendToolRenderer';
 export { RunToolRenderer } from './RunToolRenderer';
 export { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 export { RequestMachineToolRenderer, RequestMachineCard, requestMachineReason } from './RequestMachineToolRenderer';
+export { DraftAutomationCard, DraftAutomationToolRenderer, draftFromToolResult, isDraftAutomationTool } from './DraftAutomationToolRenderer';
 export { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';

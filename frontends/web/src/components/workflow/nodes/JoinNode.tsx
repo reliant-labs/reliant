@@ -5,7 +5,7 @@ import type { JoinStep } from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 
-interface JoinNodeProps {
+export interface JoinNodeProps {
   data: {
     step: JoinStep
     label: string

@@ -1,10 +1,7 @@
-import { projectGrpc } from "@/api/project-grpc";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  ListDaemonsRequestSchema,
-  type DaemonInfo as CloudDaemon,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { createProjectFromRepo, type CreateProjectFromRepoResult } from "@/hooks/project-queries";
+import type { DaemonInfo as CloudDaemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
+import { queryClient } from "@/lib/query-client";
 import { createDaemon } from "@/services/controlPlane/daemon";
 import {
   cloneAvailability,
@@ -58,7 +55,7 @@ export interface AddRepoProjectResult {
 
 export const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
 const DAEMON_TYPE_MANAGED = 1;
-const DAEMON_SIZE_SMALL = 1;
+const DAEMON_SIZE_M = 8;
 
 /**
  * Chooses the machine to clone onto during onboarding.
@@ -91,16 +88,14 @@ export async function addRepoProject({
   // machine has actually attached (docs/design/one-daemon-list.md). CreateDaemon
   // below stays on the control-plane transport — that is a genuine
   // control-plane COMMAND about the machine, not a read of the list.
-  const resp = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema));
-  const daemon = pickOnboardingDaemon(resp.daemons);
+  const daemons = await fetchDaemonList(queryClient);
+  const daemon = pickOnboardingDaemon(daemons);
   if (!daemon) {
     // Say WHY there is no target — still starting, failed, or gone — rather
     // than assuming the first.
-    const availability = cloneAvailability(withoutGoneMachines(resp.daemons));
+    const availability = cloneAvailability(withoutGoneMachines(daemons));
     throw new Error(
-      availability.kind === "blocked" && resp.daemons.length > 0
+      availability.kind === "blocked" && daemons.length > 0
         ? availability.reason
         : "Your machine is still starting. Try again in a moment.",
     );
@@ -113,9 +108,10 @@ export async function addRepoProject({
     await createDaemon({
       name: ONBOARDING_DAEMON_NAME,
       daemonType: DAEMON_TYPE_MANAGED,
-      size: DAEMON_SIZE_SMALL,
+      size: DAEMON_SIZE_M,
       gitRepo: cloneUrl,
       gitBranch: branch,
+      refreshExisting: true,
     });
   } catch (refreshErr) {
     console.warn("CreateDaemon refresh with git_repo failed (continuing with clone):", refreshErr);
@@ -125,9 +121,9 @@ export async function addRepoProject({
   // checkout will live. Errors propagate — the step shows them inline, and a
   // silent failure here is what left onboarding pointing at a project that
   // did not exist.
-  let result: Awaited<ReturnType<typeof projectGrpc.createProjectFromRepo>>;
+  let result: CreateProjectFromRepoResult;
   try {
-    result = await projectGrpc.createProjectFromRepo({
+    result = await createProjectFromRepo({
       cloneUrl,
       daemonId: daemon.daemonId,
       name,

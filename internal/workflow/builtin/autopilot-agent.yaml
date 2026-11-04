@@ -51,11 +51,26 @@ inputs:
     default: 60
     min: 1
     max: 200
+  finish_warning_turns:
+    type: integer
+    default: 5
+    min: 0
+    max: 50
+    description: >-
+      When this many turns are left, the agent is told to submit with what it has. 0 never warns.
+      An agent that spends its whole budget reading context ends with no response at all, which
+      its caller can only treat as a failure; a late, partial answer is worth more.
 
 outputs:
   response: "{{ nodes.agent_loop.response }}"
   completed: "{{ nodes.agent_loop.completed }}"
   model: "{{ nodes.agent_loop.model }}"
+  # Why the loop ended without a response, for the caller's error report:
+  # the last turn's stop_reason (truncated, refused, error: the provider's
+  # answer) and how many turns ran (turns == max_turns with stop_reason
+  # tool_use: the budget ran out while the agent was still working).
+  stop_reason: "{{ nodes.agent_loop.stop_reason }}"
+  turns: "{{ nodes.agent_loop._iterations }}"
 
 entry: [agent_loop]
 
@@ -113,6 +128,14 @@ nodes:
           timeout: 10m
           args:
             model: "{{ inputs.model }}"
+        - id: budget
+          type: save_message
+          args:
+            role: system
+            content: >-
+              {{ string(inputs.max_turns - iter.iteration - 1) }} turns left. Stop reading and call
+              `{{ inputs.response_tool_name }}` now with what you have; say in it what you could not
+              check. Running out of turns submits nothing at all.
       edges:
         - from: call_llm
           cases:
@@ -127,3 +150,12 @@ nodes:
             - to: compact
               condition: nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold
               label: compact
+            - to: budget
+              condition: inputs.finish_warning_turns > 0 && inputs.max_turns - iter.iteration - 1 == inputs.finish_warning_turns
+              label: budget
+        # A turn that compacts still warns: the warning comes after the summary.
+        - from: compact
+          cases:
+            - to: budget
+              condition: inputs.finish_warning_turns > 0 && inputs.max_turns - iter.iteration - 1 == inputs.finish_warning_turns
+              label: budget

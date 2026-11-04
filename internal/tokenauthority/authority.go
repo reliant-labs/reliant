@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
-	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -15,16 +14,6 @@ import (
 // ErrInactive reports a token that is not live (unknown, revoked, expired,
 // malformed, or not an `rlat_` at all).
 var ErrInactive = accesstokenclient.ErrInactive
-
-// DepsFor is the Deps for a deployment hosted by cp (the zero Endpoint is
-// self-hosted), with db for the self-hosted store.
-func DepsFor(cp controlplane.Endpoint, db orm.Context) Deps {
-	return Deps{
-		ControlPlaneURL:       cp.URL,
-		InternalServiceSecret: cp.InternalServiceSecret,
-		DB:                    db,
-	}
-}
 
 // New returns the deployment's ONE Authority and which store it is. It
 // returns the Authority contract rather than a concrete store: choosing the
@@ -37,14 +26,14 @@ func DepsFor(cp controlplane.Endpoint, db orm.Context) Deps {
 //
 // forge:no-observe
 func New(deps Deps) (Authority, Mode, error) {
-	if deps.ControlPlaneURL != "" {
-		if deps.InternalServiceSecret == "" {
+	if cp := controlplane.EndpointFrom(deps.ControlPlane); cp.Hosted() {
+		if cp.InternalServiceSecret == "" {
 			return nil, "", errors.New("tokenauthority: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
 				"a hosted reliant validates every machine credential through control-plane and cannot do so unauthenticated")
 		}
-		secret := deps.InternalServiceSecret
+		secret := cp.InternalServiceSecret
 		return accesstokenclient.NewInstrumented(accesstokenclient.Deps{
-			BaseURL: deps.ControlPlaneURL,
+			BaseURL: cp.URL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		}), ModeControlPlane, nil
 	}

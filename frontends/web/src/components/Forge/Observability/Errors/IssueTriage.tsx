@@ -18,14 +18,14 @@
 import { useState } from "react";
 import { AlertTriangle, BellOff, CheckCircle2, RotateCcw } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUpdateIssueStatus } from "@/hooks/observability-queries";
 import { issuesErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 
 import { conflictSummary, IGNORE_FOR, ignoreChange, resolveChange, triageActionsOf, type IgnoreFor, type ResolveChoice } from "./issueModel";
 
-const FIELD = "h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function IssueTriage({ issue }: { issue: Issue }) {
   const update = useUpdateIssueStatus();
@@ -129,15 +129,15 @@ export function IssueTriage({ issue }: { issue: Issue }) {
         )}
       </div>
       {conflict ? (
-        <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-background px-3 py-2 text-xs text-foreground" data-testid="obs-issue-conflict">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+        <p role="alert" className="flex items-start gap-2 rounded-md border border-warning-border bg-surface-sunken px-3 py-2 text-xs text-ink" data-testid="obs-issue-conflict">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-ink" aria-hidden="true" />
           <span>
             Someone changed this issue while you were looking, so nothing was changed.{" "}
             {refreshed ? `${conflictSummary(readAtClick, issue)} Check it, then choose again.` : "Loading what changed…"}
           </span>
         </p>
       ) : update.error ? (
-        <p role="alert" className="text-xs text-destructive" data-testid="obs-issue-triage-error">
+        <p role="alert" className="text-xs text-danger-ink" data-testid="obs-issue-triage-error">
           {errorKind === "denied"
             ? "You can read this issue but not triage it: triage needs a member of the organization, or a credential with obs:triage."
             : errorKind === "not-found"

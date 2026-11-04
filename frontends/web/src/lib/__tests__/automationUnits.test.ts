@@ -3,12 +3,12 @@
 /**
  * An automation is one workflow turned on in one project: its activations
  * fold into one unit, a hand-made trigger is its own, and the unit reads as
- * its worst trigger (automation-ux-spec.md §2.1).
+ * its worst trigger.
  */
 
 import { describe, expect, it } from "vitest";
 
-import type { Trigger, TriggerHealth } from "../../api/trigger-grpc";
+import type { Trigger, TriggerHealth } from "@/hooks/trigger-model";
 import { aggregateHealth, automationUnits, groupAutomationUnits, unitsNeedingYou, workflowAutomationsFor } from "../automationUnits";
 
 function health(status: TriggerHealth["status"], extra: Partial<TriggerHealth> = {}): TriggerHealth {
@@ -33,6 +33,7 @@ function trigger(overrides: Partial<Trigger> & { id: string }): Trigger {
     createdAt: "",
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
     ...overrides,
   };
 }

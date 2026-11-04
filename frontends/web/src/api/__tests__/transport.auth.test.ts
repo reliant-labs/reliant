@@ -55,7 +55,7 @@ async function headersOnTheWire(): Promise<Headers> {
   )
   await run({
     stream: false,
-    method: { name: 'GetProviderStatuses' },
+    method: { name: 'GetProviderStatuses', input: { fields: [] } },
     service: { typeName: 'reliant.v1.SettingsService' },
     header: new Headers(),
     signal: new AbortController().signal,

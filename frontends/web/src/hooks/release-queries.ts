@@ -15,7 +15,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import type { ReleasePromotion, ReleaseRollout } from "@/services/forge/releases";
 import { useReleasesApi } from "@/services/forge/ReleasesApiContext";
 
-import { forgeRetry } from "./forge-queries";
+import { forgeRetry } from "./forge-model";
 
 export const releaseKeys = {
   root: ["forge", "releases"] as const,
@@ -27,7 +27,39 @@ export const releaseKeys = {
   rollout: (environmentId: string, promotionId: string) => [...releaseKeys.root, "rollout", environmentId, promotionId] as const,
   bundle: (environmentId: string, bundleId: string, digest: string) =>
     [...releaseKeys.root, "bundle", environmentId, bundleId, digest] as const,
+  deployRuns: (project: string, env: string) => [...releaseKeys.root, "deploy-runs", project, env] as const,
+  deployRun: (id: string) => [...releaseKeys.root, "deploy-run", id] as const,
 };
+
+/**
+ * The project's deploys, newest first (one environment's when `env` names
+ * one). Re-read every 10s while one is running — a deploy moves on its own,
+ * and the reader is usually watching it — and every minute otherwise, since a
+ * deploy can start from any terminal without this page knowing.
+ */
+export function useDeployRuns(project: string | null | undefined, env?: string) {
+  const api = useReleasesApi();
+  return useQuery({
+    queryKey: releaseKeys.deployRuns(project ?? "", env ?? ""),
+    queryFn: () => api.listDeployRuns(project as string, env),
+    enabled: !!project,
+    staleTime: 10_000,
+    retry: forgeRetry,
+    refetchInterval: (query) => ((query.state.data ?? []).some((run) => run.state === "running") ? 10_000 : 60_000),
+  });
+}
+
+/** One deploy with its log, re-read while it runs. */
+export function useDeployRun(id: string | null) {
+  const api = useReleasesApi();
+  return useQuery({
+    queryKey: releaseKeys.deployRun(id ?? ""),
+    queryFn: () => api.getDeployRun(id as string),
+    enabled: !!id,
+    retry: forgeRetry,
+    refetchInterval: (query) => (query.state.data?.run.state === "running" ? 5_000 : false),
+  });
+}
 
 /** The project's releases, newest first. */
 export function useProjectReleases(project: string | null | undefined) {

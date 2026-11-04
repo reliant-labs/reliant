@@ -4,18 +4,18 @@
  * Route component for /forge/p/$project/environments/$env — ONE ENVIRONMENT,
  * as a configured object (Configure › Environments › <env>).
  *
- * ── TABS BY QUESTION, SOURCES BY TAB ────────────────────────────────────────
+ * ── THE ENVIRONMENT AS AN OBJECT, NOT A SECOND CONSOLE ──────────────────────
  *
- * The page used to be two tabs, Live and Preview: the daemon boundary drawn
- * on screen. The tabs now follow what a reader asks (envTabs.ts), and the
- * boundary is held per tab instead:
+ * The tabs are what only this page can answer (envTabs.ts):
  *
- *   Overview · Identity
- *   Releases · Activity
- *   Secrets · Domains               the control plane only (design §8.0,
- *                                   O-14). Render with the daemon asleep.
+ *   Overview · Identity             the control plane only (O-14). Render
+ *                                   with the daemon asleep.
  *   Running                         what `forge env up` runs on the daemon's
  *                                   machine — a LOCAL env's first question.
+ *
+ * Its releases, secrets, domains and activity are the project's pages scoped
+ * to it, linked from under the tabs; a retired `?tab=` for one of them
+ * redirects there.
  *
  * ── WHEN THIS PAGE ASKS THE DAEMON WITHOUT A TAB ASKING ─────────────────────
  *
@@ -45,15 +45,14 @@ import { cn } from "@/lib/utils";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import {
   useCloudEnvStatus,
-  useCloudPromotions,
   useForgeEnvStatus,
   useForgeTopology,
-  useLiveConvergences,
   useLiveView,
 } from "@/hooks/forge-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { isAwakeMachine } from "@/lib/chatMachine";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
 import { daemonSideForTab, daemonSideOf, type ForgeProjectName } from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
@@ -63,7 +62,7 @@ import { environments } from "@/services/forge/topology";
 import { useProjectStore } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
-import { useForgeConsole } from "../Console/consoleContext";
+import { useForgeConsole, type ForgeConsole } from "../Console/consoleContext";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
@@ -71,15 +70,9 @@ import { EnvPageHeader } from "./EnvPageHeader";
 import { envHeadline } from "./envHeadline";
 import { IdentityTab } from "./IdentityTab";
 import { QueuedDeployBanner } from "./QueuedDeployBanner";
-import {
-  ActivityTab,
-  DomainsTab,
-  OverviewTab,
-  ReleasesTab,
-  RunningTab,
-  SecretsTab,
-} from "./EnvTabPanels";
-import { resolveTab, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
+import { OverviewTab, RunningTab } from "./EnvTabPanels";
+import { resolveTab, retiredTabOf, RETIRED_TABS, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
+import Link from "@/components/forge-ui/link";
 
 export function ForgeEnvPage() {
   const navigate = useNavigate();
@@ -126,6 +119,7 @@ export function ForgeEnvPage() {
   // daemon is "not asked yet", never "offline".
   const daemonAsked = daemonWanted || topology.data !== undefined || topology.error !== null;
   const daemon = daemonSideOf(topology.data, topology.error);
+  const checkoutMissing = projectCheckoutMissing(topology.error);
 
   // What a daemon TAB waits on. Topology is a whole forge run (~30s on a real
   // project); the registry knows a machine is up in milliseconds, so an awake
@@ -162,8 +156,6 @@ export function ForgeEnvPage() {
   // ── The backend's per-env reads. ──
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
   const cloudStatus = useCloudEnvStatus(placedId);
-  const promotions = useCloudPromotions(liveEnv?.id ?? null);
-  const convergences = useLiveConvergences(liveEnv?.id ?? null);
 
   // Billing, with this page as the way back (and its project in the URL).
   const goToBilling = useGoToBilling("forge");
@@ -173,7 +165,7 @@ export function ForgeEnvPage() {
 
   // The org's domains — a control-plane read, asked only while a tab that
   // shows them is open, and only for an env the platform could bind one to.
-  const domainsShown = !!liveEnv && (tab === "overview" || tab === "domains");
+  const domainsShown = !!liveEnv && tab === "overview";
   const domains = useForgeDomains({ enabled: domainsShown });
 
   // A tab change is a history entry: people link each other to a tab, and
@@ -193,16 +185,15 @@ export function ForgeEnvPage() {
     void navigate({ href: href({ kind: "domains" }) });
   }, [navigate, href]);
 
-  const selectSecret = useCallback(
-    (name: string | null) => {
-      void navigate({
-        to: ".",
-        search: (prev: Record<string, unknown>) => ({ ...prev, secret: name ?? undefined }),
-        replace: true,
-      });
-    },
-    [navigate]
-  );
+  // A retired tab (Releases, Activity, Secrets, Domains) is the project's page
+  // now, scoped to this environment: a link that still names one lands there.
+  const retired = retiredTabOf(tabSearch);
+  useEffect(() => {
+    if (!retired) return;
+    const page = RETIRED_TABS[retired];
+    const extra = page === "secrets" && secretParam ? { env: envName, secret: secretParam } : { env: envName };
+    void navigate({ href: href({ kind: page }, extra), replace: true });
+  }, [retired, navigate, href, envName, secretParam]);
 
   // ── Header actions: always present on a deployed env, disabled with a reason. ──
   const latestRelease = topology.data?.kind === "report" ? (topology.data.report.latest_release ?? null) : null;
@@ -217,7 +208,9 @@ export function ForgeEnvPage() {
         ? "Checking your daemon…"
         : daemon === "disabled"
           ? FORGE_API_DISABLED_COPY
-          : "Needs your daemon: forge plans this against your checkout.";
+          : daemon === "no-checkout"
+            ? "Needs a checkout of this project on one of your machines: forge plans this against it."
+            : "Needs your daemon: forge plans this against your checkout.";
   const promoteReason =
     daemonReason ??
     (!daemonAsked
@@ -328,8 +321,8 @@ export function ForgeEnvPage() {
       <div role="tabpanel" id={`env-tab-${tab}`} aria-labelledby={`env-tab-button-${tab}`}>
         {identityLoading && (tab === "overview" || tab === "running") ? (
           <div className="space-y-4" data-testid="live-loading" aria-busy="true">
-            <div className="h-28 animate-pulse rounded-lg border border-border bg-card motion-reduce:animate-none" />
-            <div className="h-40 animate-pulse rounded-lg border border-border bg-card motion-reduce:animate-none" />
+            <div className="h-28 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
+            <div className="h-40 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
           </div>
         ) : tab === "overview" ? (
           <OverviewTab
@@ -338,13 +331,18 @@ export function ForgeEnvPage() {
             liveLoading={live.isLoading}
             forgeEnv={forgeEnv}
             daemon={daemon}
+            checkoutMissing={checkoutMissing}
+            projectName={currentProject?.name}
             projectId={projectId}
             forgeProject={projectName.name}
             domains={domains.data}
             domainsLoading={domains.isLoading}
-            onOpenDomains={() => selectTab("domains")}
+            onOpenDomains={openDomainsScreen}
             onManageDomains={openDomainsScreen}
             workloadsHref={href({ kind: "overview" }, { env: envName })}
+            cloudStatus={cloudStatus.data}
+            cloudStatusLoading={cloudStatus.isLoading}
+            domainsHref={href({ kind: "domains" })}
           />
         ) : tab === "identity" ? (
           <IdentityTab
@@ -354,7 +352,7 @@ export function ForgeEnvPage() {
             liveLoading={live.isLoading}
             envNameById={envNameById}
           />
-        ) : tab === "running" ? (
+        ) : (
           <RunningTab
             envName={envName}
             daemon={tabDaemon}
@@ -367,41 +365,12 @@ export function ForgeEnvPage() {
             }}
             retrying={envStatus.isFetching}
             projectName={currentProject?.name}
-          />
-        ) : tab === "releases" ? (
-          <ReleasesTab
-            live={liveEnv}
-            promotions={promotions.data}
-            isLoading={promotions.isLoading}
-            error={promotions.error as Error | null}
-            forgeEnv={forgeEnv}
-          />
-        ) : tab === "activity" ? (
-          <ActivityTab
-            live={liveEnv}
-            promotions={promotions.data}
-            convergences={convergences.data}
-            isLoading={promotions.isLoading}
-            error={promotions.error as Error | null}
-          />
-        ) : tab === "domains" ? (
-          <DomainsTab
-            live={liveEnv}
-            domains={domains.data}
-            domainsLoading={domains.isLoading}
-            onManageDomains={openDomainsScreen}
-          />
-        ) : (
-          <SecretsTab
-            projectId={projectId}
-            live={liveEnv}
-            envName={envName}
-            forgeProject={projectName.name}
-            selectedSecret={secretParam ?? null}
-            onSelectSecret={selectSecret}
+            checkoutMissing={checkoutMissing}
           />
         )}
       </div>
+
+      <ScopedPages envName={envName} href={href} local={lifecycle === "local"} />
 
       {promoteOpen && latestRelease && (
         <PromoteDialog
@@ -450,11 +419,44 @@ function TabButton({
       className={cn(
         "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-primary font-medium text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground"
+          ? "border-primary font-medium text-ink"
+          : "border-transparent text-ink-muted hover:text-ink"
       )}
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * The project pages this environment's other facts live on, each scoped to it.
+ * They used to be tabs here (a second copy of each page per environment).
+ */
+function ScopedPages({
+  envName,
+  href,
+  local,
+}: {
+  envName: string;
+  href: ForgeConsole["href"];
+  /** A local environment runs the working tree: it has secrets, and no releases, domains or deploy activity. */
+  local: boolean;
+}) {
+  const all = [
+    { kind: "releases", label: "Releases" },
+    { kind: "secrets", label: "Secrets" },
+    { kind: "domains", label: "Domains" },
+    { kind: "activity", label: "Activity" },
+  ] as const;
+  const pages = local ? all.filter((page) => page.kind === "secrets") : all;
+  return (
+    <nav aria-label={`More about ${envName}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted" data-testid="env-scoped-pages">
+      <span>Also for {envName}:</span>
+      {pages.map((page) => (
+        <Link key={page.kind} href={href({ kind: page.kind }, { env: envName })} className="text-ink underline-offset-2 hover:underline" data-testid={`env-scoped-${page.kind}`}>
+          {page.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

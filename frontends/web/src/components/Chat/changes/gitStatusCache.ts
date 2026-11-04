@@ -1,5 +1,5 @@
-import { worktreeGrpc } from "../../../api/worktree-grpc";
-import { projectGrpc, type FileChange as GrpcFileChange } from "../../../api/project-grpc";
+import { fetchWorktreeChanges } from "../../../hooks/worktree-git-queries";
+import { fetchProjectChanges, type FileChange as ProjectFileChange } from "../../../hooks/project-queries";
 import { useProjectStore } from "../../../store/projectStore";
 import { logger } from "../../../lib/logger";
 import type { FileChange, RecentChangesData } from "./types";
@@ -57,7 +57,7 @@ export async function fetchChanges(
   projectDefaultBranch: string,
 ): Promise<RecentChangesData> {
   if (worktreeId) {
-    const grpcData = await worktreeGrpc.getChanges(worktreeId, repoId);
+    const grpcData = await fetchWorktreeChanges(worktreeId, repoId);
     return {
       branch: grpcData.branch,
       files: grpcData.files.map(
@@ -70,11 +70,11 @@ export async function fetchChanges(
     };
   }
 
-  const grpcData = await projectGrpc.getChanges(projectId);
+  const projectData = await fetchProjectChanges(projectId);
   return {
-    branch: grpcData.branch,
-    files: grpcData.files.map(
-      (f: GrpcFileChange): FileChange => ({
+    branch: projectData.branch,
+    files: projectData.files.map(
+      (f: ProjectFileChange): FileChange => ({
         path: f.path,
         status: f.status,
         diff: f.diff,
@@ -83,7 +83,7 @@ export async function fetchChanges(
         is_new: f.is_new,
       }),
     ),
-    total_files: grpcData.total_files,
+    total_files: projectData.total_files,
     ahead: 0,
     behind: 0,
     default_branch: projectDefaultBranch,

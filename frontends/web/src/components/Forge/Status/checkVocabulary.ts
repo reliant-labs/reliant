@@ -69,32 +69,32 @@ export interface DispositionStyle {
 export const DISPOSITION_STYLES: Record<CheckDisposition, DispositionStyle> = {
   // Measured, correct. Solid, filled, continuous border.
   "measured-good": {
-    container: "bg-success/15 border border-solid border-success/40",
+    container: "bg-success-surface border border-solid border-success-border",
     foreground: "text-success-ink",
   },
   // Measured, imperfect. Same certainty treatment, warning hue — NOT destructive:
   // a degraded stack and a broken one are different reports.
   "measured-degraded": {
-    container: "bg-warning/15 border border-solid border-warning/40",
+    container: "bg-warning-surface border border-solid border-warning-border",
     foreground: "text-warning-ink",
   },
   // Measured, wrong. Solid and destructive: the one treatment that means "act".
   "measured-bad": {
-    container: "bg-destructive/15 border border-solid border-destructive/40",
-    foreground: "text-destructive-ink",
+    container: "bg-danger-surface border border-solid border-danger-border",
+    foreground: "text-danger-ink",
   },
   // A FINISHED answer that happens to be "not here": dashed and unfilled like
   // undetermined, but DIMMED, because it needs no attention at all.
   "not-applicable": {
     container: "bg-transparent border border-dashed border-border opacity-70",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
   },
   // A HOLE in the report. Dashed and unfilled — never mistakable for measured —
   // but ringed and full-opacity so it draws the eye rather than receding like a
   // skip. This is the row whose misrendering as green hid two real outages.
   undetermined: {
-    container: "bg-transparent border border-dashed border-muted-foreground/60 ring-1 ring-inset ring-muted-foreground/30",
-    foreground: "text-muted-foreground",
+    container: "bg-transparent border border-dashed border-ink-muted/60 ring-1 ring-inset ring-ink-muted/30",
+    foreground: "text-ink-muted",
   },
 };
 

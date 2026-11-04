@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 // DynamicInput - Wrapper that enables CEL expression mode for non-string inputs
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Code, ChevronDown } from "lucide-react";
@@ -236,7 +236,7 @@ export function DynamicInput({
 
           {/* Suggestions dropdown trigger */}
           {suggestions.length > 0 && !disabled && (
-            <Tooltip content="Insert parameter" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Insert parameter" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               type="button"
               onClick={() => setShowSuggestions(!showSuggestions)}
@@ -276,7 +276,7 @@ export function DynamicInput({
 
         {/* CEL mode toggle (active) - hidden when disabled */}
         {!shouldHideToggle && (
-          <Tooltip content="Switch to literal value" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+          <Tooltip content="Switch to literal value" side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
             type="button"
             onClick={handleToggle}
@@ -306,7 +306,7 @@ export function DynamicInput({
 
       {/* CEL mode toggle (inactive) - hidden when disabled */}
       {!shouldHideToggle && (
-        <Tooltip content="Switch to dynamic expression" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+        <Tooltip content="Switch to dynamic expression" side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
           type="button"
           onClick={handleToggle}

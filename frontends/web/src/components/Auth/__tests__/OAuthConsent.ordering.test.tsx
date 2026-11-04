@@ -146,6 +146,35 @@ describe("OAuth consent ordering", () => {
     });
   });
 
+  // The redirect fallback waits 2s for a navigation that, in a browser,
+  // unloads the page first. Left running past unmount it fired into a
+  // torn-down jsdom — React's setState threw "window is not defined" as an
+  // unhandled error in whichever test file the worker ran next.
+  it("cancels the redirect fallback when the page goes away", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    try {
+      const { unmount } = render(<OAuthConsent />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: /continue/i })
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: /save connector/i })
+      );
+      await waitFor(() =>
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000)
+      );
+      const index = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 2000);
+      const fallback = setTimeoutSpy.mock.results[index]!.value;
+
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(fallback);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
   it("denies without creating a connector", async () => {
     render(<OAuthConsent />);
     await userEvent.click(

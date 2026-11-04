@@ -16,10 +16,11 @@
 // dock (window-surfacing.js), which creates one only if none exists. File ›
 // New Tab used to open a second window here even while one sat in the tray.
 //
-// Close Tab and Clear Terminal are the exceptions: they act on something the
-// user is looking at. With no Reliant window focused there is nothing on screen
-// to close or clear, and bringing a window back just to close part of it, or
-// to wipe a terminal the user has not seen, is not what the keystroke asks for.
+// Close Tab, Clear Terminal and Find are the exceptions: they act on something
+// the user is looking at. With no Reliant window focused there is nothing on
+// screen to close, clear or search, and bringing a window back just to close
+// part of it, or to wipe a terminal the user has not seen, is not what the
+// keystroke asks for.
 //
 // Kept free of Electron imports so the menu's wiring is unit-testable.
 
@@ -38,10 +39,11 @@ const MENU_SHORTCUT_LABELS = Object.freeze({
   prevChat: "Previous Chat",
   nextRightSidebarTab: "Next Sidebar Tab",
   prevRightSidebarTab: "Previous Sidebar Tab",
+  findInPage: "Find…",
 });
 
 // Shortcuts that act only on a window the user is already in.
-const NEEDS_FOCUSED_WINDOW = new Set(["closeTab", "clearTerminal"]);
+const NEEDS_FOCUSED_WINDOW = new Set(["closeTab", "clearTerminal", "findInPage"]);
 
 // Returns deliver(shortcutId), true when it sent.
 //   send(channel, payload) — surfaces the window the user is in and sends to

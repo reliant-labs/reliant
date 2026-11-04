@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const discover = vi.hoisted(() => vi.fn());
-vi.mock("../../../api/worktree-grpc", () => ({ worktreeGrpc: { discover } }));
-
+import { invalidateDiscoveredWorktrees } from "../../../hooks/worktree-queries";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { WorktreesDiscoverHint } from "../WorktreesDiscoverHint";
+
+const discover = vi.fn();
 
 const list = (n: number) => ({
   discovered: Array.from({ length: n }, (_, i) => ({ path: `/w/${i}` })),
@@ -30,7 +32,11 @@ describe("WorktreesDiscoverHint", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // The hint reads DiscoverWorktrees (background) through the generated query.
+    setTransport(mockTransport({ "WorktreeService.DiscoverWorktrees": (req) => discover(req) }));
   });
+
+  afterEach(() => setTransport(null));
 
   it("is hidden at 0", async () => {
     discover.mockResolvedValue(list(0));
@@ -63,7 +69,7 @@ describe("WorktreesDiscoverHint", () => {
     expect(localStorage.getItem("reliant.worktreeHint.dismissed.p1")).toBe("2");
 
     discover.mockResolvedValue(list(3));
-    await qc.invalidateQueries({ queryKey: ["external-worktrees", "p1"] });
+    await invalidateDiscoveredWorktrees(qc, "p1");
     expect(await screen.findByText(/3 worktrees/)).toBeTruthy();
   });
 });

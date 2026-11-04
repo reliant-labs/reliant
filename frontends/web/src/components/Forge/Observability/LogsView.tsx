@@ -25,17 +25,18 @@ import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-tab
 import { ChevronRight, GitBranch, Radio, Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useSearchLogs, useServiceOverview, type LogFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import { SEVERITIES, type ObsScope, type LogRecord, type Severity } from "@/services/controlPlane/observability/types";
+import { SEVERITIES, type ObsScope, type LogRecord, type ServiceSignal, type Severity } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { AttributeTable } from "./AttributeTable";
 import { formatTimestamp } from "./format";
 import { severityParam, type ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { servicesFor, useSignalsIndex } from "./serviceSignals";
 import { useRovingFocus } from "./useRovingFocus";
 
 const features = tableFeatures({});
@@ -130,16 +131,16 @@ export function LogsView({
         navigate={navigate}
       />
       {traceId && (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="obs-logs-trace-scope">
-          Showing logs from trace <span className="font-mono text-foreground">{shortId(traceId)}</span>
+        <p className="flex flex-wrap items-center gap-2 text-xs text-ink-muted" data-testid="obs-logs-trace-scope">
+          Showing logs from trace <span className="font-mono text-ink">{shortId(traceId)}</span>
           {spanId && (
             <>
-              , span <span className="font-mono text-foreground">{shortId(spanId)}</span>
+              , span <span className="font-mono text-ink">{shortId(spanId)}</span>
             </>
           )}
           <button
             type="button"
-            className="rounded-sm text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-sm text-ink underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => navigate({ trace: undefined, span: undefined })}
           >
             Show all logs
@@ -147,6 +148,7 @@ export function LogsView({
         </p>
       )}
 
+      {logs.data && <ObsAsOf updatedAt={logs.dataUpdatedAt} />}
       {logs.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-logs-loading" />
@@ -220,7 +222,7 @@ function LogsToolbar({
             Search logs
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
             <input
               id="obs-log-query"
               type="search"
@@ -230,25 +232,25 @@ function LogsToolbar({
               aria-invalid={queryError ? true : undefined}
               aria-describedby={queryError ? "obs-log-query-error" : undefined}
               className={cn(
-                "h-8 w-full rounded-md border bg-background pl-8 pr-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                queryError ? "border-destructive" : "border-border"
+                "h-8 min-h-[32px] w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                queryError ? "border-danger" : "border-border"
               )}
               data-testid="obs-log-query"
             />
           </div>
           {queryError && (
-            <p id="obs-log-query-error" role="alert" className="mt-1 text-xs text-destructive" data-testid="obs-log-query-error">
+            <p id="obs-log-query-error" role="alert" className="mt-1 text-xs text-danger-ink" data-testid="obs-log-query-error">
               {queryError}
             </p>
           )}
-          <details className="mt-1 text-xs text-muted-foreground">
-            <summary className="cursor-pointer rounded-sm hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <details className="mt-1 text-xs text-ink-muted">
+            <summary className="inline-flex min-h-[32px] cursor-pointer items-center rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Query syntax
             </summary>
-            <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-border/60 bg-background px-3 py-2">
+            <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2">
               {QUERY_SYNTAX.map(([example, meaning]) => (
                 <div key={example} className="contents">
-                  <dt className="font-mono text-foreground">{example}</dt>
+                  <dt className="font-mono text-ink">{example}</dt>
                   <dd>{meaning}</dd>
                 </div>
               ))}
@@ -260,10 +262,12 @@ function LogsToolbar({
           range={range}
           value={service}
           onChange={(next) => navigate({ service: next }, { replace: true })}
+          signal="logs"
         />
         <Button
           variant={live ? "primary" : "outline"}
-          size="sm"
+          size="md"
+          className="min-h-[32px] touch:h-11"
           aria-pressed={live}
           onClick={() => navigate({ live: live ? undefined : true }, { replace: true })}
           leftIcon={<Radio className={cn("h-3.5 w-3.5", live && "motion-safe:animate-pulse")} />}
@@ -283,10 +287,10 @@ function LogsToolbar({
               onClick={() => toggleSeverity(severity)}
               data-testid={`obs-severity-${severity}`}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex h-8 min-h-[32px] touch:h-11 items-center rounded-full border px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
+                  ? "border-primary bg-primary/10 text-ink"
+                  : "border-border text-ink-muted hover:text-ink"
               )}
             >
               {severity}
@@ -306,6 +310,7 @@ export function ServiceSelect({
   onChange,
   includeAll = true,
   id = "obs-service-filter",
+  signal,
 }: {
   scope: ObsScope;
   range: RangePreset;
@@ -313,14 +318,27 @@ export function ServiceSelect({
   onChange: (service: string | undefined) => void;
   includeAll?: boolean;
   id?: string;
+  /**
+   * The signal the view reads. Set, the picker offers only the services that
+   * send it, plus the ones that declare it and are idle (listed apart, as not
+   * selectable), and adds services the overview does not list (one that sends
+   * profiles and nothing else). Unset (Errors, Sessions): every service seen.
+   */
+  signal?: ServiceSignal;
 }) {
   const overview = useServiceOverview(scope, range);
-  const names = useMemo(() => {
+  const signals = useSignalsIndex(signal ? scope : null, range);
+  const rows = useMemo(() => {
     const known = (overview.data?.services ?? []).map((s) => s.name);
-    // A service from a link that the window no longer contains is still selectable.
-    if (value && !known.includes(value)) known.unshift(value);
-    return known;
-  }, [overview.data, value]);
+    if (!signal) {
+      // A service from a link that the window no longer contains is still selectable.
+      if (value && !known.includes(value)) known.unshift(value);
+      return known.map((name) => ({ name, idle: "" }));
+    }
+    return servicesFor(signals, signal, known, value).map((row) => ({ name: row.name, idle: row.state.kind === "idle" ? row.state.hint : "" }));
+  }, [overview.data, value, signal, signals]);
+  const active = rows.filter((row) => !row.idle);
+  const idle = rows.filter((row) => row.idle);
 
   return (
     <>
@@ -331,16 +349,26 @@ export function ServiceSelect({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+        className="h-8 min-h-[32px] rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
         data-testid={id}
       >
         {includeAll && <option value="">All services</option>}
         {!includeAll && !value && <option value="">Choose a service…</option>}
-        {names.map((name) => (
+        {active.map(({ name }) => (
           <option key={name} value={name}>
             {name}
           </option>
         ))}
+        {idle.length > 0 && signal && (
+          <optgroup label={`No ${signal} in ${signals?.range === "7d" ? "the last 7 days" : "the last 24 hours"}`} data-testid={`${id}-idle`}>
+            {idle.map(({ name, idle: hint }) => (
+              // The current selection stays selectable, so the picker still shows it.
+              <option key={name} value={name} disabled={name !== value} title={hint}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
     </>
   );
@@ -412,7 +440,7 @@ function LogList({
     <Card padding="none" className="overflow-hidden">
       <div
         aria-hidden="true"
-        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground max-md:hidden")}
+        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-muted max-md:hidden")}
       >
         <span />
         {table.getHeaderGroups()[0]?.headers.map((header) => (
@@ -456,14 +484,14 @@ function LogList({
                   onFocus={() => setActive(item.index)}
                   className={cn(
                     ROW_GRID,
-                    "w-full px-3 py-1 text-left font-mono text-xs hover:bg-muted/50 focus:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "w-full px-3 py-1 text-left font-mono text-xs hover:bg-ink/5 focus:outline-none focus-visible:bg-ink/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     "touch:min-h-[44px] max-md:gap-y-0.5 max-md:py-2",
-                    open && "bg-muted/40"
+                    open && "bg-surface-sunken"
                   )}
                   data-testid="obs-log-row"
                 >
                   <ChevronRight
-                    className={cn("h-3 w-3 self-center text-muted-foreground transition-transform", open && "rotate-90")}
+                    className={cn("h-3 w-3 self-center text-ink-muted transition-transform", open && "rotate-90")}
                     aria-hidden="true"
                   />
                   {row.getAllCells().map((cell) => (
@@ -471,7 +499,7 @@ function LogList({
                       key={cell.id}
                       className={cn(
                         "min-w-0",
-                        cell.column.id === "body" ? cn("truncate text-foreground", LOG_BODY) : "truncate text-muted-foreground"
+                        cell.column.id === "body" ? cn("truncate text-ink", LOG_BODY) : "truncate text-ink-muted"
                       )}
                     >
                       <table.FlexRender cell={cell} />
@@ -479,8 +507,8 @@ function LogList({
                   ))}
                 </button>
                 {open && (
-                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-background px-9 py-3 max-md:px-3" data-testid="obs-log-details">
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{record.body}</pre>
+                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-surface-sunken px-9 py-3 max-md:px-3" data-testid="obs-log-details">
+                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-ink">{record.body}</pre>
                     {record.traceId && (
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -512,7 +540,7 @@ function LogList({
       </div>
       {hasMore && (
         <div className="border-t border-border px-3 py-2">
-          <Button variant="ghost" size="sm" onClick={onLoadMore} loading={loadingMore} disabled={loadingMore} data-testid="obs-logs-more">
+          <Button variant="ghost" size="md" className="min-h-[32px] touch:h-11" onClick={onLoadMore} loading={loadingMore} disabled={loadingMore} data-testid="obs-logs-more">
             Load older
           </Button>
         </div>
@@ -522,13 +550,13 @@ function LogList({
 }
 
 const SEVERITY_CLASS: Record<Severity, string> = {
-  fatal: "text-destructive font-semibold",
-  error: "text-destructive",
-  warn: "text-warning",
-  info: "text-foreground",
-  debug: "text-muted-foreground",
-  trace: "text-muted-foreground",
-  unknown: "text-muted-foreground",
+  fatal: "text-danger-ink font-semibold",
+  error: "text-danger-ink",
+  warn: "text-warning-ink",
+  info: "text-ink",
+  debug: "text-ink-muted",
+  trace: "text-ink-muted",
+  unknown: "text-ink-muted",
 };
 
 export function SeverityLabel({ severity, text }: { severity: Severity; text?: string }) {

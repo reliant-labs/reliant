@@ -70,6 +70,40 @@ describe("the issue list", () => {
     expect(listCalls(onCall).at(-1)!.text).toBe("pool.go");
   });
 
+  it("narrows to the issues one user hit", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "errors", user: "u_8812" }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    expect(rowIds()).toEqual(["iss-orders-deadline", "iss-checkout-total", "iss-worker-conns"]);
+    expect(listCalls(onCall).some((req) => (req as ListReq & { userId?: string }).userId === "u_8812")).toBe(true);
+  });
+
+  it("never shows an older control plane's unfiltered issues as one user's", async () => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    // A control plane from before ListIssuesRequest.user_id ignores the field.
+    api.listIssues = (req, options) => listIssues({ ...req, userId: undefined }, options);
+    renderPanel(api, { view: "errors", user: "u_8812" }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent("can't filter issues by user");
+    expect(screen.queryAllByTestId(/^obs-issue-iss-/)).toHaveLength(0);
+  });
+
+  it.each(["u_8812", "reliant-console-filter-probe"])("filters by user %s on a supporting control plane whose events name any user id", async (user) => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    // User ids are the application's strings: here the users hit every issue,
+    // including one whose id is the console's old fixed probe value.
+    const users = ["u_8812", "reliant-console-filter-probe"];
+    api.listIssues = async (req, options) => {
+      const page = await listIssues({ ...req, userId: undefined }, options);
+      return !req.userId || users.includes(req.userId) ? page : { ...page, issues: [], nextPageToken: "" };
+    };
+    renderPanel(api, { view: "errors", user }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    expect(rowIds()).toEqual(["iss-orders-deadline", "iss-checkout-total", "iss-worker-conns"]);
+    expect(screen.queryByTestId("obs-error-filter-unsupported")).toBeNull();
+  });
+
   it("pages through next_page_token", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn();
@@ -90,6 +124,8 @@ describe("the issue list", () => {
     renderPanel(createFixtureApi(), { view: "errors", q: "nothing-matches-this" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No open issues match");
     expect(screen.getByTestId("obs-clear-filters")).toBeInTheDocument();
+    // A filtered empty is about the filter, not about how errors arrive.
+    expect(screen.queryByTestId("obs-no-data-source")).not.toBeInTheDocument();
   });
 
   it("explains a control plane without issues inline", async () => {

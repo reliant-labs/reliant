@@ -44,9 +44,10 @@ import Badge from "@/components/forge-ui/badge";
 import { CardInset } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIdentityMutation, useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
 import type {
+  IdentityApp,
   IdentityDeliveryState,
   IdentityEnvironmentRef,
   IdentityExportURL,
@@ -61,7 +62,7 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatIn } from "../Observability/format";
 import { Panel } from "./EnvTabPanels";
 import { IdentityUsers } from "./IdentityUsers";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 
 export interface IdentityTabProps {
   envName: string;
@@ -77,8 +78,8 @@ export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById
   if (liveLoading && !live) return <IdentitySkeleton />;
   if (!live) {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="identity-unregistered">
-        Reliant has no record of <span className="font-mono text-foreground">{envName}</span>, so it runs no sign-in service
+      <p className="text-sm text-ink-muted" data-testid="identity-unregistered">
+        Reliant has no record of <span className="font-mono text-ink">{envName}</span>, so it runs no sign-in service
         for it. Register it from Overview.
       </p>
     );
@@ -107,7 +108,7 @@ function DeployedIdentity({
         return (
           <Frame icon={<ShieldOff className="h-4 w-4" />} title="You can't view this environment's identity" testId="identity-denied">
             <p>
-              Only members of the organization that owns <span className="font-mono text-foreground">{envName}</span> can.
+              Only members of the organization that owns <span className="font-mono text-ink">{envName}</span> can.
               Ask an organization admin to add you.
             </p>
           </Frame>
@@ -149,7 +150,7 @@ function DeployedIdentity({
           testId="identity-refused"
           tone="bad"
         >
-          <p className="font-mono text-foreground">{s.refused}</p>
+          <p className="font-mono text-ink">{s.refused}</p>
           <p>Fix the declaration and deploy again; the next pass picks it up.</p>
         </Frame>
       );
@@ -178,8 +179,8 @@ function DeployedIdentity({
         testId="identity-none"
       >
         <p>
-          Declare one with <code className="font-mono text-foreground">forge.ManagedIdentity</code> in{" "}
-          <code className="font-mono text-foreground">deploy/kcl/identity.k</code> and deploy. Reliant then runs its sign-in
+          Declare one with <code className="font-mono text-ink">forge.ManagedIdentity</code> in{" "}
+          <code className="font-mono text-ink">deploy/kcl/identity.k</code> and deploy. Reliant then runs its sign-in
           service — issuer, users, roles — and they show here.
         </p>
       </Frame>
@@ -189,7 +190,7 @@ function DeployedIdentity({
   return (
     <div className="space-y-4" data-testid="identity-tab">
       {!s.callerCanManage && (
-        <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status" data-testid="identity-read-only">
+        <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted" role="status" data-testid="identity-read-only">
           <Lock className="h-3 w-3" aria-hidden="true" />
           You can view this environment&apos;s users. Inviting and changing them needs an organization admin.
         </p>
@@ -241,6 +242,25 @@ const DELIVERY_VARIANT: Record<IdentityDeliveryState, "success" | "warning" | "e
   unknown: "neutral",
 };
 
+type AppRow = { name: string; app: IdentityApp };
+
+const APP_COLUMNS: DataTableColumn<AppRow>[] = [
+  { key: "name", header: "Name", render: (_, { app }) => app.name },
+  { key: "clientId", header: "Client id", className: "font-mono text-xs", render: (_, { app }) => app.clientId || "—" },
+  {
+    key: "broker",
+    header: "Broker token",
+    className: "text-xs text-ink-muted",
+    render: (_, { app }) => {
+      if (app.brokerExpiresAtMs === null) return "none";
+      const expired = app.brokerExpiresAtMs <= Date.now();
+      return (
+        <span className={cn(expired && "text-danger-ink")}>{expired ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}</span>
+      );
+    },
+  },
+];
+
 function StatusPanel({
   envId,
   status: s,
@@ -270,27 +290,27 @@ function StatusPanel({
     >
       <div className="space-y-4">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[max-content_1fr]">
-          <dt className="text-xs text-muted-foreground">Issuer</dt>
-          <dd className="min-w-0 break-all font-mono text-foreground" data-testid="identity-issuer">
+          <dt className="text-xs text-ink-muted">Issuer</dt>
+          <dd className="min-w-0 break-all font-mono text-ink" data-testid="identity-issuer">
             {s.issuer || "—"}
           </dd>
-          <dt className="text-xs text-muted-foreground">Reachable</dt>
-          <dd className="text-foreground" data-testid="identity-visibility">
+          <dt className="text-xs text-ink-muted">Reachable</dt>
+          <dd className="text-ink" data-testid="identity-visibility">
             {s.public ? "Public — anyone can reach the sign-in pages" : "Private — only from your clusters"}
           </dd>
           {s.mailDelivery !== "unknown" && (
             <>
-              <dt className="text-xs text-muted-foreground">Email</dt>
-              <dd className="text-foreground" data-testid="identity-mail">
+              <dt className="text-xs text-ink-muted">Email</dt>
+              <dd className="text-ink" data-testid="identity-mail">
                 {s.mailDelivery === "smtp" ? (
                   "Sent through this environment's own SMTP server"
                 ) : (
                   <div className="space-y-1">
                     <p>None — Reliant sends no email for this environment: no invitations, no password-reset links.</p>
-                    <p className="text-xs text-muted-foreground" data-testid="identity-mail-none-hint">
-                      To send them, add <code className="font-mono text-foreground">smtp = forge.IdentitySMTP {"{…}"}</code> to its{" "}
-                      <code className="font-mono text-foreground">forge.ManagedIdentity</code> in{" "}
-                      <code className="font-mono text-foreground">deploy/kcl/identity.k</code> and deploy. Until then, an admin
+                    <p className="text-xs text-ink-muted" data-testid="identity-mail-none-hint">
+                      To send them, add <code className="font-mono text-ink">smtp = forge.IdentitySMTP {"{…}"}</code> to its{" "}
+                      <code className="font-mono text-ink">forge.ManagedIdentity</code> in{" "}
+                      <code className="font-mono text-ink">deploy/kcl/identity.k</code> and deploy. Until then, an admin
                       invites people and resets passwords by getting a one-time link under Users and handing it over.
                     </p>
                   </div>
@@ -298,12 +318,12 @@ function StatusPanel({
               </dd>
             </>
           )}
-          <dt className="text-xs text-muted-foreground">Last reconciled</dt>
-          <dd className="text-foreground">{s.lastReconciledAtMs ? formatAgo(s.lastReconciledAtMs) : "not yet"}</dd>
+          <dt className="text-xs text-ink-muted">Last reconciled</dt>
+          <dd className="text-ink">{s.lastReconciledAtMs ? formatAgo(s.lastReconciledAtMs) : "not yet"}</dd>
           {(sharesAnother || s.sharerEnvironmentIds.length > 0) && (
             <>
-              <dt className="text-xs text-muted-foreground">Shared</dt>
-              <dd className="text-foreground" data-testid="identity-sharing">
+              <dt className="text-xs text-ink-muted">Shared</dt>
+              <dd className="text-ink" data-testid="identity-sharing">
                 {sharesAnother ? (
                   <>
                     Uses the identity of{" "}
@@ -331,14 +351,14 @@ function StatusPanel({
           )}
           {s.adopted && (
             <>
-              <dt className="text-xs text-muted-foreground">Adopted</dt>
-              <dd className="text-muted-foreground">This instance existed before Reliant managed it; its ids were kept.</dd>
+              <dt className="text-xs text-ink-muted">Adopted</dt>
+              <dd className="text-ink-muted">This instance existed before Reliant managed it; its ids were kept.</dd>
             </>
           )}
           {s.graceUntilMs && (
             <>
-              <dt className="text-xs text-muted-foreground">Deleted after</dt>
-              <dd className="text-foreground">
+              <dt className="text-xs text-ink-muted">Deleted after</dt>
+              <dd className="text-ink">
                 {new Date(s.graceUntilMs).toLocaleString()} — this environment no longer declares it.
               </dd>
             </>
@@ -349,7 +369,7 @@ function StatusPanel({
           <div
             role="alert"
             data-testid="identity-last-error"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
+            className="rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-xs text-danger-ink"
           >
             <p className="font-medium">
               {s.failures > 0 ? `${s.failures} failed attempt${s.failures === 1 ? "" : "s"}` : "The last attempt failed"}
@@ -361,60 +381,44 @@ function StatusPanel({
 
         <Section title="Applications">
           {s.apps.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No applications are registered yet.</p>
+            <p className="text-xs text-ink-muted">No applications are registered yet.</p>
           ) : (
-            <StackedTable className="w-full text-left text-sm" data-testid="identity-apps">
-              <thead>
-                <tr className="text-xs text-muted-foreground">
-                  <th className="pb-1.5 pr-4 font-normal">Name</th>
-                  <th className="pb-1.5 pr-4 font-normal">Client id</th>
-                  <th className="pb-1.5 font-normal">Broker token</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.apps.map((app) => (
-                  <tr key={app.name} className="border-t border-border/60">
-                    <td className="py-1.5 pr-4 text-foreground">{app.name}</td>
-                    <td className="py-1.5 pr-4 font-mono text-xs text-foreground">{app.clientId || "—"}</td>
-                    <td className="py-1.5 text-xs text-muted-foreground">
-                      {app.brokerExpiresAtMs === null ? (
-                        "none"
-                      ) : (
-                        <span className={cn(app.brokerExpiresAtMs <= Date.now() && "text-destructive-ink")}>
-                          {app.brokerExpiresAtMs <= Date.now() ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </StackedTable>
+            <div data-testid="identity-apps">
+              <DataTable<AppRow>
+                stacked
+                compact
+                ariaLabel="Identity applications"
+                columns={APP_COLUMNS}
+                data={s.apps.map((app) => ({ name: app.name, app }))}
+                getRowKey={(r) => r.name}
+              />
+            </div>
           )}
         </Section>
 
         <Section title="Deliveries">
           {s.deliveries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Nothing is delivered to a cluster yet.</p>
+            <p className="text-xs text-ink-muted">Nothing is delivered to a cluster yet.</p>
           ) : (
             <ul className="space-y-2" data-testid="identity-deliveries">
               {s.deliveries.map((d) => (
                 <li key={`${d.kind}/${d.cluster}/${d.namespace}/${d.name}`} className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Badge label={d.state} variant={DELIVERY_VARIANT[d.state]} size="sm" />
-                    <span className="font-mono text-xs text-foreground">
+                    <span className="font-mono text-xs text-ink">
                       {d.cluster} · {d.namespace}/{d.name}
                     </span>
-                    <span className="text-xs text-muted-foreground">{d.kind}</span>
+                    <span className="text-xs text-ink-muted">{d.kind}</span>
                     {d.lastWrittenAtMs && (
-                      <span className="text-xs text-muted-foreground" title="When the delivered values last changed">
+                      <span className="text-xs text-ink-muted" title="When the delivered values last changed">
                         written {formatAgo(d.lastWrittenAtMs)}
                       </span>
                     )}
                     {d.lastVerifiedAtMs && (
-                      <span className="text-xs text-muted-foreground">verified {formatAgo(d.lastVerifiedAtMs)}</span>
+                      <span className="text-xs text-ink-muted">verified {formatAgo(d.lastVerifiedAtMs)}</span>
                     )}
                   </div>
-                  {d.lastError && <p className="break-words font-mono text-xs text-destructive-ink">{d.lastError}</p>}
+                  {d.lastError && <p className="break-words font-mono text-xs text-danger-ink">{d.lastError}</p>}
                 </li>
               ))}
             </ul>
@@ -428,7 +432,7 @@ function StatusPanel({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-medium uppercase tracking-wide text-ink-muted">{title}</h3>
       <CardInset padding="sm">{children}</CardInset>
     </section>
   );
@@ -477,7 +481,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
           </Button>
         )}
         {exportNow.error && (
-          <p role="alert" className="text-destructive-ink">
+          <p role="alert" className="text-danger-ink">
             {identityErrorMessage(exportNow.error) || "Couldn't export this identity."}
           </p>
         )}
@@ -510,7 +514,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
           </Button>
         )}
         {fetchLink.error && (
-          <p role="alert" className="text-destructive-ink">
+          <p role="alert" className="text-danger-ink">
             {identityErrorMessage(fetchLink.error) || "Couldn't sign a download link."}
           </p>
         )}
@@ -519,18 +523,18 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
   }
   return (
     <Panel title="Export" description="A copy of this environment's users and roles." testId="identity-export">
-      <div className="text-xs text-muted-foreground">{body}</div>
+      <div className="text-xs text-ink-muted">{body}</div>
     </Panel>
   );
 }
 
 function ExportLink({ link }: { link: IdentityExportURL }) {
   return (
-    <p className="text-foreground" data-testid="identity-export-link">
-      <a href={link.url} className="text-primary underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
+    <p className="text-ink" data-testid="identity-export-link">
+      <a href={link.url} className="text-primary-ink underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
         Download the export
       </a>
-      {link.expiresAtMs && <span className="text-muted-foreground"> — expires {formatIn(link.expiresAtMs)}</span>}
+      {link.expiresAtMs && <span className="text-ink-muted"> — expires {formatIn(link.expiresAtMs)}</span>}
     </p>
   );
 }
@@ -542,7 +546,7 @@ function NotEnabled({ envName }: { envName: string }) {
     <Frame icon={<KeyRound className="h-4 w-4" />} title="Managed identity isn't enabled for this environment yet" testId="identity-not-enabled">
       <p>
         Reliant can run the sign-in service for an environment — its issuer, users and roles — but it isn&apos;t switched on
-        for this control plane yet. Nothing is wrong with <span className="font-mono text-foreground">{envName}</span>: once
+        for this control plane yet. Nothing is wrong with <span className="font-mono text-ink">{envName}</span>: once
         it is, its identity shows here.
       </p>
     </Frame>
@@ -553,9 +557,9 @@ function LocalIdentity({ envName }: { envName: string }) {
   return (
     <Frame icon={<Laptop className="h-4 w-4" />} title="This environment signs in against your local IdP" testId="identity-local">
       <p>
-        <code className="font-mono text-foreground">forge env up {envName}</code> runs forge&apos;s dev IdP on your machine
+        <code className="font-mono text-ink">forge env up {envName}</code> runs forge&apos;s dev IdP on your machine
         and converges the same identity declaration into it. That IdP reports nothing to Reliant, so there is no status to
-        show here: its issuer and seed users are in the output of <code className="font-mono text-foreground">forge env up</code>.
+        show here: its issuer and seed users are in the output of <code className="font-mono text-ink">forge env up</code>.
       </p>
     </Frame>
   );
@@ -583,13 +587,13 @@ export function Frame({
   tone?: "neutral" | "bad";
 }) {
   return (
-    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5">
-      <span className={cn("mt-0.5 shrink-0", tone === "bad" ? "text-destructive-ink" : "text-muted-foreground")} aria-hidden="true">
+    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
+      <span className={cn("mt-0.5 shrink-0", tone === "bad" ? "text-danger-ink" : "text-ink-muted")} aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        {children && <div className="space-y-2 text-xs text-muted-foreground">{children}</div>}
+        <p className="text-sm font-medium text-ink">{title}</p>
+        {children && <div className="space-y-2 text-xs text-ink-muted">{children}</div>}
       </div>
     </div>
   );

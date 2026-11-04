@@ -195,6 +195,15 @@ describe("drill-down", () => {
     expect(drillSearches({ ...panel, where: [] }, {}, { range: "1h", service: "api" }).service).toBe("api");
   });
 
+  it("carries viewer trace predicates into drills without inventing metric-only trace keys", () => {
+    const { traces } = drillSearches({ ...panel, where: [
+      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service" },
+      { field: "span.attr.rpc.method", op: "eq", value: "Get" },
+      { field: "metric.attr.procedure", op: "eq", value: "/pkg.Service/Get" },
+    ] }, {}, { range: "1h" });
+    expect(traces.f).toEqual(["rpc.service:pkg.Service", "rpc.method:Get"]);
+  });
+
   it("knows which fields the scope can filter on", () => {
     expect(scopeKeyOf("span.attr.http.route")).toBe("http.route");
     expect(scopeKeyOf("deployment.environment.name")).toBeNull();
@@ -213,8 +222,19 @@ describe("the spec as JSON", () => {
     expect(panelFromJson(null)).toMatchObject({ id: "", kind: "", series: [] });
   });
 
-  it("writes plain JSON with undefined keys dropped", () => {
-    const json = dashboardToJson({ id: "d", title: "D", description: undefined, filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [], unit: undefined }] });
-    expect(json).toEqual({ id: "d", title: "D", filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [] }] });
+  it("writes forge's canonical JSON: undefined and empty values dropped, as forge's omitempty fields drop them", () => {
+    const json = dashboardToJson({ id: "d", title: "D", description: undefined, filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [], unit: undefined, ratio: false }] });
+    expect(json).toEqual({ id: "d", title: "D", panels: [{ id: "p", title: "P", kind: "line", signal: "traces" }] });
+  });
+
+  it("never sends a text panel the series and signal the console fills in on reading, which forge refuses on it", () => {
+    const text = panelFromJson({ id: "about", title: "About", kind: "text", markdown: "Hello" });
+    expect(text).toMatchObject({ series: [], signal: "" });
+    expect(dashboardToJson({ id: "d", title: "D", filters: [], panels: [text] }).panels).toEqual([{ id: "about", title: "About", kind: "text", markdown: "Hello" }]);
+  });
+
+  it("keeps a list's items where they are, empty ones included", () => {
+    const funnel = { id: "f", title: "F", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["a", "", "c"] } };
+    expect(dashboardToJson({ id: "d", title: "D", filters: [], panels: [funnel] }).panels).toEqual([{ id: "f", title: "F", kind: "funnel", signal: "traces", funnel: { steps: ["a", "", "c"] } }]);
   });
 });

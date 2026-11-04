@@ -7,18 +7,26 @@
  * React Query keeps the previous page on screen until the next one lands,
  * and an in-flight request for a stale key is aborted. Pages come from
  * `next_page_token`, so the browser only ever holds what was scrolled to.
+ *
+ * Both reads are forge's generated infinite hooks: keyed under
+ * catalogServiceKeys.all (so a connection change refetches them), with the
+ * page token owned by the hook and the proto mapped to the view by `select`.
  */
 
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { keepPreviousData, type InfiniteData } from "@tanstack/react-query";
 
+import type { ListCatalogIntegrationsResponse, SearchCatalogResponse } from "../../../gen/reliant/v1/catalog_pb";
 import {
-  catalogSearchGrpc,
+  catalogFacetFromProto,
+  catalogKindToProto,
+  catalogListingFromProto,
+  catalogSummaryFromProto,
   type CatalogEntrySummary,
   type CatalogFacet,
   type CatalogIntegrationListing,
   type CatalogKind,
-} from "../../../api/catalog-search-grpc";
+} from "../../../hooks/catalog-queries";
+import { useListCatalogIntegrationsInfinite, useSearchCatalogInfinite } from "../../../hooks/catalog-service-hooks_gen";
 import { useDebounce } from "../../../hooks/useDebounce";
 
 export const CATALOG_SEARCH_DEBOUNCE_MS = 150;
@@ -54,13 +62,60 @@ export interface CatalogSearchState {
   refetch: () => void;
 }
 
-export const catalogSearchKeys = {
-  all: ["catalogSearch"] as const,
-  search: (query: string, kind: CatalogKind, category: string, integration = "") =>
-    [...catalogSearchKeys.all, kind, category, integration, query] as const,
-  integrations: (kind: CatalogKind, category: string) => ["catalogIntegrations", kind, category] as const,
-  entry: (ref: string) => ["catalogEntry", ref] as const,
-};
+interface SearchView {
+  entries: CatalogEntrySummary[];
+  facets: CatalogFacet[];
+  totalSize: number;
+}
+
+/** Every loaded page's entries, deduplicated by ref; facets and total from the first page. */
+function searchViewOf(data: InfiniteData<SearchCatalogResponse, string>): SearchView {
+  const seen = new Set<string>();
+  const entries: CatalogEntrySummary[] = [];
+  for (const page of data.pages) {
+    for (const entry of page.entries) {
+      if (seen.has(entry.ref)) continue;
+      seen.add(entry.ref);
+      entries.push(catalogSummaryFromProto(entry));
+    }
+  }
+  const first = data.pages[0];
+  return { entries, facets: first?.categoryFacets.map(catalogFacetFromProto) ?? [], totalSize: first?.totalSize ?? 0 };
+}
+
+interface IntegrationsView {
+  integrations: CatalogIntegrationListing[];
+  facets: CatalogFacet[];
+  totalSize: number;
+}
+
+/** Every loaded page's integrations, deduplicated by id; facets and total from the first page. */
+function integrationsViewOf(data: InfiniteData<ListCatalogIntegrationsResponse, string>): IntegrationsView {
+  const seen = new Set<string>();
+  const integrations: CatalogIntegrationListing[] = [];
+  for (const page of data.pages) {
+    for (const listing of page.integrations) {
+      const id = listing.integration?.id ?? "";
+      if (seen.has(id)) continue;
+      seen.add(id);
+      integrations.push(catalogListingFromProto(listing));
+    }
+  }
+  const first = data.pages[0];
+  return { integrations, facets: first?.categoryFacets.map(catalogFacetFromProto) ?? [], totalSize: first?.totalSize ?? 0 };
+}
+
+const NO_ENTRIES: CatalogEntrySummary[] = [];
+const NO_INTEGRATIONS: CatalogIntegrationListing[] = [];
+const NO_FACETS: CatalogFacet[] = [];
+
+function searchRequest(query: string, kind: CatalogKind, category: string, integration: string) {
+  return { query: query.slice(0, 256), kinds: [catalogKindToProto(kind)], category, integration, pageSize: CATALOG_PAGE_SIZE };
+}
+
+function integrationsRequest(kind: CatalogKind, category: string, pageSize: number) {
+  return { kinds: [catalogKindToProto(kind)], category, pageSize };
+}
 
 export function useCatalogSearch({
   query,
@@ -73,15 +128,8 @@ export function useCatalogSearch({
   const settledQuery = useDebounce(query.trim(), CATALOG_SEARCH_DEBOUNCE_MS);
   const active = enabled && (!requireQuery || settledQuery !== "");
 
-  const result = useInfiniteQuery({
-    queryKey: catalogSearchKeys.search(settledQuery, kind, category, integration),
-    queryFn: ({ pageParam, signal }) =>
-      catalogSearchGrpc.search(
-        { query: settledQuery, kinds: [kind], category, integration, pageSize: CATALOG_PAGE_SIZE, pageToken: pageParam },
-        signal,
-      ),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  const result = useSearchCatalogInfinite(searchRequest(settledQuery, kind, category, integration), {
+    select: searchViewOf,
     // Typing keeps the last results on screen until the next land. Switching
     // integration must not: one integration's actions would show under
     // another's name.
@@ -90,25 +138,10 @@ export function useCatalogSearch({
     enabled: active,
   });
 
-  const entries = useMemo(() => {
-    const seen = new Set<string>();
-    const out: CatalogEntrySummary[] = [];
-    for (const page of result.data?.pages ?? []) {
-      for (const entry of page.entries) {
-        if (seen.has(entry.ref)) continue;
-        seen.add(entry.ref);
-        out.push(entry);
-      }
-    }
-    return out;
-  }, [result.data]);
-
-  const first = result.data?.pages[0];
-
   return {
-    entries,
-    facets: first?.categoryFacets ?? [],
-    totalSize: first?.totalSize ?? 0,
+    entries: result.data?.entries ?? NO_ENTRIES,
+    facets: result.data?.facets ?? NO_FACETS,
+    totalSize: result.data?.totalSize ?? 0,
     settledQuery,
     isLoading: result.isLoading,
     isFetching: result.isFetching,
@@ -147,35 +180,17 @@ export interface CatalogIntegrationsState {
  * integrations is fetched only as far as it is scrolled.
  */
 export function useCatalogIntegrations({ kind, category = "", pageSize = CATALOG_PAGE_SIZE, enabled = true }: CatalogIntegrationsArgs): CatalogIntegrationsState {
-  const result = useInfiniteQuery({
-    queryKey: [...catalogSearchKeys.integrations(kind, category), pageSize],
-    queryFn: ({ pageParam, signal }) =>
-      catalogSearchGrpc.listIntegrations({ kinds: [kind], category, pageSize, pageToken: pageParam }, signal),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  const result = useListCatalogIntegrationsInfinite(integrationsRequest(kind, category, pageSize), {
+    select: integrationsViewOf,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     enabled,
   });
 
-  const integrations = useMemo(() => {
-    const seen = new Set<string>();
-    const out: CatalogIntegrationListing[] = [];
-    for (const page of result.data?.pages ?? []) {
-      for (const listing of page.integrations) {
-        if (seen.has(listing.integration.id)) continue;
-        seen.add(listing.integration.id);
-        out.push(listing);
-      }
-    }
-    return out;
-  }, [result.data]);
-
-  const first = result.data?.pages[0];
   return {
-    integrations,
-    facets: first?.categoryFacets ?? [],
-    totalSize: first?.totalSize ?? 0,
+    integrations: result.data?.integrations ?? NO_INTEGRATIONS,
+    facets: result.data?.facets ?? NO_FACETS,
+    totalSize: result.data?.totalSize ?? 0,
     isLoading: result.isLoading,
     isError: result.isError,
     hasNextPage: !!result.hasNextPage,

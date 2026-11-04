@@ -99,25 +99,68 @@ enum WorkflowExecutionEventType {
   WORKFLOW_EXECUTION_EVENT_TYPE_CANCELLED = 4;
 }
 
-// StreamingService provides real-time streaming of updates.
-// Uses gRPC server-streaming for efficient push-based updates.
-// A single StreamUserUpdates stream handles BOTH global user-level events
-// and per-chat detail events (when subscribe_chat_id is set).
+// StreamingService provides real-time streaming of updates over two
+// independent server streams: one per client for user-level events, and one
+// per open chat for that chat's detail events. Switching chats cancels and
+// reopens only the chat stream; the user stream stays connected.
 service StreamingService {
-  // StreamUserUpdates opens a server-streaming connection for all real-time updates.
-  // Always delivers user-level events (chat state, projects, processes, etc.).
-  // When subscribe_chat_id is set, ALSO delivers per-chat detail events
-  // (messages, approvals, tool calls, streaming deltas, workflow/node events).
-  // To switch chat subscriptions, the client disconnects and reconnects with a new request.
-  rpc StreamUserUpdates(StreamUserUpdatesRequest) returns (stream UserStreamEvent) {}
+  // StreamUserUpdates opens the user-wide stream: chat state, projects,
+  // processes, daemon signals and every other user-level event. It carries no
+  // per-chat detail; that is StreamChatUpdates.
+  rpc StreamUserUpdates(StreamUserUpdatesRequest) returns (stream UserStreamEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
+  // or a cursor the server will not replay from) or a replay of
+  // (since_seq, latest], then exactly one caught_up, then live chat updates
+  // (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
+  // for a chat that does not exist or is not the caller's.
+  rpc StreamChatUpdates(StreamChatUpdatesRequest) returns (stream ChatStreamEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================
-// Chat Detail Messages (delivered via UserStreamEvent when subscribed)
+// Chat Stream Messages (StreamChatUpdates)
 // ============================================
 
+// StreamChatUpdatesRequest opens one chat's detail stream.
+message StreamChatUpdatesRequest {
+  string chat_id = 1;
+  // Chat-level sequence the client's cached state is current as of: the
+  // server replays (since_seq, latest]. 0 asks for a snapshot, and so does a
+  // cursor too far behind or ahead of the chat to replay from.
+  int64 since_seq = 2;
+  // The project the client's user stream (StreamUserUpdates) is scoped to,
+  // or unset when it streams every project. See ChatUserUpdates.
+  optional string project_id = 3;
+}
+
+// ChatStreamEvent is one frame of a chat's detail stream.
+message ChatStreamEvent {
+  oneof event {
+    ChatSyncSnapshot snapshot = 1;     // Initial sync with assembled messages
+    ChatUpdateBatch updates = 2;       // Replayed or live chat updates
+    ChatCaughtUp caught_up = 3;        // Initial sync complete (once per stream)
+    Heartbeat heartbeat = 4;           // Keepalive heartbeat
+    ChatUserUpdates user_updates = 5;  // This chat's user-level updates the user stream filters out
+  }
+}
+
+// ChatUserUpdates carries user-level updates about the streamed chat, or about
+// a chat it started (agent.start_run), that the client's project-scoped user
+// stream does not deliver because they belong to another project. A chat
+// opened outside the current project (a deep link, a notification) still gets
+// its status, activity and spawned runs this way. The two streams partition
+// the updates: one in the request's project goes to the user stream, never
+// here. Sent only when the request names a project_id. Live only: these carry
+// no cursor and do not advance the user stream's.
+message ChatUserUpdates {
+  repeated UserUpdateData updates = 1;
+}
+
 // ChatSyncSnapshot provides the initial sync with pre-assembled messages.
-// Sent through the unified stream when subscribe_chat_id is set.
 message ChatSyncSnapshot {
   repeated Message messages = 1;                // Assembled messages with content blocks
   repeated ChatUpdateData other_updates = 2;   // Non-message updates (approvals, threads, etc.)
@@ -152,36 +195,30 @@ message ChatUpdateData {
 // User Updates Streaming Messages
 // ============================================
 
-// StreamUserUpdatesRequest initiates the unified update stream
+// StreamUserUpdatesRequest initiates the user-wide update stream
 message StreamUserUpdatesRequest {
   int64 since_seq = 1;                         // User-level sequence number to start from
-  optional string subscribe_chat_id = 2;       // Subscribe to per-chat detail events for this chat
-  int64 chat_since_seq = 3;                    // Chat-level sequence number to start from (0 for initial sync snapshot)
+  // The chat subscription moved to StreamChatUpdates.
+  reserved 2, 3;
+  reserved "subscribe_chat_id", "chat_since_seq";
   optional string project_id = 4;              // Scope updates to this project (omit for all projects)
 }
 
-// UserStreamEvent represents a single event in the unified update stream.
-// Contains BOTH user-level events and per-chat detail events.
+// UserStreamEvent represents a single event in the user-wide update stream.
 message UserStreamEvent {
   oneof event {
-    // User-level events (always delivered)
     UserSyncInfo sync = 1;                     // Initial sync info
     UserUpdateBatch updates = 2;               // Batch of user updates
     Heartbeat heartbeat = 3;                   // Keepalive heartbeat
-
-    // Per-chat detail events (only when subscribe_chat_id is set)
-    ChatSyncSnapshot chat_sync_snapshot = 4;   // Initial chat sync with assembled messages
-    ChatUpdateBatch chat_updates = 5;          // Incremental chat updates batch
-    WorkflowExecutionEvent workflow_event = 6; // Workflow lifecycle event
-    NodeExecutionEvent node_event = 7;         // Node lifecycle event
-    ExecutionLog execution_log = 8;            // Log entry from execution
-    ChatCaughtUp chat_caught_up = 9;           // Initial chat sync complete (sent once per subscription)
   }
+  // Per-chat frames moved to ChatStreamEvent (StreamChatUpdates).
+  reserved 4 to 9;
+  reserved "chat_sync_snapshot", "chat_updates", "workflow_event", "node_event", "execution_log", "chat_caught_up";
 }
 
-// ChatCaughtUp marks the end of a subscription's initial chat sync. It is sent
-// exactly once per subscription, after the snapshot or the replay from
-// chat_since_seq — including a replay of nothing — and before any live chat
+// ChatCaughtUp marks the end of a chat stream's initial sync. It is sent
+// exactly once per stream, after the snapshot or the replay from
+// since_seq — including a replay of nothing — and before any live chat
 // event. Until it arrives, the client's cached transcript may still be behind
 // the server; no other frame can stand in for it, because a replay of nothing
 // sends no chat frame at all.
@@ -302,30 +339,4 @@ enum ExecutionLogLevel {
   EXECUTION_LOG_LEVEL_INFO = 2;
   EXECUTION_LOG_LEVEL_WARN = 3;
   EXECUTION_LOG_LEVEL_ERROR = 4;
-}
-
-// ExecutionLog represents a log entry from workflow/node execution
-message ExecutionLog {
-  string id = 1;                             // Unique log entry ID
-  string workflow_id = 2;                    // Workflow UUID
-  optional string node_id = 3;               // Node ID if from a specific node
-  ExecutionLogLevel level = 4;               // Log severity
-  string message = 5;                        // Log message content
-  int64 timestamp = 6;                       // Unix timestamp
-  optional string source = 7;                // Source identifier (e.g., "stdout", "stderr", "activity")
-  map<string, string> fields = 8;            // Structured log fields
-}
-
-// NodeExecutionEvent represents a node lifecycle event (start, update, complete)
-message NodeExecutionEvent {
-  NodeExecutionEventType event_type = 1;
-  NodeExecutionState node = 2;               // Current node state
-  optional string progress_message = 3;      // Optional progress message for "progress" events
-  optional double progress_percent = 4;      // Optional progress percentage (0-100)
-}
-
-// WorkflowExecutionEvent represents a workflow lifecycle event
-message WorkflowExecutionEvent {
-  WorkflowExecutionEventType event_type = 1;
-  WorkflowExecutionState workflow = 2;       // Current workflow state (may include nested state)
 }

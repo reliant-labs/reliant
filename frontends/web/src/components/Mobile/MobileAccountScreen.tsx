@@ -27,10 +27,12 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut, Moon, Sun, User } from "lucide-react";
+import { useActiveOrg } from "../../hooks/useOrgs";
 import { useAuthStore } from "../../store/authStore";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { cn } from "../../lib/utils";
 import { MobileMenuButton } from "./MobileMenuButton";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import {
   MobileBackButton,
   MobileCardGroup,
@@ -111,6 +113,19 @@ function ThemeToggle() {
           Dark
         </button>
       </div>
+    </div>
+  );
+}
+
+/** The org this phone acts in. Nothing for a person with one org. */
+function OrgSection() {
+  const { canSwitch } = useActiveOrg();
+  if (!canSwitch) return null;
+  return (
+    <div data-testid="mobile-org-section">
+      <MobileCardGroup label="Organization">
+        <OrgSwitcher variant="list" />
+      </MobileCardGroup>
     </div>
   );
 }
@@ -201,6 +216,8 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
           </div>
           <ThemeToggle />
         </MobileCardGroup>
+
+        <OrgSection />
 
         <MobileCardGroup>
           <div className="p-4">

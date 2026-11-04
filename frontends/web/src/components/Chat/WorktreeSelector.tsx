@@ -4,8 +4,9 @@ import { cn } from "../../lib/utils";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
+import { useCurrentWorktree, useWorktreeList, getCachedWorktree } from "../../hooks/worktree-queries";
 
 interface WorktreeSelectorProps {
   selectedWorktreeId?: string;
@@ -25,17 +26,17 @@ export function WorktreeSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  // Loads the first page when mounted or the project changes.
+  const { worktrees: allWorktrees } = useWorktreeList(currentProject?.id);
   // Filter out archived worktrees (only show active ones)
   const activeWorktrees = allWorktrees.filter(w => !w.deleted_at);
   // Find the main worktree
   const mainWorktree = activeWorktrees.find(w => w.is_main === true);
   // Filter out the main worktree from the list (it's shown separately at the top)
   const nonMainWorktrees = activeWorktrees.filter(w => !w.is_main);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
+  const currentWorktree = useCurrentWorktree();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const currentProject = useProjectStore((state) => state.currentProject);
 
   const selectedWorktree = selectedWorktreeId
     ? activeWorktrees.find((w) => w.id === selectedWorktreeId)
@@ -47,13 +48,11 @@ export function WorktreeSelector({
     onWorktreeSelect?.(effectiveWorktreeId);
 
     // Also update the global current worktree in the store. Look it up in the
-    // store rather than this render's list, which won't yet contain a
+    // cache rather than this render's list, which won't yet contain a
     // just-created workspace.
     if (currentProject && effectiveWorktreeId) {
-      const worktree = useWorktreeStore
-        .getState()
-        .worktrees.find((w) => w.id === effectiveWorktreeId && !w.deleted_at);
-      if (worktree) {
+      const worktree = getCachedWorktree(effectiveWorktreeId);
+      if (worktree && !worktree.deleted_at) {
         await switchWorktreeContext(currentProject.id, worktree);
       }
     } else if (currentProject) {
@@ -66,11 +65,7 @@ export function WorktreeSelector({
 
   const handleWorktreeCreated = async (worktreeId: string) => {
     setShowCreateModal(false);
-    // Reload worktrees first so the new one is in the list
-    if (currentProject) {
-      await loadWorktrees(currentProject.id);
-    }
-    // Then select the newly created worktree
+    // createWorktree cached the new row and refreshes the list.
     handleWorktreeSelect(worktreeId);
   };
 
@@ -88,13 +83,6 @@ export function WorktreeSelector({
     }
   }, [isOpen]);
 
-  // Load worktrees when component mounts or project changes
-  useEffect(() => {
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
-  }, [currentProject, loadWorktrees]);
-
   if (!currentProject) {
     return null;
   }
@@ -109,7 +97,7 @@ export function WorktreeSelector({
             ? "Select a git workspace for this chat"
             : "Workspace can only be set on new chats"
         }
-        placement="top"
+        side="top"
       >
         <button
         onClick={() => canSelectWorktree && setIsOpen(!isOpen)}
@@ -159,7 +147,7 @@ export function WorktreeSelector({
                   <div className="leading-snug text-xs opacity-80">Main workspace</div>
                 </div>
                 {selectedWorktreeId === mainWorktree?.id && (
-                  <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                  <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                 )}
               </div>
             </button>
@@ -189,7 +177,7 @@ export function WorktreeSelector({
 
                     </div>
                     {selectedWorktreeId === worktree.id && (
-                      <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                      <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
                     )}
                   </div>
                 </button>

@@ -12,6 +12,7 @@ import {
   storageCard,
   projectedBillLabel,
   hoursRanOut,
+  hoursReference,
   type DaemonPricingLike,
   type DaemonUsageLike,
 } from "../daemonUsage";
@@ -24,12 +25,13 @@ import {
  */
 
 const pricing: DaemonPricingLike = {
+  pricingVersion: "test-v1",
   sizes: [
-    { size: "small", multiplier: 1n, hourlyPriceCents: "13.0000", storageGib: 25n },
-    { size: "medium", multiplier: 2n, hourlyPriceCents: "26.0000", storageGib: 50n },
-    { size: "large", multiplier: 4n, hourlyPriceCents: "52.0000", storageGib: 100n },
-    { size: "xl", multiplier: 8n, hourlyPriceCents: "104.0000", storageGib: 200n },
-    { size: "2xl", multiplier: 16n, hourlyPriceCents: "208.0000", storageGib: 400n },
+    { size: "m", costWeight: "1/1", hourlyPriceCents: "13.0000", storageGib: 25n },
+    { size: "l", costWeight: "2/1", hourlyPriceCents: "26.0000", storageGib: 50n },
+    { size: "xl", costWeight: "4/1", hourlyPriceCents: "52.0000", storageGib: 100n },
+    { size: "2xl", costWeight: "8/1", hourlyPriceCents: "104.0000", storageGib: 200n },
+    { size: "3xl", costWeight: "16/1", hourlyPriceCents: "208.0000", storageGib: 400n },
   ],
   storageCentsPerGibMonth: "25.0000",
   placeholder: true,
@@ -38,10 +40,12 @@ const pricing: DaemonPricingLike = {
 function usage(over: Partial<DaemonUsageLike> = {}): DaemonUsageLike {
   return {
     usageMeasured: true,
-    includedSmallDaemonSeconds: 160n * 3600n,
-    usedSmallDaemonSeconds: 0n,
-    remainingSmallDaemonSeconds: 0n,
-    runningMultiplier: 0n,
+    pricingVersion: "test-v1",
+    allowanceWeightedSeconds: "576000/1",
+    consumedWeightedSeconds: "0/1",
+    remainingWeightedSeconds: "0/1",
+    grantRemainingWeightedSeconds: "0/1",
+    runningCostWeightSum: "0/1",
     bySize: [],
     ...over,
   };
@@ -51,45 +55,62 @@ const ts = (d: Date) => ({ seconds: BigInt(Math.floor(d.getTime() / 1000)) });
 
 describe("usage headline", () => {
   it("reads remaining SDS as hours", () => {
-    expect(remainingHeadline(usage({ remainingSmallDaemonSeconds: BigInt(41.5 * 3600) }))).toBe(
-      "41.5 hours left",
+    expect(remainingHeadline(usage({ remainingWeightedSeconds: "149400/1", runningCostWeightSum: "1/1" }))).toBe(
+      "≈ 41.5 hours left at the current rate",
     );
   });
 
   // usage_measured=false still renders as UNKNOWN, never "0.0 … left".
   it("renders nothing when the server did not measure", () => {
     expect(remainingHeadline(usage({ usageMeasured: false }))).toBeNull();
-    expect(burnLabel(usage({ usageMeasured: false, runningMultiplier: 4n }))).toBeNull();
+    expect(burnLabel(usage({ usageMeasured: false, runningCostWeightSum: "4/1" }))).toBeNull();
     expect(runsOutLabel(usage({ usageMeasured: false, exhaustsAt: ts(new Date()) }))).toBeNull();
     expect(asOfLabel(usage({ usageMeasured: false, measuredThrough: ts(new Date()) }))).toBeNull();
     expect(remainingHeadline(undefined)).toBeNull();
   });
 });
 
+describe("hours reference", () => {
+  it("picks the plan's own (largest allowed) size, matching the usage's price version", () => {
+    expect(hoursReference(pricing, ["m", "l"])).toEqual({ size: "l", weight: "2/1" });
+    expect(hoursReference(pricing, ["m"], { pricingVersion: "test-v1" })).toEqual({ size: "m", weight: "1/1" });
+    expect(hoursReference(pricing, ["m"], { pricingVersion: "other" })).toBeNull();
+    expect(hoursReference(pricing, [])).toBeNull();
+    expect(hoursReference(undefined, ["m"])).toBeNull();
+  });
+
+  it("states what is left in plan hours when nothing is running", () => {
+    const ref = hoursReference(pricing, ["m"]);
+    expect(remainingHeadline(usage({ remainingWeightedSeconds: "352800/1" }), ref)).toBe("98 hours left");
+    expect(remainingHeadline(usage({ remainingWeightedSeconds: "0/1" }), ref)).toBe("Included hours used up");
+    expect(remainingHeadline(usage({ remainingWeightedSeconds: "3600/1" }))).toBe("Included hours available");
+  });
+});
+
 describe("burn line", () => {
   it("names the size when the period ran exactly one and it is up", () => {
     const u = usage({
-      remainingSmallDaemonSeconds: BigInt(41.6 * 3600),
-      runningMultiplier: 4n,
-      bySize: [{ size: "large", multiplier: 4n, runningSeconds: 100n, overageSeconds: 0n }],
+      remainingWeightedSeconds: "149760/1",
+      runningCostWeightSum: "4/1",
+      bySize: [{ size: "xl", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "100/1", exactOverageSeconds: "0/1" }],
     });
-    expect(burnLabel(u)).toBe("≈ 10.4 h left on your Large");
+    expect(burnLabel(u)).toBe("≈ 10.4 hours left at the current rate");
   });
 
   it("does not guess a size when two are running", () => {
     const u = usage({
-      remainingSmallDaemonSeconds: 36000n,
-      runningMultiplier: 5n,
+      remainingWeightedSeconds: "36000/1",
+      runningCostWeightSum: "5/1",
       bySize: [
-        { size: "small", multiplier: 1n, runningSeconds: 10n, overageSeconds: 0n },
-        { size: "large", multiplier: 4n, runningSeconds: 10n, overageSeconds: 0n },
+        { size: "m", pricingVersion: "test-v1", costWeight: "1/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
+        { size: "xl", pricingVersion: "test-v1", costWeight: "4/1", exactRunningSeconds: "10/1", exactOverageSeconds: "0/1" },
       ],
     });
-    expect(burnLabel(u)).toBe("≈ 2.0 h left with your running machines");
+    expect(burnLabel(u)).toBe("≈ 2 hours left at the current rate");
   });
 
   it("is absent when nothing is running", () => {
-    expect(burnLabel(usage({ remainingSmallDaemonSeconds: 3600n }))).toBeNull();
+    expect(burnLabel(usage({ remainingWeightedSeconds: "3600/1" }))).toBeNull();
   });
 });
 
@@ -107,37 +128,37 @@ describe("runs out / as of", () => {
   });
 
   it("renders measured_through as a clock time", () => {
-    expect(asOfLabel(usage({ measuredThrough: ts(new Date()) }))).toMatch(/^as of \d{2}:\d{2}$/);
+    expect(asOfLabel(usage({ measuredThrough: ts(new Date()) }))).toMatch(/^as of \d{1,2}:\d{2}\s?[AP]M$/);
   });
 });
 
 describe("hours in the footnote", () => {
   it("converts the plan's small hours into hours of a size", () => {
-    for (const [size, hrs] of [["small", "160"], ["medium", "80"], ["large", "40"], ["xl", "20"], ["2xl", "10"]] as const) {
-      expect(sizeHours(pricing, size, 160)).toBe(hrs);
+    for (const [size, hrs] of [["m", "160"], ["l", "80"], ["xl", "40"], ["2xl", "20"], ["3xl", "10"]] as const) {
+      expect(sizeHours(pricing, size, "576000/1")).toBe(hrs);
     }
   });
 
   it("never invents an allowance", () => {
-    expect(sizeHours(pricing, "small", undefined)).toBeNull();
-    expect(sizeHours(pricing, "small", Number.NaN)).toBeNull();
-    expect(sizeHours(undefined, "small", 160)).toBeNull();
-    expect(sizeHours(pricing, "unknown", 160)).toBeNull();
-    expect(sizeHours(pricing, "small", 0)).toBe("0");
+    expect(sizeHours(pricing, "m", undefined)).toBeNull();
+    expect(sizeHours(pricing, "m", "NaN")).toBeNull();
+    expect(sizeHours(undefined, "m", "576000/1")).toBeNull();
+    expect(sizeHours(pricing, "unknown", "576000/1")).toBeNull();
+    expect(sizeHours(pricing, "m", "0/1")).toBe("0");
   });
 
   it("rounds down rather than promise more than the plan includes", () => {
-    const p: DaemonPricingLike = { ...pricing, sizes: [{ ...pricing.sizes[0], multiplier: 3 }] };
-    expect(sizeHours(p, "small", 100)).toBe("33.3");
+    const p: DaemonPricingLike = { ...pricing, sizes: [{ ...pricing.sizes[0], costWeight: "3/1" }] };
+    expect(sizeHours(p, "m", "360000/1")).toBe("33.3");
   });
 
   // A 2XL plan holds 2,560 small hours; the user is told 160 hours of 2XL.
   it("states a plan's hours at its OWN (largest allowed) size, never in small units", () => {
-    expect(planOwnSizeHours(pricing, ["small"], 160)).toBe("160");
-    expect(planOwnSizeHours(pricing, ["small", "medium"], 160)).toBe("80");
-    expect(planOwnSizeHours(pricing, ["small", "medium", "large", "xl", "2xl"], 2560)).toBe("160");
-    expect(planOwnSizeHours(pricing, [], 160)).toBeNull();
-    expect(planOwnSizeHours(pricing, ["small"], undefined)).toBeNull();
+    expect(planOwnSizeHours(pricing, ["m"], "576000/1")).toBe("160");
+    expect(planOwnSizeHours(pricing, ["m", "l"], "576000/1")).toBe("80");
+    expect(planOwnSizeHours(pricing, ["m", "l", "xl", "2xl", "3xl"], "9216000/1")).toBe("160");
+    expect(planOwnSizeHours(pricing, [], "576000/1")).toBeNull();
+    expect(planOwnSizeHours(pricing, ["m"], undefined)).toBeNull();
   });
 
   it("prices storage from the server's per-GiB price", () => {
@@ -160,10 +181,10 @@ describe("hours in the footnote", () => {
   });
 
   it("calls machines paused only when hours, coupon hours and overage are all gone", () => {
-    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 0n }), false)).toBe(true);
-    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 0n }), true)).toBe(false);
-    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 3600n }), false)).toBe(false);
-    expect(hoursRanOut({ ...usage({ remainingSmallDaemonSeconds: 0n }), grantedSmallDaemonSecondsRemaining: 60n }, false)).toBe(false);
+    expect(hoursRanOut(usage({ remainingWeightedSeconds: "0/1" }), false)).toBe(true);
+    expect(hoursRanOut(usage({ remainingWeightedSeconds: "0/1" }), true)).toBe(false);
+    expect(hoursRanOut(usage({ remainingWeightedSeconds: "3600/1" }), false)).toBe(false);
+    expect(hoursRanOut({ ...usage({ remainingWeightedSeconds: "0/1" }), grantRemainingWeightedSeconds: "60/1" }, false)).toBe(false);
     expect(hoursRanOut(usage({ usageMeasured: false }), false)).toBe(false);
   });
 });

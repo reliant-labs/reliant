@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 )
 
@@ -65,5 +66,71 @@ func TestHandleExecBGStatus_ReportsOutcomeAndForgottenProcesses(t *testing.T) {
 	}
 	if len(resp.Unknown) != 1 || resp.Unknown[0] != "never-started" {
 		t.Errorf("Unknown = %v, want [never-started]", resp.Unknown)
+	}
+}
+
+// startSleeper starts a first-party agent background process that runs until
+// the test ends.
+func startSleeper(t *testing.T) *shell.BackgroundProcess {
+	t.Helper()
+	mgr := shell.GetBackgroundManager()
+	process, err := mgr.StartProcess(context.Background(), shell.StartProcessOptions{
+		Command:    "exec sleep 600",
+		WorkingDir: t.TempDir(),
+		ChatID:     "chat-1",
+	})
+	if err != nil {
+		t.Fatalf("start process: %v", err)
+	}
+	t.Cleanup(func() { _ = mgr.KillProcess(process.ID) })
+	return process
+}
+
+// The server's word on each process's chat rides on exec.bg_status for the
+// daemon's idle reaper. Only the server's own (first-party) poll may give it:
+// a connector that could say "finished" would talk the reaper into stopping
+// the user's dev server.
+func TestHandleExecBGStatus_RecordsChatStateFromTheServerOnly(t *testing.T) {
+	t.Parallel()
+	mgr := shell.GetBackgroundManager()
+	process := startSleeper(t)
+	ask := func(ctx context.Context, running bool) {
+		t.Helper()
+		payload, _ := json.Marshal(daemon.ProcessStatusRequest{
+			ProcessIDs: []string{process.ID},
+			Chats:      []daemon.ProcessChatState{{ProcessID: process.ID, Running: running}},
+		})
+		if _, err := handleExecBGStatus(ctx, payload); err != nil {
+			t.Fatalf("handleExecBGStatus: %v", err)
+		}
+	}
+
+	ask(daemonpolicy.NewContext(context.Background(), &daemonpolicy.Policy{GrantID: "grant-1"}), false)
+	if got := mgr.ReapOutlook(process).ChatRunning; got != nil {
+		t.Fatalf("a connector's word on the chat was recorded: running=%v", *got)
+	}
+	for _, running := range []bool{true, false} {
+		ask(context.Background(), running)
+		if got := mgr.ReapOutlook(process).ChatRunning; got == nil || *got != running {
+			t.Fatalf("after the server said running=%v, the daemon holds %v", running, got)
+		}
+	}
+}
+
+// exec.bg_touch confines a connector to its own processes: its touch leaves
+// the user's process as idle as it was. (That a touch resets idle time, with
+// a fake clock: shell.TestTouchForGrant.)
+func TestHandleExecBGTouch_ConnectorCannotTouchTheUsersProcess(t *testing.T) {
+	t.Parallel()
+	mgr := shell.GetBackgroundManager()
+	process := startSleeper(t)
+	before := mgr.ReapOutlook(process).LastActive
+	payload, _ := json.Marshal(daemon.TouchProcessesRequest{ProcessIDs: []string{process.ID, "never-started"}})
+	ctx := daemonpolicy.NewContext(context.Background(), &daemonpolicy.Policy{GrantID: "grant-1"})
+	if _, err := handleExecBGTouch(ctx, payload); err != nil {
+		t.Fatalf("handleExecBGTouch: %v", err)
+	}
+	if got := mgr.ReapOutlook(process).LastActive; !got.Equal(before) {
+		t.Fatalf("a connector touched a first-party process: last active %v -> %v", before, got)
 	}
 }

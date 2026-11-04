@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ContentBlockType,
   MessageRole,
@@ -12,7 +12,8 @@ import {
   getMessagesMetaFromCache,
   setMessagesInCache,
 } from "../../hooks/message-queries";
-import { api } from "../../api/client";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 // Scroll-back paging. The initial chat snapshot is BOUNDED to the newest N
 // messages, so loadOlderMessages is what makes the rest of a long chat
@@ -23,23 +24,10 @@ import { api } from "../../api/client";
 
 const CHAT = "c-older";
 
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: {
-        ...actual.api.chatsV2,
-        listMessages: vi.fn(),
-      },
-    },
-  };
-});
-
-const listMessages = vi.mocked(api.chatsV2.listMessages);
+/** The fake ListMessages, answered at the transport. */
+const listMessages = vi.fn();
+beforeEach(() => setTransport(mockTransport({ "ChatService.ListMessages": (req: unknown) => listMessages(req) })));
+afterEach(() => setTransport(null));
 
 function msg(id: string, seq: number, overrides: Partial<Message> = {}) {
   return {
@@ -91,6 +79,7 @@ beforeEach(() => {
   useChatStore.setState({
     toolResultsByCallId: {},
     streamingMessages: {},
+    olderLoadingByChat: {},
   } as never);
 });
 
@@ -105,10 +94,9 @@ describe("loadOlderMessages", () => {
 
     await useChatStore.getState().loadOlderMessages(CHAT);
 
-    expect(listMessages).toHaveBeenCalledWith(CHAT, {
-      recent: 100,
-      beforeSeq: 300,
-    });
+    expect(listMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: CHAT, recent: 100, beforeSeq: 300n }),
+    );
     expect(getMessagesFromCache(CHAT).map((m) => m.id)).toEqual([
       "m200",
       "m299",
@@ -235,5 +223,161 @@ describe("loadOlderMessages", () => {
     const index = useChatStore.getState().toolResultsByCallId[CHAT];
     expect(index["call-new"]?.content).toBe("newer");
     expect(index["call-old"]?.content).toBe("result-for-call-old");
+  });
+
+  describe("the page's errors", () => {
+    const ERR = "activity-error-a";
+
+    function pageError(id: string, seq: number, attempt: number, retrying: boolean) {
+      return {
+        entityId: id,
+        sequenceNumber: BigInt(seq),
+        dataJson: JSON.stringify({
+          id,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: attempt,
+          is_retrying: retrying,
+          timestamp: "2026-01-01T00:00:00.000Z",
+        }),
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
+    }
+
+    function seedErrors(errors: unknown[]) {
+      setMessagesInCache(CHAT, [msg("m300", 300)], {
+        total: 400,
+        hasMore: true,
+        oldestSeq: 300,
+      });
+      useChatStore.setState({ errorEvents: { [CHAT]: errors } } as never);
+    }
+
+    const errors = () => useChatStore.getState().errorEvents[CHAT] ?? [];
+
+    it("adds an error the snapshot did not carry", async () => {
+      seedErrors([]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError("older-error", 40, 1, false)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors().map((e) => [e.id, e.sequence_number])).toEqual([["older-error", 40]]);
+    });
+
+    it("never replaces a newer attempt with the page's older one", async () => {
+      // One error's retries straddle the page's upper edge: the page holds
+      // attempt 1 (seq 50), the snapshot already delivered the final attempt 3
+      // (seq 90). Scrolling back must not make it look like it is retrying.
+      seedErrors([
+        {
+          update_type: "error",
+          id: ERR,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: 3,
+          is_retrying: false,
+          timestamp: "2026-01-01T00:01:00.000Z",
+          sequence_number: 90,
+        },
+      ]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError(ERR, 50, 1, true)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors()).toHaveLength(1);
+      expect(errors()[0]).toMatchObject({ attempt_number: 3, is_retrying: false, sequence_number: 90 });
+    });
+
+    it("replaces an older attempt with the page's newer one", async () => {
+      seedErrors([
+        {
+          update_type: "error",
+          id: ERR,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: 1,
+          is_retrying: true,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          sequence_number: 50,
+        },
+      ]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError(ERR, 60, 2, false)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors()[0]).toMatchObject({ attempt_number: 2, sequence_number: 60 });
+    });
+  });
+
+  describe("olderLoadingByChat", () => {
+    const loading = () => useChatStore.getState().olderLoadingByChat[CHAT] === true;
+
+    function seed() {
+      setMessagesInCache(CHAT, [msg("m300", 300)], {
+        total: 400,
+        hasMore: true,
+        oldestSeq: 300,
+      });
+    }
+
+    it("is true for exactly the life of the fetch", async () => {
+      seed();
+      let resolve!: (value: ReturnType<typeof page>) => void;
+      listMessages.mockReturnValue(
+        new Promise((r) => {
+          resolve = r;
+        }) as never,
+      );
+
+      const pending = useChatStore.getState().loadOlderMessages(CHAT);
+      expect(loading()).toBe(true);
+
+      resolve(page([msg("m200", 200)], 400));
+      await pending;
+      expect(loading()).toBe(false);
+    });
+
+    it("is not cleared by a duplicate call the in-flight guard turns away", async () => {
+      seed();
+      let resolve!: (value: ReturnType<typeof page>) => void;
+      listMessages.mockReturnValue(
+        new Promise((r) => {
+          resolve = r;
+        }) as never,
+      );
+
+      const store = useChatStore.getState();
+      const first = store.loadOlderMessages(CHAT);
+      // The second call returns at once; it must leave the flag alone.
+      await store.loadOlderMessages(CHAT);
+      expect(loading()).toBe(true);
+
+      resolve(page([msg("m200", 200)], 400));
+      await first;
+      expect(loading()).toBe(false);
+    });
+
+    it("clears after a failed fetch", async () => {
+      seed();
+      listMessages.mockRejectedValueOnce(new Error("network"));
+      await useChatStore.getState().loadOlderMessages(CHAT);
+      expect(loading()).toBe(false);
+    });
+
+    it("is per chat", async () => {
+      seed();
+      listMessages.mockReturnValue(new Promise(() => {}) as never);
+      void useChatStore.getState().loadOlderMessages(CHAT);
+      expect(useChatStore.getState().olderLoadingByChat["other-chat"]).toBeUndefined();
+    });
   });
 });

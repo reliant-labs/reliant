@@ -163,7 +163,7 @@ func (c *ReliantClient) ConvertMessages(prompts []string, messages []message.Mes
 			}
 			for _, binaryContent := range msg.BinaryContent() {
 				if isImageMimeType(binaryContent.MIMEType) {
-					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(Family)}
+					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.DataURL()}
 					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
 					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
 				} else {
@@ -221,15 +221,57 @@ func (c *ReliantClient) ConvertMessages(prompts []string, messages []message.Mes
 			})
 
 		case message.Tool:
-			for _, result := range msg.ToolResults() {
+			results := msg.ToolResults()
+			for _, result := range results {
 				openaiMessages = append(openaiMessages,
 					openai.ToolMessage(result.Content, result.ToolCallID),
 				)
+			}
+			if attachments, ok := toolResultAttachmentsMessage(results); ok {
+				openaiMessages = append(openaiMessages, attachments)
 			}
 		}
 	}
 
 	return openaiMessages
+}
+
+// toolResultAttachmentsMessage carries the turn's tool-result images as one
+// user message after its tool messages. A chat-completions tool message holds
+// text only, and the tool messages answering one assistant turn must stay
+// contiguous, so the user message goes after the last of them, never between.
+// Non-images are described rather than sent, as on the user path.
+func toolResultAttachmentsMessage(results []message.ToolResult) (openai.ChatCompletionMessageParamUnion, bool) {
+	var content []openai.ChatCompletionContentPartUnionParam
+	for _, result := range results {
+		for _, bp := range result.BinaryParts {
+			if len(content) == 0 {
+				content = append(content, openai.ChatCompletionContentPartUnionParam{
+					OfText: &openai.ChatCompletionContentPartTextParam{Text: "Tool result attachments:"},
+				})
+			}
+			content = append(content, openai.ChatCompletionContentPartUnionParam{
+				OfText: &openai.ChatCompletionContentPartTextParam{Text: fmt.Sprintf("From tool call %s:", result.ToolCallID)},
+			})
+			if isImageMimeType(bp.MIMEType) {
+				content = append(content, openai.ChatCompletionContentPartUnionParam{
+					OfImageURL: &openai.ChatCompletionContentPartImageParam{
+						ImageURL: openai.ChatCompletionContentPartImageImageURLParam{URL: bp.DataURL()},
+					},
+				})
+				continue
+			}
+			content = append(content, openai.ChatCompletionContentPartUnionParam{
+				OfText: &openai.ChatCompletionContentPartTextParam{
+					Text: fmt.Sprintf("[Attachment: %s (type: %s)]", extractFilenameFromPath(bp.Path), bp.MIMEType),
+				},
+			})
+		}
+	}
+	if len(content) == 0 {
+		return openai.ChatCompletionMessageParamUnion{}, false
+	}
+	return openai.UserMessage(content), true
 }
 
 // ConvertTools converts internal tools to OpenAI chat completion format.
@@ -629,19 +671,13 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					}
 				} else if currentContent != "" {
 					logging.WarnContext(ctx, fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
+						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
 					return
 				} else {
 					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
-					eventChan <- llm.DriverEvent{
-						Type:  llm.EventError,
-						Error: fmt.Errorf("empty response from Reliant proxy"),
-					}
-					close(eventChan)
+					llm.EndStreamWithError(eventChan, fmt.Errorf("empty response from Reliant proxy"),
+						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
 					return
 				}
 
@@ -666,10 +702,12 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				return
 			}
 
+			// Out of retries, or not retryable: what this last request billed
+			// goes out after the error, or the usage ledger loses it.
+			billed := c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation)
 			retry, wait, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-				close(eventChan)
+				llm.EndStreamWithError(eventChan, retryErr, billed)
 				return
 			}
 			if retry {
@@ -683,6 +721,9 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				// nothing at all while it sleeps: measured on run b7aa4056, eight of
 				// ten fan-out units spent ~113s of their ~129s life here and every
 				// supervision surface read it as "the model is thinking".
+				// The attempt's accumulator is dropped with it; what it billed
+				// goes out on the wait, so the usage ledger counts this request too.
+				wait.Usage = llm.FailedAttemptUsage(billed)
 				select {
 				case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 				case <-ctx.Done():
@@ -700,8 +741,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					continue
 				}
 			}
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-			close(eventChan)
+			llm.EndStreamWithError(eventChan, retryErr, billed)
 			return
 		}
 	}()

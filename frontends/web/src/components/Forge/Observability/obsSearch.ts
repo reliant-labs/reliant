@@ -16,23 +16,26 @@ import { SEVERITIES } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 /**
- * The views, in tab order. A view is one entry in this list (the route schema
- * reads it), one label and one branch in ObservabilityPanel. Delivery is not
- * one: releases and their DORA figures are the console's Releases page (D9).
- * Dashboards are not one either: native dashboards are console pages of their
- * own (Observability › Dashboards, decision DB).
+ * The views. A view is one entry in this list (the route schema reads it), one
+ * label and one branch in ObservabilityPanel. Delivery is not one: releases
+ * and their DORA figures are the console's Releases page. Dashboards are not
+ * one either: native dashboards are console pages of their own (Observability
+ * › Dashboards). Usage is not one: the organization's allowance is the app's
+ * Settings › Billing.
  */
-export const OBS_VIEWS = ["overview", "alerts", "errors", "logs", "traces", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "graph", "rpc", "alerts", "errors", "sessions", "logs", "traces", "profiles"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
+  graph: "Service graph",
+  rpc: "RPC explorer",
   alerts: "Alerts",
   errors: "Errors",
+  sessions: "Sessions",
   logs: "Logs",
   traces: "Traces",
   profiles: "Profiles",
-  usage: "Usage",
 };
 
 /** The views where grouping means something: the ones that aggregate. */
@@ -77,13 +80,19 @@ export interface ObsSearch {
   view?: ObsView;
   range?: RangePreset;
   service?: string;
+  /** Graph/explorer: exact full proto service and service/method identities. */
+  rpcService?: string;
+  rpcId?: string;
+  declared?: boolean;
+  internal?: boolean;
   severity?: string;
+  /** Logs: the query. Traces: the root operation. Errors: title or culprit. Sessions: entry path contains. */
   q?: string;
   trace?: string;
   span?: string;
   profileType?: string;
   live?: boolean;
-  /** Traces: only the ones with a failed span. */
+  /** Traces: only the ones with a failed span. Sessions: only the ones that raised a browser error. */
   errors?: boolean;
   /** Traces: only the ones slower than this ("500ms", "1s"). */
   minDuration?: string;
@@ -93,6 +102,8 @@ export interface ObsSearch {
    * env page pins its own environment and ignores this.
    */
   envs?: string[];
+  /** The org place's app filter: forge app names. Absent: every app. */
+  apps?: string[];
   /** Attribute filters, one token each (obsFilters.ts): `service.version:v1.8`. */
   f?: string[];
   /** Up to three keys every aggregating view splits its series by. */
@@ -116,6 +127,22 @@ export interface ObsSearch {
   platform?: IssuePlatform;
   /** Errors: the order. Absent: most recently seen first. */
   isort?: IssueSort;
+  /** Errors: `me` or a user id (assigneeFilterOf). Absent: anyone's. */
+  assignee?: string;
+  /** Sessions: the session open in detail (its rum.sessionId). */
+  session?: string;
+  /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
+  t?: number;
+  /** Sessions, Errors and Traces: only this user id's. */
+  user?: string;
+  /** Traces: only the ones of this browser session (its rum.sessionId). */
+  rsession?: string;
+  /**
+   * Sessions: the page tokens walked to reach the page shown, oldest first —
+   * the last is the page's own. Absent: the first page. A trail, not one
+   * token, so Previous is a link too.
+   */
+  cursor?: string[];
 }
 
 export const ALERTS_TABS = ["firing", "history", "silences", "rules", "receivers"] as const;
@@ -130,6 +157,10 @@ export const OBS_SEARCH_KEYS = [
   "view",
   "range",
   "service",
+  "rpcService",
+  "rpcId",
+  "declared",
+  "internal",
   "severity",
   "q",
   "trace",
@@ -139,6 +170,7 @@ export const OBS_SEARCH_KEYS = [
   "errors",
   "minDuration",
   "envs",
+  "apps",
   "f",
   "groupBy",
   "alerts",
@@ -149,6 +181,12 @@ export const OBS_SEARCH_KEYS = [
   "istatus",
   "platform",
   "isort",
+  "assignee",
+  "session",
+  "t",
+  "user",
+  "rsession",
+  "cursor",
 ] as const satisfies readonly (keyof ObsSearch)[];
 
 /**

@@ -10,13 +10,14 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	attachment "github.com/reliant-labs/reliant/internal/handlers/attachment"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // No row reaches Repo: every one is refused first.
 func TestCreateFileReference_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{MaxFileSize: 4}))
+	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{API: &config.ApiServerConfig{MaxUploadSize: 4}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateFileReferenceRequest, pb.CreateFileReferenceResponse]{
 		{
@@ -38,7 +39,7 @@ func TestCreateFileReference_Generated(t *testing.T) {
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
-			Name:    "a file over MaxFileSize is refused",
+			Name:    "a file over max_upload_size is refused",
 			Req:     connect.NewRequest(&pb.CreateFileReferenceRequest{FilePath: "/w/main.go", Content: []byte("abcde")}),
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeResourceExhausted,

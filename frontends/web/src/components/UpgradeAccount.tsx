@@ -4,6 +4,8 @@ import { useAuthStore } from '@/store/authStore'
 // The same-origin guard, shared: only relative paths are honored, so a crafted
 // `returnTo` cannot bounce the user to an attacker-controlled origin.
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { isClaimReturnTo } from '@/lib/claimLink'
+import { ExistingAccount } from './Claim/ExistingAccount'
 import { describeAuthError } from '@/lib/authErrors'
 import { LinkIdentityForm } from './LinkIdentityForm'
 import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
@@ -64,6 +66,7 @@ const goToReturnTo = (
 export function UpgradeAccount() {
   const navigate = useNavigate()
   const { returnTo } = useSearch({ from: '/upgrade' })
+  const forClaim = isClaimReturnTo(returnTo)
   const {
     user,
     initialized,
@@ -234,14 +237,14 @@ export function UpgradeAccount() {
                     value={billingEmail}
                     onChange={(e) => setBillingEmail(e.target.value)}
                     disabled={billingSubmitting}
-                    className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+                    className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     placeholder="you@example.com"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={billingSubmitting || !billingEmail.trim()}
-                  className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {billingSubmitting ? 'Sending...' : 'Send code'}
                 </button>
@@ -267,13 +270,13 @@ export function UpgradeAccount() {
                     disabled={billingSubmitting}
                     maxLength={6}
                     placeholder="000000"
-                    className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+                    className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={billingSubmitting || billingCode.length !== 6}
-                  className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {billingSubmitting ? 'Verifying...' : 'Verify and continue'}
                 </button>
@@ -309,15 +312,27 @@ export function UpgradeAccount() {
   return (
     <AuthLayout>
       <div className="p-8 space-y-6">
-        <AuthHeader
-          title="Save your account"
-          description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
-        />
+        {forClaim ? (
+          <AuthHeader
+            title="Create your account"
+            description="Add an email or sign in with a provider and the site is yours. It's free, and nothing about the site changes."
+          />
+        ) : (
+          <AuthHeader
+            title="Save your account"
+            description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
+          />
+        )}
 
         <LinkIdentityForm
           returnTo={returnTo}
           onLinked={() => goToReturnTo(returnTo, navigate)}
+          submitLabel={forClaim ? 'Create account and claim' : undefined}
         />
+
+        {/* An email or provider that already belongs to a Reliant user cannot be
+            linked here; for a claim that person is told what to do instead. */}
+        {forClaim && <ExistingAccount leavesTemporaryAccount />}
 
       </div>
     </AuthLayout>

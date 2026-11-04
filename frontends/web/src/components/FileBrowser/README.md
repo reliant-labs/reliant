@@ -56,7 +56,6 @@ The File Browser uses the `fileSystem` API module:
 
 - `getFileTree(path?)` - Fetches directory structure
 - `getFileContent(path)` - Fetches text file contents
-- `getFileMetadata(path)` - Fetches file/directory metadata
 - `getFilePreviewInfo(path)` - Fetches canonical preview classification (`text`, `image`, `pdf`, `audio`, `video`, `binary`)
 - `getFilePreviewBlob(path)` - Fetches raw preview bytes for blob-backed media rendering
 

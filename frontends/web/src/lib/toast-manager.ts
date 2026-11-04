@@ -71,6 +71,7 @@ class ToastManager {
 
   info(message: string, options?: ToastOptions) {
     sonnerToast.info(message, {
+      id: options?.id,
       duration: options?.duration || defaultOptions.duration,
       dismissible: true,
     });

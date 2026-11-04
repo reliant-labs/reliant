@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, Code, List } from 'lucide-react'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import type { ResponseToolDefinition } from '../../types/workflow'
 
 interface ResponseToolsEditorProps {

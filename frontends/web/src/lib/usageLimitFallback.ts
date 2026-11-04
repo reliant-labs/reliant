@@ -6,7 +6,7 @@
  * of the limited provider's accounts is back first. Pure.
  */
 
-import type { ProviderAccount } from "@/api/provider-account-grpc";
+import type { ProviderAccount } from "@/types/providerAccount";
 import { findPinnedModel, splitModelId } from "@/lib/modelId";
 
 /** The slice of the model catalog this needs. */

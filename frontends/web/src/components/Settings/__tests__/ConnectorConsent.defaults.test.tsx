@@ -9,9 +9,14 @@
  * otherwise be invisible until someone hit a denial in the wild.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport, renderWithTransport } from "../../../lib/test-utils";
+import { serviceHandlers } from "../../../test/serviceTransport";
 
 const listConnectors = vi.fn();
 const listAvailableTools = vi.fn();
@@ -19,16 +24,22 @@ const listDaemons = vi.fn();
 const authorizeClient = vi.fn();
 const createDaemon = vi.fn();
 
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: {
-    connector: () => ({
-      listConnectors,
-      listAvailableTools,
-      authorizeClient,
+// ConnectorService and the daemon list are reached through connectClient, so
+// they answer at the transport. Each render gets a fresh query cache.
+function render(ui: ReactElement) {
+  return renderWithTransport(ui, {
+    transport: mockTransport({
+      ...serviceHandlers("ConnectorService", {
+        listConnectors: (req) => listConnectors(req),
+        listAvailableTools: (req) => listAvailableTools(req),
+        authorizeClient: (req) => authorizeClient(req),
+      }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: (req) => listDaemons(req) }),
     }),
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
+  });
+}
+
+afterEach(() => setTransport(null));
 
 vi.mock("../../../services/controlPlane/daemon", () => ({
   createDaemon: (...a: unknown[]) => createDaemon(...a),
@@ -43,7 +54,8 @@ const cloneRepo = vi.fn();
 vi.mock("../../../services/controlPlane/git", () => ({
   gitService: {
     getCredential: (...a: unknown[]) => getCredential(...a),
-    getOAuthURL: () => "https://cp.example/auth/github/authorize",
+    buildOAuthURL: (a: { token: string; returnTo: string }) =>
+      `https://cp.example/auth/github/authorize?${new URLSearchParams({ token: a.token, returnTo: a.returnTo })}`,
     cloneRepo: (...a: unknown[]) => cloneRepo(...a),
   },
 }));
@@ -236,9 +248,7 @@ describe("git access on the consent screen", () => {
         ...original,
         pathname: "/oauth/consent",
         search: "?authorization_id=auth-123",
-        set href(v: string) {
-          assign(v);
-        },
+        assign,
       },
     });
 
@@ -310,10 +320,11 @@ describe("creating a machine from the consent flow", () => {
 
     await waitFor(() => expect(createDaemon).toHaveBeenCalled());
 
-    // Managed, because the permissive defaults are only safe in a sandbox.
+    // Managed, because the permissive defaults are only safe in a sandbox;
+    // M (8), because 1 is a retired, reserved size number.
     expect(createDaemon.mock.calls[0][0]).toMatchObject({
       daemonType: 1,
-      size: 1,
+      size: 8,
     });
 
     // Selected automatically, so the user does not have to notice it appear.

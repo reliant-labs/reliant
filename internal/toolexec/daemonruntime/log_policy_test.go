@@ -210,7 +210,7 @@ func TestDaemonCommandLogLevel(t *testing.T) {
 // The line's keys are snake_case and carry no payload.
 func TestLogDaemonCommandHandledKeys(t *testing.T) {
 	out := capturePolicyLogs(t)
-	logDaemonCommandHandled(nil, 5*time.Millisecond, nil, 3)
+	logDaemonCommandHandled(context.Background(), nil, 5*time.Millisecond, nil, 3)
 	line := lineWith(t, out, "daemon command handled")
 	require.NotEmpty(t, line)
 	assert.Contains(t, line, "level=DEBUG")
@@ -220,7 +220,7 @@ func TestLogDaemonCommandHandledKeys(t *testing.T) {
 	assert.NotContains(t, line, "requestID")
 
 	out.Reset()
-	logDaemonCommandHandled(nil, 5*time.Millisecond, errors.New("boom"), 0)
+	logDaemonCommandHandled(context.Background(), nil, 5*time.Millisecond, errors.New("boom"), 0)
 	assert.Contains(t, lineWith(t, out, "daemon command handled"), "level=INFO")
 }
 

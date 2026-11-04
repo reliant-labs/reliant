@@ -276,7 +276,7 @@ GENERATED FILE - DO NOT EDIT DIRECTLY
 
 Source: internal/workflow/scenario/types.go
 Generator: tools/docgen/scenarios
-Regenerate: make generate-scenario-schema
+Regenerate: task generate:docs:scenario-schema
 =============================================================================
 -->
 

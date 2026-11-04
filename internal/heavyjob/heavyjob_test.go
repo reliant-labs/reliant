@@ -37,6 +37,11 @@ func TestHeavyClassification(t *testing.T) {
 		"golangci-lint run ./...",
 	}
 	light := []string{
+		// Heredoc bodies are data: a note-taking command that mentions a heavy
+		// command is not a heavy command.
+		"cat >> notes.md <<'EOF'\nrun forge lint before pushing\ngo test ./...\nEOF",
+		"cat > x <<EOF\nforge generate\nEOF\nls",
+		"cat >> notes.md <<-EOF\n\tnpm ci\n\tEOF",
 		"ls -la",
 		"git status",
 		"go version",
@@ -56,6 +61,11 @@ func TestHeavyClassification(t *testing.T) {
 		"gotest ./...",
 		"echo $(go env GOPATH)",
 	}
+	heavy = append(heavy,
+		// ...but a heavy command on the opening line, or after the heredoc, is.
+		"cat <<EOF && go test ./...\nbody\nEOF",
+		"cat > x <<'EOF'\nbody\nEOF\ngo build ./...",
+	)
 	for _, line := range heavy {
 		if !g.Heavy(Job{Command: line}) {
 			t.Errorf("heavy: %q classified light", line)
@@ -155,6 +165,29 @@ func TestAdmissionRefusesHeavyCommandsOnly(t *testing.T) {
 	}
 }
 
+// The process guard (BackgroundAdmission) refuses only heavy commands started
+// in the background: those are what piled up when a machine ran out of
+// processes (2026-10-30). A foreground heavy command, which its agent waits
+// on, and a light one still run.
+func TestBackgroundAdmissionRefusesOnlyBackgroundHeavyCommands(t *testing.T) {
+	g, err := New(Config{Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t), BackgroundAdmission: refuseAll("near the process limit")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bg := exec.Command("sh", "-c", "go test ./...")
+	_, err = g.Prepare(bg, Job{Command: "go test ./...", Background: true})
+	var refused *RefusedError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "near the process limit") {
+		t.Fatalf("background heavy: err = %v, want a refusal", err)
+	}
+	if heavy, err := g.Prepare(exec.Command("sh", "-c", "go test ./..."), Job{Command: "go test ./..."}); !heavy || err != nil {
+		t.Fatalf("foreground heavy: %v, %v; want it queued, not refused", heavy, err)
+	}
+	if heavy, err := g.Prepare(exec.Command("sh", "-c", "ls"), Job{Command: "ls", Background: true}); heavy || err != nil {
+		t.Fatalf("background light: %v, %v", heavy, err)
+	}
+}
+
 func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 	dir := t.TempDir()
 	g, err := New(Config{Env: []string{"FORGE_SLOTS_DIR=" + dir, "FORGE_HEAVY_SLOTS=3"}, Self: testSelf(t)})
@@ -171,12 +204,18 @@ func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 	}
 
 	heavy := exec.Command("sh", "-c", "go test ./...")
+	heavy.Env = []string{"PATH=/bin", "GOMAXPROCS=6"}
 	origPath := heavy.Path
 	if ok, err := g.Prepare(heavy, Job{Command: "go test ./..."}); !ok || err != nil {
 		t.Fatalf("a heavy command was not rewritten: %v", err)
 	}
-	want := []string{testSelf(t)[0], WrapperArg, "--dir", dir, "--label", "go test ./...", "--slots", "3", "--", origPath, "-c", "go test ./..."}
+	want := []string{testSelf(t)[0], WrapperArg, "--dir", dir, "--label", "go test ./...", "--slots", "3", "--child-gomaxprocs", "6", "--", origPath, "-c", "go test ./..."}
 	if heavy.Path != testSelf(t)[0] || !slices.Equal(heavy.Args, want) {
 		t.Fatalf("rewritten to %s %q, want %q", heavy.Path, heavy.Args, want)
+	}
+	// The wrapper starts on one P; the command's own value rides in
+	// --child-gomaxprocs.
+	if want := []string{"PATH=/bin", "GOMAXPROCS=6", "GOMAXPROCS=1"}; !slices.Equal(heavy.Env, want) {
+		t.Fatalf("wrapper env %q, want %q", heavy.Env, want)
 	}
 }

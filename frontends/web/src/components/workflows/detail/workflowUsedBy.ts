@@ -19,7 +19,7 @@
  * listed under the third.
  */
 
-import type { WorkflowResponse } from "@/api/workflow-grpc";
+import type { WorkflowResponse } from "@/hooks/workflow-queries";
 import { getStepInline, getStepRef, type Step } from "@/types/workflow";
 
 const BUILTIN_PREFIX = "builtin://";

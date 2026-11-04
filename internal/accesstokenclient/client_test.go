@@ -61,6 +61,58 @@ func TestIntrospect_DecodesAnActivePrincipal(t *testing.T) {
 	}
 }
 
+// IntrospectAccount decodes the acting user's email from the same response,
+// and an older control plane's response (no actingUserEmail) is still a live
+// principal with no email.
+func TestIntrospectAccount_DecodesTheActingUsersEmail(t *testing.T) {
+	for name, tc := range map[string]struct{ extra, want string }{
+		"named":         {extra: `,"actingUserEmail":"alice@example.com"`, want: "alice@example.com"},
+		"older control": {extra: ``, want: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := fakeCP(t, func(string, map[string]any) (int, string) {
+				return 200, `{"active":true,"tokenId":"tok-1","actingUserId":"user-1","scopes":["daemon:connect"]` + tc.extra + `}`
+			})
+			defer srv.Close()
+
+			a, err := New(Deps{BaseURL: srv.URL, Sign: sign}).IntrospectAccount(context.Background(), liveToken)
+			if err != nil {
+				t.Fatalf("IntrospectAccount: %v", err)
+			}
+			if a.Principal == nil || a.Principal.ActingUserID != "user-1" || a.Email != tc.want {
+				t.Fatalf("got principal %+v email %q, want user-1 / %q", a.Principal, a.Email, tc.want)
+			}
+		})
+	}
+}
+
+// A daemon credential holds every scope, and the control plane resolves that
+// against its OWN catalog, which may be newer than this binary's. A scope only
+// it knows is skipped, never a reason to refuse the daemon; an explicit list
+// carrying the same unknown scope is still refused whole.
+func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
+	for _, all := range []bool{true, false} {
+		srv := fakeCP(t, func(string, map[string]any) (int, string) {
+			return 200, `{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1",
+				"scopes":["daemon:connect","deploy:write","future:scope"],"allScopes":` + map[bool]string{true: "true", false: "false"}[all] + `}`
+		})
+		p, err := New(Deps{BaseURL: srv.URL, Sign: sign}).Introspect(context.Background(), liveToken)
+		srv.Close()
+		if !all {
+			if err == nil {
+				t.Fatalf("an explicit list with an unknown scope authenticated: %+v", p)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("a wildcard credential was refused over a newer scope: %v", err)
+		}
+		if len(p.Scopes) != 2 || !p.Scopes.Has(fat.ScopeDaemonConnect) || !p.Scopes.Has(fat.ScopeDeployWrite) {
+			t.Fatalf("wildcard scopes = %s", p.Scopes)
+		}
+	}
+}
+
 func TestIntrospect_InactiveIsErrInactive(t *testing.T) {
 	srv := fakeCP(t, func(string, map[string]any) (int, string) { return 200, `{}` })
 	defer srv.Close()
@@ -133,24 +185,24 @@ func TestIntrospect_TransportErrorIsNotInactive(t *testing.T) {
 
 func TestMintForUser_SendsTheGrantAndDecodes(t *testing.T) {
 	srv := fakeCP(t, func(method string, body map[string]any) (int, string) {
-		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true {
+		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true || body["orgId"] != "org-b" {
 			t.Fatalf("got %s %v", method, body)
 		}
 		res, _ := body["resource"].(map[string]any)
 		if res["kind"] != "daemon" || res["id"] != "d-1" {
 			t.Fatalf("resource %v", body["resource"])
 		}
-		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true}`
+		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true,"scopes":["daemon:connect"]}`
 	})
 	defer srv.Close()
 	m, err := New(Deps{BaseURL: srv.URL, Sign: sign}).MintForUser(context.Background(), MintRequest{
-		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect},
-		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true,
+		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeDeployWrite},
+		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true, OrgID: "org-b",
 	})
 	if err != nil {
 		t.Fatalf("MintForUser: %v", err)
 	}
-	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated {
+	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated || strings.Join(m.Scopes, ",") != "daemon:connect" {
 		t.Fatalf("minted %+v", m)
 	}
 }

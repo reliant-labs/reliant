@@ -47,7 +47,7 @@ export GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 cd "$(git rev-parse --show-toplevel)"
 
 # The GOFLAGS go would use here — the environment's, `go env -w`, or
-# $GOROOT/go.env — with -trimpath merged in, as the Makefile's GOFLAGS block
+# $GOROOT/go.env — with -trimpath merged in, as the Taskfile's GOFLAGS env block
 # does. An exported GOFLAGS replaces every lower layer, so appending to
 # "${GOFLAGS:-}" alone dropped the workspace's go.env -trimpath and every
 # build below compiled into worktree-private cache entries.
@@ -81,7 +81,18 @@ else
   # Resolve whatever was handed in (branch, tag or sha) against the remote so
   # the pin is always a concrete commit. A ref that does not resolve remotely
   # is passed through unchanged and `go get` reports it.
-  sha="$(git ls-remote "${FORGE_REMOTE}" "${target}" | cut -f1 | head -1)"
+  #
+  # Ask for exact refnames, in order: a bare `ls-remote <remote> v1.0.3`
+  # matches every ref ENDING in /v1.0.3, and forge's release branch
+  # refs/heads/release/v1.0.3 sorts before refs/tags/v1.0.3 — which pinned
+  # the unmerged release branch instead of the tag. `^{}` peels an annotated
+  # tag to its commit.
+  refs="$(git ls-remote "${FORGE_REMOTE}" "refs/tags/${target}^{}" "refs/tags/${target}" "refs/heads/${target}")"
+  sha=""
+  for want in "refs/tags/${target}^{}" "refs/tags/${target}" "refs/heads/${target}"; do
+    sha="$(printf '%s\n' "${refs}" | awk -v r="${want}" '$2 == r {print $1; exit}')"
+    if [ -n "${sha}" ]; then break; fi
+  done
   if [ -z "${sha}" ]; then sha="${target}"; fi
   source_desc="${target}"
 fi

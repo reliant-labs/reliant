@@ -117,17 +117,6 @@ func ListReposByProject(ctx context.Context, db orm.Context, projectID string) (
 	return out, nil
 }
 
-// ReplaceRepo rewrites the repo's name and remote URL (without credentials)
-// and stamps updated_at. A missing repo is not an error.
-func ReplaceRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
-	row := &Repo{ID: r.ID, Name: r.Name, RemoteURL: gitremote.StripCredentialsPtr(r.RemoteURL)}
-	err := UpdateRepoMasked(ctx, db, row, []string{RepoFieldName, RepoFieldRemoteURL})
-	if err != nil && !errors.Is(err, orm.ErrNoRows) {
-		return err
-	}
-	return nil
-}
-
 // RemoveRepo deletes the repo; a missing one is not an error.
 func RemoveRepo(ctx context.Context, db orm.Context, id string) error {
 	if err := DeleteRepo(ctx, db, id); err != nil && !errors.Is(err, orm.ErrNoRows) {

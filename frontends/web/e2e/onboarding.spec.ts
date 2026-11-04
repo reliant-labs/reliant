@@ -43,6 +43,14 @@ function serverProjects(page: Page): unknown[] {
  * specific ones take priority over the generic empty-object fallback.
  */
 async function mockGrpcRoutes(page: Page) {
+  // Exercise the cloud-enabled onboarding contract in dev and preview alike;
+  // never inherit the developer's deployed control-plane/auth configuration.
+  const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
+  await page.route('**/config.js', route => route.fulfill({
+    contentType: 'text/javascript',
+    body: `window.__FORGE_CONFIG__ = ${JSON.stringify({ CONTROL_PLANE_API_URL: origin, SUPABASE_URL: `${origin}/supabase`, SUPABASE_ANON_KEY: 'anon-test-key' })};`,
+  }));
+  await page.route('**/supabase/**', route => route.fulfill({ json: {} }));
   // Broad fallbacks — any RPC not explicitly overridden below gets `{}`.
   await page.route('**/reliant.v1.**', (route: Route) =>
     route.fulfill({
@@ -291,70 +299,6 @@ test.describe('Onboarding Flow', () => {
     await loginWithApiKey(page);
   });
 
-  // Every plan includes 160 hours at its OWN size, so its small-hour total is
-  // 160 x that size's multiplier (the 2XL plan holds 2,560 small hours).
-  async function mockPricing(page: Page) {
-    const sizes = ['small', 'medium', 'large', 'xl'];
-    await page.route('**/controlplane.v1.BillingService/ListPlans', route => route.fulfill({
-      json: {
-        plans: sizes.map((size, index) => ({
-          id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(2000 * (index + 1)), displayOrder: index,
-          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), includedSmallDaemonHours: String(160 * 2 ** index) },
-        })),
-        daemonPricing: {
-          sizes: sizes.map((size, index) => ({ size, multiplier: String(2 ** index), hourlyPriceCents: String(13 * 2 ** index), storageGib: String([120, 140, 180, 260][index]) })),
-          suspendedDiskCentsPerGibMonth: '25', placeholder: false,
-        },
-      },
-    }));
-  }
-
-  const FOOTNOTE = 'Includes 160 hours a month. Extra hours and storage are billed separately.';
-  const BANNED = /GiB|\/hr|hrs|while suspended|per month\b.*GB|after included hours|uses included hours|as fast|small-daemon|hours\/month included|2,?560|1,?280/;
-
-  test('onboarding plan rows: name, spec and monthly price only', async ({ page }, testInfo) => {
-    page.on('pageerror', error => console.error(error));
-    await mockPricing(page);
-    // Not covered by a coupon: every row shows its monthly price.
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: false, hasActiveSubscription: false, grantedSmallDaemonSecondsRemaining: '0', planName: '' } }));
-    await gotoOnboarding(page);
-    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    for (const price of ['$20.00/mo', '$40.00/mo', '$60.00/mo', '$80.00/mo']) {
-      await expect(dialog.getByText(price, { exact: true })).toBeVisible();
-    }
-    for (const spec of ['2 GB RAM · 0.5 CPU', '4 GB RAM · 1 CPU', '8 GB RAM · 2 CPU', '16 GB RAM · 4 CPU']) {
-      await expect(dialog.getByText(spec, { exact: true })).toBeVisible();
-    }
-    await expect(dialog.getByTestId('machine-pricing-line')).toHaveText(FOOTNOTE);
-    await expect(dialog.getByText(BANNED)).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath('onboarding-plan-rows.png'), fullPage: true });
-  });
-
-  test('create machine modal: name and spec per size, one footnote', async ({ page }, testInfo) => {
-    page.on('pageerror', error => console.error(error));
-    await mockPricing(page);
-    await page.route('**/controlplane.v1.UserService/GetCurrentUser', route =>
-      route.fulfill({ json: { user: { id: 'user_test', onboardingCompleted: true } } }));
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: true, hasActiveSubscription: true, grantedSmallDaemonSecondsRemaining: '0', planName: 'Compute xl', allowedDaemonSizes: ['small', 'medium', 'large', 'xl'] } }));
-    // The XL plan: 160 own-size hours = 1,280 small hours.
-    await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeUsage', route =>
-      route.fulfill({ json: { usageMeasured: true, includedSmallDaemonSeconds: String(1280 * 3600), remainingSmallDaemonSeconds: String(3 * 3600) } }));
-
-    await page.goto('/settings/machines');
-    await page.getByRole('button', { name: /new machine/i }).first().click();
-    const modal = page.getByRole('dialog').filter({ hasText: 'Create Machine' });
-    const sizes = modal.getByRole('radiogroup', { name: 'Size' });
-    for (const name of ['Small', 'Medium', 'Large', 'XL']) {
-      await expect(sizes.getByRole('radio', { name, exact: true })).toBeVisible();
-    }
-    await expect(sizes.getByText('$')).toHaveCount(0);
-    await expect(modal.getByTestId('size-pricing-note')).toHaveText(FOOTNOTE);
-    await expect(modal.getByText(BANNED)).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath('create-machine-modal.png'), fullPage: true });
-  });
-
   test('shows onboarding for a new (not-yet-onboarded) user at /onboarding', async ({ page }) => {
     await gotoOnboarding(page);
 
@@ -362,7 +306,7 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog).toBeVisible();
 
     // First step is Compute — verify the heading is visible.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
   });
 
@@ -448,9 +392,12 @@ test.describe('Onboarding Flow', () => {
     // it now reads as a claim about POSITION that is no longer true: the
     // panel sits at the bottom of the step, not inside the list.
     await expect(
-      dialog.getByText('Install Reliant Daemon and connect with a token'),
+      dialog.getByText('Install Reliant on that machine', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(dialog.getByRole('button', { name: 'Generate token' })).toBeVisible();
+    // .first(): the folded "Not seeing a code?" hint repeats the command.
+    await expect(dialog.getByText('reliant daemon start', { exact: true }).first()).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Pairing code' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
 
     // The cloud CTA is gone while this path is selected — it would offer to
     // undo the choice the user just made, as the only primary button on the
@@ -482,7 +429,7 @@ test.describe('Onboarding Flow', () => {
 
   // ── Model → Project-choice / Finish ─────────────────
 
-  test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to work on?', async ({ page }) => {
+  test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to do first?', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
@@ -491,8 +438,8 @@ test.describe('Onboarding Flow', () => {
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
-    // Cloud path lands on project-choice ("What do you want to work on?").
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible({ timeout: 10_000 });
+    // Cloud path lands on project-choice ("What do you want to do first?").
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/modelProvider.*anthropic|anthropic.*modelProvider/, {
       timeout: 10_000,
     });
@@ -523,7 +470,7 @@ test.describe('Onboarding Flow', () => {
 
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
 
-  test('Project-choice: "Start something new" (cloud) creates a project and leaves onboarding', async ({ page }) => {
+  test('Project-choice: "Build an app" (cloud) creates a project and leaves onboarding', async ({ page }) => {
     // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
     // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
     await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
@@ -541,9 +488,9 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     // completeOnboarding + ensureProject succeed, the commit provisions the
     // machine, and the gate reports it connected — Continue is the only exit.
@@ -558,7 +505,7 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
     // Simulate an existing_codebase plan seeded directly (equivalent to the
     // OAuth round trip having already happened) — deriveStep sends an
@@ -605,7 +552,8 @@ test.describe('Onboarding Flow', () => {
     // ProvisioningGate's "nothing to do" branch exits onboarding by itself
     // (#289); no Continue button is rendered on this path.
     listProjects.release();
-    await expect(page).toHaveURL(/\/project\/proj_existing/, { timeout: 10_000 });
+    await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('tour') === 'chat-and-sidebars', { timeout: 10_000 });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_existing');
     await expect(dialog).toBeHidden();
     expect(createProjectCalls).toEqual([]);
   });
@@ -627,7 +575,7 @@ test.describe('Onboarding Flow', () => {
     await expect(backButton).toBeVisible();
     await backButton.click();
 
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -649,7 +597,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -736,7 +684,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
     // Still on Compute — the step did not navigate away.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
   });
 });
 
@@ -766,8 +714,9 @@ test.describe('Onboarding – Failure Scenarios', () => {
 
     const root = page.locator('#root');
     await expect(root).toBeAttached({ timeout: 10_000 });
-    const childCount = await root.evaluate((el) => el.childNodes.length);
-    expect(childCount).toBeGreaterThan(0);
+    // #root exists before React's async auth bootstrap resolves. Wait on
+    // rendered children, not the synchronous empty container at document load.
+    await expect.poll(() => root.evaluate((el) => el.childNodes.length)).toBeGreaterThan(0);
   });
 
   test('Cloud daemon creation fails: the provisioning gate reports it, and lets the user continue anyway', async ({ page }) => {
@@ -789,9 +738,9 @@ test.describe('Onboarding – Failure Scenarios', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     // The machine task reports failed; the user is not trapped in the
     // wizard for a provisioning failure — Continue stays enabled (see
@@ -816,9 +765,9 @@ test.describe('Onboarding – Failure Scenarios', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     await expect(
       dialog.getByText(/Couldn't set up your project/i),
@@ -865,7 +814,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
   // fires (it owns the terminal step for that branch), then the commit
   // provisions a machine and ProvisioningGate/DaemonConnectingGate gate the
   // actual exit — see commitLaunchPlan.ts and ProvisioningGate.tsx.
-  test('Cloud + build_app: "Start something new" leaves onboarding directly', async ({ page }) => {
+  test('Cloud + build_app: "Build an app" leaves onboarding directly', async ({ page }) => {
     // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
     // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
     await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
@@ -883,7 +832,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
     await expect(dialog.getByText('Your machine is ready')).toBeVisible({ timeout: 10_000 });
     await dialog.getByRole('button', { name: 'Continue' }).click();
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
@@ -930,7 +879,8 @@ test.describe('Onboarding – Project-choice branch selection', () => {
         await dialog.getByRole('button', { name: 'Continue' }).click();
       }
 
-      await expect(page).toHaveURL(/\/project\/proj_default/, { timeout: 10_000 });
+      await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('tour') === 'chat-and-sidebars', { timeout: 10_000 });
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_default');
       await expect(dialog).toBeHidden();
     });
   }
@@ -984,13 +934,13 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
       timeout: 5_000,
     });
 
     await dialog.getByRole('button', { name: 'Use your own computer' }).click();
     await expect(
-      dialog.getByText('Install Reliant Daemon and connect with a token'),
+      dialog.getByText('Install Reliant on that machine', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
   });
 });

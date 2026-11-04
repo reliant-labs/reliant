@@ -28,6 +28,7 @@ one (or let 'reliant workflow run --project-path' resolve it for you).`,
 
 	cmd.AddCommand(newProjectCreateCmd())
 	cmd.AddCommand(newProjectListCmd())
+	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 
 	return cmd
 }

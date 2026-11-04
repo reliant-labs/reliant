@@ -41,7 +41,7 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("CreatePlan, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := newPlanRepo()
-			repo.GetChatFunc = func(context.Context, string) (*db.Chat, error) { return nil, tc.err }
+			repo.GetChatRowFunc = func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err }
 			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
 			_, err := svc.CreatePlan(plan.AuthedContext(t), connect.NewRequest(&pb.CreatePlanRequest{ChatId: ownChatID, Title: "Plan"}))
 			requireClientReads(t, err, tc.want)

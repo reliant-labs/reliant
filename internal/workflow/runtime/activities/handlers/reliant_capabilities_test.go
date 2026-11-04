@@ -62,6 +62,10 @@ func TestReliantCapabilities_PinsRoutingFacts(t *testing.T) {
 		"https://github.com/reliant-labs/forge",
 		"cron-kind workloads and operators need",
 		"Move to Forge",
+		"reliant forge obs check <env> --wait --json",
+		"Report \"not proven good\"",
+		"reliant forge db query <env>",
+		"reliant forge skill load observability/query",
 	} {
 		assert.Contains(t, g, want)
 	}

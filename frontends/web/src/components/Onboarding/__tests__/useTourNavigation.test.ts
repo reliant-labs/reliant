@@ -70,8 +70,8 @@ vi.mock("../../../store/chatStore", () => ({
   },
 }));
 
-// projectStore is dynamically imported when the tour ends, to decide which
-// chat route to land the user on.
+// projectStore is read when the tour ends, to decide which chat route to land
+// the user on.
 const projectStoreMocks = vi.hoisted(() => ({
   currentProject: { id: "project-1" } as { id: string } | null,
 }));
@@ -473,6 +473,55 @@ describe("useTourNavigation", () => {
       );
       // Tour is over, not restarted.
       expect(router.state.location.search.tour).toBeUndefined();
+    });
+
+    // Finishing used to strip `?tour=` first and land on the chat only after
+    // a dynamic import settled: the user sat on the bare workflow builder for
+    // a chunk load, and a click there was overridden by the late jump. Under
+    // load the routing test caught it parked on /workflow/... . One
+    // navigation, straight to the chat, leaves no such window.
+    it("finishing goes straight to the project chat, never stopping on the builder without the tour", async () => {
+      const useTourNavigation = await loadHook();
+      if (!useTourNavigation) {
+        expect.fail("useTourNavigation hook not implemented yet");
+        return;
+      }
+      const { result, router } = renderHookWithRouter(
+        () => useTourNavigation(),
+        ["/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder"]
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      const visited: string[] = [];
+      const unsubscribe = router.history.subscribe(({ location }) => {
+        visited.push(location.pathname + location.search);
+      });
+      await act(async () => {
+        await result.current.completeAndAdvance();
+      });
+      unsubscribe();
+      expect(visited).toEqual(["/project/project-1"]);
+    });
+
+    it("skipping goes straight to the project chat, never stopping on the abandoned step's page", async () => {
+      const useTourNavigation = await loadHook();
+      if (!useTourNavigation) {
+        expect.fail("useTourNavigation hook not implemented yet");
+        return;
+      }
+      const { result, router } = renderHookWithRouter(
+        () => useTourNavigation(),
+        ["/workflows/library?tour=workflow-hub"]
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      const visited: string[] = [];
+      const unsubscribe = router.history.subscribe(({ location }) => {
+        visited.push(location.pathname + location.search);
+      });
+      await act(async () => {
+        await result.current.skipAll();
+      });
+      unsubscribe();
+      expect(visited).toEqual(["/project/project-1"]);
     });
 
     it("finishing with no project selected lands on the home route", async () => {

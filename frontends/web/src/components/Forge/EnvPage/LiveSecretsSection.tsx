@@ -56,6 +56,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   useDeleteManagedSecret,
   useDestroyManagedSecret,
+  useEnvironmentShape,
   useInvalidateManagedSecrets,
   useManagedSecretVersions,
   useManagedSecrets,
@@ -165,9 +166,13 @@ export function LiveSecretsSection({
    * `provider` comes from the shape's own secrets. forge's providers and the
    * shape's are the same vocabulary, so `hosted` means the managed store here
    * exactly as it does in forge's report.
+   *
+   * The shape is fetched for this one environment (GetEnvironmentShape); the
+   * Live roster carries only whether it exists.
    */
+  const shapeQuery = useEnvironmentShape(env?.declared ? env.id : null);
+  const shape = shapeQuery.data;
   const declared: ForgeSecretsReport | null = useMemo(() => {
-    const shape = env?.declaredShape;
     if (!shape) return null;
     return {
       env: env?.name,
@@ -182,7 +187,7 @@ export function LiveSecretsSection({
         declared_by: secret.declaredBy.map((workload) => ({ workload })),
       })),
     };
-  }, [env?.declaredShape, env?.name]);
+  }, [shape, env?.name]);
 
   const availability =
     managed.data?.availability ?? (target.kind === "none" ? target.availability : "unreachable");
@@ -249,9 +254,9 @@ export function LiveSecretsSection({
   if (!env) {
     return (
       <div className="space-y-3" data-testid="live-secrets-not-built">
-        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-          <span className="font-mono text-foreground">{name}</span> hasn&apos;t been built yet. Run{" "}
-          <code className="font-mono text-foreground">forge env build {name}</code>, or open Preview
+        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-ink-muted">
+          <span className="font-mono text-ink">{name}</span> hasn&apos;t been built yet. Run{" "}
+          <code className="font-mono text-ink">forge env build {name}</code>, or open Preview
           with your daemon online.
         </p>
 
@@ -259,7 +264,7 @@ export function LiveSecretsSection({
           type="button"
           onClick={() => setModal({ existing: null })}
           data-testid="add-secret"
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
         >
           Add secret
         </button>
@@ -282,8 +287,8 @@ export function LiveSecretsSection({
   return (
     <div className="space-y-3" data-testid="live-secrets">
       {env.kind === "local" && (
-        <p data-testid="secrets-local-pull" className="text-xs text-muted-foreground">
-          <code className="font-mono text-foreground">forge env up</code> pulls these into the
+        <p data-testid="secrets-local-pull" className="text-xs text-ink-muted">
+          <code className="font-mono text-ink">forge env up</code> pulls these into the
           processes it starts, in memory — they are never written to disk.
         </p>
       )}
@@ -297,7 +302,7 @@ export function LiveSecretsSection({
         availability={availability}
         report={declared}
         managed={managed.data?.secrets ?? []}
-        isLoading={managed.isLoading && !managed.data}
+        isLoading={(managed.isLoading && !managed.data) || shapeQuery.isLoading}
         selectedName={selectedSecret}
         onSelect={onSelectSecret}
         versions={versions.data?.versions ?? []}

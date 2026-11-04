@@ -2,7 +2,7 @@
 
 # Phase 2 of a release: tag the commit that ACTUALLY LANDED ON MAIN.
 #
-# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--dry-run]
+# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--commit <sha>] [--dry-run]
 #
 # Run this AFTER the release PR opened by ./scripts/release.sh has merged.
 # With no version argument it reads the version from origin/main itself, so
@@ -40,6 +40,10 @@
 # push has to carry a human credential. That is this script.
 
 set -euo pipefail
+# shellcheck source=release-lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/release-lock.sh"
+# shellcheck source=rc-shape.sh
+. "$(dirname "${BASH_SOURCE[0]}")/rc-shape.sh"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -49,25 +53,48 @@ NC='\033[0m'
 
 DRY_RUN=false
 REQUESTED_TAG=""
+SKIP_RELEASE_GATE=false
+REQUESTED_COMMIT=""
+# --rc: tag the head of an RC branch (release/vX.Y.Z-rc.N) — main plus the RC train's one
+# pin commit — instead of a main commit (control-plane docs/design/gitops-promotion.md).
+RC_MODE=false
 
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
     case "$arg" in
+        --commit)
+            REQUESTED_COMMIT="${1:?--commit needs a commit}"
+            shift
+            ;;
         --dry-run)
             DRY_RUN=true
+            ;;
+        --rc)
+            RC_MODE=true
+            ;;
+        --skip-release-gate)
+            SKIP_RELEASE_GATE=true
             ;;
         v[0-9]*)
             REQUESTED_TAG="$arg"
             ;;
         -h|--help)
-            echo "Usage: $0 [vX.Y.Z] [--dry-run]"
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]"
             echo ""
-            echo "  vX.Y.Z     Tag this specific version (default: read from origin/main)"
-            echo "  --dry-run  Print exactly what would happen, create and push nothing"
+            echo "  vX.Y.Z               Tag this specific version (default: read from origin/main)"
+            echo "  --commit <sha>       Tag this main commit instead of the version bump (it must contain the bump)"
+            echo "  --dry-run            Print exactly what would happen, create and push nothing"
+            echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
+            echo "  --rc                 With --commit: the commit heads an RC branch (release/vX.Y.Z-rc.N): main,"
+            echo "                       the train's pin commit, then any fix commits. The version and notes are"
+            echo "                       the RC commit's (main must carry the same version); its gate is its"
+            echo "                       green release-gate record, else that commit's 'Release gate' job"
             exit 0
             ;;
         *)
             echo -e "${RED}Error: unrecognized argument '$arg'${NC}" >&2
-            echo "Usage: $0 [vX.Y.Z] [--dry-run]" >&2
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]" >&2
             exit 1
             ;;
     esac
@@ -78,11 +105,19 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
+# Tagging is the release train's job (control-plane's scripts/release-train.sh);
+# a chat labels its PR release:asap. There is no release lock: the tag push
+# decides a race between two taggers (the remote refuses a second push of the
+# same tag).
+
 # Everything below reasons about origin/main, never the local checkout. A
 # local `main` can be stale, ahead, or someone else's in-flight work; the tag
 # has to describe what is actually published.
 echo -e "${YELLOW}📡 Fetching origin...${NC}"
 git fetch origin main --tags --quiet
+if [[ "$RC_MODE" == "true" ]]; then
+    git fetch origin '+refs/heads/release/*:refs/remotes/origin/release/*' --quiet
+fi
 
 if ! git rev-parse --verify --quiet origin/main >/dev/null; then
     echo -e "${RED}Error: origin/main does not exist${NC}" >&2
@@ -138,7 +173,22 @@ fi
 
 # ── Which commit gets the tag? ──────────────────────────────────────────────
 #
-# The commit on origin/main that INTRODUCED this version, not origin/main's
+# --rc: the RC branch head the train gated. A set fixed in place carries its own
+# version bump and notes as fix commits (the same change reaches main as a PR, which
+# is why main must carry the version above), so the head is judged on what IT
+# carries: the version, the notes and the RC shape (below). It never contains
+# main's bump commit, which squash-merged as a different object.
+RC_VERSION_COMMIT=""
+if [[ "$RC_MODE" == "true" && -n "$REQUESTED_COMMIT" ]]; then
+    RC_VERSION_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
+    if [[ "$(git show "$RC_VERSION_COMMIT:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")" != "$NEW_VERSION" ]]; then
+        echo -e "${RED}Error: --rc ${RC_VERSION_COMMIT:0:9} does not carry version ${NEW_VERSION} (main's)${NC}" >&2
+        echo -e "${YELLOW}  Put the version bump on the RC branch as a fix commit, as on main.${NC}" >&2
+        exit 1
+    fi
+fi
+
+# Otherwise: the commit on origin/main that INTRODUCED this version, not origin/main's
 # tip. Main keeps moving while a release is in flight, and tagging the tip
 # would silently sweep whatever merged after the bump into the release.
 #
@@ -146,8 +196,8 @@ fi
 # the first one carrying this version — that is the bump itself.
 echo -e "${YELLOW}🔎 Locating the commit on origin/main that set version ${NEW_VERSION}...${NC}"
 
-RELEASE_COMMIT=""
-while read -r candidate; do
+RELEASE_COMMIT="$RC_VERSION_COMMIT"
+[[ -n "$RELEASE_COMMIT" ]] || while read -r candidate; do
     [[ -z "$candidate" ]] && continue
     candidate_version=$(git show "$candidate:electron/package.json" 2>/dev/null \
         | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).version}catch(e){''}" 2>/dev/null || echo "")
@@ -163,12 +213,47 @@ if [[ -z "$RELEASE_COMMIT" ]]; then
     exit 1
 fi
 
+# --commit: tag a later commit of main than the bump (a fix that landed after
+# it). It must contain the bump and still carry this version; the guard, the
+# release notes and the release gate below then judge it like any other.
+if [[ -n "$REQUESTED_COMMIT" && -z "$RC_VERSION_COMMIT" ]]; then
+    VERSION_COMMIT="$RELEASE_COMMIT"
+    RELEASE_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
+    if ! git merge-base --is-ancestor "$VERSION_COMMIT" "$RELEASE_COMMIT"; then
+        echo -e "${RED}Error: --commit ${RELEASE_COMMIT:0:9} does not contain the version bump ${VERSION_COMMIT:0:9}${NC}" >&2
+        exit 1
+    fi
+    if [[ "$(git show "$RELEASE_COMMIT:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")" != "$NEW_VERSION" ]]; then
+        echo -e "${RED}Error: ${RELEASE_COMMIT:0:9} does not carry version ${NEW_VERSION}${NC}" >&2
+        exit 1
+    fi
+fi
+
 # ── THE GUARD ───────────────────────────────────────────────────────────────
 #
 # The one check that would have caught this five releases ago. It is cheap,
 # and it is the difference between a release that can be described by
 # `git describe` and one that cannot.
-if ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
+# --rc: the RC train tags the set's reliant commit R' = a main commit plus ONE pin commit
+# and any fix commits (scripts/rc-shape.sh), kept on origin as the head of
+# release/vX.Y.Z-rc.N. It is held to exactly that shape.
+RC_BRANCH=""
+if [[ "$RC_MODE" == "true" ]]; then
+    if [[ -z "$REQUESTED_COMMIT" ]]; then
+        echo -e "${RED}Error: --rc needs --commit <the RC branch head>${NC}" >&2
+        exit 1
+    fi
+    RC_BRANCH=$(git ls-remote origin 'refs/heads/release/*' | awk -v s="$RELEASE_COMMIT" '$1 == s {print $2}' \
+        | grep -E '^refs/heads/release/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -1 || true)
+fi
+if [[ -n "$RC_BRANCH" ]] && ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
+    if ! rc_shaped "$RELEASE_COMMIT" origin/main; then
+        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/} but is not main + the train's pin commit + fix commits${NC}" >&2
+        echo -e "${YELLOW}  An RC commit is a main commit, one pin commit (RC-Set: trailer), then linear fix commits.${NC}" >&2
+        exit 1
+    fi
+    echo -e "${YELLOW}ℹ️  ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/}, cut off origin/main (--rc)${NC}"
+elif ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
     echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} is not an ancestor of origin/main${NC}" >&2
     echo -e "${YELLOW}  A tag off the trunk breaks git describe, changelog-from-tags, and Go pseudo-versions.${NC}" >&2
     exit 1
@@ -181,6 +266,57 @@ if [[ ! "$NEW_VERSION" =~ -rc ]]; then
     if ! git cat-file -e "$RELEASE_COMMIT:docs/data/releases/${RELEASE_TAG}.yaml" 2>/dev/null; then
         echo -e "${RED}Error: docs/data/releases/${RELEASE_TAG}.yaml is not present at ${RELEASE_COMMIT:0:9}${NC}" >&2
         echo -e "${YELLOW}  The release notes did not land with the version bump.${NC}" >&2
+        exit 1
+    fi
+fi
+
+# ── THE RELEASE GATE ────────────────────────────────────────────────────────
+#
+# A merge runs only what its diff can affect (scripts/merge-gate.sh), so main
+# is judged in pieces. The other half of that bargain: the WHOLE suite must
+# have passed on the commit a release is cut from (scripts/release-gate.sh:
+# unscoped lint, the -race suite with every slow test, integration, e2e,
+# generate and docs drift). A green on an ancestor carries when everything
+# since is release metadata (this release PR's own version bump and notes).
+# dev-docs/merge-and-release-gates.md.
+if [[ "$SKIP_RELEASE_GATE" == "true" ]]; then
+    # The waiver means the same thing for an RC commit as for a main one: the gate's
+    # verdict was judged by a person and the reason goes in the release notes. Without
+    # this branch --rc silently ignored it (v1.8.14-rc.4, 2026-10-31: test-only reds).
+    echo -e "${YELLOW}⚠️  --skip-release-gate: tagging ${RELEASE_COMMIT:0:9} WITHOUT a green release-gate record. Say so in the release notes.${NC}" >&2
+elif [[ -n "$RC_BRANCH" ]]; then
+    # An RC commit's gate is its release-gate record: the RC train runs the gate on its own
+    # machine and publishes the record as the commit's note (control-plane
+    # scripts/rc/rl-gate.sh, owner 2026-11-02), the same record a main commit gets. The
+    # train's fallback dispatches ci.yml at the RC branch, which publishes a record only
+    # on main, so that verdict is the run's "Release gate" job.
+    echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9} (--rc)...${NC}"
+    set +e
+    "$(dirname "$0")/release-gate.sh" check "$RELEASE_COMMIT"
+    GATE_RC=$?
+    set -e
+    if [[ "$GATE_RC" != 0 ]]; then
+        echo -e "${YELLOW}🔎 No green release-gate record; checking the Release gate job on Actions...${NC}"
+        GATE=$(gh run list -R reliant-labs/reliant --workflow ci.yml --commit "$RELEASE_COMMIT" --limit 20 \
+            --json databaseId,event --jq '[.[] | select(.event == "workflow_dispatch" or .event == "push")] | sort_by(.databaseId) | last | .databaseId // empty' 2>/dev/null || true)
+        JOB=""
+        [[ -z "$GATE" ]] || JOB=$(gh run view "$GATE" -R reliant-labs/reliant --json jobs --jq '[.jobs[] | select(.name == "Release gate")][0].conclusion // empty' 2>/dev/null || true)
+        if [[ "$JOB" != "success" ]]; then
+            echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} has no green release-gate record, and its Release gate job is '${JOB:-absent}' (run ${GATE:-none})${NC}" >&2
+            exit 1
+        fi
+    fi
+else
+    echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9}...${NC}"
+    set +e
+    "$(dirname "$0")/release-gate.sh" check "$RELEASE_COMMIT"
+    GATE_RC=$?
+    set -e
+    if [[ "$GATE_RC" != 0 ]]; then
+        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} has no green release-gate record${NC}" >&2
+        echo -e "${YELLOW}  Run the slow tier on it (40-70 min; it holds one heavy slot):${NC}" >&2
+        echo -e "${BLUE}    ./scripts/release-gate.sh run ${RELEASE_COMMIT}${NC}" >&2
+        echo -e "${YELLOW}  then run this again. A hotfix that cannot wait: --skip-release-gate.${NC}" >&2
         exit 1
     fi
 fi
@@ -202,9 +338,31 @@ if [[ "$DRY_RUN" == "true" ]]; then
     exit 0
 fi
 
+# One release of this repository at a time, across machines and pipelines: a hand cut
+# and the release workflow cannot both tag (release-lock.sh; the workflow coalesces into
+# a live lock). Then re-check origin: a holder that just finished released the lock
+# after pushing the tag.
+# The release is registered before the lock is taken, so no exit between the two
+# leaves a held lock behind (release_lock_release is a no-op when none is held).
+trap release_lock_release EXIT
+release_lock_acquire "$RELEASE_TAG" || exit 1
+if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+    echo -e "${RED}Error: tag $RELEASE_TAG reached origin while waiting (another cut released it)${NC}" >&2
+    exit 1
+fi
+
 echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"
+# Publish only while this release provably still holds the lock (release-lock.sh).
+release_lock_assert || exit 1
 git tag "$RELEASE_TAG" "$RELEASE_COMMIT"
-git push origin "$RELEASE_TAG"
+# A refused push deletes the local tag this run just made: every worktree of a
+# checkout shares refs/tags/, and a loser's leftover tag makes every later
+# `git fetch --tags` there fail with "would clobber existing tag" (forge#1524).
+if ! git push origin "$RELEASE_TAG"; then
+    git tag -d "$RELEASE_TAG" >/dev/null
+    echo -e "${RED}Error: the push of $RELEASE_TAG was refused, so nothing was released; deleted the local tag${NC}" >&2
+    exit 1
+fi
 
 echo ""
 echo -e "${GREEN}🎉 ${RELEASE_TAG} published on main at ${RELEASE_COMMIT:0:9}${NC}"

@@ -18,6 +18,37 @@ describe("useLongPress", () => {
     vi.useRealTimers();
   });
 
+  it.each(["scroll", "visibilitychange"])("cancels an active press on %s and removes listeners", (eventName) => {
+    const add = vi.spyOn(document, "addEventListener");
+    const remove = vi.spyOn(document, "removeEventListener");
+    const onLongPress = vi.fn();
+    const { result, unmount } = renderHook(() => useLongPress(onLongPress));
+    expect(add.mock.calls.filter(([name]) => name === "scroll")).toHaveLength(0);
+    act(() => result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent));
+    expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+    act(() => {
+      document.dispatchEvent(new Event(eventName));
+      vi.advanceTimersByTime(500);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+    unmount();
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  it("cancels on unmount and rejects multi-touch", () => {
+    const onLongPress = vi.fn();
+    const { result, unmount } = renderHook(() => useLongPress(onLongPress));
+    act(() => result.current.onTouchStart({ touches: [{}, {}] } as unknown as React.TouchEvent));
+    act(() => vi.advanceTimersByTime(500));
+    expect(onLongPress).not.toHaveBeenCalled();
+    act(() => result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent));
+    unmount();
+    act(() => vi.advanceTimersByTime(500));
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+
   it("fires after holding for 500ms without moving", () => {
     const onLongPress = vi.fn();
     const { result } = renderHook(() => useLongPress(onLongPress));

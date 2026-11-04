@@ -65,14 +65,6 @@ func ListDraftWorkflowScenarios(ctx context.Context, db orm.Context, draftID str
 	})
 }
 
-// ListUserWorkflowScenarios is a user's scenarios, most recently updated
-// first.
-func ListUserWorkflowScenarios(ctx context.Context, db orm.Context, userID string) ([]*core.WorkflowScenario, error) {
-	return selectWorkflowScenarios(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("user_id = ?", userID).Order("updated_at DESC")
-	})
-}
-
 func selectWorkflowScenarios(ctx context.Context, db orm.Context, apply func(*bun.SelectQuery) *bun.SelectQuery) ([]*core.WorkflowScenario, error) {
 	var rows []*WorkflowScenario
 	if err := apply(db.Bun().NewSelect().Model(&rows)).Scan(ctx); err != nil {
@@ -119,12 +111,6 @@ func updateWorkflowScenario(ctx context.Context, db orm.Context, id string, set 
 // error.
 func RemoveWorkflowScenario(ctx context.Context, db orm.Context, id string) error {
 	return ignoreNotFound(DeleteWorkflowScenario(ctx, db, id))
-}
-
-// RemoveDraftWorkflowScenarios deletes every scenario of a draft.
-func RemoveDraftWorkflowScenarios(ctx context.Context, db orm.Context, draftID string) error {
-	_, err := db.Bun().NewDelete().Model((*WorkflowScenario)(nil)).Where("workflow_draft_id = ?", draftID).Exec(ctx)
-	return err
 }
 
 func workflowScenarioToCore(row *WorkflowScenario) *core.WorkflowScenario {

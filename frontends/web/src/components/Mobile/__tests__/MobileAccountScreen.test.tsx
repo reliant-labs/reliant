@@ -35,6 +35,12 @@ vi.mock('../../../services/settingsSync', () => ({
   SETTINGS_KEYS: { THEME: 'appearance.theme' },
 }))
 
+// One org: the Organization section renders nothing (its own tests are in
+// components/Orgs and e2e/org-switcher.spec.ts).
+vi.mock('../../../hooks/useOrgs', () => ({
+  useActiveOrg: () => ({ canSwitch: false, orgs: [], active: null, activeOrgId: null, select: vi.fn() }),
+}))
+
 const { MobileAccountScreen } = await import('../MobileAccountScreen')
 
 beforeEach(() => {

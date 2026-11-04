@@ -57,17 +57,24 @@ func (s PathScope) String() string {
 	}
 }
 
-// BasePathReader is what ResolveBasePath reads: the chat a request names, the
-// worktree it resolves to, and the project.
+// BasePathReader is what ResolveBasePath reads: the chat a request names and
+// the worktree it resolves to.
 type BasePathReader interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
-// ResolveBasePath resolves the correct base path for file operations.
-// Returns the worktree path if worktree_id or chat_id is provided, otherwise returns project path.
-func ResolveBasePath(ctx context.Context, repo BasePathReader, projectID string, worktreeID *string, chatID *string) (string, error) {
+// MainCheckout returns the project's main checkout on the machine the request
+// runs on (internal/projectcheckout, which this package cannot import: it sits
+// below the daemon router). It is called only when no branch worktree scopes
+// the request. projects.path is the creating machine's path, so it is never
+// the answer.
+type MainCheckout func(ctx context.Context) (string, error)
+
+// ResolveBasePath resolves the correct base path for file operations: the
+// worktree's path if worktree_id or chat_id names a usable branch worktree,
+// otherwise mainCheckout's answer.
+func ResolveBasePath(ctx context.Context, repo BasePathReader, projectID string, worktreeID *string, chatID *string, mainCheckout MainCheckout) (string, error) {
 	wtID := ""
 	if worktreeID != nil {
 		wtID = *worktreeID
@@ -94,19 +101,16 @@ func ResolveBasePath(ctx context.Context, repo BasePathReader, projectID string,
 		// every request with "project %q has no workspace path to scope this
 		// request to", naming the project, whose path was correct all along.
 		//
-		// Treating an empty path like a missing row degrades to the project
-		// root, which is what a chat with no worktree already gets, rather
-		// than failing outright.
-		if err == nil && strings.TrimSpace(worktree.Path) != "" {
+		// Treating an empty path like a missing row degrades to the main
+		// checkout, which is what a chat with no worktree already gets,
+		// rather than failing outright. The main worktree row mirrors
+		// projects.path, so it is the main checkout too.
+		if err == nil && !worktree.IsMain && strings.TrimSpace(worktree.Path) != "" {
 			return worktree.Path, nil
 		}
 	}
 
-	project, err := repo.GetProject(ctx, projectID)
-	if err != nil {
-		return "", err
-	}
-	return project.Path, nil
+	return mainCheckout(ctx)
 }
 
 // ValidatePath resolves requestedPath against basePath and enforces the

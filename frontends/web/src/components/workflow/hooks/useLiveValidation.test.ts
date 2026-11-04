@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 const validateWorkflow = vi.hoisted(() => vi.fn());
-vi.mock("../../../api/workflow-grpc", () => ({ workflowGrpc: { validateWorkflow } }));
+vi.mock("../../../hooks/workflow-queries", () => ({ validateWorkflow }));
 
 import { fromJson } from "@bufbuild/protobuf";
 
@@ -127,7 +127,7 @@ describe("useLiveValidation with int64 fields", () => {
   ])("validates a loaded workflow with %s and reports its problems", async (_label, inputs) => {
     const workflow = loaded(inputs);
     // The fixture is what the builder really holds: the int64s are bigints.
-    const config = workflow.inputs!.max_attempts.config.value as Record<string, unknown>;
+    const config = workflow.inputs!.max_attempts!.config!.value as Record<string, unknown>;
     expect(Object.values(config).some((value) => typeof value === "bigint")).toBe(true);
 
     const { setStatus, setFindings } = await validateOnce(workflow);

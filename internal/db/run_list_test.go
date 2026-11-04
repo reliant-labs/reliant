@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -118,6 +119,7 @@ func TestListRuns_ScopedToUser(t *testing.T) {
 }
 
 func TestListRuns_RootRunsOnlyAndArchivedHidden(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)
@@ -257,6 +259,7 @@ func TestListRuns_HasMoreOnlyWhenMoreRowsFollow(t *testing.T) {
 }
 
 func TestListRuns_DisplayStates(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)
@@ -295,6 +298,7 @@ func TestListRuns_DisplayStates(t *testing.T) {
 }
 
 func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

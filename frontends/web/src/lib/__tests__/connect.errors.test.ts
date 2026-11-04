@@ -20,8 +20,11 @@ import { ConnectClientError } from "@reliantlabs/forge-web-runtime/interceptors"
 import { DaemonRegistryService, DaemonWakingSchema } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ChatService } from "@/gen/reliant/v1/chat_pb";
 
-const sentry = vi.hoisted(() => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
-vi.mock("@sentry/react", () => sentry);
+const reporting = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportFailure: vi.fn(),
+}));
+vi.mock("@/lib/errorReporting", () => reporting);
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -81,7 +84,7 @@ describe("a server error, through the full chain", () => {
         message,
         details: [{ type: "reliant.v1.DaemonWaking", value: waking }],
       },
-      { "x-reliant-reason": "account_required", "x-forge-error-reason": "account_required" },
+      { "x-forge-error-reason": "account_required" },
     );
     const { connectClient } = await load();
     return connectClient(DaemonRegistryService).listDaemons({}).catch((e: unknown) => e);
@@ -115,10 +118,11 @@ describe("a server error, through the full chain", () => {
   });
 
   it("is classified by rpcErrorPolicy as before (a machine wait is not a crash report)", async () => {
-    serverFails(503, {
-      code: "unavailable",
-      message: "your machine is still starting: no daemon connected",
-    });
+    serverFails(
+      503,
+      { code: "unavailable", message: "your machine is still starting: no daemon connected" },
+      { "x-forge-error-reason": "daemon_starting" },
+    );
     const { connectClient } = await load();
     const err = await connectClient(ChatService)
       .listChats({})
@@ -132,7 +136,7 @@ describe("a server error, through the full chain", () => {
     expect(
       classifyRpcFailure(err, { serviceTypeName: ChatService.typeName, signalAborted: false }),
     ).toBe("machine-wait");
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 
   it("reaches a generated hook's error as a ConnectError", async () => {

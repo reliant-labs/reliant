@@ -7,7 +7,6 @@
 package configv1
 
 import (
-	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -38,9 +37,9 @@ type ObservabilityConfig struct {
 	OtelEnabled bool `protobuf:"varint,2,opt,name=otel_enabled,json=otelEnabled,proto3" json:"otel_enabled,omitempty"`
 	// Reliant's own Prometheus endpoint.
 	PrometheusEnabled bool `protobuf:"varint,3,opt,name=prometheus_enabled,json=prometheusEnabled,proto3" json:"prometheus_enabled,omitempty"`
-	// The deployment environment telemetry and Sentry events are filed under:
-	// SENTRY_ENVIRONMENT, else the deploy layer's typed ENVIRONMENT. Unset: the
-	// process's tier (RELIANT_ENV), else development.
+	// The deployment environment telemetry is filed under: the deploy layer's
+	// typed ENVIRONMENT. Unset: the process's tier (RELIANT_ENV), else
+	// development.
 	Environment   string `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -104,95 +103,20 @@ func (x *ObservabilityConfig) GetEnvironment() string {
 	return ""
 }
 
-// SentryConfig is where the API server and the worker report errors. Only a
-// prod-tier process reports at all (internal/runenv).
-type SentryConfig struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// A kill switch: unset is on.
-	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	// Unset: nothing to report to.
-	Dsn string `protobuf:"bytes,2,opt,name=dsn,proto3" json:"dsn,omitempty"`
-	// The share of transactions traced, 0 to 1.
-	TracesSampleRate float64 `protobuf:"fixed64,3,opt,name=traces_sample_rate,json=tracesSampleRate,proto3" json:"traces_sample_rate,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *SentryConfig) Reset() {
-	*x = SentryConfig{}
-	mi := &file_reliant_config_v1_observability_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SentryConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SentryConfig) ProtoMessage() {}
-
-func (x *SentryConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_observability_config_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SentryConfig.ProtoReflect.Descriptor instead.
-func (*SentryConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_observability_config_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *SentryConfig) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
-func (x *SentryConfig) GetDsn() string {
-	if x != nil {
-		return x.Dsn
-	}
-	return ""
-}
-
-func (x *SentryConfig) GetTracesSampleRate() float64 {
-	if x != nil {
-		return x.TracesSampleRate
-	}
-	return 0
-}
-
 var File_reliant_config_v1_observability_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_observability_config_proto_rawDesc = "" +
 	"\n" +
-	",reliant/config/v1/observability_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x81\x04\n" +
+	",reliant/config/v1/observability_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xeb\x03\n" +
 	"\x13ObservabilityConfig\x12\x81\x01\n" +
 	"\rotlp_endpoint\x18\x01 \x01(\tB\\\x82\xce\x18X\n" +
 	"\x1bOTEL_EXPORTER_OTLP_ENDPOINT*9OTLP collector base URL (export is on whenever it is set)R\fotlpEndpoint\x12w\n" +
 	"\fotel_enabled\x18\x02 \x01(\bBT\x82\xce\x18P\n" +
 	"\fOTEL_ENABLED*@Require an OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT)R\votelEnabled\x12q\n" +
 	"\x12prometheus_enabled\x18\x03 \x01(\bBB\x82\xce\x18>\n" +
-	"\x12PROMETHEUS_ENABLED\x1a\x04true*\"Serve Reliant's Prometheus metricsR\x11prometheusEnabled\x12z\n" +
-	"\venvironment\x18\x04 \x01(\tBX\x82\xce\x18T\n" +
-	"\x12SENTRY_ENVIRONMENT*/Deployment environment telemetry is filed underZ\r\n" +
-	"\vENVIRONMENTR\venvironment\"\xd6\x02\n" +
-	"\fSentryConfig\x12{\n" +
-	"\aenabled\x18\x01 \x01(\bBa\x82\xce\x18]\n" +
-	"\x0eSENTRY_ENABLED\x1a\x04true*EReport errors to Sentry (when SENTRY_DSN is set and the tier is prod)R\aenabled\x122\n" +
-	"\x03dsn\x18\x02 \x01(\tB \x82\xce\x18\x1c\n" +
-	"\n" +
-	"SENTRY_DSN*\n" +
-	"Sentry DSN0\x01P\x01R\x03dsn\x12\x94\x01\n" +
-	"\x12traces_sample_rate\x18\x03 \x01(\x01Bf\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00\x82\xce\x18K\n" +
-	"\x19SENTRY_TRACES_SAMPLE_RATE\x1a\x010*+Share of transactions Sentry traces, 0 to 1R\x10tracesSampleRateB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x12PROMETHEUS_ENABLED\x1a\x04true*\"Serve Reliant's Prometheus metricsR\x11prometheusEnabled\x12d\n" +
+	"\venvironment\x18\x04 \x01(\tBB\x82\xce\x18>\n" +
+	"\vENVIRONMENT*/Deployment environment telemetry is filed underR\venvironmentB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_observability_config_proto_rawDescOnce sync.Once
@@ -206,10 +130,9 @@ func file_reliant_config_v1_observability_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_observability_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_observability_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_reliant_config_v1_observability_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_reliant_config_v1_observability_config_proto_goTypes = []any{
 	(*ObservabilityConfig)(nil), // 0: reliant.config.v1.ObservabilityConfig
-	(*SentryConfig)(nil),        // 1: reliant.config.v1.SentryConfig
 }
 var file_reliant_config_v1_observability_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -230,7 +153,7 @@ func file_reliant_config_v1_observability_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_observability_config_proto_rawDesc), len(file_reliant_config_v1_observability_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

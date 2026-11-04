@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * DEV-ONLY: the console v3 forge-ui primitives, composed the way the console
+ * DEV-ONLY: the forge-ui primitives, composed the way the console
  * uses them, on fabricated data — the Cloudflare-style SidebarLayout, a
  * PageHeader with breadcrumb + status + meta + actions, underline Tabs, Cards
  * with flush DataTables (whole-row links, numeric columns), Status, Tag and
- * Mono. research/console-v3/mockup is the spec this is checked against.
+ * Mono.
  *
  *   /forge-ui-preview?page=overview|releases|observability|logs|alerts|dashboards|environments|secrets|activity
  *   &rail=1 collapses the nav to the icon rail.

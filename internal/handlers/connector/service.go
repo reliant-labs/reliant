@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -33,9 +35,12 @@ type Deps struct {
 	// authority holds the credential.
 	Tokens TokenAuthority
 
-	// PublicURL is the externally reachable base URL, used to tell the user
-	// where to point their MCP client. Empty answers with the path alone.
-	PublicURL string
+	// Integrations is the shared integrations config: its public_url
+	// (PUBLIC_URL) is the externally reachable base URL, used to tell the
+	// user where to point their MCP client. Nil, or an empty public_url,
+	// answers with the path alone.
+	//forge:optional-dep
+	Integrations *configv1.IntegrationsConfig
 }
 
 // GrantStore is the slice of connectorgrant.Store the connector handlers use.
@@ -84,6 +89,9 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedConnectorServiceHandler
 	deps Deps
+	// publicURL is Deps.Integrations' public_url, trimmed of space and a
+	// trailing slash; empty when there is none.
+	publicURL string
 }
 
 // New creates a new connector service instance with the supplied Deps.
@@ -92,7 +100,11 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps}, nil
+	s := &Service{deps: deps}
+	if deps.Integrations != nil {
+		s.publicURL = strings.TrimSuffix(strings.TrimSpace(deps.Integrations.GetPublicUrl()), "/")
+	}
+	return s, nil
 }
 
 // Name returns the service name for logging and registry.

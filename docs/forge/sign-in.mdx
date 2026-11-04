@@ -9,8 +9,17 @@ How it works:
 
 1. A running daemon exports `FORGE_CREDENTIAL_HELPER` to the shells it starts for your agents, pointing at `reliant auth forge-credential` and pinned to that daemon. `reliant forge …` sets the same helper for itself.
 2. When forge has no credential of its own, it asks the helper for one, naming the control plane the environment declares.
-3. The helper exchanges your Reliant session (the daemon's credential, or your `reliant auth login`) with the Reliant server for a **short-lived token** — valid for at most an hour, carrying only deploy, secret and domain permission, and only what your session itself holds. The server refuses to mint one for any control plane other than its own, so a repository cannot point forge somewhere else to collect a token.
+3. The helper exchanges your Reliant session (the daemon's credential, or your `reliant auth login`) with the Reliant server for a **short-lived token** — valid for at most an hour, carrying only requested control-plane capabilities your session holds and your organization currently grants you. The server refuses to mint one for any control plane other than its own, so a repository cannot point forge somewhere else to collect a token.
 4. forge uses that token. Your session credential never leaves Reliant's own files, and tokens are cached in `~/.reliant/forge-token-cache.json` (readable only by you) so forge does not mint one per command.
+
+## Which organization
+
+A token acts in exactly one organization. If you belong to several, forge uses the one you are working in:
+
+- From the web app, the organization chosen in the **organization switcher** (shown in the sidebar when you belong to more than one). Deploy, promote, secrets and status all act in it, from the same machine, with no sign-in per organization.
+- From an agent's shell or `reliant forge …` in a terminal, the organization the Reliant session credential was issued for. A web-triggered forge command overrides this with its active organization.
+
+You must be a member of the organization. Your permissions are those you hold **in that organization**: a deploy token for one organization never carries a permission you only hold in another. Tokens are cached per organization, so switching does not reuse a token minted for the other one.
 
 forge's own sources still come first, in this order: `--token`, the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` by default, for CI), a stored `forge login`, then your Reliant session, which also takes over when a stored login has expired. `forge cloud status <env>` shows which one a command will use — never the token itself.
 
@@ -18,11 +27,19 @@ CI has no Reliant session to exchange. Give it an organization automation token 
 
 Third-party connectors that run commands on your daemon do **not** receive the helper: only your own agents can deploy as you.
 
+## Defaults and explicit restrictions
+
+A new daemon credential requests the user's control-plane capabilities by default: deployment, cluster administration, token read/write, secrets, domains, managed identity, observability read/write/triage, and database query. The control plane clips that ceiling to your current organization grants. This is an explicit, closed scope list, not a wildcard or an authorization bypass; resource bindings and service-level checks still apply.
+
+Restrictions are opt-in: edit a credential's permissions in **Settings → Access Tokens**. Each helper exchange intersects the request with that credential's stored scopes, then the control plane clips the mint to your current grants. Refreshing the helper credential does not restore the default ceiling or widen a restricted parent. A daemon-bound child keeps the same binding and dies when that daemon is torn down; it cannot outlive an expiring parent. An already exchanged credential may remain usable until its expiry after its parent is narrowed or revoked (at most an hour).
+
+The helper never receives session authority (`reliant:api`, `daemon:connect`), LLM invocation, connector, port-proxy, or daemon-resume capabilities. Write-implies-read authorization is not a delegation rule: requesting a read scope absent from the parent does not manufacture it from a write scope.
+
 <Note>
-A session needs deploy permission to be exchanged — a token can never grant authority it does not hold. Sign-ins from this release on ask for it (limited to what your organization grants you). If forge says your Reliant credential "cannot authorize" a deploy, run `reliant auth login` once, or grant the daemon's credential deploy, secret and domain permission in **Settings → Access Tokens**.
+Daemon-bound cluster, token administration, and observability write capabilities retain the daemon lifecycle binding. Observability write is not an environment-bound grant. Updating the scope list never removes a daemon binding to make a mint succeed, nor broadens an existing explicitly narrowed credential.
 </Note>
 
-**forge asks you to sign in on a machine:** forge prints the helper's own reason. "Not signed in to Reliant" means the machine has no session: sign in to the app or run `reliant auth login`. "Cannot authorize" means the session lacks deploy permission (see the note above).
+**forge asks you to sign in on a machine:** forge prints the helper's own reason. "Not signed in to Reliant" means the machine has no session: sign in to the app or run `reliant auth login`. "Cannot authorize" means the session lacks the requested permissions. If you intentionally restricted it, change those permissions rather than signing in again to replace it with a default credential.
 
 ## Related topics
 

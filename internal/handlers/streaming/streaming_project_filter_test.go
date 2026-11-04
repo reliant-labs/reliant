@@ -57,25 +57,26 @@ func TestUserUpdateMatchesProject(t *testing.T) {
 	}
 }
 
-// TestUserUpdateFilter_SubscribedChatBypassesProjectFilter pins that the chat a
-// stream explicitly subscribes to, and the chats an agent started from it, are
-// delivered whatever project the stream is scoped to. A deep link or
-// notification can open a chat outside the client's current project; its run
-// status and spawned sub-agent chats are project-filtered user updates, so
-// without the exemption they never arrived.
-func TestUserUpdateFilter_SubscribedChatBypassesProjectFilter(t *testing.T) {
+// TestChatFocusFilter_CarriesTheOpenChatsCrossProjectUpdates pins that the
+// chat a client has open, and the chats an agent started from it, get their
+// user-level updates whatever project the client's user stream is scoped to.
+// A deep link or notification can open a chat outside the client's current
+// project; its run status and spawned sub-agent chats are project-filtered
+// user updates, so the chat stream forwards exactly those the user stream
+// drops — and never one it delivers, so nothing arrives twice.
+func TestChatFocusFilter_CarriesTheOpenChatsCrossProjectUpdates(t *testing.T) {
 	t.Parallel()
 	current, foreign := "proj-a", "proj-b"
-	const subscribed, child, stranger = "chat-sub", "chat-child", "chat-other"
+	const open, child, stranger = "chat-open", "chat-child", "chat-other"
 
 	lookups := map[string]int{}
-	newFilter := func(subscribeChatID string) *userUpdateFilter {
-		f := &userUpdateFilter{projectID: current, subscribeChatID: subscribeChatID, childOfSubscribed: map[string]bool{}}
+	newFilter := func() *chatFocusFilter {
+		f := newChatFocusFilter(nil, current, open)
 		f.parentOf = func(_ context.Context, chatID string) (string, error) {
 			lookups[chatID]++
 			switch chatID {
 			case child:
-				return subscribed, nil
+				return open, nil
 			case "chat-flaky":
 				return "", errors.New("db down")
 			}
@@ -90,40 +91,58 @@ func TestUserUpdateFilter_SubscribedChatBypassesProjectFilter(t *testing.T) {
 		}
 	}
 
-	t.Run("subscribed chat in another project passes", func(t *testing.T) {
-		f := newFilter(subscribed)
+	t.Run("open chat in another project is forwarded", func(t *testing.T) {
+		f := newFilter()
 		for _, typ := range []db.UserUpdateType{db.UserUpdateChatActivityChanged, db.UserUpdateChatStateChange, db.UserUpdateChatTitleChanged} {
-			assert.True(t, f.matches(context.Background(), chatUpdate(typ, subscribed, foreign)), typ.String())
+			assert.True(t, f.matches(context.Background(), chatUpdate(typ, open, foreign)), typ.String())
 		}
 	})
-	t.Run("update identified only by entity id passes", func(t *testing.T) {
-		f := newFilter(subscribed)
-		u := &db.UserUpdate{SequenceNumber: 5, UpdateType: db.UserUpdateChatStateChange, EntityType: db.EntityTypeChat, EntityID: subscribed}
+	t.Run("update identified only by entity id is forwarded", func(t *testing.T) {
+		f := newFilter()
+		project := foreign
+		u := &db.UserUpdate{SequenceNumber: 5, UpdateType: db.UserUpdateChatStateChange, ProjectID: &project, EntityType: db.EntityTypeChat, EntityID: open}
 		assert.True(t, f.matches(context.Background(), u))
 	})
-	t.Run("sub-agent chat of the subscribed chat passes, lookup memoized", func(t *testing.T) {
-		f := newFilter(subscribed)
+	t.Run("sub-agent chat of the open chat is forwarded, lookup memoized", func(t *testing.T) {
+		f := newFilter()
 		for i := 0; i < 3; i++ {
 			assert.True(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatCreated, child, foreign)))
 		}
 		assert.Equal(t, 1, lookups[child])
 	})
 	t.Run("unrelated chat in another project is dropped", func(t *testing.T) {
-		f := newFilter(subscribed)
+		f := newFilter()
 		assert.False(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatActivityChanged, stranger, foreign)))
 	})
 	t.Run("lookup failure drops the update without pinning the answer", func(t *testing.T) {
-		f := newFilter(subscribed)
+		f := newFilter()
 		assert.False(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatCreated, "chat-flaky", foreign)))
 		assert.False(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatCreated, "chat-flaky", foreign)))
 		assert.Equal(t, 2, lookups["chat-flaky"])
 	})
-	t.Run("without a chat subscription the project filter stands", func(t *testing.T) {
-		f := newFilter("")
-		assert.False(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatActivityChanged, subscribed, foreign)))
+	t.Run("an update the user stream delivers is not forwarded", func(t *testing.T) {
+		f := newFilter()
+		assert.False(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatActivityChanged, open, current)),
+			"the open chat's in-project update reaches the client on the user stream")
+		assert.False(t, f.matches(context.Background(), &db.UserUpdate{UpdateType: db.UserUpdateDaemonHeartbeat}),
+			"an ephemeral project-less update reaches the client on the user stream")
 	})
-	t.Run("project-matching update still passes", func(t *testing.T) {
-		f := newFilter(subscribed)
-		assert.True(t, f.matches(context.Background(), chatUpdate(db.UserUpdateChatActivityChanged, stranger, current)))
+	t.Run("a user stream with no project scope needs nothing forwarded", func(t *testing.T) {
+		assert.Nil(t, newChatFocusFilter(nil, "", open))
 	})
+}
+
+// TestUserUpdateFilter_IsTheProjectFilterAlone pins that the user stream no
+// longer knows which chat is open: an update about a chat in another project
+// is the chat stream's to deliver (chatFocusFilter), never this one's.
+func TestUserUpdateFilter_IsTheProjectFilterAlone(t *testing.T) {
+	t.Parallel()
+	f := userUpdateFilter{projectID: "proj-a"}
+	chatID, foreign, current := "chat-open", "proj-b", "proj-a"
+	assert.False(t, f.matches(context.Background(), &db.UserUpdate{
+		SequenceNumber: 5, UpdateType: db.UserUpdateChatActivityChanged, ChatID: &chatID, ProjectID: &foreign,
+	}))
+	assert.True(t, f.matches(context.Background(), &db.UserUpdate{
+		SequenceNumber: 5, UpdateType: db.UserUpdateChatActivityChanged, ChatID: &chatID, ProjectID: &current,
+	}))
 }

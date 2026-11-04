@@ -13,7 +13,7 @@
  */
 
 import { createContext, useContext } from "react";
-import type { Trigger } from "../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { DeclaredTrigger, TriggerFinding } from "../../lib/declaredTriggers";
 
 export interface TriggerRailContextValue {

@@ -1,5 +1,5 @@
 import { Code } from 'lucide-react';
-import { HelpPopover } from '../ui/HelpPopover';
+import { HelpPopover } from './HelpPopover';
 import { MonacoCELEditor } from './MonacoCELEditor';
 import { useCELCompletionContext, type CELInsertTarget } from './CELCompletionContext';
 import type { MutableRefObject } from 'react';

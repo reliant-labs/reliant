@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -138,7 +139,7 @@ func createTestMessage(
 	ordinal int64,
 ) *db.Message {
 	messageID := uuid.New().String()
-	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 	msg := &db.Message{
 		ID:              messageID,
@@ -159,6 +160,7 @@ func createTestMessage(
 // ============================================================================
 
 func TestExecuteToolsActivity_Idempotency(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	h := NewIdempotencyTestHelper(t)
@@ -236,6 +238,7 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	h := NewIdempotencyTestHelper(t)

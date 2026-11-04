@@ -3,20 +3,20 @@ import { useChatStore } from "../chatStore";
 import { useGlobalUpdatesStore } from "../globalUpdatesStore";
 import { useProjectStore } from "../projectStore";
 
-// The stream can only change which chat it carries by reconnecting. Leaving
+// The chat stream can only change which chat it carries by reconnecting. Leaving
 // a chat for the new-chat view (desktop) or the chat list (mobile) used to
 // drop the subscription — one reconnect — and coming back to the same chat
 // added a second, for a chat whose state never left the cache. These pin the
 // replacement: a deselected chat stays subscribed until another chat takes
-// the slot, or the chat itself goes away.
+// the chat stream, or the chat itself goes away.
 
 type MockService = {
   connected: boolean;
   subscribed: string | undefined;
   isConnected: () => boolean;
-  getSubscribedChatId: () => string | undefined;
-  subscribeToChatDetails: ReturnType<typeof vi.fn>;
-  unsubscribeFromChatDetails: ReturnType<typeof vi.fn>;
+  getChatId: () => string | undefined;
+  subscribeToChat: ReturnType<typeof vi.fn>;
+  unsubscribe: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
 };
 
@@ -25,17 +25,19 @@ function liveServiceOn(chatId: string): MockService {
     connected: true,
     subscribed: chatId,
     isConnected: () => svc.connected,
-    getSubscribedChatId: () => svc.subscribed,
-    subscribeToChatDetails: vi.fn((id: string) => {
+    getChatId: () => svc.subscribed,
+    subscribeToChat: vi.fn((id: string) => {
       svc.subscribed = id;
     }),
-    unsubscribeFromChatDetails: vi.fn(() => {
+    unsubscribe: vi.fn(() => {
       svc.subscribed = undefined;
     }),
     stop: vi.fn(),
   };
   useGlobalUpdatesStore.setState({
-    wsService: svc as never,
+    // A connected user stream: subscribing never needs to connect one.
+    wsService: { isConnected: () => true, stop: vi.fn() } as never,
+    chatStream: svc as never,
     subscribedChatId: chatId,
     connectionStatus: "connected",
   });
@@ -58,7 +60,7 @@ describe("leaving a chat", () => {
     useChatStore.getState().clearCurrentChat();
 
     expect(useChatStore.getState().activeChatId).toBeNull();
-    expect(svc.unsubscribeFromChatDetails).not.toHaveBeenCalled();
+    expect(svc.unsubscribe).not.toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT);
   });
 
@@ -70,8 +72,8 @@ describe("leaving a chat", () => {
     // What ChatContainer does on mount for the chat it renders.
     useGlobalUpdatesStore.getState().reconcileChatSubscription(CHAT);
 
-    expect(svc.subscribeToChatDetails).not.toHaveBeenCalled();
-    expect(svc.unsubscribeFromChatDetails).not.toHaveBeenCalled();
+    expect(svc.subscribeToChat).not.toHaveBeenCalled();
+    expect(svc.unsubscribe).not.toHaveBeenCalled();
   });
 
   it("opening a different chat replaces it in a single switch", () => {
@@ -81,9 +83,9 @@ describe("leaving a chat", () => {
 
     useGlobalUpdatesStore.getState().reconcileChatSubscription(OTHER);
 
-    expect(svc.unsubscribeFromChatDetails).not.toHaveBeenCalled();
-    expect(svc.subscribeToChatDetails).toHaveBeenCalledTimes(1);
-    expect(svc.subscribeToChatDetails).toHaveBeenCalledWith(OTHER);
+    expect(svc.unsubscribe).not.toHaveBeenCalled();
+    expect(svc.subscribeToChat).toHaveBeenCalledTimes(1);
+    expect(svc.subscribeToChat).toHaveBeenCalledWith(OTHER);
   });
 });
 
@@ -93,7 +95,7 @@ describe("evicting a chat", () => {
 
     useChatStore.getState().evictChat(CHAT);
 
-    expect(svc.unsubscribeFromChatDetails).toHaveBeenCalledTimes(1);
+    expect(svc.unsubscribe).toHaveBeenCalledTimes(1);
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBeNull();
   });
 
@@ -102,7 +104,7 @@ describe("evicting a chat", () => {
 
     useChatStore.getState().evictChat(OTHER);
 
-    expect(svc.unsubscribeFromChatDetails).not.toHaveBeenCalled();
+    expect(svc.unsubscribe).not.toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT);
   });
 });
@@ -111,7 +113,7 @@ describe("a chat the server refused", () => {
   it("is not recorded as subscribed when the service declines it", () => {
     const svc = liveServiceOn(CHAT);
     // The real service ignores a chat it has seen refused.
-    svc.subscribeToChatDetails.mockImplementation(() => undefined);
+    svc.subscribeToChat.mockImplementation(() => undefined);
 
     useGlobalUpdatesStore.getState().subscribeToChatDetails(OTHER);
 

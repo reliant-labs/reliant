@@ -1,63 +1,81 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Chat } from "../api/client";
-import type { ChatSelection } from "../gen/reliant/v1/chat_pb";
+import type { Chat } from "../api/client";
+import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { queryClient } from "../lib/query-client";
+import { chatServiceKeys, useListArchivedChats } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
+import * as chatActions from "./chat-actions";
 
 // ── Query key factory ───────────────────────────────────────────────────────
+
+/**
+ * The list scope of the all-projects chat list (ListChats with no project_id).
+ * A real key segment rather than `undefined`, so a project-scoped key never
+ * prefix-matches it and an invalidation of one list never reaches the other.
+ */
+export const ALL_PROJECTS_SCOPE = "*all-projects*";
 
 export const chatKeys = {
   all: ["chats"] as const,
   lists: () => [...chatKeys.all, "list"] as const,
-  list: (projectId?: string) => [...chatKeys.lists(), projectId] as const,
+  /** One project's list, or every project's when `projectId` is null/undefined. */
+  list: (projectId?: string | null) => [...chatKeys.lists(), projectId ?? ALL_PROJECTS_SCOPE] as const,
   details: () => [...chatKeys.all, "detail"] as const,
   detail: (chatId?: string) => [...chatKeys.details(), chatId] as const,
   // The chat's server-side selection: a ChatSelection, or null when it has none.
   selection: (chatId?: string) => [...chatKeys.detail(chatId), "selection"] as const,
-  archived: () => [...chatKeys.all, "archived"] as const,
-  search: (projectId: string, query: string) =>
-    [...chatKeys.all, "search", projectId, query] as const,
 };
 
 // ── Cache patch helpers ─────────────────────────────────────────────────────
-// GOTCHA: the list cache stores the RAW envelope from api.chatsV2.list
+// GOTCHA: the list cache stores the RAW envelope from chatActions.listChats
 // ({ chats, lastUserUpdateSequence }) — the `select: (data) => data.chats`
 // transform in useChatList runs on READ, not at cache time. Updaters here must
 // patch `.chats` inside the envelope, not a bare array.
 
-type ChatListEnvelope = {
+export type ChatListEnvelope = {
   chats: Chat[];
   total?: number;
   lastUserUpdateSequence: number;
-  // The project's main workspace, so the list can show it with no chat in it.
-  mainWorktree?: WorktreeSummary;
+  // The main workspace of each project in the list's scope, so the list can
+  // show a project's main workspace with no chat in it.
+  mainWorktrees: WorktreeSummary[];
 };
 
+/** The scope a list cache key was written for: a project id, or null for all. */
+function scopeOfListKey(queryKey: readonly unknown[]): string | null {
+  const scope = queryKey[2];
+  return typeof scope === "string" && scope !== ALL_PROJECTS_SCOPE ? scope : null;
+}
+
+/** Whether a list of `scope` (null: every project) holds chats of `projectId`. */
+function scopeHolds(scope: string | null, projectId: string | undefined): boolean {
+  return scope === null || (!!projectId && scope === projectId);
+}
+
 /**
- * Surgically patch a chat's fields in both the list and detail caches.
- * Never creates cache entries — if a cache is empty or the chat isn't
- * present, that cache is left untouched.
+ * Surgically patch a chat's fields in every list cache holding it and in its
+ * detail cache. Never creates cache entries — if a cache is empty or the chat
+ * isn't present, that cache is left untouched. `projectId` is accepted for the
+ * callers that know it; a chat is patched wherever it is listed either way.
  */
 export function patchChatCaches(
-  projectId: string | undefined,
+  _projectId: string | undefined,
   chatId: string,
   patch: Partial<Chat>
 ): void {
-  if (projectId) {
-    queryClient.setQueryData(
-      chatKeys.list(projectId),
-      (prev: ChatListEnvelope | undefined) => {
-        if (!prev || !prev.chats.some((c) => c.id === chatId)) return prev;
-        return {
-          ...prev,
-          chats: prev.chats.map((c) =>
-            c.id === chatId ? { ...c, ...patch } : c
-          ),
-        };
-      }
-    );
-  }
+  queryClient.setQueriesData<ChatListEnvelope>(
+    { queryKey: chatKeys.lists() },
+    (prev) => {
+      if (!prev || !prev.chats.some((c) => c.id === chatId)) return prev;
+      return {
+        ...prev,
+        chats: prev.chats.map((c) =>
+          c.id === chatId ? { ...c, ...patch } : c
+        ),
+      };
+    }
+  );
   // Also patch the detail cache — ChatHeader reads the title from the detail
   // query, and patching beats invalidation (no refetch round-trip).
   queryClient.setQueryData(
@@ -101,13 +119,32 @@ export function refetchChatSelection(chatId: string): Promise<unknown> {
   return queryClient.refetchQueries({ queryKey: chatKeys.selection(chatId), exact: true });
 }
 
+function upsertInto(prev: ChatListEnvelope, chat: Chat): ChatListEnvelope {
+  const existingIndex = prev.chats.findIndex((c) => c.id === chat.id);
+  if (existingIndex >= 0) {
+    return {
+      ...prev,
+      chats: prev.chats.map((c, index) =>
+        index === existingIndex ? { ...c, ...chat } : c
+      ),
+    };
+  }
+  return {
+    ...prev,
+    chats: [chat, ...prev.chats],
+    ...(prev.total !== undefined ? { total: prev.total + 1 } : {}),
+  };
+}
+
 /**
- * Seed or upsert a full chat into the project list cache.
+ * Seed or upsert a full chat into the list caches that hold its project.
  *
  * Create-chat flows already have the authoritative Chat returned by the server,
  * so they can make subscribed list readers update synchronously instead of
- * waiting for the global CHAT_CREATED invalidation/refetch path. Creates a
- * minimal envelope when the list has not loaded yet.
+ * waiting for the global CHAT_CREATED invalidation/refetch path. The chat's
+ * project list gets a minimal envelope when it has not loaded yet; the
+ * all-projects list is only upserted into once it has (a one-chat envelope
+ * would stand in for every other project's chats until the refetch).
  */
 export function upsertChatInListCache(
   projectId: string | undefined,
@@ -117,6 +154,10 @@ export function upsertChatInListCache(
   if (!resolvedProjectId) return;
 
   queryClient.setQueryData(
+    chatKeys.list(null),
+    (prev: ChatListEnvelope | undefined) => (prev ? upsertInto(prev, chat) : prev),
+  );
+  queryClient.setQueryData(
     chatKeys.list(resolvedProjectId),
     (prev: ChatListEnvelope | undefined): ChatListEnvelope => {
       if (!prev) {
@@ -124,24 +165,10 @@ export function upsertChatInListCache(
           chats: [chat],
           total: 1,
           lastUserUpdateSequence: 0,
+          mainWorktrees: [],
         };
       }
-
-      const existingIndex = prev.chats.findIndex((c) => c.id === chat.id);
-      if (existingIndex >= 0) {
-        return {
-          ...prev,
-          chats: prev.chats.map((c, index) =>
-            index === existingIndex ? { ...c, ...chat } : c
-          ),
-        };
-      }
-
-      return {
-        ...prev,
-        chats: [chat, ...prev.chats],
-        ...(prev.total !== undefined ? { total: prev.total + 1 } : {}),
-      };
+      return upsertInto(prev, chat);
     }
   );
 }
@@ -168,7 +195,7 @@ export async function resolveChat(chatId: string): Promise<Chat | undefined> {
   const cached = getChatFromCache(chatId);
   if (cached) return cached;
   try {
-    const chat = await api.chatsV2.get(chatId);
+    const chat = await chatActions.getChat(chatId);
     seedChatDetail(chat);
     return chat;
   } catch {
@@ -177,53 +204,69 @@ export async function resolveChat(chatId: string): Promise<Chat | undefined> {
 }
 
 /**
- * Read the cached chat list for a project (imperative, non-reactive).
- * Returns [] when the list has not been loaded/seeded.
+ * Read the cached chat list of a scope (imperative, non-reactive): one
+ * project's chats — from its own list, or the all-projects list when only that
+ * one has loaded — or every project's when `projectId` is null. Returns []
+ * when no list holding them has been loaded/seeded.
  */
-export function getCachedChatList(projectId: string | undefined): Chat[] {
-  if (!projectId) return [];
+export function getCachedChatList(projectId: string | null | undefined): Chat[] {
+  if (projectId === undefined) return [];
+  const own = queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(projectId));
+  if (own) return own.chats;
+  if (projectId === null) return [];
   return (
-    queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(projectId))
-      ?.chats ?? []
+    queryClient
+      .getQueryData<ChatListEnvelope>(chatKeys.list(null))
+      ?.chats.filter((c) => c.projectId === projectId) ?? []
   );
 }
 
 /**
- * The project's main workspace as the chat list last reported it (imperative,
- * non-reactive). Undefined until the list has loaded.
+ * The project's main workspace as a chat list holding it last reported it
+ * (imperative, non-reactive). Undefined until such a list has loaded.
  */
 export function getCachedMainWorktree(
   projectId: string | undefined
 ): WorktreeSummary | undefined {
   if (!projectId) return undefined;
-  return queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(projectId))
-    ?.mainWorktree;
+  for (const [key, envelope] of queryClient.getQueriesData<ChatListEnvelope>({ queryKey: chatKeys.lists() })) {
+    if (!envelope || !scopeHolds(scopeOfListKey(key), projectId)) continue;
+    const main = envelope.mainWorktrees?.find((w) => w.projectId === projectId);
+    if (main) return main;
+  }
+  return undefined;
 }
 
 /**
- * Remove a chat from the list cache envelope and drop its detail cache.
+ * The main workspaces a scope's chat list carries (imperative, non-reactive):
+ * [] until it has loaded.
+ */
+export function getCachedListMainWorktrees(scope: string | null): WorktreeSummary[] {
+  return queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(scope))?.mainWorktrees ?? [];
+}
+
+/**
+ * Remove a chat from every list cache envelope and drop its detail cache.
  */
 export function removeChatFromListCache(
-  projectId: string | undefined,
+  _projectId: string | undefined,
   chatId: string
 ): void {
-  if (projectId) {
-    queryClient.setQueryData(
-      chatKeys.list(projectId),
-      (prev: ChatListEnvelope | undefined) => {
-        if (!prev) return prev;
-        const chats = prev.chats.filter((c) => c.id !== chatId);
-        if (chats.length === prev.chats.length) return prev;
-        return {
-          ...prev,
-          chats,
-          ...(prev.total !== undefined
-            ? { total: Math.max(0, prev.total - 1) }
-            : {}),
-        };
-      }
-    );
-  }
+  queryClient.setQueriesData<ChatListEnvelope>(
+    { queryKey: chatKeys.lists() },
+    (prev) => {
+      if (!prev) return prev;
+      const chats = prev.chats.filter((c) => c.id !== chatId);
+      if (chats.length === prev.chats.length) return prev;
+      return {
+        ...prev,
+        chats,
+        ...(prev.total !== undefined
+          ? { total: Math.max(0, prev.total - 1) }
+          : {}),
+      };
+    }
+  );
   queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
 }
 
@@ -232,31 +275,51 @@ export function removeChatFromListCache(
 export function useChatList(projectId?: string) {
   return useQuery({
     queryKey: chatKeys.list(projectId),
-    queryFn: () => api.chatsV2.list(projectId),
+    queryFn: ({ signal }) => chatActions.listChats(projectId, { signal }),
     enabled: !!projectId,
     select: (data) => data.chats,
   });
 }
 
 /**
- * The chat list together with the project's main workspace: everything the
- * sidebar and the mobile list need to group chats by workspace, from the one
- * ListChats response. The full worktree list is not involved.
+ * The chat list of a scope — one project, or every project when `scope` is
+ * null — together with each project's main workspace: everything the sidebar
+ * and the mobile list need to group chats by project and workspace, from the
+ * one ListChats response. The full worktree list is not involved.
  */
-export function useChatListWithWorkspaces(projectId?: string) {
+export function useChatListWithWorkspaces(scope: string | null, options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: chatKeys.list(projectId),
-    queryFn: () => api.chatsV2.list(projectId),
-    enabled: !!projectId,
+    queryKey: chatKeys.list(scope),
+    queryFn: ({ signal }) => chatActions.listChats(scope ?? undefined, { signal }),
+    enabled: options.enabled ?? true,
   });
 }
 
-export function useChat(chatId?: string) {
-  return useQuery({
+/**
+ * The chat's detail, kept current by the stream. The stream patches this cache
+ * as the chat changes (title, state, activity, worktree, config), and every
+ * path that reads a chat from the server seeds it (seedChatDetail, which
+ * selectChat runs on open) -- so a mount re-reading GetChat is a round trip
+ * for what the cache already holds. That duplicate was the extra GetChat on
+ * every open and every switch back to a chat.
+ *
+ * Fresh for CHAT_DETAIL_STALE_MS rather than forever: a missed event heals on
+ * the next mount past that, and a stream disruption invalidates every chat
+ * query read before it (globalUpdatesStore.handleStatusChange).
+ */
+export const CHAT_DETAIL_STALE_MS = 5 * 60_000;
+
+export function chatDetailQueryOptions(chatId: string | undefined) {
+  return {
     queryKey: chatKeys.detail(chatId),
-    queryFn: () => api.chatsV2.get(chatId!),
+    queryFn: () => chatActions.getChat(chatId!),
     enabled: !!chatId,
-  });
+    staleTime: CHAT_DETAIL_STALE_MS,
+  };
+}
+
+export function useChat(chatId?: string) {
+  return useQuery(chatDetailQueryOptions(chatId));
 }
 
 /**
@@ -278,10 +341,27 @@ export function useChat(chatId?: string) {
 export function useChatSelection(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
-    queryFn: async () => (await api.chatsV2.get(chatId!)).selection ?? null,
+    queryFn: () => fetchChatSelection(chatId!),
     enabled: !!chatId,
     staleTime: Infinity,
   });
+}
+
+/**
+ * The read of a chat's selection: the chat's own GetChat (the selection rides
+ * on it), joined to the detail query's request when one is already in flight.
+ * A chat opened with no detail cached would otherwise make that call twice,
+ * once for the header and once for the composer.
+ *
+ * It never answers from a cached detail, however fresh: the project list seeds
+ * details without a selection, so a cached detail says nothing about whether
+ * the chat has one, and a selection read after the stream stopped maintaining
+ * it must reach the server. staleTime 0 makes fetchQuery fetch (or join the
+ * request in flight) instead of returning the cache.
+ */
+async function fetchChatSelection(chatId: string): Promise<ChatSelection | null> {
+  const chat = await queryClient.fetchQuery({ ...chatDetailQueryOptions(chatId), staleTime: 0 });
+  return chat.selection ?? null;
 }
 
 /**
@@ -298,11 +378,27 @@ export function markChatSelectionsUnmaintained(): void {
   });
 }
 
-export function useArchivedChats() {
-  return useQuery({
-    queryKey: chatKeys.archived(),
-    queryFn: () => api.chatsV2.listArchived(),
+/**
+ * An archived row as the sidebar lists it: the chat, with its workspace's name
+ * and deletion time flattened in.
+ */
+function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
+  return response.chats.map(({ chat, worktreeName, worktreeDeletedAt }) => {
+    const { $typeName: _, ...rest } = chat ?? ({} as Partial<ProtoChat>);
+    return { ...rest, worktreeName, worktreeDeletedAt } as Chat;
   });
+}
+
+/**
+ * The archived list is a pull read on the generated key (entity scope
+ * `chatServiceKeys.archivedChat`): the stream only says it changed, and every
+ * archive, restore and delete — hand or streamed — invalidates that scope.
+ * Unlike the live list it seeds no detail entry, so a refetch of it (a
+ * generated ChatService mutation invalidates `chatServiceKeys.all`) never
+ * writes over stream-maintained chat state.
+ */
+export function useArchivedChats() {
+  return useListArchivedChats({}, { select: toArchivedChats });
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────
@@ -310,19 +406,26 @@ export function useArchivedChats() {
 export function useStartChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: StartChatRequest) => api.chatsV2.start(request),
+    mutationFn: (request: StartChatRequest) => chatActions.startChat(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
     },
   });
 }
 
-export function useDeleteChat() {
+/**
+ * Delete an ARCHIVED chat for good. The server refuses a chat that is not
+ * archived, so this can never quietly archive instead; archiving is
+ * useArchiveChat. Callers confirm first: there is no undo.
+ */
+export function usePermanentlyDeleteChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.delete(chatId),
+    mutationFn: (chatId: string) => chatActions.deleteChat(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
+      // Deletes can come from the archived list too.
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }
@@ -331,7 +434,7 @@ export function useRenameChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, title }: { chatId: string; title: string }) =>
-      api.chatsV2.update(chatId, { title } as UpdateChatRequest),
+      chatActions.updateChat(chatId, { title } as UpdateChatRequest),
     onSuccess: (_data, { chatId }) => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
@@ -342,10 +445,10 @@ export function useRenameChat() {
 export function useArchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.archive(chatId),
+    mutationFn: (chatId: string) => chatActions.archiveChat(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }
@@ -353,12 +456,12 @@ export function useArchiveChat() {
 export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.unarchive(chatId),
+    mutationFn: (chatId: string) => chatActions.unarchiveChat(chatId),
     onSuccess: () => {
       // The chat list carries each chat's workspace, so the restored chat shows
       // with the right group as soon as the list refetches.
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }

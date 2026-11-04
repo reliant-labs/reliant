@@ -100,6 +100,23 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"create_trigger_activation": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"create_workflow": {
 		Bindable: map[string]struct{}{
 			"complete": {},
@@ -112,6 +129,18 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"id":   {},
 			"name": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"draft_automation": {
+		Bindable: map[string]struct{}{
+			"assumptions": {},
+			"name":        {},
+			"params":      {},
+			"prompt":      {},
+			"summary":     {},
+			"when":        {},
+			"workflow":    {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -146,6 +175,23 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"enable_trigger": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"fetch": {
 		Bindable: map[string]struct{}{
 			"format":   {},
@@ -164,6 +210,12 @@ var generatedToolParams = map[string]ToolParams{
 			"replace_text": {},
 			"repo":         {},
 			"use_regex":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"fire_trigger": {
+		Bindable: map[string]struct{}{
+			"trigger_id": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -249,6 +301,19 @@ var generatedToolParams = map[string]ToolParams{
 			"connection": {},
 			"owner":      {},
 			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__check_run_list": {
+		Bindable: map[string]struct{}{
+			"app_id":     {},
+			"check_name": {},
+			"connection": {},
+			"filter":     {},
+			"head_sha":   {},
+			"owner":      {},
+			"repo":       {},
+			"status":     {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -401,10 +466,12 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__pr_list_files": {
 		Bindable: map[string]struct{}{
-			"connection":  {},
-			"owner":       {},
-			"pull_number": {},
-			"repo":        {},
+			"connection":    {},
+			"include_patch": {},
+			"owner":         {},
+			"path_prefix":   {},
+			"pull_number":   {},
+			"repo":          {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -473,11 +540,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__repo_get_content": {
 		Bindable: map[string]struct{}{
-			"connection": {},
-			"owner":      {},
-			"path":       {},
-			"ref":        {},
-			"repo":       {},
+			"connection":   {},
+			"line_count":   {},
+			"owner":        {},
+			"path":         {},
+			"ref":          {},
+			"repo":         {},
+			"start_column": {},
+			"start_line":   {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -573,6 +643,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_machines": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_pending_questions": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -603,6 +677,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"list_trigger_events": {
+		Bindable: map[string]struct{}{
+			"limit":      {},
+			"page_token": {},
+			"trigger_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_triggers": {
 		Bindable: map[string]struct{}{
 			"project_id": {},
@@ -618,6 +700,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_machine": {
+		Bindable: map[string]struct{}{
+			"action":     {},
+			"machine_id": {},
+			"size":       {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -637,6 +727,23 @@ var generatedToolParams = map[string]ToolParams{
 			"source_start": {},
 			"target_file":  {},
 			"target_line":  {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"pause_trigger": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -776,6 +883,7 @@ var generatedToolParams = map[string]ToolParams{
 			"description":       {},
 			"env":               {},
 			"heavy":             {},
+			"keep_alive":        {},
 			"max_output":        {},
 			"repo":              {},
 			"run_in_background": {},
@@ -915,6 +1023,7 @@ var generatedToolParams = map[string]ToolParams{
 	"spawn_send": {
 		Bindable: map[string]struct{}{
 			"message": {},
+			"subject": {},
 		},
 		Unbindable: map[string]string{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",
@@ -1008,6 +1117,23 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"update_trigger_activation": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"view": {
 		Bindable: map[string]struct{}{
 			"file_path": {},
@@ -1084,4 +1210,24 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+}
+
+// generatedKnownTags is the tool-tag vocabulary, projected from the
+// registry's TagDescriptions.
+var generatedKnownTags = []string{
+	"analysis",
+	"coding:default",
+	"coding:plan",
+	"execution",
+	"file",
+	"integration",
+	"mcp",
+	"media",
+	"planning",
+	"readonly",
+	"runs",
+	"search",
+	"shell",
+	"web",
+	"workflow",
 }

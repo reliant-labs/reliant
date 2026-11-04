@@ -1,7 +1,11 @@
-import { worktreeGrpc } from "./worktree-grpc";
+import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
+import { invalidateWorktreeQueries, getCachedWorktree } from "../hooks/worktree-queries";
+import { connectClient } from "../lib/connect";
+import { queryClient } from "../lib/query-client";
 import { triggerImmediateGitStatusRefresh } from "../store/gitStatusStore";
-import { useWorktreeStore } from "../store/worktreeStore";
 import { useProjectStore } from "../store/projectStore";
+
+const client = connectClient(WorktreeService);
 
 export interface StageFilesRequest {
   files: string[]; // Array of file paths to stage, or ["."] to stage all
@@ -27,13 +31,22 @@ export interface GitOperationResponse {
   pr_url?: string;
 }
 
-// Helper to get projectId from worktreeId for refresh triggers. The store holds
+// Helper to get projectId from worktreeId for refresh triggers. The cache holds
 // only the workspaces something asked for, so a miss falls back to the open
 // project: git operations run in the workspace the user is looking at.
 function getProjectIdFromWorktree(worktreeId: string): string | undefined {
-  const { worktrees, currentWorktree } = useWorktreeStore.getState();
-  const known = worktrees.find(w => w.id === worktreeId) ?? (currentWorktree?.id === worktreeId ? currentWorktree : undefined);
-  return known?.project_id ?? useProjectStore.getState().currentProject?.id;
+  return getCachedWorktree(worktreeId)?.project_id ?? useProjectStore.getState().currentProject?.id;
+}
+
+/**
+ * After a git write: refresh every cached read of the workspace (its changes,
+ * status, commits, PR) and tell the legacy git-status subscribers.
+ */
+function afterWrite(worktreeId: string, notify = true): void {
+  void invalidateWorktreeQueries(queryClient, worktreeId);
+  if (!notify) return;
+  const projectId = getProjectIdFromWorktree(worktreeId);
+  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
 }
 
 export interface ExistingPRResponse {
@@ -54,10 +67,8 @@ export async function stageFiles(
   files: string[],
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.stageFiles(worktreeId, files, repoId);
-  // Trigger immediate refresh after staging
-  const projectId = getProjectIdFromWorktree(worktreeId);
-  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
+  const result = await client.stageFiles({ worktreeId, files, repoId: repoId ?? "" });
+  afterWrite(worktreeId);
   return {
     message: result.message,
     files: result.files,
@@ -73,10 +84,8 @@ export async function unstageFiles(
   files: string[],
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.unstageFiles(worktreeId, files, repoId);
-  // Trigger immediate refresh after unstaging
-  const projectId = getProjectIdFromWorktree(worktreeId);
-  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
+  const result = await client.unstageFiles({ worktreeId, files, repoId: repoId ?? "" });
+  afterWrite(worktreeId);
   return {
     message: result.message,
     files: result.files,
@@ -92,10 +101,8 @@ export async function commitChanges(
   message: string,
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.commit(worktreeId, message, repoId);
-  // Trigger immediate refresh after commit
-  const projectId = getProjectIdFromWorktree(worktreeId);
-  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
+  const result = await client.commitWorktree({ worktreeId, message, repoId: repoId ?? "" });
+  afterWrite(worktreeId);
   return {
     message: result.message,
     output: result.output,
@@ -110,7 +117,8 @@ export async function pushChanges(
   worktreeId: string,
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.push(worktreeId, repoId);
+  const result = await client.pushWorktree({ worktreeId, repoId: repoId ?? "" });
+  afterWrite(worktreeId, false);
   return {
     message: result.message,
     output: result.output,
@@ -125,10 +133,8 @@ export async function pullChanges(
   worktreeId: string,
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.pull(worktreeId, repoId);
-  // Trigger immediate refresh after pull
-  const projectId = getProjectIdFromWorktree(worktreeId);
-  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
+  const result = await client.pullWorktree({ worktreeId, repoId: repoId ?? "" });
+  afterWrite(worktreeId);
   return {
     message: result.message,
     output: result.output,
@@ -143,13 +149,13 @@ export async function getExistingPR(
   worktreeId: string,
   repoId?: string
 ): Promise<ExistingPRResponse> {
-  const result = await worktreeGrpc.getPR(worktreeId, repoId);
+  const result = await client.getWorktreePR({ worktreeId, repoId: repoId ?? "" });
   return {
     exists: result.exists,
-    url: result.url,
-    number: result.number,
-    title: result.title,
-    state: result.state,
+    url: result.url || undefined,
+    number: result.number || undefined,
+    title: result.title || undefined,
+    state: result.state || undefined,
   };
 }
 
@@ -163,10 +169,11 @@ export async function createPullRequest(
   body?: string,
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.createPR(worktreeId, title, body, repoId);
+  const result = await client.createWorktreePR({ worktreeId, title, body, repoId: repoId ?? "" });
+  afterWrite(worktreeId, false);
   return {
     message: result.message,
-    pr_url: result.pr_url,
+    pr_url: result.prUrl,
     output: result.output,
   };
 }
@@ -183,10 +190,8 @@ export async function revertFiles(
   files: string[],
   repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.revertFiles(worktreeId, files, repoId);
-  // Trigger immediate refresh after revert
-  const projectId = getProjectIdFromWorktree(worktreeId);
-  if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
+  const result = await client.revertFiles({ worktreeId, files, repoId: repoId ?? "" });
+  afterWrite(worktreeId);
   return {
     message: result.message,
     files: result.files,

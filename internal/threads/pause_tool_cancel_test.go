@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,6 +50,7 @@ func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -76,6 +78,7 @@ func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -102,6 +105,7 @@ func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)

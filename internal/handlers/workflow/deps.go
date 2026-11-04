@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -46,10 +47,17 @@ type Repository interface {
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+
+	// Installs is each machine's checkout of the project and who owns each
+	// machine (projectcheckout.Resolve).
+	daemonplacement.Installs
 }
 
-// Sender sends one request/response command to a user's daemon.
-// toolexec.DaemonRouter implements it.
+// Sender sends one request/response command to the machine holding a
+// project's checkout. *toolexec.NATSDaemonRouter implements it.
 type Sender interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	// PlacementDaemonID ranks the machines holding a checkout the way the
+	// project's other work is placed (daemonplacement.Machines).
+	PlacementDaemonID(ctx context.Context, userID, daemonID string) (string, error)
 }

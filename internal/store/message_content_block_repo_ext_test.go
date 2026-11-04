@@ -189,19 +189,6 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 		}
 	}
 
-	// UpdateContentBlockBody writes NULL for a nil field.
-	upd := &core.MessageContentBlock{ID: "m0-b0", Content: sp("new"), Version: ip(9)}
-	if err := store.UpdateContentBlockBody(ctx, o, upd); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := f.env.Repo.GetContentBlock(ctx, "m0-b0")
-	if *got.Content != "new" || got.ToolInput != nil || *got.Version != 9 || *got.ToolName != "shell" {
-		t.Fatalf("after UpdateContentBlockBody: %+v", got)
-	}
-	if err := store.UpdateContentBlockBody(ctx, o, &core.MessageContentBlock{ID: "absent"}); err != nil {
-		t.Fatalf("UpdateContentBlockBody(absent) = %v", err)
-	}
-
 	// Streamed deltas through both layers concatenate in order; only
 	// AppendToContentBlock counts a version. Quotes, backslashes and `?`
 	// survive bun's interpolation.
@@ -219,14 +206,11 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 			t.Fatalf("append %d: %v", i, err)
 		}
 	}
-	if err := store.AppendContentDelta(ctx, o, "m1-b0", "!"); err != nil {
-		t.Fatal(err)
-	}
 	if err := store.AppendToContentBlock(ctx, o, "m1-b0", ""); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = store.FindContentBlock(ctx, o, "m1-b0")
-	if want := "<0 '\\ ?><1 '\\ ?><2 '\\ ?><3 '\\ ?><4 '\\ ?><5 '\\ ?>!"; *got.Content != want || *got.Version != 6 {
+	got, _ := store.FindContentBlock(ctx, o, "m1-b0")
+	if want := "<0 '\\ ?><1 '\\ ?><2 '\\ ?><3 '\\ ?><4 '\\ ?><5 '\\ ?>"; *got.Content != want || *got.Version != 6 {
 		t.Fatalf("content %q version %d; want %q version 6", *got.Content, *got.Version, want)
 	}
 	if err := f.env.Repo.AppendToolInputDelta(ctx, f.chat, "m1-b1", `,"x":1}`); err != nil {
@@ -239,14 +223,6 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 		t.Fatalf("tool_input %q version %d", *got.ToolInput, *got.Version)
 	}
 
-	// Streaming finished: every block of the message is stamped.
-	n, err := store.TouchMessageBlocks(ctx, o, "n2")
-	if err != nil || n != 3 {
-		t.Fatalf("TouchMessageBlocks = %d, %v; want 3", n, err)
-	}
-	if got, _ = store.FindContentBlock(ctx, o, "n2-b0"); !got.UpdatedAt.After(t0) {
-		t.Fatalf("n2-b0 updated_at %v not stamped", got.UpdatedAt)
-	}
 }
 
 // atomicWrite is one message with nBlocks text blocks (the last with an

@@ -3,8 +3,19 @@
 // import would run AFTER every import below (hoisting), missing all of
 // startup — see lib/browser-log-boot.ts.
 import "./lib/browser-log-boot";
+// SECOND, for the same reason: it checks the runtime config (config.js) before
+// any module that reads it evaluates, and on a document that cannot work it
+// shows what is wrong and stops the boot — see lib/configGuard.ts.
+import "./lib/configGuard";
+// THIRD: a claim link's token leaves the address bar before the router or any
+// telemetry SDK can read it — see lib/claimLink.ts.
+import "./lib/claimLinkBoot";
 
 import { createRoot } from "react-dom/client";
+// The brand faces, bundled and served from our own origin (index.css names
+// them in --font-sans / --font-mono; vite.config.ts preloads the Latin file).
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./index.css";
 import "./components/workflow/workflow-theme.css";
 import "./lib/debug.ts";
@@ -19,8 +30,10 @@ import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
-// CRITICAL: Wait for Electron backend config BEFORE any gRPC/API calls
-// In production Electron builds, RELIANT_CONFIG is injected asynchronously by preload.js
+// CRITICAL: Wait for Electron's host config BEFORE any gRPC/API calls
+// In production Electron builds, RELIANT_CONFIG (the local daemon URL and other
+// host facts, not the per-environment runtime config) is injected
+// asynchronously by preload.js
 // If we don't wait, gRPC clients throw "not ready" errors and auth/settings fail
 const configStart = performance.now();
 if (!isConfigReady()) {

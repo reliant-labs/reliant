@@ -6,14 +6,15 @@
  * CompletionItemProvider to consume.
  */
 
-import { getCatalogClient } from '../api/grpc-client'
-import type {
-  CELNamespaceInfo,
-  CELFunctionInfo,
-  CELFieldInfo,
-  CELNodeOutputSchema,
-  CELHelperTypeInfo,
-  GetCELCompletionsResponse,
+import { connectClient } from './connect'
+import {
+  CatalogService,
+  type CELNamespaceInfo,
+  type CELFunctionInfo,
+  type CELFieldInfo,
+  type CELNodeOutputSchema,
+  type CELHelperTypeInfo,
+  type GetCELCompletionsResponse,
 } from '../gen/reliant/v1/catalog_pb'
 
 // ---------------------------------------------------------------------------
@@ -32,7 +33,7 @@ export async function ensureCELCompletionsCached(): Promise<void> {
   }
   _fetchPromise = (async () => {
     try {
-      const client = getCatalogClient()
+      const client = connectClient(CatalogService)
       const response = await client.getCELCompletions({})
       _cached = response
     } catch (err) {

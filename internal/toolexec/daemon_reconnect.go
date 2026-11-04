@@ -92,6 +92,14 @@ func WithDaemonReconnectWait(ctx context.Context, observe DaemonWaitObserver) co
 	return context.WithValue(ctx, reconnectWaitKey{}, &reconnectWait{observe: observe})
 }
 
+// WithoutDaemonReconnectWait undoes WithDaemonReconnectWait for the round
+// trips made with ctx: a call that has somewhere else to run (a
+// PlacementPreferDaemon tool) fails over at once instead of waiting out the
+// daemon's grace period.
+func WithoutDaemonReconnectWait(ctx context.Context) context.Context {
+	return context.WithValue(ctx, reconnectWaitKey{}, (*reconnectWait)(nil))
+}
+
 func reconnectWaitFrom(ctx context.Context) *reconnectWait {
 	w, _ := ctx.Value(reconnectWaitKey{}).(*reconnectWait)
 	return w
@@ -335,6 +343,8 @@ var reissuableDaemonCommands = map[string]bool{
 	"fs.search":           true,
 	"exec.bg_output":      true,
 	"exec.bg_list":        true,
+	// Touching twice is touching once.
+	"exec.bg_touch": true,
 }
 
 // interruption is ErrDaemonConnectionInterrupted in the gateway's own words,

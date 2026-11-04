@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2 } from 'lucide-react'
-import { Modal } from '../ui/Modal'
-import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
-import { createAccountClient } from '../../api/grpc-client'
+import Modal from '../forge-ui/modal'
+import Input from '../forge-ui/input'
+import Button from '@/components/forge-ui/button';
 import type {
   AccountDeletionWalletQuote,
   DeleteAccountResponse,
-  PreviewAccountDeletionResponse,
   RefundDestination,
 } from '../../gen/reliant/v1/account_pb'
+import {
+  accountServiceKeys,
+  useDeleteAccount,
+  usePreviewAccountDeletion,
+} from '../../hooks/account-service-hooks_gen'
 import { logger } from '../../lib/logger'
 import { formatCentsAsDollars } from './cloud/billingUtils'
 
@@ -45,45 +49,49 @@ interface DeleteAccountDialogProps {
  * one.
  */
 export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccountDialogProps) {
-  const [preview, setPreview] = useState<PreviewAccountDeletionResponse | null>(null)
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const queryClient = useQueryClient()
+  const deleteAccount = useDeleteAccount()
+  // Read on every open, never retried silently: a failed preview says so and
+  // the user reopens. Its entry is dropped on close (below), so a reopen shows
+  // the loading state rather than a previous count. It is off while a delete
+  // runs and after one succeeds, so the delete's invalidation does not re-read
+  // an account that no longer exists.
+  const previewQuery = usePreviewAccountDeletion(
+    {},
+    {
+      enabled: isOpen && !deleteAccount.isPending && !deleteAccount.isSuccess,
+      staleTime: 0,
+      retry: false,
+    }
+  )
+  const preview = previewQuery.data ?? null
+  const isLoadingPreview = previewQuery.isFetching && !preview
   const [typedConfirmation, setTypedConfirmation] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Set when the account was deleted but a refund still needs support. The
   // user is told before they are signed out, rather than left to wonder.
   const [pendingRefund, setPendingRefund] = useState<DeleteAccountResponse | null>(null)
+  const resetDelete = deleteAccount.reset
 
   useEffect(() => {
     if (!isOpen) {
       // Reset on close so reopening never shows a stale count or a
       // half-typed confirmation from a previous attempt.
-      setPreview(null)
+      queryClient.removeQueries({ queryKey: accountServiceKeys.previewAccountDeletion.all })
+      resetDelete()
       setTypedConfirmation('')
       setError(null)
       setPendingRefund(null)
-      return
     }
+  }, [isOpen, queryClient, resetDelete])
 
-    let cancelled = false
-    setIsLoadingPreview(true)
-    createAccountClient()
-      .previewAccountDeletion({})
-      .then((resp) => {
-        if (!cancelled) setPreview(resp)
-      })
-      .catch((err) => {
-        logger.error('[DeleteAccount] preview failed', err)
-        if (!cancelled) setError('Could not load your account details. Please try again.')
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingPreview(false)
-      })
-
-    return () => {
-      cancelled = true
+  useEffect(() => {
+    if (previewQuery.error) {
+      logger.error('[DeleteAccount] preview failed', previewQuery.error)
+      setError('Could not load your account details. Please try again.')
     }
-  }, [isOpen])
+  }, [previewQuery.error])
 
   // An anonymous session has no email to type, so there is nothing to
   // confirm — the dialog itself is the confirmation.
@@ -97,7 +105,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
     setIsDeleting(true)
     setError(null)
     try {
-      const resp = await createAccountClient().deleteAccount({ confirmEmail: typedConfirmation })
+      const resp = await deleteAccount.mutateAsync({ confirmEmail: typedConfirmation })
       if (resp.refundPending) {
         setPendingRefund(resp)
         setIsDeleting(false)
@@ -124,7 +132,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
 
   if (pendingRefund) {
     return (
-      <Modal isOpen={isOpen} onClose={onDeleted} title="Account deleted" size="md">
+      <Modal open={isOpen} onClose={onDeleted} title="Account deleted" size="md">
         <div className="space-y-5 p-1">
           <p className="text-sm">Your account and its data have been deleted.</p>
           <p className="text-sm text-muted-foreground">
@@ -142,7 +150,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Delete account" size="md">
+    <Modal open={isOpen} onClose={onClose} title="Delete account" size="md">
       <div className="space-y-5 p-1">
         <div className="flex items-start gap-3">
           <div className="p-2 bg-destructive/10 rounded-lg shrink-0">
@@ -187,7 +195,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
             {preview.wallet && <WalletSettlementSummary quote={preview.wallet} />}
 
             {preview.retainedElsewhere.length > 0 && (
-              <div className="rounded-lg border border-border/40 bg-muted/30 p-3">
+              <div className="rounded-lg border border-border/60 bg-background p-3">
                 <h4 className="text-sm font-medium mb-2">This will NOT be deleted</h4>
                 <ul className="space-y-1.5">
                   {preview.retainedElsewhere.map((line) => (
@@ -215,6 +223,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
                   autoComplete="off"
                   spellCheck={false}
                   disabled={isDeleting}
+                  className="forge-ui"
                 />
               </div>
             )}
@@ -222,8 +231,8 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
         )}
 
         {error && (
-          <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+            <p className="text-sm text-destructive-ink">{error}</p>
           </div>
         )}
 
@@ -232,7 +241,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             onClick={handleDelete}
             disabled={!preview || !confirmationMatches || isDeleting}
             leftIcon={isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}

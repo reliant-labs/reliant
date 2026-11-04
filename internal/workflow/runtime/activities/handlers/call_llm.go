@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -51,6 +54,10 @@ import (
 
 // streamProcessingState holds mutable state during stream event processing
 type streamProcessingState struct {
+	// retries are the provider requests the driver failed and retried inside
+	// this call; each is a usage-ledger row of its own.
+	retries *driverRetries
+
 	blockStates       *BlockStreamState
 	textParts         []string
 	thinkingParts     []string // Extended thinking content parts
@@ -130,12 +137,22 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
-	// controlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted; see WithControlPlane.
-	controlPlaneURL string
+	// machines resolves the turn's selector to the machine whose synced
+	// config it reads (configMachine); nil reads the project's union for any
+	// selector that names no id. Set by WithDaemonRouter.
+	machines toolexec.DaemonRouter
+	// allowPrivateEgress is the dial policy for user-supplied model endpoint
+	// URLs; see WithPrivateEgress.
+	allowPrivateEgress bool
 	// routing picks the account of a provider that serves a thread and
 	// handles an account that is refused; nil routes nothing.
 	routing *AccountRouting
+	// trackerFor returns the product-event tracker for a user; analytics.ForUser
+	// outside tests.
+	trackerFor func(ctx context.Context, userID string) analytics.Tracker
+	// firstTokenNow is the first-token guard's clock; nil is time.Now. Tests
+	// set it to decide exactly when the deadline passes.
+	firstTokenNow func() time.Time
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's
@@ -146,18 +163,20 @@ func (a *CallLLMActivity) WithAccountRouting(r *AccountRouting) *CallLLMActivity
 	return a
 }
 
-// WithControlPlane records the control plane hosting this deployment, which
-// picks the dial policy for user-supplied model endpoint URLs: a hosted
-// deployment's shared worker must not be pointed at its own network. Unset is
-// self-hosted.
-func (a *CallLLMActivity) WithControlPlane(controlPlaneURL string) *CallLLMActivity {
-	a.controlPlaneURL = controlPlaneURL
+// WithPrivateEgress sets whether a user-supplied model endpoint URL may
+// resolve to a private, loopback or link-local address (netguard.ForDeployment).
+// Unset refuses them: the shared worker must not be pointed at its own network.
+func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
+	a.allowPrivateEgress = allow
 	return a
 }
 
-// WithLocalModels wires the daemon relay local models are reached through.
-func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallLLMActivity {
-	a.localRelay = relay
+// WithDaemonRouter wires the daemon router: the relay local models are
+// reached through, and the resolution that picks the machine whose synced
+// config (skills, memory, MCP servers) a turn reads.
+func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLLMActivity {
+	a.machines = router
+	a.localRelay = router
 	return a
 }
 
@@ -178,7 +197,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
 			Relay:  relay,
-			Policy: netguard.ForDeployment(a.controlPlaneURL),
+			Policy: netguard.ForDeployment(a.allowPrivateEgress),
 		},
 	}
 }
@@ -193,12 +212,31 @@ func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFact
 		configProvider: cfgProvider,
 		driverResolver: resolver,
 		mcpBinder:      mcpBinder,
+		trackerFor:     analytics.ForUser,
 	}
 }
 
 // Name returns the activity name for registration
 func (a *CallLLMActivity) Name() string {
 	return "CallLLM"
+}
+
+// OutlivesHeartbeatRPCFailure keeps a running LLM stream alive when a
+// heartbeat RPC to the Temporal server merely times out (runtime's
+// shieldFromSpuriousHeartbeatCancel). Real cancels — pause, interrupt, reset,
+// an attempt the server has re-dispatched — still stop it.
+//
+// Without it, one heartbeat RPC that missed the SDK's 2s deadline killed the
+// stream, discarded the partial turn, and re-ran it from the start
+// (heartbeatKilledStream). On 2026-10-30 that was 669 streams in 25 minutes
+// against a Temporal server whose persistence was slow, and every re-run added
+// history events, heartbeats and provider spend to the load that caused it;
+// the step ladders ran out and agents failed with "heartbeat RPC cancelled the
+// LLM stream". A stream outlasting a slow heartbeat costs nothing: its
+// message is keyed by runtime.callLLMIdempotencyKey, so a server-side
+// re-dispatch cannot double-record the turn.
+func (a *CallLLMActivity) OutlivesHeartbeatRPCFailure() bool {
+	return true
 }
 
 // DisplayName returns human-readable name for UI
@@ -344,6 +382,10 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
+
+	// A running workflow may predate launch-time pinning. Its inputs are a
+	// snapshot, but the chat's durable pin must still keep this turn on disk.
+	rtx.DaemonSelector = chatDaemonSelector(chat, rtx.DaemonSelector)
 
 	// Add userID to context for API key loading
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, chat.UserID)
@@ -994,7 +1036,10 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	}
 }
 
-func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project) (*cfgpkg.Config, error) {
+// getProjectConfig reads the project's config as daemonID (the machine the
+// turn's tools run on) synced it: its skills, memories and MCP servers, not
+// the last pusher's.
+func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project, daemonID string) (*cfgpkg.Config, error) {
 	if project == nil {
 		return nil, fmt.Errorf("project is nil")
 	}
@@ -1005,6 +1050,7 @@ func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Proj
 
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{
 		ProjectID: project.ID,
+		DaemonID:  daemonID,
 	})
 	if err != nil {
 		return nil, err
@@ -1067,7 +1113,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.
-	if rtx.FallbackModel != "" {
+	if rtx.FallbackModel != "" && rtx.ChatProvider == "" {
 		modelSelector = models.ModelSelector{ID: rtx.FallbackModel}
 	}
 
@@ -1078,13 +1124,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project: %w", err)
 	}
-	projectPath := project.Path
-
-	projectCfg, err := a.getProjectConfig(ctx, project)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load project config: %w", err)
-	}
-
 	// Load worktree path if applicable
 	var worktreePath string
 	// worktreeDaemonID is the daemon that physically owns this worktree's
@@ -1102,16 +1141,38 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to load worktree %s for chat %s thread %s: %w", *effectiveWorktree, chat.ID, thread, err)
 		}
-		worktreePath = worktree.Path
-		if worktree.DaemonID != nil {
-			worktreeDaemonID = *worktree.DaemonID
+		// The main worktree row mirrors projects.path, the creating
+		// machine's: the main checkout is resolved on this turn's machine.
+		if worktree.IsMain {
+			// Bound to the main row: the main checkout, routed like it.
+			worktreeThreadBound = false
+		} else {
+			worktreePath = worktree.Path
+			if worktree.DaemonID != nil {
+				worktreeDaemonID = *worktree.DaemonID
+			}
 		}
 	}
+
+	// The project's checkout on the machine this turn's tools run on (routed
+	// as ExecuteTools routes them), for the prompt's working directory. A
+	// machine with no checkout leaves it unset; the tools say why.
+	projectPath := resolveCallCheckout(ctx, a.repo, a.machines, project,
+		toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, chatDaemonSelector(chat, rtx.DaemonSelector))),
+		worktreePath == "").main.Path
 
 	// Determine working directory (prefer worktree path over project path)
 	workingDir := projectPath
 	if worktreePath != "" {
 		workingDir = worktreePath
+	}
+
+	// The project config (skills, memory, MCP servers) is the one the machine
+	// this turn's tools run on synced: routed as ExecuteTools routes them.
+	projectCfg, err := a.getProjectConfig(ctx, project,
+		configMachine(ctx, a.machines, chat.UserID, toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use
@@ -1129,19 +1190,25 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:         chat.UserID,
-		SessionID:      chat.ID,
-		Selector:       modelSelector,
-		RunProviders:   rtx.ProviderPreference,
-		ThreadID:       thread,
-		Routing:        a.routing,
-		Failover:       rtx.Failover,
-		Temperature:    explicitTemperature,
-		ThinkingLevel:  explicitThinkingLevel,
-		MaxTokens:      explicitMaxTokens,
-		WorkingDir:     workingDir,
-		TagPrefsReader: a.repo,
-		Local:          a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:            chat.UserID,
+		SessionID:         chat.ID,
+		Selector:          modelSelector,
+		RunProviders:      rtx.ProviderPreference,
+		ChatProvider:      rtx.ChatProvider,
+		ClearProviderPins: rtx.ClearProviderPins,
+		Descendant:        rtx.Descendant,
+		PresetModelTags:   rtx.PresetModelTags,
+		ChatModel:         chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen: rtx.ThreadModelChosen,
+		ThreadID:          thread,
+		Routing:           a.routing,
+		Failover:          rtx.Failover,
+		Temperature:       explicitTemperature,
+		ThinkingLevel:     explicitThinkingLevel,
+		MaxTokens:         explicitMaxTokens,
+		WorkingDir:        workingDir,
+		TagPrefsReader:    a.repo,
+		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -1295,7 +1362,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		for _, spawnConfig := range spawnConfigs {
-			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
 				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
@@ -1654,10 +1721,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// liveness the keepalives it reads inside an open content block, which
 	// the progress guard below needs and no driver event carries.
 	llmCallStart := time.Now()
+	streamState.retries = newDriverRetries()
 	liveness := llm.NewStreamLiveness()
 	eventChan := driver.StreamResponse(llm.WithStreamLiveness(streamCtx, liveness), systemPrompts, history, availableTools)
 	var streamErr error
 	streamInterrupted := false
+	// driverErrored is set when the driver itself reported the failure, as
+	// opposed to a cancel, a deadline or the progress guard cutting the turn.
+	driverErrored := false
 
 	// Progress guard, armed above the transport. The idle and content-stall
 	// timers in internal/llm watch bytes, so neither can see a driver that
@@ -1679,6 +1750,25 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		progressTimer.Reset(progressTimeout)
 	}
 
+	// First-token guard: the progress guard measures the gap between events,
+	// so a stream trickling non-output events never trips it. This one bounds
+	// the total time to the first output token (see ErrStreamFirstTokenTimeout
+	// and firstTokenGuard for the one keepalive exception).
+	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout(), llm.StreamIdleTimeout(), llm.StreamFirstTokenHoldCap(), a.firstTokenNow)
+	defer firstToken.stop()
+	cutForFirstToken := func() {
+		activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
+			"chatID", chat.ID,
+			"thread", thread,
+			"provider", resolved.ProviderDriver,
+			"model", resolvedModelID,
+			"firstTokenTimeout", firstToken.timeout,
+			"heldOnKeepalives", firstToken.held,
+			"elapsed", time.Since(llmCallStart))
+		streamErr = llm.ErrStreamFirstTokenTimeout
+		cancelStream()
+	}
+
 streamLoop:
 	for {
 		// Events the provider has already handed us are part of this turn, even
@@ -1691,8 +1781,17 @@ streamLoop:
 		case event, ok := <-eventChan:
 			if ok {
 				resetProgressTimer()
+				// A continuously ready channel never reaches the select
+				// below, so the deadline is checked here too: framing
+				// events alone must not hold the stream open past it, and
+				// an output token queued after it does not disarm it.
+				if firstToken.admit(event, liveness) {
+					cutForFirstToken()
+					break streamLoop
+				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
+					driverErrored = true
 					break streamLoop
 				}
 				continue
@@ -1759,6 +1858,15 @@ streamLoop:
 			cancelStream()
 			break streamLoop
 
+		case <-firstToken.C():
+			// The deadline, or the end of a keepalive hold (see
+			// firstTokenGuard for the rule).
+			if !firstToken.fire(liveness) {
+				continue
+			}
+			cutForFirstToken()
+			break streamLoop
+
 		case event, ok := <-eventChan:
 			if !ok {
 				if streamCtx.Err() != nil {
@@ -1780,6 +1888,13 @@ streamLoop:
 			// as in the drain above, or a healthy stream whose events all
 			// arrive through this branch would trip the progress timer.
 			resetProgressTimer()
+			// Select picks at random among ready cases, so a busy event
+			// channel can keep winning over a fired first-token timer; an
+			// output token that arrives after it fired is late.
+			if firstToken.admit(event, liveness) {
+				cutForFirstToken()
+				break streamLoop
+			}
 
 			// CRITICAL: Check for cancellation before processing each event
 			// This is necessary because Go's select is non-deterministic, and when
@@ -1814,10 +1929,18 @@ streamLoop:
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 				streamErr = err
+				driverErrored = true
 				break streamLoop
 			}
 		}
 	}
+
+	if driverErrored {
+		a.collectUsageAfterStreamError(eventChan, streamState)
+	}
+	// The request ends here: the bookkeeping below, and the ledger writes of
+	// any request the driver retried, are not part of its latency.
+	llmLatencyMs := streamState.retries.finish().Sub(llmCallStart).Milliseconds()
 
 	// A cancelled stream closes the channel without a further event, so the
 	// backoff marker would otherwise outlive the call that opened it and report a
@@ -1832,12 +1955,13 @@ streamLoop:
 		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
 	}
 
-	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
 	usageErr := streamErr
 	if streamInterrupted {
 		usageErr = nil
 	}
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
+	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -1881,10 +2005,7 @@ streamLoop:
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 		}
-		if rejected := a.routing.credentialRejection(ctx, streamErr, failedCall); rejected != nil {
-			return nil, rejected
-		}
-		return nil, a.routing.usageLimitFailure(ctx, streamErr, failedCall)
+		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}
 
 	// A heartbeat RPC that merely timed out is NOT an instruction to stop.
@@ -2414,9 +2535,18 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 	return ownChildren, len(inherited) > 0
 }
 
+// spawnPresetSource is where the spawn tool reads the project presets it
+// describes: the run's pinned catalog when it has one, else its machine's (the
+// union when the machine never synced), exactly where LoadPresetParams loads
+// the preset a spawn then runs (projectPresets). The model is shown the
+// presets the run will actually spawn with, not a later push.
+type spawnPresetSource struct {
+	projectID, daemonID, pin string
+}
+
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.
 // Used when spawn configurations come from tool_filter syntax.
-func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, projectID string, config tools.SpawnFilterConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig) tools.Tool {
 	if len(config.Presets) == 0 {
 		return nil
 	}
@@ -2427,27 +2557,29 @@ func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, proj
 		Presets:  config.Presets,
 	}
 
-	return a.getSpawnTool(ctx, projectID, spawnConfig)
+	return a.getSpawnTool(ctx, source, spawnConfig)
 }
 
 // getSpawnTool returns a spawn tool for orchestration workflows.
 // The spawn tool allows the LLM to delegate tasks to child workflows with specific presets.
 // config contains the workflow to spawn and available presets.
-func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, config *SpawnConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnTool(ctx context.Context, source spawnPresetSource, config *SpawnConfig) tools.Tool {
 	if config == nil || len(config.Presets) == 0 {
 		return nil
 	}
 
-	// Load preset descriptions from stored config (synced by daemon) + builtins.
-	// This runs on every turn of an orchestrating node, so it reads the one
-	// column it needs: the whole config row carries every indexed skill and
-	// was 3.3 GB of worker allocation per 22 minutes in prod.
+	// Load preset descriptions from the run's catalog (spawnPresetSource) +
+	// builtins. This runs on every turn of an orchestrating node, so it reads
+	// only presets: the whole config row carries every indexed skill and was
+	// 3.3 GB of worker allocation per 22 minutes in prod.
 	var storedPresets []cfgpkg.StoredPreset
-	if projectID != "" && a.repo != nil {
-		presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
-		if err == nil {
-			storedPresets, _ = cfgpkg.ParseStoredPresets(presetsJSON)
+	if source.projectID != "" && a.repo != nil {
+		presets, err := projectPresets(ctx, a.repo, source.projectID, source.daemonID, source.pin)
+		if err != nil {
+			logging.WarnContext(ctx, "[CallLLM] Could not read the run's presets for the spawn tool; listing names only",
+				"projectID", source.projectID, "catalogPin", source.pin, "error", err)
 		}
+		storedPresets = presets
 	}
 
 	var presetDescriptions []string
@@ -2784,6 +2916,9 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 	// the other keeps the marker true at every instant, at two writes per backoff
 	// episode rather than one per delta.
 	if event.Type == llm.EventRetryWait {
+		if state.retries != nil && event.Retry != nil {
+			state.retries.observe(*event.Retry)
+		}
 		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
 		return nil
 	}
@@ -2919,28 +3054,20 @@ func (a *CallLLMActivity) handleThinkingDelta(ctx context.Context, chatID string
 	}
 
 	// Start a new thinking block if needed
-	thinkingPos := state.blockStates.GetThinkingBlockPosition()
 	if len(state.thinkingParts) == 0 {
 		state.thinkingParts = append(state.thinkingParts, "")
 		// Track thinking block position properly
-		thinkingPos = state.blockStates.StartThinkingBlock()
-		// Dual-write: Write thinking_block_start delta to chat_updates
-		a.writeStreamingDelta(ctx, chatID, "thinking_block_start", map[string]interface{}{
-			"block_index": thinkingPos,
-			"block_type":  "thinking",
-			"thread":      thread,
-		}, state)
+		state.blockStates.StartThinkingBlock()
 	}
 
-	// Append to thinking content
+	// Append to thinking content. It reaches the client with the persisted
+	// message, never as a live delta: no client renders thinking while it
+	// streams (the web store discards thinking deltas on arrival), and
+	// publishing them made them most of every chat's delta stream. In prod
+	// they were 82% of the deltas a chat open replays from the 5-minute
+	// deltas buffer: 1,443 of 1,752 frames sent to a phone opening one
+	// active chat, before a single one could be shown.
 	state.thinkingParts[0] += event.Thinking
-
-	// Dual-write: Write thinking_block_delta to chat_updates
-	a.writeStreamingDelta(ctx, chatID, "thinking_block_delta", map[string]interface{}{
-		"block_index": thinkingPos,
-		"delta":       event.Thinking,
-		"thread":      thread,
-	}, state)
 }
 
 // handleToolUseStart handles the start of a tool use block
@@ -3117,6 +3244,67 @@ func (a *CallLLMActivity) logLLMUsage(ctx context.Context, chat *db.Chat, driver
 	logging.InfoContext(ctx, "[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
 }
 
+// trackLLMCallCompleted emits the product.llm_call_completed event: provider,
+// model, token counts, latency and outcome. Never prompt or reply text.
+//
+// workflowID is the workflow that made the call (the runtime's), not the
+// chat's root: a spawned sub-agent's calls belong to the sub-agent, so they
+// join its own workflow events. Each call is its own event, even when two
+// carry identical counts (CallID).
+func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, workflowID, stepName string, latencyMs int64, usage llm.TokenUsage, streamErr error) {
+	metrics := analytics.LLMCallMetrics{
+		CallID:           uuid.NewString(),
+		Provider:         driver.Name(),
+		Model:            string(driver.Model().ID),
+		InputTokens:      int(usage.InputTokens),
+		OutputTokens:     int(usage.OutputTokens),
+		CacheReadTokens:  int(usage.CacheReadInputTokens),
+		CacheWriteTokens: int(usage.CacheCreationInputTokens),
+		LatencyMs:        latencyMs,
+		Success:          streamErr == nil,
+		ErrorType:        classifyLLMError(streamErr),
+		IsStreaming:      true,
+		ChatID:           chat.ID,
+		StepName:         stepName,
+	}
+	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
+		metrics.InputTokens = int(usage.TokenCount)
+	}
+	metrics.WorkflowID = workflowID
+	if metrics.WorkflowID == "" && chat.WorkflowID != nil {
+		metrics.WorkflowID = *chat.WorkflowID
+	}
+	trackerFor := a.trackerFor
+	if trackerFor == nil {
+		trackerFor = analytics.ForUser
+	}
+	trackerFor(ctx, chat.UserID).TrackLLMCallCompleted(metrics)
+}
+
+// classifyLLMError maps an LLM error to a coarse category for analytics.
+func classifyLLMError(err error) string {
+	if err == nil {
+		return ""
+	}
+	errMsg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "429"):
+		return "rate_limit"
+	case strings.Contains(errMsg, "context length") || strings.Contains(errMsg, "too many tokens") || strings.Contains(errMsg, "maximum context"):
+		return "context_length"
+	case strings.Contains(errMsg, "auth") || strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") || strings.Contains(errMsg, "invalid api key"):
+		return "auth"
+	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
+		return "timeout"
+	case strings.Contains(errMsg, "cancelled") || strings.Contains(errMsg, "canceled"):
+		return "cancelled"
+	case strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network") || strings.Contains(errMsg, "eof"):
+		return "network"
+	default:
+		return "unknown"
+	}
+}
+
 // trimBashWorkspaceCD removes redundant "cd <workspace> && " prefix from Bash tool input.
 // This is done for cleaner display since the shell tool already runs in the workspace directory.
 func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
@@ -3145,6 +3333,35 @@ func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
 	}
 
 	return toolInput
+}
+
+// usageAfterErrorWindow bounds how long a failed stream is read on for the
+// usage its driver reports after the error.
+const usageAfterErrorWindow = time.Second
+
+// collectUsageAfterStreamError reads what a driver sent after it reported an
+// error. Drivers send their final event, with the usage the provider billed,
+// after the error as well as before it, and CallLLM stops reading at the error;
+// without this the tokens a failed attempt consumed would reach the usage
+// ledger as zero. Only the final event's usage is taken, and the read is
+// bounded: a driver that has nothing more to say costs nothing.
+func (a *CallLLMActivity) collectUsageAfterStreamError(eventChan <-chan llm.DriverEvent, state *streamProcessingState) {
+	timer := time.NewTimer(usageAfterErrorWindow)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				return
+			}
+			if event.Type == llm.EventComplete && event.Response != nil {
+				state.usage = event.Response.Usage
+				return
+			}
+		case <-timer.C:
+			return
+		}
+	}
 }
 
 // handleError handles error events from the stream
@@ -3651,10 +3868,21 @@ func celStringValuePtr(c *reliantv1.CelString) *string {
 // toolDaemonSelector mirrors the daemon routing priority ExecuteTools applies:
 // an explicit node/workflow selector beats the worktree's owning daemon, and
 // neither means default resolution (nil).
+//
+// Except the chat's pin (a Session selector) when it names ANOTHER machine
+// than a branch workspace's owner: that checkout exists on its owner alone,
+// so the pinned machine has no directory to run in (or to repair). The pin
+// is stale — a run launched before its chat moved to the workspace's machine
+// carries the old one as session_daemon_id for its whole life — and the
+// owner wins. A selector the workflow or node configures is deliberate
+// routing and keeps its precedence, whatever it names.
 func toolDaemonSelector(worktreeDaemonID string, explicit *activitytypes.DaemonSelector) *toolexec.DaemonSelector {
 	selector := (*toolexec.DaemonSelector)(nil)
 	if worktreeDaemonID != "" {
 		selector = &toolexec.DaemonSelector{ID: worktreeDaemonID}
+	}
+	if explicit != nil && explicit.Session && worktreeDaemonID != "" && explicit.ID != worktreeDaemonID {
+		return selector
 	}
 	if explicit != nil {
 		selector = &toolexec.DaemonSelector{ID: explicit.ID, Name: explicit.Name, Type: explicit.Type, Labels: explicit.Labels}

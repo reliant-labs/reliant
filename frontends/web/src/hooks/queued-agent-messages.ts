@@ -67,8 +67,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { chatGrpc, type QueuedAgentMessageView } from "../api/chat-grpc";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { create } from "@bufbuild/protobuf";
+import type { QueuedAgentMessageView } from "./chat-model";
+import {
+  ListQueuedAgentMessagesResponseSchema,
+  QueuedAgentMessageSchema,
+  type ListQueuedAgentMessagesResponse,
+  type QueuedAgentMessage,
+} from "../gen/reliant/v1/chat_pb";
+import { queryClient as appQueryClient } from "../lib/query-client";
+import { chatServiceKeys, chatServiceQueries } from "./chat-service-hooks_gen";
 // initEventBus, not getEventBus: this hook rides inside the composer, which
 // plenty of tests mount without the app's Providers, and getEventBus THROWS
 // when the bus has not been initialized. Making the composer unmountable
@@ -86,13 +95,42 @@ import { subscribeToRefetch } from "../store/refetchStore";
  */
 export const QUEUE_FALLBACK_POLL_MS = 60_000;
 
-export const queuedAgentMessageKeys = {
-  all: ["queuedAgentMessages"] as const,
-  thread: (chatId?: string, threadId?: string) =>
-    [...queuedAgentMessageKeys.all, chatId, threadId] as const,
-};
+/**
+ * A write that can change a mailbox (SendAgentMessage, CancelQueuedAgentMessage,
+ * InterruptThread) re-reads every mounted one. These writes are hand calls, not
+ * the generated mutations, so each names the scope it affects; a generated
+ * ChatService mutation would refetch every ChatService pull read instead.
+ */
+export function invalidateQueuedAgentMessages(qc: QueryClient = appQueryClient): Promise<void> {
+  return qc.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
+}
 
 const EMPTY_QUEUE: QueuedAgentMessageView[] = [];
+
+function toQueuedRow(message: QueuedAgentMessage): QueuedAgentMessageView {
+  return {
+    id: message.id,
+    body: message.body,
+    created_at: message.createdAt,
+    sender_kind: message.senderKind,
+    attachments: message.attachments,
+  };
+}
+
+function fromQueuedRow(row: QueuedAgentMessageView): QueuedAgentMessage {
+  return create(QueuedAgentMessageSchema, {
+    id: row.id,
+    body: row.body,
+    createdAt: row.created_at,
+    senderKind: row.sender_kind,
+    attachments: row.attachments,
+  });
+}
+
+/** The strip's rows. Hoisted, so React Query re-runs it only when the entry changes. */
+function toQueuedRows(response: ListQueuedAgentMessagesResponse): QueuedAgentMessageView[] {
+  return response.messages.map(toQueuedRow);
+}
 
 export interface UseQueuedAgentMessagesResult {
   messages: QueuedAgentMessageView[];
@@ -115,12 +153,14 @@ export function useQueuedAgentMessages(
   isRunning: boolean,
 ): UseQueuedAgentMessagesResult {
   const queryClient = useQueryClient();
-  // Memoized so it is a stable dependency: rebuilt fresh each render, the key
+  // The generated read (entity scope `chatServiceKeys.queuedAgentMessage`).
+  // Memoized so its key is a stable dependency: rebuilt fresh each render, it
   // would re-arm every effect and callback below on every render.
-  const queryKey = useMemo(
-    () => queuedAgentMessageKeys.thread(chatId, threadId),
+  const read = useMemo(
+    () => chatServiceQueries.listQueuedAgentMessages({ chatId: chatId ?? "", threadId: threadId ?? "" }),
     [chatId, threadId],
   );
+  const queryKey = read.queryKey;
   const enabled = !!chatId && !!threadId;
 
   // Forgotten ids, each stamped with the number of requests that had been
@@ -139,11 +179,17 @@ export function useQueuedAgentMessages(
     requestsIssued.current = 0;
   }, [chatId, threadId]);
 
-  const { data } = useQuery<QueuedAgentMessageView[]>({
-    queryKey,
-    queryFn: async () => {
+  const { data } = useQuery({
+    ...read,
+    // The generated fetch, with each answer filtered on the way into the
+    // cache (tombstones out, this client's in-flight queued sends in). The
+    // entry keeps the response's shape, so it is typed as the generated key
+    // says; `select` maps it to the strip's rows.
+    queryFn: async (context) => {
       const issuedAt = ++requestsIssued.current;
-      const response = await chatGrpc.listQueuedAgentMessages(chatId!, threadId!);
+      // A generated read always carries its fetch (never skipToken).
+      if (typeof read.queryFn !== "function") throw new Error("ListQueuedAgentMessages has no fetch");
+      const response = await read.queryFn(context);
 
       const present = new Set(response.messages.map((m) => m.id));
       // A tombstone is a patch over a lagging server, so it expires the moment
@@ -159,14 +205,17 @@ export function useQueuedAgentMessages(
       // already on screen as an optimistic transcript entry. SendAgentMessage
       // uses the same client-chosen ID for its optimistic queue row and server
       // row, so an in-flight mailbox read can reconcile exactly by ID.
-      return withQueuedSendsInFlight(
-        response.messages.filter(
-          (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
-        ),
-        chatId!,
-        threadId!,
+      const kept = response.messages.filter(
+        (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
       );
+      // withQueuedSendsInFlight appends the local rows the read lacks after
+      // the ones it was given.
+      const local = withQueuedSendsInFlight(kept.map(toQueuedRow), chatId!, threadId!)
+        .slice(kept.length)
+        .map(fromQueuedRow);
+      return { ...response, messages: [...kept, ...local] };
     },
+    select: toQueuedRows,
     enabled,
     refetchInterval: isRunning ? QUEUE_FALLBACK_POLL_MS : false,
     // A backgrounded tab has no one reading the strip, and the queue is only
@@ -195,8 +244,8 @@ export function useQueuedAgentMessages(
       for (const id of dropped) {
         tombstones.current.set(id, requestsIssued.current);
       }
-      queryClient.setQueryData<QueuedAgentMessageView[]>(queryKey, (prev) =>
-        prev ? prev.filter((m) => !dropped.has(m.id)) : prev,
+      queryClient.setQueryData(queryKey, (prev) =>
+        prev ? { ...prev, messages: prev.messages.filter((m) => !dropped.has(m.id)) } : prev,
       );
     },
     [queryClient, queryKey],
@@ -242,10 +291,10 @@ export function useQueuedAgentMessages(
     return initEventBus().on("agentMailbox:queued", (payload) => {
       if (payload.chatId !== chatId || payload.thread !== threadId) return;
       if (tombstones.current.has(payload.message.id)) return;
-      queryClient.setQueryData<QueuedAgentMessageView[]>(queryKey, (prev) => {
-        const rows = prev ?? [];
-        if (rows.some((m) => m.id === payload.message.id)) return rows;
-        return [...rows, payload.message];
+      queryClient.setQueryData(queryKey, (prev) => {
+        const response = prev ?? create(ListQueuedAgentMessagesResponseSchema, {});
+        if (response.messages.some((m) => m.id === payload.message.id)) return response;
+        return { ...response, messages: [...response.messages, fromQueuedRow(payload.message)] };
       });
     });
   }, [chatId, threadId, enabled, queryClient, queryKey]);

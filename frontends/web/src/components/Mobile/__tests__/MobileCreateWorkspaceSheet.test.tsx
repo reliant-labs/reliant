@@ -4,7 +4,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 import userEvent from "@testing-library/user-event";
 
 const createWorktree = vi.fn();
@@ -13,11 +15,17 @@ const store = vi.hoisted(() => ({
   worktrees: [] as Array<{ id: string; name: string; deleted_at?: string | null }>,
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ createWorktree }),
-    { getState: () => ({ worktrees: store.worktrees, refreshWorktrees }) },
-  ),
+// Creation goes through createWorktree; the workspaces the app already holds
+// and a fresh re-list (after a lost reply) through the worktree cache readers.
+vi.mock("../../../hooks/worktree-actions", () => ({
+  createWorktree: (...args: unknown[]) => createWorktree(...args),
+}));
+vi.mock("../../../hooks/worktree-queries", () => ({
+  getCachedWorktrees: () => store.worktrees,
+  fetchLiveWorktrees: async () => {
+    await refreshWorktrees();
+    return store.worktrees;
+  },
 }));
 
 const project = vi.hoisted(() => ({ isGitRepo: true }));
@@ -27,9 +35,13 @@ vi.mock("../../../store/projectStore", () => ({
 }));
 
 const repos = vi.hoisted(() => ({ current: [{ id: "r1" }] as Array<{ id: string }> }));
-vi.mock("../../../api/repo-grpc", () => ({
-  repoGrpc: { list: () => Promise.resolve({ repos: repos.current }) },
-}));
+
+// RepoService answers through the real transport seam, so the component's
+// generated useListRepos hook is what is under test.
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "RepoService.ListRepos": () => ({ repos: repos.current }) }),
+  });
 
 const useBranches = vi.fn();
 vi.mock("../../../hooks/useBranches", () => ({

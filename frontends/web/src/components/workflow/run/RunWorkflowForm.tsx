@@ -21,18 +21,16 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
-import { presetGrpc, type Preset } from "@/api/preset-grpc";
-import { worktreeGrpc } from "@/api/worktree-grpc";
+import { fetchDefaultPresets, useWorkflowPresets, type Preset } from "@/hooks/preset-queries";
+import { useWorktreeById, useWorktreeList } from "@/hooks/worktree-queries";
 import { buildDaemonChoices, daemonLabel, NO_MACHINE } from "@/components/Automations/daemonChoices";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import type { InputDef } from "@/lib/inputHelpers";
-import { useWorkflowPresets } from "@/store/globalDataStore";
-import { usePreferencesStore } from "@/store/preferencesStore";
+import { useHiddenItems } from "@/hooks/settings-queries";
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
 import { TypedInputsProvider } from "../inputs/TypedInputField";
 import { useWorkflowDefinition } from "../useWorkflowDefinition";
@@ -142,7 +140,7 @@ export function RunWorkflowForm({
     projectId,
     workflowRef,
   );
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+  const { isPresetHidden } = useHiddenItems();
 
   // Handlers compose onto the latest value, never a render's stale snapshot:
   // a default-preset fetch can resolve between renders.
@@ -214,7 +212,7 @@ export function RunWorkflowForm({
     if (countRunInputs(valueRef.current) > 0) return;
 
     let cancelled = false;
-    void presetGrpc.getDefaultPresets(projectId, workflowRef).then((defaults) => {
+    void fetchDefaultPresets(projectId, workflowRef).then((defaults) => {
       if (cancelled || Object.keys(defaults).length === 0) return;
       // The user may have started filling the form while this was in flight.
       if (countRunInputs(valueRef.current) > 0) return;
@@ -376,31 +374,15 @@ interface WorktreeFieldProps {
 export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: WorktreeFieldProps) {
   // One page at a time: a project can hold hundreds of workspaces agents
   // created, and the form needs none of them until the user opens the list.
-  const worktreesQuery = useInfiniteQuery({
-    queryKey: ["run-workflow-form", "worktrees", projectId],
-    queryFn: ({ pageParam }) => worktreeGrpc.list(projectId, { pageToken: pageParam || undefined }),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.nextPageToken || undefined,
-    enabled: !!projectId,
-    staleTime: 30_000,
-  });
-  const worktrees = useMemo(
-    () => worktreesQuery.data?.pages.flatMap((page) => page.worktrees),
-    [worktreesQuery.data],
-  );
+  const worktreesQuery = useWorktreeList(projectId);
+  const worktrees = worktreesQuery.worktrees;
   // A stored workspace beyond the loaded pages is looked up by id, so an edit
   // shows its real name instead of "Unavailable" just because it is on page 3.
-  const storedQuery = useQuery({
-    queryKey: ["run-workflow-form", "worktree", worktreeId],
-    queryFn: () => worktreeGrpc.get(worktreeId!),
-    enabled: !!worktreeId && worktreesQuery.isSuccess && !worktrees?.some((w) => w.id === worktreeId),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const stored = useWorktreeById(worktreeId);
 
   const options = useMemo(() => {
-    const stored = storedQuery.data && !storedQuery.data.deleted_at ? [storedQuery.data] : [];
-    const listed = [...(worktrees ?? []), ...stored]
+    const storedRows = stored && !stored.deleted_at && !worktrees.some((w) => w.id === stored.id) ? [stored] : [];
+    const listed = [...worktrees, ...storedRows]
       .filter((w) => !w.is_main || w.id === worktreeId)
       .map((w) => ({ value: w.id, label: w.branch ? `${w.name} (${w.branch})` : w.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -410,7 +392,7 @@ export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }:
       listed.unshift({ value: worktreeId, label: `Unavailable workspace (${worktreeId.slice(0, 8)})` });
     }
     return listed;
-  }, [worktrees, worktreeId, storedQuery.data]);
+  }, [worktrees, worktreeId, stored]);
 
   return (
     <div>
@@ -432,20 +414,20 @@ export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }:
           </option>
         ))}
       </select>
-      {worktreesQuery.hasNextPage && (
+      {worktreesQuery.hasMore && (
         <button
           type="button"
-          className="mt-1 text-xs text-primary hover:underline disabled:opacity-60"
-          disabled={disabled || worktreesQuery.isFetchingNextPage}
-          onClick={() => void worktreesQuery.fetchNextPage()}
+          className="mt-1 text-xs text-primary-ink hover:underline disabled:opacity-60"
+          disabled={disabled || worktreesQuery.isLoadingMore}
+          onClick={worktreesQuery.loadMore}
         >
-          {worktreesQuery.isFetchingNextPage ? "Loading…" : "Load more workspaces"}
+          {worktreesQuery.isLoadingMore ? "Loading…" : "Load more workspaces"}
         </button>
       )}
       <p id={`${id}-hint`} className={hintClass}>
         {worktreesQuery.isLoading
           ? "Loading this project's workspaces…"
-          : worktreesQuery.isError
+          : worktreesQuery.error
             ? "Could not load this project's workspaces; the main checkout is still available."
             : "The checkout the run works in."}
       </p>

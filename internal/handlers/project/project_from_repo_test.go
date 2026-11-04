@@ -188,6 +188,45 @@ func TestCreateProjectFromRepo_CompletedCloneIsRecordedAsInstalled(t *testing.T)
 	assert.Equal(t, "installed", string(rows[0].InstallState))
 }
 
+// A cloned project is a git repo at its root by construction, and the clone
+// is queued, so nothing was there for discovery to find. Without a root repo
+// row, creating a workspace on it depended on a later adoption — which asked
+// the user's default daemon, and refused a real repo as "project has no git
+// repos" whenever that was a different machine.
+func TestCreateProjectFromRepo_RegistersTheRootRepo(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{
+		ClonedPath: "/home/workspace/projects/control-plane",
+		Queued:     true,
+	}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+
+	userID := "user-from-repo-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+
+	name := "control-plane-" + uuid.NewString()
+	cloneURL := "https://github.com/acme/" + name + ".git"
+	req := &reliantv1.CreateProjectFromRepoRequest{CloneUrl: cloneURL, DaemonId: "daemon-abc"}
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
+	require.NoError(t, err)
+
+	repos, err := repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+	assert.Equal(t, "", repos[0].RelativePath)
+	assert.Equal(t, name, repos[0].Name)
+	require.NotNil(t, repos[0].RemoteURL)
+	assert.Equal(t, cloneURL, *repos[0].RemoteURL)
+
+	// Adding the same repo again finds the project and leaves its registry
+	// alone.
+	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
+	require.NoError(t, err)
+	repos, err = repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	require.NoError(t, err)
+	assert.Len(t, repos, 1)
+}
+
 func TestCreateProjectFromRepo_RequiresATargetMachine(t *testing.T) {
 	// Not defaulted server-side on purpose: with several machines the choice
 	// is the user's, and picking one silently puts the checkout somewhere

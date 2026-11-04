@@ -11,13 +11,32 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
+const composerPayload = vi.hoisted(() => ({ attachments: undefined as string[] | undefined, params: undefined as Record<string, unknown> | undefined, presets: undefined as Record<string, string> | undefined }));
+// This suite tests the route/startChat seam; the real composer's configuration
+// and upload behavior have focused ChatInput tests.
+vi.mock('../../Chat/ChatInput', async () => {
+  const { useState } = await import('react');
+  return { ChatInput: ({ onSend, disabled }: { onSend: (text: string, attachments?: string[], workflow?: string, params?: Record<string, unknown>, thread?: undefined, presets?: Record<string, string>) => Promise<void>; disabled: boolean }) => {
+    const [text, setText] = useState('');
+    return <><textarea aria-label="Message" value={text} onChange={(e) => setText(e.target.value)} /><button aria-label="Send" disabled={disabled || !text.trim()} onClick={() => { void onSend(text, composerPayload.attachments, undefined, composerPayload.params, undefined, composerPayload.presets).catch(() => {}); }}>Send</button></>;
+  }};
+});
 const startChat = vi.fn()
 const selectChat = vi.fn()
 const navigate = vi.fn()
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+const installList = vi.hoisted(() => ({
+  current: [] as Array<{ project_id: string; daemon_id: string; install_state: number }>,
+}));
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: installList.current, isLoading: false }),
+}));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
     <a {...props}>{children}</a>
@@ -35,20 +54,40 @@ vi.mock('../../../store/chatStore', () => ({
   }),
 }))
 
-vi.mock('../../../store/projectStore', () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: 'p1', name: 'reliant' } }),
-}))
+vi.mock('../../../store/projectStore', () => {
+  const state = { currentProject: { id: 'p1', name: 'reliant' } }
+  return {
+    useProjectStore: Object.assign((selector: (s: unknown) => unknown) => selector(state), {
+      getState: () => state,
+    }),
+  }
+})
 
 // WorktreeStatus: ACTIVE = 1, CREATING = 5, FAILED = 6.
 const worktreeList = vi.hoisted(() => ({
   current: [] as Array<Record<string, unknown>>,
 }))
 const MAIN_WORKTREE = { id: 'wt-main', is_main: true, name: 'main', branch: 'main', status: 1 }
-vi.mock('../../../store/worktreeStore', () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({ worktrees: worktreeList.current, loadWorktrees: vi.fn() }),
+const worktreePaging = vi.hoisted(() => ({ hasMore: false, loadMore: () => {} }))
+vi.mock('../../../hooks/worktree-queries', () => ({
+  useWorktreeList: () => ({
+    worktrees: worktreeList.current,
+    hasMore: worktreePaging.hasMore,
+    isLoadingMore: false,
+    loadMore: worktreePaging.loadMore,
+  }),
 }))
+
+// The surface's real capabilities, with per-test overrides.
+const capabilityOverrides = vi.hoisted(() => ({ current: {} as Record<string, boolean> }))
+vi.mock('@/lib/surfaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/surfaceContext')>()
+  return {
+    ...actual,
+    useCapability: (name: Parameters<typeof actual.useCapability>[0]) =>
+      capabilityOverrides.current[name] ?? actual.useCapability(name),
+  }
+})
 
 // The sheet has its own tests; here it only needs to report a creation.
 vi.mock('../MobileCreateWorkspaceSheet', () => ({
@@ -70,10 +109,12 @@ vi.mock('../MobileCreateWorkspaceSheet', () => ({
   ),
 }))
 
-vi.mock('../../../store/globalDataStore', () => ({
+const workflowCatalog = vi.hoisted(() => ({ bareNames: false }));
+vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
   useWorkflows: () => ({
     workflows: [
-      { name: 'builtin://agent', description: 'Basic agentic chat' },
+      { name: workflowCatalog.bareNames ? 'agent' : 'builtin://agent', description: 'Basic agentic chat' },
       { name: 'builtin://forge-one-shot', description: 'Build with Forge' },
       // Its Chat trigger is off: a chat cannot start it.
       { name: 'nightly-digest', description: 'Runs on a schedule', automation_only: true },
@@ -82,15 +123,11 @@ vi.mock('../../../store/globalDataStore', () => ({
   }),
 }))
 
-vi.mock('../../../store/preferencesStore', () => ({
-  DEFAULT_WORKFLOW: 'builtin://agent',
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      preferences: { defaultWorkflow: 'builtin://forge-one-shot' },
-      isLoading: false,
-      loadPreferences: vi.fn(),
-      isWorkflowHidden: () => false,
-    }),
+const hidden = vi.hoisted(() => ({ isWorkflowHidden: () => false, isPresetHidden: () => false }))
+vi.mock('../../../hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/settings-queries')>()),
+  useDefaultWorkflow: () => 'builtin://forge-one-shot',
+  useHiddenItems: () => hidden,
 }))
 
 vi.mock('../../../lib/analytics', () => ({ trackEvent: vi.fn() }))
@@ -108,9 +145,27 @@ vi.mock('@/hooks/useOnboardingQueries', () => ({
 }))
 
 const { MobileNewChat } = await import('../MobileNewChat')
+const { ComposeModeProvider } = await import('@/lib/composeMode')
 
-beforeEach(() => {
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+// Main plus five branches, most recent first: b1 (1h) … b5 (5h).
+const SIX_WORKTREES = [
+  MAIN_WORKTREE,
+  ...[3, 1, 5, 2, 4].map((h) => ({ id: `wt-b${h}`, is_main: false, name: `b${h}`, branch: `b${h}`, status: 1, last_active: hoursAgo(h) })),
+]
+
+beforeEach(async () => {
+  workflowCatalog.bareNames = false;
+  composerPayload.attachments = undefined;
+  composerPayload.params = undefined;
+  composerPayload.presets = undefined;
+  const { useChatParamsStore } = await import('../../../store/chatParamsStore');
+  useChatParamsStore.getState().setTempNewChatWorkflow(null);
   worktreeList.current = [MAIN_WORKTREE]
+  worktreePaging.hasMore = false
+  worktreePaging.loadMore = vi.fn()
+  capabilityOverrides.current = {}
+  installList.current = []
   daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }]
   startChat.mockReset()
   startChat.mockResolvedValue({ id: 'chat-9' })
@@ -119,6 +174,37 @@ beforeEach(() => {
 })
 
 describe('MobileNewChat', () => {
+  it('forwards shared composer uploads and workflow configuration', async () => {
+    composerPayload.attachments = ['upload-1'];
+    composerPayload.params = { goal: 'ship', agent: { mode: 'auto' } };
+    composerPayload.presets = { agent: 'careful' };
+    render(<MobileNewChat />);
+    await userEvent.type(screen.getByLabelText('Message'), 'go');
+    await userEvent.click(screen.getByLabelText('Send'));
+    expect(startChat.mock.calls[0].slice(2, 6)).toEqual([composerPayload.attachments, composerPayload.params, 'builtin://forge-one-shot', composerPayload.presets]);
+  });
+  it('offers the created chat after navigation fails without enabling another creation', async () => {
+    navigate.mockRejectedValueOnce(new Error('navigation failed'));
+    render(<MobileNewChat />);
+    await userEvent.type(screen.getByLabelText('Message'), 'go');
+    await userEvent.click(screen.getByLabelText('Send'));
+    await screen.findByText('Chat created. Open it to continue.');
+    expect(screen.getByLabelText('Send')).toBeDisabled();
+    expect(screen.getByText('Open created chat')).toBeInTheDocument();
+    expect(startChat).toHaveBeenCalledTimes(1);
+  });
+  it('resolves a URI selection against bare catalog names without exposing the URI', async () => {
+    workflowCatalog.bareNames = true;
+    const { useChatParamsStore } = await import('../../../store/chatParamsStore');
+    useChatParamsStore.getState().setTempNewChatWorkflow('builtin://agent');
+    render(<MobileNewChat />);
+    expect(screen.getByRole('button', { name: 'Workflow Agent' })).toBeInTheDocument();
+    expect(screen.queryByText('builtin://agent')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Message'), 'go');
+    await userEvent.click(screen.getByLabelText('Send'));
+    expect(startChat.mock.calls[0][4]).toBe('builtin://agent');
+  });
+
   it('shows the current project as context', () => {
     render(<MobileNewChat />)
     expect(screen.getByText('reliant')).toBeInTheDocument()
@@ -214,9 +300,12 @@ describe('MobileNewChat', () => {
     ]
     render(<MobileNewChat />)
 
-    await userEvent.click(screen.getByText('Workspace'))
-    expect(screen.queryByRole('button', { name: /^broken/ })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /^feature-x/ }))
+    // One tap on the canvas, no sheet.
+    expect(screen.getByRole('radio', { name: /^main/ })).toBeChecked()
+    expect(screen.queryByRole('radio', { name: /^broken/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: /^feature-x/ }))
+    expect(screen.getByRole('radio', { name: /^feature-x/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^main/ })).not.toBeChecked()
 
     await userEvent.type(screen.getByLabelText('Message'), 'on the branch')
     await userEvent.click(screen.getByLabelText('Send'))
@@ -224,16 +313,15 @@ describe('MobileNewChat', () => {
     expect(startChat.mock.calls[0][0]).toBe('wt-feature')
   })
 
-  it('creates a workspace from the picker and selects it', async () => {
+  it('creates a workspace from the canvas and selects it', async () => {
     render(<MobileNewChat />)
 
-    await userEvent.click(screen.getByText('Workspace'))
     await userEvent.click(screen.getByRole('button', { name: 'New workspace' }))
     await userEvent.click(screen.getByRole('button', { name: 'Create stub' }))
 
     expect(screen.queryByRole('dialog', { name: 'New workspace' })).not.toBeInTheDocument()
     // Still CREATING: it is offered, labelled as such, and selected.
-    expect(screen.getByText('fresh')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^fresh.*Setting up/ })).toBeChecked()
 
     await userEvent.type(screen.getByLabelText('Message'), 'go')
     await userEvent.click(screen.getByLabelText('Send'))
@@ -286,5 +374,142 @@ describe('MobileNewChat', () => {
     await waitFor(() => expect(startChat).toHaveBeenCalled())
     // A chosen daemon is woken by the server at send.
     expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-laptop', noMachine: undefined })
+  })
+
+  // ProjectInstallState: INSTALLED = 1.
+  it('will not start on a machine the project is not set up on, and keeps the draft', async () => {
+    daemonList.current = [
+      { daemonId: 'd-laptop', hostname: 'laptop', status: 1 },
+      { daemonId: 'd-desk', hostname: 'desk', status: 1 },
+    ]
+    installList.current = [{ project_id: 'p1', daemon_id: 'd-desk', install_state: 1 }]
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByText('Runs on'))
+    await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
+    expect(screen.getByTestId('mobile-new-chat-placement')).toHaveTextContent("reliant isn't set up on laptop")
+
+    await userEvent.type(screen.getByLabelText('Message'), 'fix the build')
+    expect(screen.getByLabelText('Message')).toHaveValue('fix the build')
+    expect(screen.getByLabelText('Send')).toBeDisabled()
+    expect(startChat).not.toHaveBeenCalled()
+  })
+
+  it("offers only the picked machine's workspaces and runs a branch workspace on its own machine", async () => {
+    daemonList.current = [
+      { daemonId: 'd-laptop', hostname: 'laptop', status: 1 },
+      { daemonId: 'd-desk', hostname: 'desk', status: 1 },
+    ]
+    worktreeList.current = [
+      MAIN_WORKTREE,
+      { id: 'wt-desk', is_main: false, name: 'desk-branch', branch: 'desk', status: 1, daemon_id: 'd-desk' },
+      { id: 'wt-laptop', is_main: false, name: 'laptop-branch', branch: 'laptop', status: 1, daemon_id: 'd-laptop' },
+    ]
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByText('Runs on'))
+    await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
+    expect(screen.queryByRole('radio', { name: /^desk-branch/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: /^laptop-branch/ }))
+
+    await userEvent.type(screen.getByLabelText('Message'), 'on the branch')
+    await userEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][0]).toBe('wt-laptop')
+    // The workspace decides the machine; the server resolves it from the checkout.
+    expect(startChat.mock.calls[0][6]).toBeUndefined()
+  })
+  it('lists main first, then the most recent workspaces, with Show all for the rest', async () => {
+    worktreeList.current = SIX_WORKTREES
+    render(<MobileNewChat />)
+
+    const radios = screen.getAllByRole('radio')
+    expect(radios.map((r) => r.textContent)).toEqual(['maindefault', 'b11h ago', 'b22h ago', 'b33h ago'])
+    await userEvent.click(screen.getByRole('button', { name: 'Show all (6)' }))
+    // The full list, in a sheet.
+    expect(screen.getByRole('button', { name: /^b5/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^b5/ }))
+
+    // Picked from the sheet: it takes the last slot, checked, so the choice stays visible.
+    expect(screen.getByRole('radio', { name: /^b5/ })).toBeChecked()
+    expect(screen.queryByRole('radio', { name: /^b3/ })).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Message'), 'deep in the list')
+    await userEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][0]).toBe('wt-b5')
+  })
+
+  it('pages the Show all sheet when the server has more workspaces', async () => {
+    worktreePaging.hasMore = true
+    worktreeList.current = [MAIN_WORKTREE, { id: 'wt-b1', is_main: false, name: 'b1', branch: 'b1', status: 1 }]
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show all (2+)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(worktreePaging.loadMore).toHaveBeenCalled()
+  })
+
+  it('has no Show all when every workspace is already listed', () => {
+    worktreeList.current = [MAIN_WORKTREE, { id: 'wt-b1', is_main: false, name: 'b1', branch: 'b1', status: 1 }]
+    render(<MobileNewChat />)
+    expect(screen.queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument()
+  })
+
+  it('shows main as a single read-only line when it is the only workspace and none can be created', () => {
+    capabilityOverrides.current = { worktreeCreate: false }
+    render(<MobileNewChat />)
+    expect(screen.getByText('Workspace')).toBeInTheDocument()
+    expect(screen.getByText('main')).toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New workspace' })).not.toBeInTheDocument()
+  })
+
+  it('offers main as a choice when a workspace can be created', () => {
+    render(<MobileNewChat />)
+    expect(screen.getByRole('radio', { name: /^main/ })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'New workspace' })).toBeInTheDocument()
+  })
+
+  it('hides Runs on without machine selection on this surface', () => {
+    capabilityOverrides.current = { chatDaemonSelection: false }
+    render(<MobileNewChat />)
+    expect(screen.queryByText('Runs on')).not.toBeInTheDocument()
+    expect(screen.getByText('Workflow')).toBeInTheDocument()
+  })
+
+  it('renders no suggested prompts and no model control', () => {
+    render(<MobileNewChat />)
+    expect(screen.queryByText(/start with/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/try asking|suggest/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^model$/i)).not.toBeInTheDocument()
+  })
+
+  it('has no summary line while the keyboard is down', () => {
+    render(<MobileNewChat />)
+    expect(screen.queryByTestId('mobile-new-chat-summary')).not.toBeInTheDocument()
+  })
+
+  it('keeps the choice visible as a summary line while composing, and tapping it brings the options back', async () => {
+    worktreeList.current = [MAIN_WORKTREE, { id: 'wt-feature', is_main: false, name: 'feature-x', branch: 'feature/x', status: 1 }]
+    render(
+      <ComposeModeProvider keyboardOpen>
+        <MobileNewChat />
+      </ComposeModeProvider>,
+    )
+    const summary = screen.getByTestId('mobile-new-chat-summary')
+    expect(summary).toHaveTextContent('main · laptop · Forge One Shot')
+
+    await userEvent.click(screen.getByRole('radio', { name: /^feature-x/ }))
+    expect(summary).toHaveTextContent('feature-x · laptop · Forge One Shot')
+
+    const input = screen.getByLabelText('Message')
+    input.focus()
+    const canvas = screen.getByRole('radiogroup', { name: 'Workspace' }).closest('.overflow-y-auto') as HTMLElement
+    canvas.scrollTop = 120
+    // fireEvent rather than userEvent: userEvent's click would move focus itself.
+    fireEvent.click(summary)
+    expect(input).not.toHaveFocus()
+    expect(canvas.scrollTop).toBe(0)
   })
 })

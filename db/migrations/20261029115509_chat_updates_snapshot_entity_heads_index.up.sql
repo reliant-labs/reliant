@@ -1,0 +1,23 @@
+-- forge:backward-compatible — additive index; the previous release's snapshot query cannot use it and keeps using idx_chat_updates_snapshot_heads, which this leaves in place.
+
+-- Migration: chat_updates_snapshot_entity_heads_index
+--
+-- The chat snapshot's update heads (store.SnapshotHeadsSQL) no longer carry
+-- workflow state. NODE_EXECUTION (9) is keyed "<workflow>:<node>" and
+-- WORKFLOW_STATUS (5) by workflow, so every run a chat ever made added
+-- entities, and the skip scan over them cost what the chat's whole history
+-- costs (prod: p50 0.2s, p95 2.5s, max 11s) — for state only a run-status
+-- view reads, which now asks for its one workflow's nodes
+-- (ChatService.GetWorkflowNodeExecutions, idx_chat_updates_workflow_heads).
+-- This index holds exactly the entities the skip scan still walks.
+--
+-- Its predicate is the skip scan's exclusion list EXACTLY (not a subset, as
+-- idx_chat_updates_snapshot_heads' is): every probe is then answered from the
+-- index alone, without a heap fetch to recheck update_type, and no probe walks
+-- past rows it would discard. TestSnapshotHeadsQueryMatchesPartialIndex pins
+-- the two lists together.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file. idx_chat_updates_snapshot_heads is dropped by a later
+-- migration, once no release reads through it.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chat_updates_snapshot_entity_heads ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC) WHERE update_type <> ALL (ARRAY[1, 3, 4, 5, 9, 18, 19, 20]);

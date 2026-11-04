@@ -42,6 +42,27 @@ type Daemon struct {
 	LastStatusChangedAt *time.Time
 	LastOOMKilledAt     *time.Time
 	OOMKillCount        int32
+
+	// Labels are the machine's durable labels, set by its owner. They decide
+	// machine-pool membership (dev-docs/design/machine-pools.md) and, unlike
+	// the labels a daemon reports when it connects, hold while it sleeps.
+	Labels map[string]string
+
+	// IsDefault: the owner chose this machine as their default
+	// (SetDefaultDaemon). Work that names no machine runs here first; at most
+	// one of a user's daemons carries it.
+	IsDefault bool
+
+	// RequiresBoundToken reserves the id for daemon-bound credentials: once
+	// set, an unbound login token can no longer connect as this daemon. The
+	// server sets it — never the daemon — when a daemon-bound credential
+	// connects as the id, when the gateway dials the pod in, or when a
+	// control-plane lifecycle observation applies; nothing clears it.
+	//
+	// On UpsertDaemon it is the write's credential: true reserves the row,
+	// false leaves an existing reservation in place and is refused on a
+	// reserved row (ErrDaemonRequiresBoundToken).
+	RequiresBoundToken bool
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied
@@ -89,6 +110,25 @@ type DaemonAttachment struct {
 	// reach). JSON-encoded in the detected_ports column. Nil/empty when
 	// nothing is listening or the daemon doesn't report (local daemons).
 	DetectedPorts []uint32
+	// Build is the build the daemon reported when its stream registered.
+	// The zero value is "unknown build".
+	Build DaemonBuild
+}
+
+// DaemonBuild is the build a daemon reported in DaemonRegister. Every field is
+// empty/zero for a daemon that predates the report or an unstamped build,
+// which is an unknown build, not an error. CommitTimeUnix is the ordering key
+// (0 = unordered); Version is display only.
+type DaemonBuild struct {
+	Version        string
+	Commit         string
+	CommitTimeUnix int64
+	ForgeVersion   string
+}
+
+// Known reports whether the daemon identified its build at all.
+func (b DaemonBuild) Known() bool {
+	return b.Version != "" || b.Commit != ""
 }
 
 // DaemonIdentity is what the control plane knows about a daemon's existence.

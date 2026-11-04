@@ -34,12 +34,12 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
     data: {
       plans: [
         {
-          id: "plan_compute_small",
-          name: "Small",
+          id: "plan_compute_m",
+          name: "M",
           displayOrder: 1,
           priceCents: 2000n,
           structuredLimits: {
-            allowedDaemonSizes: ["small"],
+            allowedDaemonSizes: ["m"],
             includedSmallDaemonHours: 17n,
           },
         },
@@ -50,8 +50,8 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
 vi.mock("@/components/RedeemCouponForm", () => ({
   RedeemCouponForm: () => <div data-testid="redeem-coupon" />,
 }));
-vi.mock("@/components/Projects/SelfHostedDaemonConnect", () => ({
-  SelfHostedDaemonConnect: () => <div data-testid="self-hosted-connect" />,
+vi.mock("@/components/Machines/PairMachinePanel", () => ({
+  PairMachinePanel: () => <div data-testid="self-hosted-connect" />,
 }));
 vi.mock("@/hooks/useBundledDaemonPending", () => ({
   useBundledDaemonPending: () => false,
@@ -91,7 +91,7 @@ beforeEach(() => vi.clearAllMocks());
 describe("ComputeStep — cloud machines fold away when Free is chosen", () => {
   it("shows hosted rows and no disclosure until Free is chosen", () => {
     renderStep();
-    expect(screen.getByText("Small")).toBeVisible();
+    expect(screen.getByText("M")).toBeVisible();
     expect(screen.queryByTestId("compute-cloud-toggle")).toBeNull();
   });
 
@@ -101,22 +101,22 @@ describe("ComputeStep — cloud machines fold away when Free is chosen", () => {
 
     const toggle = screen.getByTestId("compute-cloud-toggle");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveTextContent("Reliant Cloud machines · from $20.00/mo");
-    expect(screen.queryByText("Small")).toBeNull();
+    expect(toggle).toHaveTextContent("Reliant Cloud machines · from $20/mo");
+    expect(screen.queryByText("M")).toBeNull();
     expect(screen.getByTestId("self-hosted-connect")).toBeVisible();
 
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Small")).toBeVisible();
+    expect(screen.getByText("M")).toBeVisible();
   });
 
   it("picking a hosted row switches back to hosted", () => {
     const updatePlan = renderStep();
     fireEvent.click(screen.getByRole("button", { name: /Use your own computer/ }));
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
-    fireEvent.click(screen.getByText("Small"));
+    fireEvent.click(screen.getByText("M"));
 
-    expect(updatePlan).toHaveBeenCalledWith({ computePlanId: "plan_compute_small" });
+    expect(updatePlan).toHaveBeenCalledWith({ computePlanId: "plan_compute_m" });
     expect(screen.queryByTestId("compute-cloud-toggle")).toBeNull();
     expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
   });

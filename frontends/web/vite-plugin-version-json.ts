@@ -14,7 +14,7 @@ import { UNKNOWN, type BuildInfo } from "./src/lib/releaseIdentity";
  * knew nothing about itself. Prod's reliant image was built without -ldflags,
  * so the RPC answered "unknown" and the page read "version unknown" — while
  * the build that produced the page knew perfectly well what it was. The same
- * blindness filed every web Sentry event under `reliant@unknown`.
+ * blindness filed every web error report under `reliant@unknown`.
  *
  * So the bundle now carries its own identity, `__RELIANT_BUILD__` (read through
  * src/lib/appBuild.ts), and the About page shows it beside the server's.

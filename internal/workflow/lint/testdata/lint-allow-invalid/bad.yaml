@@ -1,0 +1,9 @@
+name: fixture
+entry: [build]
+nodes:
+# lint:allow run-timeout — a typo silences nothing
+# lint:allow run-exit-code-unread
+- id: build
+  type: run
+  timeout: 5m
+  args: {command: make build}

@@ -10,7 +10,6 @@
  */
 
 import { memo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   X,
   ChevronDown,
@@ -56,9 +55,14 @@ import type { LoopIterationInfo } from "./hooks/useExecutionStatus";
 import { getNodeDisplayName } from "../../lib/node-metadata";
 import { unwrapProtoInputs } from "../../lib/protoValueUtils";
 import { getActionArgsRecord, hasTypedArgs } from "../../lib/actionStepArgs";
-import { getMessageClient } from "../../api/grpc-client";
+import { useGetMessage } from "../../hooks/message-service-hooks_gen";
+import type { GetMessageResponse } from "../../gen/reliant/v1/message_pb";
 import { messageText } from "../../lib/transcript";
 import { MarkdownRenderer } from "../Chat/MarkdownRenderer";
+
+function savedMessageText(response: GetMessageResponse): string {
+  return response.message ? messageText(response.message) : "";
+}
 
 /**
  * The message a node wrote, when its step saved one — for a reviewer, its
@@ -67,14 +71,8 @@ import { MarkdownRenderer } from "../Chat/MarkdownRenderer";
  * id, so the text is fetched on demand.
  */
 function SavedMessageSection({ messageId }: { messageId: string }) {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["workflow-node-saved-message", messageId],
-    queryFn: async () => {
-      const res = await getMessageClient().getMessage({ messageId });
-      return res.message ? messageText(res.message) : "";
-    },
-    staleTime: Infinity,
-  });
+  // A saved message does not change, so it is read once.
+  const { data, isLoading, isError } = useGetMessage({ messageId }, { staleTime: Infinity, select: savedMessageText });
 
   if (isLoading) {
     return (

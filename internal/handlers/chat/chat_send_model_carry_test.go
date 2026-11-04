@@ -201,7 +201,7 @@ func TestSendMessage_PausedRunsServablePinIsLeftAlone(t *testing.T) {
 	_, err := service.SendMessage(ctx, sendContinue(fx.chatID, nil))
 	require.NoError(t, err)
 
-	assert.NotContains(t, signalNames(temporal.signals), workflow.SignalUpdateWorkflowState)
+	assert.Contains(t, signalNames(temporal.signals), workflow.SignalUpdateWorkflowState, "resume reconciles the persisted empty binding")
 	assert.Contains(t, signalNames(temporal.signals), workflow.SignalResume)
 	assert.Empty(t, noticesNaming(transcriptBodies(t, ctx, repo, fx.chatID), "claude-5.5-sonnet"))
 }

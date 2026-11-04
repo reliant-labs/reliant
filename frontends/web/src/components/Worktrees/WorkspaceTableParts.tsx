@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
 import Badge from "../forge-ui/badge";
 import Status from "../forge-ui/status";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatAbsoluteTime, formatRelativeTime } from "../../lib/relativeTime";
-import type { Worktree } from "../../store/worktreeStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { hasCheckout, lifecycleOf, workingTreeState } from "./workspaceStatus";
-import { useWorkspaceGitStatus } from "./useWorkspaceGitStatus";
+import { useWorkspaceGitStatus } from "../../hooks/worktree-git-queries";
 import {
   workspaceColumn,
   workspaceIconButton,
   workspaceIconButtonDanger,
 } from "./workspaceStyles";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface IconActionProps {
   label: string;
@@ -28,7 +28,7 @@ interface IconActionProps {
 /** An icon-only row action: always a tooltip, always an accessible name. */
 export function IconAction({ label, hint, icon, onClick, disabled, danger, testId }: IconActionProps) {
   return (
-    <Tooltip content={hint ?? label} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={hint ?? label} delay={300} triggerClassName="inline-flex">
       <button
         type="button"
         aria-label={label}
@@ -48,15 +48,7 @@ export function IconAction({ label, hint, icon, onClick, disabled, danger, testI
  * it. "Active" is the default lifecycle and gets no badge; only a status the
  * user deliberately set is worth the space.
  */
-export function WorkspaceNameCell({
-  worktree,
-  isCurrent,
-  onSelect,
-}: {
-  worktree: Worktree;
-  isCurrent?: boolean;
-  onSelect?: () => void;
-}) {
+export function WorkspaceNameCell({ worktree, isCurrent }: { worktree: Worktree; isCurrent?: boolean }) {
   const lifecycle = lifecycleOf(worktree.status);
   const showLifecycle =
     worktree.status !== WorktreeStatus.ACTIVE && worktree.status !== WorktreeStatus.UNSPECIFIED;
@@ -67,25 +59,15 @@ export function WorkspaceNameCell({
         ? "info"
         : "neutral";
 
+  // Spans, not divs: in a list whose rows open, this is the row's button content.
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {onSelect ? (
-          <button
-            type="button"
-            onClick={onSelect}
-            aria-label={`View details for ${worktree.name}`}
-            className="min-w-0 truncate rounded-sm text-left text-sm font-medium text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {worktree.name}
-          </button>
-        ) : (
-          <span className="min-w-0 truncate text-sm font-medium text-foreground">{worktree.name}</span>
-        )}
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">{worktree.name}</span>
         {worktree.is_main && <Badge label="Main" size="sm" />}
         {isCurrent && <Badge label="Current" variant="info" size="sm" />}
         {showLifecycle && <Badge label={lifecycle.label} variant={lifecycleVariant} size="sm" />}
-      </div>
+      </span>
       <span
         className={cn(
           "truncate font-mono text-2xs text-muted-foreground",
@@ -94,7 +76,7 @@ export function WorkspaceNameCell({
       >
         {worktree.branch}
       </span>
-    </div>
+    </span>
   );
 }
 
@@ -118,7 +100,7 @@ export function TimeCell({ value, empty = "Never" }: { value?: string | null; em
     return <span className="text-xs text-muted-foreground">{empty}</span>;
   }
   return (
-    <Tooltip content={formatAbsoluteTime(value)} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={formatAbsoluteTime(value)} delay={300} triggerClassName="inline-flex">
       <span className="whitespace-nowrap text-xs text-muted-foreground">{relative}</span>
     </Tooltip>
   );
@@ -140,7 +122,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
       <Tooltip
         content={worktree.failure_reason || lifecycle.description}
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
         <GitStateLabel
           worktreeId={worktreeId}
@@ -161,7 +143,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
       <Tooltip
         content="Git status is read from your machine, which could not reach this workspace."
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
         <GitStateLabel worktreeId={worktreeId} variant="neutral" label="Unavailable" />
       </Tooltip>
@@ -170,7 +152,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
 
   const state = workingTreeState(data);
   return (
-    <Tooltip content={state.detail} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={state.detail} delay={300} triggerClassName="inline-flex">
       <GitStateLabel worktreeId={worktreeId} variant={state.variant} label={state.label} />
     </Tooltip>
   );

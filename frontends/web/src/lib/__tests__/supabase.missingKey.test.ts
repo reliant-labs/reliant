@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { setRuntimeConfig } from '@/test/runtimeConfig'
 
 // src/test/setup.ts globally mocks '@/lib/supabase' precisely because importing
 // it used to throw "supabaseKey is required." That mock is what kept this
@@ -29,34 +30,15 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
-const ORIGINAL_ENV = { ...import.meta.env }
-
-function setEnv(vars: Record<string, string | undefined>) {
-  for (const [key, value] of Object.entries(vars)) {
-    if (value === undefined) {
-      delete (import.meta.env as Record<string, unknown>)[key]
-    } else {
-      (import.meta.env as Record<string, unknown>)[key] = value
-    }
-  }
-}
-
 beforeEach(() => {
   vi.resetModules()
-  // window.electronAPI is absent, and VITE_AUTH_MODE is unset, so getStorage()
+  // window.electronAPI is absent, and AUTH_MODE is unset, so getStorage()
   // takes the browser path; nothing here needs an Electron or gRPC backend.
-  setEnv({ VITE_SUPABASE_URL: undefined, VITE_SUPABASE_ANON_KEY: undefined })
-})
-
-afterEach(() => {
-  for (const key of Object.keys(import.meta.env)) {
-    delete (import.meta.env as Record<string, unknown>)[key]
-  }
-  Object.assign(import.meta.env, ORIGINAL_ENV)
+  setRuntimeConfig({})
 })
 
 describe('supabase module with no anon key configured', () => {
-  // The regression itself: with VITE_SUPABASE_ANON_KEY unset, this module used
+  // The regression itself: with SUPABASE_ANON_KEY unset, this module used
   // to throw at IMPORT time. It is imported transitively from the app entry via
   // authStore -> AuthInitializer, so the throw happened before React could
   // mount, leaving #root empty and every Playwright test timing out on a blank
@@ -83,15 +65,15 @@ describe('supabase module with no anon key configured', () => {
   it('throws an actionable error at first use, not at import', async () => {
     const { supabase, MISSING_ANON_KEY_MESSAGE } = await import('@/lib/supabase')
     expect(() => supabase.auth).toThrow(MISSING_ANON_KEY_MESSAGE)
-    expect(MISSING_ANON_KEY_MESSAGE).toContain('VITE_SUPABASE_ANON_KEY')
+    expect(MISSING_ANON_KEY_MESSAGE).toContain('SUPABASE_ANON_KEY')
   })
 })
 
 describe('supabase module with an anon key configured', () => {
   beforeEach(() => {
-    setEnv({
-      VITE_SUPABASE_URL: 'https://dash.example.invalid',
-      VITE_SUPABASE_ANON_KEY: 'sb_publishable_test_key',
+    setRuntimeConfig({
+      SUPABASE_URL: 'https://dash.example.invalid',
+      SUPABASE_ANON_KEY: 'sb_publishable_test_key',
     })
   })
 

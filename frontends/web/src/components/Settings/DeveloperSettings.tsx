@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
+import Input from "../../components/forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import Card from "../forge-ui/card";
 import { FileText, FolderOpen, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
 import { isForgeUIEnabled, setForgeUIEnabled } from "../../lib/forgeFeature";
@@ -280,9 +280,9 @@ export function DeveloperSettings() {
                         onClick={handleBrowseFile}
                         variant="outline"
                         size="sm"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                      </Button>
+                        icon={<FolderOpen />}
+                        aria-label="Browse for a replay file"
+                      />
                     </div>
                     {config.replayFile && config.replayFile !== 'none' && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -305,6 +305,7 @@ export function DeveloperSettings() {
                         saveConfig(newConfig);
                       }}
                       placeholder="Enter scenario name"
+                      className="forge-ui"
                     />
                     <p className="text-xs text-muted-foreground">
                       Define custom scenarios for the mock static driver
@@ -319,7 +320,7 @@ export function DeveloperSettings() {
               <div className={`p-3 rounded-lg border ${
                 saveStatus === 'saved' ? 'border-success bg-success/5' :
                 saveStatus === 'error' ? 'border-destructive bg-destructive/5' :
-                'border-border bg-muted'
+                'border-border bg-background'
               }`}>
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -336,7 +337,7 @@ export function DeveloperSettings() {
       </Card>
 
       {/* Additional Information */}
-      <div className="p-3 rounded-lg border border-border/40 bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="p-3 rounded-lg border border-border/60 bg-background">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5" />
           <div className="text-sm">

@@ -60,7 +60,11 @@ func TestForgeHookGeneratorsMatchForgeYAML(t *testing.T) {
 					t.Fatal(err)
 				}
 				for _, m := range goGenerate.FindAllStringSubmatch(string(src), -1) {
-					generators = append(generators, path.Join(pkg, m[1]))
+					gen := path.Join(pkg, m[1])
+					generators = append(generators, gen)
+					if forgeHookOf[gen] != h.Name {
+						t.Errorf("forgeHookOf[%q] is %q, but forge.yaml's hook %s runs it", gen, forgeHookOf[gen], h.Name)
+					}
 					found = true
 				}
 			}
@@ -68,7 +72,11 @@ func TestForgeHookGeneratorsMatchForgeYAML(t *testing.T) {
 				t.Errorf("hook %s runs go generate in %s, which has no //go:generate go run directive", h.Name, pkg)
 			}
 		case len(argv) >= 3 && argv[0] == "go" && argv[1] == "run":
-			generators = append(generators, path.Clean(strings.TrimPrefix(argv[2], "./")))
+			gen := path.Clean(strings.TrimPrefix(argv[2], "./"))
+			generators = append(generators, gen)
+			if forgeHookOf[gen] != h.Name {
+				t.Errorf("forgeHookOf[%q] is %q, but forge.yaml's hook %s runs it", gen, forgeHookOf[gen], h.Name)
+			}
 		default:
 			for _, arg := range argv {
 				if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(arg))); err == nil && !isForgeInput(path.Clean(arg)) {
@@ -86,5 +94,45 @@ func TestForgeHookGeneratorsMatchForgeYAML(t *testing.T) {
 	want := slices.Sorted(slices.Values(forgeHookGenerators))
 	if !slices.Equal(generators, want) {
 		t.Errorf("forge.yaml's generate hooks run %v, but forgeHookGenerators (tools/test-affected/rules.go) lists %v", generators, want)
+	}
+}
+
+// TestForgeGenHooksOnly pins the merge gate's cheap forge-generate check: Go
+// that only hook generators compile runs exactly the hooks whose generator
+// compiles it (every one of them, not the first), while anything forge itself
+// reads keeps the whole forge generate.
+func TestForgeGenHooksOnly(t *testing.T) {
+	pkg := func(n string) string { return mod + "/" + n }
+	g := testGraph()
+	tools, yaml := "internal/llm/tools/cmd/toolconfiggen", "internal/workflow/yaml/cmd/yamlbindingsgen"
+	for _, gen := range []string{tools, yaml} {
+		g.DirPkg[gen] = pkg(gen)
+		g.Files[gen+"/main.go"] = FileInfo{Pkg: pkg(gen), Kind: KindCode}
+	}
+	// toolconfiggen compiles leaf and mid; yamlbindingsgen compiles leaf.
+	g.BuildDeps[pkg(tools)] = map[string]bool{pkg(tools): true, pkg("internal/mid"): true, pkg("internal/leaf"): true}
+	g.BuildDeps[pkg(yaml)] = map[string]bool{pkg(yaml): true, pkg("internal/leaf"): true}
+
+	cases := []struct {
+		paths     []string
+		hooksOnly bool
+		hooks     []string
+	}{
+		{[]string{"internal/leaf/leaf.go"}, true, []string{"tool-catalog", "yaml-bindings"}},
+		{[]string{"internal/mid/mid.go"}, true, []string{"tool-catalog"}},
+		// A forge input beside it: the whole forge generate.
+		{[]string{"internal/mid/mid.go", "proto/reliant/v1/chat.proto"}, false, nil},
+		{[]string{"internal/mid/mid.go", "Taskfile.yml"}, false, nil},
+		// A test file is in no generator's build: the lane does not run.
+		{[]string{"internal/mid/mid_test.go"}, false, nil},
+	}
+	for _, tc := range cases {
+		pl := classifyIn(g, tc.paths...)
+		if pl.ForgeGen.HooksOnly != tc.hooksOnly || !slices.Equal(pl.ForgeGen.Hooks, tc.hooks) {
+			t.Errorf("%v: hooks_only=%v hooks=%v, want %v %v (reasons %v)", tc.paths, pl.ForgeGen.HooksOnly, pl.ForgeGen.Hooks, tc.hooksOnly, tc.hooks, pl.ForgeGen.Reasons)
+		}
+		if tc.hooksOnly && !pl.ForgeGen.Full {
+			t.Errorf("%v: a hooks-only plan must still mark the lane selected", tc.paths)
+		}
 	}
 }

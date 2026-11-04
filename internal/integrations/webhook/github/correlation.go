@@ -48,7 +48,8 @@ func echoOf(typ string, raw map[string]any, body *payload) *provenance.Echo {
 		e.BodySHA256 = digestOf(dig(raw, "comment", "body"))
 		e.AppSlug = appSlug(dig(raw, "comment", "performed_via_github_app"))
 	case "pull_request.opened", "pull_request.reopened", "pull_request.closed",
-		"pull_request.ready_for_review", "pull_request.review_requested":
+		"pull_request.ready_for_review", "pull_request.review_requested",
+		"pull_request.dequeued", "pull_request.auto_merge_disabled":
 		e.ObjectKind = provenance.KindPullRequest
 		e.ObjectID = number("pull_request", "number")
 		e.Target = target(e.ObjectID)

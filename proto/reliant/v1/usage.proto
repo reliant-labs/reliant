@@ -1,0 +1,133 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// UsageService reports the caller's own LLM usage: calls, errors, tokens and
+// latency per day, model, provider and credential type, whichever credential
+// made the call (Reliant AI, the user's own API key, a Claude / Codex /
+// Copilot subscription, a local model).
+//
+// It reads the count-only usage ledger the worker writes for every model call
+// (prompts, replies and tool I/O are never recorded). Every rpc is scoped to
+// the authenticated user: there is no user_id on any request, and a machine
+// credential (an rlat_ access token) acts as the user it was minted for.
+// Members' own-key usage is not visible to an organization's admins.
+service UsageService {
+  // GetLLMUsage returns the caller's LLM usage over a UTC date range, summed
+  // into buckets by day, model, provider, auth mode or purpose, optionally
+  // filtered.
+  // The response says how complete it is (see LLMUsageCompleteness).
+  rpc GetLLMUsage(GetLLMUsageRequest) returns (GetLLMUsageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the caller's own usage totals; changes nothing"}
+    };
+  }
+}
+
+// LLMAuthMode is how a model call was authenticated.
+enum LLMAuthMode {
+  LLM_AUTH_MODE_UNSPECIFIED = 0;
+  // Reliant AI: the platform's managed key, billed by Reliant.
+  LLM_AUTH_MODE_MANAGED = 1;
+  // The user's own API key (or an organization key).
+  LLM_AUTH_MODE_BYOK = 2;
+  // A Claude, Codex or Copilot sign-in, under the user's subscription.
+  LLM_AUTH_MODE_SUBSCRIPTION = 3;
+  // A local model reached through the user's daemon.
+  LLM_AUTH_MODE_LOCAL = 4;
+}
+
+// LLMPurpose is what a model request was for.
+enum LLMPurpose {
+  LLM_PURPOSE_UNSPECIFIED = 0;
+  // A turn of a chat.
+  LLM_PURPOSE_CHAT = 1;
+  // Summarizing a long conversation to free up context.
+  LLM_PURPOSE_COMPACTION = 2;
+  // Naming a chat.
+  LLM_PURPOSE_TITLE = 3;
+  // Drafting an automation from a description.
+  LLM_PURPOSE_DRAFT_AUTOMATION = 4;
+}
+
+// LLMUsageGroupBy is the dimension a response is bucketed by.
+enum LLMUsageGroupBy {
+  // Treated as LLM_USAGE_GROUP_BY_DAY.
+  LLM_USAGE_GROUP_BY_UNSPECIFIED = 0;
+  LLM_USAGE_GROUP_BY_DAY = 1;
+  LLM_USAGE_GROUP_BY_MODEL = 2;
+  LLM_USAGE_GROUP_BY_PROVIDER = 3;
+  LLM_USAGE_GROUP_BY_AUTH_MODE = 4;
+  LLM_USAGE_GROUP_BY_PURPOSE = 5;
+}
+
+// LLMUsageCompleteness says how far a response can be trusted to be the whole
+// story for its range.
+enum LLMUsageCompleteness {
+  LLM_USAGE_COMPLETENESS_UNSPECIFIED = 0;
+  // The whole range lies inside the per-call retention window.
+  LLM_USAGE_COMPLETENESS_COMPLETE = 1;
+  // Part of the range is older than the per-call retention window. Those days
+  // are served from the daily rollup, which is kept: the totals stand, but
+  // they can no longer be re-derived from individual calls.
+  LLM_USAGE_COMPLETENESS_PARTIAL = 2;
+}
+
+message GetLLMUsageRequest {
+  // First UTC day of the range, "YYYY-MM-DD", inclusive.
+  string start_date = 1 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Last UTC day of the range, "YYYY-MM-DD", inclusive. The range is at most
+  // 400 days (end_date - start_date + 1).
+  string end_date = 2 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Unset means day.
+  LLMUsageGroupBy group_by = 3;
+  // Provider id as recorded ("anthropic", "openai", "claude", …). Exact match.
+  optional string provider = 4;
+  optional LLMAuthMode auth_mode = 5;
+  // Model id as recorded. Exact match.
+  optional string model = 6;
+  optional LLMPurpose purpose = 7;
+}
+
+// LLMUsageBucket is the sum of every matching call in one group.
+message LLMUsageBucket {
+  // The group: a UTC day "YYYY-MM-DD", a model id, a provider id, an auth mode
+  // name ("managed", "byok", "subscription", "local") or a purpose name
+  // ("chat", "compaction", "title", "draft_automation"), per group_by.
+  string key = 1;
+  int64 calls = 2;
+  // Calls that ended in an error. Cancelled calls count as calls only.
+  int64 error_calls = 3;
+  int64 input_tokens = 4;
+  int64 output_tokens = 5;
+  int64 cache_read_tokens = 6;
+  int64 cache_write_tokens = 7;
+  // Sum of every call's latency; latency_ms_total / calls is avg_latency_ms.
+  int64 latency_ms_total = 8;
+  // 0 when calls is 0.
+  double avg_latency_ms = 9;
+}
+
+message GetLLMUsageResponse {
+  // The request's group_by with the default applied.
+  LLMUsageGroupBy group_by = 1;
+  // One bucket per group that has usage; a group with none is absent, never
+  // zero. By day: oldest first. Otherwise: most tokens first, then key.
+  repeated LLMUsageBucket buckets = 2;
+  // Sum over all buckets; key is empty.
+  LLMUsageBucket totals = 3;
+  LLMUsageCompleteness completeness = 4;
+  // RFC 3339 UTC time the totals were read; the current UTC day is still
+  // accumulating.
+  string as_of = 5;
+  // First UTC day whose individual calls are still stored ("YYYY-MM-DD").
+  string detail_available_from = 6;
+  // Human-readable account of the above, for display.
+  string note = 7;
+}

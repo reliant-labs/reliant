@@ -25,21 +25,21 @@ import { shortVersion, type ChecksSummary, type EnvCell, type ReleaseEnv, type R
 // ── Buttons ─────────────────────────────────────────────────────────────────
 
 const BUTTON =
-  "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 export const BUTTON_PRIMARY = `${BUTTON} border border-accent bg-accent text-on-accent hover:bg-accent-hover`;
 export const BUTTON_SECONDARY = `${BUTTON} border border-border bg-surface text-ink hover:bg-ink/5`;
 /**
- * A link in running text: ink with a quiet underline, never the accent (D8 —
+ * A link in running text: ink with a quiet underline, never the accent (
  * the accent marks the primary action, focus and selection only). `no-color`
  * opts out of index.css's global `a:not(.no-color)` accent rule, which sits
  * in the utilities layer and would otherwise beat `text-ink`.
  */
 export const INK_LINK =
-  "no-color text-ink underline decoration-ink-muted/50 underline-offset-2 transition-colors hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "no-color text-ink underline decoration-ink-muted/50 underline-offset-2 transition-colors hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 /** An inline text button styled as INK_LINK. */
 export const INK_BUTTON = "text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink";
 export const ICON_BUTTON =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -317,7 +317,7 @@ export function RowMenu({ label, items, testId }: { label: string; items: MenuIt
 
 /**
  * Where to promote a release: one radio per long-lived environment, each with
- * what it runs now. The confirm button names the environment (decision D1) —
+ * what it runs now. The confirm button names the environment —
  * and nothing is written here: it opens the plan, which shows the diff and
  * labels a move to an older release as a rollback before anything applies.
  */

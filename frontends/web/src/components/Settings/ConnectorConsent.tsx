@@ -1,10 +1,9 @@
+import { uniqueMachineName } from "@/lib/uniqueMachineName";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { create } from "@bufbuild/protobuf";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ShieldAlert, Plus, Github } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
 import {
-  ListConnectorsRequestSchema,
-  ListAvailableToolsRequestSchema,
   AuthorizeClientRequestSchema,
   CreateConnectorRequestSchema,
   ConnectorExecMode,
@@ -13,14 +12,19 @@ import type {
   Connector,
   ConnectorTool,
 } from "../../gen/reliant/v1/connector_pb";
-import { ListDaemonsRequestSchema } from "../../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
+import {
+  connectorServiceQueries,
+  useAuthorizeClient,
+} from "../../hooks/connector-service-hooks_gen";
+import { fetchDaemonList } from "../../hooks/daemon-registry-queries";
 import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
+import { connectGitHub } from "../../lib/github-connect";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { machineDisplayName } from "@/lib/machineName";
 
@@ -52,14 +56,6 @@ function isPersonalMachine(d: DaemonInfo): boolean {
   return d.daemonType !== "managed";
 }
 
-/** The machines this user can bind a connector to, from reliant's registry. */
-async function fetchDaemons(): Promise<DaemonInfo[]> {
-  const res = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema, {}));
-  return res.daemons;
-}
-
 /**
  * How long to wait for a freshly-created machine to become bindable.
  *
@@ -80,11 +76,11 @@ export interface ProvisionTiming {
   timeoutMs?: number;
 }
 
-// Numeric protobuf enum values for a "managed small" machine, matching the
+// Numeric protobuf enum values for a "managed M" machine, matching the
 // shape `createDaemon` takes (see services/controlPlane/daemon.ts, which keeps
 // these as numbers so callers need not import the control-plane enums).
 const DAEMON_TYPE_MANAGED_ENUM = 1;
-const DAEMON_SIZE_SMALL_ENUM = 1;
+const DAEMON_SIZE_M_ENUM = 8;
 
 export function ConnectorConsent({
   clientId,
@@ -112,6 +108,8 @@ export function ConnectorConsent({
    */
   busy?: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const authorizeClient = useAuthorizeClient();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [tools, setTools] = useState<ConnectorTool[]>([]);
   const [daemons, setDaemons] = useState<DaemonInfo[]>([]);
@@ -156,10 +154,12 @@ export function ConnectorConsent({
   const load = useCallback(async () => {
     try {
       setError(null);
-      const client = grpcClient.connector();
+      // Through the generated entries, so the Machines page's grant list and
+      // this screen share one cache. The grant list is always read fresh: the
+      // choice of which grant to bind is made from it.
       const [connectorsRes, toolsRes] = await Promise.all([
-        client.listConnectors(create(ListConnectorsRequestSchema, {})),
-        client.listAvailableTools(create(ListAvailableToolsRequestSchema, {})),
+        queryClient.fetchQuery(connectorServiceQueries.listConnectors({}, { staleTime: 0 })),
+        queryClient.fetchQuery(connectorServiceQueries.listAvailableTools({})),
       ]);
 
       const live = connectorsRes.connectors.filter((c) => !c.revokedAt);
@@ -176,8 +176,10 @@ export function ConnectorConsent({
         setMode("new");
       }
 
+      // The machines this user can bind a connector to: a fresh read of the
+      // one daemon list (hooks/daemon-registry-queries).
       try {
-        setDaemons(await fetchDaemons());
+        setDaemons(await fetchDaemonList(queryClient));
       } catch {
         setDaemons([]);
       }
@@ -187,7 +189,7 @@ export function ConnectorConsent({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     load();
@@ -251,10 +253,12 @@ export function ConnectorConsent({
       const known = new Set(daemons.map((d) => d.daemonId));
 
       const { createDaemon } = await import("../../services/controlPlane/daemon");
+      // A valid, unused name: the server refuses one already in use, and
+      // "<App> workspace" (a space, capitals) was never a valid name at all.
       const createdID = await createDaemon({
-        name: clientName ? `${clientName} workspace` : "connector workspace",
+        name: uniqueMachineName(`${clientName || "connector"}-workspace`, daemons.map((d) => d.name)),
         daemonType: DAEMON_TYPE_MANAGED_ENUM,
-        size: DAEMON_SIZE_SMALL_ENUM,
+        size: DAEMON_SIZE_M_ENUM,
       });
 
       // CreateDaemon returns before the machine has registered with reliant,
@@ -267,7 +271,7 @@ export function ConnectorConsent({
 
         let current: DaemonInfo[] = [];
         try {
-          current = await fetchDaemons();
+          current = await fetchDaemonList(queryClient);
         } catch {
           // A transient list failure during provisioning is not fatal; the
           // next tick retries until the deadline.
@@ -345,36 +349,11 @@ export function ConnectorConsent({
    */
   const handleConnectGitHub = async () => {
     setError(null);
-    try {
-      const [{ gitService }, { supabase }] = await Promise.all([
-        import("../../services/controlPlane/git"),
-        import("../../lib/supabase"),
-      ]);
-
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        setError("GitHub connections are not available in this deployment.");
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError("You need to be signed in to connect GitHub.");
-        return;
-      }
-
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start the GitHub connection."
-      );
+    const outcome = await connectGitHub();
+    if (outcome.kind === "error") {
+      setError(outcome.message);
+    } else if (outcome.kind === "connected") {
+      setGithubConnected(true);
     }
   };
 
@@ -471,7 +450,9 @@ export function ConnectorConsent({
               }),
             });
 
-      await grpcClient.connector().authorizeClient(req);
+      // A generated write: it refetches every ConnectorService read, so the
+      // Machines page shows a grant created here.
+      await authorizeClient.mutateAsync(req);
       // The grant and binding now exist. Inside the OAuth flow the caller
       // takes over from here (approve, then redirect), so the "connected"
       // screen below would be a dead end shown over a live flow — leave the
@@ -508,8 +489,8 @@ export function ConnectorConsent({
   if (authorized) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center space-y-4">
-        <div className="mx-auto w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center">
-          <Check className="w-6 h-6 text-green-700 dark:text-green-400" />
+        <div className="mx-auto w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
+          <Check className="w-6 h-6 text-success-ink" />
         </div>
         <h2 className="text-lg font-semibold">{displayName} is connected</h2>
         <p className="text-sm text-muted-foreground">
@@ -536,8 +517,8 @@ export function ConnectorConsent({
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive-ink">{error}</p>
         </div>
       )}
 
@@ -606,6 +587,7 @@ export function ConnectorConsent({
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="forge-ui"
             />
           </div>
 
@@ -694,7 +676,7 @@ export function ConnectorConsent({
                   </div>
                 ) : clonedRepo ? (
                   <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+                    <Check className="w-4 h-4 shrink-0 text-success-ink" />
                     <p className="text-xs text-muted-foreground min-w-0 truncate">
                       Cloned{" "}
                       <span className="font-mono">{clonedRepo}</span> onto this
@@ -745,9 +727,9 @@ export function ConnectorConsent({
               </div>
             )}
             {selectedIsPersonal && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   This is your own computer, not a disposable sandbox. Anything
                   you allow here runs against your real files — prefer a narrow
                   directory and no shell access.
@@ -761,7 +743,7 @@ export function ConnectorConsent({
             <Input
               value={form.pathRoot}
               onChange={(e) => setForm({ ...form, pathRoot: e.target.value })}
-              className="font-mono text-sm"
+              className="forge-ui font-mono text-sm"
               placeholder="/Users/you/code/project"
             />
             {(suggestedRoots.length > 0 || form.daemonId) && (
@@ -790,9 +772,9 @@ export function ConnectorConsent({
               </div>
             )}
             {form.pathRoot.trim() === "/" && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   {displayName} will be able to read every file this machine's
                   daemon can reach, including SSH keys, browser profiles, and
                   credentials outside any project.
@@ -863,21 +845,21 @@ export function ConnectorConsent({
                   setForm({ ...form, execAllowlist: e.target.value })
                 }
                 placeholder="git, go, npm"
-                className="font-mono text-sm"
+                className="forge-ui font-mono text-sm"
               />
             )}
 
             {execModeRequired && (
-              <p className="text-xs text-yellow-700 dark:text-yellow-400">
+              <p className="text-xs text-warning-ink">
                 You selected a tool that runs commands, so shell access cannot
                 be “No commands”.
               </p>
             )}
 
             {form.execMode === ConnectorExecMode.UNRESTRICTED && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   {displayName} could run any command in this workspace. Only
                   choose this for a workspace you are willing to have modified
                   or destroyed.

@@ -8,19 +8,18 @@
  *   - your own workflow: the trigger is DECLARED in its `triggers:` (the
  *     WHEN, saved in the YAML) and its card's panel opens;
  *   - a built-in (read-only): the definition can't gain a declaration, so
- *     the pick becomes your PERSONAL trigger — a trigger row with that source
- *     inline — through the activate dialog's personal mode.
+ *     the pick opens the automation dialog with that WHEN — an automation
+ *     with its own trigger, which works on a built-in without changing it.
  *
  * Both paths start from the same declaration shape, so the user never
  * chooses between "declare" and "automation"; the model difference stays
  * out of the UI.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { catalogSearchGrpc, type CatalogEntry, type CatalogEntrySummary } from "../../../api/catalog-search-grpc";
-import { connectionKeys } from "../../../hooks/connection-queries";
+import { cachedCatalogEntry, fetchCatalogEntry, type CatalogEntry, type CatalogEntrySummary } from "../../../hooks/catalog-queries";
 import { triggerFromBuiltin, triggerFromCatalog, type DeclaredTrigger } from "../../../lib/declaredTriggers";
 
 export interface PersonalTriggerDraft {
@@ -38,19 +37,20 @@ export interface UseAddTriggerOptions {
   declare: (trigger: DeclaredTrigger, catalogRef?: string) => void;
   /** Close the palette the pick came from. */
   closePalette: () => void;
+  /** A pick on a workflow whose definition can't change: start an automation with it as its WHEN. */
+  startAutomation: (draft: PersonalTriggerDraft) => void;
 }
 
-export function useAddTrigger({ canEditDefinition, declared, declare, closePalette }: UseAddTriggerOptions) {
+export function useAddTrigger({ canEditDefinition, declared, declare, closePalette, startAutomation }: UseAddTriggerOptions) {
   const queryClient = useQueryClient();
-  const [personal, setPersonal] = useState<PersonalTriggerDraft | null>(null);
 
   const add = useCallback(
     (trigger: DeclaredTrigger, catalogRef?: string) => {
       closePalette();
       if (canEditDefinition) declare(trigger, catalogRef);
-      else setPersonal({ trigger, catalogRef });
+      else startAutomation({ trigger, catalogRef });
     },
-    [canEditDefinition, declare, closePalette],
+    [canEditDefinition, declare, closePalette, startAutomation],
   );
 
   const chooseBuiltin = useCallback(
@@ -61,14 +61,10 @@ export function useAddTrigger({ canEditDefinition, declared, declare, closePalet
   /** A catalog trigger type: its events are the type's event list (the payload schema's `event` enum). */
   const chooseCatalog = useCallback(
     async (entry: CatalogEntrySummary) => {
-      let full = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      let full: CatalogEntry | undefined = cachedCatalogEntry(queryClient, entry.ref);
       if (!full) {
         try {
-          full = await queryClient.fetchQuery({
-            queryKey: connectionKeys.catalogEntry(entry.ref),
-            queryFn: () => catalogSearchGrpc.get(entry.ref),
-            staleTime: 5 * 60_000,
-          });
+          full = await fetchCatalogEntry(queryClient, entry.ref);
         } catch {
           full = undefined;
         }
@@ -79,5 +75,5 @@ export function useAddTrigger({ canEditDefinition, declared, declare, closePalet
     [add, declared, queryClient],
   );
 
-  return { chooseBuiltin, chooseCatalog, personal, closePersonal: useCallback(() => setPersonal(null), []) };
+  return { chooseBuiltin, chooseCatalog };
 }

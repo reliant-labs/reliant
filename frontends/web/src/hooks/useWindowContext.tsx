@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
+import { useWorktreeStore } from '../store/worktreeStore';
 import { useProjectStore } from '../store/projectStore';
+import { resolveWorktree, type Worktree } from './worktree-queries';
+import { fetchProjects, useProjects } from "./project-queries";
 
 interface WindowContext {
   worktreeId: string | null;
@@ -23,10 +25,8 @@ export function useWindowContext() {
   const [windowContext, setWindowContext] = useState<WindowContext | null>(null);
   const [isElectron, setIsElectron] = useState(false);
   const selectWorktree = useWorktreeStore((state) => state.selectWorktree);
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
 
   useEffect(() => {
     // Check if running in Electron
@@ -47,14 +47,23 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
         if (cancelled) return;
 
-        // Set the project in store based on window context
+        // Set the project in store based on window context. A window is a
+        // view of every project (the sidebar's filter, not the window, picks
+        // which); its saved project is only the context it reopens on. A new
+        // window has none and opens on the last project used, like a cold
+        // start — never on a picker.
+        const contextProject = context.projectId
+          ? currentProjects.find(p => p.id === context.projectId)
+          : undefined;
+        if (!contextProject) {
+          await useProjectStore.getState().restoreLastProject();
+          return;
+        }
         if (context.projectId) {
-          // Get fresh projects from store
-          const currentProjects = useProjectStore.getState().projects;
-          const project = currentProjects.find(p => p.id === context.projectId);
+          const project = contextProject;
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
             await selectProject(project, { skipClear: true });
@@ -83,11 +92,10 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
 
         // Update stores
         if (data.projectId) {
-          const currentProjects = useProjectStore.getState().projects;
           const project = currentProjects.find(p => p.id === data.projectId);
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
@@ -115,11 +123,10 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
 
         // Update stores
         if (data.projectId) {
-          const currentProjects = useProjectStore.getState().projects;
           const project = currentProjects.find(p => p.id === data.projectId);
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
@@ -143,7 +150,7 @@ export function useWindowContext() {
         unsubSetContext();
       };
     }
-  }, [selectWorktree, selectProject, resolveWorktree, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
+  }, [selectWorktree, selectProject]); // Note: intentionally not including worktrees/projects to avoid infinite loops
 
   const openInNewWindow = useCallback(async (worktreeData: Partial<Worktree>) => {
     if (!window.electronAPI) {

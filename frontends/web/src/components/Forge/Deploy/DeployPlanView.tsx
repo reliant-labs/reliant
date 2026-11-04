@@ -46,7 +46,7 @@
 import { AlertTriangle, Boxes, Layers, Package, ShieldCheck, Target } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   blockingFindings,
   guardVerdictOf,
@@ -122,11 +122,11 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
       className={cn(
         "space-y-2 rounded-lg px-4 py-3",
         verdict === "refuse"
-          ? "border border-solid border-destructive/50 bg-destructive/10"
-          : "border border-solid border-warning/50 bg-warning/10"
+          ? "border border-solid border-danger-border bg-danger-surface"
+          : "border border-solid border-warning-border bg-warning-surface"
       )}
     >
-      <div className="flex items-center gap-2 text-foreground">
+      <div className="flex items-center gap-2 text-ink">
         <Target className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="deploy-target-heading">
           {/* The ENVIRONMENT and the write, never a context — the contexts are
@@ -144,7 +144,7 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
         // A real shape — host-only, compose, frontend-only — and also the shape
         // from which no deploy can be authorised, since the confirmation token
         // has no spelling for "no cluster".
-        <p data-testid="deploy-target-none" className="text-xs text-muted-foreground">
+        <p data-testid="deploy-target-none" className="text-xs text-ink-muted">
           No <span className="font-mono">forge.K8sCluster.cluster</span> is declared for this
           environment, so there is no cluster for a deploy to be authorised against.
         </p>
@@ -156,9 +156,9 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
               data-testid={`deploy-target-context-${context}`}
               className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
             >
-              <span className="font-mono text-sm font-medium text-foreground">{context}</span>
+              <span className="font-mono text-sm font-medium text-ink">{context}</span>
               {namespace && (
-                <span className="font-mono text-xs text-muted-foreground">
+                <span className="font-mono text-xs text-ink-muted">
                   namespace {namespace}
                 </span>
               )}
@@ -168,7 +168,7 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
       )}
 
       {multi && (
-        <p data-testid="deploy-multi-cluster-note" className="text-2xs text-muted-foreground">
+        <p data-testid="deploy-multi-cluster-note" className="text-2xs text-ink-muted">
           This environment declares more than one cluster. Every context listed above will be
           written to.
         </p>
@@ -179,8 +179,8 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
           and omitting it invites them to go and check kubectl themselves — where
           they would find a context that has nothing to do with this deploy. */}
       {currentContext && (
-        <Tooltip content="Your kubectl current-context. Forge NEVER reads it and never falls back to it: a deploy goes to the context this environment declares. It is shown only so you can see the difference.">
-          <p data-testid="deploy-current-context" className="text-2xs text-muted-foreground">
+        <Tooltip content="Your kubectl current-context. Forge NEVER reads it and never falls back to it: a deploy goes to the context this environment declares. It is shown only so you can see the difference." triggerClassName="block">
+          <p data-testid="deploy-current-context" className="text-2xs text-ink-muted">
             Not the target: your kubectl current-context is{" "}
             <span className="font-mono">{currentContext}</span>.
           </p>
@@ -191,21 +191,21 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
       {verdict === "refuse" && (
         <div
           data-testid="deploy-guard-refused"
-          className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
+          className="space-y-1 rounded-md border border-solid border-danger-border bg-danger-surface px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive-ink">
+          <p className="text-xs font-medium text-danger-ink">
             Forge will not deploy this environment.
           </p>
           {plan.guard?.reason && (
-            <p className="text-2xs text-muted-foreground">Reason: {plan.guard.reason}</p>
+            <p className="text-2xs text-ink-muted">Reason: {plan.guard.reason}</p>
           )}
           {plan.guard?.fix && (
-            <p className="text-2xs text-foreground" data-testid="deploy-guard-fix">
+            <p className="text-2xs text-ink" data-testid="deploy-guard-fix">
               {plan.guard.fix}
             </p>
           )}
           {(plan.guard?.available_contexts?.length ?? 0) > 0 && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-2xs text-ink-muted">
               Your kubeconfig has: {plan.guard?.available_contexts?.join(", ")}
             </p>
           )}
@@ -215,7 +215,7 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
       {/* What ships: the release whose digests are pinned, or a statement that
           there is no binding — which is the case the token's expect_unbound half
           exists for. */}
-      <p className="text-2xs text-muted-foreground" data-testid="deploy-release">
+      <p className="text-2xs text-ink-muted" data-testid="deploy-release">
         {plan.release
           ? `Shipping release ${plan.release}'s pinned digests.`
           : "This environment has no release binding, so it deploys by resolved tag."}
@@ -274,11 +274,11 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
       className={cn(
         "space-y-2 rounded-lg px-4 py-3",
         verdict === "refuse"
-          ? "border border-solid border-destructive/50 bg-destructive/10"
-          : "border border-solid border-warning/50 bg-warning/10"
+          ? "border border-solid border-danger-border bg-danger-surface"
+          : "border border-solid border-warning-border bg-warning-surface"
       )}
     >
-      <div className="flex items-center gap-2 text-foreground">
+      <div className="flex items-center gap-2 text-ink">
         <Target className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="deploy-target-heading">
           {heading}
@@ -291,16 +291,16 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
       {verdict === "refuse" && (
         <div
           data-testid="deploy-guard-refused"
-          className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
+          className="space-y-1 rounded-md border border-solid border-danger-border bg-danger-surface px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive-ink">
+          <p className="text-xs font-medium text-danger-ink">
             This environment can&apos;t be deployed right now.
           </p>
           {plan.guard?.reason && (
-            <p className="text-2xs text-muted-foreground">{plan.guard.reason}</p>
+            <p className="text-2xs text-ink-muted">{plan.guard.reason}</p>
           )}
           {plan.guard?.fix && (
-            <p className="text-2xs text-foreground" data-testid="deploy-guard-fix">
+            <p className="text-2xs text-ink" data-testid="deploy-guard-fix">
               {plan.guard.fix}
             </p>
           )}
@@ -308,7 +308,7 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
       )}
 
       {!release && (
-        <p className="text-2xs text-muted-foreground" data-testid="deploy-release">
+        <p className="text-2xs text-ink-muted" data-testid="deploy-release">
           There&apos;s no release to deploy yet. Choose a release for {environmentName} first.
         </p>
       )}
@@ -343,7 +343,7 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
       data-blocking-count={blocking.length}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
           Preflight
         </h3>
@@ -351,13 +351,13 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
           data-testid="deploy-preflight-status"
           className={cn(
             "inline-flex items-center gap-1 text-2xs",
-            preflightRan(status) ? "text-muted-foreground" : "font-medium text-foreground"
+            preflightRan(status) ? "text-ink-muted" : "font-medium text-ink"
           )}
         >
           {/* Not-ran keeps its warning hue on the ICON; amber text on the card
               measured 2.1:1 in light. */}
           {!preflightRan(status) && (
-            <AlertTriangle className="h-3 w-3 shrink-0 text-warning" aria-hidden="true" />
+            <AlertTriangle className="h-3 w-3 shrink-0 text-warning-ink" aria-hidden="true" />
           )}
           {PREFLIGHT_STATUS_LABELS[status]}
         </span>
@@ -368,13 +368,13 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
         // the apply fails.
         <div
           data-testid="deploy-preflight-blocking"
-          className="space-y-2 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
+          className="space-y-2 rounded-md border border-solid border-danger-border bg-danger-surface px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive-ink">
+          <p className="text-xs font-medium text-danger-ink">
             {blocking.length} blocking finding{blocking.length === 1 ? "" : "s"} — this deploy would
             fail.
           </p>
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-2xs text-ink-muted">
             Forge checked the live target and something this deploy references is not there. These
             are not advisory: fix them and re-plan.
           </p>
@@ -395,7 +395,7 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
       )}
 
       {findings.length === 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           {preflightRan(status)
             ? "Forge checked the live target and found nothing wrong."
             : // "No findings" would be a claim about the cluster nobody made.
@@ -421,7 +421,7 @@ function FindingRow({ finding, blocking }: { finding: ForgeDeployFinding; blocki
       data-blocking={blocking ? "true" : "false"}
       className={cn(
         "space-y-0.5 rounded px-2 py-1 text-2xs",
-        blocking ? "bg-destructive/10 text-destructive-ink" : "text-muted-foreground"
+        blocking ? "bg-danger-surface text-danger-ink" : "text-ink-muted"
       )}
     >
       <span className="font-mono">{finding.check || "check"}</span>
@@ -429,7 +429,7 @@ function FindingRow({ finding, blocking }: { finding: ForgeDeployFinding; blocki
       {(finding.keys?.length ?? 0) > 0 && (
         <span className="pl-1.5 font-mono">keys: {finding.keys?.join(", ")}</span>
       )}
-      {finding.detail && <p className="text-muted-foreground">{finding.detail}</p>}
+      {finding.detail && <p className="text-ink-muted">{finding.detail}</p>}
     </li>
   );
 }
@@ -461,21 +461,21 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
       data-tag-count={tagCount}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
           <Package className="h-3.5 w-3.5" aria-hidden="true" />
           Images
         </h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             data-testid="deploy-digest-count"
-            className="inline-flex items-center gap-1 rounded-full border border-solid border-success/40 bg-success/15 px-2 py-0.5 text-2xs text-success-ink"
+            className="inline-flex items-center gap-1 rounded-full border border-solid border-success-border bg-success-surface px-2 py-0.5 text-2xs text-success-ink"
           >
             {digestCount} digest-pinned
           </span>
           {tagCount > 0 && (
             <span
               data-testid="deploy-tag-count"
-              className="inline-flex items-center gap-1 rounded-full border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-2xs text-warning-ink"
+              className="inline-flex items-center gap-1 rounded-full border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-2xs text-warning-ink"
             >
               <TAG_PINNING_ICON className="h-3 w-3" aria-hidden="true" />
               {tagCount} by mutable tag
@@ -493,7 +493,7 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
       )}
 
       {images.length === 0 ? (
-        <p className="text-xs text-muted-foreground">This plan renders no container images.</p>
+        <p className="text-xs text-ink-muted">This plan renders no container images.</p>
       ) : (
         <ul className="space-y-1">
           {images.map((image) => {
@@ -513,7 +513,7 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
                 >
                   {pinning === "digest" ? "digest" : pinning === "tag" ? "tag" : "unknown"}
                 </span>
-                <span className="truncate font-mono text-2xs text-foreground">
+                <span className="truncate font-mono text-2xs text-ink">
                   {image.reference}
                 </span>
               </li>
@@ -540,7 +540,7 @@ export function ResourcesPanel({ plan }: { plan: ForgeDeployReport }) {
       className="space-y-2 rounded-lg border border-border px-4 py-3"
       data-testid="deploy-resources"
     >
-      <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
         <Layers className="h-3.5 w-3.5" aria-hidden="true" />
         {resources.length} resource{resources.length === 1 ? "" : "s"}
       </h3>
@@ -549,7 +549,7 @@ export function ResourcesPanel({ plan }: { plan: ForgeDeployReport }) {
           {resources.map((resource) => (
             <li
               key={`${resource.kind}/${resource.name}`}
-              className="truncate font-mono text-2xs text-muted-foreground"
+              className="truncate font-mono text-2xs text-ink-muted"
             >
               {resource.kind}/{resource.name}
             </li>
@@ -557,7 +557,7 @@ export function ResourcesPanel({ plan }: { plan: ForgeDeployReport }) {
         </ul>
       )}
       {(plan.targets?.length ?? 0) > 0 && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-2xs text-ink-muted">
           Narrowed to: {plan.targets?.join(", ")}
         </p>
       )}
@@ -584,20 +584,20 @@ export function RolloutPanel({ plan }: { plan: ForgeDeployReport }) {
       data-rollout-mode={mode}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
           <Boxes className="h-3.5 w-3.5" aria-hidden="true" />
           Rollout
         </h3>
         {typeof timeout === "number" && timeout > 0 && (
           <Tooltip content="The readiness budget PER RESOURCE, not for the whole set.">
-            <span className="text-2xs text-muted-foreground">{timeout}s per resource</span>
+            <span className="text-2xs text-ink-muted">{timeout}s per resource</span>
           </Tooltip>
         )}
       </div>
 
       <p
         data-testid="deploy-rollout-mode"
-        className={cn("text-2xs", mode === "skip" ? "text-warning-ink" : "text-muted-foreground")}
+        className={cn("text-2xs", mode === "skip" ? "text-warning-ink" : "text-ink-muted")}
       >
         {ROLLOUT_MODE_LABELS[mode]}
       </p>

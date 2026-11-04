@@ -108,11 +108,14 @@ func (r *fakeWorkflowRun) GetRunID() string { return r.runID }
 // the run ids back onto the chat.
 type recordingRunRecorder struct {
 	repo  ChatWriter
+	mu    sync.Mutex // concurrent launches record through one recorder
 	calls []string
 }
 
 func (r *recordingRunRecorder) RecordRun(ctx context.Context, chatID, workflowID, runID string) {
+	r.mu.Lock()
 	r.calls = append(r.calls, chatID+"/"+workflowID+"/"+runID)
+	r.mu.Unlock()
 	chat, err := r.repo.GetChat(ctx, chatID)
 	if err != nil {
 		return
@@ -238,6 +241,8 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, launchTestUserID, persisted.UserID)
 	assert.Equal(t, "builtin://agent", *persisted.WorkflowName)
+	assert.Equal(t, core.ChatOriginUser, persisted.Origin, "a person's first send is a conversation")
+	assert.True(t, persisted.ListInSidebar)
 
 	// Its root run is ACTIVE: Launch closes the pending window itself once
 	// Temporal has accepted the start.

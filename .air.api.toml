@@ -1,14 +1,14 @@
 # Air config for the reliant api server under `forge up --env=dev` (the
 # control-plane repo's dev KCL declares reliant-api-server as a host service
 # with runner="air" pointing here). Modeled on control-plane's
-# .air.admin-server.toml rather than the legacy .air.toml:
+# .air.admin-server.toml:
 #   - per-service tmp dir so api / worker / electron's dist build never
 #     trample each other's binary
 #   - stop_on_error=false + atomic build (go build -o .tmp && mv): a FAILED
 #     build never touches the running process — Air only swaps on success,
 #     so mid-edit broken trees don't take the api server down
 #   - no buf-generate pre_cmd: codegen on every save is slow and surprising;
-#     run `make proto-generate` explicitly when protos change
+#     run `task generate:forge` explicitly when protos change
 # Env (PORT, DATABASE_URL, …) comes from forge's host phase, not from here.
 root = "."
 testdata_dir = "testdata"

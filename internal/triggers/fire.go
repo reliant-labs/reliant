@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // chatIDNamespace seeds the deterministic chat id a scheduled fire launches
@@ -34,6 +35,16 @@ type Firer struct {
 	launcher  Launcher
 	workflows WorkflowResolver
 	now       func() time.Time
+	capacity  capacityDescriptions
+	wake      *capacityWake
+	pools     Placer
+}
+
+// WithCapacityWake lets a capped launch fire the next waiting event of its
+// scope at once (capacityWake), instead of leaving it to the redriver.
+func (f *Firer) WithCapacityWake(starter WorkflowStarter, taskQueue string) *Firer {
+	f.wake = &capacityWake{starter: starter, taskQueue: taskQueue}
+	return f
 }
 
 // NewFirer builds the fire activity's receiver.
@@ -41,10 +52,22 @@ func NewFirer(repo Repo, launcher Launcher) *Firer {
 	return &Firer{repo: repo, launcher: launcher, now: time.Now}
 }
 
+// WithPlacer lets the firer place a pool-bound trigger's runs.
+func (f *Firer) WithPlacer(p Placer) *Firer {
+	f.pools = p
+	return f
+}
+
 // WithWorkflows lets the firer read an activation's declaration. Without it,
 // an activation's fire is recorded as failed rather than guessed at.
 func (f *Firer) WithWorkflows(workflows WorkflowResolver) *Firer {
 	f.workflows = workflows
+	return f
+}
+
+// WithCapacityDescriptions supplies authoritative Temporal run state for an opt-in cap.
+func (f *Firer) WithCapacityDescriptions(reader capacityDescriptions) *Firer {
+	f.capacity = reader
 	return f
 }
 
@@ -69,7 +92,10 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	existing, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
 	switch {
 	case err == nil:
-		if existing.Outcome != core.TriggerEventLaunched {
+		// A pending row is a fire still waiting: for workflow capacity (it has
+		// a capacity order) or for a member of its machine pool (recorded by
+		// recordPoolWait). Both continue; anything settled is the answer.
+		if existing.Outcome != core.TriggerEventLaunched && existing.Outcome != core.TriggerEventPending {
 			return outputFromEvent(existing), nil
 		}
 	case errors.Is(err, core.ErrTriggerEventNotFound):
@@ -77,7 +103,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	default:
 		return nil, fmt.Errorf("load event for fire %s: %w", req.FireWorkflowID, err)
 	}
-	resuming := existing != nil
+	resuming := existing != nil && existing.Outcome == core.TriggerEventLaunched
 
 	trigger, err := f.repo.GetTrigger(ctx, req.TriggerID)
 	if err != nil {
@@ -91,15 +117,45 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, fmt.Errorf("load trigger %s: %w", req.TriggerID, err)
 	}
 
+	// A pool-bound trigger reads everything below from its pool's agreed
+	// catalog, the one its run is placed on.
+	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.failPermanently(ctx, fireRecord{trigger: trigger, req: req}, err.Error(), err)
+		}
+		return nil, err
+	}
+	if wait != "" {
+		return f.recordPoolWait(ctx, trigger, f.buildEvent(trigger, req), wait)
+	}
+	trigger = bound
+
+	// Which definition this fire resolves is recorded on its event row,
+	// whatever the outcome. A definition that is broken — the newest version
+	// of the file does not parse or validate — refuses the fire: it is never
+	// skipped quietly, and never run from an older version.
+	def, err := firingDefinition(ctx, f.workflows, trigger, existing, resuming)
+	if err != nil {
+		return nil, err
+	}
+	rec := fireRecord{trigger: trigger, req: req, def: def}
+	if def.Broken() && !resuming {
+		return f.failPermanently(ctx, rec, RefusalDetail(def), errors.New(def.Error))
+	}
+
 	// An activation fires from its workflow's declaration as it is NOW: the
 	// row's config is only the projection the schedule was converged from.
 	// A declaration that is gone or changed kind is recorded and stops here;
 	// one whose cron or timezone was edited fires this slot under the new
 	// rules (the reconciler re-converges the Temporal schedule itself).
-	decl, err := activationFor(ctx, f.workflows, trigger)
+	// Everything after reads the catalog snapshot the definition was
+	// described in, and the run launches on it: what it recorded is what runs.
+	workflows := PinnedTo(f.workflows, def)
+	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.failPermanently(ctx, trigger, req, err.Error(), err)
+			return f.failPermanently(ctx, rec, err.Error(), err)
 		}
 		return nil, err
 	}
@@ -107,11 +163,12 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		projected := *trigger
 		projected.Config = decl.Source.Config
 		trigger = &projected
+		rec.trigger = trigger
 	}
 	// An activation missing a setting its workflow requires would launch a
 	// run that fails input validation at its first step. Record why instead.
 	if issues := SetupIssues(decl, trigger); len(issues) > 0 && !resuming {
-		return f.recordSkip(ctx, trigger, req, SetupDetail(issues))
+		return f.recordSkip(ctx, rec, SetupDetail(issues))
 	}
 
 	// A stored config that no longer parses cannot tell us its overlap policy
@@ -119,7 +176,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// owner can see why the trigger stopped producing runs.
 	sched, err := ScheduleFor(trigger)
 	if err != nil {
-		return f.failPermanently(ctx, trigger, req, "trigger config is invalid: "+err.Error(), err)
+		return f.failPermanently(ctx, rec, "trigger config is invalid: "+err.Error(), err)
 	}
 
 	// A manual fire is a human pressing "run now", so it overrides both the
@@ -127,20 +184,20 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// not for an explicit request. A resumed fire already passed both.
 	enforcePolicy := !req.Manual && !resuming
 	if enforcePolicy && !trigger.Enabled {
-		return f.recordSkip(ctx, trigger, req, "trigger is disabled")
+		return f.recordSkip(ctx, rec, "trigger is disabled")
 	}
 
 	// Never fall back to another daemon: the trigger named this one, and the
 	// credential its runs hold is bound to it. Record why and stop. A
 	// no-machine trigger names none, by design (research/DAEMONLESS_RUNS.md).
-	if trigger.NoMachine {
-		// nothing to look up
+	if trigger.NoMachine || trigger.MachinePoolID != "" {
+		// nothing to look up: a pool-bound trigger is placed at launch
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
-		if _, err := f.recordOutcome(ctx, trigger, req, core.TriggerEventFailed, detail); err != nil {
+		if _, err := f.recordOutcome(ctx, rec, core.TriggerEventFailed, detail); err != nil {
 			return nil, err
 		}
 		return nil, nonRetryable(detail, err)
@@ -148,17 +205,58 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 
 	spec, err := f.buildSpec(ctx, trigger, sched, req, decl)
 	if err != nil {
-		return f.failPermanently(ctx, trigger, req, err.Error(), err)
+		return f.failPermanently(ctx, rec, err.Error(), err)
 	}
-	if enforcePolicy && sched.SkipOnOverlap() {
+	if def != nil {
+		spec.CatalogPin = def.CatalogPin
+	}
+	policy, err := capacityPolicy(ctx, workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && !capped {
+		return f.recordSkip(ctx, rec, "queued workflow capacity policy was removed")
+	}
+	if !capped && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
 		// trigger, so fires released together after an outage cannot all
 		// pass the check before any of them has launched.
 		spec.Guard = f.overlapGuard(trigger.ID)
 	}
 	ev := f.buildEvent(trigger, req)
+	ev.Definition = def
+	if capped {
+		row := &core.TriggerEvent{ID: uuid.NewString(), UserID: trigger.UserID, TriggerID: &trigger.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey, OccurredAt: ev.OccurredAt, CreatedAt: f.now(), Payload: ev.Payload, Outcome: core.TriggerEventPending, Definition: def}
+		if existing != nil {
+			row = existing
+		}
+		row.CapacityKey = capacityKey(ctx, policy, row, func() triggerspec.Scope {
+			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{
+				Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
+				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
+			}.Root())
+		})
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
+			if capacitySettled(err) {
+				return f.recordSkip(ctx, rec, err.Error())
+			}
+			return nil, err
+		}
+	}
 
-	res, launchErr := f.launcher.Launch(ctx, ev, spec)
+	if existing != nil && existing.CapacityOrder != nil && existing.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
+		if repo, ok := f.repo.(capacityRepository); ok {
+			spec.RecordExecution = repo.BindTriggerCapacityExecution
+			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+		} else {
+			return nil, errors.New("admitted retry storage unavailable")
+		}
+	}
+	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, ev, spec, resuming, catalog)
 	switch {
 	case errors.Is(launchErr, launch.ErrDeclined):
 		var declined *launch.DeclinedError
@@ -166,12 +264,21 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
 		}
-		return f.recordSkip(ctx, trigger, req, reason)
+		if reason == capacityWaiting {
+			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason}, nil
+		}
+		if isPoolWaiting(reason) {
+			return f.recordPoolWait(ctx, trigger, ev, reason)
+		}
+		return f.recordSkip(ctx, rec, reason)
 
 	case launchErr == nil:
 		// Launch recorded the launched event itself, inside the same
 		// transaction as the chat. Writing one here too would either conflict
 		// on (kind, dedupe_key) or, worse, succeed and double-count.
+		if capped {
+			f.wake.wakeNext(ctx, f.repo, trigger, res.EventID)
+		}
 		return &FireOutput{
 			Outcome: string(core.TriggerEventLaunched),
 			ChatID:  res.Chat.ID,
@@ -197,7 +304,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// can see WHY their trigger stopped producing runs, then stop:
 		// retrying would re-reach the same conclusion every backoff interval
 		// until the workflow timed out.
-		if _, err := f.recordOutcome(ctx, trigger, req, core.TriggerEventFailed, launchErr.Error()); err != nil {
+		if _, err := f.recordOutcome(ctx, rec, core.TriggerEventFailed, launchErr.Error()); err != nil {
 			return nil, err
 		}
 		return nil, nonRetryable("trigger cannot launch: "+launchErr.Error(), launchErr)
@@ -223,10 +330,16 @@ func (f *Firer) overlapGuard(triggerID string) func(ctx context.Context) (string
 
 // previousRunBlocks reports whether this trigger's previous run is still going.
 //
-// "Still going" is the root run being active or paused. PENDING does not
-// count: a pending root has never started, which for a launched event means a
-// half-launched fire whose Temporal start failed — it is stranded, not
-// running, and treating it as live would wedge the trigger behind it forever.
+// "Still going" is the root run being active or paused, or PENDING with its
+// start in flight: a fire that has just committed is PENDING until its
+// Temporal start marks it ACTIVE, and the fire queued on the trigger lock
+// behind it reads it in exactly that window. Only a root whose start is
+// recorded as failed (Workflow.StartFailedAt — by the launcher's error branch,
+// or by the reconciler once the start has been missing from Temporal for its
+// bound) is stranded, and that one must not wedge the trigger: this fire
+// abandons it and launches. The abandon is conditional on the stamp, so a
+// retry of the stranded fire that has just claimed its start again wins, and
+// this fire skips instead of running beside it.
 func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string, error) {
 	launched := core.TriggerEventLaunched
 	prev, err := f.repo.GetLatestTriggerEvent(ctx, triggerID, &launched)
@@ -250,11 +363,46 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 		return "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
 	}
 	status, ok := statuses[*prev.ChatID]
-	if !ok || status.State == core.WorkflowStatePending {
+	if !ok {
 		return "", nil
+	}
+	if status.State == core.WorkflowStatePending {
+		return f.pendingRunBlocks(ctx, *prev.ChatID)
 	}
 	if status.Live() {
 		return fmt.Sprintf("previous run is %s (chat %s)", status.Label(), *prev.ChatID), nil
+	}
+	return "", nil
+}
+
+// pendingRunBlocks decides a previous fire whose root is still PENDING: in
+// flight blocks, a recorded failed start is abandoned and does not.
+func (f *Firer) pendingRunBlocks(ctx context.Context, chatID string) (string, error) {
+	starting := fmt.Sprintf("previous run is starting (chat %s)", chatID)
+	// A chat's effective status is PENDING only when its newest root is.
+	roots, err := f.repo.ListRootWorkflows(ctx, chatID)
+	if err != nil {
+		return "", fmt.Errorf("load root workflow of chat %s: %w", chatID, err)
+	}
+	if len(roots) == 0 {
+		return "", nil
+	}
+	root := roots[0]
+	if root.Status.State != core.WorkflowStatePending {
+		// Moved on between the two reads; it is no longer PENDING, so this
+		// fire treats it as the conservative case and skips.
+		return starting, nil
+	}
+	if root.StartFailedAt == nil {
+		return starting, nil
+	}
+	abandoned, err := f.repo.AbandonFailedWorkflowStart(ctx, root.ID)
+	if err != nil {
+		return "", fmt.Errorf("abandon the failed start of chat %s: %w", chatID, err)
+	}
+	if !abandoned {
+		// A retry of that fire claimed its start again after the read above.
+		return starting, nil
 	}
 	return "", nil
 }
@@ -367,8 +515,17 @@ func scheduleSender(trigger *core.Trigger) *core.TriggerSender {
 	return &core.TriggerSender{Kind: core.TriggerSenderKindSchedule, ID: trigger.UserID, Verified: true}
 }
 
-func (f *Firer) recordSkip(ctx context.Context, trigger *core.Trigger, req FireRequest, reason string) (*FireOutput, error) {
-	return f.recordOutcome(ctx, trigger, req, core.TriggerEventSkipped, reason)
+// fireRecord is what every event row of one fire is written from: the
+// trigger (projected onto its declaration), the fire, and the definition it
+// resolved.
+type fireRecord struct {
+	trigger *core.Trigger
+	req     FireRequest
+	def     *core.TriggerEventDefinition
+}
+
+func (f *Firer) recordSkip(ctx context.Context, rec fireRecord, reason string) (*FireOutput, error) {
+	return f.recordOutcome(ctx, rec, core.TriggerEventSkipped, reason)
 }
 
 // recordOutcome writes the event row for a fire that did NOT launch. Launched
@@ -376,11 +533,11 @@ func (f *Firer) recordSkip(ctx context.Context, trigger *core.Trigger, req FireR
 // outcomes it never sees.
 func (f *Firer) recordOutcome(
 	ctx context.Context,
-	trigger *core.Trigger,
-	req FireRequest,
+	rec fireRecord,
 	outcome core.TriggerEventOutcome,
 	detail string,
 ) (*FireOutput, error) {
+	trigger, req := rec.trigger, rec.req
 	ev := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,
@@ -392,6 +549,7 @@ func (f *Firer) recordOutcome(
 		Sender:        scheduleSender(trigger),
 		Outcome:       outcome,
 		OutcomeDetail: detail,
+		Definition:    rec.def,
 	}
 	created, err := f.repo.CreateTriggerEvent(ctx, ev)
 	if err != nil {
@@ -405,6 +563,21 @@ func (f *Firer) recordOutcome(
 		if err != nil {
 			return nil, fmt.Errorf("load existing event for fire %s: %w", req.FireWorkflowID, err)
 		}
+		if stored.Outcome == core.TriggerEventPending && stored.CapacityOrder != nil {
+			settler, ok := f.repo.(interface {
+				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
+			})
+			if !ok {
+				return nil, errors.New("capacity queue settlement unavailable")
+			}
+			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail, rec.def); err != nil {
+				return nil, err
+			}
+			stored, err = f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return outputFromEvent(stored), nil
 	}
 	return &FireOutput{Outcome: string(outcome), Reason: detail, EventID: ev.ID}, nil
@@ -412,8 +585,8 @@ func (f *Firer) recordOutcome(
 
 // failPermanently records a failed event and ends the fire without retries:
 // the trigger can never launch as written.
-func (f *Firer) failPermanently(ctx context.Context, trigger *core.Trigger, req FireRequest, detail string, cause error) (*FireOutput, error) {
-	if _, err := f.recordOutcome(ctx, trigger, req, core.TriggerEventFailed, detail); err != nil {
+func (f *Firer) failPermanently(ctx context.Context, rec fireRecord, detail string, cause error) (*FireOutput, error) {
+	if _, err := f.recordOutcome(ctx, rec, core.TriggerEventFailed, detail); err != nil {
 		return nil, err
 	}
 	return nil, nonRetryable(detail, cause)

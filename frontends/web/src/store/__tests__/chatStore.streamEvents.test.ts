@@ -10,7 +10,7 @@ import { useThreadActivityStore } from "../threadActivityStore";
 // dedup / snapshot / sort behavior here lets us extract each into a pure
 // reducer without changing what the UI sees.
 
-function seedChat(chatId: string) {
+function seedChat(_chatId: string) {
   useChatStore.setState({
     activeChatId: null,
     messages: {},
@@ -58,7 +58,7 @@ function runOutput(
     unique_activity_id: uniqueActivityId,
     sequence_number: seq,
     timestamp: "2026-01-01T00:00:00.000Z",
-    content,
+    output: content,
   } as unknown as ChatUpdate;
 }
 
@@ -66,9 +66,11 @@ function nodeExec(
   nodeId: string,
   eventType: string,
   seq: number,
+  workflowId = "wf-1",
 ): ChatUpdate {
   return {
     update_type: "node_execution",
+    workflow_id: workflowId,
     node_id: nodeId,
     event_type: eventType,
     status: 0,
@@ -172,7 +174,7 @@ describe("runOutputs reducer", () => {
 
     const outputs = useChatStore.getState().runOutputs[CHAT] || [];
     expect(outputs.map((r) => r.unique_activity_id)).toEqual(["b", "a"]);
-    expect(outputs.find((r) => r.unique_activity_id === "a")?.content).toBe(
+    expect(outputs.find((r) => r.unique_activity_id === "a")?.output).toBe(
       "second-updated",
     );
   });
@@ -185,12 +187,22 @@ describe("runOutputs reducer", () => {
     ]);
 
     const outputs = useChatStore.getState().runOutputs[CHAT] || [];
-    expect(outputs.map((r) => r.content)).toEqual(["first", "second"]);
+    expect(outputs.map((r) => r.output)).toEqual(["first", "second"]);
   });
 });
 
 describe("nodeExecutions reducer", () => {
-  it("dedups by node_id + event_type and sorts by sequence_number", () => {
+  it("keeps each run's events: two runs of a workflow share every node id", () => {
+    const store = useChatStore.getState();
+    store.processChatStreamUpdates(CHAT, [
+      nodeExec("call_llm", "completed", 1, "run-1"),
+      nodeExec("call_llm", "completed", 2, "run-2"),
+    ]);
+    const execs = useChatStore.getState().nodeExecutions[CHAT] || [];
+    expect(execs.map((n) => n.workflow_id)).toEqual(["run-1", "run-2"]);
+  });
+
+  it("dedups by run + node_id + event_type and sorts by sequence_number", () => {
     const store = useChatStore.getState();
     store.processChatStreamUpdates(CHAT, [
       nodeExec("n1", "started", 1),

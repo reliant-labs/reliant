@@ -56,6 +56,15 @@ func (t *terminalPumpTracker) stopAll() {
 func (d *daemonClient) handleTerminalInput(
 	msg *reliantv1.TerminalInputMessage,
 ) {
+	releaseRecovery, admissionErr := beginRecoveryWork()
+	if admissionErr != nil {
+		_ = d.send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
+			TerminalSessionEvent: &reliantv1.TerminalSessionEvent{SessionId: msg.GetSessionId(),
+				EventType: reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR, Message: admissionErr.Error()},
+		}})
+		return
+	}
+	defer releaseRecovery()
 	tm := terminalManager()
 	if tm == nil {
 		logging.Warn(logPrefix + " Terminal input received but terminal manager not initialized")

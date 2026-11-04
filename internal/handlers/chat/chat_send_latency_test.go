@@ -4,9 +4,11 @@ package chat
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -18,14 +20,34 @@ import (
 )
 
 // slowQueryTemporalClient is a run whose worker is too busy to answer a query:
-// QueryWorkflowWithOptions returns only when its context ends.
+// QueryWorkflowWithOptions returns only when its context ends. It records how
+// long each query was allowed to wait, so the test pins the bound itself
+// rather than the send's wall-clock time.
 type slowQueryTemporalClient struct {
 	wakeTestTemporalClient
+	mu      sync.Mutex
+	queries []queryBound
+}
+
+// queryBound is one query's context: whether it had a deadline, and how long
+// was left when the fake sampled it. Recorded apart, because a correct
+// deadline may already have passed by the time a descheduled goroutine gets
+// here on a loaded machine, so "left" can be negative and still be bounded.
+type queryBound struct {
+	hasDeadline bool
+	left        time.Duration
 }
 
 func (c *slowQueryTemporalClient) QueryWorkflowWithOptions(
 	ctx context.Context, _ *client.QueryWorkflowWithOptionsRequest,
 ) (*client.QueryWorkflowWithOptionsResponse, error) {
+	var bound queryBound
+	if deadline, ok := ctx.Deadline(); ok {
+		bound = queryBound{hasDeadline: true, left: time.Until(deadline)}
+	}
+	c.mu.Lock()
+	c.queries = append(c.queries, bound)
+	c.mu.Unlock()
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
@@ -43,7 +65,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
-	temporal := &slowQueryTemporalClient{wakeTestTemporalClient{
+	temporal := &slowQueryTemporalClient{wakeTestTemporalClient: wakeTestTemporalClient{
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	}}
 	service := &Service{
@@ -58,11 +80,20 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	start := time.Now()
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "next step"))
-	elapsed := time.Since(start)
 	require.NoError(t, err)
-	assert.Less(t, elapsed, 3*time.Second, "the send waited on the workflow's answer to an advisory query")
+	// The query is bounded by its own short timeout, not by the request's
+	// context. (A wall-clock bound on the whole send was flaky: on a loaded
+	// gate the send's DB round trips alone could pass it.)
+	temporal.mu.Lock()
+	queries := append([]queryBound(nil), temporal.queries...)
+	temporal.mu.Unlock()
+	require.NotEmpty(t, queries, "the send asks the run whether its params changed")
+	for _, q := range queries {
+		require.True(t, q.hasDeadline, "the advisory query has no deadline of its own")
+		// An already-expired deadline (negative) is still bounded.
+		assert.LessOrEqual(t, q.left, paramsChangeQueryTimeout, "the send waited on the workflow's answer to an advisory query")
+	}
 	assert.True(t, resp.Msg.Queued, "the message is queued for the running thread's next turn")
 
 	var names []string
@@ -90,6 +121,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 // SendMessage p50 was 1.7s, StartChat 2.3s. A spy used to count that read;
 // now Repository simply does not declare it, so no send can make it.
 func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {

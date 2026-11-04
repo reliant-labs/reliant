@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	daemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
@@ -42,7 +44,7 @@ func TestResumeDaemon_CallsControlPlaneDaemonServiceAsTheCaller(t *testing.T) {
 	rec := &resumeRecorder{}
 	url := serveDaemonService(t, rec)
 
-	if err := New(Deps{BaseURL: url}).ResumeDaemon(context.Background(), " rlat_bound ", "daemon-1"); err != nil {
+	if err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: url}}).ResumeDaemon(context.Background(), " rlat_bound ", "daemon-1"); err != nil {
 		t.Fatalf("ResumeDaemon: %v", err)
 	}
 	if rec.gotAuth != "Bearer rlat_bound" {
@@ -59,7 +61,7 @@ func TestResumeDaemon_KeepsTheControlPlaneCode(t *testing.T) {
 	rec := &resumeRecorder{err: connect.NewError(connect.CodeFailedPrecondition, nil)}
 	url := serveDaemonService(t, rec)
 
-	err := New(Deps{BaseURL: url}).ResumeDaemon(context.Background(), "jwt", "daemon-1")
+	err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: url}}).ResumeDaemon(context.Background(), "jwt", "daemon-1")
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v (err %v), want FailedPrecondition", got, err)
 	}

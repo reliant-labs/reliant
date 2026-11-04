@@ -1,4 +1,4 @@
-import type { ProviderAccount, UsageWindow } from "../../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../../types/providerAccount";
 
 /** At or above this fraction a window reads amber. */
 export const USAGE_WARN_FRACTION = 0.8;
@@ -62,6 +62,51 @@ export function formatClock(iso: string | undefined, now: Date): string {
 export function limitedLabel(account: ProviderAccount, now: Date): string {
   const clock = formatClock(account.limitedUntil, now);
   return clock ? `Limited until ${clock}` : "Limited";
+}
+
+/**
+ * The whole limit in one sentence: which window benched the account and when
+ * it is back. "Limited: Weekly cap · back Tue 3:40 PM". The pill, the bar's
+ * caption and the bar's red tone used to carry one piece each.
+ */
+export function limitedSentence(account: ProviderAccount, now: Date): string {
+  const window = account.windows.find((w) => w.name === account.limitedWindow);
+  const clock = formatClock(account.limitedUntil, now);
+  const cap = window ? `: ${window.label || window.name} cap` : "";
+  return `Limited${cap}${clock ? ` · back ${clock}` : ""}`;
+}
+
+/** A short window name for a one-line meter: "5h", "Week", "Opus". */
+export function windowShortLabel(w: UsageWindow): string {
+  switch (w.name) {
+    case "5h":
+      return "5h";
+    case "7d":
+      return "Week";
+    case "7d_opus":
+      return "Opus";
+    case "7d_sonnet":
+      return "Sonnet";
+    default:
+      return w.label || w.name;
+  }
+}
+
+/** True when any window is at or past the warning fraction right now. */
+export function isNearLimit(account: ProviderAccount, now: Date): boolean {
+  return account.windows.some((w) => {
+    const used = effectiveWindow(w, account.usageObservedAt, now).used;
+    return used !== null && used >= USAGE_WARN_FRACTION;
+  });
+}
+
+/**
+ * Whether an account's row opens by itself. Healthy accounts are one line; an
+ * account that is limited, close to a limit, or waiting for sign-in shows its
+ * detail without being asked, because that is the account the user came for.
+ */
+export function needsAttention(account: ProviderAccount, now: Date): boolean {
+  return account.status === "limited" || account.status === "needs_sign_in" || isNearLimit(account, now);
 }
 
 export interface EffectiveWindow {

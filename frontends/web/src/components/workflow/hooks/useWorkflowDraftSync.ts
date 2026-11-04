@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef } from "react";
-import { getWorkflowByDraftId } from "../../../api/workflow-grpc";
+import { fetchWorkflow } from "../../../hooks/workflow-queries";
 import type { DraftStatus } from "../workflowDraftStatus";
 import type { Workflow } from "../../../types/workflow";
 import { subscribeToDraftUpdates, type WorkflowDraftUpdate } from "../../../store/workflowDraftUpdates";
@@ -73,7 +73,7 @@ export function useWorkflowDraftSync({
     try {
       do {
         refetchRequestedRef.current = false;
-        const fetched = await getWorkflowByDraftId(projectId, draftId);
+        const fetched = await fetchWorkflow(projectId, { draftId: draftId }, { fresh: true });
         if (!fetched.workflow) continue;
         if (fetched.version <= appliedVersionRef.current) continue;
         appliedVersionRef.current = fetched.version;
@@ -91,7 +91,7 @@ export function useWorkflowDraftSync({
 
   const reloadDiscardingEdits = useCallback(async (): Promise<void> => {
     if (!projectId || !draftId) return;
-    const fetched = await getWorkflowByDraftId(projectId, draftId);
+    const fetched = await fetchWorkflow(projectId, { draftId: draftId }, { fresh: true });
     if (!fetched.workflow) return;
     appliedVersionRef.current = fetched.version;
     latest.current.onRemoteUpdate({

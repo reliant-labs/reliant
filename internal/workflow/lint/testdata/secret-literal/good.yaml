@@ -1,0 +1,15 @@
+name: fixture
+entry: [comment]
+nodes:
+# The machine's own credential, never one in the file.
+- id: comment
+  type: run
+  timeout: 1m
+  args:
+    credentials: inherit
+    command: gh api user
+- id: done
+  type: save_message
+  args: {role: assistant, content: 'exit {{ nodes.comment.exit_code }}'}
+edges:
+- {from: comment, default: done}

@@ -23,14 +23,15 @@ query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
 1. **Create and edit the migration**:
 
    ```bash
-   make migration NAME=my_changes
+   task db:migration NAME=my_changes
    # Edit db/migrations/<version>_my_changes.up.sql
    ```
 
-   `make migration` runs `forge db migration new` from the forge go.mod pins,
+   `task db:migration` runs `forge db migration new` at `forge.yaml`'s pin,
    which opens the file with the two compatibility declarations (below) as a
    comment to replace. Always let forge pick the version: it allocates a UTC
-   timestamp that sorts after every existing one. There is no down migration —
+   timestamp that sorts after every existing one, including the newest on
+   `origin/main` (it fetches main first and checks the result). There is no down migration —
    a bad migration is repaired by a new one written against the state the
    database is actually in.
 
@@ -60,11 +61,12 @@ query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
    changes with it. forge.yaml sets
    `database.migration_safety.require_compat_declaration`, so
    `forge lint --migration-safety` (a blocking CI step) fails a migration that
-   says neither — `make migration`'s unedited template included — gives no
+   says neither — `task db:migration`'s unedited template included — gives no
    reason (a `<why …>` placeholder is none), or says both.
 
 2. **Regenerate Go code**: `forge generate` (at `forge.yaml`'s
-   `forge_version`; `make forge-generate-check` runs exactly that one)
+   `forge_version`; `task generate:forge` runs exactly that one, and
+   `task generate:check` fails if it would change anything)
    re-projects `internal/store` from the applied schema. Commit what it writes.
 
 3. **Write your Go code** using the newly generated types, and your queries in
@@ -86,6 +88,17 @@ older than one that merged first, re-version it before merging:
 ```bash
 forge db migration rebase db/migrations/<version>_my_changes.up.sql
 ```
+
+This is enforced, not advisory: `go run ./tools/test-affected migration-order`
+fetches `origin/main` and fails any migration on your branch that main does not
+carry and whose version is at or below main's newest, naming both versions and
+the remedy. It runs in `task test:affected` and `task ci:merge`
+(`scripts/merge-gate.sh`) whenever the diff touches `db/migrations/`, and after
+`task db:migration`. It fails closed: if
+`origin/main` cannot be refreshed it reports that instead of passing
+(`MIGRATION_ORDER_OFFLINE=1` judges the local ref, for an offline desk only).
+`forge lint --migration-safety` has the same rule but reads the local
+`origin/main` as it was last fetched, which is how reliant#1399 passed it.
 
 ## Applying and inspecting
 
@@ -230,9 +243,10 @@ you need it (rule 8). The rules every query follows:
    The tests the lanes wrote against a sqlc twin (`…AgreeWithSQLC`) now
    compare the query with the Repo method over it. A new test asserts
    the rows it expects. Run them with
-   `FORGE_TEST_POSTGRES_URL=postgres://…/postgres go test ./internal/store/...`
-   (or a `DATABASE_URL`, whose server is used); like this package's tests
-   they skip under `-short`.
+   `task test:short -- ./internal/store/...`: they use forge pgtest's shared
+   embedded Postgres, or `FORGE_TEST_POSTGRES_URL=postgres://…/postgres` for a
+   server of your own (never `DATABASE_URL`, which no test reads), and run
+   under `-short` too.
 
 7. **One transaction, either layer.** The Repo and `internal/store`
    share one pool (`repo.ORM()` is the ORM client over it) and one

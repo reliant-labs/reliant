@@ -230,11 +230,24 @@ type mockRepo struct {
 	orphanedMailboxResolveErr error
 	resolvedMailboxThreads    []string
 
+	// Approval sweep (approval_sweep_test.go): the stale approvals the query
+	// reports, which closes find them still pending, the closes made, and
+	// the unannounced resolutions and announcements.
+	staleApprovals        []db.StaleApproval
+	approvalAlreadyClosed map[string]bool
+	closedApprovals       map[string]string // id -> reason
+	unannounced           []*db.Approval
+	announcedApprovals    []string
+
 	// Backgrounded-process sweep: the calls the query reports, the daemon
 	// rows that exist (absent = deleted), and the status events emitted.
 	backgroundedProcessCalls []*db.BackgroundedProcessCall
 	daemons                  map[string]bool
-	emittedToolCallUpdates   []db.ToolCallUpdate
+	// heldChats are the chats ChatsHeldOnUsageLimit reports held, and
+	// heldSince the cutoff each call passed.
+	heldChats              map[string]bool
+	heldSince              []time.Time
+	emittedToolCallUpdates []db.ToolCallUpdate
 
 	// Terminal cascades and checkpoint drops a repair performs, and whether
 	// each cascade ran inside RunTx (i.e. in the status write's commit).
@@ -245,6 +258,26 @@ type mockRepo struct {
 	cascadedInTx           []bool
 	inTx                   bool
 	deletedCheckpoints     []string
+
+	// Stranded-start sweep: the roots the query reports, the cutoff it was
+	// asked for, and the roots it recorded as failed starts.
+	strandedStarts       []*db.Workflow
+	strandedStartsCutoff time.Time
+	markedStartFailed    []string
+}
+
+func (m *mockRepo) ListStrandedWorkflowStarts(_ context.Context, cutoff time.Time, _ int) ([]*db.Workflow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.strandedStartsCutoff = cutoff
+	return m.strandedStarts, nil
+}
+
+func (m *mockRepo) MarkWorkflowStartFailed(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.markedStartFailed = append(m.markedStartFailed, id)
+	return true, nil
 }
 
 // The fake keeps state (rows by id, call order), so it stays a fake rather
@@ -286,6 +319,19 @@ func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.Ba
 			continue
 		}
 		out = append(out, call)
+	}
+	return out, nil
+}
+
+func (m *mockRepo) ChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.heldSince = append(m.heldSince, since)
+	var out []string
+	for _, id := range chatIDs {
+		if m.heldChats[id] {
+			out = append(out, id)
+		}
 	}
 	return out, nil
 }

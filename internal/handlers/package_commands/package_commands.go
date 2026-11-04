@@ -3,18 +3,13 @@ package package_commands
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
-	"github.com/reliant-labs/reliant/internal/processproto"
 )
 
 // ============================================================================
@@ -36,212 +31,9 @@ func convertCommandToProto(cmd pkgmgr.Command) *reliantv1.PackageCommand {
 	}
 }
 
-// convertProcessToPackageProcess converts a shell.BackgroundProcess to proto PackageProcess
-func convertProcessToPackageProcess(p *shell.BackgroundProcess) *reliantv1.PackageProcess {
-	result := &reliantv1.PackageProcess{
-		Id:         p.ID,
-		Command:    p.Command,
-		Status:     processproto.Status(p.Status),
-		WorkingDir: p.WorkingDir,
-		StartTime:  p.StartTime.Format("2006-01-02T15:04:05Z07:00"),
-	}
-
-	if p.WorktreeID != "" {
-		result.WorktreeId = proto.String(p.WorktreeID)
-	}
-
-	if p.EndTime != nil {
-		endTime := p.EndTime.Format("2006-01-02T15:04:05Z07:00")
-		result.EndTime = proto.String(endTime)
-	}
-
-	if p.ExitCode != nil {
-		result.ExitCode = proto.Int32(int32(*p.ExitCode))
-	}
-
-	return result
-}
-
 // ============================================================================
 // RPC Handlers
 // ============================================================================
-
-// RunCommand executes a package command.
-//
-// It runs the command on THIS server through Deps.Processes, as do the
-// process rpcs below. Running and scoping them on the daemon is a separate,
-// paused effort; the favorites rpcs are DB-backed and belong here.
-func (s *Service) RunCommand(
-	ctx context.Context,
-	req *connect.Request[reliantv1.RunPackageCommandRequest],
-) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
-	if req.Msg.CommandName == "" {
-		return nil, svcerr.InvalidArgument("command_name is required")
-	}
-
-	if req.Msg.PackageType == reliantv1.PackageType_PACKAGE_TYPE_UNSPECIFIED {
-		return nil, svcerr.InvalidArgument("package_type is required")
-	}
-
-	// Determine working directory and worktree ID
-	var workingDir string
-	var rootDir string
-	var worktreeID string
-
-	if req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != "" {
-		worktreeID = *req.Msg.WorktreeId
-		// Look up worktree to get its path
-		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
-		if err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
-		}
-		rootDir = worktree.Path
-	} else if req.Msg.Path != nil && *req.Msg.Path != "" {
-		rootDir = *req.Msg.Path
-	} else {
-		return nil, svcerr.InvalidArgument("worktree_id or path is required")
-	}
-
-	// Use explicit working_dir if provided (for subdirectory commands)
-	// Otherwise fall back to root directory
-	if req.Msg.WorkingDir != nil && *req.Msg.WorkingDir != "" {
-		workingDir = *req.Msg.WorkingDir
-	} else {
-		workingDir = rootDir
-	}
-
-	packageType, ok := pkgmgrPackageTypeFromProto(req.Msg.PackageType)
-	if !ok {
-		return nil, svcerr.InvalidArgument(fmt.Sprintf("package_type %q is not supported", req.Msg.PackageType.String()))
-	}
-
-	// Run the command
-	result, err := s.deps.Processes.RunCommand(ctx, pkgmgr.RunRequest{
-		WorktreeID:  worktreeID,
-		WorkingDir:  workingDir,
-		CommandName: req.Msg.CommandName,
-		PackageType: packageType,
-		Env:         req.Msg.Env,
-	})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to run command"))
-	}
-
-	return connect.NewResponse(&reliantv1.RunPackageCommandResponse{
-		ProcessId: result.ProcessID,
-		Command:   result.Command,
-		StartTime: result.StartTime.Format("2006-01-02T15:04:05Z07:00"),
-	}), nil
-}
-
-// ListProcesses returns processes for a worktree, or all processes if no filter is provided
-func (s *Service) ListProcesses(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListPackageProcessesRequest],
-) (*connect.Response[reliantv1.ListPackageProcessesResponse], error) {
-	worktreeID := req.Msg.GetWorktreeId()
-
-	var processes []*shell.BackgroundProcess
-	if worktreeID != "" {
-		processes = s.deps.Processes.GetProcessesByWorktree(worktreeID)
-	} else {
-		// No filter - return all processes
-		processes = s.deps.Processes.GetAllProcesses()
-	}
-
-	protoProcesses := make([]*reliantv1.PackageProcess, len(processes))
-	for i, p := range processes {
-		protoProcesses[i] = convertProcessToPackageProcess(p)
-	}
-
-	return connect.NewResponse(&reliantv1.ListPackageProcessesResponse{
-		Processes: protoProcesses,
-	}), nil
-}
-
-// GetProcess returns a specific process
-func (s *Service) GetProcess(
-	ctx context.Context,
-	req *connect.Request[reliantv1.GetPackageProcessRequest],
-) (*connect.Response[reliantv1.GetPackageProcessResponse], error) {
-	processID := req.Msg.ProcessId
-	if processID == "" {
-		return nil, svcerr.InvalidArgument("process_id is required")
-	}
-
-	process, err := s.deps.Processes.GetProcess(processID)
-	if err != nil {
-		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
-	}
-
-	return connect.NewResponse(&reliantv1.GetPackageProcessResponse{
-		Process: convertProcessToPackageProcess(process),
-	}), nil
-}
-
-// GetProcessLogs returns the logs for a process
-func (s *Service) GetProcessLogs(
-	ctx context.Context,
-	req *connect.Request[reliantv1.GetPackageProcessLogsRequest],
-) (*connect.Response[reliantv1.GetPackageProcessLogsResponse], error) {
-	processID := req.Msg.ProcessId
-	if processID == "" {
-		return nil, svcerr.InvalidArgument("process_id is required")
-	}
-
-	// Get separate stdout/stderr for backwards compatibility
-	stdout, stderr, err := s.deps.Processes.GetProcessOutput(processID)
-	if err != nil {
-		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
-	}
-
-	// Get combined interleaved output
-	combinedOutput, err := s.deps.Processes.GetCombinedOutput(processID)
-	if err != nil {
-		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
-	}
-
-	// Convert to proto format
-	protoCombined := make([]*reliantv1.OutputLine, len(combinedOutput))
-	for i, line := range combinedOutput {
-		protoCombined[i] = &reliantv1.OutputLine{
-			Type: processproto.OutputStream(line.Type),
-			Text: line.Text,
-		}
-	}
-
-	return connect.NewResponse(&reliantv1.GetPackageProcessLogsResponse{
-		Stdout:   stdout,
-		Stderr:   stderr,
-		Combined: protoCombined,
-	}), nil
-}
-
-// KillProcess terminates a process
-func (s *Service) KillProcess(
-	ctx context.Context,
-	req *connect.Request[reliantv1.KillPackageProcessRequest],
-) (*connect.Response[reliantv1.KillPackageProcessResponse], error) {
-	processID := req.Msg.ProcessId
-	if processID == "" {
-		return nil, svcerr.InvalidArgument("process_id is required")
-	}
-
-	err := s.deps.Processes.KillProcess(processID)
-	if err != nil {
-		// If process is already dead, treat as success - the desired state is achieved
-		if strings.Contains(err.Error(), "is not running") {
-			return connect.NewResponse(&reliantv1.KillPackageProcessResponse{
-				Message: "Process was already stopped",
-			}), nil
-		}
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to kill process"))
-	}
-
-	return connect.NewResponse(&reliantv1.KillPackageProcessResponse{
-		Message: "Process killed successfully",
-	}), nil
-}
 
 // GetCommandFavorites returns the list of favorited command keys for a project
 func (s *Service) GetCommandFavorites(

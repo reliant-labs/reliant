@@ -170,7 +170,7 @@ var File_reliant_config_v1_integrations_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_integrations_config_proto_rawDesc = "" +
 	"\n" +
-	"+reliant/config/v1/integrations_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xcf\f\n" +
+	"+reliant/config/v1/integrations_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd1\f\n" +
 	"\x12IntegrationsConfig\x12a\n" +
 	"\n" +
 	"public_url\x18\x01 \x01(\tBB\x82\xce\x18>\n" +
@@ -191,9 +191,9 @@ const file_reliant_config_v1_integrations_config_proto_rawDesc = "" +
 	"\x17test_integration_secret\x18\b \x01(\tBT\x82\xce\x18P\n" +
 	"\x1fRELIANT_TEST_INTEGRATION_SECRET*)Test integration secret (e2e stacks only)0\x01P\x01R\x15testIntegrationSecret\x12\xc1\x01\n" +
 	"\x10oauth_client_ids\x18\t \x03(\v29.reliant.config.v1.IntegrationsConfig.OauthClientIdsEntryB\\\x82\xce\x18X*:Integration OAuth client ids, RELIANT_OAUTH_<ID>_CLIENT_IDb\x0eRELIANT_OAUTH_j\n" +
-	"_CLIENT_IDR\x0eoauthClientIds\x12\xdb\x01\n" +
+	"_CLIENT_IDR\x0eoauthClientIds\x12\xdd\x01\n" +
 	"\x14oauth_client_secrets\x18\n" +
-	" \x03(\v2=.reliant.config.v1.IntegrationsConfig.OauthClientSecretsEntryBj\x82\xce\x18f*BIntegration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET0\x01b\x0eRELIANT_OAUTH_j\x0e_CLIENT_SECRETR\x12oauthClientSecrets\x1aA\n" +
+	" \x03(\v2=.reliant.config.v1.IntegrationsConfig.OauthClientSecretsEntryBl\x82\xce\x18h*BIntegration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET0\x01P\x01b\x0eRELIANT_OAUTH_j\x0e_CLIENT_SECRETR\x12oauthClientSecrets\x1aA\n" +
 	"\x13OauthClientIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aE\n" +

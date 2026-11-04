@@ -18,7 +18,7 @@ import {
 } from "../../lib/inputHelpers";
 import { formatValueForDisplay, hasDefaultValue } from "../../lib/paramUtils";
 import { PresetPicker } from "../workflow/PresetPicker";
-import type { Preset } from "../../store/globalDataStore";
+import type { Preset } from "../../hooks/preset-queries";
 
 interface ParamRowProps {
   name: string;

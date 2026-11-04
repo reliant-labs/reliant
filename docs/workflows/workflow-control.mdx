@@ -77,7 +77,9 @@ A provider usage limit is not a failure and does not pause the run: the run wait
 
 A sub-agent whose step fails is different: that sub-agent fails on its own and its parent is told, so the rest of the chat keeps going. Message the sub-agent to resume it.
 
-Runs that nobody is watching, such as [automations](/automations/overview), resume themselves after a failure like this, waiting longer each time, because a rate limit or a disconnected machine usually clears on its own. If the failure survives about half an hour of retries, the run stays paused where a person can see it, in **Workflows → Runs**, and a message resumes it.
+Runs that nobody is watching, such as [automations](/automations/overview), resume themselves after a failure like this, waiting longer each time, because a rate limit or a disconnected machine usually clears on its own. While one of these runs is paused, your **Inbox** lists it with what paused it. If the failure survives about half an hour of retries, the run ends as failed, with that cause as its error. A paused run still counts against its workflow's `concurrency.max_running` limit (see the [workflow schema](/reference/workflow-schema)), so ending it lets the automation's next run start instead of waiting behind it.
+
+A `run` command that could not reach its machine is not a failure of the step. When the machine is disconnected or restarting, the step waits for it to come back for up to 30 minutes and then sends the command. This wait uses none of the node's retries and does not pause the run. If the machine is still unavailable after 30 minutes, or it was removed, the run fails with an error that names the machine and says the command never ran.
 
 ## Manual Intervention Pattern
 

@@ -23,6 +23,7 @@ import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { hasOpenEscapeLayer } from "@/hooks/useEscapeLayer";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
+import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 
 export function ForgeLayout() {
   const navigate = useNavigate();
@@ -51,5 +52,11 @@ export function ForgeLayout() {
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onClose]);
 
-  return <Outlet />;
+  // One query-quota state for every observability read under /forge: the banner, the
+  // paused badges and the poll scheduler all read it.
+  return (
+    <ObsQuotaProvider>
+      <Outlet />
+    </ObsQuotaProvider>
+  );
 }

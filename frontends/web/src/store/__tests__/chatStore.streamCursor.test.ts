@@ -166,21 +166,26 @@ describe("chat stream cursor", () => {
 
 describe("end to end through globalUpdatesStore", () => {
   it("records the left chat's cursor and resumes the reopened chat from it", async () => {
-    // The real wiring: UserStreamingService ↔ globalUpdatesStore ↔ chatStore.
+    // The real wiring: ChatStreamingService ↔ globalUpdatesStore ↔ chatStore.
     // Only the network (establishConnection) is stubbed.
     const { useGlobalUpdatesStore } = await import("../globalUpdatesStore");
+    const { ChatStreamingService } = await import("../../api/chat-streaming-grpc");
     const { UserStreamingService } = await import("../../api/streaming-grpc");
     const requested: Array<[string | undefined, bigint]> = [];
-    const connect = vi
-      .spyOn(UserStreamingService.prototype as never, "establishConnection")
+    const connectChat = vi
+      .spyOn(ChatStreamingService.prototype as unknown as { establishConnection: () => Promise<void> }, "establishConnection")
       .mockImplementation(async function (this: unknown) {
-        const svc = this as { subscribedChatId?: string; lastChatSequence: bigint };
-        requested.push([svc.subscribedChatId, svc.lastChatSequence]);
+        const svc = this as { chatId?: string; lastChatSequence: bigint };
+        requested.push([svc.chatId, svc.lastChatSequence]);
       });
+    const connectUser = vi
+      .spyOn(UserStreamingService.prototype as unknown as { establishConnection: () => Promise<void> }, "establishConnection")
+      .mockImplementation(async () => undefined);
     try {
       useChatStore.setState({ hasLoaded: true });
       useGlobalUpdatesStore.setState({
         wsService: null,
+        chatStream: null,
         subscribedChatId: null,
         lastSequence: 1,
         connectionStatus: "disconnected",
@@ -189,7 +194,7 @@ describe("end to end through globalUpdatesStore", () => {
 
       // Open CHAT: first visit, nothing cached → snapshot.
       store.subscribeToChatDetails(CHAT);
-      const svc = useGlobalUpdatesStore.getState().wsService as unknown as {
+      const svc = useGlobalUpdatesStore.getState().chatStream as unknown as {
         handleEvent(e: unknown): void;
         isConnected_: boolean;
         connectAttemptInFlight: boolean;
@@ -198,7 +203,7 @@ describe("end to end through globalUpdatesStore", () => {
       svc.connectAttemptInFlight = false;
       svc.handleEvent({
         event: {
-          case: "chatSyncSnapshot",
+          case: "snapshot",
           value: {
             messages: [(message(CHAT, `${CHAT}-m1`, 1) as { message: unknown }).message],
             otherUpdates: [],
@@ -225,8 +230,61 @@ describe("end to end through globalUpdatesStore", () => {
       ]);
       // Cached content is on screen while the replay is outstanding.
       expect(useChatStore.getState().chatSyncPendingId).toBe(CHAT);
+      // The user stream was connected once, by the first subscription, and
+      // never again: a chat switch reconnects only the chat stream.
+      expect(connectUser).toHaveBeenCalledTimes(1);
     } finally {
-      connect.mockRestore();
+      connectChat.mockRestore();
+      connectUser.mockRestore();
+      useGlobalUpdatesStore.getState().disconnect();
+    }
+  });
+
+  it("switching chats never touches a connected user stream", async () => {
+    const { useGlobalUpdatesStore } = await import("../globalUpdatesStore");
+    const { ChatStreamingService } = await import("../../api/chat-streaming-grpc");
+    const { UserStreamingService } = await import("../../api/streaming-grpc");
+    const connectChat = vi
+      .spyOn(ChatStreamingService.prototype as unknown as { establishConnection: () => Promise<void> }, "establishConnection")
+      .mockImplementation(async () => undefined);
+    const connectUser = vi
+      .spyOn(UserStreamingService.prototype as unknown as { establishConnection: () => Promise<void> }, "establishConnection")
+      .mockImplementation(async () => undefined);
+    try {
+      useChatStore.setState({ hasLoaded: true });
+      useGlobalUpdatesStore.setState({
+        wsService: null,
+        chatStream: null,
+        subscribedChatId: null,
+        lastSequence: 1,
+        connectionStatus: "disconnected",
+      });
+      useGlobalUpdatesStore.getState().connect();
+      const user = useGlobalUpdatesStore.getState().wsService as unknown as {
+        isConnected_: boolean;
+        connectAttemptInFlight: boolean;
+        abortController: AbortController | null;
+      };
+      // The live connection establishConnection would have opened.
+      user.isConnected_ = true;
+      user.connectAttemptInFlight = false;
+      user.abortController = new AbortController();
+      const userConnection = user.abortController;
+      connectUser.mockClear();
+
+      for (const chatId of [CHAT, OTHER, CHAT, OTHER]) {
+        useGlobalUpdatesStore.getState().subscribeToChatDetails(chatId);
+      }
+      useGlobalUpdatesStore.getState().unsubscribeFromChatDetails();
+
+      expect(connectChat).toHaveBeenCalledTimes(4);
+      expect(connectUser).not.toHaveBeenCalled();
+      expect(user.abortController).toBe(userConnection);
+      expect(userConnection?.signal.aborted).toBe(false);
+      expect(useGlobalUpdatesStore.getState().wsService?.isConnected()).toBe(true);
+    } finally {
+      connectChat.mockRestore();
+      connectUser.mockRestore();
       useGlobalUpdatesStore.getState().disconnect();
     }
   });
@@ -238,7 +296,7 @@ describe("end to end through globalUpdatesStore", () => {
     useThreadActivityStore
       .getState()
       .setThreads(CHAT, [{ id: "t1", status: "running" } as never]);
-    useGlobalUpdatesStore.setState({ wsService: null, subscribedChatId: CHAT });
+    useGlobalUpdatesStore.setState({ wsService: null, chatStream: null, subscribedChatId: CHAT });
 
     useGlobalUpdatesStore.getState().unsubscribeFromChatDetails(CHAT);
 

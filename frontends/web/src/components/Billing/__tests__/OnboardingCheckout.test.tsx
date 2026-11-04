@@ -18,6 +18,10 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Pricing consent is tested through real typed transport in MachineSaleConsent.test;
+// this suite isolates the already-authorized two-leg payment mechanics.
+vi.mock("../MachineSaleConsent", () => ({ MachineSaleConsent: ({ children }: { children: (price?: number) => React.ReactNode }) => <>{children()}</> }));
+
 // ── Stripe.js, stubbed ───────────────────────────────────────────────────
 
 /** Queued results for successive `confirmPayment` calls. */
@@ -113,7 +117,7 @@ const CREDIT_LINE: CheckoutLine = {
 
 let confirmCompute: () => Promise<boolean>;
 let confirmCredit: () => Promise<boolean>;
-let onDone: ReturnType<typeof vi.fn>;
+let onDone: ReturnType<typeof vi.fn<() => void>>;
 
 function renderCheckout(lines: CheckoutLine[], overrides: Partial<{
   computePlanId: string;
@@ -126,7 +130,7 @@ function renderCheckout(lines: CheckoutLine[], overrides: Partial<{
       lines={lines}
       computePlanId={
         owedCompute
-          ? (overrides.computePlanId ?? "plan_compute_small")
+          ? (overrides.computePlanId ?? "plan_compute_m")
           : undefined
       }
       creditCents={owedCredit ? (overrides.creditCents ?? 2500) : undefined}
@@ -150,7 +154,7 @@ beforeEach(() => {
   confirmCalls.length = 0;
   confirmCompute = async () => true;
   confirmCredit = async () => true;
-  onDone = vi.fn();
+  onDone = vi.fn<() => void>();
 });
 
 // ── The summary ──────────────────────────────────────────────────────────

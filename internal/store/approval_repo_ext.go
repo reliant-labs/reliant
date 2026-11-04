@@ -38,6 +38,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -125,6 +126,110 @@ func UpdateApprovalStatus(ctx context.Context, db orm.Context, id string, status
 	return UpdateApprovalMasked(ctx, db, row, fields)
 }
 
+// resolvePendingApprovalSQL closes one approval only while it is still
+// pending: a person's decision (or another closer) that got there first is
+// kept, and the caller learns it lost from the empty result.
+const resolvePendingApprovalSQL = `
+UPDATE approvals
+SET status = ?1, denial_reason = ?2, action_taken = ?3, resolved_at = ?4
+WHERE id = ?0 AND status = 1
+RETURNING id, chat_id, approval_type, entity_id, status, denial_reason, title, metadata,
+    created_at, resolved_at, action_taken, temporal_workflow_id, thread_id`
+
+// ResolvePendingApproval moves a pending approval to status (a terminal one)
+// with reason and actionTaken recorded, and returns the closed row. It
+// returns (nil, nil) when the approval is not pending (or not there): nothing
+// is overwritten.
+func ResolvePendingApproval(ctx context.Context, db orm.Context, id string, status reliantv1.ApprovalStatus, reason, actionTaken string, at time.Time) (*core.Approval, error) {
+	var rows []*Approval
+	if err := db.Bun().NewRaw(resolvePendingApprovalSQL, id, int32(status), reason, actionTaken, at).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("resolve pending approval %s: %w", id, err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return approvalToCore(rows[0]), nil
+}
+
+// StaleApproval is a pending approval no one can act on any more, and why.
+type StaleApproval struct {
+	ID     string `bun:"id"`
+	ChatID string `bun:"chat_id"`
+	// Why is the reason for the person: what ended the wait.
+	Why string `bun:"why"`
+}
+
+// listStaleApprovalsSQL finds pending approvals whose wait is over: the run
+// that asked (the newest run of the approval's thread, as pending_input_gates
+// resolves it) or the chat's root run completed (stop_reason 1) or was
+// cancelled (4), the chat was archived (state 3), or the chat is gone. A
+// failed (2) or paused (3) run is resumable and keeps its approval, the rule
+// ListInboxPending lists by. idx_approvals_pending keeps the scan to the
+// pending rows.
+const listStaleApprovalsSQL = `
+SELECT a.id, a.chat_id,
+    CASE
+        WHEN ch.id IS NULL THEN 'its chat was deleted'
+        WHEN ch.state = 3 THEN 'its chat was archived'
+        WHEN g.run_stop_reason = 4 OR rw.stop_reason = 4 THEN 'the run waiting on it was cancelled'
+        ELSE 'the run waiting on it finished'
+    END AS why
+FROM approvals a
+LEFT JOIN chats ch ON ch.id = a.chat_id
+LEFT JOIN workflows rw ON rw.id = ch.workflow_id
+LEFT JOIN pending_input_gates g ON g.kind = 'approval' AND g.id = a.id
+WHERE a.status = 1
+  AND (
+      ch.id IS NULL
+      OR ch.state = 3
+      OR (g.run_state = 3 AND g.run_stop_reason IN (1, 4))
+      OR (rw.state = 3 AND rw.stop_reason IN (1, 4))
+  )
+ORDER BY a.created_at, a.id
+LIMIT ?0`
+
+// ListStaleApprovals returns up to limit pending approvals whose wait is over
+// (listStaleApprovalsSQL), oldest first.
+func ListStaleApprovals(ctx context.Context, db orm.Context, limit int) ([]StaleApproval, error) {
+	var out []StaleApproval
+	if err := db.Bun().NewRaw(listStaleApprovalsSQL, limit).Scan(ctx, &out); err != nil {
+		return nil, fmt.Errorf("list stale approvals: %w", err)
+	}
+	return out, nil
+}
+
+// listUnannouncedResolutionsSQL finds closed approvals whose chat feed still
+// says pending: the newest approval update for the row (update_type 2) is a
+// "pending" one. Clients rebuild a chat's approvals from that feed (the
+// newest update per entity is in every snapshot), so such a row reads as
+// actionable forever. Before ApprovalResolve announced what it closed, every
+// timed-out approval was one. Each row is one probe of
+// idx_chat_updates_snapshot_entity_heads.
+const listUnannouncedResolutionsSQL = `
+SELECT a.id, a.chat_id, a.approval_type, a.entity_id, a.status, a.denial_reason, a.title, a.metadata,
+    a.created_at, a.resolved_at, a.action_taken, a.temporal_workflow_id, a.thread_id
+FROM approvals a
+WHERE a.status <> 1
+  AND (
+      SELECT u.data::jsonb ->> 'status' FROM chat_updates u
+      WHERE u.chat_id = a.chat_id AND u.entity_id = a.id AND u.update_type = 2
+      ORDER BY u.sequence_number DESC
+      LIMIT 1
+  ) = 'pending'
+ORDER BY a.created_at, a.id
+LIMIT ?0`
+
+// ListUnannouncedApprovalResolutions returns up to limit closed approvals
+// whose chat feed still announces them as pending
+// (listUnannouncedResolutionsSQL), oldest first.
+func ListUnannouncedApprovalResolutions(ctx context.Context, db orm.Context, limit int) ([]*core.Approval, error) {
+	var rows []*Approval
+	if err := db.Bun().NewRaw(listUnannouncedResolutionsSQL, limit).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list unannounced approval resolutions: %w", err)
+	}
+	return approvalsToCore(rows), nil
+}
+
 func approvalFromCore(a *core.Approval) *Approval {
 	return &Approval{
 		ID:                 a.ID,
@@ -140,6 +245,7 @@ func approvalFromCore(a *core.Approval) *Approval {
 		ActionTaken:        a.ActionTaken,
 		TemporalWorkflowID: a.TemporalWorkflowID,
 		ThreadID:           a.ThreadID,
+		BatchID:            a.BatchID,
 	}
 }
 
@@ -158,6 +264,7 @@ func approvalToCore(row *Approval) *core.Approval {
 		CreatedAt:          row.CreatedAt,
 		ResolvedAt:         row.ResolvedAt,
 		ThreadID:           row.ThreadID,
+		BatchID:            row.BatchID,
 	}
 }
 

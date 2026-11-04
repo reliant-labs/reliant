@@ -25,9 +25,9 @@
  */
 
 import { fireEvent, screen, waitFor, act } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
-import type { QueuedAgentMessageView } from "../../../api/chat-grpc";
+import type { QueuedAgentMessageView } from "../../../hooks/chat-model";
 
 const CHAT_ID = "chat-abc";
 const THREAD_ID = "thread-xyz";
@@ -49,14 +49,6 @@ const {
 // QUEUED_SENDER_KIND_HUMAN is a plain constant the component filters on, so
 // the mock has to carry it through or every row would be filtered out and the
 // tests would pass vacuously against an empty strip.
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: {
-    cancelQueuedAgentMessage: cancelQueuedAgentMessageMock,
-    interruptThread: interruptThreadMock,
-  },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
-
 vi.mock("../../../lib/toast-manager", () => ({
   toast: {
     info: toastInfoMock,
@@ -67,6 +59,19 @@ vi.mock("../../../lib/toast-manager", () => ({
 }));
 
 import { QueuedMessages } from "../QueuedMessages";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+
+// The mailbox writes are ChatService calls, answered at the transport.
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      "ChatService.CancelQueuedAgentMessage": (req: unknown) => cancelQueuedAgentMessageMock(req),
+      "ChatService.InterruptThread": (req: unknown) => interruptThreadMock(req),
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 const HUMAN = 5;
 const AGENT_TO_AGENT = 1;
@@ -173,7 +178,7 @@ describe("QueuedMessages", () => {
     fireEvent.click(screen.getByLabelText("Cancel queued message"));
 
     await waitFor(() => {
-      expect(cancelQueuedAgentMessageMock).toHaveBeenCalledWith(CHAT_ID, "queued-7");
+      expect(cancelQueuedAgentMessageMock).toHaveBeenCalledWith(expect.objectContaining({ chatId: CHAT_ID, messageId: "queued-7" }));
     });
     await waitFor(() => {
       expect(onForget).toHaveBeenCalledWith("queued-7");
@@ -240,7 +245,7 @@ describe("QueuedMessages", () => {
 
     // Per THREAD, not per message: interrupt takes no message id, because the
     // agent delivers its whole mailbox on the turn this unblocks.
-    expect(interruptThreadMock).toHaveBeenCalledWith(CHAT_ID, THREAD_ID);
+    expect(interruptThreadMock).toHaveBeenCalledWith(expect.objectContaining({ chatId: CHAT_ID, threadId: THREAD_ID }));
     expect(interruptThreadMock).toHaveBeenCalledTimes(1);
     expect(onRefresh).toHaveBeenCalled();
   });

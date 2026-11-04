@@ -55,10 +55,11 @@ vi.mock('@/hooks/useAnonSignInNudge', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/' }),
 }))
 
-vi.mock('../../ui/Modal', () => ({
-  Modal: ({ children }: { children: React.ReactNode }) => (
+vi.mock('../../forge-ui/modal', () => ({
+  default: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="nudge-modal">{children}</div>
   ),
 }))

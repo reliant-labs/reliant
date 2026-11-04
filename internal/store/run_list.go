@@ -202,6 +202,108 @@ func LastRunPerWorkflow(ctx context.Context, db orm.Context, filters core.RunLis
 	return runItems(rows), nil
 }
 
+// ListUnlaunchedTriggerEvents returns up to filters.Limit of the caller's
+// trigger events that started no run — a stored trigger's firing that was
+// skipped or could not start — newest first by (occurred_at, id), and whether
+// more follow. It is the run log's second half: the same filters as ListRuns
+// where an event has the column (project, workflow, trigger, kind, time,
+// the trigger's name for Query), and the same keyset shape, so a caller
+// merges one page of each into one time-ordered page.
+//
+// An event has no display state, title or parent, so DisplayStates or
+// ParentChatID set means no event can match: it returns none. An event
+// whose trigger was deleted (trigger_id cleared) has no project or workflow
+// to show or filter by, and is left out. Driven by
+// idx_trigger_events_unlaunched.
+func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters core.RunListFilters) ([]*core.UnlaunchedTriggerEvent, bool, error) {
+	if filters.UserID == "" {
+		return nil, false, fmt.Errorf("user ID cannot be empty")
+	}
+	limit := filters.Limit
+	if limit <= 0 {
+		return nil, false, fmt.Errorf("limit must be positive")
+	}
+	if len(filters.DisplayStates) > 0 || filters.ParentChatID != nil {
+		return nil, false, nil
+	}
+
+	q := db.Bun().NewSelect().
+		TableExpr("trigger_events AS te").
+		Join("JOIN triggers AS t ON t.id = te.trigger_id AND t.user_id = te.user_id").
+		ColumnExpr("te.id, te.trigger_id, t.name AS trigger_name, t.workflow AS workflow_name").
+		ColumnExpr("COALESCE(t.workflow_trigger, '') AS workflow_trigger, t.project_id, te.kind").
+		ColumnExpr("te.occurred_at, te.outcome, te.outcome_detail").
+		Where("te.user_id = ?", filters.UserID).
+		Where("te.outcome IN (?, ?)", core.TriggerEventSkipped, core.TriggerEventFailed).
+		Where("te.chat_id IS NULL")
+	if filters.ProjectID != nil {
+		q = q.Where("t.project_id = ?", *filters.ProjectID)
+	}
+	if len(filters.Workflows) > 0 {
+		q = q.Where("t.workflow = ANY(?)", pgdialect.Array(filters.Workflows))
+	}
+	if filters.TriggerID != nil {
+		q = q.Where("te.trigger_id = ?", *filters.TriggerID)
+	}
+	// As ListRuns: with no kind named, builder test firings stay out.
+	if len(filters.LaunchKinds) == 0 {
+		q = q.Where("te.kind <> 'builder.test'")
+	} else {
+		q = q.Where("te.kind = ANY(?)", pgdialect.Array(filters.LaunchKinds))
+	}
+	if filters.StartedAfter != nil {
+		q = q.Where("te.occurred_at >= ?", *filters.StartedAfter)
+	}
+	if filters.StartedBefore != nil {
+		q = q.Where("te.occurred_at < ?", *filters.StartedBefore)
+	}
+	if filters.Query != nil {
+		q = q.Where("position(lower(?) in lower(t.name)) > 0", *filters.Query)
+	}
+	if filters.After != nil {
+		q = q.Where("(te.occurred_at, te.id) < (?, ?)", filters.After.CreatedAt, filters.After.ChatID)
+	}
+	q = q.OrderExpr("te.occurred_at DESC, te.id DESC").Limit(int64(limit + 1))
+
+	var rows []unlaunchedEventRow
+	if err := q.Scan(ctx, &rows); err != nil {
+		return nil, false, fmt.Errorf("failed to list unlaunched trigger events: %w", err)
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	events := make([]*core.UnlaunchedTriggerEvent, len(rows))
+	for i, row := range rows {
+		events[i] = &core.UnlaunchedTriggerEvent{
+			ID:              row.ID,
+			TriggerID:       row.TriggerID,
+			TriggerName:     row.TriggerName,
+			WorkflowName:    row.WorkflowName,
+			WorkflowTrigger: row.WorkflowTrigger,
+			ProjectID:       row.ProjectID,
+			Kind:            row.Kind,
+			OccurredAt:      row.OccurredAt,
+			Outcome:         core.TriggerEventOutcome(row.Outcome),
+			OutcomeDetail:   row.OutcomeDetail,
+		}
+	}
+	return events, hasMore, nil
+}
+
+type unlaunchedEventRow struct {
+	ID              string    `bun:"id"`
+	TriggerID       string    `bun:"trigger_id"`
+	TriggerName     string    `bun:"trigger_name"`
+	WorkflowName    string    `bun:"workflow_name"`
+	WorkflowTrigger string    `bun:"workflow_trigger"`
+	ProjectID       string    `bun:"project_id"`
+	Kind            string    `bun:"kind"`
+	OccurredAt      time.Time `bun:"occurred_at"`
+	Outcome         string    `bun:"outcome"`
+	OutcomeDetail   string    `bun:"outcome_detail"`
+}
+
 // runRow is one row of runRowsSQL.
 type runRow struct {
 	ChatID          string                   `bun:"chat_id"`

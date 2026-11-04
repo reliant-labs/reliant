@@ -13,7 +13,7 @@ export function WorktreesDiscoverHint({ projectId, onReview }: Props) {
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="worktrees-discover-hint">
       <span>{hintLabel(count)} ·</span>
-      <button type="button" onClick={onReview} className="font-medium text-primary hover:underline">
+      <button type="button" onClick={onReview} className="font-medium text-primary-ink hover:underline">
         Review
       </button>
       <button

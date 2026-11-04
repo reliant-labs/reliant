@@ -4,9 +4,9 @@
  *
  * forge's generated hooks (`src/hooks/*-service-hooks_gen.ts`) call
  * `connectClient(<Service>)`, and so does every hand-written wrapper in
- * `src/api/*-grpc.ts` (through `api/grpc-client.ts`) and every control-plane
- * service module (through `services/controlPlane/client.ts`). This module
- * owns what those calls reach:
+ * `src/api/*-grpc.ts` and every control-plane service module (through
+ * `services/controlPlane/client.ts`). This module owns what those calls
+ * reach:
  *
  *   - the ROUTE table: which backend each procedure dials (`routeFor`);
  *   - each route's base URL (`reliantApiBaseUrl`, `controlPlaneBaseUrl`);
@@ -17,7 +17,7 @@
  *
  * The interceptor chain every route runs is `buildInterceptors` in
  * `api/transport.ts`: forge's runtime interceptors (error normalization, auth)
- * composed with reliant's own (deadline, daemon-last-seen, tracing, Sentry
+ * composed with reliant's own (deadline, daemon-last-seen, tracing, error
  * reporting, upgrade modal, machine wake, 401 recovery). Routes differ only
  * in base URL, wire format and the two chain options — never in which
  * interceptors they get, which is how the transports used to drift apart.
@@ -52,8 +52,10 @@ import { createClient, type Client, type Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { DescMethod, DescService } from "@bufbuild/protobuf";
 import { buildInterceptors, setCurrentBaseURL, type TransportBackend } from "@/api/transport";
+import { loadConfig } from "@/lib/config_gen";
 import { logger } from "@/lib/logger";
 import {
+  API_SERVER_DEFAULT_PORT,
   buildLocalhostUrl,
   isPackagedRendererOrigin,
   isSameOriginTransport,
@@ -72,9 +74,9 @@ export type TransportRoute =
 const CONTROL_PLANE_PACKAGE = "controlplane.v1.";
 
 /**
- * StreamUserUpdates carries snapshots and heartbeats, so StreamingService is
- * the one hot path kept on the binary wire format; unary RPCs stay JSON for
- * readable network inspection.
+ * StreamUserUpdates and StreamChatUpdates carry snapshots and heartbeats, so
+ * StreamingService is the one hot path kept on the binary wire format; unary
+ * RPCs stay JSON for readable network inspection.
  */
 const STREAMING_SERVICE = "reliant.v1.StreamingService";
 
@@ -100,7 +102,7 @@ const UNAUTH_PROCEDURES: ReadonlySet<string> = new Set([
 
 /** The route one procedure takes. Exported for the routing tests. */
 export function routeFor(serviceTypeName: string, methodName: string): TransportRoute {
-  if (serviceTypeName.startsWith(CONTROL_PLANE_PACKAGE)) return "control-plane";
+  if (serviceTypeName.startsWith(CONTROL_PLANE_PACKAGE) || serviceTypeName === "observability_billing.v1.ObservabilityBillingService") return "control-plane";
   if (UNAUTH_PROCEDURES.has(`${serviceTypeName}/${methodName}`)) return "reliant-unauth";
   if (serviceTypeName === STREAMING_SERVICE) return "reliant-stream";
   return "reliant-api";
@@ -117,7 +119,7 @@ export function reliantApiBaseUrl(): string | null {
   // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
   // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
   // them to reliant-api. This is first-party ⇒ ZERO CORS, and it short-circuits
-  // BEFORE RELIANT_CONFIG.grpcUrl / the absolute VITE_* fallbacks below so
+  // BEFORE RELIANT_CONFIG.grpcUrl / config.js's API_URL fallback below so
   // electron-dev never dials a cross-origin backend port. The packaged app
   // falls through to the daemon URL.
   if (isSameOriginTransport()) {
@@ -138,11 +140,9 @@ export function reliantApiBaseUrl(): string | null {
     return null;
   }
 
-  return (
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(import.meta.env.VITE_GRPC_PORT || "9090")
-  );
+  // The runtime config's API origin (config.js), else the api-server's
+  // default port on loopback (protocol per DISABLE_TLS).
+  return loadConfig().API_URL || buildLocalhostUrl(API_SERVER_DEFAULT_PORT);
 }
 
 /** True once the reliant api-server's URL is known. */
@@ -152,7 +152,7 @@ export function isApiReady(): boolean {
 
 /**
  * control-plane's admin-server base URL, or null when this deployment has no
- * control plane (`VITE_CONTROL_PLANE_API_URL` unset).
+ * control plane (config.js's `CONTROL_PLANE_API_URL` unset).
  *
  * An http(s)-served renderer (web-dev AND electron-dev) uses the document
  * origin, so Vite's `/controlplane.v1.*` proxy forwards to admin-server —
@@ -202,7 +202,7 @@ const ROUTES: Record<TransportRoute, RouteSpec> = {
   },
   "control-plane": {
     baseUrl: controlPlaneBaseUrl,
-    notReady: "Control plane API URL not configured (VITE_CONTROL_PLANE_API_URL)",
+    notReady: "Control plane API URL not configured (CONTROL_PLANE_API_URL)",
     withAuth: true,
     backend: "control-plane",
     useBinaryFormat: false,
@@ -239,7 +239,7 @@ export function transportFor(route: TransportRoute): Transport {
       isElectron: typeof window !== "undefined" && window.RELIANT_CONFIG?.isElectron,
     });
     // Mirrored into transport.ts so errorInterceptor can put it in the
-    // Sentry/log context of a failure.
+    // reported/log context of a failure.
     setCurrentBaseURL(baseUrl);
   }
 

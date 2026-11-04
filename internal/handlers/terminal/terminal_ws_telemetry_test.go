@@ -146,12 +146,24 @@ func spanAttributes(span sdktrace.ReadOnlySpan) map[attribute.Key]attribute.Valu
 
 func outcome(o string) attribute.KeyValue { return attribute.String("outcome", o) }
 
+// outputTestRouter is a pingTestRouter whose session's output is output.
+type outputTestRouter struct {
+	*pingTestRouter
+	output chan *toolexec.TerminalOutputEvent
+}
+
+func (r *outputTestRouter) SubscribeTerminalOutput(context.Context, string, string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
+	return r.output, func() {}, nil
+}
+
 // A session the browser opens and closes is one server span continuing the
 // browser's trace, with its outcome and traffic, and moves every session
 // metric by exactly one connection's worth.
 func TestTerminalWS_TracesAndMetersASession(t *testing.T) {
-	router := &pingTestRouter{terminalCommandRouter: newTerminalCommandRouter(), inputs: make(chan []byte, 8)}
-	router.output = make(chan *toolexec.TerminalOutputEvent, 1)
+	router := &outputTestRouter{
+		pingTestRouter: &pingTestRouter{terminalCommandRouter: newTerminalCommandRouter(), inputs: make(chan []byte, 8)},
+		output:         make(chan *toolexec.TerminalOutputEvent, 1),
+	}
 	h := newTerminalTelemetryHarness(t, router)
 
 	conn := h.dial(t, "token=secret-token&workingDir=/tmp&projectId=proj-1&reconnect=1"+
@@ -191,7 +203,8 @@ func TestTerminalWS_TracesAndMetersASession(t *testing.T) {
 	require.Equal(t, int64(5), attrs[attrBytesOut].AsInt64())
 	require.True(t, attrs[attrReconnect].AsBool())
 	require.Equal(t, "daemon-session-1", attrs[attrSessionID].AsString())
-	require.Equal(t, "proj-1", attrs[attrProjectID].AsString())
+	// No checkouts verified proj-1 is the caller's, so it is not recorded.
+	require.NotContains(t, attrs, attribute.Key(attrProjectID), "an unverified project id must stay off the span")
 	require.Equal(t, terminalTestUserID, attrs["user.id"].AsString())
 	require.Contains(t, attrs, attribute.Key(attrDurationMS))
 	for k, v := range attrs {
@@ -219,6 +232,10 @@ func (r failingCreateRouter) SendDaemonCommand(ctx context.Context, userID, comm
 		return nil, errors.New("forkpty: device not configured")
 	}
 	return r.terminalCommandRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
+func (r failingCreateRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 // A daemon that cannot open the shell is an error span and a create_failed
@@ -268,21 +285,55 @@ func TestTerminalWS_MetersAPingTimeout(t *testing.T) {
 	require.Equal(t, int64(1), int64Sum(t, rm, "reliant.terminal.sessions.ended", outcome(outcomePingTimeout)))
 }
 
-// A request refused before the upgrade still gets its span, and is counted as
-// rejected rather than as a session.
-func TestTerminalWS_TracesARefusedUpgrade(t *testing.T) {
+// A request refused before authentication is counted as rejected, and is
+// never traced: an unauthenticated caller can neither join a trace of its
+// choosing nor put an identifier into telemetry.
+func TestTerminalWS_CountsButDoesNotTraceAnUnauthenticatedRequest(t *testing.T) {
 	h := newTerminalTelemetryHarness(t, newTerminalCommandRouter())
 
-	_, resp, err := websocket.DefaultDialer.Dial(h.url+"?workingDir=/tmp", nil)
+	_, resp, err := websocket.DefaultDialer.Dial(h.url+"?workingDir=/tmp&projectId=proj-1&worktreeId=wt-1"+
+		"&traceparent=00-"+browserTraceID+"-"+browserSpanID+"-01", nil)
 	require.Error(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	_ = resp.Body.Close()
 
-	span := h.span(t)
-	require.Equal(t, outcomeUnauthenticated, spanAttributes(span)[attrOutcome].AsString())
+	// The handler has returned once the response is read.
+	require.Empty(t, h.spans.Started(), "an unauthenticated request must start no span")
 
 	rm := h.metrics(t)
 	require.Equal(t, int64(1), int64Sum(t, rm, "reliant.terminal.sessions.rejected", outcome(outcomeUnauthenticated)))
 	require.Equal(t, int64(0), int64Sum(t, rm, "reliant.terminal.sessions.started"))
 	require.Equal(t, int64(0), int64Sum(t, rm, "reliant.terminal.sessions.active"))
+}
+
+// A worktree id is recorded only once placement has checked it is the
+// caller's; another user's worktree is a workspace_not_found outcome whose id
+// stays off the span.
+func TestTerminalWS_RecordsOnlyVerifiedWorkspaceIDs(t *testing.T) {
+	t.Run("theirs", func(t *testing.T) {
+		h := newTerminalTelemetryHarness(t, &machineRecordingRouter{}, WithTerminalCheckouts(routingCheckouts()))
+		conn := h.dial(t, "token=test&workingDir=/tmp&worktreeId=wt-theirs&projectId=p-theirs")
+		var msg wsMessage
+		require.NoError(t, conn.ReadJSON(&msg))
+		require.Equal(t, "error", msg.Type)
+
+		attrs := spanAttributes(h.span(t))
+		require.Equal(t, outcomeWorkspaceNotFound, attrs[attrOutcome].AsString())
+		require.NotContains(t, attrs, attribute.Key(attrWorktreeID))
+		require.NotContains(t, attrs, attribute.Key(attrProjectID))
+	})
+	t.Run("mine", func(t *testing.T) {
+		h := newTerminalTelemetryHarness(t, &machineRecordingRouter{}, WithTerminalCheckouts(routingCheckouts()))
+		conn := h.dial(t, "token=test&workingDir=/tmp&worktreeId=wt-branch&projectId=p1")
+		var init wsMessage
+		require.NoError(t, conn.ReadJSON(&init))
+		require.Equal(t, "init", init.Type)
+		require.NoError(t, conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")))
+
+		attrs := spanAttributes(h.span(t))
+		require.Equal(t, outcomeClientClosed, attrs[attrOutcome].AsString())
+		require.Equal(t, "wt-branch", attrs[attrWorktreeID].AsString())
+		require.Equal(t, "p1", attrs[attrProjectID].AsString())
+	})
 }

@@ -115,8 +115,8 @@ service DaemonService {
 }
 
 message CreateDaemonRequest {
-  // Human-readable name for the new daemon. Used for display and for the
-  // (owner, name) idempotency check inside CreateDaemon; not a lookup key.
+  // Human-readable name for the new daemon. Unique per owner: a name the owner
+  // already uses is ALREADY_EXISTS unless refresh_existing is set.
   string name = 1;
   DaemonType daemon_type = 2;
   // Managed daemon fields
@@ -131,6 +131,20 @@ message CreateDaemonRequest {
   // Daemon enhancements
   DaemonSize size = 10;
   string idle_timeout = 11; // duration string, e.g. "30m"
+  // What to do when the owner already has a daemon with this name.
+  //
+  // Unset (a person pressing Create): the request fails with ALREADY_EXISTS,
+  // so a second machine is never silently folded into the first. Set: the
+  // existing managed daemon is refreshed (size, image, repo) and returned —
+  // the retry-safe commit a flow that may run twice needs (onboarding names
+  // its one machine and re-sends the create on every retry).
+  bool refresh_existing = 12;
+  // Where a managed machine's disk lives; unspecified is PERSISTENT. EPHEMERAL
+  // gives every start a fresh disk that is deleted when the machine suspends,
+  // so a suspended machine costs nothing and keeps nothing: for stateless
+  // machines such as CI pool members. Fixed at create: refresh_existing with
+  // a different mode is FAILED_PRECONDITION.
+  controlplane.v1.DaemonDiskMode disk_mode = 13;
 }
 
 message CreateDaemonResponse {
@@ -164,6 +178,23 @@ message UpdateDaemonRequest {
   // resources are derived from its size; change the size with ResizeDaemon.
   reserved 3, 4;
   reserved "image", "resources";
+  // env, when present, REPLACES the machine's environment variables (an
+  // empty one clears them); absent leaves them as they are. Names Reliant
+  // sets on every machine (DAEMON_*, RELIANT_*, WORKSPACE_*, PATH, HOME, the
+  // proxy variables, ...) are refused. A running machine picks the new set
+  // up the next time its pod is built: resume, resize or re-create.
+  MachineEnv env = 5;
+  // idle_timeout, when present, replaces how long a managed machine may sit
+  // idle before it suspends (a duration such as "10m"; at most 4h). Absent
+  // leaves it as it is. It applies to the running machine at once: the
+  // operator reads it at every idle check. A machine pool sets its members'
+  // with it (the pool's member_idle_timeout).
+  optional string idle_timeout = 6;
+}
+
+// MachineEnv is a managed machine's declared environment.
+message MachineEnv {
+  map<string, string> vars = 1;
 }
 
 message UpdateDaemonResponse {

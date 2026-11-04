@@ -100,7 +100,7 @@ func (tc *testContext) createContextWindow(threadID string, sequence int, parent
 // createMessage creates a message in a context window
 func (tc *testContext) createMessage(chatID, threadID, cwID string, ordinal int64, role reliantv1.MessageRole) *db.Message {
 	tc.t.Helper()
-	seq, err := tc.repo.GetNextSeq(tc.ctx, chatID, threadID)
+	_, seq, err := tc.repo.AllocateMessageOrder(tc.ctx, threadID, chatID)
 	require.NoError(tc.t, err)
 	msg := &db.Message{
 		ID:              uuid.New().String(),

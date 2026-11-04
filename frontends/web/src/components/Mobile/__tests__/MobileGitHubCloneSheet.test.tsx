@@ -7,8 +7,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
-import type { Daemon } from "../../../services/controlPlane/daemon";
+import { DaemonStatus, type DaemonInfo as Daemon } from "../../../gen/reliant/v1/daemon_registry_pb";
 import type { GitRepo } from "../../../services/controlPlane/git/types";
 
 const mocks = vi.hoisted(() => ({
@@ -36,8 +35,8 @@ const repo: GitRepo = {
   updatedAt: "",
 };
 
-function daemon(overrides: Partial<Daemon> & { id: string }): Partial<Daemon> {
-  return { name: overrides.id, status: DaemonStatus.ACTIVE, ...overrides };
+function daemon(overrides: Partial<Daemon> & { daemonId: string }): Partial<Daemon> {
+  return { status: DaemonStatus.ACTIVE, ...overrides };
 }
 
 beforeEach(() => {

@@ -25,3 +25,6 @@ import (
 func terminateGracefully(proc *os.Process) error {
 	return proc.Kill()
 }
+
+// killGroup kills the child. Windows has no process groups to signal here.
+func killGroup(proc *os.Process, _ []GroupMember) { _ = proc.Kill() }

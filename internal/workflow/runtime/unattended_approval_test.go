@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -57,11 +59,11 @@ func runApprovalWorkflow(t *testing.T, inputs map[string]interface{}) ([]string,
 	reg("ApprovalResolve", func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 		return map[string]interface{}{}, nil
 	})
-	reg("ActivityLoadWorkflow", func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	reg("ActivityLoadWorkflow", func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		return LoadedWorkflow{WorkflowJSON: workflowBytes}, nil
 	})
 	reg("WorkflowStatus", func(_ context.Context, _ map[string]interface{}) (interface{}, error) { return nil, nil })
-	reg("WorkflowCheckpoint", func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+	reg("WorkflowCheckpoint", func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	})
 	reg("Cleanup", func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {

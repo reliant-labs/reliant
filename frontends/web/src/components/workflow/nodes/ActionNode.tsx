@@ -6,11 +6,10 @@ import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 import { getNodeIcon, getNodeColor, getNodeDisplayName, getNodeTheme } from '../../../lib/node-metadata'
 import { getActionUses, isIntegrationActionStep } from '../../../lib/actionNodeArgs'
-import { refIntegration, type CatalogEntry } from '../../../api/catalog-search-grpc'
-import { connectionKeys } from '../../../hooks/connection-queries'
+import { cachedCatalogEntry, refIntegration } from '../../../hooks/catalog-queries'
 import { IntegrationLogoTile } from '../../icons/IntegrationLogo'
 
-interface ActionNodeProps {
+export interface ActionNodeProps {
   data: {
     step: Step
     label: string
@@ -30,7 +29,7 @@ function useIntegrationHeader(step: Step): { title: string; icon: string } | und
   const queryClient = useQueryClient()
   if (!isIntegrationActionStep(step)) return undefined
   const uses = getActionUses(step)
-  const cached = uses ? queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(uses)) : undefined
+  const cached = uses ? cachedCatalogEntry(queryClient, uses) : undefined
   if (cached) {
     return { title: `${cached.summary.integration.displayName} · ${cached.summary.displayName}`, icon: cached.summary.integration.icon }
   }

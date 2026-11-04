@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -22,25 +23,84 @@ service MCPService {
   rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {}
   
   // InstallServer installs a new MCP server
-  rpc InstallServer(InstallServerRequest) returns (InstallServerResponse) {}
+  rpc InstallServer(InstallServerRequest) returns (InstallServerResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "install"
+        target: {
+          kind: "mcp_server"
+          id: "name"
+        }
+        detail: ["project_id", "scope", "response.success"]
+      }
+    };
+  }
   
   // UninstallServer removes an MCP server
-  rpc UninstallServer(UninstallServerRequest) returns (UninstallServerResponse) {}
+  rpc UninstallServer(UninstallServerRequest) returns (UninstallServerResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "uninstall"
+        target: {
+          kind: "mcp_server"
+          id: "name"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
   
   // RestartServer restarts an MCP server
-  rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {}
+  rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}
+    };
+  }
   
   // ListRecommended returns a list of recommended MCP servers
   rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {}
   
   // UpdateServerConfig updates the configuration of an MCP server
-  rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {}
+  rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update_config"
+        target: {
+          kind: "mcp_server"
+          id: "name"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 
   // SetServerEnabled toggles whether a server is enabled without uninstalling
-  rpc SetServerEnabled(SetServerEnabledRequest) returns (SetServerEnabledResponse) {}
+  rpc SetServerEnabled(SetServerEnabledRequest) returns (SetServerEnabledResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_enabled"
+        target: {
+          kind: "mcp_server"
+          id: "name"
+        }
+        detail: ["project_id", "enabled", "response.success"]
+      }
+    };
+  }
 
   // MoveServerScope changes where a server config is stored (global/project/project-local)
-  rpc MoveServerScope(MoveServerScopeRequest) returns (MoveServerScopeResponse) {}
+  rpc MoveServerScope(MoveServerScopeRequest) returns (MoveServerScopeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "move_scope"
+        target: {
+          kind: "mcp_server"
+          id: "name"
+        }
+        detail: ["project_id", "scope", "response.success"]
+      }
+    };
+  }
 }
 
 // MCPServerStatus indicates the health state of an MCP server

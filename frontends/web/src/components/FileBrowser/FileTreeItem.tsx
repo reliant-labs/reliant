@@ -15,21 +15,26 @@ import {
   Trash2,
 } from "lucide-react";
 import { FileIcon } from "./FileIcon";
-import { ContextMenu } from "../ui/ContextMenu";
-import type { ContextMenuItem } from "../ui/ContextMenu";
+import ContextMenu from "../forge-ui/context_menu";
+import type { MenuItem } from "../forge-ui/dropdown_menu";
+import {
+  contextMenuOpening,
+  menuGroups,
+  MENU_SEPARATOR,
+  type ContextMenuOpening,
+} from "../../lib/contextMenuOpening";
+import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import type { FileNode } from "./index";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { createFile, createFolder, deleteFileOrFolder, copyFile, moveFile, copyDirectoryRecursive } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import { useWorktreeById } from "../../hooks/useWorktreeById";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
-import { queryClient } from "../../lib/query-client";
-import { settingsKeys, type UserPreferences } from "../../hooks/settings-queries";
+import { cachedUserPreferences } from "../../hooks/settings-queries";
 import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
+import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 
 export type FileOperationType = "copy" | "delete";
 
@@ -131,17 +136,14 @@ export const FileTreeItem = memo(function FileTreeItem({
     ? expandedPaths.has(node.path) 
     : internalIsExpanded;
   
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuOpening | null>(null);
   const [creatingInline, setCreatingInline] = useState<"file" | "folder" | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const itemRef = useRef<HTMLButtonElement>(null);
   const currentProject = useProjectStore((state) => state.currentProject);
   const viewerStore = useViewerStore();
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
   const listedWorktree = useWorktreeById(worktreeId);
   const { setClipboard, operation, filePath, fileName, isDirectory: clipboardIsDirectory, worktreeId: clipboardWorktreeId, projectId: clipboardProjectId, clearClipboard } = useFileClipboardStore();
   // Get the worktree for building full paths
@@ -246,7 +248,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextMenu(contextMenuOpening(e));
   };
 
   const copyToClipboard = (text: string) => {
@@ -324,8 +326,8 @@ export const FileTreeItem = memo(function FileTreeItem({
     }
   };
 
-  const getContextMenuItems = (): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
+  const getContextMenuItems = (): Array<MenuItem | typeof MENU_SEPARATOR> => {
+    const items: Array<MenuItem | typeof MENU_SEPARATOR> = [];
 
     if (isDirectory) {
       items.push({
@@ -358,7 +360,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Add file operations
     if (isDirectory) {
       items.push(
-        { label: "", onClick: () => {}, separator: true },
+        MENU_SEPARATOR,
         {
           label: "New File",
           icon: <FilePlus className="w-4 h-4" />,
@@ -391,7 +393,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Copy operations
     const fullPath = buildFullPath(effectiveWorktree?.path, node.path);
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Copy Path",
         icon: <Copy className="w-4 h-4" />,
@@ -414,7 +416,7 @@ export const FileTreeItem = memo(function FileTreeItem({
 
     // Cut/Copy operations (for both files and directories)
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Cut",
         icon: <Scissors className="w-4 h-4" />,
@@ -445,7 +447,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Paste operation (only for directories)
     if (isDirectory && operation && filePath && fileName) {
       items.push(
-        { label: "", onClick: () => {}, separator: true },
+        MENU_SEPARATOR,
         {
           label: `Paste ${operation === "cut" ? "(Move)" : "(Copy)"}`,
           icon: <ClipboardPaste className="w-4 h-4" />,
@@ -497,12 +499,12 @@ export const FileTreeItem = memo(function FileTreeItem({
 
     // Delete
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Delete",
         icon: <Trash2 className="w-4 h-4" />,
         onClick: () => {
-          const skipConfirmation = queryClient.getQueryData<UserPreferences>(settingsKeys.preferences())?.skipDeleteConfirmation ?? false;
+          const skipConfirmation = cachedUserPreferences().skipDeleteConfirmation;
           onFileOperation?.("delete", node, skipConfirmation);
         },
       }
@@ -532,7 +534,7 @@ export const FileTreeItem = memo(function FileTreeItem({
             aria-hidden
           />
         ))}
-      <Tooltip content={buildFullPath(effectiveWorktree?.path, node.path)} delay={300} placement="bottom">
+      <Tooltip content={buildFullPath(effectiveWorktree?.path, node.path)} delay={300} side="bottom" triggerClassName="block">
         <button
           ref={itemRef}
           data-path={node.path}
@@ -583,7 +585,7 @@ export const FileTreeItem = memo(function FileTreeItem({
             <Folder
               className={cn(
                 "w-4 h-4 transition-colors",
-                effectiveIsExpanded ? "text-primary" : "text-muted-foreground"
+                effectiveIsExpanded ? "text-primary-ink" : "text-muted-foreground"
               )}
             />
           ) : (
@@ -595,7 +597,7 @@ export const FileTreeItem = memo(function FileTreeItem({
         <span
           className={cn(
             "flex-1 truncate transition-colors",
-            isSelected && "text-primary font-semibold",
+            isSelected && "text-primary-ink font-semibold",
             !isSelected && "group-hover:text-foreground"
           )}
         >
@@ -625,8 +627,7 @@ export const FileTreeItem = memo(function FileTreeItem({
                       content={`${errorCount} error${
                         errorCount > 1 ? "s" : ""
                       }${isDirectory ? " in this folder" : ""}`}
-                      placement="top"
-                    >
+                      side="top" triggerClassName="block">
                       <div className="flex items-center gap-0.5 text-destructive-ink">
                         <AlertCircle className="w-3 h-3" />
                         <span className="text-xs font-medium">
@@ -640,8 +641,7 @@ export const FileTreeItem = memo(function FileTreeItem({
                       content={`${warningCount} warning${
                         warningCount > 1 ? "s" : ""
                       }${isDirectory ? " in this folder" : ""}`}
-                      placement="top"
-                    >
+                      side="top" triggerClassName="block">
                       <div className="flex items-center gap-0.5 text-amber-500">
                         <AlertTriangle className="w-3 h-3" />
                         <span className="text-xs font-medium">
@@ -668,9 +668,9 @@ export const FileTreeItem = memo(function FileTreeItem({
         >
           <span className="w-4 h-4 flex-shrink-0">
             {creatingInline === "file" ? (
-              <FilePlus className="w-4 h-4 text-primary" />
+              <FilePlus className="w-4 h-4 text-primary-ink" />
             ) : (
-              <FolderPlus className="w-4 h-4 text-primary" />
+              <FolderPlus className="w-4 h-4 text-primary-ink" />
             )}
           </span>
           <input
@@ -726,9 +726,20 @@ export const FileTreeItem = memo(function FileTreeItem({
       {/* Context Menu */}
       {contextMenu && (
         <ContextMenu
-          items={getContextMenuItems()}
+          label={`${node.name} actions`}
+          groups={menuGroups(getContextMenuItems())}
+          open
           position={contextMenu}
-          onClose={() => setContextMenu(null)}
+          openVia={contextMenu.via}
+          onOpenChange={(open) => {
+            if (open) return;
+            setContextMenu(null);
+            // Back to the composer, unless the chosen item focused an input
+            // of its own (inline new file/folder): after its state commits.
+            requestAnimationFrame(() => {
+              if (!isInputFocused()) focusChatInput();
+            });
+          }}
         />
       )}
 

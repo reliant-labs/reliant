@@ -17,7 +17,7 @@
 
 import { ExternalLink, Globe } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { DOMAIN_AVAILABILITY_EXPLANATIONS, type ForgeDomain } from "@/services/forge/domains";
 
@@ -49,7 +49,7 @@ export function EnvDomains({
 }) {
   if (!placed) {
     return (
-      <p data-testid="env-domains-not-placed" className="text-sm text-muted-foreground">
+      <p data-testid="env-domains-not-placed" className="text-sm text-ink-muted">
         Custom domains are served for environments Reliant runs. This one runs on your own cluster, so its
         hostnames are yours to route.
       </p>
@@ -57,14 +57,14 @@ export function EnvDomains({
   }
   if (isLoading && !state) {
     return (
-      <p data-testid="env-domains-loading" className="text-sm text-muted-foreground">
+      <p data-testid="env-domains-loading" className="text-sm text-ink-muted">
         Loading domains…
       </p>
     );
   }
   if (state && state.availability !== "available") {
     return (
-      <p data-testid="env-domains-unavailable" className="text-sm text-muted-foreground">
+      <p data-testid="env-domains-unavailable" className="text-sm text-ink-muted">
         {DOMAIN_AVAILABILITY_EXPLANATIONS[state.availability]}
       </p>
     );
@@ -74,7 +74,7 @@ export function EnvDomains({
   if (bound.length === 0) {
     return (
       <div data-testid="env-domains-empty" className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">No custom domain points here — it serves on its generated URLs.</p>
+        <p className="text-sm text-ink-muted">No custom domain points here — it serves on its generated URLs.</p>
         <Button variant="outline" size="sm" onClick={onManage} leftIcon={<Globe className="h-3.5 w-3.5" />}>
           Add a domain
         </Button>
@@ -86,7 +86,7 @@ export function EnvDomains({
   const hidden = bound.length - shown.length;
   return (
     <div className="space-y-3" data-testid="env-domains">
-      <ul className="overflow-hidden rounded-lg border border-border/60 bg-background">
+      <ul className="overflow-hidden rounded-lg border border-border/60 bg-surface-sunken">
         {shown.map((domain) => (
           <li
             key={domain.id}
@@ -100,26 +100,26 @@ export function EnvDomains({
                   target="_blank"
                   rel="noreferrer"
                   title={domain.hostname}
-                  className="inline-flex min-w-0 items-center gap-1 font-mono text-sm text-foreground hover:underline"
+                  className="inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink hover:underline"
                 >
                   <span className="truncate">{domain.hostname}</span>
-                  <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <ExternalLink className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
                 </a>
               ) : (
-                <span className="truncate font-mono text-sm text-foreground" title={domain.hostname}>
+                <span className="truncate font-mono text-sm text-ink" title={domain.hostname}>
                   {domain.hostname}
                 </span>
               )}
             </span>
             <DomainStateBadge state={domain.state} />
-            <span className="col-span-2 min-w-0 truncate text-xs text-muted-foreground">
+            <span className="col-span-2 min-w-0 truncate text-xs text-ink-muted">
               {domain.binding?.redirectTo ? `Redirects to ${domain.binding.redirectTo}` : `Serves ${domain.binding?.target || "—"}`}
             </span>
           </li>
         ))}
       </ul>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-ink-muted">
           {hidden > 0 ? `and ${hidden} more` : ""}
         </span>
         <Button variant="ghost" size="sm" onClick={onManage} data-testid="env-domains-manage">

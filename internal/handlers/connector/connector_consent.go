@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -170,6 +171,9 @@ func (s *Service) RevokeClientAuthorization(
 	revoked, err := s.deps.Grants.DeleteBinding(ctx, userID, clientID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to revoke authorization"))
+	}
+	if !revoked {
+		activity.Skip(ctx) // no such authorization: nothing changed
 	}
 	return connect.NewResponse(&reliantv1.RevokeClientAuthorizationResponse{Revoked: revoked}), nil
 }

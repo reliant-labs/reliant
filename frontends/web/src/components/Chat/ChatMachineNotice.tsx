@@ -74,7 +74,7 @@ export function ChatMachineNoticeLine({ notice }: { notice: ChatMachineNotice })
             type="button"
             onClick={act}
             disabled={resume.isPending}
-            className="text-xs font-medium text-primary hover:underline disabled:opacity-60 disabled:no-underline"
+            className="text-xs font-medium text-primary-ink hover:underline disabled:opacity-60 disabled:no-underline"
           >
             {resume.isPending ? "Starting…" : notice.offerRetry ? "Try again" : "Start it"}
           </button>

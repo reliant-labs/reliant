@@ -20,6 +20,7 @@ cmd.gatewayOptions {
     MaxIdleConns: 17
     ConnectTimeout: 47s
     SchemaWait: 2m3s
+    KeepIdleWarm: true
   }
   DataDir: "/surface/data"
   NATS: natsutil.Endpoint {

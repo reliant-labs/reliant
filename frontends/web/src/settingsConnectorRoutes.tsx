@@ -45,7 +45,7 @@ export function createSettingsConnectorRoutes<TParent extends AnyRoute>(
     getParentRoute,
     path: '/settings/connectors',
     beforeLoad: () => {
-      throw redirect({ href: '/settings/environments?from=connectors', replace: true })
+      throw redirect({ href: '/settings/machines?from=connectors', replace: true })
     },
   })
 

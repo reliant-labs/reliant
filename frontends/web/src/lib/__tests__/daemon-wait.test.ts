@@ -324,3 +324,19 @@ describe("daemonWaitSummary", () => {
     expect(daemonWaitSummary(state)).toBe(state.title);
   });
 });
+
+describe("no machine at all", () => {
+  it("says there is no machine yet and offers to add one, instead of claiming one is starting", () => {
+    const state = classifyDaemonWait({ daemon: null, elapsedMs: 0, isCloud: true, noMachine: true });
+    expect(state.tone).toBe("none");
+    expect(state.title).toMatch(/No machine yet/);
+    expect(state.title).not.toMatch(/Starting/);
+    expect(state.showAddMachine).toBe(true);
+    expect(state.shouldRetry).toBe(false);
+  });
+
+  it("still narrates the startup while the list has not answered", () => {
+    const state = classifyDaemonWait({ daemon: null, elapsedMs: 0, isCloud: true });
+    expect(state.tone).not.toBe("none");
+  });
+});

@@ -2,7 +2,7 @@
 
 /**
  * IntegrationValuePicker: the nine states, the keyboard model and what it
- * announces (automation-ux-spec.md §3.5). ListInputOptions is the only mock,
+ * announces. ListInputOptions is the only mock,
  * answering with the real generated messages; until the server implements it
  * (T6) these are the options the picker is exercised against.
  */
@@ -22,10 +22,10 @@ import {
   type ListInputOptionsRequest,
 } from "@/gen/reliant/v1/catalog_pb";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+
 const listInputOptions = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ listInputOptions }) },
-}));
 
 import { IntegrationValuePicker, type IntegrationValuePickerProps } from "../IntegrationValuePicker";
 
@@ -85,6 +85,7 @@ const activeOption = () => {
 };
 
 beforeEach(() => {
+  setTransport(mockTransport({ "CatalogService.ListInputOptions": (req) => listInputOptions(req) }));
   listInputOptions.mockReset();
   listInputOptions.mockImplementation(async (req: ListInputOptionsRequest) => {
     if (req.resolve.length > 0) return page([]);

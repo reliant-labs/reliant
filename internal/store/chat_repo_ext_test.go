@@ -214,6 +214,10 @@ func TestChatListAndSearch(t *testing.T) {
 		if id == "l-5" {
 			c.Title = "needle in the title"
 		}
+		if id == "l-3" {
+			// An automation's run, as the launcher writes it: born a run.
+			c.Origin = core.ChatOriginAutomation
+		}
 		if err := store.InsertChat(ctx, env.ORM, c); err != nil {
 			t.Fatalf("InsertChat(%s): %v", id, err)
 		}
@@ -301,6 +305,18 @@ func TestChatListAndSearch(t *testing.T) {
 	sort.Strings(matched)
 	if err != nil || !reflect.DeepEqual(matched, []string{"l-1", "l-5"}) {
 		t.Fatalf("SearchChats(needle) = %v, %v; want l-1 (message text) and l-5 (title), one row per chat", matched, err)
+	}
+	// No ProjectID searches all of the user's projects; another user's search
+	// finds none of these.
+	allProjects, err := store.SearchChats(ctx, env.ORM, core.ChatSearchFilters{UserID: storetest.SeedUserID, SearchQuery: "needle", Limit: 10})
+	allMatched := convChatIDs(allProjects)
+	sort.Strings(allMatched)
+	if err != nil || !reflect.DeepEqual(allMatched, matched) {
+		t.Fatalf("SearchChats(needle, all projects) = %v, %v; want %v", allMatched, err, matched)
+	}
+	foreign, err := store.SearchChats(ctx, env.ORM, core.ChatSearchFilters{UserID: "someone-else", SearchQuery: "needle", Limit: 10})
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("SearchChats(needle) as another user = %v, %v; want none", convChatIDs(foreign), err)
 	}
 
 	// Archived chats with their worktree name: the live worktree's, else the
@@ -417,8 +433,30 @@ func TestChatMachineMarkers(t *testing.T) {
 	if changed, err := store.SetChatQueuedForMachine(ctx, env.ORM, "m-3", true); err != nil || !changed {
 		t.Fatalf("queue m-3 = %v, %v", changed, err)
 	}
+	for _, m := range markers {
+		if _, err := m.set("m-3", true); err != nil {
+			t.Fatalf("%s(m-3): %v", m.name, err)
+		}
+	}
 	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateArchived, "test"); err != nil {
 		t.Fatalf("archive m-3: %v", err)
+	}
+	// Archiving drops every machine marker, so unarchiving starts nothing:
+	// a queued message or breaker pause left set would be delivered, or
+	// resumed, the moment the chat left the archive.
+	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateIdle, "test"); err != nil {
+		t.Fatalf("unarchive m-3: %v", err)
+	}
+	var markersLeft int
+	if err := env.ORM.Bun().NewRaw(`SELECT num_nonnulls(queued_for_machine_at, paused_for_machine_at, daemon_blocked_at)
+FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft != 0 {
+		t.Fatalf("after archive+unarchive m-3 holds %d machine markers (%v); want none", markersLeft, err)
+	}
+	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateArchived, "test"); err != nil {
+		t.Fatalf("re-archive m-3: %v", err)
+	}
+	if _, err := store.SetChatQueuedForMachine(ctx, env.ORM, "m-3", true); err != nil {
+		t.Fatalf("queue archived m-3: %v", err)
 	}
 	for _, user := range []string{"", storetest.SeedUserID, "someone-else"} {
 		got, err := store.ListChatsQueuedForMachine(ctx, env.ORM, user, 10)

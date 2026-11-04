@@ -3,17 +3,21 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -59,6 +63,10 @@ type WorkflowStatusInput struct {
 	// workflow declared no outcome, and the stored value is left untouched —
 	// absence is not failure.
 	Outcome string `json:"outcome,omitempty"`
+	// OutcomeNode is the top-level node that declared a failure Outcome. Its
+	// newest attempt is marked failed (MarkDeclaredFailureNode), so the run's
+	// diagnostics name where it ended instead of finding no failed node.
+	OutcomeNode string `json:"outcome_node,omitempty"`
 	// Error is why the run failed, on a "failed" status. It becomes the
 	// source run's error in a workflow-event trigger's payload.
 	Error string `json:"error,omitempty"`
@@ -88,12 +96,16 @@ type WorkflowStatusOutput struct {
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
 	repo WorkflowStatusStore
+	// trackerFor returns the product-event tracker for a user; analytics.ForUser
+	// outside tests.
+	trackerFor func(ctx context.Context, userID string) analytics.Tracker
 }
 
 // NewWorkflowStatusActivity creates a new WorkflowStatusActivity
 func NewWorkflowStatusActivity(repo WorkflowStatusStore) *WorkflowStatusActivity {
 	return &WorkflowStatusActivity{
-		repo: repo,
+		repo:       repo,
+		trackerFor: analytics.ForUser,
 	}
 }
 
@@ -104,14 +116,24 @@ func (a *WorkflowStatusActivity) Name() string {
 
 // Execute writes workflow status to chat_updates table, updates chat state, and tracks workflow hierarchy
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
-	// Track workflow analytics (non-blocking)
-	go a.trackAnalytics(ctx, input)
-
 	// Track workflow in database for parent-child hierarchy
 	if err := a.trackWorkflow(ctx, input); err != nil {
+		if terminalWriteMustRetry(input.Status, err) {
+			// The row's last status write did not happen, and nothing will
+			// write it after this one: report it, so Temporal retries this
+			// activity (workflowStatusActivityOptions gives a terminal status
+			// an unlimited, deadline-bounded retry). Reporting success over
+			// it is how a finished run's chat read as running (e2e story
+			// 05). Nothing below has run yet, so a retry repeats none of it.
+			return WorkflowStatusOutput{Success: false}, fmt.Errorf("record %s status of workflow %s: %w", input.Status, input.WorkflowID, err)
+		}
 		// Log but don't fail - chat_update is more important for UI
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to track workflow", "error", err)
 	}
+
+	// Track workflow analytics (non-blocking). After the status write, so a
+	// retried terminal write is counted once.
+	go a.trackAnalytics(ctx, input)
 
 	// Determine if this is a root workflow (no parent)
 	isRootWorkflow := input.ParentWorkflowID == ""
@@ -127,7 +149,17 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	//   nobody watching. This covers preflight failures such as an unavailable
 	//   daemon, which also end the root as "failed".
 	// A completed run that declared a failure outcome is also a failure.
+	// Mark the declaring node first: everything below that explains the
+	// failure reads it back from the node attempts.
+	if input.Status == "completed" && input.Outcome == model.OutcomeFailure && input.OutcomeNode != "" {
+		if _, err := a.repo.MarkDeclaredFailureNode(ctx, input.WorkflowID, input.OutcomeNode); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Could not mark the failure-outcome node", "workflow_id", input.WorkflowID, "node", input.OutcomeNode, "error", err)
+		}
+	}
 	if isRootWorkflow {
+		if input.LaunchRun && (input.Status == "failed" || input.Status == "completed" && input.Outcome == model.OutcomeFailure) {
+			a.ensureAutomationFailureMessage(ctx, input)
+		}
 		a.recordLaunchRunStatus(ctx, input)
 		reason := ""
 		switch {
@@ -197,6 +229,20 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
+}
+
+// terminalWriteMustRetry reports whether trackWorkflow's err must fail the
+// activity so Temporal retries it: a terminal status (completed, failed,
+// cancelled) whose write did not happen, for any reason but a row that does
+// not exist — no attempt can write that, and an inline workflow's notify
+// may name no row of its own.
+func terminalWriteMustRetry(status string, err error) bool {
+	switch status {
+	case "completed", "failed", "cancelled":
+	default:
+		return false
+	}
+	return !svcerr.IsNotFound(err) && !errors.Is(err, sql.ErrNoRows)
 }
 
 // completionNotifies reports whether a ROOT completion should mark the chat
@@ -433,6 +479,13 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// workflow over running threads and reaped them as a missed cascade.
 		return a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Failed()); err != nil {
+				return err
+			}
+			// Why, on the run itself and in the same commit as the status:
+			// a run that failed before any node ran has nowhere else to
+			// carry it (no node attempt), and every surface that reads the
+			// run (GetRun, get_run, the run page) reads it from here.
+			if err := a.repo.SetWorkflowFailureDetail(txCtx, input.WorkflowID, rundiagnostics.ErrorText(input.Error)); err != nil {
 				return err
 			}
 			if err := a.cascadeTerminalStatus(txCtx, input.WorkflowID, db.StopReasonFailed); err != nil {
@@ -843,15 +896,18 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	return a.repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeThread, input.WorkflowID, string(updateDataJSON))
 }
 
-// trackAnalytics records workflow product events (internal/analytics).
-// Only tracks root workflows to reduce event volume - child workflow data
-// can be derived from root workflow metrics if needed
+// isChildRun reports whether a run was started by another workflow or agent
+// (a spawned sub-agent, or a node of a parent graph) rather than by a user,
+// trigger or API call. The product dashboards count a run once by excluding
+// is_child=true.
+func isChildRun(input WorkflowStatusInput) bool {
+	return input.ParentWorkflowID != "" || input.SpawnedByToolCallID != "" || input.SpawnedByNodeID != ""
+}
+
+// trackAnalytics records workflow product events (internal/analytics). Child
+// runs are recorded too, flagged is_child, so a consumer can count either.
 func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input WorkflowStatusInput) {
-	// Skip child workflows to reduce event volume
-	isChild := input.ParentWorkflowID != ""
-	if isChild {
-		return
-	}
+	isChild := isChildRun(input)
 
 	// Determine workflow type
 	workflowType := "custom"
@@ -883,10 +939,14 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		IsWorkspace:  chat != nil && chat.WorktreeID != nil && *chat.WorktreeID != "",
 		Presets:      presets,
 		PresetTypes:  classifyPresetTypes(presets),
-		IsChild:      false, // Always false now since we skip children
+		IsChild:      isChild,
 	}
 
-	analyticsClient := analytics.ForUser(ctx, userID)
+	trackerFor := a.trackerFor
+	if trackerFor == nil {
+		trackerFor = analytics.ForUser
+	}
+	analyticsClient := trackerFor(ctx, userID)
 	switch input.Status {
 	case "started":
 		analyticsClient.TrackWorkflowStarted(metrics)

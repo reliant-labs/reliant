@@ -15,11 +15,6 @@ import { WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import type { Workflow } from "@/types/workflow";
 import type { StepExecution, WorkflowExecution } from "../../Chat/ExecutionSidebar/types";
 
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  getMessageClient: () => ({ getMessage: vi.fn() }),
-}));
-
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),
@@ -82,7 +77,7 @@ function nodeCard(container: HTMLElement, nodeId: string): HTMLElement | null {
 
 describe("WorkflowViewer with int64 fields on a step", () => {
   it("applies a status update to a run whose step holds a bigint", async () => {
-    expect(typeof (workflow.nodes[0].args.value as { maxTokens: { value: { value: unknown } } }).maxTokens.value.value).toBe(
+    expect(typeof (workflow.nodes![0]!.args!.value as { maxTokens: { value: { value: unknown } } }).maxTokens.value.value).toBe(
       "bigint",
     );
     const errors: unknown[] = [];

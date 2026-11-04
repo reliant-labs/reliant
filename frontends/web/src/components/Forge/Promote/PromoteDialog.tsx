@@ -16,7 +16,7 @@
 
 import { useCallback } from "react";
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { useApplyForgePromote, useForgePromotePlan } from "@/hooks/forge-queries";
 import type { ForgePromotePlan } from "@/services/forge/promote";
 
@@ -31,7 +31,7 @@ export interface PromoteDialogProps {
   release: string;
   projectName?: string;
   /**
-   * The dialog's title, naming the environment (decision D1). Defaults to
+   * The dialog's title, naming the environment. Defaults to
    * "Promote <env> to <release>"; the Releases pages say "Roll back prod to
    * …" for a move to an older release.
    */
@@ -83,7 +83,7 @@ export function PromoteDialog({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={handleClose}
       size="lg"
       title={title ?? `Promote ${env} to ${release}`}

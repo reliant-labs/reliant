@@ -42,6 +42,11 @@ type Repo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
+	// ListRootWorkflows is a chat's root workflows, newest first.
+	ListRootWorkflows(ctx context.Context, chatID string) ([]*core.Workflow, error)
+	// AbandonFailedWorkflowStart stops a PENDING root whose start is
+	// recorded as failed; false means it is not stranded (any more).
+	AbandonFailedWorkflowStart(ctx context.Context, id string) (bool, error)
 }
 
 // EventRepo is what the inbound path — intake, event fire and redriver —
@@ -51,7 +56,9 @@ type EventRepo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
-	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (settled bool, err error)
+	// SettlePendingTriggerEvent records a verdict, and the definition the
+	// fire resolved (nil keeps the recorded one), on a still-pending event.
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (settled bool, err error)
 	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
 }
 

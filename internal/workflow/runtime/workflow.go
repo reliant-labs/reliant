@@ -78,11 +78,21 @@ type WorkflowInput struct {
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
 // run. A non-nil-but-empty ResumeInput still enables resume mode: the engine
-// falls back to the workflow's resume_node / single top-level loop.
+// falls back to the workflow's resume_node / single top-level loop. Only an
+// explicit RecoveryOnly input opts out of that positional behavior.
 type ResumeInput struct {
+	// RecoveryOnly restores unfinished agents without positional resumption:
+	// execute the root graph from entry, including its setup nodes. Absent in
+	// recorded inputs, so existing empty-NodeID positional resumes retain
+	// their resume_node/single-loop fallback semantics.
+	RecoveryOnly bool `json:"recovery_only,omitempty"`
 	// NodeID is the top-level node recorded in the position checkpoint.
 	// May be empty when the predecessor died before entering any node.
 	NodeID string `json:"node_id,omitempty"`
+	// CatalogPin is the workflow catalog the interrupted run started with,
+	// read from its checkpoint (ResumeInputFromDurableState): the restart's
+	// root load reads it, so the resumed position runs the same definitions.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 	// LoopIteration is the loop iteration recorded in the checkpoint when
 	// NodeID is a loop node (0 otherwise). The resumed loop re-enters at this
 	// iteration so max-iteration guards keep counting from where they were;
@@ -119,6 +129,10 @@ type ResumeInput struct {
 	// message arrived (stoppedAgentsSuccessorInput), and by SendAgentMessage
 	// for a chat with no run, from durable state (StoppedSpawnFromDurableState).
 	ResumeStopped []SpawnHandoff `json:"resume_stopped,omitempty"`
+	// ResumeAllStopped means a user resumed one portion while no run was
+	// open: discover and resume its unfinished siblings too. New input only,
+	// so old histories cannot schedule this startup read.
+	ResumeAllStopped bool `json:"resume_all_stopped,omitempty"`
 	// ThreadInputs are the per-thread param changes the user made (a model
 	// switch on one agent's thread), so a thread rebuilt after the boundary
 	// keeps them (ChildWorkflowTracker.threadInputOverrides).
@@ -168,6 +182,18 @@ type SpawnHandoff struct {
 	// can fix (providerCapacityError): a chat-wide capacity wake resumes it
 	// (capacity_wake.go). Carried across a continue-as-new with the record.
 	CapacityStop bool `json:"capacity_stop,omitempty"`
+	// LastFailure is the digest (db.FailureReportDigest) of the failure report
+	// this stopped sub-agent's parent last received from it. A resumed run that
+	// fails again with the same report does not send it a second time
+	// (runDetachedSpawnChild): every message resumes the whole chat, and a
+	// deterministic failure would otherwise give the parent the same report,
+	// and a turn to read it, on every one.
+	LastFailure string `json:"last_failure,omitempty"`
+	// PendingToolBatch is set when the spawn parked inside a blocking
+	// ask_user wait: the successor re-enters iteration LoopIteration at its
+	// execute_tools batch, with what already settled, instead of calling the
+	// LLM again (ask_user_handoff.go).
+	PendingToolBatch *PendingToolBatch `json:"pending_tool_batch,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -234,8 +260,37 @@ func NewChatContext(chatID string) *ChatContext {
 // ChildWorkflowTracker tracks active child workflows for signal forwarding
 // and per-thread input maps for thread-scoped param queries and updates.
 type ChildWorkflowTracker struct {
-	children     map[string]bool                   // Map of child workflow IDs that are currently active
-	threadInputs map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
+	// chatProvider is the provider the chat is bound to (provider_switch.go),
+	// "" when unbound; rootThread is the run's own thread, the one call that
+	// is not a descendant's.
+	chatProvider string
+	rootThread   string
+	// rootInputs is the run's own input map, which global updates (the
+	// chat's model picks) write. Its "model" is the chat's model: what a
+	// descendant falls back to on a bound chat (chatModel).
+	rootInputs map[string]interface{}
+	// providerUpdates, userResumes, durableResumes and lateCandidateChecks
+	// number the observations providerVersion asks about; providerVersions
+	// caches each category's first new-code answer.
+	providerUpdates     int
+	providerVersions    map[string]bool
+	providerPinCleanups map[string]bool
+	userResumes         int
+	durableResumes      int
+	lateCandidateChecks int
+	// durableLookupRunning and durableLookupAgain coalesce chat-wide stopped
+	// lookups (reviveDurableStoppedAsync).
+	durableLookupRunning bool
+	durableLookupAgain   bool
+	// resumeWholeChat resumes every unfinished thread for a user's message;
+	// switchProvider re-routes them after a binding change; retryWaits only
+	// retries every usage-limit wait and provider-switch hold now. Set by the
+	// run.
+	resumeWholeChat func(workflow.Context)
+	switchProvider  func(workflow.Context)
+	retryWaits      func()
+	children        map[string]bool                   // Map of child workflow IDs that are currently active
+	threadInputs    map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
 
 	// threadOwnedKeys records, per thread, the input keys that thread set
 	// EXPLICITLY for itself — from its preset or from its node args. A global
@@ -875,7 +930,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// instead of completing (see late_wake.go). Assigning the named
 		// return is what turns this completion into that continue-as-new.
 		lateWake := func() error { return continueAsNewForLateWake(ctx, input, thread, childTracker) }
-		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, launchRun, childTracker, lateWake); handoff != nil {
+		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, runOutcomeNode, launchRun, childTracker, lateWake); handoff != nil {
 			result, retErr = nil, handoff
 		}
 	}()
@@ -893,6 +948,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// Notify user of the workflow parsing/loading error
 		notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "workflow_parse_error", err.Error())
 		return nil, fmt.Errorf("failed to load workflow definition: %w", err)
+	}
+	// Every later load of this run reads the catalog the root resolved
+	// against (catalog_pin.go); a continue-as-new successor carries it in
+	// the execution context.
+	if loadedWf.CatalogPin != "" {
+		if execCtx := input.ExecContext; execCtx != nil {
+			execCtx.CatalogPin = loadedWf.CatalogPin
+		}
+		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
 
 	// Parse the placeholder-resolved workflow to get input schemas
@@ -929,6 +993,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			if !workflow_constants.RuntimeInjectedInputs[key] {
 				filteredInputs[key] = value
 			}
+		}
+
+		// The launch boundary already wrapped a single valid item given for
+		// a list input; a start that reached the run another way gets the
+		// same reading here rather than a failed run.
+		for _, c := range validation.CoerceSingleToList(filteredInputs, wfWithPlaceholders.GetInputs(), nil) {
+			logger.Info("[Workflow Runtime] Coerced a single input value to a one-item list",
+				"workflowName", input.WorkflowName, "input", c.Input, "item_type", c.Type)
 		}
 
 		validationResult := validation.ValidateInputs(&reliantv1.Workflow{
@@ -1058,7 +1130,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Priority: workflow daemon > session daemon > default resolution.
 	if execCtx.DaemonSelector == nil {
 		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID}
+			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID, Session: true}
 			logger.Debug("[Workflow Runtime] Using session daemon",
 				"daemonID", sessionDaemonID,
 			)
@@ -1204,6 +1276,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
+	// STEP 6.7: The workflow's declared requires: (tools, integrations,
+	// checkouts), checked on the machine preflight just made ready, before any
+	// node can have a side effect.
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread); err != nil {
+		return nil, err
+	}
+
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
 	// and after preflight so a daemon preflight just woke can answer it.
@@ -1311,6 +1390,27 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
+	childTracker.chatProvider, _ = input.Inputs[InputKeyProviderSwitch].(string)
+	childTracker.rootThread = thread
+	childTracker.rootInputs = input.Inputs
+	// A user's message (or a thread-scoped model edit on a bound chat)
+	// resumes the whole unfinished chat: every usage-limit wait and
+	// provider-switch hold retries now, a capacity self-pause is released, and
+	// every stopped descendant this execution holds or the database remembers
+	// is resumed. A thread's fallback lease is kept: an ordinary message is not
+	// a way back to the provider whose limit it is waiting out.
+	childTracker.retryWaits = func() { usageLimitWaiter.retryEpoch++ }
+	childTracker.resumeWholeChat = func(wakeCtx workflow.Context) {
+		usageLimitWaiter.retryEpoch++
+		wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, true)
+		childTracker.reviveDurableStoppedAsync(wakeCtx, input.ChatID)
+	}
+	// A binding change also drops every fallback lease: a stay on another
+	// provider is exactly what the switched (or unbound) chat replaces.
+	childTracker.switchProvider = func(wakeCtx workflow.Context) {
+		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		childTracker.resumeWholeChat(wakeCtx)
+	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
 	// on with every thread the provider blocked, not only those in a
 	// usage-limit wait (capacity_wake.go). Histories recorded before it
@@ -1318,6 +1418,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if workflow.GetVersion(ctx, capacityWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 		usageLimitWaiter.listenFromStart(func(wakeCtx workflow.Context, sig CapacityWakeSignal) {
 			wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, sig.AllStopped)
+			if sig.AllStopped {
+				childTracker.reviveDurableStoppedAsync(wakeCtx, input.ChatID)
+			}
 		})
 	}
 
@@ -1342,6 +1445,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// PauseService.ResumeWorkflow).
 	repeatedToolErrors := NewRepeatedToolErrorBreaker(RepeatedToolErrorLimit)
 	daemonOfflineBreaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
+		// A run that already gave up is ending: nothing may park any more
+		// (StepExecutor.HandleCompletion fails the step instead).
+		if pauser.GaveUp() != nil {
+			return
+		}
 		logger.Warn("[Workflow Runtime] Pausing: daemon offline for consecutive steps",
 			"workflowID", workflowID,
 			"chatID", input.ChatID,
@@ -1380,6 +1488,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// cancel in-flight activities: anything still running either fails
 		// with the same daemon-offline condition or proves the daemon is back.
 		pauser.Arm()
+		pauser.noteSelfPauseCause(errors.New(strings.TrimSuffix(DaemonOfflinePauseMessage, ".")))
 		checkPause(callerCtx)
 		// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 		_ = workflow.Sleep(callerCtx, 0)
@@ -1410,6 +1519,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
 			MachineWake:        machineWake,
+			GaveUp:             pauser.GaveUp,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
 				delete(cancelledThreads, thread)
@@ -1464,6 +1574,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
 		MachineWake:        machineWake,
+		GaveUp:             pauser.GaveUp,
 	}
 
 	// STEP 8.7: Create step executor for unified step lifecycle
@@ -1532,6 +1643,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		for _, stopped := range input.Resume.ResumeStopped {
 			childTracker.resumeStopped(ctx, stopped.ChildThread)
 		}
+	}
+
+	if input.Resume != nil && input.Resume.ResumeAllStopped {
+		childTracker.reviveDurableStopped(ctx, input.ChatID)
 	}
 
 	// STEP 9: Main workflow loop
@@ -2459,6 +2574,16 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Handle retry exhaustion - pause workflow and retry on resume
 				if stepEvent.RetryExhausted {
+					// Unless pausing would only hold the run for nothing: see
+					// endsRunInsteadOfPausing.
+					if endErr := pauseCtrl.endsRunInsteadOfPausing(running.StepID, stepEvent.Error); endErr != nil {
+						logger.Warn("[Workflow Runtime] Step failed; ending the run instead of pausing",
+							"stepID", running.StepID,
+							"error", endErr,
+						)
+						recordFailedNode(ctx, running.StepID, 1)
+						return nil, endErr
+					}
 					logger.Warn("[Workflow Runtime] Activity exhausted retries; pausing until resume",
 						"stepID", running.StepID,
 						"activityID", running.ActivityID,
@@ -2497,6 +2622,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					pauser.Arm()
 					pauser.noteSelfPauseCause(stepEvent.Error)
 					checkPause(ctx)
+					// An unattended run whose pause outlived its self-resume
+					// ladder ends here, with the cause (pause_coordinator.go).
+					if gaveUp := pauser.GaveUp(); gaveUp != nil {
+						recordFailedNode(ctx, running.StepID, 1)
+						return nil, gaveUp
+					}
 					// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 					_ = workflow.Sleep(ctx, 0)
 
@@ -2883,6 +3014,14 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 				continue
 			}
 			childTracker.recordThreadWake(sig)
+			if sig.FromUser {
+				childTracker.userResumes++
+			}
+			// Any message from the user resumes the whole unfinished chat,
+			// not only the thread it is for.
+			if sig.FromUser && childTracker.resumeWholeChat != nil && childTracker.providerVersion(gCtx, "resume-whole-chat", childTracker.userResumes) {
+				childTracker.resumeWholeChat(gCtx)
+			}
 			logger.Info("[ThreadWake] Wake notification received",
 				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason), "fromUser", sig.FromUser)
 			// The doorbell of a sub-agent that stopped on a failure has no
@@ -2941,6 +3080,11 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							)
 							threadInputs[key] = value
 						}
+						// On a bound chat a thread held at a model call
+						// retries on its new model at once.
+						if _, changed := update["model"]; changed && childTracker.chatProvider != "" && childTracker.retryWaits != nil {
+							childTracker.retryWaits()
+						}
 					} else {
 						logger.Info("[Workflow Runtime] Thread-scoped update for a thread that is not running; kept for its next run",
 							"thread", targetThread,
@@ -2948,6 +3092,7 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						)
 					}
 				} else {
+					switchedProvider := childTracker.applyProviderSwitch(ctx, workflowInputs, update)
 					// Global update: apply to root workflowInputs
 					for key, value := range update {
 						logger.Debug("[Workflow Runtime] Input updated via signal",
@@ -2988,6 +3133,11 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						}
 					}
 
+					// Apply routing state before any wake yields and re-dispatches
+					// a model call. Never cancel in-flight tools.
+					if switchedProvider && childTracker.switchProvider != nil {
+						childTracker.switchProvider(ctx)
+					}
 					// Forward state updates to all active child workflows.
 					// Sort child IDs for deterministic signal ordering across replays.
 					childIDs := make([]string, 0, len(childTracker.children))
@@ -3027,6 +3177,9 @@ type LoadedWorkflow struct {
 	YAML         []byte `json:"yaml"`
 	WorkflowJSON []byte `json:"workflow_json"`
 	HasTemplates bool   `json:"has_templates"`
+	// CatalogPin is the project catalog the load resolved against
+	// (catalog_pin.go); empty from a worker that predates pins.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 }
 
 // loadWorkflowDefinition loads the workflow YAML definition and returns both raw YAML
@@ -3034,8 +3187,7 @@ type LoadedWorkflow struct {
 func loadWorkflowDefinition(ctx workflow.Context, input WorkflowInput) (*LoadedWorkflow, error) {
 	logger := workflow.GetLogger(ctx)
 
-	// Create activity context for loading workflow
-	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -3043,16 +3195,19 @@ func loadWorkflowDefinition(ctx workflow.Context, input WorkflowInput) (*LoadedW
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	// Load workflow from database/file
 	// Pass ChatID to allow the activity to resolve project-relative workflow paths
-	loadInput := map[string]string{
-		"chat_id":       input.ChatID,
-		"workflow_name": input.WorkflowName,
+	loadInput := types.LoadWorkflowInput{
+		ChatID:       input.ChatID,
+		WorkflowName: input.WorkflowName,
+		// A continue-as-new successor of a pinned run, or a restart from
+		// its checkpoint, loads its root from the pin too.
+		CatalogPin: rootCatalogPin(input),
 	}
 	var result LoadedWorkflow
-	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(ctx, &result); err != nil {
+	if err := executeBookkeeping(ctx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(ctx, &result); err != nil {
 		logger.Error("[Workflow Runtime] Failed to load workflow", "error", err)
 		return nil, err
 	}
@@ -4072,20 +4227,37 @@ func runDetachedSpawnChild(
 		"body":           result.Content,
 		"tool_call_id":   config.reportKey(),
 	}
-	var enqueueOutput map[string]interface{}
-	if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
-		// Best-effort by the same rule as every other mailbox write: a
-		// failed enqueue here means the parent never learns this spawn
-		// finished until the stranded-spawn reconciler sweep catches it
-		// (spec §7.1) — logged, not fatal to this goroutine or the run.
-		logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+	// The failure a resumed agent stopped on again, word for word, is one its
+	// parent already has: it is not reported twice.
+	failure := ""
+	if result.IsError && !result.Cancelled {
+		failure = failureReportDigest(result.Content)
+	}
+	reported := false
+	if repeatedFailureReport(gCtx, config, childTracker, failure) {
+		logger.Info("[SpawnBackground] Resumed sub-agent failed again with the report its parent already has; not reporting it again",
 			"toolCallID", config.toolCallID,
 			"parentThread", parentThread,
 			"childThread", config.childThread,
-			"error", err,
 		)
+		reported = true
 	} else {
-		childTracker.recordDetachedReport(parentThread)
+		var enqueueOutput map[string]interface{}
+		if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
+			// Best-effort by the same rule as every other mailbox write: a
+			// failed enqueue here means the parent never learns this spawn
+			// finished until the stranded-spawn reconciler sweep catches it
+			// (spec §7.1) — logged, not fatal to this goroutine or the run.
+			logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+				"toolCallID", config.toolCallID,
+				"parentThread", parentThread,
+				"childThread", config.childThread,
+				"error", err,
+			)
+		} else {
+			childTracker.recordDetachedReport(parentThread)
+			reported = true
+		}
 	}
 
 	if result.terminalStatus != "" {
@@ -4097,8 +4269,18 @@ func runDetachedSpawnChild(
 	// a parent woken by that count already finds the agent resumable.
 	stopped := result.IsError && !result.Cancelled
 	if stopped {
-		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop)
+		// Only a report the parent has (or already had) is remembered as
+		// its last: one that never reached the mailbox is sent next time.
+		if !reported {
+			failure = ""
+		}
+		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop, failure)
+		delete(childTracker.notStopped, config.childThread)
 	} else {
+		if childTracker.notStopped == nil {
+			childTracker.notStopped = map[string]bool{}
+		}
+		childTracker.notStopped[config.childThread] = true
 		childTracker.forgetLastThreadInputs(config.childThread)
 	}
 	childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
@@ -4388,8 +4570,14 @@ func executeToolsWithSpawnSupport(
 
 	var regularToolsFuture workflow.Future
 
+	// A batch a successor re-enters after its spawn parked in an ask_user
+	// wait resumes from what had settled: its regular tools, spawns and
+	// earlier answers are not run again (ask_user_handoff.go).
+	batchPark := toolBatchHandoffFrom(ctx)
+	resume := batchPark.takeResume()
+
 	// Execute regular tools via ExecuteTools activity
-	if len(split.regularToolCalls) > 0 {
+	if len(split.regularToolCalls) > 0 && resume == nil {
 		runRegular := func(refused map[string]string) workflow.Future {
 			regularNode := &reliantv1.Node{
 				Id:   evalNode.GetId(),
@@ -4412,7 +4600,7 @@ func executeToolsWithSpawnSupport(
 				"loop_iteration", rtx.LoopIteration,
 			)
 
-			return workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(regularNode))
+			return executeWithActivationApprovals(ctx, activityCtx, rtx, regularNode, IsUnattended(workflowInputs))
 		}
 
 		// A run that recorded this batch behind the removed integration action
@@ -4433,7 +4621,11 @@ func executeToolsWithSpawnSupport(
 	// Execute spawn tool calls inline and combine with regular tool results
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
-	for _, spawnToolCall := range split.spawnToolCalls {
+	spawnToolCalls := split.spawnToolCalls
+	if resume != nil {
+		spawnToolCalls = nil
+	}
+	for _, spawnToolCall := range spawnToolCalls {
 		config, err := parseSpawnToolCall(ctx, spawnToolCall, rtx.WorkflowID)
 		if err != nil {
 			// Return error as a tool result so the LLM can learn and retry
@@ -4451,12 +4643,13 @@ func executeToolsWithSpawnSupport(
 	resultFuture, resultSettable := workflow.NewFuture(ctx)
 
 	workflow.Go(ctx, func(gCtx workflow.Context) {
-		var combinedResults []interface{}
-		var messageOutput map[string]interface{}
-		var grantedTools []interface{}
+		var progress toolBatchProgress
+		if resume != nil {
+			progress = *resume
+		}
 
 		// Include any spawn parse errors as tool results
-		combinedResults = append(combinedResults, spawnParseErrors...)
+		progress.Results = append(progress.Results, spawnParseErrors...)
 
 		// Wait for regular tools first (if any)
 		if regularToolsFuture != nil {
@@ -4466,10 +4659,10 @@ func executeToolsWithSpawnSupport(
 				return
 			}
 			if result.messageOutput != nil {
-				messageOutput = result.messageOutput
+				progress.MessageOutput = result.messageOutput
 			}
-			combinedResults = append(combinedResults, result.toolResults...)
-			grantedTools = result.grantedTools
+			progress.Results = append(progress.Results, result.toolResults...)
+			progress.GrantedTools = result.grantedTools
 		}
 
 		// Every spawn dispatches detached. Each call to dispatchSpawnBackground
@@ -4479,7 +4672,7 @@ func executeToolsWithSpawnSupport(
 		// multiple spawns so prep for one does not gate prep for another.
 		if len(spawnConfigs) == 1 {
 			result := dispatchSpawnBackground(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl, threadInterruptFactory)
-			combinedResults = append(combinedResults, result.toToolResult())
+			progress.Results = append(progress.Results, result.toToolResult())
 		} else if len(spawnConfigs) > 1 {
 			resultCh := workflow.NewChannel(gCtx)
 			for _, cfg := range spawnConfigs {
@@ -4492,7 +4685,7 @@ func executeToolsWithSpawnSupport(
 			for range spawnConfigs {
 				var result *spawnInlineResult
 				resultCh.Receive(gCtx, &result)
-				combinedResults = append(combinedResults, result.toToolResult())
+				progress.Results = append(progress.Results, result.toToolResult())
 			}
 		}
 
@@ -4504,24 +4697,33 @@ func executeToolsWithSpawnSupport(
 			tracker:   childTracker,
 			interrupt: resolveThreadInterrupt(threadInterruptFactory, nil, rtx.Thread),
 		}
-		for _, askTC := range split.askUserToolCalls {
+		// A background spawn's blocking wait can park the spawn for a
+		// continue-as-new handoff, carrying what this batch has settled
+		// (ask_user_handoff.go); a resumed batch starts at its first
+		// unsettled ask_user.
+		for i := progress.NextAsk; i < len(split.askUserToolCalls); i++ {
+			progress.NextAsk = i
+			if batchPark != nil {
+				askThreadInput.park = &askUserPark{batch: batchPark, progress: progress}
+			}
+			askThreadInput.resumeBlocking = resume != nil && i == resume.NextAsk
 			result := executeAskUserInline(
-				gCtx, askTC,
+				gCtx, split.askUserToolCalls[i],
 				rtx.ChatID, rtx.WorkflowID, rtx.Thread,
 				rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration,
 				IsUnattended(workflowInputs),
 				askThreadInput,
 				logger,
 			)
-			combinedResults = append(combinedResults, result)
+			progress.Results = append(progress.Results, result)
 		}
 
 		// Return in ExecuteToolsOutput format. The regular batch's load_tool
 		// grants ride along: the step completion records them for the thread
 		// whichever way the batch was assembled.
-		finalResult := buildFinalToolResult(combinedResults, messageOutput)
-		if len(grantedTools) > 0 {
-			finalResult["granted_tools"] = grantedTools
+		finalResult := buildFinalToolResult(progress.Results, progress.MessageOutput)
+		if len(progress.GrantedTools) > 0 {
+			finalResult["granted_tools"] = progress.GrantedTools
 		}
 		resultSettable.SetValue(finalResult)
 	})
@@ -4639,7 +4841,7 @@ func executeAskUserInline(
 	// Async — the default: post the question and return at once
 	// (askUserAsync). The rule is versioned per call (askUserIsAsync), so a
 	// history recorded when a call without a flag blocked replays that wait.
-	if askUserIsAsync(ctx, toolCallID, toolInput) {
+	if !thread.resumeBlocking && askUserIsAsync(ctx, toolCallID, toolInput) {
 		metaObj["async"] = true
 		asyncMeta, _ := json.Marshal(metaObj)
 		return askUserAsync(ctx, toolCallID, askUserQuestionInput{
@@ -4726,8 +4928,18 @@ func executeAskUserInline(
 		cancelTimer()
 	})
 
+	// A handoff requested while this waits parks the spawn here, with the
+	// question still pending; the successor reattaches to it. The wait goes
+	// on meanwhile, and a wait that ends before the handoff unparks it.
+	parkCtx, stopParkWatch := workflow.WithCancel(ctx)
+	parked := awaitAskUserPark(parkCtx, createOutput.QuestionID, thread.park)
+
 	selector.Select(ctx)
 	stopYieldWatch()
+	stopParkWatch()
+	if *parked {
+		thread.park.batch.unpark()
+	}
 
 	// An answer that landed in the same moment as the yield wins: the user
 	// did answer, and the answer is what the model asked for.
@@ -4941,6 +5153,8 @@ type workflowStatusOpts struct {
 	// Empty means the workflow declared no outcome and the stored value is left
 	// alone — absence is not failure.
 	Outcome string
+	// OutcomeNode is the top-level node that declared a failure Outcome.
+	OutcomeNode string
 	// Error is why the run failed, on a "failed" notification. It is what a
 	// workflow-event trigger reports as the source run's error.
 	Error string
@@ -4968,6 +5182,73 @@ func failureText(err error) string {
 	return text
 }
 
+// Terminal status delivery budget (workflowStatusActivityOptions). Variables
+// so a test can shrink them.
+var (
+	// terminalStatusAttemptTimeout bounds one attempt: long enough for the
+	// status transaction on a loaded database, short enough that a hung
+	// connection is abandoned and retried.
+	terminalStatusAttemptTimeout = 30 * time.Second
+	// terminalStatusDeadline bounds every attempt together. Past it the run
+	// ends without its status written, and the reconciler, which compares
+	// every running row with Temporal, repairs the row on its next pass.
+	terminalStatusDeadline = 10 * time.Minute
+)
+
+// isTerminalWorkflowStatus reports whether a WorkflowStatus notification
+// ends its workflow row's run: the last status write it will ever get.
+func isTerminalWorkflowStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "cancelled":
+		return true
+	}
+	return false
+}
+
+// workflowStatusActivityOptions is how hard a WorkflowStatus notification is
+// tried.
+//
+// A terminal status is the run's last word on its row: nothing after it will
+// ever write the row again, so a lost one leaves the chat reading as running
+// over a run that has ended. It used to share the in-flight statuses' budget
+// — 5s per attempt, three attempts, ~20s in all — and on a loaded database
+// every attempt timed out and the run ended with its row still ACTIVE (e2e
+// story 05). It is now retried until it lands, each attempt bounded and the
+// whole bounded by terminalStatusDeadline, and the activity fails a terminal
+// write it could not make instead of reporting success over it
+// (WorkflowStatusActivity.Execute), so Temporal's retry carries it.
+//
+// The in-flight statuses (started, paused) keep the short budget: each is
+// superseded by the next status the run writes, and a run should not wait
+// on one.
+//
+// Changing these options is replay-safe: Temporal matches a replayed
+// activity by type and id, not by its options.
+func workflowStatusActivityOptions(status string) workflow.ActivityOptions {
+	if isTerminalWorkflowStatus(status) {
+		return workflow.ActivityOptions{
+			StartToCloseTimeout:    terminalStatusAttemptTimeout,
+			ScheduleToCloseTimeout: terminalStatusDeadline,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    30 * time.Second,
+				// Unlimited: ScheduleToCloseTimeout is the bound.
+				MaximumAttempts: 0,
+			},
+		}
+	}
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: time.Second * 5,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+}
+
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
 // and tracks workflow hierarchy in the database.
 // This is a fire-and-forget notification - errors are logged but don't fail the workflow
@@ -4987,16 +5268,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 			"workflowID", workflowID)
 	}
 
-	// Execute workflow status activity with short timeout
-	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
-		StartToCloseTimeout: time.Second * 5,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    5 * time.Second,
-			MaximumAttempts:    3,
-		},
-	})
+	activityCtx := workflow.WithActivityOptions(baseCtx, workflowStatusActivityOptions(status))
 
 	// Use map with correct JSON field names (snake_case) to avoid import cycle
 	input := map[string]interface{}{
@@ -5034,6 +5306,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		if opts.Outcome != "" {
 			input["outcome"] = opts.Outcome
 		}
+		if opts.OutcomeNode != "" {
+			input["outcome_node"] = opts.OutcomeNode
+		}
 		if opts.Error != "" {
 			input["error"] = opts.Error
 		}
@@ -5048,7 +5323,16 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 	var result map[string]interface{}
 	// Use baseCtx (which may be disconnected) for the Get() call as well
 	err := workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input).Get(baseCtx, &result)
-	if err != nil {
+	if err != nil && isTerminalWorkflowStatus(status) {
+		// Retried for terminalStatusDeadline and still not written: the row
+		// reads running over a run that is ending, until the reconciler's
+		// next pass repairs it. Not a workflow failure — the run's work is
+		// done — but nobody should have to notice it from a stuck chat.
+		logger.Error("[Workflow Runtime] Terminal workflow status was not written; the reconciler will repair the row",
+			"status", status,
+			"workflowID", workflowID,
+			"error", err)
+	} else if err != nil {
 		// Log error but don't fail workflow
 		logger.Warn("[Workflow Runtime] Failed to notify workflow status",
 			"status", status,
@@ -5069,7 +5353,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID string, loopIteration int) {
 	logger := workflow.GetLogger(ctx)
 
-	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -5077,17 +5361,21 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 			MaximumInterval:    5 * time.Second,
 			MaximumAttempts:    2,
 		},
-	})
+	}
 
-	input := map[string]interface{}{
-		"chat_id":        chatID,
-		"workflow_id":    workflowID,
-		"node_id":        nodeID,
-		"loop_iteration": loopIteration,
+	input := types.WorkflowCheckpointInput{
+		ChatID:        chatID,
+		WorkflowID:    workflowID,
+		NodeID:        nodeID,
+		LoopIteration: int64(loopIteration),
+		// The run's catalog rides its position: a restart from this
+		// checkpoint loads the definitions the run started with
+		// (ResumeInput.CatalogPin).
+		CatalogPin: catalogPinFrom(ctx),
 	}
 
 	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(activityCtx, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
+	if err := executeBookkeeping(ctx, activityOpts, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
 		logger.Warn("[Workflow Runtime] Failed to persist position checkpoint",
 			"nodeID", nodeID,
 			"loopIteration", loopIteration,
@@ -5111,7 +5399,7 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 // meaningful for loop targets; 0 when the target differs from the checkpoint
 // node, since the recorded iteration belongs to the checkpoint node).
 func resolveResumeTarget(wf *reliantv1.Workflow, resume *ResumeInput, logger log.Logger) (*reliantv1.Node, int) {
-	if resume == nil {
+	if resume == nil || resume.RecoveryOnly {
 		return nil, 0
 	}
 
@@ -5282,7 +5570,7 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 //
 // Whatever non-nil error this returns is what the workflow returns: the
 // late-wake continue-as-new, or the failure of a run a panic ended.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome, runOutcomeNode string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -5385,8 +5673,15 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Notify UI that the workflow finished and update the workflow record. The
 	// lifecycle status is "completed" — the Temporal execution really did finish
 	// — and the verdict travels beside it so no surface has to guess.
+	// A failure verdict names the node that declared it, so the status
+	// activity can mark that node failed: its own activity succeeded, and
+	// without the mark no diagnostic surface can say where the run ended.
+	outcomeNode := ""
+	if runOutcome == model.OutcomeFailure {
+		outcomeNode = runOutcomeNode
+	}
 	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, LaunchRun: launchRun})
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun})
 
 	// Last, so a wake that landed during the bookkeeping above counts too.
 	// Child runs are never signalled — every wake addresses the chat's root
@@ -5557,18 +5852,25 @@ func preflightTarget(input WorkflowInput, execCtx *ExecutionContext) map[string]
 		"chat_id": input.ChatID,
 	}
 	// Pass daemon selector if one was resolved at workflow level
+	// The chat's pin stays marked as one (session), so the activities let it
+	// yield to the chat's workspace owner as tool execution does.
 	if execCtx.DaemonSelector != nil {
-		target["daemon_selector"] = map[string]interface{}{
+		sel := map[string]interface{}{
 			"id":   execCtx.DaemonSelector.ID,
 			"name": execCtx.DaemonSelector.Name,
 			"type": execCtx.DaemonSelector.Type,
 		}
+		if execCtx.DaemonSelector.Session {
+			sel["session"] = true
+		}
+		target["daemon_selector"] = sel
 	}
 	// Also check session daemon from inputs
 	if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
 		if _, hasDaemonSelector := target["daemon_selector"]; !hasDaemonSelector {
 			target["daemon_selector"] = map[string]interface{}{
-				"id": sessionDaemonID,
+				"id":      sessionDaemonID,
+				"session": true,
 			}
 		}
 	}
@@ -5608,8 +5910,10 @@ const (
 	preflightWaitSlice = 60 * time.Second
 	// preflightHeartbeatTimeout deliberately differs from
 	// activityHeartbeatTimeout so resolveMaxAttempts does not treat the check
-	// as a retried graph step.
-	preflightHeartbeatTimeout = 20 * time.Second
+	// as a retried graph step. It must still leave room for several heartbeat
+	// windows: the SDK heartbeats every min(0.8x this, the worker's 15s
+	// throttle) = 15s, so 45s is three windows (20s left one).
+	preflightHeartbeatTimeout = 45 * time.Second
 	preflightSliceMargin      = 30 * time.Second
 
 	// preflightMachineWaitCap is the safety net behind the machine's own
@@ -5680,7 +5984,7 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 	if waiting, _ := result["waiting"].(bool); !waiting {
 		return nil
 	}
-	return waitForMachine(ctx, actCtx, preflightInput, waitStart)
+	return waitForMachine(ctx, actCtx, preflightInput, waitStart, result["failed_since"])
 }
 
 // waitForMachine is the rest of a run's wait for a machine that is still
@@ -5690,11 +5994,19 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 // without it) or the timer comes due, then checks once.
 //
 // It ends when the check finds the machine attached (nil), when the check
-// itself ends the wait — the machine failed to start or was removed, or the
+// itself ends the wait — the machine was removed, or its failure to start has
+// held (machinefailure), or the
 // final check past preflightMachineWaitCap still finds it down; the activity
 // queues the message for the machine and returns the reason — or when the
 // user gives up on the machine, which ends the run cancelled.
-func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]interface{}, waitStart time.Time) error {
+//
+// failedSince is the start of the machine's run of Failed reports as the last
+// check returned it (nil: none), handed to the next check unread: a Failed
+// report ends the wait only once it has held for machinefailure.Settle, which
+// is longer than any one check, so the run of reports lives here, in the
+// workflow, between them. It is an activity result read back from history,
+// so replay sees the same value.
+func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]interface{}, waitStart time.Time, failedSince interface{}) error {
 	signals := workflow.GetSignalChannel(ctx, machinewait.SignalName)
 	recheck := machineRecheckFirst
 	for {
@@ -5716,6 +6028,9 @@ func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]inte
 			slice = preflightWaitSlice
 		}
 		in := preflightSliceInput(preflightInput, slice, preflightMachineWaitCap, final)
+		if failedSince != nil {
+			in["failed_since"] = failedSince
+		}
 		var result map[string]interface{}
 		if err := workflow.ExecuteActivity(actCtx, "PreflightDaemonCheck", in).Get(ctx, &result); err != nil {
 			return err
@@ -5723,6 +6038,7 @@ func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]inte
 		if waiting, _ := result["waiting"].(bool); !waiting {
 			return nil
 		}
+		failedSince = result["failed_since"]
 		// A connect that was not this run's machine (another of the user's)
 		// is no reason to look less often; only a quiet interval backs off.
 		if !signaled {
@@ -5802,4 +6118,18 @@ func preflightSliceInput(preflightInput map[string]interface{}, slice, budget ti
 	in["wait_budget_seconds"] = int(budget / time.Second)
 	in["final"] = final
 	return in
+}
+
+// rootCatalogPin is the catalog a run's root load reads: the one its
+// execution context carries (a continue-as-new successor), else the one its
+// interrupted predecessor's checkpoint recorded (a restart), else "" (a new
+// run, which pins the current catalog).
+func rootCatalogPin(input WorkflowInput) string {
+	if input.ExecContext != nil && input.ExecContext.CatalogPin != "" {
+		return input.ExecContext.CatalogPin
+	}
+	if input.Resume != nil {
+		return input.Resume.CatalogPin
+	}
+	return ""
 }

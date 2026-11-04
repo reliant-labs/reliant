@@ -12,7 +12,7 @@
  *     A projection of ListTriggers; nothing about them is in the definition.
  */
 
-import type { Trigger } from "../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { normalizeWorkflowRef } from "../components/workflow/useWorkflowInputs";
 import { automationHealth, type AutomationHealthDisplay } from "./automationHealth";
 import { describeTriggerSource } from "./cronText";

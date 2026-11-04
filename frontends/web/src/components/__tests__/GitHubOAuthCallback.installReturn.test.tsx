@@ -47,6 +47,14 @@ vi.mock("@/services/controlPlane/git", () => ({
   },
 }));
 
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: { access_token: "t" } } }),
+    },
+  },
+}));
+
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));

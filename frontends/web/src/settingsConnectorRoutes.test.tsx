@@ -69,8 +69,8 @@ describe("settings connector routes", () => {
 
   it("redirects the retired /settings/connectors section to Machines", async () => {
     const router = renderAt("/settings/connectors");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/environments"));
-    expect(await screen.findByTestId("section")).toHaveTextContent("environments");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/machines"));
+    expect(await screen.findByTestId("section")).toHaveTextContent("machines");
   });
 
   it("leaves other settings sections alone", async () => {

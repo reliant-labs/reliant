@@ -1,37 +1,25 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { grpcClient } from "./grpc-client";
-import { singleflight } from "../lib/singleflight";
+import { connectClient } from "../lib/connect";
 import { create } from "@bufbuild/protobuf";
-import { ConfigScope } from "../gen/reliant/v1/common_pb";
 import {
-  ConfigSeverity,
-  HiddenItemType,
-} from "../gen/reliant/v1/settings_pb";
+  fetchProviderStatuses,
+  invalidateProviderStatuses,
+} from "../hooks/settings-queries";
 import type {
   Setting as ProtoSetting,
-  UserPrompt as ProtoUserPrompt,
   ProviderStatus as ProtoProviderStatus,
 } from "../gen/reliant/v1/settings_pb";
 import {
+  SettingsService,
   // Sub-phase 6a: Core Settings CRUD
-  CreateSettingRequestSchema,
   ListSettingsRequestSchema,
-  GetSettingRequestSchema,
-  UpdateSettingRequestSchema,
   DeleteSettingRequestSchema,
   BatchUpsertSettingsRequestSchema,
   // Sub-phase 6b: UI Settings
   GetShortcutsRequestSchema,
   UpdateShortcutsRequestSchema,
-  GetPreferencesRequestSchema,
-  UpdatePreferencesRequestSchema,
-  SetHiddenItemRequestSchema,
-  // Sub-phase 6c: Prompts
-  GetPromptsRequestSchema,
-  SavePromptsRequestSchema,
   // Sub-phase 6d: Provider Settings
-  GetProviderStatusesRequestSchema,
   ValidateProviderAPIKeyRequestSchema,
   SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
@@ -40,14 +28,6 @@ import {
   StartCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthResponse_Status,
-  // Sub-phase 6e: Privacy
-  GetPrivacySettingsRequestSchema,
-  UpdatePrivacySettingsRequestSchema,
-  TrackPageVisitedRequestSchema,
-  UserPromptSchema,
-  // Sub-phase 6g: Configuration Health
-  GetConfigHealthRequestSchema,
-  type ConfigError as ProtoConfigError,
 } from "../gen/reliant/v1/settings_pb";
 
 // ============================================
@@ -62,15 +42,6 @@ export interface Setting {
   project_id?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface UserPrompt {
-  id: string;
-  title: string;
-  content: string;
-  default?: boolean;
-  hotkey?: string;
-  category?: string;
 }
 
 export interface ProviderStatus {
@@ -96,40 +67,6 @@ export interface SignInOutcome {
   accountLabel?: string;
 }
 
-export interface Preferences {
-  streaming_enabled: boolean;
-  worktree_archive_mode: string;
-  worktree_default_delete_branch: boolean;
-  additional: Record<string, string>;
-  branch_copy_uncommitted_files_default: boolean;
-  default_mcp_scope: ConfigScope;
-  default_workflow_scope: ConfigScope;
-  default_workflow: string;
-  hide_builtin_workflows: boolean;
-  hide_builtin_presets: boolean;
-  hidden_workflow_slugs: string[];
-  hidden_preset_slugs: string[];
-}
-
-export interface PrivacySettings {
-  analytics_enabled: boolean;
-  crash_reporting_enabled: boolean;
-}
-
-export interface ConfigError {
-  type: string; // preset, workflow, mcp, config
-  source: string;
-  message: string;
-  severity: ConfigSeverity;
-  details: Record<string, string>;
-}
-
-export interface ConfigHealth {
-  errors: ConfigError[];
-  error_count: number;
-  warning_count: number;
-}
-
 // ============================================
 // Conversion Functions
 // ============================================
@@ -146,17 +83,6 @@ function protoSettingToFrontend(proto: ProtoSetting): Setting {
   };
 }
 
-function protoUserPromptToFrontend(proto: ProtoUserPrompt): UserPrompt {
-  return {
-    id: proto.id,
-    title: proto.title,
-    content: proto.content,
-    default: proto.default || undefined,
-    hotkey: proto.hotkey || undefined,
-    category: proto.category || undefined,
-  };
-}
-
 function protoProviderStatusToFrontend(
   proto: ProtoProviderStatus
 ): ProviderStatus {
@@ -165,16 +91,6 @@ function protoProviderStatusToFrontend(
     configured: proto.configured,
     account_count: proto.accountCount,
     display_name: proto.displayName,
-  };
-}
-
-function protoConfigErrorToFrontend(proto: ProtoConfigError): ConfigError {
-  return {
-    type: proto.type,
-    source: proto.source,
-    message: proto.message,
-    severity: proto.severity,
-    details: proto.details,
   };
 }
 
@@ -187,60 +103,17 @@ export const settingsGrpc = {
   // Sub-phase 6a: Core Settings CRUD
   // ============================================
 
-  async createSetting(
-    key: string,
-    value: string,
-    valueType?: string,
-    projectId?: string
-  ): Promise<Setting> {
-    const client = grpcClient.settings();
-    const request = create(CreateSettingRequestSchema, {
-      key,
-      value,
-      valueType,
-      projectId,
-    });
-    const response = await client.createSetting(request);
-    if (!response.setting) throw new Error("No setting in response");
-    return protoSettingToFrontend(response.setting);
-  },
-
   async listSettings(projectId?: string): Promise<{
     settings: Setting[];
     total: number;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(ListSettingsRequestSchema, { projectId });
     const response = await client.listSettings(request);
     return {
       settings: response.settings.map(protoSettingToFrontend),
       total: response.total,
     };
-  },
-
-  async getSetting(key: string, projectId?: string): Promise<Setting | null> {
-    const client = grpcClient.settings();
-    const request = create(GetSettingRequestSchema, { key, projectId });
-    const response = await client.getSetting(request);
-    return response.setting ? protoSettingToFrontend(response.setting) : null;
-  },
-
-  async updateSetting(
-    key: string,
-    value?: string,
-    valueType?: string,
-    projectId?: string
-  ): Promise<Setting> {
-    const client = grpcClient.settings();
-    const request = create(UpdateSettingRequestSchema, {
-      key,
-      value,
-      valueType,
-      projectId,
-    });
-    const response = await client.updateSetting(request);
-    if (!response.setting) throw new Error("No setting in response");
-    return protoSettingToFrontend(response.setting);
   },
 
   /**
@@ -254,7 +127,7 @@ export const settingsGrpc = {
     projectId?: string
   ): Promise<Setting[]> {
     if (settings.length === 0) return [];
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(BatchUpsertSettingsRequestSchema, {
       settings: settings.map((s) => ({
         key: s.key,
@@ -274,7 +147,7 @@ export const settingsGrpc = {
     success: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(DeleteSettingRequestSchema, { key, projectId });
     const response = await client.deleteSetting(request);
     return {
@@ -288,7 +161,7 @@ export const settingsGrpc = {
   // ============================================
 
   async getShortcuts(): Promise<string> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(GetShortcutsRequestSchema, {});
     const response = await client.getShortcuts(request);
     return response.shortcuts;
@@ -298,7 +171,7 @@ export const settingsGrpc = {
     success: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(UpdateShortcutsRequestSchema, { shortcuts });
     const response = await client.updateShortcuts(request);
     return {
@@ -307,134 +180,18 @@ export const settingsGrpc = {
     };
   },
 
-  // In-flight dedup: concurrent calls share a single RPC round-trip.
-  _getPreferencesInflight: null as Promise<Preferences> | null,
-
-  async getPreferences(): Promise<Preferences> {
-    if (this._getPreferencesInflight) {
-      return this._getPreferencesInflight;
-    }
-
-    this._getPreferencesInflight = (async () => {
-      try {
-        const client = grpcClient.settings();
-        const request = create(GetPreferencesRequestSchema, {});
-        const response = await client.getPreferences(request);
-        return {
-          streaming_enabled: response.streamingEnabled,
-          worktree_archive_mode: response.worktreeArchiveMode,
-          worktree_default_delete_branch: response.worktreeDefaultDeleteBranch,
-          additional: response.additional,
-          branch_copy_uncommitted_files_default:
-            response.branchCopyUncommittedFilesDefault,
-          default_mcp_scope: response.defaultMcpScope ?? ConfigScope.PROJECT,
-          default_workflow_scope:
-            response.defaultWorkflowScope ?? ConfigScope.PROJECT,
-          default_workflow: response.defaultWorkflow || "builtin://agent",
-          hide_builtin_workflows: response.hideBuiltinWorkflows ?? false,
-          hide_builtin_presets: response.hideBuiltinPresets ?? false,
-          hidden_workflow_slugs: response.hiddenWorkflowSlugs ?? [],
-          hidden_preset_slugs: response.hiddenPresetSlugs ?? [],
-        };
-      } finally {
-        this._getPreferencesInflight = null;
-      }
-    })();
-
-    return this._getPreferencesInflight;
-  },
-
-  async updatePreferences(prefs: Partial<Preferences>): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(UpdatePreferencesRequestSchema, {
-      streamingEnabled: prefs.streaming_enabled,
-      worktreeArchiveMode: prefs.worktree_archive_mode,
-      worktreeDefaultDeleteBranch: prefs.worktree_default_delete_branch,
-      additional: prefs.additional || {},
-      branchCopyUncommittedFilesDefault:
-        prefs.branch_copy_uncommitted_files_default,
-      defaultMcpScope: prefs.default_mcp_scope,
-      defaultWorkflowScope: prefs.default_workflow_scope,
-      defaultWorkflow: prefs.default_workflow,
-      hideBuiltinWorkflows: prefs.hide_builtin_workflows,
-      hideBuiltinPresets: prefs.hide_builtin_presets,
-    });
-    const response = await client.updatePreferences(request);
-    return {
-      success: response.success,
-      message: response.message,
-    };
-  },
-
-  async setHiddenItem(itemType: HiddenItemType, slug: string, hidden: boolean): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(SetHiddenItemRequestSchema, {
-      itemType: itemType,
-      slug,
-      hidden,
-    });
-    const response = await client.setHiddenItem(request);
-    return {
-      success: response.success,
-      message: response.message,
-    };
-  },
-
-  // ============================================
-  // Sub-phase 6c: Prompts & Active Settings
-  // ============================================
-
-  async getPrompts(): Promise<UserPrompt[]> {
-    const client = grpcClient.settings();
-    const request = create(GetPromptsRequestSchema, {});
-    const response = await client.getPrompts(request);
-    return response.prompts.map(protoUserPromptToFrontend);
-  },
-
-  async savePrompts(prompts: UserPrompt[]): Promise<{
-    success: boolean;
-    message: string;
-    prompts: UserPrompt[];
-  }> {
-    const client = grpcClient.settings();
-    const protoPrompts = prompts.map((p) =>
-      create(UserPromptSchema, {
-        id: p.id,
-        title: p.title,
-        content: p.content,
-        default: p.default,
-        hotkey: p.hotkey,
-        category: p.category,
-      })
-    );
-    const request = create(SavePromptsRequestSchema, { prompts: protoPrompts });
-    const response = await client.savePrompts(request);
-    return {
-      success: response.success,
-      message: response.message,
-      prompts: response.prompts.map(protoUserPromptToFrontend),
-    };
-  },
-
   // ============================================
   // Sub-phase 6d: Provider Settings
   // ============================================
 
+  /**
+   * Through hooks/settings-queries' cache entry (which also dedupes
+   * concurrent callers — the onboarding checklist and apiKeySetupStore both
+   * ask on page load).
+   */
   async getProviderStatuses(): Promise<ProviderStatus[]> {
-    // Use singleflight to deduplicate concurrent calls
-    // (onboardingChecklistStore and apiKeySetupStore both call this on page load)
-    return singleflight('getProviderStatuses', async () => {
-      const client = grpcClient.settings();
-      const request = create(GetProviderStatusesRequestSchema, {});
-      const response = await client.getProviderStatuses(request);
-      return response.providers.map(protoProviderStatusToFrontend);
-    });
+    const response = await fetchProviderStatuses();
+    return response.providers.map(protoProviderStatusToFrontend);
   },
 
   async validateProviderAPIKey(
@@ -444,7 +201,7 @@ export const settingsGrpc = {
     valid: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(ValidateProviderAPIKeyRequestSchema, {
       provider,
       apiKey,
@@ -462,7 +219,7 @@ export const settingsGrpc = {
     redirectURI: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteCodexOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -470,6 +227,7 @@ export const settingsGrpc = {
       accountId,
     });
     const response = await client.completeCodexOAuth(request);
+    invalidateProviderStatuses();
     return {
       success: response.success,
       message: response.message,
@@ -498,11 +256,12 @@ export const settingsGrpc = {
     createdKey: boolean;
     rotatedKey: boolean;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(SyncReliantProviderRequestSchema, {
       forceRotate,
     });
     const response = await client.syncReliantProvider(request);
+    invalidateProviderStatuses();
     return {
       success: response.success,
       message: response.message,
@@ -520,7 +279,7 @@ export const settingsGrpc = {
     state: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteClaudeOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -529,6 +288,7 @@ export const settingsGrpc = {
       accountId,
     });
     const response = await client.completeClaudeOAuth(request);
+    invalidateProviderStatuses();
     return {
       success: response.success,
       message: response.message,
@@ -551,7 +311,7 @@ export const settingsGrpc = {
     redirectURI: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteAntigravityOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -559,6 +319,7 @@ export const settingsGrpc = {
       accountId,
     });
     const response = await client.completeAntigravityOAuth(request);
+    invalidateProviderStatuses();
     return {
       success: response.success,
       message: response.message,
@@ -582,7 +343,7 @@ export const settingsGrpc = {
     intervalSeconds: number;
     expiresInSeconds: number;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(StartCopilotDeviceAuthRequestSchema, {});
     const response = await client.startCopilotDeviceAuth(request);
     return {
@@ -610,86 +371,19 @@ export const settingsGrpc = {
     identityMismatch?: string;
     accountLabel?: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(PollCopilotDeviceAuthRequestSchema, {
       deviceCode,
       accountId,
     });
     const response = await client.pollCopilotDeviceAuth(request);
+    invalidateProviderStatuses();
     return {
       status: response.status,
       errorMessage: response.errorMessage,
       created: response.created,
       identityMismatch: response.identityMismatch || undefined,
       accountLabel: response.account?.label || undefined,
-    };
-  },
-
-  // ============================================
-  // Sub-phase 6e: Privacy Settings
-  // ============================================
-
-  async getPrivacySettings(): Promise<PrivacySettings> {
-    const client = grpcClient.settings();
-    const request = create(GetPrivacySettingsRequestSchema, {});
-    const response = await client.getPrivacySettings(request);
-    return {
-      analytics_enabled: response.analyticsEnabled,
-      crash_reporting_enabled: response.crashReportingEnabled,
-    };
-  },
-
-  async updatePrivacySettings(settings: Partial<PrivacySettings>): Promise<{
-    success: boolean;
-    message: string;
-    analytics_enabled: boolean;
-    crash_reporting_enabled: boolean;
-    requires_restart: boolean;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(UpdatePrivacySettingsRequestSchema, {
-      analyticsEnabled: settings.analytics_enabled,
-      crashReportingEnabled: settings.crash_reporting_enabled,
-    });
-    const response = await client.updatePrivacySettings(request);
-    return {
-      success: response.success,
-      message: response.message,
-      analytics_enabled: response.analyticsEnabled,
-      crash_reporting_enabled: response.crashReportingEnabled,
-      requires_restart: response.requiresRestart,
-    };
-  },
-
-  async trackPageVisited(pageName: string, previousPage?: string): Promise<{
-    success: boolean;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(TrackPageVisitedRequestSchema, {
-      pageName,
-      previousPage,
-    });
-    const response = await client.trackPageVisited(request);
-    return {
-      success: response.success,
-    };
-  },
-
-  // ============================================
-  // Sub-phase 6g: Configuration Health
-  // ============================================
-
-  async getConfigHealth(projectId?: string, typeFilter?: string): Promise<ConfigHealth> {
-    const client = grpcClient.settings();
-    const request = create(GetConfigHealthRequestSchema, {
-      projectId,
-      typeFilter,
-    });
-    const response = await client.getConfigHealth(request);
-    return {
-      errors: response.errors.map(protoConfigErrorToFrontend),
-      error_count: response.errorCount,
-      warning_count: response.warningCount,
     };
   },
 };

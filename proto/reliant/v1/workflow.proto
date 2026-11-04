@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/trigger.proto";
 import "reliant/v1/workflow_v2.proto";
@@ -23,7 +24,22 @@ service WorkflowService {
   // SaveWorkflow creates or updates a workflow in the database.
   // A draft is stored as-is (validation findings are returned, not enforced);
   // a complete workflow must pass validation or nothing is stored.
-  rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse) {}
+  rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "save"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+          label: "response.workflow.name"
+        }
+        detail: [
+          "response.status",
+          "response.version"
+        ]
+      }
+    };
+  }
 
   // GetWorkflow returns a specific workflow by slug
   // forge:custom — resolves a workflow definition by slug across builtin, project and user sources
@@ -31,32 +47,109 @@ service WorkflowService {
 
   // DeleteWorkflow deletes a workflow from the database
   // forge:custom — deletes the caller's workflow draft by the slug of its name
-  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse) {}
+  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+          label: "name"
+        }
+      }
+    };
+  }
 
-  // ValidateWorkflow validates a workflow without saving it
-  rpc ValidateWorkflow(ValidateWorkflowRequest) returns (ValidateWorkflowResponse) {}
+  // ValidateWorkflow validates a workflow without saving it. It only reads,
+  // and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
+  // it rather than a mutation that invalidates every workflow read.
+  rpc ValidateWorkflow(ValidateWorkflowRequest) returns (ValidateWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ImportWorkflow imports a workflow from YAML into the database
-  rpc ImportWorkflow(ImportWorkflowRequest) returns (ImportWorkflowResponse) {}
+  rpc ImportWorkflow(ImportWorkflowRequest) returns (ImportWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "import"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+          label: "response.workflow.name"
+        }
+        detail: ["response.status"]
+      }
+    };
+  }
 
-  // ExportWorkflow exports a workflow from the database as YAML
-  rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {}
+  // ExportWorkflow exports a workflow from the database as YAML. A read
+  // (NO_SIDE_EFFECTS), like ValidateWorkflow.
+  rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetWorkflowVisibility toggles the hidden status of a workflow
-  rpc SetWorkflowVisibility(SetWorkflowVisibilityRequest) returns (SetWorkflowVisibilityResponse) {}
+  rpc SetWorkflowVisibility(SetWorkflowVisibilityRequest) returns (SetWorkflowVisibilityResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_visibility"
+        target: {
+          kind: "workflow"
+          id: "slug"
+          label: "response.workflow.name"
+        }
+        detail: ["is_hidden"]
+      }
+    };
+  }
 
   // CopyWorkflow creates a copy of an existing workflow with a new unique name
   // The copy is saved to the user's DB with forked_from set to track origin
-  rpc CopyWorkflow(CopyWorkflowRequest) returns (CopyWorkflowResponse) {}
+  rpc CopyWorkflow(CopyWorkflowRequest) returns (CopyWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "copy"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+          label: "new_name"
+        }
+        detail: ["source_slug"]
+      }
+    };
+  }
 
   // CreateWorkflowDraft creates an empty draft for the workflow builder
   // Called when user clicks "New Workflow" so the canvas has a draft to edit
-  rpc CreateWorkflowDraft(CreateWorkflowDraftRequest) returns (CreateWorkflowDraftResponse) {}
+  rpc CreateWorkflowDraft(CreateWorkflowDraftRequest) returns (CreateWorkflowDraftResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+          label: "response.name"
+        }
+        detail: ["template"]
+      }
+    };
+  }
 
   // SetWorkflowStatus moves a stored workflow between draft and complete.
   // Marking complete validates the current definition and is rejected (with
   // the errors) when it is invalid; moving to draft always succeeds.
-  rpc SetWorkflowStatus(SetWorkflowStatusRequest) returns (SetWorkflowStatusResponse) {}
+  rpc SetWorkflowStatus(SetWorkflowStatusRequest) returns (SetWorkflowStatusResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_status"
+        target: {
+          kind: "workflow"
+          id: "response.slug"
+        }
+        detail: ["status"]
+      }
+    };
+  }
 
 }
 
@@ -229,6 +322,7 @@ message DeleteWorkflowRequest {
 message DeleteWorkflowResponse {
   bool success = 1;
   string message = 2;
+  string slug = 3; // Slug of the deleted workflow (name is slugified to find it)
 }
 
 // ============================================
@@ -394,5 +488,6 @@ message SetWorkflowStatusResponse {
   WorkflowDraftStatus status = 3;     // Status after the call
   repeated ValidationError validation_errors = 4; // Current findings (errors, then warnings)
   int64 version = 5;                  // Version after the call (for OCC)
+  string slug = 6;                    // The workflow's slug
 }
 

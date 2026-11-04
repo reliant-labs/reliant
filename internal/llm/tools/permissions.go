@@ -158,10 +158,11 @@ func MinimumPermissionForTool(toolName string) string {
 	// access would let a low-privilege agent steer a higher-privilege one.
 	// list_runs and get_run only read, and sit at the base tier.
 	//
-	// No tool creates or enables a trigger: that is the user's act, in the
-	// app. list_triggers only reads.
+	// Activation management also creates standing work and needs explicit
+	// interactive approval. The tier alone never authorizes a mutation.
+	// list_triggers and list_trigger_events only read.
 	switch toolName {
-	case ToolStartRun, ToolControlRun, ToolSendToRun:
+	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolFireTrigger, ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolManageMachine:
 		return PermissionOrchestrator
 	}
 

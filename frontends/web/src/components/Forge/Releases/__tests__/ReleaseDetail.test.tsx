@@ -2,8 +2,8 @@
 
 /**
  * One release against the fixture ledger: the header's status and the two
- * env-naming actions (D1), Changes (commits with a truncated range said out
- * loud, D4; images; objects; the deploy note; and the answers a release cut
+ * env-naming actions, Changes (commits with a truncated range said out
+ * loud; images; objects; the deploy note; and the answers a release cut
  * before commit ranges or bundles gets), Rollout, Checks, Artifacts, the
  * promotion timeline, and not-found / error.
  */
@@ -30,12 +30,20 @@ describe("the header", () => {
     await ready();
     const header = screen.getByRole("heading", { level: 1 });
     expect(header).toHaveTextContent(V[0]!);
-    // Previews are counted, not named (D2).
+    // Previews are counted, not named.
     expect(screen.getByText("Live on prod, dev and 2 previews")).toBeInTheDocument();
     expect(screen.getByText("scoped: admin-web, internal-console")).toBeInTheDocument();
     expect(screen.getByText("cut by sean from main")).toBeInTheDocument();
-    // Prod already runs it: no rollback to offer.
-    expect(screen.queryByRole("button", { name: /Roll back/ })).not.toBeInTheDocument();
+    // Prod runs it: the way back is to what prod ran before, named.
+    expect(screen.getByRole("button", { name: `Roll back prod to ${shortVersion(V[1]!)}…` })).toBeInTheDocument();
+  });
+
+  it("rolls the environment back to what it ran before through the plan flow", async () => {
+    const user = userEvent.setup();
+    const harness = renderDetail(createReleasesFixtureApi(), V[0]!);
+    await ready();
+    await user.click(screen.getByRole("button", { name: `Roll back prod to ${shortVersion(V[1]!)}…` }));
+    expect(harness.promote).toHaveBeenCalledWith({ version: V[1]!, env: "prod", intent: "rollback" });
   });
 
   it("offers to roll the scoped env back to an older release, naming it", async () => {
@@ -92,7 +100,7 @@ describe("Changes", () => {
     expect(screen.getByTestId("release-deploy-note")).toHaveTextContent("No deploy note.");
   });
 
-  it("says a truncated range is truncated, never complete (D4)", async () => {
+  it("says a truncated range is truncated, never complete", async () => {
     renderDetail(createReleasesFixtureApi(), V[3]!, { search: { base: V[4] } });
     await ready();
     expect(await screen.findByTestId("release-commits-truncated")).toHaveTextContent("showing 4 of an unknown number of commits");
@@ -148,6 +156,25 @@ describe("the other tabs", () => {
     expect(rollout).toHaveTextContent("admin-server");
     await user.click(within(screen.getByTestId("release-env-picker")).getByRole("button", { name: "dev" }));
     expect(harness.current().in).toBe("dev");
+  });
+
+  it("lists forge-applied slots in their own group, by their reason, never as unobservable", async () => {
+    const reason = "applied by forge (not observed by the control plane)";
+    renderDetail(
+      createReleasesFixtureApi({ forgeApplied: [{ name: "edge-us/web/api", artifact: "web", pinnedDigest: "sha256:abc123", reason }] }),
+      V[0]!,
+      { search: { tab: "rollout" } }
+    );
+    await ready();
+    const rollout = await screen.findByTestId("release-rollout");
+    expect(rollout).toHaveTextContent("1 applied by forge");
+    const group = within(rollout).getByTestId("release-rollout-forge-applied");
+    expect(within(group).getByRole("table", { name: "Applied by forge" })).toBeInTheDocument();
+    expect(group).toHaveTextContent("edge-us/web/api");
+    expect(group).toHaveTextContent(reason);
+    expect(group).not.toHaveTextContent("Cannot be observed");
+    // The judged workloads keep their own table; the slot is not among them.
+    expect(within(rollout).getByRole("table", { name: "Workloads" })).not.toHaveTextContent("edge-us/web/api");
   });
 
   it("lists every check with its result, a failed one tinted", async () => {

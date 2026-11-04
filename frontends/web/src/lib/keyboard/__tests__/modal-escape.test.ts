@@ -83,6 +83,29 @@ describe("Escape with a modal open", () => {
     expect(pressEscape(document.body)).toEqual(["onStopStreaming"]);
   });
 
+  it("recognises a dialog by aria-modal, as forge-ui/modal renders it", () => {
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const input = document.createElement("input");
+    dialog.appendChild(input);
+    document.body.appendChild(dialog);
+    input.focus();
+
+    expect(pressEscape(input)).toEqual(["onDismissModal"]);
+  });
+
+  it("passes Escape on so the dialog can close itself", () => {
+    // dismissModal only shadows stopStreaming; claiming the key would kill
+    // the dialog's own Escape listener (ImagePreviewModal.escape.test).
+    const input = openModal();
+    const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+    Object.defineProperty(event, "target", { value: input });
+    const dispatcher = createDispatcher({ registry: buildRegistry(), getHandler: () => () => undefined });
+    dispatcher.handleKeyDown(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("is not fooled by a closed modal left in the tree", () => {
     // Overlays render `data-modal-open` only while open, so a node without the
     // attribute must not put us in the modal context.

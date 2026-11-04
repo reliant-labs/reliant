@@ -9,6 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
+import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { mockTransport } from "@/lib/test-utils";
 
 vi.mock("../../../../lib/monacoManager", () => ({ useMonaco: () => null }));
 
@@ -27,20 +30,21 @@ const getCatalogEntry = vi.fn();
 const setTriggerEnabled = vi.fn();
 const listConnections = vi.fn();
 const resolveTriggerSenders = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    catalog: () => ({ searchCatalog, getCatalogEntry }),
-    trigger: () => ({ setTriggerEnabled, resolveTriggerSenders }),
-    connection: () => ({ listConnections }),
-  },
-  getGRPCBaseURLPublic: () => null,
-}));
+// TriggerService, CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    ...serviceHandlers("TriggerService", { setTriggerEnabled, resolveTriggerSenders }),
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
+  }),
+);
 
 import { DeclaredTriggerPanel } from "../DeclaredTriggerPanel";
 import { WorkflowMutationProvider } from "../../WorkflowMutationContext";
 import type { Workflow } from "@/types/workflow";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import {
   ResolvedTriggerSenderSchema,
   ResolveTriggerSendersResponseSchema,
@@ -236,7 +240,9 @@ describe("DeclaredTriggerPanel", () => {
     renderPanel([scheduleTrigger]);
     expect(await screen.findByText('"0 25 * * *" is not a valid cron expression')).toBeInTheDocument();
     expect(screen.queryByText("Filter")).not.toBeInTheDocument();
-    expect(screen.getByText("Every weekday at 9:00 AM UTC")).toBeInTheDocument();
+    // The schedule reads as a sentence, with its concrete next runs in its zone.
+    expect(screen.getByLabelText("Repeat")).toHaveValue("weekdays");
+    expect(screen.getByTestId("schedule-preview")).toHaveTextContent(/^Next runs: \w{3} 9:00, \w{3} 9:00, \w{3} 9:00 \(UTC\)$/);
   });
 
   it("validates the name as the server does, and renames on blur", async () => {

@@ -9,11 +9,13 @@ import { cn } from "../../lib/utils";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatStore } from "../../store/chatStore";
+import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useWorktreeStore, useActiveWorktreeId, isWorktreeKnownGone } from "../../store/worktreeStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { logger } from "../../lib/logger";
+import { resolveWorktree, useActiveWorktreeId, isWorktreeKnownGone, useCachedWorktrees, useWorktreeById } from "../../hooks/worktree-queries";
 
 interface TerminalPanelProps {
   hasViewer?: boolean; // Renamed from hasDiffViewer to hasViewer (includes both file viewer and diff viewer)
@@ -28,6 +30,8 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   const [isResizingWidth, setIsResizingWidth] = useState(false);
   const setIsResizingGlobal = useSidebarStore((state) => state.setIsResizing);
   const panelRef = useRef<HTMLDivElement>(null);
+  const newTerminalLabel = withShortcut("New terminal", useShortcutLabel("newTerminal"));
+  const hideTerminalLabel = withShortcut("Hide terminal panel", useShortcutLabel("toggleTerminal"));
 
   const getWorktreeSessions = useTerminalStore(
     (state) => state.getWorktreeSessions
@@ -42,6 +46,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     (state) => state.setActiveSessionForWorktree
   );
   const createSession = useTerminalStore((state) => state.createSession);
+  const bindSessionChat = useTerminalStore((state) => state.bindSessionChat);
   const killSession = useTerminalStore((state) => state.killSession);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
   const requestFocus = useTerminalStore((state) => state.requestFocus);
@@ -52,35 +57,31 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   // Use the global active worktree (from worktreeStore) as the single source of truth
   const currentWorktreeId = useActiveWorktreeId();
   
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const selectedWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const worktrees = useCachedWorktrees(currentProject?.id);
+  const activeWorktree = useWorktreeById(currentWorktreeId);
 
   // Where a terminal for the active workspace starts. A workspace still being
   // created has no directory yet; it resolves to "pending" (never the project
   // root) and the effect below creates the session once the path settles.
   const workingDir = useMemo(() => {
     if (!currentWorktreeId) return resolveTerminalWorkingDir(null, currentProject);
-    const worktree =
-      worktrees.find((w) => w.id === currentWorktreeId) ??
-      (selectedWorktree?.id === currentWorktreeId ? selectedWorktree : undefined);
     // An id we know nothing about yet is a workspace whose row has not reached
-    // the store — pending, not "no workspace".
-    if (!worktree) return { kind: "pending" } as const;
-    return resolveTerminalWorkingDir(worktree, currentProject);
-  }, [currentWorktreeId, worktrees, selectedWorktree, currentProject]);
+    // the cache — pending, not "no workspace".
+    if (!activeWorktree) return { kind: "pending" } as const;
+    return resolveTerminalWorkingDir(activeWorktree, currentProject);
+  }, [currentWorktreeId, activeWorktree, currentProject]);
 
   // Drop terminals whose workspace is gone. Every project session below
   // mounts a terminal with its own socket, hidden or not, so a stale one is
   // not just clutter — it reconnects forever to a directory that will never
   // come back.
   //
-  // The store holds only the workspaces something asked for, so absence from it
+  // The cache holds only the workspaces something asked for, so absence from it
   // says nothing: each session's workspace is checked by id instead (one
   // lookup per distinct workspace the user has a terminal in, not per
   // workspace of the project). Only an archived row or the server's explicit
   // "not found" ends a session; a failed lookup keeps it, because discarding a
   // live terminal over a flaky network is the worse mistake.
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const pruneSessions = useTerminalStore((state) => state.pruneSessions);
   const sessionWorktreeKey = useMemo(() => {
     const projectId = currentProject?.id;
@@ -119,10 +120,14 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [currentProject?.id, sessionWorktreeKey, resolveWorktree, pruneSessions]);
+  }, [currentProject?.id, sessionWorktreeKey, pruneSessions]);
 
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
+  // The machine the shown terminal is on, as the server named it. A terminal
+  // on another machine than the chat's is indistinguishable by its prompt, so
+  // the header always says.
+  const activeMachine = sessions.find((s) => s.id === activeSessionId)?.machineName;
 
   // Keep terminals alive across workspace switches, but never mount a
   // persisted terminal for a workspace known to be archived. A mounted
@@ -153,6 +158,17 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     const worktreeSessions = getWorktreeSessions(currentWorktreeId);
 
     if (worktreeSessions.length > 0) {
+      // A session saved before terminals recorded their chat has none, and
+      // the server then picked a machine on its own — in prod not the chat's
+      // (`ls` of a folder the chat had just written said it did not exist).
+      // It belongs to the chat it is shown beside; binding reconnects it there.
+      const activeChatId = useChatStore.getState().activeChatId;
+      if (activeChatId) {
+        for (const session of worktreeSessions) {
+          if (!session.chatId) bindSessionChat(session.id, activeChatId);
+        }
+      }
+
       // Worktree has sessions - restore the last active one
       const lastActiveSessionId = getActiveSessionForWorktree(currentWorktreeId);
       const sessionExists = worktreeSessions.find((s) => s.id === lastActiveSessionId);
@@ -169,18 +185,23 @@ export function TerminalPanel(_props: TerminalPanelProps) {
       // re-runs this effect when its path lands — often ~10s after the user
       // started typing in the new workspace's chat — so this session does not
       // ask for focus. If the user opened the panel, that already did.
-      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, { focus: false });
+      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, {
+        focus: false,
+        chatId: useChatStore.getState().activeChatId ?? undefined,
+      });
       logger.info("[TerminalPanel] Created session for worktree", {
         worktreeId: currentWorktreeId,
         sessionId,
         workingDir: workingDir.path,
       });
     }
-  }, [currentWorktreeId, currentProject, workingDir, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, isTerminalOpen]);
+  }, [currentWorktreeId, currentProject, workingDir, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, bindSessionChat, isTerminalOpen]);
 
   const handleNewTerminal = useCallback(() => {
     if (!currentProject || workingDir.kind !== "ready") return;
-    const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId);
+    const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, {
+      chatId: useChatStore.getState().activeChatId ?? undefined,
+    });
     logger.info("[TerminalPanel] Created new terminal", {
       worktreeId: currentWorktreeId,
       sessionId,
@@ -309,14 +330,23 @@ export function TerminalPanel(_props: TerminalPanelProps) {
 
       {/* Header - styled to match ChatTabs */}
       <div className="flex items-center justify-between px-3 py-0 bg-accent border-b border-border h-10 flex-shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-xs font-mono">Terminal</span>
+          {activeMachine && (
+            <span
+              className="truncate text-xs text-muted-foreground"
+              title={`This terminal runs on ${activeMachine}`}
+              data-testid="terminal-machine"
+            >
+              on {activeMachine}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
           {/* Kill Active Terminal Button - only show if active session is in current worktree */}
           {activeSessionId && sessions.some((s) => s.id === activeSessionId) && (
-            <Tooltip content="Kill active terminal" placement="bottom" delay={300}>
+            <Tooltip content="Kill active terminal" side="bottom" delay={300}>
               <button
                 aria-label="Kill active terminal"
                 onClick={(e) => {
@@ -332,7 +362,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           )}
 
           {/* New Terminal Button */}
-          <Tooltip content="New terminal (Cmd+Shift+J)" placement="bottom" delay={300}>
+          <Tooltip content={newTerminalLabel} side="bottom" delay={300}>
             <button
               aria-label="New terminal"
               onClick={handleNewTerminal}
@@ -344,7 +374,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           </Tooltip>
 
           {/* Collapse Panel Button */}
-          <Tooltip content="Hide terminal panel (Cmd+J)" placement="bottom" delay={300}>
+          <Tooltip content={hideTerminalLabel} side="bottom" delay={300}>
             <button
               onClick={hideTerminal}
               className="p-1 hover:bg-accent/20 rounded transition-all"
@@ -392,6 +422,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
                 workingDir={session.workingDir}
                 worktreeId={session.worktreeId}
                 projectId={session.projectId}
+                chatId={session.chatId}
                 active={shown && isTerminalOpen}
                 className={cn("absolute inset-0", shown ? "block" : "hidden")}
               />
@@ -429,6 +460,9 @@ export function TerminalPanel(_props: TerminalPanelProps) {
                   <div className="absolute right-full mr-2 top-0 hidden group-hover:block z-50 pointer-events-none">
                     <div className="bg-popover text-popover-foreground border border-border rounded px-2 py-1.5 shadow-lg whitespace-nowrap text-xs">
                       <div className="font-semibold">{session.title}</div>
+                      {session.machineName && (
+                        <div className="text-muted-foreground">On {session.machineName}</div>
+                      )}
                       {session.pid && (
                         <div className="text-muted-foreground">
                           PID: {session.pid}

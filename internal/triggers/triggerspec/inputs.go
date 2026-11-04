@@ -16,7 +16,10 @@ import (
 //
 // It uses the template syntax every other workflow field uses, so a value is
 // one of:
-//   - a literal ("main"), passed through as-is;
+//   - a literal ("main"), passed through as-is, as text. A bare YAML boolean or
+//     number (`asap: true`, `every: 10`) is not a literal: the parser keeps
+//     its type as the pure expression `{{ true }}`, so `asap: 'true'` (text)
+//     and `asap: true` (a boolean) reach the run as what they are;
 //   - a pure expression ("{{ trigger.payload.ref }}"), which yields the
 //     expression's native type (a number stays a number);
 //   - a mixed string ("PR #{{ trigger.payload.data.number }}"), which yields

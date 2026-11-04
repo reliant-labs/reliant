@@ -2,6 +2,7 @@
 package workflowref
 
 import (
+	"errors"
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -31,18 +32,31 @@ type Sources struct {
 	User func(slug string) ([]byte, error)
 	// Project is the project's workflow index.
 	Project *Index
+	// ProjectFirst consults Project before User: an automation's precedence.
+	// An automation runs what the project declares, so the owner's own
+	// workflow of the same name must not silently replace it (it is still
+	// what a bare name resolves to when the project has none). A project
+	// workflow that is broken fails closed rather than falling through to
+	// the owner's. Interactive runs keep the default, the caller's own
+	// workflow first ("yours wins for you").
+	ProjectFirst bool
 }
 
 // Resolved is a workflow a ref named.
 type Resolved struct {
 	Ref    Ref
 	Source Source
-	// Path is the project file it came from, relative to Dir, for
-	// SourceProject.
+	// Path is the project file it came from, for SourceProject: relative to
+	// Dir for the project root's own workflows, to the project root for a
+	// nested repo's (Entry.Location).
 	Path string
 	// YAML is the definition as authored.
 	YAML     []byte
 	Workflow *reliantv1.Workflow
+	// Shadowed names the definition of the same name the precedence passed
+	// over ("your account workflow \"release\"", or the project file), or ""
+	// when there was none. Surfaces show it so a shadow is never silent.
+	Shadowed string
 }
 
 // Resolve turns a ref into the workflow it names. It is the one resolution
@@ -64,21 +78,60 @@ func Resolve(raw string, src Sources) (*Resolved, error) {
 		return parsed(ref, SourceBuiltin, "", data)
 	}
 
-	slug := Slug(ref.Name)
-	if src.User != nil {
-		data, err := src.User(slug)
+	slug := QualifiedSlug(ref.Name)
+	// A repo-qualified name addresses a project workflow and nothing else:
+	// the caller's own workflows have no repo.
+	_, _, qualified := SplitQualifiedSlug(slug)
+	user := src.User
+	if qualified {
+		user = nil
+	}
+	if src.ProjectFirst {
+		entry, err := src.Project.Lookup(slug)
+		if err == nil {
+			resolved, err := parsed(ref, SourceProject, entry.Location(), entry.Content)
+			if err == nil && user != nil {
+				// Only to say so: an account workflow that cannot be read or
+				// run (an unfinished draft is an error here) is no reason to
+				// fail a run of the project's, and is still a same-named one.
+				if data, userErr := user(slug); userErr != nil || data != nil {
+					resolved.Shadowed = fmt.Sprintf("your account workflow %q", slug)
+				}
+			}
+			return resolved, err
+		}
+		if !errors.Is(err, ErrNotFound) || user == nil {
+			return nil, err
+		}
+		data, userErr := user(slug)
+		if userErr != nil {
+			return nil, userErr
+		}
+		if data == nil {
+			return nil, err
+		}
+		return parsed(ref, SourceUser, "", data)
+	}
+	if user != nil {
+		data, err := user(slug)
 		if err != nil {
 			return nil, err
 		}
 		if data != nil {
-			return parsed(ref, SourceUser, "", data)
+			resolved, err := parsed(ref, SourceUser, "", data)
+			if err == nil {
+				if entry, lookupErr := src.Project.Lookup(slug); lookupErr == nil {
+					resolved.Shadowed = "the project's " + RelativePath(entry.Repo, entry.Path)
+				}
+			}
+			return resolved, err
 		}
 	}
 	entry, err := src.Project.Lookup(slug)
 	if err != nil {
 		return nil, err
 	}
-	return parsed(ref, SourceProject, entry.Path, entry.Content)
+	return parsed(ref, SourceProject, entry.Location(), entry.Content)
 }
 
 // BuiltinYAML returns the definition of the builtin workflow called name:
@@ -101,7 +154,11 @@ func parsed(ref Ref, source Source, path string, data []byte) (*Resolved, error)
 		if path != "" {
 			where = path
 		}
-		return nil, fmt.Errorf("%s does not parse: %w", where, err)
+		err = fmt.Errorf("%s does not parse: %w", where, err)
+		if source == SourceProject {
+			return nil, &FileError{Path: ProjectRelative(path), Content: data, Err: err}
+		}
+		return nil, err
 	}
 	return &Resolved{Ref: ref, Source: source, Path: path, YAML: data, Workflow: wf}, nil
 }

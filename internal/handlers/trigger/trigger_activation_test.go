@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -76,6 +77,7 @@ func (e *triggerTestEnv) activation(name string, mutate func(*reliantv1.TriggerD
 }
 
 func TestActivateDeclaredSchedule(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -119,6 +121,7 @@ func TestActivateDeclaredWebhookAndIntegration(t *testing.T) {
 }
 
 func TestActivateDeclaredTriggerRejects(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -219,6 +222,7 @@ func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
 // renaming the declaration leaves the activation BROKEN — reported, not
 // dropped, and not fired.
 func TestActivationHealthReportsABrokenDeclaration(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)

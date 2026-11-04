@@ -10,7 +10,11 @@
  * while the form is asked about proj-1 — every read must follow the prop.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -45,16 +49,28 @@ const startChat = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    chat: () => ({ startChat }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-  },
-}));
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
+    }),
+  );
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({ currentProject: { id: "proj-2", name: "Forge" }, projects: [] });
@@ -247,12 +263,12 @@ describe("RunWorkflowDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("input 'label': model gpt-x is not available");
     // Only a missing provider key points at Settings.
-    expect(screen.queryByRole("link", { name: /Your providers/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /AI → Providers/ })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
     expect(loadRunContext).not.toHaveBeenCalled();
   });
 
-  it("a run with no model provider links to Settings → AI → Your providers", async () => {
+  it("a run with no model provider links to Settings → AI → Providers", async () => {
     startChat.mockRejectedValue(
       new ConnectError("no API keys configured: please add an API key in Settings > API Keys", Code.FailedPrecondition),
     );
@@ -266,11 +282,11 @@ describe("RunWorkflowDialog", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("no API keys configured");
-    const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Your providers" });
-    // The AI section opens on its "Your providers" tab.
-    expect(link).toHaveAttribute("href", "/settings/general");
+    const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Providers" });
+    // The AI section opens on its Providers tab.
+    expect(link).toHaveAttribute("href", "/settings/ai");
     await user.click(link);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/general"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/ai"));
     expect(onClose).toHaveBeenCalled();
   });
 

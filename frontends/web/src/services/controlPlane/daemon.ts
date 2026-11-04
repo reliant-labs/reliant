@@ -44,6 +44,14 @@ export interface CreateDaemonArgs {
   idleTimeout?: string;
   gitRepo?: string;
   gitBranch?: string;
+  /**
+   * Refresh the owner's existing daemon of this name instead of failing.
+   * Only for a commit point that may run twice and names its one machine
+   * (onboarding). A person adding a machine leaves it unset: the server then
+   * refuses a name already in use (ALREADY_EXISTS) rather than silently
+   * folding the new machine into the old one.
+   */
+  refreshExisting?: boolean;
 }
 
 /**
@@ -63,6 +71,7 @@ export async function createDaemon(args: CreateDaemonArgs): Promise<string> {
     idleTimeout: args.idleTimeout ?? "",
     gitRepo: args.gitRepo ?? "",
     gitBranch: args.gitBranch ?? "",
+    refreshExisting: args.refreshExisting ?? false,
   });
   return res.daemon?.id ?? "";
 }

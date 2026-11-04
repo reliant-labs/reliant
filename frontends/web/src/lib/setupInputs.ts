@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Which section of the setup dialog each workflow input belongs in
- * (automation-ux-spec.md §3.2), decided from data alone — never from an
+ * Which section of the setup dialog each workflow input belongs in,
+ * decided from data alone — never from an
  * input's name — so a hundred integrations need nothing here:
  *
  *   watches   inputs a trigger is scoped by (`match_input`), which are always

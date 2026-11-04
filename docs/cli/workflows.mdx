@@ -89,6 +89,24 @@ Validating 1 workflow(s)
 
 `validate` exits `1` when any workflow has an error, so it works as a pre-commit hook or a CI step. Add `--json` for output a program can read.
 
+A field the workflow format does not define is an error, and the message names the field and the version of Reliant that rejected it. The server parses the same files with its own version, so a file written for a newer CLI than the server fails there with that message: upgrade the server, or remove the field.
+
+### Changes that break activations
+
+Each person who turns on a declared trigger creates an activation of it on the server, bound to the trigger's name and kind. Deleting the workflow, renaming or removing the trigger, or turning it into another kind leaves every activation of it **broken**: each firing is refused and nothing runs. Every file can still validate, so give `validate` the revision you are changing from and it compares the declarations:
+
+```text
+$ reliant workflow validate --base origin/main
+Validating 2 workflow(s)
+
+  ✓ review.yaml (review)
+      Breaks activations: trigger "pr" is gone (it now declares trigger "pull-request"): every activation of it turns BROKEN. Keep the name, or remove its activations (reliant trigger list)
+  ✓ steward.yaml (steward)
+      Breaks activations: deleted: at origin/main this workflow declared trigger "tick"; every activation of it turns BROKEN and fires nothing. Turn those activations off or remove them (reliant trigger list) as part of this change
+```
+
+These are warnings: the CLI cannot see the activations, and removing a trigger nobody turned on is an ordinary edit. The server can, and lists an enabled activation that a synced change broke in its owner's Inbox, with **Pause** and **Remove**.
+
 `reliant workflow validate-tree <ref>` goes further for one workflow. It follows every workflow the target calls, through `project://` and `builtin://` references, and checks [presets](/workflows/presets) against the inputs they set. This is the check the server runs when a chat starts. Pass the workflow as a file path, `project://<name>` or `builtin://<name>`:
 
 ```text
@@ -232,7 +250,7 @@ reliant trigger create --name nightly-tests --workflow project://test-then-fix \
   --message "Run the nightly tests and fix anything that broke."
 ```
 
-`trigger list`, `get`, `fire` (run now), `events`, `enable`, `disable`, `update` and `delete` manage it afterwards. Turning an automation on is your decision, so `create`, `update` and `enable` refuse to run from an agent's shell. [Schedules](/automations/schedules) covers schedule options, catch-up after an outage, and overlapping runs.
+`trigger list`, `get`, `fire` (run now), `events`, `enable`, `disable`, `update` and `delete` manage it afterwards. Turning an automation on is your decision. An agent can call `create_trigger_activation`, `update_trigger_activation`, `enable_trigger` or `pause_trigger`. **Settings → Automations → Automation approvals** decides which of those calls show you an approval card, for your account or one project: *when a change widens its power* (the default) asks for a new activation, a new or different connection or scope, a change of who it acts as, a new machine, new secrets or a production deploy step, and applies every other edit and resume straight away; *never* applies everything; *always* asks for everything. Pausing never needs a card. Cards an agent's turn raises together arrive as one batch: approve or deny them all at once from the chat or the Inbox, or decide each one. Approve all first shows what every card in it grants, and approves only what it showed. A card raised before cards described their grant in plain words is left out of Approve all and decided on its own. Every change is recorded in the activation's configuration history, with how it was approved and what it added and removed. An unattended run reaches these tools only when its workflow step names them, and a change that needs a card is refused there. The CLI's `create`, `update` and `enable` still refuse to run from an agent's shell; use the approval-backed tools instead. [Schedules](/automations/schedules) covers schedule options, catch-up after an outage, and overlapping runs.
 
 ## Related topics
 

@@ -32,7 +32,7 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 	// Get thread to find conversation ID
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil {
-		return nil, fmt.Errorf("thread not found: %w", err)
+		return nil, lookupFailed(err, "thread not found", "failed to load thread")
 	}
 
 	// Get current context window to link as parent
@@ -50,13 +50,12 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 		return currentCW, nil
 	}
 
-	// Get current max sequence
-	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
+	// The new window's sequence comes from the thread's counter, never from
+	// the highest window already written.
+	newSeq, err := s.repo.AllocateContextWindowSequence(ctx, threadID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get max context window sequence: %w", err)
+		return nil, fmt.Errorf("failed to allocate context window sequence: %w", err)
 	}
-
-	newSeq := currentSeq + 1
 
 	// Create new context window with CW chain linking:
 	// - ParentContextWindowID: Links to the previous CW (for chain traversal, though compaction stops here)

@@ -130,3 +130,62 @@ test('serves JavaScript with a MIME type the module loader accepts', () => {
   assert.strictEqual(contentTypeFor('Inter.woff2'), 'font/woff2');
   assert.strictEqual(contentTypeFor('map.bin'), 'application/octet-stream');
 });
+
+// ── app://bundle/config.js ────────────────────────────────────────────────
+// The renderer reads every endpoint from config.js and the packaged app has no
+// server, so the main process answers it (runtime-config.js) — before the web
+// root is consulted, so a stray dist/config.js can never shadow it.
+
+const { configResponse, isConfigRequest } = require('../src/app-protocol');
+
+test('config.js at the bundle root is the runtime config request, and nothing else is', () => {
+  assert.ok(isConfigRequest(`${APP_ORIGIN}/config.js`));
+  assert.ok(isConfigRequest(`${APP_ORIGIN}/config.js?v=1`), 'a query string is the same document');
+  for (const url of [
+    `${APP_ORIGIN}/assets/config.js`,
+    `${APP_ORIGIN}/config.json`,
+    `${APP_ORIGIN}/`,
+    'app://other/config.js',
+    'not a url',
+  ]) {
+    assert.ok(!isConfigRequest(url), `${url} must not be answered as config.js`);
+  }
+});
+
+test('config.js is answered from the main process as uncached JavaScript', async () => {
+  const res = configResponse(() => 'window.__FORGE_CONFIG__ = {"AUTH_MODE":"cloud"};\n', { error() {} });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers.get('content-type'), 'text/javascript');
+  assert.strictEqual(res.headers.get('cache-control'), 'no-store');
+  assert.match(await res.text(), /window\.__FORGE_CONFIG__ = \{"AUTH_MODE":"cloud"\}/);
+});
+
+test('a config.js that cannot be built is a 500, never an empty document', async () => {
+  // An empty 200 would boot the SELF-HOSTED app silently; a failed load is
+  // what the renderer's checkWebConfig() names on screen.
+  const errors = [];
+  const res = configResponse(() => {
+    throw new Error('boom');
+  }, { error: (...a) => errors.push(a.join(' ')) });
+  assert.strictEqual(res.status, 500);
+  assert.match(errors.join('\n'), /could not build config\.js: boom/);
+});
+
+test('registerAppProtocol refuses to register without a config.js source', () => {
+  const protocol = { handle() {}, isProtocolHandled: () => true };
+  assert.throws(
+    () => require('../src/app-protocol').registerAppProtocol(protocol, WEB_ROOT, { warn() {}, error() {} }, {}),
+    /needs options\.configScript/,
+  );
+});
+
+test('the registered handler answers config.js before the web root', async () => {
+  let handler;
+  const protocol = { handle: (_scheme, fn) => { handler = fn; }, isProtocolHandled: () => true };
+  require('../src/app-protocol').registerAppProtocol(protocol, '/nonexistent-web-root', { warn() {}, error() {} }, {
+    configScript: () => 'window.__FORGE_CONFIG__ = {};\n',
+  });
+  const res = await handler({ url: `${APP_ORIGIN}/config.js` });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(await res.text(), 'window.__FORGE_CONFIG__ = {};\n');
+});

@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -435,7 +436,11 @@ type GetForgeTopologyRequest struct {
 	// nobody looked at.
 	Verify bool `protobuf:"varint,2,opt,name=verify,proto3" json:"verify,omitempty"`
 	// Narrow the report to these environments. Empty means all declared.
-	Envs          []string `protobuf:"bytes,3,rep,name=envs,proto3" json:"envs,omitempty"`
+	Envs []string `protobuf:"bytes,3,rep,name=envs,proto3" json:"envs,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -489,6 +494,13 @@ func (x *GetForgeTopologyRequest) GetEnvs() []string {
 		return x.Envs
 	}
 	return nil
+}
+
+func (x *GetForgeTopologyRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetForgeTopologyResponse struct {
@@ -547,9 +559,13 @@ func (x *GetForgeTopologyResponse) GetReportJson() string {
 }
 
 type VerifyForgeEnvRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Env           string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Env       string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -594,6 +610,13 @@ func (x *VerifyForgeEnvRequest) GetProjectId() string {
 func (x *VerifyForgeEnvRequest) GetEnv() string {
 	if x != nil {
 		return x.Env
+	}
+	return ""
+}
+
+func (x *VerifyForgeEnvRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -652,9 +675,13 @@ func (x *VerifyForgeEnvResponse) GetReportJson() string {
 }
 
 type ListForgeSecretsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Env           string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Env       string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -699,6 +726,13 @@ func (x *ListForgeSecretsRequest) GetProjectId() string {
 func (x *ListForgeSecretsRequest) GetEnv() string {
 	if x != nil {
 		return x.Env
+	}
+	return ""
+}
+
+func (x *ListForgeSecretsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -768,9 +802,13 @@ func (x *ListForgeSecretsResponse) GetReportJson() string {
 }
 
 type GetForgeEnvStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Env           string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Env       string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -815,6 +853,13 @@ func (x *GetForgeEnvStatusRequest) GetProjectId() string {
 func (x *GetForgeEnvStatusRequest) GetEnv() string {
 	if x != nil {
 		return x.Env
+	}
+	return ""
+}
+
+func (x *GetForgeEnvStatusRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -876,9 +921,13 @@ func (x *GetForgeEnvStatusResponse) GetReportJson() string {
 }
 
 type GetForgeEnvShapeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Env           string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Env       string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -923,6 +972,13 @@ func (x *GetForgeEnvShapeRequest) GetProjectId() string {
 func (x *GetForgeEnvShapeRequest) GetEnv() string {
 	if x != nil {
 		return x.Env
+	}
+	return ""
+}
+
+func (x *GetForgeEnvShapeRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -992,7 +1048,11 @@ type PlanForgePromoteRequest struct {
 	// The environment to preview binding. Passed to forge as `--to <env>`.
 	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
 	// The already-built release to preview binding it to (e.g. "v1.5.15").
-	Release       string `protobuf:"bytes,3,opt,name=release,proto3" json:"release,omitempty"`
+	Release string `protobuf:"bytes,3,opt,name=release,proto3" json:"release,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1044,6 +1104,13 @@ func (x *PlanForgePromoteRequest) GetEnv() string {
 func (x *PlanForgePromoteRequest) GetRelease() string {
 	if x != nil {
 		return x.Release
+	}
+	return ""
+}
+
+func (x *PlanForgePromoteRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1142,6 +1209,10 @@ type PromoteForgeEnvRequest struct {
 	// environment that IS bound, which is the exact accident the guard exists to
 	// prevent. A request with neither field set is rejected.
 	ExpectUnbound bool `protobuf:"varint,5,opt,name=expect_unbound,json=expectUnbound,proto3" json:"expect_unbound,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1209,6 +1280,13 @@ func (x *PromoteForgeEnvRequest) GetExpectUnbound() bool {
 		return x.ExpectUnbound
 	}
 	return false
+}
+
+func (x *PromoteForgeEnvRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ForgePromoteRefusal is the state the guard found, when it refused.
@@ -1400,7 +1478,11 @@ type PlanForgeDeployRequest struct {
 	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
 	// The checkout to render — the project's main checkout when empty. Honoured
 	// only if it is one of this project's checkouts (main or a git worktree).
-	CheckoutPath  string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	CheckoutPath string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1452,6 +1534,13 @@ func (x *PlanForgeDeployRequest) GetEnv() string {
 func (x *PlanForgeDeployRequest) GetCheckoutPath() string {
 	if x != nil {
 		return x.CheckoutPath
+	}
+	return ""
+}
+
+func (x *PlanForgeDeployRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1535,7 +1624,11 @@ type StartForgeDeployPlanRequest struct {
 	Env string `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
 	// The checkout to build and render from — the project's main checkout when
 	// empty. Honoured only if it is one of this project's checkouts (main or a git worktree).
-	CheckoutPath  string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	CheckoutPath string `protobuf:"bytes,3,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1587,6 +1680,13 @@ func (x *StartForgeDeployPlanRequest) GetEnv() string {
 func (x *StartForgeDeployPlanRequest) GetCheckoutPath() string {
 	if x != nil {
 		return x.CheckoutPath
+	}
+	return ""
+}
+
+func (x *StartForgeDeployPlanRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1665,7 +1765,11 @@ type StartForgeDeployRequest struct {
 	// Honoured only if it is one of this project's checkouts (main or a git
 	// worktree); the daemon re-derives that list and checks against it. A value
 	// this server cannot authorise is refused rather than used.
-	CheckoutPath  string `protobuf:"bytes,9,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	CheckoutPath string `protobuf:"bytes,9,opt,name=checkout_path,json=checkoutPath,proto3" json:"checkout_path,omitempty"`
+	// The org forge acts in for this request (the web's active org). Unset: the
+	// caller's default org. forge's credential helper mints for exactly this
+	// org, and the control plane refuses one the caller does not belong to.
+	OrgId         *string `protobuf:"bytes,10,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1759,6 +1863,13 @@ func (x *StartForgeDeployRequest) GetReleaseVersion() string {
 func (x *StartForgeDeployRequest) GetCheckoutPath() string {
 	if x != nil {
 		return x.CheckoutPath
+	}
+	return ""
+}
+
+func (x *StartForgeDeployRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -2258,7 +2369,7 @@ var File_reliant_v1_forge_proto protoreflect.FileDescriptor
 const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/forge.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xbc\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xbc\x02\n" +
 	"\x0fForgeReportMeta\x12(\n" +
 	"\x10is_forge_project\x18\x01 \x01(\bR\x0eisForgeProject\x12\x1c\n" +
 	"\tsupported\x18\x02 \x01(\bR\tsupported\x12#\n" +
@@ -2266,64 +2377,78 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\x12unsupported_reason\x18\x04 \x01(\tR\x11unsupportedReason\x12\x1b\n" +
 	"\texit_code\x18\x05 \x01(\x05R\bexitCode\x12A\n" +
 	"\freachability\x18\x06 \x01(\x0e2\x1d.reliant.v1.ForgeReachabilityR\freachability\x12-\n" +
-	"\x12unreachable_reason\x18\a \x01(\tR\x11unreachableReason\"d\n" +
+	"\x12unreachable_reason\x18\a \x01(\tR\x11unreachableReason\"\x8b\x01\n" +
 	"\x17GetForgeTopologyRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x16\n" +
 	"\x06verify\x18\x02 \x01(\bR\x06verify\x12\x12\n" +
-	"\x04envs\x18\x03 \x03(\tR\x04envs\"l\n" +
+	"\x04envs\x18\x03 \x03(\tR\x04envs\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"l\n" +
 	"\x18GetForgeTopologyResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"H\n" +
+	"reportJson\"o\n" +
 	"\x15VerifyForgeEnvRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
-	"\x03env\x18\x02 \x01(\tR\x03env\"j\n" +
+	"\x03env\x18\x02 \x01(\tR\x03env\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"j\n" +
 	"\x16VerifyForgeEnvResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"Z\n" +
+	"reportJson\"\x81\x01\n" +
 	"\x17ListForgeSecretsRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x18\n" +
-	"\x03env\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x03env\"l\n" +
+	"\x03env\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x03env\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"l\n" +
 	"\x18ListForgeSecretsResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"K\n" +
+	"reportJson\"r\n" +
 	"\x18GetForgeEnvStatusRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
-	"\x03env\x18\x02 \x01(\tR\x03env\"m\n" +
+	"\x03env\x18\x02 \x01(\tR\x03env\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"m\n" +
 	"\x19GetForgeEnvStatusResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"J\n" +
+	"reportJson\"q\n" +
 	"\x17GetForgeEnvShapeRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
-	"\x03env\x18\x02 \x01(\tR\x03env\"l\n" +
+	"\x03env\x18\x02 \x01(\tR\x03env\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"l\n" +
 	"\x18GetForgeEnvShapeResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"d\n" +
+	"reportJson\"\x8b\x01\n" +
 	"\x17PlanForgePromoteRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12\x18\n" +
-	"\arelease\x18\x03 \x01(\tR\arelease\"l\n" +
+	"\arelease\x18\x03 \x01(\tR\arelease\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"l\n" +
 	"\x18PlanForgePromoteResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"\xc4\x01\n" +
+	"reportJson\"\xeb\x01\n" +
 	"\x16PromoteForgeEnvRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12\x18\n" +
 	"\arelease\x18\x03 \x01(\tR\arelease\x128\n" +
 	"\x18expected_current_release\x18\x04 \x01(\tR\x16expectedCurrentRelease\x12%\n" +
-	"\x0eexpect_unbound\x18\x05 \x01(\bR\rexpectUnbound\"\xd8\x02\n" +
+	"\x0eexpect_unbound\x18\x05 \x01(\bR\rexpectUnbound\x12\x1a\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xd8\x02\n" +
 	"\x13ForgePromoteRefusal\x12=\n" +
 	"\x06reason\x18\x01 \x01(\x0e2%.reliant.v1.ForgePromoteRefusalReasonR\x06reason\x128\n" +
 	"\x18expected_current_release\x18\x02 \x01(\tR\x16expectedCurrentRelease\x12)\n" +
@@ -2335,21 +2460,25 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\x17PromoteForgeEnvResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"n\n" +
+	"reportJson\"\x95\x01\n" +
 	"\x16PlanForgeDeployRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12#\n" +
-	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"k\n" +
+	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"k\n" +
 	"\x17PlanForgeDeployResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
-	"reportJson\"s\n" +
+	"reportJson\"\x9a\x01\n" +
 	"\x1bStartForgeDeployPlanRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12#\n" +
-	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"\x91\x03\n" +
+	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xb8\x03\n" +
 	"\x17StartForgeDeployRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
@@ -2360,7 +2489,10 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\x0eapprove_digest\x18\x06 \x01(\tR\rapproveDigest\x123\n" +
 	"\x15acknowledged_findings\x18\a \x03(\tR\x14acknowledgedFindings\x12'\n" +
 	"\x0frelease_version\x18\b \x01(\tR\x0ereleaseVersion\x12#\n" +
-	"\rcheckout_path\x18\t \x01(\tR\fcheckoutPath\"\xfc\x04\n" +
+	"\rcheckout_path\x18\t \x01(\tR\fcheckoutPath\x12\x1a\n" +
+	"\x06org_id\x18\n" +
+	" \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xfc\x04\n" +
 	"\x12ForgeDeployRefusal\x12<\n" +
 	"\x06reason\x18\x01 \x01(\x0e2$.reliant.v1.ForgeDeployRefusalReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12:\n" +
@@ -2427,19 +2559,25 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	")FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED\x10\x03\x12/\n" +
 	"+FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING\x10\x04\x12*\n" +
 	"&FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE\x10\x05\x123\n" +
-	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x8f\b\n" +
+	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\xcd\v\n" +
 	"\fForgeService\x12Z\n" +
-	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12T\n" +
-	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x00\x12Z\n" +
+	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12\xf1\x01\n" +
+	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x9c\x01\xa2\xbb\x18\x97\x01:\x94\x01:\x91\x01reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS\x12Z\n" +
 	"\vListSecrets\x12#.reliant.v1.ListForgeSecretsRequest\x1a$.reliant.v1.ListForgeSecretsResponse\"\x00\x12]\n" +
 	"\fGetEnvStatus\x12$.reliant.v1.GetForgeEnvStatusRequest\x1a%.reliant.v1.GetForgeEnvStatusResponse\"\x00\x12Z\n" +
-	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12Z\n" +
-	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x00\x12Y\n" +
-	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"\x00\x12W\n" +
+	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12]\n" +
+	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x03\x90\x02\x01\x12\xa7\x01\n" +
+	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"N\xa2\xbb\x18J:H\n" +
+	"\apromote\x12\x12\n" +
+	"\arelease\x12\arelease\x1a\x03env*\n" +
+	"project_id*\x18expected_current_release\x12Z\n" +
 	"\n" +
-	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x00\x12b\n" +
-	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12Z\n" +
-	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12f\n" +
+	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x03\x90\x02\x01\x12\xdf\x01\n" +
+	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"}\xa2\xbb\x18y:w:ubuilds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event\x12\xa6\x01\n" +
+	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"L\xa2\xbb\x18H:F\n" +
+	"\x06deploy\x12\x1a\n" +
+	"\arelease\x12\x0frelease_version\x1a\x03env*\n" +
+	"project_id*\x0fresponse.handle\x12f\n" +
 	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
@@ -2537,6 +2675,16 @@ func file_reliant_v1_forge_proto_init() {
 	if File_reliant_v1_forge_proto != nil {
 		return
 	}
+	file_reliant_v1_forge_proto_msgTypes[1].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[3].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[5].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[9].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[16].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[18].OneofWrappers = []any{}
+	file_reliant_v1_forge_proto_msgTypes[19].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -4,7 +4,7 @@
 //
 // ## Why this exists
 //
-// `pr-ci.yml`'s own comment records the incident this is built for: the
+// The old PR CI workflow's own comment recorded the incident this is built for: the
 // Playwright job "was cancelled at 15m in every one of the last 50 runs that
 // reached the test step," and "was never a slow-but-passing job; the Playwright
 // suite itself was genuinely failing." Fifty consecutive runs of zero signal,
@@ -34,9 +34,9 @@
 //
 // ## Usage
 //
-//   node .github/scripts/check-gate-health.mjs --workflow pr-ci.yml
-//   node .github/scripts/check-gate-health.mjs --workflow pr-ci.yml --runs 20 --threshold 5
-//   node .github/scripts/check-gate-health.mjs --workflow pr-ci.yml --json
+//   node .github/scripts/check-gate-health.mjs --workflow ci.yml
+//   node .github/scripts/check-gate-health.mjs --workflow ci.yml --runs 20 --threshold 5
+//   node .github/scripts/check-gate-health.mjs --workflow ci.yml --json
 //
 // Exits 1 when any job's consecutive bad streak reaches --threshold.
 
@@ -51,7 +51,7 @@ function argValue(flag, fallback) {
   return i !== -1 && args[i + 1] !== undefined ? args[i + 1] : fallback;
 }
 
-const workflow = argValue("--workflow", "pr-ci.yml");
+const workflow = argValue("--workflow", "ci.yml");
 // Empty means "any branch", which is what PR-triggered workflows need: most of
 // their runs are PR runs, and a gate goes dark there as easily as on main.
 // Whether main itself is green is check-main-health.mjs's question.

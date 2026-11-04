@@ -16,8 +16,8 @@
  *                         and never reaches sendAgentMessage.
  */
 
-import { fireEvent, screen } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 
@@ -35,11 +35,6 @@ globalThis.ResizeObserver ??= class {
 const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
   sendAgentMessageMock: vi.fn(),
   toastErrorMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -68,8 +63,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 // These results feed effect dependency arrays that call setState. Fresh array
@@ -80,7 +75,6 @@ const NO_MODELS = { models: [] as never[] };
 const NO_SLASH_COMMANDS: never[] = [];
 
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => NO_PRESETS,
   useModels: () => NO_MODELS,
   useGlobalDataStore: Object.assign(() => undefined, {
     getState: () => ({ models: [] }),
@@ -95,15 +89,21 @@ vi.mock("../../../hooks/useSlashCommands", () => ({
   useSlashCommands: () => NO_SLASH_COMMANDS,
 }));
 
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
-}));
+// The selected workflow has no inputs. One stable result, as React Query
+// returns one: a fresh object per render re-derives the params every render.
+vi.mock("../../../hooks/workflow-queries", async (importActual) => {
+  const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
+    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+  };
+});
 
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: {
-    getDefaultPresets: vi.fn().mockResolvedValue({}),
-    listPresets: vi.fn().mockResolvedValue([]),
-  },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => NO_PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 
 // Settings chrome pulls in model/preset pickers that have nothing to do with
@@ -116,6 +116,14 @@ vi.mock("../WorkflowSelector", () => ({
 }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
+afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
   const editor = screen.getByTestId("chat-input");
@@ -153,13 +161,15 @@ describe("queueing a message while the agent is running", () => {
     // preventDefault ran, so the browser never inserts the newline.
     expect(notPrevented).toBe(false);
 
-    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
     expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      MAIN_THREAD_ID,
-      "check the migration file",
-      [],
-      expect.any(String),
+      expect.objectContaining({
+        chatId: CHAT_ID,
+        threadId: MAIN_THREAD_ID,
+        message: "check the migration file",
+        attachments: [],
+        clientMessageId: expect.any(String),
+      }),
     );
     // Queueing is not sending: the ordinary turn-starting path stays untouched.
     expect(onSend).not.toHaveBeenCalled();
@@ -186,14 +196,16 @@ describe("queueing a message while the agent is running", () => {
     const editor = typeInComposer("look at this");
     pressEnter(editor);
 
+    await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
     expect(toastErrorMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      MAIN_THREAD_ID,
-      "look at this",
-      ["att-1"],
-      expect.any(String),
+      expect.objectContaining({
+        chatId: CHAT_ID,
+        threadId: MAIN_THREAD_ID,
+        message: "look at this",
+        attachments: ["att-1"],
+        clientMessageId: expect.any(String),
+      }),
     );
   });
 

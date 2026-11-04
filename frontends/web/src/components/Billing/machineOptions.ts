@@ -32,7 +32,7 @@ import {
   type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 
-import { sizeHours, type DaemonPricingLike } from "./daemonUsage";
+import { hourlyPriceShort, type DaemonPricingLike } from "./daemonUsage";
 import { formatMachineSpec } from "./machineSpecs";
 import type { ComputePlanOption } from "./PlanTiles";
 
@@ -56,12 +56,12 @@ export type MachineCatalogPlan = Pick<
  *
  * A size whose cheapest plan arrived unpriced is dropped too. It is the same
  * rule `COMPUTE_PLAN_UNPRICED` exists for: a machine we cannot price must not
- * appear beside a pay button, because the only alternatives are showing "$0.00"
- * for something that costs $79 or showing a blank where a price belongs.
+ * appear beside a pay button, because the only alternatives are showing "$0"
+ * for something that costs $69 or showing a blank where a price belongs.
  */
 export function deriveMachineOptions<T extends MachineCatalogPlan>(
   plans: T[],
-  /** ListPlans' daemon_pricing: each size's multiplier. */
+  /** ListPlans' daemon_pricing: each size's disk and hourly overage price. */
   pricing?: DaemonPricingLike,
 ): ComputePlanOption[] {
   const options: ComputePlanOption[] = [];
@@ -77,19 +77,20 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       // instrument that unlocks it and is never the thing being chosen.
       label: formatSizeLabel(size),
       // What the size actually BUYS, in its own slot rather than concatenated
-      // into the label. "Medium" describes nothing on its own, and the caller
+      // into the label. "L" describes nothing on its own, and the caller
       // that needs the bare name back (the coupon coverage sentence) would
       // otherwise have to unpick the string it just built.
-      detail: formatMachineSpec(size),
+      detail: formatMachineSpec(size, pricing?.sizes.find((row) => row.size === size)?.storageGib),
+      // The price of an hour past the plan's included hours, beside the
+      // monthly price it qualifies — the landing page's "After included".
+      overage: (() => {
+        const hourly = hourlyPriceShort(pricing, size);
+        return hourly ? `${hourly} after included hours` : undefined;
+      })(),
       size,
       monthlyPriceCents: display.monthlyPriceCents,
-      includedHours: sizeHours(
-        pricing,
-        size,
-        plan.structuredLimits?.includedSmallDaemonHours === undefined
-          ? undefined
-          : Number(plan.structuredLimits.includedSmallDaemonHours),
-      ),
+      includedHours: plan.structuredLimits?.machineIncludedHours && plan.structuredLimits.machineIncludedHours > 0n
+        ? String(plan.structuredLimits.machineIncludedHours) : null,
     });
   }
   return options;

@@ -279,10 +279,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray:go-to-settings', listener);
     return () => ipcRenderer.removeListener('tray:go-to-settings', listener);
   },
-  onTrayGoToProjectPicker: (callback) => {
+  onTrayAddProject: (callback) => {
     const listener = () => callback();
-    ipcRenderer.on('tray:go-to-project-picker', listener);
-    return () => ipcRenderer.removeListener('tray:go-to-project-picker', listener);
+    ipcRenderer.on('tray:add-project', listener);
+    return () => ipcRenderer.removeListener('tray:add-project', listener);
   },
   onTraySwitchWorkspace: (callback) => {
     const listener = (event, payload) => callback(payload || {});
@@ -329,6 +329,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Keyboard shortcuts — push effective bindings so the native menu's
   // accelerators track the user's remaps instead of silently overriding them.
   updateShortcutBindings: (bindings) => ipcRenderer.invoke('shortcuts:update', bindings),
+
+  // The find bar (find-bar.js): shown over this window and focused. The
+  // findInPage shortcut decides when; `request` carries the app's theme.
+  findInPage: {
+    open: (request) => ipcRenderer.invoke('find-bar:open', request),
+  },
 
   // Privacy settings
   updatePrivacySettings: (settings) => ipcRenderer.invoke('update-privacy-settings', settings),
@@ -423,8 +429,8 @@ const injectReliantConfig = async () => {
       // rendererApiUrl = where the renderer's MAIN Connect transport hits for
       //                  reliant.v1.* services (ProjectService, ChatService, …).
       //                  In prod the two collapse; in cloud-dev they're distinct
-      //                  processes on different ports. getGRPCBaseURL() in
-      //                  frontends/web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
+      //                  processes on different ports. reliantApiBaseUrl() in
+      //                  frontends/web/src/lib/connect.ts reads window.RELIANT_CONFIG.grpcUrl.
       const apiUrl = status?.apiUrl || 'http://localhost:8080';
       const rendererApiUrl = status?.rendererApiUrl || apiUrl;
       return {

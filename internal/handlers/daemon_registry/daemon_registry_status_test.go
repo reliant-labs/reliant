@@ -215,3 +215,25 @@ func TestDaemonAnswersToName(t *testing.T) {
 		}
 	}
 }
+
+// The attached daemon's reported build is served; a detached one serves none
+// (the build lives on the lease and goes with it), and a daemon that reported
+// nothing is an unknown build, not an error.
+func TestDaemonToProto_CarriesTheAttachedBuild(t *testing.T) {
+	d := &db.Daemon{ID: "d-1", UserID: "u-1"}
+
+	got := daemonToProto(d, &db.DaemonAttachment{Build: db.DaemonBuild{
+		Version: "1.8.3-dev+b675d224", Commit: "b675d22417c3", CommitTimeUnix: 1792800000, ForgeVersion: "v0.1.47",
+	}})
+	if got.GetVersion() != "1.8.3-dev+b675d224" || got.GetCommit() != "b675d22417c3" ||
+		got.GetCommitTimeUnix() != 1792800000 || got.GetForgeVersion() != "v0.1.47" {
+		t.Errorf("build = (%q, %q, %d, %q)", got.GetVersion(), got.GetCommit(), got.GetCommitTimeUnix(), got.GetForgeVersion())
+	}
+
+	for name, att := range map[string]*db.DaemonAttachment{"detached": nil, "attached, no build reported": {}} {
+		got := daemonToProto(d, att)
+		if got.GetVersion() != "" || got.GetCommit() != "" || got.GetCommitTimeUnix() != 0 || got.GetForgeVersion() != "" {
+			t.Errorf("%s: build = (%q, %q, %d, %q), want unknown", name, got.GetVersion(), got.GetCommit(), got.GetCommitTimeUnix(), got.GetForgeVersion())
+		}
+	}
+}

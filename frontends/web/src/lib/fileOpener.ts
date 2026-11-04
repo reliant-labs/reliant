@@ -3,10 +3,10 @@
  */
 
 import { useMemo } from 'react';
-import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
+import { useWorktreeStore } from '../store/worktreeStore';
+import { ALL_PROJECTS, getCachedWorktrees, getCurrentWorktree, useCachedWorktrees, useCurrentWorktree, type Worktree } from '../hooks/worktree-queries';
 import { useViewerStore } from '../store/viewerStore';
 import { useProjectStore } from '../store/projectStore';
-import { isElectron } from './constants';
 import { logger } from './logger';
 import type { ParsedFilePath } from './filePath';
 import type { FileNode } from '../components/FileBrowser';
@@ -23,25 +23,6 @@ export interface PathClassificationResult {
   matchedWorktree: Worktree | null;
   isClickable: boolean;
   tooltipMessage: string;
-}
-
-/**
- * Whether the backend will serve a file that lives outside the workspace.
- *
- * Only the desktop app will. There the server runs on the user's own machine
- * and serves that one user, so reading a file they explicitly named grants
- * them nothing they did not already have with a shell or Finder — the
- * read-only viewer RPCs accept an absolute host path
- * (internal/grpc/services/filesystem.go, validateReadPath).
- *
- * A hosted deployment routes filesystem requests through a daemon
- * (FileSystemProxyService), which keeps every path confined to the workspace.
- * Marking such a link clickable there would render a button that looks live
- * and then fails with PermissionDenied, which is worse than saying up front
- * that it cannot be opened.
- */
-function canOpenFilesOutsideWorkspace(): boolean {
-  return isElectron();
 }
 
 /** The store state classification needs, so the core stays pure and testable. */
@@ -132,23 +113,16 @@ function classifyPathWithContext(
     };
   }
 
-  // Outside the project entirely. The desktop app can still read it, so the
-  // link stays live there; a hosted deployment cannot, and says why rather
-  // than offering a button that would fail on click.
-  if (canOpenFilesOutsideWorkspace()) {
-    return {
-      classification: 'external',
-      targetWorktreeId: null,
-      matchedWorktree: null,
-      isClickable: true,
-      tooltipMessage: `Click to open ${parsedPath.path} (outside this workspace, read-only)`,
-    };
-  }
-
-  return unopenable(
-    `Cannot open ${parsedPath.path}: it is outside this workspace, and files on the host are ` +
-      `only readable in the desktop app. Open it in a project or workspace that contains it.`
-  );
+  // Outside the project entirely. The read-only viewer RPCs read an absolute
+  // path anywhere on the workspace's machine (FileSystemProxyService,
+  // resolveForView), so the link stays live; only saving is confined.
+  return {
+    classification: 'external',
+    targetWorktreeId: null,
+    matchedWorktree: null,
+    isClickable: true,
+    tooltipMessage: `Click to open ${parsedPath.path} (outside this workspace, read-only)`,
+  };
 }
 
 /**
@@ -158,8 +132,8 @@ export function usePathClassification(
   parsedPath: ParsedFilePath | null,
   contextWorktreeId?: string
 ): PathClassificationResult {
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const allWorktrees = useCachedWorktrees(ALL_PROJECTS);
+  const currentWorktree = useCurrentWorktree();
   const projectPath = useProjectStore((state) => state.currentProject?.path);
 
   // Filter out archived worktrees - fixes latent bug where archived worktrees were matched
@@ -187,12 +161,11 @@ export function classifyPath(
   parsedPath: ParsedFilePath | null,
   contextWorktreeId?: string
 ): PathClassificationResult {
-  const worktreeState = useWorktreeStore.getState();
   const projectState = useProjectStore.getState();
 
   return classifyPathWithContext(parsedPath, contextWorktreeId, {
-    activeWorktrees: worktreeState.worktrees.filter(w => !w.deleted_at),
-    currentWorktreeId: worktreeState.currentWorktree?.id,
+    activeWorktrees: getCachedWorktrees().filter(w => !w.deleted_at),
+    currentWorktreeId: useWorktreeStore.getState().currentWorktreeId ?? undefined,
     projectPath: projectState.currentProject?.path,
   });
 }
@@ -210,7 +183,6 @@ export function openFile(
   worktreeId?: string
 ): void {
   try {
-    const worktreeState = useWorktreeStore.getState();
     const viewerState = useViewerStore.getState();
     const projectState = useProjectStore.getState();
     
@@ -223,14 +195,15 @@ export function openFile(
     }
     
     // Filter out archived worktrees
-    const activeWorktrees = worktreeState.worktrees.filter(w => !w.deleted_at);
+    const activeWorktrees = getCachedWorktrees().filter(w => !w.deleted_at);
+    const currentWorktree = getCurrentWorktree();
     
     // Get current worktree if not provided
     // Try multiple sources for worktree:
     // 1. Explicitly passed worktreeId
     // 2. Current worktree from store  
     // 3. First available active worktree (fallback for when user hasn't selected one)
-    let targetWorktreeId = worktreeId || worktreeState.currentWorktree?.id;
+    let targetWorktreeId = worktreeId || currentWorktree?.id;
     
     // Fallback: if no worktree is selected but active worktrees are available, use the first one
     if (!targetWorktreeId && activeWorktrees.length > 0) {
@@ -245,7 +218,7 @@ export function openFile(
       // Try to find worktree by ID, or use current worktree
       const worktree = targetWorktreeId 
         ? activeWorktrees.find(w => w.id === targetWorktreeId)
-        : worktreeState.currentWorktree;
+        : currentWorktree;
       
       const workingDir = worktree?.path;
       
@@ -296,8 +269,8 @@ export function openFile(
  * Resolves the correct worktree from context and opens the file
  */
 export function useFileOpener() {
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
+  const currentWorktree = useCurrentWorktree();
+  const allWorktrees = useCachedWorktrees(ALL_PROJECTS);
   
   // Filter out archived worktrees
   const activeWorktrees = useMemo(

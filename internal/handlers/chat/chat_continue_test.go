@@ -38,6 +38,7 @@ type endedRunTemporalClient struct {
 	lastInputs map[string]interface{}
 	started    []startedRun
 	signals    []machinewait.Signal
+	canceled   []string
 	onStart    func()
 }
 

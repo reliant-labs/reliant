@@ -98,14 +98,6 @@ func FindWorkflowDraftByName(ctx context.Context, db orm.Context, userID, name s
 	})
 }
 
-// FindWorkflowDraftBySourcePath is the user's draft imported from
-// sourcePath, or nil.
-func FindWorkflowDraftBySourcePath(ctx context.Context, db orm.Context, userID, sourcePath string) (*core.WorkflowDraft, error) {
-	return findWorkflowDraft(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("user_id = ?", userID).Where("source_path = ?", sourcePath)
-	})
-}
-
 // FindUsableWorkflowBySlug is the user's draft with slug if it is usable —
 // complete and not hidden — or nil, for runtime loading.
 func FindUsableWorkflowBySlug(ctx context.Context, db orm.Context, userID, slug string) (*core.WorkflowDraft, error) {
@@ -145,11 +137,6 @@ func ListUserWorkflowDrafts(ctx context.Context, db orm.Context, userID string) 
 		out[i] = workflowDraftToCore(row)
 	}
 	return out, nil
-}
-
-// CountUserWorkflowDrafts counts a user's drafts.
-func CountUserWorkflowDrafts(ctx context.Context, db orm.Context, userID string) (int64, error) {
-	return CountWorkflowDraft(ctx, db, orm.WhereEq(WorkflowDraftFieldUserID, userID))
 }
 
 // WorkflowSlugExists reports whether the user has a draft with slug.
@@ -222,12 +209,6 @@ func SetWorkflowDraftForkedFrom(ctx context.Context, db orm.Context, id, forkedF
 	return updateWorkflowDraft(ctx, db, id, func(q *bun.UpdateQuery) *bun.UpdateQuery {
 		return q.Set("forked_from = ?", forkedFrom)
 	})
-}
-
-// RemoveWorkflowDraft deletes draft id and returns it; a miss is
-// sql.ErrNoRows.
-func RemoveWorkflowDraft(ctx context.Context, db orm.Context, id string) (*core.WorkflowDraft, error) {
-	return deleteWorkflowDraft(ctx, db, func(q *bun.DeleteQuery) *bun.DeleteQuery { return q.Where("id = ?", id) })
 }
 
 // RemoveWorkflowDraftBySlug deletes the user's draft with slug and returns

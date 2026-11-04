@@ -79,10 +79,10 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
 	t.Parallel()
 
-	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	_, _, dsn, cleanup := setupTestRepoWithDSN(t)
 	defer cleanup()
 
-	blind := singleConnCopy(t, rawDB)
+	blind := singleConnCopy(t, dsn)
 	if _, err := blind.Exec(`SET search_path TO pg_temp`); err != nil {
 		t.Fatalf("restrict search_path: %v", err)
 	}
@@ -106,17 +106,13 @@ func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
 	}
 }
 
-// singleConnCopy opens a second pool against the SAME database the given test
-// pool is connected to, pinned to one connection so a session-level SET applies
-// to every subsequent query on it.
-//
-// The DSN is read back from the live connection rather than recomputed: each
-// test now owns a private database, so there is no package-wide DSN to look up,
-// and pointing this pool anywhere else would silently test a different database.
-func singleConnCopy(t *testing.T, db *sql.DB) *sql.DB {
+// singleConnCopy opens a second pool on the test database at dsn, pinned to
+// one connection so a session-level SET applies to every subsequent query on
+// it.
+func singleConnCopy(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
 
-	conn, err := sql.Open("pgx", dsnForOpenDB(t, db))
+	conn, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatalf("open second connection: %v", err)
 	}
@@ -124,16 +120,4 @@ func singleConnCopy(t *testing.T, db *sql.DB) *sql.DB {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	return conn
-}
-
-// dsnForOpenDB rebuilds a DSN addressing the database that db is connected to,
-// by asking the server which database that is.
-func dsnForOpenDB(t *testing.T, db *sql.DB) string {
-	t.Helper()
-
-	dsn, err := testDSNOf(db)
-	if err != nil {
-		t.Fatalf("resolve current database: %v", err)
-	}
-	return dsn
 }

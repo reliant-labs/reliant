@@ -9,18 +9,26 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
+  type HeldWorktreeSchema,
+  InboxApprovalSchema,
+  InboxAutomationFailingSchema,
   InboxItemKind,
+  InboxItemSchema,
   ListInboxResponseSchema,
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
+import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
+import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
 import {
@@ -30,7 +38,7 @@ import {
   needsSetupItem,
   questionItem,
   renderInboxAt,
-  runFinishedItem,
+  runPausedItem,
   storageItem,
   waitingItem,
 } from "./inboxTestUtils";
@@ -38,35 +46,23 @@ import {
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
   cleanupStorage: vi.fn(),
+  forgetStorageWorktree: vi.fn(),
   clearMachineCaches: vi.fn(),
   dismissInboxItem: vi.fn(),
   restoreInboxItem: vi.fn(),
   approve: vi.fn(),
   deny: vi.fn(),
+  batchApprove: vi.fn(),
+  batchDeny: vi.fn(),
   resolveQuestion: vi.fn(),
   resumeDaemon: vi.fn(),
   setEnabled: vi.fn(),
+  deleteTrigger: vi.fn(),
   notify: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    inbox: () => ({
-      listInbox: mocks.listInbox,
-      cleanupStorage: mocks.cleanupStorage,
-      dismissInboxItem: mocks.dismissInboxItem,
-      restoreInboxItem: mocks.restoreInboxItem,
-    }),
-    daemonRegistry: () => ({ clearMachineCaches: mocks.clearMachineCaches }),
-  },
-}));
-vi.mock("@/api/client", () => ({
-  api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
-}));
-vi.mock("@/api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion: mocks.resolveQuestion, listPendingQuestions: vi.fn() },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
+  useDaemonList: () => ({ data: [], isPending: false, isError: false }),
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
       Promise.resolve(mocks.resumeDaemon(id)).catch((error) => callbacks.onError?.(error));
@@ -77,6 +73,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 vi.mock("@/hooks/trigger-queries", () => ({
   useSetTriggerEnabled: () => ({ mutate: mocks.setEnabled, isPending: false }),
+  useDeleteTrigger: () => ({ mutate: mocks.deleteTrigger, isPending: false }),
   // A custom automation: its items link to its own page.
   useTriggerById: () => undefined,
 }));
@@ -111,7 +108,35 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.deny.mockResolvedValue({ success: true, message: "" });
+  mocks.batchApprove.mockResolvedValue({ success: true, message: "" });
+  mocks.batchDeny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
+  setTransport(
+    mockTransport({
+      // The Inbox is on InboxService's generated hooks.
+      "InboxService.ListInbox": (req) => mocks.listInbox(req),
+      "InboxService.CleanupStorage": (req) => mocks.cleanupStorage(req),
+      "InboxService.ForgetStorageWorktree": (req) => mocks.forgetStorageWorktree(req),
+      "InboxService.DismissInboxItem": (req) => mocks.dismissInboxItem(req),
+      "InboxService.RestoreInboxItem": (req) => mocks.restoreInboxItem(req),
+      "ApprovalService.Approve": (req) => {
+        const { requestId, actionTaken } = req as { requestId: string; actionTaken?: string };
+        return mocks.approve(requestId, actionTaken);
+      },
+      "ApprovalService.Deny": (req) => {
+        const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
+        return mocks.deny(requestId, denialReason, actionTaken);
+      },
+      "ApprovalService.BatchApprove": (req) => mocks.batchApprove((req as { requestIds: string[] }).requestIds),
+      "ApprovalService.BatchDeny": (req) => mocks.batchDeny((req as { requestIds: string[] }).requestIds),
+      // Free-up-space goes through the generated DaemonRegistryService write.
+      "DaemonRegistryService.ClearMachineCaches": (req) => mocks.clearMachineCaches(req),
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return mocks.resolveQuestion(questionId, action, responseData);
+      },
+    }),
+  );
   mocks.dismissInboxItem.mockResolvedValue({});
   mocks.restoreInboxItem.mockResolvedValue({});
   mocks.resumeDaemon.mockResolvedValue({});
@@ -120,16 +145,36 @@ beforeEach(() => {
 });
 
 describe("InboxPage item kinds", () => {
-  it("an approval shows its title on one line, with Approve / Deny", async () => {
+  it("shows retained recovery actions and dismisses only the notice, without restoring or deleting refs", async () => {
+    respond([create(InboxItemSchema, {
+      itemId: "recovery:retained", kind: InboxItemKind.RECOVERY, projectId: "project-1",
+      waitingSince: new Date().toISOString(),
+      payload: { case: "recovery", value: {
+        recoveryId: "retained", sourceWorktreeName: "Saved feature", phase: "held", checkoutCount: 2,
+      } },
+    })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-recovery:retained");
+    expect(within(row).getByText("Saved feature")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Recovery actions" }));
+    expect(within(row).getByText(/Dismissing this notice does not delete/)).toBeInTheDocument();
+    expect(within(row).getByText(/held, not confirmed complete/)).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Dismiss Saved feature" }));
+    await waitFor(() => expect(mocks.dismissInboxItem).toHaveBeenCalled());
+    expect(mocks.restoreInboxItem).not.toHaveBeenCalled();
+  });
+
+  it("an approval opens with its card, and Approve / Deny named after the run", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     expect(within(row).getByText("Deploy to production?")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /hide/i })).toHaveAttribute("aria-expanded", "true");
 
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
 
-    await userEvent.click(within(row).getByRole("button", { name: "Deny" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Deny Nightly triage" }));
     await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("appr-1", undefined, undefined));
   });
 
@@ -184,14 +229,43 @@ describe("InboxPage item kinds", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
   });
 
-  it("a failed launch shows the reason, a single failure no count, and Edit automation", async () => {
+  it("a broken automation shows why and offers Remove and Pause, not a run to open", async () => {
+    respond([
+      failingItem({
+        itemId: "automation_failing:broken:trg-1:abc",
+        payload: {
+          case: "automationFailing",
+          value: create(InboxAutomationFailingSchema, {
+            health: create(TriggerHealthSchema, {
+              status: TriggerHealthStatus.BROKEN,
+              lastFailureDetail: 'declared trigger "tick" of workflow "merge-steward": its workflow does not resolve',
+            }),
+            lastRunChatId: "chat-last",
+          }),
+        },
+      }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_failing:broken:trg-1:abc");
+    expect(within(row).getByText(/its workflow does not resolve/)).toBeInTheDocument();
+    expect(within(row).queryByRole("link", { name: "Open last run" })).toBeNull();
+
+    await userEvent.click(within(row).getByRole("button", { name: "Pause" }));
+    expect(mocks.setEnabled).toHaveBeenCalledWith({ id: "trg-1", enabled: false }, expect.anything());
+
+    await userEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove trigger" }));
+    expect(mocks.deleteTrigger).toHaveBeenCalledWith({ id: "trg-1" }, expect.anything());
+  });
+
+  it("a failed launch shows the reason, a single failure no count, and opens the trigger", async () => {
     respond([launchFailedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
+    renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
     expect(within(row).getByText("Machine was deleted")).toBeInTheDocument();
     expect(within(row).queryByText(/in a row/)).toBeNull();
-    await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
+    // Until the trigger is known, the link resolves through the automation redirect.
+    expect(within(row).getByRole("link", { name: "Open trigger" })).toHaveAttribute("href", "/workflows/automations/trg-2");
   });
 
   it("an automation that needs setup names what is missing and links to Finish setup on its workflow page", async () => {
@@ -205,13 +279,123 @@ describe("InboxPage item kinds", () => {
     expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1");
   });
 
-  it("a finished run opens its run", async () => {
-    respond([runFinishedItem()]);
+  it("a paused automation run says what paused it and opens the run", async () => {
+    respond([runPausedItem()]);
     const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+    const row = await screen.findByTestId("inbox-item-automation_run_paused:chat-1@20261030T082500.000000");
+    expect(within(row).getByLabelText("Automation run paused")).toBeInTheDocument();
+    expect(within(row).getByText("Paused: machine e164d47d did not answer the gate command")).toBeInTheDocument();
+    expect(screen.getByText(/Paused automation runs/)).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
+  });
+
+  // One turn's activation cards (activation_card.go's layout), raised together.
+  const card = (what: string) =>
+    [
+      `Turn on ${what} for acme/shopfront: it will run on a schedule (0 3 * * *).`,
+      "Approval needed: A new activation is new standing power.",
+      `Repositories: acme/${what}`,
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+  const batched = (id: string, title: string, batchId = "wf/call-1") =>
+    approvalItem(
+      {
+        payload: {
+          case: "approval",
+          value: create(InboxApprovalSchema, { approvalId: id, approvalType: ApprovalType.TOOL_CALL, title, batchId }),
+        },
+      },
+      id,
+    );
+
+  it("approvals a run asked for together are one row, decided at once or one by one", async () => {
+    const solo = approvalItem({ chatId: "chat-2", chatTitle: "Other run" }, "solo");
+    respond([batched("a-1", card("nightly")), solo, batched("a-2", card("weekly")), batched("a-3", card("hourly"))]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText("3 approvals, asked together")).toBeInTheDocument();
+    // Each keeps its own row, open on its card, named after it.
+    const second = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(second).getByText(/^Turn on weekly for acme\/shopfront/)).toBeInTheDocument();
+    expect(within(second).getByText("acme/weekly")).toBeInTheDocument();
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+
+    // One of them on its own.
+    respond([batched("a-1", card("nightly")), solo, batched("a-3", card("hourly"))]);
+    await userEvent.click(within(second).getByRole("button", { name: /^Deny Turn on weekly/ }));
+    await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("a-2", undefined, undefined));
+    await waitFor(() => expect(within(batch).queryByTestId("inbox-item-approval:a-2")).toBeNull());
+
+    // The rest at once, after the confirmation shows what each grants.
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    expect(mocks.batchApprove).not.toHaveBeenCalled();
+    const confirm = await screen.findByTestId("approval-batch-confirm");
+    for (const what of ["nightly", "hourly"]) {
+      const grant = within(within(confirm).getByTestId(`batch-grant-a-${what === "nightly" ? 1 : 3}`));
+      expect(grant.getByText(new RegExp(`^Turn on ${what} for acme/shopfront`))).toBeInTheDocument();
+      expect(grant.getByText(`acme/${what}`)).toBeInTheDocument();
+    }
+    respond([solo]);
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+    await waitFor(() => expect(screen.queryByTestId("inbox-approval-batch-wf/call-1")).toBeNull());
+    expect(screen.getByTestId("inbox-item-approval:solo")).toBeInTheDocument();
+  });
+
+  it("an old-format activation approval in a batch is decided on its own, and says why", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nMachine: laptop (id d_1)\nOperation: enable_trigger";
+    respond([batched("a-1", card("nightly")), batched("a-2", legacy), batched("a-3", "Run the migration?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    expect(within(batch).getByText(/3 approvals, asked together · 1 decided on its own/)).toBeInTheDocument();
+    const old = within(batch).getByTestId("inbox-item-approval:a-2");
+    expect(within(old).getByText(/^Not in Approve all: this request was raised before approval cards said/)).toBeInTheDocument();
+
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    const confirm = within(await screen.findByTestId("approval-batch-confirm"));
+    expect(confirm.queryByTestId("batch-grant-a-2")).toBeNull();
+    expect(confirm.getByText("Run the migration?")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["a-1", "a-3"]));
+  });
+
+  it("a routine batch is approved at once, without a confirmation", async () => {
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?")]);
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(screen.queryByTestId("approval-batch-confirm")).toBeNull();
+  });
+
+  it("a batch already decided elsewhere says so", async () => {
+    respond([batched("x-1", "x-1", "b"), batched("x-2", "x-2", "b")]);
+    mocks.batchDeny.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-b");
+    await userEvent.click(within(batch).getByRole("button", { name: "Deny all 2" }));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+  });
+
+  it("when the approvals it sent were already decided, an approval left out of the batch stays", async () => {
+    const legacy = "Approval: A new activation is new standing power.\nOperation: enable_trigger";
+    respond([batched("r-1", "Deploy?"), batched("r-2", "Migrate?"), batched("l-1", legacy)]);
+    mocks.batchApprove.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
+    renderInboxAt(<InboxPage />);
+    const batch = await screen.findByTestId("inbox-approval-batch-wf/call-1");
+    await userEvent.click(within(batch).getByRole("button", { name: "Approve all 2" }));
+    await waitFor(() => expect(mocks.batchApprove).toHaveBeenCalledWith(["r-1", "r-2"]));
+    expect(await within(batch).findByText("Already handled")).toBeInTheDocument();
+    // Only what was sent is handled: the old-format activation is still waiting.
+    expect(within(batch).queryByTestId("inbox-item-approval:r-1")).toBeNull();
+    expect(within(batch).getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
+    respond([batched("l-1", legacy)]);
+    await waitFor(() => expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("inbox-item-approval:r-1")).toBeNull(), { timeout: 4000 });
+    expect(screen.getByTestId("inbox-item-approval:l-1")).toBeInTheDocument();
   });
 
   it("an approval already handled elsewhere says so instead of erroring", async () => {
@@ -219,8 +403,20 @@ describe("InboxPage item kinds", () => {
     mocks.approve.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
+  });
+
+  it("an approval that expired says what happened to it", async () => {
+    respond([approvalItem()]);
+    const message = "This request expired: No one answered before the request's time limit; nothing was approved.";
+    mocks.approve.mockRejectedValue(
+      new ConnectError(message, Code.FailedPrecondition, { "x-forge-error-reason": "approval_not_pending" }),
+    );
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    await userEvent.click(within(row).getByRole("button", { name: "Approve Nightly triage" }));
+    expect(await within(row).findByText(message)).toBeInTheDocument();
   });
 });
 
@@ -256,12 +452,45 @@ describe("InboxPage layout", () => {
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
     const time = row.querySelector("time")!;
     expect(within(time).getByText("3h")).toHaveAttribute("aria-hidden", "true");
-    expect(within(time).getByText(/waiting since 3 hours ago/)).toHaveClass("sr-only");
+    expect(within(time).getByText("waiting for 3 hours")).toHaveClass("sr-only");
     // The answer form and other tall content are not rendered until asked for.
     expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
   });
 
-  it("an automation item without a run links to the automation", async () => {
+  it("shows and announces the same age: 41 hours is 1d and 1 day", async () => {
+    respond([approvalItem({ waitingSince: new Date(Date.now() - 41 * 60 * 60_000).toISOString() })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    const time = row.querySelector("time")!;
+    expect(within(time).getByText("1d")).toHaveAttribute("aria-hidden", "true");
+    expect(within(time).getByText("waiting for 1 day")).toHaveClass("sr-only");
+  });
+
+  it("an activation approval shows what it grants, Approve under it, and folds the technical lines", async () => {
+    const title = [
+      "Turn on PR review for acme/shopfront: it will run on each GitHub event it watches (pull_request.opened), and use GitHub as the Reliant GitHub app (a bot account).",
+      "Approval needed: A new activation is new standing power.",
+      "Repositories: acme/shopfront",
+      "Acts as: the Reliant GitHub app (a bot account)",
+      "",
+      "Technical details",
+      "Operation: create_trigger_activation",
+    ].join("\n");
+    respond([approvalItem({ payload: { case: "approval", value: create(InboxApprovalSchema, { approvalId: "appr-1", title }) } })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(within(row).getByText(/^Turn on PR review for acme\/shopfront/)).toBeInTheDocument();
+    const repos = within(row).getByText("acme/shopfront");
+    const approve = within(row).getByRole("button", { name: "Approve Nightly triage" });
+    // Approve follows the details in reading order.
+    expect(repos.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(row).getByText("Technical details").closest("details")).not.toHaveAttribute("open");
+    // Collapsing hides Approve with the card: it is never beside a cut-off line.
+    await userEvent.click(within(row).getByRole("button", { name: /hide/i }));
+    expect(within(row).queryByRole("button", { name: "Approve Nightly triage" })).toBeNull();
+  });
+
+  it("an automation item without a run links to the trigger", async () => {
     respond([launchFailedItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
@@ -381,6 +610,38 @@ describe("InboxPage states", () => {
 
 
 describe("InboxPage storage item", () => {
+  it("a machine near its process limit names the largest process trees by the agent that started each", async () => {
+    respond([
+      storageItem(
+        { itemId: "storage:d-1:procs:1760000000000" },
+        {
+          diskLow: false,
+          volumes: [],
+          held: [],
+          processes: {
+            count: 5_400n,
+            limit: 7_650n,
+            refusingHeavy: true,
+            top: [
+              { chatId: "a32b6a3d-0000", chatTitle: "Release gate under 1h", command: "bash scripts/ci-gate.sh all", tasks: 4_950n, tracked: true },
+              { chatId: "", command: "nohup /tmp/blitz/gate.sh 1631", tasks: 300n },
+            ],
+          },
+        },
+      ),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:procs:1760000000000");
+    expect(within(row).getByText("MacBook processes")).toBeInTheDocument();
+    expect(
+      within(row).getByText(
+        /5,400 of 7,650 processes \(71%\) · heavy background commands paused · Release gate under 1h: `bash scripts\/ci-gate\.sh all` 4,950 · untracked: `nohup \/tmp\/blitz\/gate\.sh 1631` 300/,
+      ),
+    ).toBeInTheDocument();
+    // Nothing to free or clean up: the disk is fine.
+    expect(within(row).queryByRole("button", { name: "Free up space" })).not.toBeInTheDocument();
+  });
+
   it("names the volume that is full and what fills it, and what it kept, under its own heading", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
@@ -488,14 +749,14 @@ describe("InboxPage storage item", () => {
   });
 
   it("while a clean-up runs, Clean up is disabled and says so", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
   });
 
   it("when nothing is removable, Clean up is disabled and explains why", async () => {
-    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
+    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n }] })]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const button = within(row).getByRole("button", { name: "Clean up" });
@@ -516,5 +777,57 @@ describe("InboxPage storage item", () => {
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+  });
+});
+
+// Archived workspaces whose machine was removed: no machine is on record, so
+// nothing can clean them up, and once no connected machine has the folder
+// they would sit here for good. Forget drops the record and deletes nothing.
+describe("InboxPage workspaces with no machine", () => {
+  const unowned = (held: MessageInitShape<typeof HeldWorktreeSchema>[], online = true) =>
+    storageItem({ itemId: "storage::kept" }, { daemonId: "", daemonName: "", diskLow: false, volumes: [], online, held });
+  const gone = {
+    worktreeId: "wt-gone",
+    name: "old-spike",
+    projectName: "reliant",
+    path: "/home/workspace/.reliant/worktrees/reliant/old-spike",
+    reason: "no-machine-on-record",
+    forgettable: true,
+  };
+  const unchecked = { ...gone, worktreeId: "wt-unchecked", name: "unchecked", forgettable: false };
+
+  it("Forget lists what will be forgotten, says nothing is deleted, and forgets only those", async () => {
+    mocks.forgetStorageWorktree.mockResolvedValue({});
+    respond([unowned([gone, unchecked])]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    expect(within(row).getByText("Workspaces with no machine")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Forget" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Nothing is\s+deleted from any disk/)).toBeInTheDocument();
+    const list = within(dialog).getByRole("list", { name: "Workspaces to forget" });
+    expect(within(list).getByText("old-spike")).toBeInTheDocument();
+    expect(within(list).queryByText("unchecked")).not.toBeInTheDocument();
+    const notYet = within(dialog).getByRole("list", { name: "Workspaces that cannot be forgotten yet" });
+    expect(within(notYet).getByText(/a connected machine has not been checked/)).toBeInTheDocument();
+    expect(mocks.forgetStorageWorktree).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Forget 1 workspace" }));
+    await waitFor(() => expect(mocks.forgetStorageWorktree).toHaveBeenCalledTimes(1));
+    expect(mocks.forgetStorageWorktree.mock.calls[0][0]).toMatchObject({ worktreeId: "wt-gone" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("with no machine connected nothing can be checked, so Forget is disabled and says why", async () => {
+    respond([unowned([unchecked], false)]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage::kept");
+    const button = within(row).getByRole("button", { name: "Forget" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/connect a machine/i));
+    expect(within(row).getByText(/no machine connected to check/)).toBeInTheDocument();
+    expect(within(row).queryByText(/offline/)).not.toBeInTheDocument();
   });
 });

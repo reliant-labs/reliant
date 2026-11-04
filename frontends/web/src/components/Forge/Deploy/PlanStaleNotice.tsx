@@ -40,16 +40,16 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
   return (
     <section
       data-testid="plan-stale"
-      className="space-y-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2"
+      className="space-y-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2"
     >
-      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-        <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+      <p className="flex items-center gap-1.5 text-xs font-medium text-ink">
+        <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-warning-ink" aria-hidden="true" />
         This changed while you were reading it, so nothing was deployed.
       </p>
 
       {/* The environment is UNTOUCHED. Said first and plainly, because the
           reader's immediate question is whether a half-deploy happened. */}
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         Your environment is exactly as it was. Something moved underneath this plan —
         another deploy, a new build, or a change made directly to the environment — so the
         changes listed below are not the ones you approved.
@@ -57,19 +57,19 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
 
       {planChanged(change) ? (
         <CardInset data-testid="plan-stale-diff" className="space-y-1.5">
-          <p className="text-2xs font-medium text-foreground">What is different now</p>
+          <p className="text-2xs font-medium text-ink">What is different now</p>
 
           {change.releaseChanged && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-2xs text-ink-muted">
               It would now ship{" "}
-              <span className="font-mono text-foreground">
+              <span className="font-mono text-ink">
                 {change.releaseChanged.to || "a different release"}
               </span>
               {change.releaseChanged.from && (
                 <>
                   {" "}
                   instead of{" "}
-                  <span className="font-mono text-foreground">{change.releaseChanged.from}</span>
+                  <span className="font-mono text-ink">{change.releaseChanged.from}</span>
                 </>
               )}
               .
@@ -77,13 +77,13 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
           )}
 
           {change.bundleChanged && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-2xs text-ink-muted">
               The build it would deploy is not the one that was planned.
             </p>
           )}
 
           {change.driftChanged && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-2xs text-ink-muted">
               {change.driftChanged.to
                 ? "What is running has drifted from what was last deployed since this was planned."
                 : "The drift that was there when this was planned is gone."}
@@ -94,7 +94,7 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
               added/removed lists. A deletion that appeared after approval is
               the single most important thing on this screen. */}
           {change.newStopCodes.length > 0 && (
-            <p data-testid="plan-stale-new-stop" className="text-2xs font-medium text-destructive-ink">
+            <p data-testid="plan-stale-new-stop" className="text-2xs font-medium text-danger-ink">
               It now destroys something it did not before. You will be asked to accept that
               separately.
             </p>
@@ -107,13 +107,13 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
         // The digest differed but nothing the digest covers looks different to
         // us. Not swallowed: forge's comparison is authoritative and ours is a
         // rendering, so the honest line is "it moved, we cannot show you how".
-        <p data-testid="plan-stale-opaque" className="text-2xs text-muted-foreground">
+        <p data-testid="plan-stale-opaque" className="text-2xs text-ink-muted">
           The details of what moved could not be shown. Read the plan below before approving
           it.
         </p>
       )}
 
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         Read the plan below — it is the current one — and approve it if it is what you want.
       </p>
     </section>
@@ -132,11 +132,11 @@ function FindingDelta({
   if (findings.length === 0) return null;
   return (
     <div data-testid={testId} className="space-y-0.5">
-      <p className="text-2xs font-medium text-foreground">{label}</p>
+      <p className="text-2xs font-medium text-ink">{label}</p>
       <ul className="space-y-0.5">
         {findings.map((finding, index) => (
-          <li key={index} className="text-2xs text-muted-foreground">
-            {finding.subject && <span className="font-mono text-foreground">{finding.subject}</span>}
+          <li key={index} className="text-2xs text-ink-muted">
+            {finding.subject && <span className="font-mono text-ink">{finding.subject}</span>}
             {finding.detail && (
               <span>
                 {finding.subject ? " — " : ""}
@@ -144,7 +144,7 @@ function FindingDelta({
               </span>
             )}
             {!finding.subject && !finding.detail && (
-              <span className="font-mono text-foreground">{finding.code ?? "change"}</span>
+              <span className="font-mono text-ink">{finding.code ?? "change"}</span>
             )}
           </li>
         ))}

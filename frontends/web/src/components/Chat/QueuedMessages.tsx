@@ -18,13 +18,12 @@ import { Clock, OctagonX, Paperclip, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
-import {
-  chatGrpc,
-  QUEUED_SENDER_KIND_HUMAN,
-  type QueuedAgentMessageView,
-} from "../../api/chat-grpc";
+import { type QueuedAgentMessageView } from "../../hooks/chat-model";
+import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
+import * as chatActions from "../../hooks/chat-actions";
+import { STATUS_SHEET_CARD_BODY, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 
 const AGE_TICK_MS = 1_000;
@@ -98,7 +97,7 @@ export function QueuedMessages({
   // Only the user's own queued messages are actionable here. A peer agent's
   // spawn_send message is not the human's to revoke.
   const pending = messages.filter(
-    (m) => m.sender_kind === QUEUED_SENDER_KIND_HUMAN,
+    (m) => m.sender_kind === AgentMessageKind.HUMAN_MESSAGE,
   );
 
   // Which message ids have an RPC in flight, so their buttons can't be
@@ -126,7 +125,7 @@ export function QueuedMessages({
   const cancel = useCallback(
     async (messageId: string): Promise<boolean> => {
       if (!chatId) return false;
-      const response = await chatGrpc.cancelQueuedAgentMessage(chatId, messageId);
+      const response = await chatActions.cancelQueuedAgentMessage(chatId, messageId);
       if (!response.success) {
         // Already delivered. Re-read rather than pretending the message is
         // gone when the agent has it.
@@ -194,7 +193,7 @@ export function QueuedMessages({
     if (!chatId || !threadId || !onInterrupted) return;
     setInterrupting(true);
     try {
-      await chatGrpc.interruptThread(chatId, threadId);
+      await chatActions.interruptThread(chatId, threadId);
 
       await onInterrupted();
       await onRefresh();
@@ -239,13 +238,18 @@ export function QueuedMessages({
   // exited) is marked by the reconciler's resolveOrphanedAgentMessages rather
   // than being silently resent from a stale client view.
 
+  // Collapsed into the composer's status slot this is "2 queued"; take-back
+  // and interrupt stay in the slot's sheet, which renders this strip in full.
+  useStatusSlotSummary(hasPending ? { label: `${pending.length} queued` } : null);
+  const inSheet = useStatusSlotCollapsed();
+
   // Nothing queued means nothing to say. An empty container here would be a
   // permanent gap above the composer.
   if (!hasPending) return null;
 
   return (
     <div
-      className="flex flex-col gap-1 pb-1.5"
+      className={cn("flex flex-col gap-1", inSheet ? STATUS_SHEET_CARD_BODY : "pb-1.5")}
       data-testid="queued-messages"
       aria-label="Messages queued for the running agent"
     >
@@ -256,7 +260,7 @@ export function QueuedMessages({
         <div className="flex justify-end">
           <Tooltip
             content="Stop what the agent is doing so it reads your queued messages now"
-            placement="top"
+            side="top"
           >
             <button
               type="button"
@@ -347,7 +351,7 @@ export function QueuedMessages({
                 quietly send the rest too — and the version that claimed a
                 single row raced the agent's own delivery to do it. */}
             <div className="flex flex-shrink-0 items-center gap-1">
-              <Tooltip content="Remove this message from the queue" placement="top">
+              <Tooltip content="Remove this message from the queue" side="top">
                 <button
                   type="button"
                   aria-label="Cancel queued message"

@@ -11,24 +11,32 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 //
 // Every rpc here is reachable without credentials (auth_required: false):
 // probes and the sign-in flow run before a caller can hold a token.
+//
+// Health, Ready, Info and Version only read, and say so with
+// NO_SIDE_EFFECTS: forge then generates useQuery hooks for them (their names
+// are nouns, not read verbs), and Connect clients may retry them.
 service SystemService {
   // Health returns the health status of the service
   rpc Health(HealthRequest) returns (HealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Ready returns the readiness status of the service
   rpc Ready(ReadyRequest) returns (ReadyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Info returns general API information including version, build info, and worktree
   rpc Info(InfoRequest) returns (InfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Version returns detailed version information
   rpc Version(VersionRequest) returns (VersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
@@ -36,23 +44,35 @@ service SystemService {
   // by opening the provider in the system browser, waiting for the localhost
   // callback, exchanging the PKCE code, and returning Supabase session tokens.
   rpc StartOAuthSignIn(StartOAuthSignInRequest) returns (StartOAuthSignInResponse) {
-    option (forge.v1.method) = {auth_required: false};
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "sign-in handshake: returns session tokens to the desktop app and changes no reliant state"}
+    };
   }
 
   // DevAuthLoad loads the global auth session (development only).
   // Browser dev mode calls the DevAuth rpcs before a JWT exists.
   rpc DevAuthLoad(DevAuthLoadRequest) returns (DevAuthLoadResponse) {
-    option (forge.v1.method) = {auth_required: false};
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "development only: reads the developer's local auth session file"}
+    };
   }
 
   // DevAuthSave saves the global auth session (development only)
   rpc DevAuthSave(DevAuthSaveRequest) returns (DevAuthSaveResponse) {
-    option (forge.v1.method) = {auth_required: false};
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "development only: writes the developer's local auth session file"}
+    };
   }
 
   // DevAuthClear clears the global auth session (development only)
   rpc DevAuthClear(DevAuthClearRequest) returns (DevAuthClearResponse) {
-    option (forge.v1.method) = {auth_required: false};
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "development only: clears the developer's local auth session file"}
+    };
   }
 }
 

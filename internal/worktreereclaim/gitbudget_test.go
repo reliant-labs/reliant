@@ -86,11 +86,14 @@ func TestGitProcessesPerPass(t *testing.T) {
 		budget int
 		setup  func(f *fixture, w Worktree)
 	}{
-		{"clean, on main", 31, func(*fixture, Worktree) {}},
-		{"unpushed commit, saved then removed", 54, func(f *fixture, w Worktree) {
+		// Exact index/private-history proof is bound before/after classification
+		// and each deletion. These required fresh resolved-ref reads replace the
+		// unsafe post-classification-only baseline (P1 regression coverage).
+		{"clean, on main", 38, func(*fixture, Worktree) {}},
+		{"unpushed commit, held for remote recovery", 54, func(f *fixture, w Worktree) {
 			commit(f.t, w.Path, "b.txt", "b\n")
 		}},
-		{"squash-merged and pruned", 40, func(f *fixture, w Worktree) {
+		{"squash-merged and pruned", 49, func(f *fixture, w Worktree) {
 			f.commitIn(w, "feat/x", "one.txt", "1\n", true)
 			f.squashMerge("feat/x")
 			f.pruned(w)
@@ -105,7 +108,11 @@ func TestGitProcessesPerPass(t *testing.T) {
 			c := &gitCounter{}
 			got := f.oneIn(c.counting(context.Background()), w)
 			n, by := c.take()
-			if got.Outcome != OutcomeRemoved {
+			if strings.HasPrefix(tc.name, "unpushed") {
+				if got.Outcome != OutcomeHeld || !exists(w.Path) || len(got.SnapshotRefs) != 0 {
+					t.Fatalf("got %+v, want held without local snapshot fallback", got)
+				}
+			} else if got.Outcome != OutcomeRemoved {
 				t.Fatalf("got %+v, want removed", got)
 			}
 			t.Logf("%d git processes: %s", n, by)

@@ -38,7 +38,7 @@
 import { RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   deployCertainty,
   describeDeployCertainty,
@@ -105,17 +105,17 @@ export function DeployJobPanel({
             {jobStyle.label}
           </h3>
         </div>
-        <p className="text-xs text-muted-foreground" data-testid="deploy-job-blurb">
+        <p className="text-xs text-ink-muted" data-testid="deploy-job-blurb">
           {jobStyle.blurb}
         </p>
         {/* The server's own sentence, when it sent one. Branching is on
             jobStatus; this is displayed, never parsed. */}
         {jobStatusDetail && (
-          <p className="text-2xs text-muted-foreground" data-testid="deploy-job-detail">
+          <p className="text-2xs text-ink-muted" data-testid="deploy-job-detail">
             {jobStatusDetail}
           </p>
         )}
-        <p className="font-mono text-2xs text-muted-foreground" data-testid="deploy-job-handle">
+        <p className="font-mono text-2xs text-ink-muted" data-testid="deploy-job-handle">
           {env} · {handle}
           {startedAt && ` · started ${formatStamp(startedAt)}`}
           {finishedAt && ` · finished ${formatStamp(finishedAt)}`}
@@ -130,11 +130,11 @@ export function DeployJobPanel({
           data-testid="deploy-job-unknown"
           className="space-y-2 rounded-lg border border-dashed border-border px-4 py-3"
         >
-          <p className="text-xs text-foreground">
+          <p className="text-xs text-ink">
             Manifests may or may not have reached the cluster. Nothing here can tell you which —
             forge&apos;s outcome was lost, not negative.
           </p>
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-2xs text-ink-muted">
             Do not start another deploy to find out: a retry against a cluster that may already be
             converging applies a second manifest stream on top of the first. Read the environment
             instead.
@@ -160,7 +160,7 @@ export function DeployJobPanel({
       {running && (
         <p
           data-testid="deploy-job-running-note"
-          className="rounded-lg border border-dashed border-border px-4 py-3 text-xs text-muted-foreground"
+          className="rounded-lg border border-dashed border-border px-4 py-3 text-xs text-ink-muted"
         >
           Forge is applying and watching for readiness. Its report — including which resources
           became ready and which did not — appears here when it finishes.
@@ -216,7 +216,7 @@ function ReportSection({
         <h3 className={cn("text-sm font-medium", style.foreground)} data-testid="deploy-verdict-label">
           {CERTAINTY_LABELS[certainty]}
         </h3>
-        <p className="text-xs text-muted-foreground" data-testid="deploy-verdict-blurb">
+        <p className="text-xs text-ink-muted" data-testid="deploy-verdict-blurb">
           {describeDeployCertainty(certainty, report)}
         </p>
       </section>

@@ -346,3 +346,40 @@ func TestApprovalCreateActivity_IdempotencyAlreadyResolved(t *testing.T) {
 	assert.Equal(t, "approved", output.Status)
 	assert.Equal(t, "deploy", output.ActionTaken)
 }
+
+// An approval about one of the run's own tool calls is a TOOL_CALL approval
+// that names the call, and carries the batch the step raised it in; an
+// approval node's carries neither.
+func TestApprovalCreateActivity_ToolCallBatch(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	userID, projectID, chatID, workflowID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	h.CreateTestWorkflow(ctx, workflowID, chatID)
+
+	var output ApprovalCreateOutput
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "agent_loop",
+		Title: "Approval: enable_trigger", ToolCallID: "call-1", BatchID: "batch-1",
+	}, &output))
+	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL), stored.ApprovalType)
+	require.NotNil(t, stored.BatchID)
+	assert.Equal(t, "batch-1", *stored.BatchID)
+	require.NotNil(t, stored.Metadata)
+	assert.Contains(t, *stored.Metadata, `"tool_call_id":"call-1"`)
+
+	var step ApprovalCreateOutput
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "approve", Title: "Deploy?",
+	}, &step))
+	stored, err = h.Repo().GetApproval(ctx, step.ApprovalID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP), stored.ApprovalType)
+	assert.Nil(t, stored.BatchID)
+}

@@ -220,7 +220,7 @@ describe("FileTree when the machine is not up, or not there", () => {
   });
 
   it("waits for a machine that is starting or not connected (Unavailable)", async () => {
-    apiMocks.getFileTree.mockRejectedValue(new ConnectError("no daemon connected for user", Code.Unavailable));
+    apiMocks.getFileTree.mockRejectedValue(new ConnectError("no daemon connected for user", Code.Unavailable, new Headers({ "x-forge-error-reason": "daemon_not_connected" })));
     renderFileTree();
 
     expect(await screen.findByTestId("daemon-wait")).toHaveTextContent("Starting your machine");
@@ -232,6 +232,7 @@ describe("FileTree when the machine is not up, or not there", () => {
       new ConnectError(
         "resolving daemon for command: no daemon available: no machine is connected to your account yet",
         Code.FailedPrecondition,
+        new Headers({ "x-forge-error-reason": "no_daemon" }),
       ),
     );
     renderFileTree();

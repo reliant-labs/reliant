@@ -11,10 +11,9 @@ import { useState } from 'react'
 import { Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../../lib/utils'
-import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
+import Modal from '../../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
+import { createPreset, type Preset } from '../../../hooks/preset-queries'
 import { formatValueForDisplay, unwrapProtoValue } from '../../../lib/paramUtils'
 
 interface PresetViewModalProps {
@@ -33,7 +32,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
 
     setIsCopying(true)
     try {
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: copyName.trim(),
         description: preset.description || `Copy of ${preset.name}`,
         params: preset.params,
@@ -59,7 +58,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={preset.name}
       size="lg"
@@ -108,16 +107,14 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
               </h3>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
+                size="xs"
+                icon={<Copy />}
+                aria-label="Copy system prompt"
                 onClick={() => {
                   navigator.clipboard.writeText(String(systemPrompt))
                   toast.success('System prompt copied to clipboard')
                 }}
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span className="sr-only">Copy system prompt</span>
-              </Button>
+              />
             </div>
             <div className="bg-muted/50 text-foreground p-4 rounded-lg font-mono text-xs whitespace-pre-wrap max-h-[400px] overflow-y-auto border border-border/50 shadow-inner">
               {String(systemPrompt)}
@@ -169,7 +166,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
                 value={copyName}
                 onChange={(e) => setCopyName(e.target.value)}
                 placeholder="New preset name"
-                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 onKeyDown={(e) => e.key === 'Enter' && handleCopy()}
               />
               <Button onClick={handleCopy} disabled={isCopying || !copyName.trim()}>

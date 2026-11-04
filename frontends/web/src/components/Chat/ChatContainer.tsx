@@ -5,7 +5,7 @@
  * Passes all data as props to ChatPresenter for rendering.
  */
 
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
@@ -18,6 +18,7 @@ import {
   useRunOutputs,
   useStreamingMessages,
   useHasOlderMessages,
+  useIsLoadingOlderMessages,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -30,12 +31,17 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { transformWorkflowExecution } from "./ExecutionSidebar";
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
+
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
+
+/** One empty list, so a chat with no approvals keeps a stable reference. */
+const NO_APPROVALS: Approval[] = [];
 
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
@@ -45,17 +51,27 @@ interface ChatContainerProps {
   isFocused?: boolean;
   /** The host shows the chat's title itself (run detail). */
   hideChatTitle?: boolean;
+  /** The host renders the chat header itself (the mobile top bar). */
+  hideHeader?: boolean;
+  /** Controlled thread selection; see ChatPresenter. */
+  selectedThreadId?: string | null;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
-export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatContainerProps) {
+export function ChatContainer({
+  tabId,
+  isFocused = true,
+  hideChatTitle,
+  hideHeader,
+  selectedThreadId,
+  onSelectThread,
+}: ChatContainerProps) {
   // In the new navigation system, tabId IS the chatId (no separate tabs)
   // We keep the tabId prop name for compatibility but treat it as chatId
   const chatId = tabId;
 
   // Get worktree and project IDs
-  const currentWorktreeId = useWorktreeStore(
-    (state) => state.currentWorktree?.id || null,
-  );
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const currentProjectId = useProjectStore(
     (state) => state.currentProject?.id || null,
   );
@@ -84,14 +100,14 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const { data: approvals = [] } = useApprovals(chatId);
+  const approvals = useApprovals(chatId).data?.approvals ?? NO_APPROVALS;
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
   const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
+  const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
@@ -243,32 +259,23 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
         logger.info("✅ pauseChat API call completed");
       } catch (error) {
         logger.error("pauseChat API call failed:", error);
-        Sentry.captureException(error, {
-          tags: { component: 'chat', operation: 'stop_streaming' },
-          level: 'warning',
-        });
+        reportError(error, { component: 'chat', operation: 'stop_streaming' });
       }
     }
   }, [chatId, currentChat?.id]);
 
   // --- Scroll-back paging ---
   // The initial snapshot is bounded to the newest messages, so older history is
-  // fetched on demand when the user scrolls to the top of the timeline.
-  // hasOlderMessages comes from the server (via the message envelope); the
-  // in-flight flag is local because loadOlderMessages is an imperative store
-  // action rather than a query. The store guards against duplicate concurrent
-  // fetches independently — this flag exists to drive the spinner.
+  // fetched on demand when the user nears the top of the timeline. Both flags
+  // are reactive store state: hasMore rides the message envelope and the
+  // in-flight flag is the store's own (a duplicate call that the store's guard
+  // turns away cannot clear it).
   const hasOlderMessages = useHasOlderMessages(chatId);
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const isLoadingOlderMessages = useIsLoadingOlderMessages(chatId);
 
-  const handleLoadOlderMessages = useCallback(async () => {
+  const handleLoadOlderMessages = useCallback(() => {
     if (!chatId) return;
-    setIsLoadingOlderMessages(true);
-    try {
-      await useChatStore.getState().loadOlderMessages(chatId);
-    } finally {
-      setIsLoadingOlderMessages(false);
-    }
+    void useChatStore.getState().loadOlderMessages(chatId);
   }, [chatId]);
 
   // Fetch workflow executions for sidebar/header metadata
@@ -294,10 +301,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       logger.info("✅ Restart conversation message sent");
     } catch (error) {
       logger.error("Failed to restart conversation:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'chat', operation: 'restart_conversation' },
-        level: 'warning',
-      });
+      reportError(error, { component: 'chat', operation: 'restart_conversation' });
     }
   }, [chatId]);
 
@@ -325,6 +329,9 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
       hideChatTitle={hideChatTitle}
+      hideHeader={hideHeader}
+      selectedThreadId={selectedThreadId}
+      onSelectThread={onSelectThread}
     />
   );
 }

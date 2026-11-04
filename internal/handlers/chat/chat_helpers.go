@@ -45,9 +45,19 @@ func activeWorkflowNameForResume(chat *db.Chat, existingWorkflow *db.Workflow) s
 	return ""
 }
 
-// getChatForUser fetches a chat and verifies ownership in a single query.
-// This is the preferred pattern for defense-in-depth ownership checks on chat access.
-// New code should use this instead of separate GetChat + UserID comparison.
+// requireChatOwner is the ownership check for an RPC that reads nothing of the
+// chat past who owns it: the chats row alone, not the activity view
+// getChatForUser reads (whose activity, workflow-state and working-thread
+// columns are subqueries over the chat's messages, workflows and threads).
+// A missing chat and another user's are the same core.ErrChatNotFound.
+func (s *Service) requireChatOwner(ctx context.Context, chatID, userID string) error {
+	_, err := s.deps.Repo.GetChatRowWithUserCheck(ctx, chatID, userID)
+	return err
+}
+
+// getChatForUser fetches a chat, with its activity-derived fields, and
+// verifies ownership in a single query. Where only ownership matters, use
+// requireChatOwner, which skips the activity view.
 func (s *Service) getChatForUser(ctx context.Context, chatID, userID string) (*db.Chat, error) {
 	chat, err := s.deps.Repo.GetChatWithUserCheck(ctx, chatID, userID)
 	if err != nil {
@@ -194,6 +204,7 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	if c.LaunchKind != "" {
 		proto.LaunchKind = &c.LaunchKind
 	}
+	proto.Origin = c.Origin
 	if c.TriggerID != nil {
 		proto.TriggerId = c.TriggerID
 	}

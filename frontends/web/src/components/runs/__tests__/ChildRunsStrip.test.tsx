@@ -4,24 +4,28 @@
  * The strip of agent-started runs in the parent chat's header (decision 4:
  * those runs are never in the sidebar, so this is where they are found).
  *
- * The RPC client is the only mock. What is pinned: it asks ListRuns for this
+ * The transport is the only mock. What is pinned: it asks ListRuns for this
  * chat's children only; it renders nothing when there are none; it links the
  * filtered Runs list and each run; and it does not fetch at all where the
  * surface has no Runs area (the /m header).
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { create } from "@bufbuild/protobuf";
 
 import { ListRunsResponseSchema, RunDisplayState, RunSchema } from "@/gen/reliant/v1/run_pb";
+import { setTransport } from "@/lib/connect";
 import { SurfaceProvider } from "@/lib/surfaceContext";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 import { renderRunsAt } from "./runTestUtils";
 
+// The transport is the only mock: RunService is reached through the
+// generated hooks.
 const listRuns = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { run: () => ({ listRuns }) },
-}));
+beforeEach(() => setTransport(mockTransport(serviceHandlers("RunService", { listRuns }))));
+afterEach(() => setTransport(null));
 
 import { ChildRunsStrip } from "../ChildRunsStrip";
 

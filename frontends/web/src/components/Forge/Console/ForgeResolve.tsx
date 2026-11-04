@@ -2,7 +2,8 @@
 
 /**
  * The way INTO the console from anywhere that does not name a forge project:
- * the bare `/forge` (the app sidebar's entry) and every retired URL —
+ * `/forge?project=…|forgeProject=…` (the bare `/forge` is the Apps list now)
+ * and every retired URL —
  * `/forge/env/:env?tab=…`, `/forge/observability?…`, `/forge/domains`, and the
  * older per-command paths.
  *
@@ -31,11 +32,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { useNavigate } from "@tanstack/react-router";
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeTopology } from "@/hooks/forge-queries";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { fetchProjects, useProject } from "@/hooks/project-queries";
 
 import { ForgeProjectPicker } from "../ForgeProjectPicker";
 
@@ -52,7 +55,6 @@ type Ladder = { state: "resolving" } | { state: "project"; projectId: string } |
 
 export function ForgeResolve({ project, forgeProject, target }: ForgeResolveProps) {
   const named = forgeProject?.trim() || undefined;
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   const restoreLastProject = useProjectStore((state) => state.restoreLastProject);
   const [ladder, setLadder] = useState<Ladder>({ state: "resolving" });
   const attempted = useRef(false);
@@ -63,8 +65,7 @@ export function ForgeResolve({ project, forgeProject, target }: ForgeResolveProp
     void (async () => {
       try {
         if (project) {
-          await loadProjects();
-          const row = useProjectStore.getState().projects.find((candidate) => candidate.id === project);
+          const row = (await fetchProjects()).find((candidate) => candidate.id === project);
           if (row) {
             setLadder({ state: "project", projectId: row.id });
             return;
@@ -76,7 +77,6 @@ export function ForgeResolve({ project, forgeProject, target }: ForgeResolveProp
           setLadder({ state: "project", projectId: current.id });
           return;
         }
-        await loadProjects();
         if (await restoreLastProject()) {
           const restored = useProjectStore.getState().currentProject;
           if (restored) {
@@ -89,7 +89,7 @@ export function ForgeResolve({ project, forgeProject, target }: ForgeResolveProp
         setLadder({ state: "none" });
       }
     })();
-  }, [named, project, loadProjects, restoreLastProject]);
+  }, [named, project, restoreLastProject]);
 
   // The picker has already selected it in the store.
   const onPicked = useCallback((picked: Project) => setLadder({ state: "project", projectId: picked.id }), []);
@@ -112,13 +112,9 @@ function ResolveName({
   target: (forgeProject: string) => string;
   onPicked: (project: Project) => void;
 }) {
-  const row = useProjectStore(
-    (state) =>
-      (state.currentProject?.id === projectId ? state.currentProject : null) ??
-      state.projects.find((candidate) => candidate.id === projectId) ??
-      null
-  );
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const current = useProjectStore((state) => (state.currentProject?.id === projectId ? state.currentProject : null));
+  const listed = useProject(projectId);
+  const row = current ?? listed ?? null;
   const persisted = (row?.forge_project_name ?? "").trim();
   const topology = useForgeTopology(projectId, { enabled: !persisted });
   const reported = topology.data?.kind === "report" ? (topology.data.report.project ?? "").trim() : "";
@@ -127,8 +123,8 @@ function ResolveName({
   // The server persists the name the daemon just reported; re-read the rows
   // so the console's own lookup (ConsoleLayout) finds it there.
   useEffect(() => {
-    if (!persisted && reported) void loadProjects();
-  }, [persisted, reported, loadProjects]);
+    if (!persisted && reported) void fetchProjects({ fresh: true }).catch(() => undefined);
+  }, [persisted, reported]);
 
   if (name) return <Redirect href={target(name)} />;
   if (topology.isLoading) return <Resolving />;
@@ -141,9 +137,11 @@ function ResolveName({
           knows of
           {topology.data?.kind === "not-forge-project"
             ? ": there is no forge.yaml in it."
-            : topology.error
-              ? ", and its daemon could not be asked."
-              : "."}{" "}
+            : projectCheckoutMissing(topology.error)
+              ? ", and it isn't checked out on any of your machines that could read its forge.yaml."
+              : topology.error
+                ? ", and its daemon could not be asked."
+                : "."}{" "}
           Choose another, or deploy this one with forge to see it here.
         </>
       }

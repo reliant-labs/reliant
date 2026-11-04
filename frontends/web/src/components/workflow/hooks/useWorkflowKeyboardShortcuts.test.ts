@@ -23,7 +23,7 @@ function setup(overrides: Partial<UseWorkflowKeyboardShortcutsArgs> & Record<str
   return args;
 }
 
-const pressEscape = (target: EventTarget = document.body) => fireEvent.keyDown(target, { key: "Escape" });
+const pressEscape = (target: Window | Document | Element = document.body) => fireEvent.keyDown(target, { key: "Escape" });
 
 afterEach(() => {
   document.body.innerHTML = "";

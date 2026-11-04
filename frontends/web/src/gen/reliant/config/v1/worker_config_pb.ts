@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/worker_config.proto.
  */
 export const file_reliant_config_v1_worker_config: GenFile = /*@__PURE__*/
-  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS93b3JrZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKfCgoMV29ya2VyQ29uZmlnEmAKC2hlYWx0aF9wb3J0GA4gASgFQku6SAgaBhj//wMoAYLOGDwKC0hFQUxUSF9QT1JUEgtoZWFsdGgtcG9ydBoEODA4MSoaSGVhbHRoIGNoZWNrIGVuZHBvaW50IHBvcnQSdAoKcHByb2ZfcG9ydBgPIAEoBUJgukgL2AEBGgYY//8DKAGCzhhOCgpQUFJPRl9QT1JUEgpwcHJvZi1wb3J0GgQ2MDYwKi5wcHJvZiBkZWJ1ZyBzZXJ2ZXIgcG9ydCAoYmluZHMgMTI3LjAuMC4xIG9ubHkpEpwBCg5wcmVfc3RvcF9kZWxheRgSIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbkJpgs4YZQoOUFJFX1NUT1BfREVMQVkaAjVzKk9Ib3cgbG9uZyB0byBrZWVwIHNlcnZpbmcgYWZ0ZXIgcmVhZGluZXNzIGZsaXBzIGF0IHNodXRkb3duIChuZWdhdGl2ZTogbm8gcGF1c2UpEocBChBzaHV0ZG93bl90aW1lb3V0GBMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQlKCzhhOChBTSFVURE9XTl9USU1FT1VUGgMzMHMqNUJ1ZGdldCBmb3IgZ3JhY2VmdWwgc2h1dGRvd24gYWZ0ZXIgdGhlIHByZS1zdG9wIHBhdXNlEnkKDmxpdmVuZXNzX3BhdGhzGBQgASgJQmGCzhhdCg5MSVZFTkVTU19QQVRIUxoQL2hlYWx0aCwvaGVhbHRoeio5TGl2ZW5lc3MgcHJvYmUgcGF0aHMgb24gdGhlIGhlYWx0aCBwb3J0IChjb21tYS1zZXBhcmF0ZWQpEnoKD3JlYWRpbmVzc19wYXRocxgVIAEoCUJhgs4YXQoPUkVBRElORVNTX1BBVEhTGg4vcmVhZHksL3JlYWR5eio6UmVhZGluZXNzIHByb2JlIHBhdGhzIG9uIHRoZSBoZWFsdGggcG9ydCAoY29tbWEtc2VwYXJhdGVkKRKzAQodbWF4X2NvbmN1cnJlbnRfd29ya2Zsb3dfdGFza3MYFiABKAVCiwG6SAfYAQEaAigCgs4YfQosUkVMSUFOVF9XT1JLRVJfTUFYX0NPTkNVUlJFTlRfV09SS0ZMT1dfVEFTS1MqTVdvcmtmbG93IHRhc2tzIChyZXBsYXlzIGluY2x1ZGVkKSBydW4gYXQgb25jZTsgMCBkZXJpdmVzIG1heCgyLCBHT01BWFBST0NTLTEpEmoKFXdvcmtmbG93X3Rhc2tfcG9sbGVycxgXIAEoBUJLukgEGgIoAoLOGEAKJFJFTElBTlRfV09SS0VSX1dPUktGTE9XX1RBU0tfUE9MTEVSUxoBNSoVV29ya2Zsb3ctdGFzayBwb2xsZXJzOh3KwRgZCgdyZWxpYW50EgZzZXJ2ZXISBndvcmtlckoECAEQAkoECAoQC0oECAsQDEoECAwQDUoECA0QDkoECBAQEUoECBEQEkoECCgQKUoECDIQM0oECDMQNEoECDwQPUoECEYQR0oECFoQW1INY29udHJvbF9wbGFuZVIIZGF0YWJhc2VSBG5hdHNSCHRlbXBvcmFsUgVkcmFpblIIZGF0YV9kaXJSEHN0cmVhbWluZ19kcml2ZXJSDGludGVncmF0aW9uc1INb2JzZXJ2YWJpbGl0eVIGc2VudHJ5UglhbmFseXRpY3NSA2xsbVIHcHJldmlld0JAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_duration]);
+  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS93b3JrZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKvEwoMV29ya2VyQ29uZmlnEosBChJob3N0ZWRfYWN0aW9uc191cmwYHiABKAlCb4LOGGsKIVJFTElBTlRfV09SS0VSX0hPU1RFRF9BQ1RJT05TX1VSTCpEUHJpdmF0ZSBIVFRQUyB3b3Jrc3BhY2UtY29udHJvbGxlciBlbmRwb2ludCBmb3IgZml4ZWQgaG9zdGVkIGFjdGlvbnNQARKoAQoWaG9zdGVkX2FjdGlvbnNfY2FfZmlsZRgfIAEoCUKHAYLOGIIBCiVSRUxJQU5UX1dPUktFUl9IT1NURURfQUNUSU9OU19DQV9GSUxFKldQRU0gdHJ1c3QgYnVuZGxlIGZvciB0aGUgcHJpdmF0ZSBob3N0ZWQtYWN0aW9uIGNvbnRyb2xsZXI7IHJlbG9hZGVkIGZvciBlYWNoIGNvbm5lY3Rpb25QARJgCgtoZWFsdGhfcG9ydBgOIAEoBUJLukgIGgYY//8DKAGCzhg8CgtIRUFMVEhfUE9SVBILaGVhbHRoLXBvcnQaBDgwODEqGkhlYWx0aCBjaGVjayBlbmRwb2ludCBwb3J0EnQKCnBwcm9mX3BvcnQYDyABKAVCYLpIC9gBARoGGP//AygBgs4YTgoKUFBST0ZfUE9SVBIKcHByb2YtcG9ydBoENjA2MCoucHByb2YgZGVidWcgc2VydmVyIHBvcnQgKGJpbmRzIDEyNy4wLjAuMSBvbmx5KRKcAQoOcHJlX3N0b3BfZGVsYXkYEiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25CaYLOGGUKDlBSRV9TVE9QX0RFTEFZGgI1cypPSG93IGxvbmcgdG8ga2VlcCBzZXJ2aW5nIGFmdGVyIHJlYWRpbmVzcyBmbGlwcyBhdCBzaHV0ZG93biAobmVnYXRpdmU6IG5vIHBhdXNlKRKHAQoQc2h1dGRvd25fdGltZW91dBgTIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbkJSgs4YTgoQU0hVVERPV05fVElNRU9VVBoDMzBzKjVCdWRnZXQgZm9yIGdyYWNlZnVsIHNodXRkb3duIGFmdGVyIHRoZSBwcmUtc3RvcCBwYXVzZRJ5Cg5saXZlbmVzc19wYXRocxgUIAEoCUJhgs4YXQoOTElWRU5FU1NfUEFUSFMaEC9oZWFsdGgsL2hlYWx0aHoqOUxpdmVuZXNzIHByb2JlIHBhdGhzIG9uIHRoZSBoZWFsdGggcG9ydCAoY29tbWEtc2VwYXJhdGVkKRJ6Cg9yZWFkaW5lc3NfcGF0aHMYFSABKAlCYYLOGF0KD1JFQURJTkVTU19QQVRIUxoOL3JlYWR5LC9yZWFkeXoqOlJlYWRpbmVzcyBwcm9iZSBwYXRocyBvbiB0aGUgaGVhbHRoIHBvcnQgKGNvbW1hLXNlcGFyYXRlZCkSswEKHW1heF9jb25jdXJyZW50X3dvcmtmbG93X3Rhc2tzGBYgASgFQosBukgH2AEBGgIoAoLOGH0KLFJFTElBTlRfV09SS0VSX01BWF9DT05DVVJSRU5UX1dPUktGTE9XX1RBU0tTKk1Xb3JrZmxvdyB0YXNrcyAocmVwbGF5cyBpbmNsdWRlZCkgcnVuIGF0IG9uY2U7IDAgZGVyaXZlcyBtYXgoMiwgR09NQVhQUk9DUy0xKRJqChV3b3JrZmxvd190YXNrX3BvbGxlcnMYFyABKAVCS7pIBBoCKAKCzhhACiRSRUxJQU5UX1dPUktFUl9XT1JLRkxPV19UQVNLX1BPTExFUlMaATUqFVdvcmtmbG93LXRhc2sgcG9sbGVycxJ/Cg9lZ3Jlc3NfcmVwbGljYXMYGCABKAVCZrpIBBoCKACCzhhbCh5SRUxJQU5UX1dPUktFUl9FR1JFU1NfUkVQTElDQVMaATEqNldvcmtlciByZXBsaWNhcyBzaGFyaW5nIHRoZSBlZ3Jlc3MgcmF0ZSBidWRnZXRzICgwOiAxKRKJAQoWZWdyZXNzX3VzZXJfcGVyX21pbnV0ZRgZIAEoBUJpukgEGgIoAYLOGF4KJVJFTElBTlRfV09SS0VSX0VHUkVTU19VU0VSX1BFUl9NSU5VVEUaAjYwKjFFZ3Jlc3MgdG9vbCBjYWxscyBwZXIgbWludXRlIHBlciB1c2VyLCBmbGVldC13aWRlEm8KEWVncmVzc191c2VyX2J1cnN0GBogASgFQlS6SAQaAigBgs4YSQogUkVMSUFOVF9XT1JLRVJfRUdSRVNTX1VTRVJfQlVSU1QaAjIwKiFFZ3Jlc3MgYnVyc3QgcGVyIHVzZXIsIGZsZWV0LXdpZGUSiwEKGmVncmVzc191c2VyX21heF9jb25jdXJyZW50GBsgASgFQme6SAQaAigBgs4YXAopUkVMSUFOVF9XT1JLRVJfRUdSRVNTX1VTRVJfTUFYX0NPTkNVUlJFTlQaATYqLEVncmVzcyBjYWxscyBpbiBmbGlnaHQgcGVyIHVzZXIsIHBlciByZXBsaWNhEpsBChplZ3Jlc3NfaG9zdF9tYXhfY29uY3VycmVudBgcIAEoBUJ3ukgEGgIoAYLOGGwKKVJFTElBTlRfV09SS0VSX0VHUkVTU19IT1NUX01BWF9DT05DVVJSRU5UGgIxNio7RWdyZXNzIGNhbGxzIGluIGZsaWdodCB0byBvbmUgZGVzdGluYXRpb24gaG9zdCwgcGVyIHJlcGxpY2ESqgEKGGVncmVzc190dXJuX21heF9wYXJhbGxlbBgdIAEoBUKHAbpIBBoCKAGCzhh8CidSRUxJQU5UX1dPUktFUl9FR1JFU1NfVFVSTl9NQVhfUEFSQUxMRUwaATQqTkVncmVzcyBjYWxscyBvZiBvbmUgY29udmVyc2F0aW9uIHR1cm4gcnVuIGF0IG9uY2UsIHBlciByZXBsaWNhICh0aGUgcmVzdCB3YWl0KTodysEYGQoHcmVsaWFudBIGc2VydmVyEgZ3b3JrZXJKBAgBEAJKBAgKEAtKBAgLEAxKBAgMEA1KBAgNEA5KBAgQEBFKBAgREBJKBAgoEClKBAgyEDNKBAgzEDRKBAg8ED1KBAhGEEdKBAhaEFtSDWNvbnRyb2xfcGxhbmVSCGRhdGFiYXNlUgRuYXRzUgh0ZW1wb3JhbFIFZHJhaW5SCGRhdGFfZGlyUhBzdHJlYW1pbmdfZHJpdmVyUgxpbnRlZ3JhdGlvbnNSDW9ic2VydmFiaWxpdHlSBnNlbnRyeVIJYW5hbHl0aWNzUgNsbG1SB3ByZXZpZXdCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_duration]);
 
 /**
  * WorkerConfig is the `reliant server worker` process's own config. It loads
@@ -26,6 +26,19 @@ export const file_reliant_config_v1_worker_config: GenFile = /*@__PURE__*/
  * @generated from message reliant.config.v1.WorkerConfig
  */
 export type WorkerConfig = Message<"reliant.config.v1.WorkerConfig"> & {
+  /**
+   * Separate from the general control-plane API: only the private controller
+   * can redeem hosted action grants. Unset leaves these actions unavailable.
+   *
+   * @generated from field: string hosted_actions_url = 30;
+   */
+  hostedActionsUrl: string;
+
+  /**
+   * @generated from field: string hosted_actions_ca_file = 31;
+   */
+  hostedActionsCaFile: string;
+
   /**
    * @generated from field: int32 health_port = 14;
    */
@@ -86,6 +99,52 @@ export type WorkerConfig = Message<"reliant.config.v1.WorkerConfig"> & {
    * @generated from field: int32 workflow_task_pollers = 23;
    */
   workflowTaskPollers: number;
+
+  /**
+   * Egress limits (internal/egresslimit): what one user, one destination host
+   * and one conversation turn may push through the worker's server-side
+   * egress tools (fetch, websearch, sourcegraph, integration actions such as
+   * http__request). Prod egress shares one NAT address, so an unbounded
+   * caller can get it banned or exhaust its ports for every tenant. A refused
+   * call is a non-fatal tool result ("rate limited, retry after Ns"), never a
+   * failed run.
+   *
+   * The per-minute and burst budgets are FLEET-wide quantities; state is in
+   * process, so each replica enforces 1/egress_replicas of them. Set
+   * egress_replicas to the worker's replica count; unset or 0 means 1 (the
+   * whole budget per replica), so a fleet that forgets it admits up to
+   * replicas times the budget. The worker logs the effective per-replica
+   * budget at startup. The max_concurrent / parallel values bound one process
+   * (and one node's NAT), so they are per replica and not divided.
+   *
+   * @generated from field: int32 egress_replicas = 24;
+   */
+  egressReplicas: number;
+
+  /**
+   * @generated from field: int32 egress_user_per_minute = 25;
+   */
+  egressUserPerMinute: number;
+
+  /**
+   * @generated from field: int32 egress_user_burst = 26;
+   */
+  egressUserBurst: number;
+
+  /**
+   * @generated from field: int32 egress_user_max_concurrent = 27;
+   */
+  egressUserMaxConcurrent: number;
+
+  /**
+   * @generated from field: int32 egress_host_max_concurrent = 28;
+   */
+  egressHostMaxConcurrent: number;
+
+  /**
+   * @generated from field: int32 egress_turn_max_parallel = 29;
+   */
+  egressTurnMaxParallel: number;
 };
 
 /**

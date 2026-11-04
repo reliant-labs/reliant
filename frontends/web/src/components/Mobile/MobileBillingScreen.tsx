@@ -27,7 +27,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { overageSmallDaemonSeconds, remainingHeadline } from "@/components/Billing/daemonUsage";
+import { hoursReference, hoursSizes, measuredMachineUsage, remainingHeadline } from "@/components/Billing/daemonUsage";
+import { exactUsageDisplay } from "@/components/Billing/exactMachineUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -44,17 +45,17 @@ import {
   isPurchasableComputePlan,
   sortPlansForDisplay,
   formatAllowedSizes,
-  formatCentsAsDollars,
+  planDisplayName,
   formatCurrencyFromWalletFields,
   getWalletBalanceState,
   getWalletWarning,
   nanosFromFields,
   // The two-band derivations, shared with desktop so a phone and a laptop can
   // never disagree about whether a plan's detail loaded.
-  deriveComputeCapacity,
   isPlanDetailUnavailable,
 } from "../Settings/cloud/billingUtils";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
+import { formatPrice } from "@/components/Billing/priceFormat";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -121,7 +122,7 @@ function Band({
   );
 }
 
-export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
+export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) {
   const subQ = useComputeSubscription();
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
@@ -156,12 +157,11 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
 
   const planUi = useMemo(() => {
     const plan = subscription?.plan;
-    const d = derivePlanDisplay(plan);
     return {
       // null, not "No compute plan": absence is a different state from a plan
       // whose detail failed to load, and the two get different copy.
-      planName: plan?.name ?? null,
-      includedHours: d.includedSmallDaemonHours,
+      planName: plan ? planDisplayName(plan) : null,
+      includedHours: Number(plan?.structuredLimits?.machineIncludedHours ?? 0n),
       // The screenshot's `0 h` state. On a phone a bare zero is MORE alarming,
       // not less — there is no surrounding detail to contradict it.
       detailUnavailable: isPlanDetailUnavailable(plan),
@@ -169,29 +169,30 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   }, [subscription]);
 
   const usageUi = useMemo(() => {
-    const included = Number(usage?.includedSmallDaemonSeconds ?? 0);
-    const used = Number(usage?.usedSmallDaemonSeconds ?? 0);
+    // Hours at the plan's own size, the unit the plan was sold in.
+    const reference = hoursReference(
+      plansQ.data?.daemonPricing,
+      hoursSizes(subscription?.plan?.structuredLimits?.allowedDaemonSizes),
+      usage ?? undefined,
+    );
+    const exact = exactUsageDisplay(usage ?? undefined, reference);
     // A stubbed or unmeasurable period answers 200 with zeros, so
     // "ran nothing" and "we didn't measure" arrive identical. Rendering the
     // second as "0.0 h used" told a user they had consumed nothing while the
     // daemon start gate was refusing them against real metered usage — and a
     // phone has no surrounding detail to contradict it. `usageMeasured` is
     // false by default, so an older server is read as unknown, not as zero.
-    const measured = !!usage && usage.usageMeasured;
+    const measured = measuredMachineUsage(usage ?? undefined) && !!exact;
     return {
       measured,
       // The same headline as desktop, from the same server fields. Null when
       // unmeasured, never "0.0 … left".
-      headline: measured ? remainingHeadline(usage) : null,
-      includedHours: included / 3600,
-      usedHours: used / 3600,
-      capacity: deriveComputeCapacity({
-        used,
-        included,
-        overage: usage ? overageSmallDaemonSeconds(usage) : 0,
-      }),
+      headline: measured ? remainingHeadline(usage ?? undefined, reference) : null,
+      includedLabel: exact?.includedLabel ?? "Unavailable",
+      usedLabel: exact?.usedLabel ? `${exact.usedLabel} used` : "Unavailable",
+      capacity: exact?.capacity ?? { usedPct: 0, overagePct: 0, state: "unknown" },
     };
-  }, [usage]);
+  }, [usage, plansQ.data?.daemonPricing, subscription]);
 
   // Every plan the catalog sells, in the catalog's own order. This screen
   // used to take the FIRST of these and buy it on one tap — a purchase
@@ -227,7 +228,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
         return [
           {
             planId: plan.id,
-            label: plan.name,
+            label: planDisplayName(plan),
             monthlyPriceCents: d.monthlyPriceCents,
           },
         ];
@@ -257,7 +258,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <MobileSettingsSectionHeader title="Billing" onBack={onBack} />
+      <MobileSettingsSectionHeader title="Billing" onBack={onBack} backLabel={backLabel} />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {loading ? (
@@ -369,10 +370,10 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   )}
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
-                      {usageUi.usedHours.toFixed(1)} h used
+                      {usageUi.usedLabel}
                     </span>
                     <span className="text-muted-foreground">
-                      {`${usageUi.includedHours.toFixed(0)} h included`}
+                      {usageUi.includedLabel}
                     </span>
                   </div>
                   {/* `bg-primary/10` track, not `bg-muted` — in dark mode
@@ -409,7 +410,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium text-foreground">
-                            {plan.name}
+                            {planDisplayName(plan)}
                           </span>
                           <span className="block text-xs text-muted-foreground">
                             {/* Sizes are the reason to pick one plan over
@@ -421,7 +422,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                         <span className="shrink-0 text-sm font-semibold text-foreground">
                           {isCurrent
                             ? "Current"
-                            : `${formatCentsAsDollars(d.monthlyPriceCents ?? 0)}/mo`}
+                            : `${formatPrice(d.monthlyPriceCents ?? 0)}/mo`}
                         </span>
                       </button>
                     );

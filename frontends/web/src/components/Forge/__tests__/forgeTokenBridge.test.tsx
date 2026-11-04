@@ -25,7 +25,7 @@
  *      in index.css). That is the single most likely wrong "fix".
  *
  * Actual color resolution was verified in a real browser across
- * professional-blue / forest / pure-black / vibrant-pink in both modes:
+ * professional-blue / modern-teal / pure-black / purple-classic in both modes:
  * all 32 utilities resolved to opaque colors, and `.forge-ui` was confirmed
  * to flip `accent` from reliant's muted tint to its primary action color.
  */
@@ -59,7 +59,7 @@ const COLOR_PREFIXES = [
  */
 const NON_COLOR_SUFFIXES = new Set([
   "xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl",
-  "left", "center", "right", "justify", "start", "end", "wrap", "nowrap",
+  "left", "center", "right", "justify", "start", "end", "wrap", "nowrap", "balance", "pretty",
   "b", "t", "l", "r", "x", "y", "0", "2", "4", "8",
   "collapse", "separate", "dashed", "dotted", "solid", "none", "inset",
   "clip", "transparent", "current", "inherit", "white", "black", "auto",
@@ -86,7 +86,7 @@ function declaredTokens(css: string): Set<string> {
  * tailwind.config.js rather than in the bridge, so scanning it would report
  * `bg-card` as an undeclared forge token.
  */
-const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "__tokenprobe.tsx"]);
+const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "S2Sandbox.tsx", "R5Sandbox.tsx", "__tokenprobe.tsx"]);
 
 /** Color-token names referenced by the installed forge components. */
 function referencedTokens(): Map<string, string[]> {
@@ -95,7 +95,9 @@ function referencedTokens(): Map<string, string[]> {
     (f) => f.endsWith(".tsx") && !HAND_WRITTEN.has(f),
   );
   const pattern = new RegExp(
-    `\\b(?:${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
+    // Not preceded by `-`: `bg-border-strong` is the token border-strong,
+    // not a `border-` utility whose colour is "strong".
+    `(?<![\\w-])(?:${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
     "g",
   );
   for (const file of files) {
@@ -158,7 +160,9 @@ describe("forge token bridge", () => {
     // forge `accent` = primary action color; reliant `--accent` = a muted
     // hover tint used at ~159 existing call sites. @theme overrides the JS
     // config, so an unscoped mapping would repaint all of them.
-    const scope = /\.forge-ui\s*\{([^}]+)\}/.exec(css);
+    // The rule's selector list may name more than `.forge-ui`: forge's Button
+    // (`[data-slot="button"]`) carries the same scope on its own element.
+    const scope = /\.forge-ui\s*(?:,\s*[^{,]+)*\{([^}]+)\}/.exec(css);
     expect(scope, ".forge-ui scope block should exist").not.toBeNull();
     expect(
       scope![1],

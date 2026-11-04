@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { TokenKind } from "../../../gen/reliant/v1/token_pb";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 // TokenSettings drives reliant.v1.TokenService (kind DAEMON) — the ONE
 // machine-credential surface. These pin the wire requests it sends, because
@@ -11,11 +13,13 @@ const listTokens = vi.fn();
 const createToken = vi.fn();
 const revokeToken = vi.fn();
 
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: {
-    token: () => ({ listTokens, createToken, revokeToken }),
-  },
-}));
+// TokenService is reached through connectClient (the generated hooks), so the
+// fakes answer at the transport.
+function renderTokens() {
+  return renderWithTransport(<TokenSettings />, {
+    transport: mockTransport(serviceHandlers("TokenService", { listTokens, createToken, revokeToken })),
+  });
+}
 
 import { TokenSettings } from "../TokenSettings";
 
@@ -40,7 +44,7 @@ describe("TokenSettings", () => {
 
   it("lists DAEMON tokens only and shows their display prefix", async () => {
     // Mutation caught: dropping `kind: TokenKind.DAEMON` from the list call.
-    render(<TokenSettings />);
+    renderTokens();
     expect(await screen.findByText("build-box")).toBeInTheDocument();
     expect(screen.getByText("rlat_A3f9Kd2p...")).toBeInTheDocument();
     expect(listTokens).toHaveBeenCalledTimes(1);
@@ -51,10 +55,10 @@ describe("TokenSettings", () => {
     // Mutation caught: minting without `kind` (the server refuses it) or
     // rendering anything but the returned secret.
     createToken.mockResolvedValue({ token: "rlat_secretvalue", info: { id: "tok-2" } });
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
 
-    fireEvent.click(screen.getByText("New Token"));
+    fireEvent.click(screen.getByText("New token"));
     fireEvent.change(screen.getByPlaceholderText("Token name (e.g. my-server)"), {
       target: { value: "  laptop  " },
     });
@@ -68,7 +72,7 @@ describe("TokenSettings", () => {
 
   it("revokes by the token's id", async () => {
     // Mutation caught: sending the retired `tokenId` field instead of `id`.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     // The revoke control is a labelled button now, not a bare trash icon —
     // the row also carries Edit, so an icon with no name was ambiguous.

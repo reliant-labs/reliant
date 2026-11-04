@@ -6,6 +6,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -33,18 +35,6 @@ const mocks = vi.hoisted(() => ({
   resumeDaemon: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    inbox: () => ({ listInbox: mocks.listInbox, dismissInboxItem: vi.fn(), restoreInboxItem: vi.fn(), cleanupStorage: vi.fn() }),
-    daemonRegistry: () => ({ clearMachineCaches: vi.fn() }),
-  },
-}));
-vi.mock("@/api/client", () => ({
-  api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
-}));
-vi.mock("@/api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion: mocks.resolveQuestion, listPendingQuestions: vi.fn() },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useResumeDaemon: () => ({ mutate: (id: string) => mocks.resumeDaemon(id), isPending: false, variables: undefined }),
 }));
@@ -93,6 +83,26 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
+  // The Inbox, approvals and questions are on their generated hooks: answered at the transport.
+  setTransport(
+    mockTransport({
+      "InboxService.ListInbox": (req) => mocks.listInbox(req),
+      "InboxService.DismissInboxItem": { response: {} },
+      "InboxService.RestoreInboxItem": { response: {} },
+      "ApprovalService.Approve": (req) => {
+        const { requestId, actionTaken } = req as { requestId: string; actionTaken?: string };
+        return mocks.approve(requestId, actionTaken);
+      },
+      "ApprovalService.Deny": (req) => {
+        const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
+        return mocks.deny(requestId, denialReason, actionTaken);
+      },
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return mocks.resolveQuestion(questionId, action, responseData);
+      },
+    }),
+  );
   useInboxScopeStore.setState({ scope: "all" });
   useMobileDrawerStore.setState({ isOpen: false });
 });
@@ -106,11 +116,11 @@ describe("MobileInboxScreen", () => {
     expect(useMobileDrawerStore.getState().isOpen).toBe(true);
   });
 
-  it("approves from the row, through the same approval call as desktop", async () => {
+  it("approves under the card, through the same approval call as desktop", async () => {
     respond([approvalItem()]);
     renderScreen();
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
+    await userEvent.click(within(row).getByRole("button", { name: /^Approve / }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
   });
 

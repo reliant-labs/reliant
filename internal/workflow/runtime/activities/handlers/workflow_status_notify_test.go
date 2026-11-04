@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -111,6 +112,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 }
 
 func TestWorkflowStatus_FailureUnread(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {
@@ -146,6 +148,7 @@ func TestWorkflowStatus_DeclaredFailureOutcomeUsesFailedReason(t *testing.T) {
 }
 
 func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {

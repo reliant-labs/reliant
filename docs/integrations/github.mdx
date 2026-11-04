@@ -55,6 +55,9 @@ On a self-hosted deployment there is no control plane to mint tokens, so Reliant
 | `repo.get_tree` | Every file path in a repository or directory | no |
 | `code.search` | GitHub code search | no |
 | `workflow.dispatch` | Run an Actions workflow that has a `workflow_dispatch` trigger | yes |
+| `check_run.create` | Report a check (queued, running or finished) on one commit, which a ruleset can require. **Workflow steps only**; acts as the Reliant App | yes |
+| `check_run.update` | Move a check run on, or set its conclusion and details. **Workflow steps only**; acts as the Reliant App | yes |
+| `check_run.list` | The check runs on one commit, by name and App; follows pagination | no |
 
 The four `app.*`, `users.search` and `user.get_by_id` actions are what the value types below list their options from. The two `app.*` actions need a GitHub App user token (the hosted connection, or an oauth2 connection to a GitHub App), not a personal access token.
 
@@ -138,6 +141,12 @@ GitHub's API opens a pull request with no labels. After `pr.create`, add them wi
 
 There is no merge action, and `pr.update` cannot merge, whatever it is given. A person merges. Approving stays available through `pr.review.create` with the `APPROVE` verdict, so whether a workflow may approve is something you decide in the workflow.
 
+### Check runs come from the App
+
+GitHub lets only an App write a check run, so `check_run.create` and `check_run.update` work only in an automation that acts as the Reliant App (its acting identity); acting as its owner, GitHub answers 403. The bot's token for them carries the `checks` permission alone. They are workflow steps, never agent tools: what a check reports about a commit is the workflow's record, not something an agent may post about its own work.
+
+A check is tied to one exact commit (`head_sha` is the full 40-character SHA), so a push leaves the new head with no passing run. A branch ruleset can require a check by name **from the Reliant App**. In a repository with a merge queue, the required check must also be reported on each merge group's commit: trigger on `check_suite.requested` with `branch` starting `gh-readonly-queue/`, and report there.
+
 ### Unattended runs
 
 Automation runs have nobody watching them, so an unattended run is not handed an action that changes GitHub (the **yes** rows above) unless the workflow step names it in its `tools`. Read-only actions are always reachable. See [Unattended by design](/automations/overview#unattended-by-design).
@@ -157,6 +166,7 @@ Automation runs have nobody watching them, so an unattended run is not handed an
 | Push | `push` |
 | Actions run finished | `workflow_run.completed` |
 | A check finished (one job), or all of a commit's checks | `check_run.completed`, `check_suite.completed` |
+| A commit (a push, or a merge queue's merge group) asks the App for its checks | `check_suite.requested` |
 
 Each event's payload is declared, so `get_integration_schema` lists it and validation checks a trigger's `filter`, `inputs` and `prompt` against it: reading a top-level key the event never carries (`data.issue` on an inline diff comment) is an error before the trigger fires. Lists of names, such as `issue.labels` and `pull_request.labels`, hold strings.
 
@@ -177,7 +187,8 @@ You can narrow a trigger with `match`, either to a fixed value (`repository: acm
 | `conclusion`, `branch` | `workflow_run.completed`, `check_run.completed`, `check_suite.completed` |
 | `workflow` | `workflow_run.completed` |
 | `name`, `app` | `check_run.completed` (the check's name, and the slug of the App that ran it, `github-actions` for Actions) |
-| `app` | `check_suite.completed` |
+| `app` | `check_suite.completed`, `check_suite.requested` |
+| `branch` | `check_suite.requested` (a merge group's is `gh-readonly-queue/<base>/pr-<number>-<sha>`) |
 
 Boolean-like attributes are the strings `"true"` and `"false"`; quote them in YAML.
 

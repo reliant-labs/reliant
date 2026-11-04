@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -24,13 +25,17 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ApprovalType is the kind of approval request. Workflow step approvals are
-// the only kind left.
+// ApprovalType is the kind of approval request.
 type ApprovalType int32
 
 const (
-	ApprovalType_APPROVAL_TYPE_UNSPECIFIED   ApprovalType = 0
+	ApprovalType_APPROVAL_TYPE_UNSPECIFIED ApprovalType = 0
+	// A workflow approval node is waiting on it.
 	ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP ApprovalType = 2
+	// One of the run's own tool calls is waiting on it: an activation change
+	// (create/update/enable_trigger) or a machine start. The run answers that
+	// call itself, approved or not, so a denial writes no denial message.
+	ApprovalType_APPROVAL_TYPE_TOOL_CALL ApprovalType = 3
 )
 
 // Enum value maps for ApprovalType.
@@ -38,10 +43,12 @@ var (
 	ApprovalType_name = map[int32]string{
 		0: "APPROVAL_TYPE_UNSPECIFIED",
 		2: "APPROVAL_TYPE_WORKFLOW_STEP",
+		3: "APPROVAL_TYPE_TOOL_CALL",
 	}
 	ApprovalType_value = map[string]int32{
 		"APPROVAL_TYPE_UNSPECIFIED":   0,
 		"APPROVAL_TYPE_WORKFLOW_STEP": 2,
+		"APPROVAL_TYPE_TOOL_CALL":     3,
 	}
 )
 
@@ -72,7 +79,11 @@ func (ApprovalType) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{0}
 }
 
-// ApprovalStatus tracks the lifecycle of an approval request
+// ApprovalStatus tracks the lifecycle of an approval request. Only PENDING is
+// actionable. APPROVED and DENIED are a person's decision; EXPIRED and
+// CANCELLED are the system closing a request nobody can answer any more (its
+// wait timed out, or the run waiting on it ended or was interrupted), with the
+// reason in denial_reason.
 type ApprovalStatus int32
 
 const (
@@ -80,6 +91,8 @@ const (
 	ApprovalStatus_APPROVAL_STATUS_PENDING     ApprovalStatus = 1
 	ApprovalStatus_APPROVAL_STATUS_APPROVED    ApprovalStatus = 2
 	ApprovalStatus_APPROVAL_STATUS_DENIED      ApprovalStatus = 3
+	ApprovalStatus_APPROVAL_STATUS_EXPIRED     ApprovalStatus = 4
+	ApprovalStatus_APPROVAL_STATUS_CANCELLED   ApprovalStatus = 5
 )
 
 // Enum value maps for ApprovalStatus.
@@ -89,12 +102,16 @@ var (
 		1: "APPROVAL_STATUS_PENDING",
 		2: "APPROVAL_STATUS_APPROVED",
 		3: "APPROVAL_STATUS_DENIED",
+		4: "APPROVAL_STATUS_EXPIRED",
+		5: "APPROVAL_STATUS_CANCELLED",
 	}
 	ApprovalStatus_value = map[string]int32{
 		"APPROVAL_STATUS_UNSPECIFIED": 0,
 		"APPROVAL_STATUS_PENDING":     1,
 		"APPROVAL_STATUS_APPROVED":    2,
 		"APPROVAL_STATUS_DENIED":      3,
+		"APPROVAL_STATUS_EXPIRED":     4,
+		"APPROVAL_STATUS_CANCELLED":   5,
 	}
 )
 
@@ -139,10 +156,15 @@ type Approval struct {
 	CreatedAt    string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ResolvedAt   *string                `protobuf:"bytes,12,opt,name=resolved_at,json=resolvedAt,proto3,oneof" json:"resolved_at,omitempty"`
 	// Structured fields (replacing JSON in metadata).
-	MessageId     *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
-	WorkflowId    *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
-	RunId         *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`
-	ActionTaken   *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	MessageId   *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
+	WorkflowId  *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
+	RunId       *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`
+	ActionTaken *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	// Set when the run raised this approval together with others in one step
+	// (one turn's tool calls): every approval of the batch carries the same id,
+	// so they can be offered, and decided, together. Each stays its own row and
+	// can still be decided on its own.
+	BatchId       *string `protobuf:"bytes,23,opt,name=batch_id,json=batchId,proto3,oneof" json:"batch_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -271,6 +293,13 @@ func (x *Approval) GetRunId() string {
 func (x *Approval) GetActionTaken() string {
 	if x != nil && x.ActionTaken != nil {
 		return *x.ActionTaken
+	}
+	return ""
+}
+
+func (x *Approval) GetBatchId() string {
+	if x != nil && x.BatchId != nil {
+		return *x.BatchId
 	}
 	return ""
 }
@@ -648,10 +677,13 @@ func (x *BatchApproveRequest) GetActionTaken() string {
 
 // BatchApproveResponse confirms the batch approval
 type BatchApproveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Approved      int32                  `protobuf:"varint,2,opt,name=approved,proto3" json:"approved,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Success  bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Approved int32                  `protobuf:"varint,2,opt,name=approved,proto3" json:"approved,omitempty"`
+	Message  string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	// The chat every approval in the batch belongs to (the handler refuses a
+	// batch that spans chats). It is the target of the batch's activity event.
+	ChatId        string `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -703,6 +735,13 @@ func (x *BatchApproveResponse) GetApproved() int32 {
 func (x *BatchApproveResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *BatchApproveResponse) GetChatId() string {
+	if x != nil {
+		return x.ChatId
 	}
 	return ""
 }
@@ -770,10 +809,13 @@ func (x *BatchDenyRequest) GetActionTaken() string {
 
 // BatchDenyResponse confirms the batch denial
 type BatchDenyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Denied        int32                  `protobuf:"varint,2,opt,name=denied,proto3" json:"denied,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Denied  int32                  `protobuf:"varint,2,opt,name=denied,proto3" json:"denied,omitempty"`
+	Message string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	// The chat every approval in the batch belongs to, as in
+	// BatchApproveResponse.chat_id.
+	ChatId        string `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -829,12 +871,19 @@ func (x *BatchDenyResponse) GetMessage() string {
 	return ""
 }
 
+func (x *BatchDenyResponse) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
 var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xd1\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xfe\x05\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -853,14 +902,16 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\vworkflow_id\x18\x10 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x1a\n" +
 	"\x06run_id\x18\x11 \x01(\tH\x05R\x05runId\x88\x01\x01\x12&\n" +
-	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01B\x0e\n" +
+	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01\x12\x1e\n" +
+	"\bbatch_id\x18\x17 \x01(\tH\aR\abatchId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x10\n" +
 	"\x0e_denial_reasonB\x0e\n" +
 	"\f_resolved_atB\r\n" +
 	"\v_message_idB\x0e\n" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
-	"\r_action_takenJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
+	"\r_action_takenB\v\n" +
+	"\t_batch_idJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
 	"tool_inputR\x10integration_nameR\x10integration_icon\"=\n" +
 	"\x1aListApprovalsByChatRequest\x12\x1f\n" +
 	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"g\n" +
@@ -889,36 +940,52 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\vrequest_ids\x18\x01 \x03(\tR\n" +
 	"requestIds\x12&\n" +
 	"\faction_taken\x18\x02 \x01(\tH\x00R\vactionTaken\x88\x01\x01B\x0f\n" +
-	"\r_action_taken\"f\n" +
+	"\r_action_taken\"\x7f\n" +
 	"\x14BatchApproveResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1a\n" +
 	"\bapproved\x18\x02 \x01(\x05R\bapproved\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"\xa8\x01\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12\x17\n" +
+	"\achat_id\x18\x04 \x01(\tR\x06chatId\"\xa8\x01\n" +
 	"\x10BatchDenyRequest\x12\x1f\n" +
 	"\vrequest_ids\x18\x01 \x03(\tR\n" +
 	"requestIds\x12(\n" +
 	"\rdenial_reason\x18\x02 \x01(\tH\x00R\fdenialReason\x88\x01\x01\x12&\n" +
 	"\faction_taken\x18\x03 \x01(\tH\x01R\vactionTaken\x88\x01\x01B\x10\n" +
 	"\x0e_denial_reasonB\x0f\n" +
-	"\r_action_taken\"_\n" +
+	"\r_action_taken\"x\n" +
 	"\x11BatchDenyResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06denied\x18\x02 \x01(\x05R\x06denied\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*h\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12\x17\n" +
+	"\achat_id\x18\x04 \x01(\tR\x06chatId*\x85\x01\n" +
 	"\fApprovalType\x12\x1d\n" +
 	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\x88\x01\n" +
+	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\x12\x1b\n" +
+	"\x17APPROVAL_TYPE_TOOL_CALL\x10\x03\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\xc4\x01\n" +
 	"\x0eApprovalStatus\x12\x1f\n" +
 	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17APPROVAL_STATUS_PENDING\x10\x01\x12\x1c\n" +
 	"\x18APPROVAL_STATUS_APPROVED\x10\x02\x12\x1a\n" +
-	"\x16APPROVAL_STATUS_DENIED\x10\x032\x9f\x03\n" +
+	"\x16APPROVAL_STATUS_DENIED\x10\x03\x12\x1b\n" +
+	"\x17APPROVAL_STATUS_EXPIRED\x10\x04\x12\x1d\n" +
+	"\x19APPROVAL_STATUS_CANCELLED\x10\x052\xa3\x05\n" +
 	"\x0fApprovalService\x12h\n" +
-	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x00\x12D\n" +
-	"\aApprove\x12\x1a.reliant.v1.ApproveRequest\x1a\x1b.reliant.v1.ApproveResponse\"\x00\x12;\n" +
-	"\x04Deny\x12\x17.reliant.v1.DenyRequest\x1a\x18.reliant.v1.DenyResponse\"\x00\x12S\n" +
-	"\fBatchApprove\x12\x1f.reliant.v1.BatchApproveRequest\x1a .reliant.v1.BatchApproveResponse\"\x00\x12J\n" +
-	"\tBatchDeny\x12\x1c.reliant.v1.BatchDenyRequest\x1a\x1d.reliant.v1.BatchDenyResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x00\x12y\n" +
+	"\aApprove\x12\x1a.reliant.v1.ApproveRequest\x1a\x1b.reliant.v1.ApproveResponse\"5\xa2\xbb\x181:/\n" +
+	"\aapprove\x12\x16\n" +
+	"\bapproval\x12\n" +
+	"request_id*\faction_taken\x12m\n" +
+	"\x04Deny\x12\x17.reliant.v1.DenyRequest\x1a\x18.reliant.v1.DenyResponse\"2\xa2\xbb\x18.:,\n" +
+	"\x04deny\x12\x16\n" +
+	"\bapproval\x12\n" +
+	"request_id*\faction_taken\x12\xa3\x01\n" +
+	"\fBatchApprove\x12\x1f.reliant.v1.BatchApproveRequest\x1a .reliant.v1.BatchApproveResponse\"P\xa2\xbb\x18L:J\n" +
+	"\rbatch_approve\x12\x18\n" +
+	"\x04chat\x12\x10response.chat_id*\x11response.approved*\faction_taken\x12\x95\x01\n" +
+	"\tBatchDeny\x12\x1c.reliant.v1.BatchDenyRequest\x1a\x1d.reliant.v1.BatchDenyResponse\"K\xa2\xbb\x18G:E\n" +
+	"\n" +
+	"batch_deny\x12\x18\n" +
+	"\x04chat\x12\x10response.chat_id*\x0fresponse.denied*\faction_takenB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_approval_proto_rawDescOnce sync.Once

@@ -1,12 +1,12 @@
 /**
  * Process Logs Viewer for Package Commands
  * 
- * A wrapper around TerminalOutput that connects to the packageCommandsStore.
+ * A wrapper around TerminalOutput for a package command's process.
  * Uses gRPC streaming for real-time output instead of polling.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { usePackageProcesses, useKillProcess, type ProcessLogsResponse } from "../../hooks/package-queries";
+import { usePackageProcesses, useKillPackageProcess, type ProcessLogsResponse } from "../../hooks/package-queries";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { cn } from "../../lib/utils";
 import {
@@ -14,7 +14,7 @@ import {
   type OutputLine,
 } from "../../api/process-output-streaming";
 import { logger } from "../../lib/logger";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../hooks/background-queries";
 
 interface ProcessLogsViewerProps {
   processId: string;
@@ -33,8 +33,8 @@ export function ProcessLogsViewer({
   onOpenPort,
   className,
 }: ProcessLogsViewerProps) {
-  const { data: processes = [] } = usePackageProcesses();
-  const killProcessMutation = useKillProcess();
+  const { data: processes } = usePackageProcesses();
+  const killProcessMutation = useKillPackageProcess();
 
   // Local state for streamed output
   const [logs, setLogs] = useState<ProcessLogsResponse | null>(null);
@@ -42,6 +42,8 @@ export function ProcessLogsViewer({
   const streamingServiceRef = useRef<ProcessOutputStreamingService | null>(null);
 
   const process = processes.find((p) => p.id === processId);
+  // The output streams from the machine the process runs on.
+  const processDaemonId = process?.daemon_id;
 
   // Build combined text from output lines for stdout/stderr fields
   const buildLogsFromLines = useCallback((lines: OutputLine[]): ProcessLogsResponse => {
@@ -121,7 +123,7 @@ export function ProcessLogsViewer({
           setIsLoading(false);
         }
       },
-    });
+    }, processDaemonId);
 
     streamingServiceRef.current = service;
     service.start();
@@ -130,7 +132,7 @@ export function ProcessLogsViewer({
       service.stop();
       streamingServiceRef.current = null;
     };
-  }, [processId, buildLogsFromLines]);
+  }, [processId, processDaemonId, buildLogsFromLines]);
 
   // Manual refresh - restart stream to get fresh data
   const handleRefresh = useCallback(() => {
@@ -167,10 +169,10 @@ export function ProcessLogsViewer({
       onStatusChange: (status) => {
         if (status === "connected") setIsLoading(false);
       },
-    });
+    }, processDaemonId);
     streamingServiceRef.current = service;
     service.start();
-  }, [processId, buildLogsFromLines]);
+  }, [processId, processDaemonId, buildLogsFromLines]);
 
   if (!process) {
     return (
@@ -207,7 +209,7 @@ export function ProcessLogsViewer({
       onRefresh={handleRefresh}
       onKill={
         process.status === BackgroundProcessStatus.RUNNING
-          ? () => killProcessMutation.mutate(processId)
+          ? () => killProcessMutation.mutate({ processId, daemonId: process.daemon_id })
           : undefined
       }
       onOpenPort={onOpenPort}

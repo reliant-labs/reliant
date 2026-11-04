@@ -70,6 +70,24 @@ func TestFireWorkflowPassesItsIdentityToTheActivity(t *testing.T) {
 	}
 }
 
+func TestCapacityRedrivePreservesOriginalScheduledIdentity(t *testing.T) {
+	env := newWorkflowEnv(t)
+	original := FireRequest{TriggerID: "t1", FireWorkflowID: "original-scheduled-fire", Manual: true}
+	var got FireRequest
+	env.RegisterActivityWithOptions(func(_ context.Context, req FireRequest) (*FireOutput, error) {
+		got = req
+		return &FireOutput{Outcome: "pending"}, nil
+	}, activity.RegisterOptions{Name: FireActivityName})
+	env.SetStartWorkflowOptions(client.StartWorkflowOptions{ID: "capacity-redrive:event:123"})
+	env.ExecuteWorkflow(TriggerCapacityRedriveWorkflow, original)
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatal(err)
+	}
+	if got.FireWorkflowID != original.FireWorkflowID || got.TriggerID != original.TriggerID || !got.Manual {
+		t.Fatalf("redrive changed original identity: %+v", got)
+	}
+}
+
 func TestFireWorkflowCarriesManualThrough(t *testing.T) {
 	env := newWorkflowEnv(t)
 

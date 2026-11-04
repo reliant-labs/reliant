@@ -13,7 +13,8 @@ import (
 // Repository is the slice of *db.Repo the filesystem handlers use.
 type Repository interface {
 	// GetChat, GetWorktree and GetProject resolve a request's workspace
-	// (filepreview.ResolveBasePath) and its machine (daemonplacement).
+	// (filepreview.ResolveBasePath) and its machine (daemonplacement); the
+	// main checkout is that machine's project_daemons row (projectcheckout).
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)

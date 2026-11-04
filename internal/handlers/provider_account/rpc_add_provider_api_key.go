@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -70,6 +71,9 @@ func (s *Service) AddProviderAPIKey(
 	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
+	}
+	if !created && label == "" {
+		activity.Skip(ctx) // the key was already stored and nothing was relabelled
 	}
 	return connect.NewResponse(&pb.AddProviderAPIKeyResponse{Account: proto(acct, limits, time.Now()), Created: created}), nil
 }

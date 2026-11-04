@@ -1,0 +1,22 @@
+name: fixture
+entry: [gate]
+nodes:
+- id: gate
+  type: run
+  timeout: 1h
+  args:
+    command: |
+      task ci || exit 1
+      git merge main || exit 4
+- id: merged
+  type: save_message
+  args: {role: assistant, content: merged}
+- id: red
+  type: save_message
+  outcome: failure
+  args: {role: assistant, content: 'not merged (exit {{ nodes.gate.exit_code }})'}
+edges:
+- from: gate
+  cases:
+  - {to: merged, condition: 'nodes.gate.exit_code == 0'}
+  default: red

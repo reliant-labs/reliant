@@ -39,8 +39,14 @@ func TestHTTPRequestTimeoutParam(t *testing.T) {
 	srv := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { <-release }))
 	defer close(release)
 
+	// Resolve the action and build the runner before the clock starts: the
+	// first resolve loads the whole embedded catalog, which under -race took
+	// 4s on an idle machine and ~10s inside the release gate, all of it
+	// charged to the 1s request timeout this asserts on.
+	m, a := builtinHTTPRequest(t)
+	r := newRunner()
 	start := time.Now()
-	res, err := runHTTP(t, map[string]any{"url": srv.URL, "timeout": 1.0})
+	res, err := r.Run(context.Background(), m, a, map[string]any{"url": srv.URL, "timeout": 1.0})
 	if err == nil && !res.IsError {
 		t.Fatal("a hung server must time out")
 	}

@@ -46,7 +46,7 @@ func (s *Service) CancelChatToolCalls(ctx context.Context, opts CancelChatToolCa
 		return CancelChatToolCallsResult{}, svcerr.InvalidArgument("user_id is required")
 	}
 
-	chat, err := s.repo.GetChatWithUserCheck(ctx, opts.ChatID, opts.UserID)
+	chat, err := s.repo.GetChatRowWithUserCheck(ctx, opts.ChatID, opts.UserID)
 	if err != nil {
 		return CancelChatToolCallsResult{}, fmt.Errorf("load chat: %w", err)
 	}

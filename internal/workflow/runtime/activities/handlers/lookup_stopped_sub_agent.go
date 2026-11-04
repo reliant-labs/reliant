@@ -13,17 +13,20 @@ import (
 type LookupStoppedSubAgentInput struct {
 	ChatID string `json:"chat_id" reliant:"-"`
 	Thread string `json:"thread"`
+	All    bool   `json:"all,omitempty"`
 }
 
 // LookupStoppedSubAgentOutput is the sub-agent on the thread if it stopped on
 // a failure, and nothing if it did not.
 type LookupStoppedSubAgentOutput struct {
-	Agent *db.StoppedSpawnAgent `json:"agent,omitempty"`
+	Agent  *db.StoppedSpawnAgent   `json:"agent,omitempty"`
+	Agents []*db.StoppedSpawnAgent `json:"agents,omitempty"`
 }
 
 // stoppedSubAgentReader is the one read this activity makes.
 type stoppedSubAgentReader interface {
 	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
+	ListStoppedSpawnAgents(ctx context.Context, chatID string) ([]*db.StoppedSpawnAgent, error)
 }
 
 // LookupStoppedSubAgentActivity answers, from durable rows, whether a thread
@@ -65,6 +68,13 @@ func (a *LookupStoppedSubAgentActivity) Category() schema.ActivityCategory {
 
 // Execute reads the thread's stopped sub-agent, if there is one.
 func (a *LookupStoppedSubAgentActivity) Execute(ctx context.Context, input LookupStoppedSubAgentInput) (LookupStoppedSubAgentOutput, error) {
+	if input.ChatID == "" {
+		return LookupStoppedSubAgentOutput{}, fmt.Errorf("chat_id is required")
+	}
+	if input.All {
+		agents, err := a.repo.ListStoppedSpawnAgents(ctx, input.ChatID)
+		return LookupStoppedSubAgentOutput{Agents: agents}, err
+	}
 	if input.ChatID == "" || input.Thread == "" {
 		return LookupStoppedSubAgentOutput{}, fmt.Errorf("chat_id and thread are required")
 	}

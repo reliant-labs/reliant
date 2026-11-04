@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { DaemonInfoSchema, DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { chatMachineNotice, formatWaitElapsed, resolveChatMachine } from "../chatMachineNotice";
 
-function machine(status: DaemonStatus, extra: Partial<DaemonInfo> = {}): DaemonInfo {
+function machine(status: DaemonStatus, extra: Partial<Omit<DaemonInfo, "$typeName">> = {}): DaemonInfo {
   return create(DaemonInfoSchema, { daemonId: "d-1", hostname: "box", status, ...extra });
 }
 
@@ -145,6 +145,11 @@ describe("resolveChatMachine", () => {
   it("is the default machine for an unpinned chat", () => {
     expect(resolveChatMachine([starting], undefined)?.daemonId).toBe("starting");
     expect(resolveChatMachine([starting, up], undefined)?.daemonId).toBe("up");
+  });
+
+  it("is the machine the project is installed on for an unpinned chat, not a connected one without it", () => {
+    const laptop = create(DaemonInfoSchema, { daemonId: "laptop", status: DaemonStatus.ACTIVE, daemonType: "self_hosted" });
+    expect(resolveChatMachine([laptop, starting], undefined, new Set(["starting"]))?.daemonId).toBe("starting");
   });
 
   it("is unknown until the registry answers", () => {

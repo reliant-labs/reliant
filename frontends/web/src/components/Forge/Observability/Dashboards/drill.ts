@@ -30,7 +30,7 @@ import type { ObsSearch } from "../obsSearch";
 export interface ExploreHrefs {
   logs: (search: ObsSearch) => string;
   traces: (search: ObsSearch) => string;
-  /** The workload's page (the Overview's workload detail). */
+  /** The workload's page (the Overview's workload detail); "" when no single workload is meant. */
   workload: (name: string) => string;
 }
 
@@ -56,7 +56,9 @@ const isErrorPredicate = (p: Predicate) =>
 /** Whether the panel (or every one of its series) counts failures only. */
 export function countsErrors(panel: Panel): boolean {
   if ((panel.where ?? []).some(isErrorPredicate)) return true;
-  return panel.series.length > 0 && panel.series.every((s) => (s.where ?? []).some(isErrorPredicate));
+  // A definition may arrive without `series` (a forge spec read raw, a newer kind): it counts nothing.
+  const series = panel.series ?? [];
+  return series.length > 0 && series.every((s) => (s.where ?? []).some(isErrorPredicate));
 }
 
 /** The service a series is about: its group's, the panel's own `service.name = …`, or the variable. */
@@ -76,6 +78,15 @@ export function drillSearches(panel: Panel, group: Record<string, string>, conte
     }
     const key = scopeKeyOf(field);
     if (key) tokens.push({ key, op: "eq", value });
+  }
+  // Carry temporary trace/resource predicates into the explorers. Metric-only
+  // attributes (for example procedure) must not become nonexistent trace keys.
+  for (const predicate of panel.where ?? []) {
+    if (predicate.op !== "eq" || !predicate.value) continue;
+    if (predicate.field === "span.name") operation ??= predicate.value;
+    if (!predicate.field.startsWith("span.attr.") && !predicate.field.startsWith("resource.attr.")) continue;
+    const key = scopeKeyOf(predicate.field);
+    if (key && !tokens.some((token) => token.key === key)) tokens.push({ key, op: "eq", value: predicate.value });
   }
   const errors = countsErrors(panel);
   const f = filterParam(tokens);

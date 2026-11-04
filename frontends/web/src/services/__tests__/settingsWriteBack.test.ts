@@ -48,7 +48,7 @@ const flushWrites = () => new Promise((resolve) => setTimeout(resolve, 0))
 /** Keys sent to the server across every batch issued so far. */
 const writtenKeys = () =>
   mocks.batchUpsertSettings.mock.calls.flatMap(
-    ([settings]: [Array<{ key: string; value: string }>]) => settings,
+    (call: unknown[]) => call[0] as Array<{ key: string; value: string }>,
   )
 vi.mock('../../lib/configReady', () => ({ waitForConfig: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../../lib/logger', () => ({

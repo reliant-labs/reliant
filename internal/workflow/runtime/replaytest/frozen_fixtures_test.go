@@ -26,7 +26,7 @@ const frozenSumsFile = "SHA256SUMS"
 // pinned, and adding, editing or deleting a frozen fixture is a test failure
 // rather than a diff someone has to notice in review.
 //
-// A new set is made with `make freeze-replay-fixtures NAME=...`, which writes
+// A new set is made with `task replay-fixtures:freeze NAME=...`, which writes
 // its SHA256SUMS; nothing should ever need to touch one after that. A set is
 // retired only by deleting the whole directory together with the version gate
 // it exists for, once no run that old can still be open.
@@ -69,7 +69,7 @@ func TestFrozenFixturesAreUnchanged(t *testing.T) {
 func readFrozenSums(t *testing.T, path string) map[string]string {
 	t.Helper()
 	f, err := os.Open(path)
-	require.NoError(t, err, "every frozen set needs a %s (make freeze-replay-fixtures writes it)", frozenSumsFile)
+	require.NoError(t, err, "every frozen set needs a %s (task replay-fixtures:freeze writes it)", frozenSumsFile)
 	defer func() { _ = f.Close() }()
 
 	sums := map[string]string{}

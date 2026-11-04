@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/stopcause"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
@@ -92,10 +95,16 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 	return cmd
 }
 
-// registerDaemon mints this machine's daemon credential by a browser login:
-// the OAuth code flow with PKCE against the control plane, asking for
-// daemon:connect. The resulting `rlat_` IS the daemon credential, written to
-// the daemon store keyed by conn's server.
+// registerDaemon pairs this machine with an account and stores the daemon
+// credential it is given: device authorization (RFC 8628) against the control
+// plane, asking for daemon:connect. It prints a short code and the page that
+// approves it; the person approves there, or types the code into the Add
+// machine sheet already waiting in the web app ("Approve machine <host>?").
+// Nothing travels back to this process, so it works over ssh on a headless
+// server as well as on a laptop. A control plane that does not offer device
+// authorization gets the older browser login (the OAuth code flow with PKCE
+// and a loopback redirect) instead. The resulting `rlat_` IS the daemon
+// credential, written to the daemon store keyed by conn's server.
 //
 // The login is consented in the browser, so no session JWT is kept on disk
 // (the retired reliant-auth.json). The token is named reliant-cli@<instance
@@ -135,32 +144,59 @@ func daemonNonInteractive(nonInteractive, managed bool) bool {
 // account names which credential this registration writes. It is part of the
 // store key, so registering account A cannot overwrite account B's token at
 // the same origin. Empty means the default account.
-func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) error {
+//
+// want, when known, is the account the pairing must be approved as — the CLI
+// login's (daemonAccountForCLILogin). A pairing approved as anyone else is
+// refused and not saved, so the machine never ends up connected as an account
+// other than the one it is logged in to the CLI as. A control plane that does
+// not name the approving account cannot be checked and is taken as before.
+func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
-	if !nonInteractive {
-		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine as a daemon — approve the login in your browser.")
+	if nonInteractive {
+		return fmt.Errorf("daemon login: %w", cliauth.ErrInteractiveRequired)
 	}
-	logging.InfoContext(ctx, "Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
+	logging.InfoContext(ctx, "Registering daemon via control-plane pairing", "api_url", apiURL, "instance_id", instanceid.ID())
 
-	cred, err := cliauth.Login{
-		Server: apiURL,
-		// daemon:connect, plus forge's control-plane authority as a CEILING
-		// the control plane clips to this user's grants — the same set
-		// control-plane provisions for a managed daemon. forge on this
-		// daemon exchanges it for an hour-long deploy token; without it
-		// there would be nothing to exchange, because a token may never
-		// grant authority it does not hold.
-		Scopes:         append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...),
-		Name:           "daemon-" + instanceid.Label(),
-		NonInteractive: nonInteractive,
-		Out:            cmd.OutOrStdout(),
-		OpenURL:        loginOpener,
+	// daemon:connect ALONE. A daemon credential holds every scope its
+	// person holds — the control plane keys that on daemon:connect and
+	// resolves it at each use, clipped to their current grants
+	// (control-plane accesstoken/wildcard.go), exactly as it does for a
+	// managed daemon. forge on this daemon exchanges it for an hour-long
+	// deploy token, and a scope forge adds later is exchangeable with no
+	// re-registration. Listing scopes here is how every daemon used to end
+	// up without the newest one.
+	scopes := []string{cliauth.ScopeDaemon}
+	hostname, _ := os.Hostname()
+	cred, err := cliauth.DeviceLogin{
+		Server:   apiURL,
+		Scopes:   scopes,
+		Name:     "daemon-" + instanceid.Label(),
+		Hostname: hostname,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+		Out:      cmd.OutOrStdout(),
+		OpenURL:  loginOpener,
 	}.Run(ctx)
+	if errors.Is(err, cliauth.ErrNoDeviceFlow) {
+		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine — approve the login in your browser.")
+		cred, err = cliauth.Login{
+			Server:  apiURL,
+			Scopes:  scopes,
+			Name:    "daemon-" + instanceid.Label(),
+			Out:     cmd.OutOrStdout(),
+			OpenURL: loginOpener,
+		}.Run(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("daemon login: %w", err)
 	}
 	if !scopeGranted(cred.Scopes, cliauth.ScopeDaemon) {
 		return fmt.Errorf("the control plane did not grant %s (granted: %v)", cliauth.ScopeDaemon, cred.Scopes)
+	}
+	approved := cliauth.AccountOf(cred)
+	if want.Known() && approved.Known() && !approved.Same(want) {
+		return fmt.Errorf("this machine was approved as %s, but you are logged in to the CLI as %s, so the sign-in was not saved.\n"+
+			"Approve the code while signed in to Reliant as %s, or run 'reliant auth login%s' as %s first",
+			approved, want, want, conn.serverFlagHint(), approved)
 	}
 
 	creds := &auth.DaemonCredentials{
@@ -170,6 +206,8 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		RegisteredAt: time.Now().UTC(),
 		Sub:          account,
 		ExpiresAt:    cred.ExpiresAt,
+		AccountID:    cred.AccountID,
+		AccountEmail: cred.AccountEmail,
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
@@ -177,6 +215,9 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
+	if approved.Known() {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Account:     %s\n", approved)
+	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", conn.describeServer())
 	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", conn.describeGateway())
@@ -217,12 +258,21 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 // is set, when it returns cliauth.ErrInteractiveRequired instead. A CLI
 // session from `reliant auth login` is a different credential and is never
 // reused for this.
-func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+//
+// want, when known, is the CLI login's account: a stored credential is used
+// only when it is recorded as that account (daemonAccountForCLILogin recorded
+// it), and a registration must be approved as it.
+func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	creds, err := auth.ReadDaemonCredentials(apiURL, account)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
+	}
+	if creds != nil && want.Known() && !daemonSignInAccount(creds).Same(want) {
+		// Filed where the login's sign-in would be, but not confirmed as
+		// the login's account: pair rather than connect as it.
+		creds = nil
 	}
 	if creds != nil {
 		// A stored PAT that carries a known expiry and has lapsed (or is about to)
@@ -248,13 +298,22 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 				creds.GatewayURL = gwURL
 				persistDaemonCredentials(creds)
 			}
+			// Say so: a saved credential prints no pairing code, and a person
+			// whose Add machine sheet is waiting for one — a new user on a
+			// machine still signed in as someone else — otherwise sees only
+			// "connected", as an account that is not theirs.
+			if !nonInteractive {
+				fmt.Fprint(cmd.OutOrStdout(), savedSignInNotice(creds, conn, want.Known()))
+			}
 			return creds, nil
 		}
-	} else if !nonInteractive {
+	} else if !nonInteractive && !want.Known() {
+		// With a CLI login, daemonAccountForCLILogin has already said why
+		// this machine is being paired.
 		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
 	}
 
-	if err := registerDaemon(ctx, cmd, conn, account, nonInteractive); err != nil {
+	if err := registerDaemon(ctx, cmd, conn, account, want, nonInteractive); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
@@ -264,6 +323,30 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
 	return creds, nil
+}
+
+// savedSignInNotice is what `daemon start` prints before connecting with a
+// credential saved by an earlier sign-in: whose it is when that is known, that
+// it is using it, which is why no pairing code follows, and how to sign in as
+// someone else instead. cliLogin says the sign-in was chosen because it is the
+// CLI login's account; then logging the CLI in as someone else is the remedy,
+// since that retires this sign-in.
+func savedSignInNotice(creds *auth.DaemonCredentials, conn *connection, cliLogin bool) string {
+	saved := "Using the daemon sign-in saved on this machine"
+	if who := daemonSignInAccount(creds).String(); who != "" {
+		saved += " for " + who
+	}
+	if !creds.RegisteredAt.IsZero() {
+		saved += " on " + creds.RegisteredAt.Local().Format("2 Jan 2006")
+	}
+	if cliLogin {
+		return fmt.Sprintf("%s, the account you are logged in to the CLI as, so there is no pairing code to approve.\n"+
+			"Not you? Run 'reliant auth login%s' and sign in as yourself, then 'reliant daemon start%s' again.\n",
+			saved, conn.serverFlagHint(), conn.serverFlagHint())
+	}
+	return fmt.Sprintf("%s, so there is no pairing code to approve.\n"+
+		"Not you? Run 'reliant auth logout%s', then 'reliant daemon start%s' again.\n",
+		saved, conn.serverFlagHint(), conn.serverFlagHint())
 }
 
 // daemonCredentialPollInterval is how often a non-interactive daemon with no
@@ -345,8 +428,8 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 // cliauth.ErrInteractiveRequired as a fatal error. This is the seam used
 // by both the initial credential resolution and the auth-failure retry path
 // in `daemon start`, so neither can regress into popping a browser.
-func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, nonInteractive)
+func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, want, nonInteractive)
 	if err == nil {
 		shareDaemonSessionWithForge(conn, creds)
 		return creds, nil
@@ -368,8 +451,8 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 // the auth-failure retry path: the caller has already deleted stale
 // credentials and needs a fresh registration, but a non-interactive daemon
 // must idle rather than fail when that requires a login it cannot run.
-func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	regErr := registerDaemon(ctx, cmd, conn, account, nonInteractive)
+func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	regErr := registerDaemon(ctx, cmd, conn, account, want, nonInteractive)
 	if regErr == nil {
 		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL, account)
 		if readErr != nil || newCreds == nil {
@@ -577,14 +660,14 @@ After registering, run 'reliant daemon start' to connect.`,
 				fmt.Fprintln(cmd.OutOrStdout(), "Daemon is already registered")
 				fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
 				fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", creds.ServerURL)
-				fmt.Fprintf(cmd.OutOrStdout(), "\nTo re-register, delete the credentials file and run this command again.\n")
+				fmt.Fprintf(cmd.OutOrStdout(), "\nTo re-register, run 'reliant auth logout%s' and then this command again.\n", conn.serverFlagHint())
 				return nil
 			}
 
 			// `daemon register` is always an explicit, interactive CLI
 			// invocation — never spawned by Electron — so it never passes
 			// nonInteractive.
-			return registerDaemon(cmd.Context(), cmd, conn, account, false)
+			return registerDaemon(cmd.Context(), cmd, conn, account, cliauth.Account{}, false)
 		},
 	}
 
@@ -601,9 +684,11 @@ After registering, run 'reliant daemon start' to connect.`,
 // excluded: the credential was accepted and only the asserted identity was
 // refused. Treating it as a credential failure is what told a user with two
 // accounts on one laptop to re-mint a token that was fine, and — without
-// --token — deleted their good credential and opened a browser login.
+// --token — deleted their good credential and opened a browser login. A
+// daemon id reserved for daemon-bound credentials is excluded for the same
+// reason: the login token was accepted, only the id it asserted was refused.
 func daemonCredentialRefused(err error) bool {
-	if bootstrap.IsForeignDaemonIDError(err) {
+	if bootstrap.IsForeignDaemonIDError(err) || bootstrap.IsReservedDaemonIDError(err) {
 		return false
 	}
 	code := connect.CodeOf(err)
@@ -619,7 +704,7 @@ func daemonCredentialRefused(err error) bool {
 // credential is re-minted (reRegister). Everything else is reported as is.
 func daemonStartFailure(err error, useToken bool, conn *connection) (failure error, reRegister bool) {
 	switch {
-	case bootstrap.IsForeignDaemonIDError(err):
+	case bootstrap.IsForeignDaemonIDError(err), bootstrap.IsReservedDaemonIDError(err):
 		return fmt.Errorf("tools-daemon stopped: %w", err), false
 	case !daemonCredentialRefused(err):
 		return fmt.Errorf("tools-daemon exited with error: %w", err), false
@@ -687,8 +772,18 @@ const daemonShutdownGrace = 10 * time.Second
 // forever is exactly what makes "signal it and assume" look acceptable in the
 // tools that drive it. Bounding the whole path is cheaper and more durable than
 // proving every step inside it terminates.
-func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.CancelFunc, grace time.Duration, exit func(int)) {
-	<-sigCh
+//
+// describe, when set, explains the first signal before anything shuts down
+// (stopcause): a clean exit nobody asked for is otherwise indistinguishable
+// from one somebody did, and the commands in flight — often including the one
+// that sent the signal — are gone a moment later.
+func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.CancelFunc, grace time.Duration, exit func(int), describe func(os.Signal) string) {
+	sig := <-sigCh
+	if describe != nil {
+		report := describe(sig)
+		fmt.Fprint(w, "\n"+report)
+		slog.Warn("tools-daemon received a stop signal", "signal", sig.String(), "report", report)
+	}
 	fmt.Fprintln(w, "\nShutting down — press Ctrl+C again to force-exit")
 	cancel()
 
@@ -722,10 +817,17 @@ Credential resolution order:
   1. --token: an access token read from stdin (create one under Settings →
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
-     earlier 'daemon start' or 'reliant daemon register').
-  3. Otherwise a browser login of its own that mints a daemon credential.
-     This is a separate credential from 'reliant auth login', which is never
-     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+     earlier 'daemon start' or 'reliant daemon register'). It says so, and
+     whose it is, before connecting; 'reliant auth logout' removes it, to sign
+     in as someone else. When you are logged in to the CLI ('reliant auth
+     login'), only the daemon credential of that same account is used: one
+     of another account is passed over, said so, and the machine is paired
+     as you instead, so the daemon never connects as someone else.
+  3. Otherwise it pairs the machine: it prints a short code and a link, and
+     you approve "this machine" in the Reliant app — on the link, or by typing
+     the code into the Add machine window. Nothing has to reach back to this
+     terminal, so it works over ssh. The credential it is given is separate
+     from 'reliant auth login', which is never reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
      the daemon never opens a browser: it stays resident and idle, publishing
      "awaiting_credentials" in its runtime state (see 'reliant daemon
      status'), and polls for a credential to appear on disk. Electron spawns
@@ -791,7 +893,10 @@ To switch back to an account whose token is already stored:
 			sigCh := make(chan os.Signal, 2)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			defer signal.Stop(sigCh)
-			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit)
+			started := time.Now()
+			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit, func(sig os.Signal) string {
+				return stopcause.Capture(sig, "/proc", os.Getpid(), started, time.Now()).String()
+			})
 
 			// The instance account is the account this daemon's credential
 			// belongs to, and it has to be settled before the data directory
@@ -801,6 +906,8 @@ To switch back to an account whose token is already stored:
 			// stored credential's account applies (resolveInstanceAccount).
 			var pastedToken string
 			tokenVerified := false
+			// want is the CLI login's account when the daemon is kept to it.
+			var want cliauth.Account
 			if useToken && !serverMode {
 				pastedToken, err = readPastedToken(ctx, cmd)
 				if err != nil {
@@ -817,6 +924,23 @@ To switch back to an account whose token is already stored:
 				tokenVerified = verified
 				if strings.TrimSpace(instance.account) == "" {
 					instance.account = owner
+				}
+			} else if !serverMode && !nonInteractive && strings.TrimSpace(instance.account) == "" {
+				// A person at a terminal with no --account: keep the daemon
+				// to the account the CLI is logged in as, when it names one
+				// (account_in_step.go). Electron and managed pods run
+				// non-interactively and name their account themselves, so
+				// they never get here.
+				gatewayFor := func(c *auth.DaemonCredentials) (daemonGateway, error) {
+					saved := c.GatewayURL
+					if saved == "" {
+						saved = conn.GatewayURL
+					}
+					return resolveDaemonGateway(cmd, grpcURL, saved, port, tlsMode, tlsCert, tlsKey)
+				}
+				instance.account, want = daemonAccountForCLILogin(ctx, cmd, conn, gatewayFor)
+				if !want.Known() {
+					instance.account = resolveInstanceAccount("", conn.ServerURL)
 				}
 			} else {
 				instance.account = resolveInstanceAccount(instance.account, conn.ServerURL)
@@ -890,7 +1014,7 @@ To switch back to an account whose token is already stored:
 					return err
 				}
 			} else {
-				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
+				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, instance.account, want, dataDir, nonInteractive)
 				if err != nil {
 					return err
 				}
@@ -954,7 +1078,7 @@ To switch back to an account whose token is already stored:
 				if !nonInteractive {
 					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
 				}
-				newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
+				newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, want, dataDir, nonInteractive)
 				if regErr != nil {
 					return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 				}

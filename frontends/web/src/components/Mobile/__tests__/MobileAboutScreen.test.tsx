@@ -5,13 +5,18 @@
  * chrome, out of scope on mobile — see MobileLayout's module comment).
  */
 
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
+
+// The server's Version RPC, answered through the real transport seam.
 const version = vi.fn();
-vi.mock("../../../api/system-grpc", () => ({
-  systemGrpc: { version: () => version() },
-}));
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "SystemService.Version": () => version() }),
+  });
 const appBuild = vi.fn();
 vi.mock("../../../lib/appBuild", () => ({ appBuild: () => appBuild() }));
 

@@ -13,6 +13,85 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
+// ─── Egress limiter ─────────────────────────────────────────────────────────
+
+var (
+	// EgressLimitedTotal counts egress tool calls the limiter refused
+	// (internal/egresslimit), by tool and which limit tripped.
+	EgressLimitedTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "egress",
+			Name:      "limited_total",
+			Help:      "Egress tool calls refused by the egress limiter, by tool and limit scope.",
+		},
+		[]string{"tool", "scope"},
+	)
+)
+
+// ─── Daemon link liveness ───────────────────────────────────────────────────
+//
+// A daemon that registers has proven only that its stream opened. The gateway
+// probes the stream with a no-op round trip before fanning connect-time work
+// out to it (internal/handlers/tools_daemon/link_liveness.go); these say how
+// long that takes and how often the work had to wait.
+
+var (
+	// DaemonLinkProbeSeconds is the round trip of the gateway's no-op probe
+	// of a daemon's stream, by outcome: ok, slow (answered, but too slowly
+	// to fan work out to), failed (no answer within the probe's timeout).
+	DaemonLinkProbeSeconds = newHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "link_probe_seconds",
+			Help:      "Round trip of the gateway's no-op probe of a daemon stream, by outcome (ok, slow, failed).",
+			Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+		},
+		[]string{"outcome"},
+	)
+	// DaemonReconnectLatencySeconds is how long after registering a daemon
+	// stream became usable: its first completed command round trip
+	// (stage=first_round_trip) and its link ready for connect-time work
+	// (stage=ready).
+	DaemonReconnectLatencySeconds = newHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "reconnect_latency_seconds",
+			Help:      "Time from a daemon's registration to its first completed command round trip (stage=first_round_trip) and to its link being ready for connect-time work (stage=ready).",
+			Buckets:   []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 900},
+		},
+		[]string{"stage"},
+	)
+	// DaemonConnectWorkDeferredTotal counts connect-time passes deferred
+	// because the daemon's link was not ready, by reason: probe_failed,
+	// probe_slow, reconcile_interrupted (a reconcile command hit a transport
+	// failure mid-pass).
+	DaemonConnectWorkDeferredTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "connect_work_deferred_total",
+			Help:      "Connect-time work deferred because the daemon's link was not ready, by reason (probe_failed, probe_slow, reconcile_interrupted).",
+		},
+		[]string{"reason"},
+	)
+	// DaemonCommandsHeldTotal counts daemon commands the gateway held for a
+	// stream that had not answered anything yet, by outcome: released (the
+	// link proved itself and the command was sent) or reconnecting (it did
+	// not in time, and the command was answered unsent).
+	DaemonCommandsHeldTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "commands_held_total",
+			Help:      "Daemon commands held for a stream that had not answered yet, by outcome (released, reconnecting).",
+		},
+		[]string{"outcome"},
+	)
+)
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
@@ -231,6 +310,18 @@ var (
 		},
 		[]string{"error_type"},
 	)
+	// ToolPlacementTotal counts calls of PlacementPreferDaemon tools by where
+	// they ran (daemon or server) and, for the server, why (fallback reason;
+	// "" when the server was not a fallback).
+	ToolPlacementTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "tool_execution",
+			Name:      "placement_total",
+			Help:      "Calls of prefer-daemon tools by tool, where they ran and why the server ran them.",
+		},
+		[]string{"tool", "ran_at", "reason"},
+	)
 	ToolExecutionErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
@@ -286,14 +377,22 @@ var (
 	//                              outright (terminate, timeout), or the failure
 	//                              that ended it is the user's to act on.
 	//                              Expected; logged at INFO
-	// Every increment of the fault classes is paired with a Sentry-visible
-	// ERROR log; alert on any sustained non-zero rate of those.
+	//   stranded_start_failed    - PENDING root whose launch committed but
+	//                              whose run never reached Temporal within the
+	//                              bound, with no failed start recorded (the
+	//                              launcher died or lost the write); recorded
+	//                              as a failed start
+	//   stranded_start_repaired  - the same PENDING root, but Temporal has its
+	//                              run: the launch's mark-active was lost;
+	//                              moved to ACTIVE
+	// Every increment of the fault classes is paired with an ERROR log (an
+	// issue); alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed, stranded_start_failed, stranded_start_repaired).",
 		},
 		[]string{"class"},
 	)
@@ -377,6 +476,7 @@ func initMetrics() {
 	Registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	// Application metrics.
+	Registry.MustRegister(daemonFleetCollector{})
 	Registry.MustRegister(
 		// HTTP
 		HTTPRequestsTotal,
@@ -392,6 +492,13 @@ func initMetrics() {
 		NATSReceiveTotal,
 		NATSRequestDuration,
 		NATSErrorsTotal,
+		// Egress
+		EgressLimitedTotal,
+		// Daemon link liveness
+		DaemonLinkProbeSeconds,
+		DaemonReconnectLatencySeconds,
+		DaemonConnectWorkDeferredTotal,
+		DaemonCommandsHeldTotal,
 		// DB
 		DBQueryDuration,
 		DBErrorsTotal,
@@ -406,6 +513,7 @@ func initMetrics() {
 		DeadEndErrorsTotal,
 		StreamingErrorsTotal,
 		ToolExecutionErrorsTotal,
+		ToolPlacementTotal,
 		// Reconciler
 		ReconcilerAnomaliesTotal,
 		// Workflow resume

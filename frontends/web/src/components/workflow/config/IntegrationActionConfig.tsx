@@ -22,7 +22,7 @@ import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { ConnectionPicker } from "../connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../connections/ConnectIntegrationDialog";
 import { IntegrationLogoTile } from "../../icons/IntegrationLogo";
-import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { useCatalogEntry } from "../../../hooks/catalog-queries";
 import {
   getActionConnection,
   getActionParams,
@@ -36,7 +36,7 @@ import {
   missingRequiredParams,
   paramToFieldValue,
 } from "../../../lib/jsonSchemaFields";
-import { refIntegration } from "../../../api/catalog-search-grpc";
+import { refIntegration } from "../../../hooks/catalog-queries";
 import { Section, SectionFields, SectionLabel } from "./primitives";
 
 export interface IntegrationActionConfigProps {
@@ -93,7 +93,7 @@ export function IntegrationActionConfig({ step, onUpdate, isReadOnly = false }: 
               <code className="font-mono">{uses}</code> isn't in the integration catalog.
             </p>
             <p className="cpv2-field-hint !mt-0">It may have been renamed or removed, or its integration isn't installed here.</p>
-            <button type="button" onClick={() => void entryQuery.refetch()} className="text-xs font-medium text-primary hover:underline">
+            <button type="button" onClick={() => void entryQuery.refetch()} className="text-xs font-medium text-primary-ink hover:underline">
               Retry
             </button>
           </div>

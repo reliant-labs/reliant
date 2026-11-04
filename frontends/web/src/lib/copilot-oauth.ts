@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/react'
+import { reportError, reportFailure } from '@/lib/errorReporting'
 import { settingsGrpc } from '@/api/settings-grpc'
 import { PollCopilotDeviceAuthResponse_Status } from '@/gen/reliant/v1/settings_pb'
 
@@ -106,10 +106,7 @@ export async function runCopilotDeviceFlow(
     if (signal?.aborted) {
       return errorResult('cancelled', 'Sign-in cancelled.')
     }
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'copilot' },
-      level: 'warning',
-    })
+    reportError(error, { component: 'oauth', provider: 'copilot' })
     return errorResult(
       'start_failed',
       error?.message || 'Could not start GitHub Copilot sign-in. Please try again.',
@@ -168,10 +165,7 @@ export async function runCopilotDeviceFlow(
           )
         case PollCopilotDeviceAuthResponse_Status.ERROR:
         default:
-          Sentry.captureMessage('Copilot device auth poll returned error', {
-            tags: { component: 'oauth', provider: 'copilot' },
-            level: 'warning',
-          })
+          reportFailure('Copilot device auth poll returned error', { component: 'oauth', provider: 'copilot' })
           return errorResult(
             'poll_error',
             errorMessage || 'GitHub Copilot sign-in failed. Please try again.',
@@ -182,10 +176,7 @@ export async function runCopilotDeviceFlow(
     if (error instanceof AbortError || signal?.aborted) {
       return errorResult('cancelled', 'Sign-in cancelled.')
     }
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'copilot' },
-      level: 'warning',
-    })
+    reportError(error, { component: 'oauth', provider: 'copilot' })
     return errorResult(
       'poll_error',
       error?.message || 'GitHub Copilot sign-in failed. Please try again.',

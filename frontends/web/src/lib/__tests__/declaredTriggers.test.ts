@@ -18,7 +18,7 @@ import {
 
 const issue = newDeclaredTrigger({
   name: 'new-issue',
-  source: { case: 'integration', value: { integration: 'github', events: ['issues.opened'], match: { repository: 'acme/app' } } } as DeclaredTrigger['source'],
+  source: { case: 'integration', value: { integration: 'github', events: ['issues.opened'], match: { repository: 'acme/app' } } } as NonNullable<DeclaredTrigger['source']>,
 })
 
 describe('declared triggers', () => {

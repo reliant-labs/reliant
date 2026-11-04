@@ -2,7 +2,7 @@
 
 /**
  * The picker's full-screen sheet, used below `sm` or on a coarse pointer
- * instead of a popover (automation-ux-spec.md §3.7): Back on the left, the
+ * instead of a popover: Back on the left, the
  * field's label as the title, Done with the count on the right, and the search
  * pinned at the top. It sits ABOVE the setup dialog's own sheet — one sheet
  * per level, never a popover inside a sheet.
@@ -49,7 +49,7 @@ export function PickerSheet({ title, count, multi, onDone, children }: PickerShe
         <button
           type="button"
           onClick={onDone}
-          className="inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden /> Back
         </button>
@@ -57,7 +57,7 @@ export function PickerSheet({ title, count, multi, onDone, children }: PickerShe
         <button
           type="button"
           onClick={onDone}
-          className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {multi ? `Done · ${count}` : "Done"}
         </button>

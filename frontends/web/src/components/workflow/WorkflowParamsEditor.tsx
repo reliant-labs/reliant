@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useId } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { ToolsSelector } from './ToolsSelector'
-import { presetGrpc, type Preset } from '../../api/preset-grpc'
+import Combobox, { type ComboboxOption } from '../forge-ui/combobox'
+import { useProjectPresets } from '../../hooks/preset-queries'
 import { useProjectStore } from '../../store/projectStore'
 import { useModels } from '../../store/globalDataStore'
 import { formatValueForDisplay } from '../../lib/paramUtils'
@@ -67,6 +68,14 @@ const PARAM_TYPES = [
   // Advanced
   { value: 'any', label: 'Any', group: 'Advanced', description: 'Generic input for complex types', hasDefault: true },
 ]
+
+// The Type picker's options, grouped by category.
+const PARAM_TYPE_OPTIONS: ComboboxOption[] = PARAM_TYPES.map(({ value, label, group, description }) => ({
+  value,
+  label,
+  group,
+  description,
+}))
 
 // Types that represent lists (empty array as implicit default)
 const LIST_TYPES = ['tools', 'attachments']
@@ -182,7 +191,7 @@ export function WorkflowParamsEditorContent({ params, onUpdate }: WorkflowParams
 
       <button
         onClick={addParam}
-        className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
+        className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-ink border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
       >
         <Plus className="w-4 h-4" />
         Add input
@@ -213,6 +222,7 @@ interface ParamEditorProps {
 }
 
 function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) {
+  const typeId = useId()
   const typeConfig = PARAM_TYPES.find(t => t.value === param.type)
   const isListType = param.type ? LIST_TYPES.includes(param.type) : false
   
@@ -228,7 +238,7 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
             type="text"
             value={param._name}
             onChange={(e) => onRename(e.target.value)}
-            className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+            className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
             placeholder="input_name"
           />
         </div>
@@ -246,13 +256,15 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
 
       {/* Type selector */}
       <div>
-        <label className="block text-xs font-medium text-foreground mb-1">
+        <label htmlFor={typeId} className="block text-xs font-medium text-foreground mb-1">
           Type
         </label>
-        <select
-          value={param.type}
-          onChange={(e) => {
-            const newType = e.target.value
+        <Combobox
+          id={typeId}
+          options={PARAM_TYPE_OPTIONS}
+          value={param.type ?? null}
+          onChange={(newType) => {
+            if (!newType || newType === param.type) return
             // Clear default when switching to a type that doesn't support it
             const newTypeConfig = PARAM_TYPES.find(t => t.value === newType)
             const updates: Record<string, unknown> = { type: newType }
@@ -265,26 +277,8 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
             }
             onUpdate(updates)
           }}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
-        >
-          {/* Group types by category */}
-          {Object.entries(
-            PARAM_TYPES.reduce((acc, t) => {
-              const group = t.group || 'Other'
-              if (!acc[group]) acc[group] = []
-              acc[group].push(t)
-              return acc
-            }, {} as Record<string, typeof PARAM_TYPES>)
-          ).map(([group, types]) => (
-            <optgroup key={group} label={group}>
-              {types.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          searchPlaceholder="Search types"
+        />
         {typeConfig?.description && (
           <p className="mt-1 text-xs text-muted-foreground">
             {typeConfig.description}
@@ -331,7 +325,7 @@ function ParamDocsFields({ param, onUpdate }: TypeSpecificInputProps) {
           type="text"
           value={getInputDescription(param as InputDef) ?? ''}
           onChange={(e) => onUpdate({ description: e.target.value })}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
           placeholder="What this input is for, shown under it on the Run form"
         />
       </div>
@@ -344,7 +338,7 @@ function ParamDocsFields({ param, onUpdate }: TypeSpecificInputProps) {
           type="text"
           value={getInputExample(param as InputDef) ?? ''}
           onChange={(e) => onUpdate({ example: e.target.value })}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
           placeholder="What a value looks like, shown in the empty box"
         />
       </div>
@@ -364,7 +358,13 @@ type Visibility = 'toolbar' | 'settings' | 'hidden'
 
 // Types InlineParamInput can render as a toolbar pill. Others fall back to a
 // label-only pill there, which isn't a usable control.
-const TOOLBAR_TYPES = new Set(['enum', 'boolean', 'string', 'number', 'integer'])
+const TOOLBAR_TYPES = new Set(['enum', 'boolean', 'string', 'number', 'integer', 'model'])
+
+const VISIBILITY_OPTIONS: Array<ComboboxOption & { value: Visibility }> = [
+  { value: 'toolbar', label: 'Toolbar', description: 'Under the chat input' },
+  { value: 'settings', label: 'Settings', description: 'Behind ⚙' },
+  { value: 'hidden', label: 'Hidden', description: 'Runtime only' },
+]
 
 function visibilityOf(ui: string | undefined): Visibility {
   if (ui === 'toolbar') return 'toolbar'
@@ -392,16 +392,15 @@ function VisibilitySelect({ param, onUpdate }: TypeSpecificInputProps) {
       <label htmlFor={selectId} className="block text-xs font-medium text-foreground mb-1">
         Visibility in chat
       </label>
-      <select
+      <Combobox
         id={selectId}
+        options={VISIBILITY_OPTIONS.filter((o) => toolbarAllowed || o.value !== 'toolbar')}
         value={visibility}
-        onChange={(e) => handleChange(e.target.value as Visibility)}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
-      >
-        {toolbarAllowed && <option value="toolbar">Toolbar — under the chat input</option>}
-        <option value="settings">Settings — behind ⚙</option>
-        <option value="hidden">Hidden — runtime only</option>
-      </select>
+        onChange={(next) => {
+          if (next) handleChange(next as Visibility)
+        }}
+        searchPlaceholder="Search placements"
+      />
       <p className="mt-1 text-xs text-muted-foreground">
         Sets <code className="font-mono">ui:</code> in the workflow YAML.
       </p>
@@ -462,7 +461,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
           onChange={(e) => onUpdate({ 
             enumValues: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
           })}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
           placeholder="option1, option2, option3"
         />
         <p className="mt-1 text-xs text-muted-foreground">
@@ -483,7 +482,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
                 default: newDefault,
               })
             }}
-            className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+            className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
           >
             <option value="">No default (user must provide value)</option>
             {enumValues.map((val) => (
@@ -511,7 +510,7 @@ function BooleanDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
             default: newDefault,
           })
         }}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
       >
         <option value="">No default (user must provide value)</option>
         <option value="true">true</option>
@@ -542,7 +541,7 @@ function ModelDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
           })
         }}
         disabled={loading}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
       >
         <option value="">No default (user must provide value)</option>
         {models.map((model) => (
@@ -598,8 +597,7 @@ function ToolsDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 
 function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
   const { currentProject } = useProjectStore()
-  const [availablePresets, setAvailablePresets] = useState<Preset[]>([])
-  const [loading, setLoading] = useState(true)
+  const { presets: availablePresets, loading } = useProjectPresets(currentProject?.id)
 
   // Parse the default value from proto Value
   const parseDefault = (): string[] => {
@@ -618,22 +616,6 @@ function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
   }
   
   const [selectedPresets, setSelectedPresets] = useState<string[]>(parseDefault)
-
-  useEffect(() => {
-    if (!currentProject?.id) {
-      setLoading(false)
-      return
-    }
-    presetGrpc.listPresets(currentProject.id)
-      .then(presets => {
-        setAvailablePresets(presets)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Failed to load presets:', err)
-        setLoading(false)
-      })
-  }, [currentProject?.id])
 
   const handleToggle = (presetName: string) => {
     const newSelection = selectedPresets.includes(presetName)
@@ -715,7 +697,7 @@ function NumberDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
             default: e.target.value || undefined,
           })
         }}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
         placeholder={isInteger ? '0' : '0.0'}
       />
       <p className="mt-1 text-xs text-muted-foreground">
@@ -741,7 +723,7 @@ function StringDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
             default: newDefault,
           })
         }}
-        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
         placeholder="default value"
       />
       <p className="mt-1 text-xs text-muted-foreground">
@@ -785,7 +767,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
         )}
         <span>Validation</span>
         {hasValidation && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
             configured
           </span>
         )}
@@ -806,7 +788,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                   type="text"
                   value={getInputPattern(param as InputDef) || ''}
                   onChange={(e) => onUpdate({ pattern: e.target.value || undefined })}
-                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="^[a-z]+$"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -827,7 +809,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                     onChange={(e) => onUpdate({
                       minLength: e.target.value ? parseInt(e.target.value, 10) : undefined
                     })}
-                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
                     placeholder="0"
                   />
                 </div>
@@ -842,7 +824,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                     onChange={(e) => onUpdate({ 
                       maxLength: e.target.value ? parseInt(e.target.value, 10) : undefined 
                     })}
-                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
                     placeholder="∞"
                   />
                 </div>
@@ -864,7 +846,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                   onChange={(e) => onUpdate({
                     minItems: e.target.value ? parseInt(e.target.value, 10) : undefined
                   })}
-                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="0"
                 />
               </div>
@@ -879,7 +861,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                   onChange={(e) => onUpdate({ 
                     maxItems: e.target.value ? parseInt(e.target.value, 10) : undefined 
                   })}
-                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="∞"
                 />
               </div>
@@ -989,7 +971,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
           )}
           <span>Object Properties</span>
           {propertyCount > 0 && (
-            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
               {propertyCount} {propertyCount === 1 ? 'property' : 'properties'}
             </span>
           )}
@@ -1021,7 +1003,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
             <button
               type="button"
               onClick={addProperty}
-              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs text-primary border border-dashed border-primary/50 rounded hover:bg-primary/5 transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs text-primary-ink border border-dashed border-primary/50 rounded hover:bg-primary/5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Property
@@ -1049,7 +1031,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
             }
           }}
           rows={3}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
           placeholder='{\n  "key": "value"\n}'
         />
         <p className="mt-1 text-xs text-muted-foreground">
@@ -1102,7 +1084,7 @@ function ObjectPropertyEditor({
               type="text"
               value={name}
               onChange={(e) => onUpdate({ name: e.target.value })}
-              className="flex-1 px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+              className="flex-1 px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
             />
             <span className="text-xs px-1 py-0.5 rounded bg-background border border-border">
               {schema.type || 'string'}
@@ -1136,7 +1118,7 @@ function ObjectPropertyEditor({
             <select
               value={schema.type || 'string'}
               onChange={(e) => onUpdate({ type: e.target.value })}
-              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
             >
               <option value="string">String</option>
               <option value="number">Number</option>
@@ -1156,7 +1138,7 @@ function ObjectPropertyEditor({
               type="text"
               value={schema.description || ''}
               onChange={(e) => onUpdate({ description: e.target.value || undefined })}
-              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
               placeholder="Property description..."
             />
           </div>
@@ -1168,7 +1150,7 @@ function ObjectPropertyEditor({
               id={`required-${name}`}
               checked={isRequired}
               onChange={onToggleRequired}
-              className="w-3 h-3 rounded border-input text-primary focus:ring-1 focus:ring-ring"
+              className="w-3 h-3 rounded border-input text-primary-ink focus:ring-1 focus:ring-ring"
             />
             <label htmlFor={`required-${name}`} className="text-xs text-foreground">
               Required field
@@ -1187,7 +1169,7 @@ function ObjectPropertyEditor({
                   min="0"
                   value={schema.minLength ?? ''}
                   onChange={(e) => onUpdate({ minLength: e.target.value ? parseInt(e.target.value) : undefined })}
-                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="0"
                 />
               </div>
@@ -1200,7 +1182,7 @@ function ObjectPropertyEditor({
                   min="0"
                   value={schema.maxLength ?? ''}
                   onChange={(e) => onUpdate({ maxLength: e.target.value ? parseInt(e.target.value) : undefined })}
-                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="∞"
                 />
               </div>
@@ -1217,7 +1199,7 @@ function ObjectPropertyEditor({
                   type="number"
                   value={schema.minimum ?? ''}
                   onChange={(e) => onUpdate({ minimum: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="-∞"
                 />
               </div>
@@ -1229,7 +1211,7 @@ function ObjectPropertyEditor({
                   type="number"
                   value={schema.maximum ?? ''}
                   onChange={(e) => onUpdate({ maximum: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+                  className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
                   placeholder="∞"
                 />
               </div>
@@ -1248,7 +1230,7 @@ function ObjectPropertyEditor({
                 const values = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
                 onUpdate({ enum: values.length > 0 ? values : undefined })
               }}
-              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring/40 focus:border-ring transition-colors"
+              className="w-full px-2 py-1.5 text-xs border border-input rounded-md bg-background text-foreground focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
               placeholder="val1, val2, val3"
             />
             <p className="mt-0.5 text-xs text-muted-foreground">

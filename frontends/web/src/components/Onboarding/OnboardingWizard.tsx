@@ -22,6 +22,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Workflow } from "lucide-react";
+import { isClaimPath } from "../../lib/claimLink";
 import { useAuthStore } from "../../store/authStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
@@ -202,7 +203,7 @@ function WorkflowIntroStep(props: StepProps) {
         <div className="space-y-2">
           <p>{step.description}</p>
           <div className="flex items-start gap-2 p-2 rounded bg-primary/5 border border-primary/10">
-            <Workflow className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <Workflow className="w-4 h-4 text-primary-ink flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground">
               Workflows are defined in YAML and run multi-agent pipelines with loops, branches, parallelization, and human-in-the-loop approvals.
             </p>
@@ -366,7 +367,10 @@ export function OnboardingWizard() {
   // bad-UX dupe of the same information. Phase 2 (the checklist) is for
   // AFTER /onboarding exits to the main chat; while the user is on
   // /onboarding itself we suppress the floater entirely.
-  const isOnboardingRoute = location.pathname.startsWith("/onboarding");
+  // /claim owns the screen for the same reason: someone is mid-way through
+  // taking over a site, and the guide would sit over the one decision on it.
+  const isOnboardingRoute =
+    location.pathname.startsWith("/onboarding") || isClaimPath(location.pathname);
 
   // Onboarding is per-USER state, so none of it may render to a signed-out
   // visitor. Route alone is not that gate: the sign-in screen is reachable

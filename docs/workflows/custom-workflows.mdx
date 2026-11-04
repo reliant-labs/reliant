@@ -57,7 +57,7 @@ All three methods produce the same YAML format. A workflow created with the AI b
 
 ## Workflow File Location
 
-Reliant automatically discovers workflow files in your project's `.reliant/workflows/` directory.
+Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in the project root's `.reliant/workflows/` and in each discovered nested git repository's `.reliant/workflows/`. This uses the same repository discovery as memory files and skills; the project root need not itself be a git repository.
 
 <Tree>
   <Tree.Folder name="your-project" defaultOpen>
@@ -83,9 +83,34 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
 
 **Discovery**: The machine your project is on watches `.reliant/workflows/` and syncs it to Reliant every couple of seconds, so a saved file shows up in the workflow selector and the library without a restart. A file that does not parse is listed in the library under **Failed to load**, with the error.
 
-**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike.
+**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike. Automations are the exception: a run a trigger starts always runs the project's workflow of that name, so a workflow of yours can never silently replace what an automation runs. Yours still runs when the project has none of that name. When both exist, the automation's details (`reliant trigger get`, `list_triggers`) say which one it runs and warn about the other; rename yours to tell them apart.
 
 Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
+
+### Projects with several repositories
+
+For a project at `/projects/labs` holding `control-plane/` and `forge/`, commit a shared workflow at `control-plane/.reliant/workflows/merge-steward.yaml`. It is discovered without copying it into `/projects/labs/.reliant/workflows/`.
+
+Names resolve deterministically:
+
+- A workflow in the **project root** wins its bare name over nested repositories.
+- If only one nested repository declares a name, its bare name works too.
+- If two nested repositories declare the same name and the root does not, the bare name **fails explicitly**. Both workflows are listed with qualified addresses, such as `control-plane/merge-steward` and `forge/merge-steward`, and a discovery warning. Use `project://control-plane/merge-steward` to choose one.
+- A qualified address always selects that repository, even when the root or one of your account's workflows has the same name. The repository qualifier is its exact, case-sensitive project-relative path; the workflow name is normalized as a slug.
+- Duplicate names within one repository's workflows directory remain errors. They are never resolved by file ordering.
+
+Scenarios stay beside their workflow in that repository's `<name>/scenarios/`. An orphan scenario or one whose local workflow name is invalid is reported as a source-directory error, never attached to a workflow in another repository. The CLI includes nested repositories when reading a conventional `.reliant/workflows` directory; an arbitrary `--dir` still reads only that directory. Newly added repositories may take up to a minute to enter the daemon's cached repository list.
+
+Discovery is confined to each source repository. Symlinks within the workflows tree and non-regular YAML files are rejected. Each source is limited to 1 MiB per YAML file, 8 MiB total YAML content, 1,024 filesystem entries (including the directory itself), and four path components below the workflows directory. If a source cannot be read safely or exceeds these bounds, the snapshot fails rather than uploading a partial or empty replacement catalog; fix the reported source and save again.
+
+### Workflows on more than one machine
+
+Each machine a project is checked out on syncs its own `.reliant/workflows` (and `.reliant/presets`), and Reliant keeps each machine's copy separately. A machine's sync replaces only its own copy, so a machine that lacks a checkout, or has none of the files, never removes a workflow another machine still provides. Disconnecting or suspending a machine keeps what it last synced, until that machine syncs again; every machine sends its full set each time it connects. So deleting a workflow file takes effect once every machine that has the file has synced the deletion.
+
+- **The workflow library, the workflow selector and chats** read the project's combined set: every file any machine provides. When two machines hold the same file, the copy synced most recently is used.
+- **An automation resolves its workflow on its machine**, because its runs execute there. If that machine does not have the workflow, the automation is **broken**, listed in your inbox, and the reason names where the workflow is: `machine "cicd" has no workflow "release"; it is defined on machine "default" at control-plane/.reliant/workflows/release.yaml`. Check that repository out on the automation's machine, or point the automation at a machine that has it. A machine that has never synced the project falls back to the combined set until it does.
+- When no machine provides a workflow any more, the error names the file and machine it was last synced from.
+- **Skills, memories and MCP servers follow the same rule.** Each machine's `.reliant/skills`, `reliant.md` files, MCP configuration and config are kept separately too, and a run reads its own machine's: a skill or MCP server is used on the machine that has it. Listings with no machine read the combined skills and memories, so a machine syncing without a checkout no longer removes that checkout's skills for everyone.
 
 ## Anatomy of a Workflow
 
@@ -179,6 +204,18 @@ Common input types: `string`, `number`, `integer`, `boolean`, `enum`, `model`, `
 
 For complete input type documentation, see the [Types Reference](/reference/types).
 
+### Secrets
+
+`secrets:` declares stored secrets by name and the environment each lives in. A secret travels only in a credential slot: a header value of `http/request@1` (`"Bearer {{ secrets.NAME }}"`), or an action's `credential: { secret: NAME }`, which the integration sends the way it sends an API key.
+
+```yaml
+secrets:
+  TRADER_KEY:
+    environment: "{{ inputs.trader_env }}"   # "<forge project>/<env name>", an environment id, or an expression
+```
+
+The workflow never holds the value: it is resolved inside the action and written only into the request it sends, so it is never in state, history, logs or anything the step returns. A secret anywhere else, `run` commands included, is a validation error. A workflow loaded with `ref:` declares its own secrets. See [Secrets](/integrations/http#secrets) for the full rules and the access list.
+
 ### Entry Point
 
 The `entry` field specifies which node starts execution:
@@ -236,7 +273,13 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
 - id: run_tests
   type: run
   command: npm test
+  timeout: 20m
 ```
+
+A run node's `timeout:` is the limit on its command: 5 minutes when none is declared, and at most
+12 hours (a longer literal fails validation). The 10-minute cap on an agent's own shell calls does
+not apply, so a gate or build that takes hours declares hours. A command still running at its
+timeout is stopped, and the step fails with exit code 124 and a `stderr` line naming the timeout.
 
 **Compute nodes** turn CEL into named values inside the workflow: no model, no shell, no worker.
 Use one for deterministic logic (a label check, a size bucket, a lease expiry, parsing the JSON a

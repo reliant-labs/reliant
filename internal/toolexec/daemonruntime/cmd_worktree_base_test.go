@@ -38,7 +38,11 @@ func newBaseRepos(t *testing.T) baseRepos {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	setWorktreeTestGitEnv(t)
+	// TestMain's HOME and git config (no automatic maintenance) are shared by
+	// every test: these run in parallel and keep their worktrees apart by
+	// workspace ID (create). A per-test HOME needed t.Setenv, which made all
+	// five serial: ~95s of the package's 300s -race budget on a loaded host.
+	t.Parallel()
 
 	run := func(dir string, args ...string) string {
 		t.Helper()
@@ -72,6 +76,14 @@ func newBaseRepos(t *testing.T) baseRepos {
 // create runs worktree.create in the clone and returns its response.
 func (r baseRepos) create(t *testing.T, workspaceID, branch, base string) worktreeCreateResponse {
 	t.Helper()
+	resp, _ := r.createAs(t, workspaceID, branch, base)
+	return resp
+}
+
+// createAs is create, also returning the unique workspace ID it used.
+func (r baseRepos) createAs(t *testing.T, workspaceID, branch, base string) (worktreeCreateResponse, string) {
+	t.Helper()
+	workspaceID = uniqueWorkspaceID(t, workspaceID)
 	payload, err := json.Marshal(worktreeCreateRequest{
 		ProjectPath: r.clone,
 		WorkspaceID: workspaceID,
@@ -85,7 +97,7 @@ func (r baseRepos) create(t *testing.T, workspaceID, branch, base string) worktr
 	require.NoError(t, err)
 	var resp worktreeCreateResponse
 	require.NoError(t, json.Unmarshal(raw, &resp))
-	return resp
+	return resp, workspaceID
 }
 
 // refExists reports whether ref exists in dir.
@@ -171,7 +183,7 @@ func TestWorktreeCreate_BaseNowhereIsBaseNotFound(t *testing.T) {
 	}
 	r := newBaseRepos(t)
 
-	resp := r.create(t, "ws-missing-base", "worktree/doomed", "feat/nowhere")
+	resp, workspaceID := r.createAs(t, "ws-missing-base", "worktree/doomed", "feat/nowhere")
 	require.False(t, resp.Success)
 	assert.Equal(t, worktreeerr.BaseNotFound, resp.ErrorCode)
 	assert.Equal(t, "feat/nowhere", resp.ErrorDetail)
@@ -179,7 +191,7 @@ func TestWorktreeCreate_BaseNowhereIsBaseNotFound(t *testing.T) {
 
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
-	_, statErr := os.Stat(filepath.Join(home, ".reliant", "worktrees", "ws-missing-base"))
+	_, statErr := os.Stat(filepath.Join(home, ".reliant", "worktrees", workspaceID))
 	assert.True(t, os.IsNotExist(statErr), "nothing was created, so nothing is left behind")
 	assert.False(t, refExists(r.clone, "refs/heads/worktree/doomed"))
 	assert.False(t, refExists(r.clone, "refs/heads/feat/nowhere"))

@@ -43,11 +43,14 @@
  * Plus the write: setting a secret from Live makes zero daemon calls either.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
@@ -69,26 +72,17 @@ function daemonTripwire(method: string) {
   };
 }
 
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: daemonTripwire("getTopology"),
-    verifyEnv: daemonTripwire("verifyEnv"),
-    listSecrets: daemonTripwire("listSecrets"),
-    getEnvStatus: daemonTripwire("getEnvStatus"),
-    getEnvShape: daemonTripwire("getEnvShape"),
-    planPromote: daemonTripwire("planPromote"),
-    applyPromote: daemonTripwire("applyPromote"),
-    planDeploy: daemonTripwire("planDeploy"),
-    startDeploy: daemonTripwire("startDeploy"),
-    getDeployStatus: daemonTripwire("getDeployStatus"),
-  },
-}));
-
-// The generated daemon client itself, in case anything bypasses forge-grpc.
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  createForgeClient: daemonTripwire("createForgeClient"),
-}));
+/**
+ * EVERY ForgeService rpc, answered at the transport by a tripwire — the
+ * generated hooks and the generated client both read it there, so nothing can
+ * bypass this. Built from the service descriptor, so an rpc added later is
+ * wired too.
+ */
+function forgeServiceTripwires(): MockHandlers {
+  return Object.fromEntries(
+    ForgeService.methods.map((method) => [`ForgeService.${method.name}`, daemonTripwire(method.localName)])
+  );
+}
 
 const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
@@ -151,7 +145,7 @@ function liveEnv(overrides: Partial<LiveEnv>): LiveEnv {
     name: "x",
     project: "hounders",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "",
     releaseProvenance: null,
@@ -182,13 +176,7 @@ const PROD: LiveEnv = liveEnv({
   drift: { state: "in_sync", observedAt: "2026-10-01T10:04:00.000Z" },
   driftDetail: "",
   provenance: "v12 · images main@abc1234 · config feat-x@def5678, unmerged, dirty",
-  declaredShape: {
-    kind: "persistent",
-    workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
-    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: [],
-  },
+  declared: true,
 });
 
 /** Declared from a Preview render, nothing promoted. Secrets must be settable. */
@@ -199,13 +187,7 @@ const STAGING: LiveEnv = liveEnv({
   release: "",
   declaredAt: "2026-10-02T09:00:00.000Z",
   provenance: "feat-x@def5678, unmerged",
-  declaredShape: {
-    kind: "self_managed",
-    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
-    secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: ["prod-gke"],
-  },
+  declared: true,
 });
 
 /**
@@ -224,13 +206,31 @@ const CONVERGENCES: LiveConvergence[] = [
   },
 ];
 
-const getLiveView = vi.fn(() => Promise.resolve([PROD, STAGING]));
+const getLiveView = vi.fn((_project: string) => Promise.resolve([PROD, STAGING]));
 const listEnvironmentConvergences = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? CONVERGENCES : [])
 );
+/** Each env's declared shape: a control-plane read of its own (GetEnvironmentShape). */
+const SHAPES: Record<string, unknown> = {
+  "cp-prod": {
+    kind: "persistent",
+    workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declaredBy: ["api"] }],
+    domains: [],
+    clusters: [],
+  },
+  "cp-staging": {
+    kind: "self_managed",
+    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
+    secrets: [{ name: "DATABASE_URL", provider: "hosted", declaredBy: ["api"] }],
+    domains: [],
+    clusters: ["prod-gke"],
+  },
+};
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: (project: string) => getLiveView(project),
+  getEnvironmentShape: (id: string) => Promise.resolve(SHAPES[id] ?? null),
   listEnvironmentConvergences: (id: string) => listEnvironmentConvergences(id),
 }));
 
@@ -262,7 +262,7 @@ const PROMOTIONS: CloudPromotion[] = [
   },
 ];
 
-const getEnvironmentStatus = vi.fn(() => Promise.resolve(STATUS));
+const getEnvironmentStatus = vi.fn((_id: string) => Promise.resolve(STATUS));
 const listEnvironmentPromotions = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? PROMOTIONS : [])
 );
@@ -274,14 +274,17 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 
 // The managed store IS the control plane, so the secrets half of Live is a
 // control-plane read too.
-const listSecrets = vi.fn(() =>
-  Promise.resolve([{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] }])
+const listSecrets = vi.fn((_environmentId: string) =>
+  Promise.resolve({
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] as unknown[] }],
+    protected: false,
+  })
 );
-const setSecret = vi.fn(() => Promise.resolve({ version: 4 }));
+const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 4 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (...args: unknown[]) => listSecrets(...(args as [])),
-  setSecret: (...args: unknown[]) => setSecret(...(args as [])),
+  listSecrets: (environmentId: string) => listSecrets(environmentId),
+  setSecret: (input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 
@@ -313,6 +316,10 @@ vi.mock("@/services/forge/domains", async (importOriginal) => ({
     ]),
 }));
 
+// The Identity tab's own reads (its users, the org's plan) are its tests'
+// business; here it stands in for "the other tab" in the routing tests.
+vi.mock("../IdentityTab", () => ({ IdentityTab: () => <div data-testid="identity-tab" /> }));
+
 import { ForgeEnvPage } from "../ForgeEnvPage";
 import { EnvironmentsPage } from "../../Overview/EnvironmentsPage";
 import { ForgeConsoleContext, type ForgeConsole } from "../../Console/consoleContext";
@@ -332,8 +339,11 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
   daemonCalls.length = 0;
+  setTransport(mockTransport(forgeServiceTripwires()));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";
@@ -394,54 +404,6 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(daemonCalls).toEqual([]);
   });
 
-  it("renders the Releases tab — releases only, no observations — with zero daemon calls", async () => {
-    routeState.env = "prod";
-    routeState.tab = "releases";
-    renderWithQuery(<ForgeEnvPage />);
-
-    const releases = await screen.findByTestId("live-releases");
-    expect(within(releases).getByTestId("promotion-promo-1")).toBeInTheDocument();
-    // Convergence activity is the Activity tab's, never interleaved here.
-    expect(within(releases).queryByTestId("convergence-conv-1")).not.toBeInTheDocument();
-    expect(releases.querySelector('[data-entry="observation"]')).toBeNull();
-    expectNoBannerOrError();
-    expect(daemonCalls).toEqual([]);
-  });
-
-  it("renders the Activity tab — promotions and observations interleaved — with zero daemon calls", async () => {
-    routeState.env = "prod";
-    routeState.tab = "activity";
-    renderWithQuery(<ForgeEnvPage />);
-
-    const activity = await screen.findByTestId("live-activity");
-    expect(within(activity).getByTestId("activity-promotion-promo-1")).toBeInTheDocument();
-    expect(within(activity).getByTestId("convergence-conv-1")).toHaveTextContent(/confirmed running/i);
-    expect(screen.queryByTestId("live-releases")).not.toBeInTheDocument();
-    expectNoBannerOrError();
-    expect(daemonCalls).toEqual([]);
-  });
-
-  it("renders the Domains tab with the domains bound to this env only, with zero daemon calls", async () => {
-    routeState.env = "prod";
-    routeState.tab = "domains";
-    renderWithQuery(<ForgeEnvPage />);
-
-    await screen.findByTestId("env-domain-hounders.club");
-    expect(screen.queryByTestId("env-domain-staging.hounders.club")).not.toBeInTheDocument();
-    expect(daemonCalls).toEqual([]);
-  });
-
-  it("renders the Secrets tab from the managed store with zero daemon calls", async () => {
-    routeState.env = "prod";
-    routeState.tab = "secrets";
-    renderWithQuery(<ForgeEnvPage />);
-
-    // From the managed store joined with the DECLARED shape.
-    await screen.findByText("STRIPE_WEBHOOK_SECRET");
-    expectNoBannerOrError();
-    expect(daemonCalls).toEqual([]);
-  });
-
   it("renders a self_managed env that is declared and not built", async () => {
     routeState.env = "staging";
     renderWithQuery(<ForgeEnvPage />);
@@ -463,14 +425,6 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(daemonCalls).toEqual([]);
   });
 
-  it("lists a declared-not-built env's secrets on Secrets even though none was ever set", async () => {
-    routeState.env = "staging";
-    routeState.tab = "secrets";
-    renderWithQuery(<ForgeEnvPage />);
-    await screen.findByText("DATABASE_URL");
-    expect(daemonCalls).toEqual([]);
-  });
-
   it("renders an env Reliant has no record of as 'not registered', even when the daemon throws", async () => {
     routeState.env = "fresh";
     renderWithQuery(<ForgeEnvPage />);
@@ -486,27 +440,6 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(daemonCalls.every((call) => call === "getTopology" || call === "getEnvStatus")).toBe(true);
   });
 
-  it("sets a secret from the Secrets tab with zero daemon calls", async () => {
-    routeState.env = "prod";
-    routeState.tab = "secrets";
-    const user = userEvent.setup();
-    renderWithQuery(<ForgeEnvPage />);
-
-    await screen.findByText("STRIPE_WEBHOOK_SECRET");
-    await user.click(screen.getByTestId("add-secret"));
-
-    await user.type(await screen.findByLabelText("Name"), "NEW_SECRET");
-    await user.type(screen.getByLabelText("Value"), "s3cret");
-    await user.click(screen.getByTestId("set-secret-submit"));
-
-    await waitFor(() => expect(setSecret).toHaveBeenCalled());
-    // The write went straight to the control plane with the user's session.
-    expect(setSecret.mock.calls[0]?.[0]).toMatchObject({
-      environmentId: "cp-prod",
-      name: "NEW_SECRET",
-    });
-    expect(daemonCalls).toEqual([]);
-  });
 });
 
 /**
@@ -514,11 +447,11 @@ describe("the Live tab makes zero daemon calls", () => {
  * the checkout's topology, which feeds the separately labelled "not
  * registered" list — and the table must render in full when that throws.
  */
-describe("the Environments table needs no daemon", () => {
+describe("the Environments list needs no daemon", () => {
   it("lists every environment from the control plane, fully rendered", async () => {
     renderWithQuery(<WithRoster><EnvironmentsPage /></WithRoster>);
 
-    await screen.findByTestId("forge-env-table");
+    await screen.findByTestId("forge-env-list");
 
     const prod = screen.getByTestId("env-row-prod");
     expect(within(prod).getByText("v12")).toBeInTheDocument();
@@ -542,7 +475,8 @@ describe("the Environments table needs no daemon", () => {
 
     const empty = await screen.findByTestId("forge-environments-empty", {}, { timeout: 5000 });
     expect(empty).toHaveTextContent(/no environments recorded yet/i);
-    expect(empty).toHaveTextContent("forge env build");
+    expect(empty).toHaveTextContent("forge env deploy <env>");
+    expect(empty).toHaveTextContent("Environments lists where this project runs");
 
     expectNoBannerOrError();
     expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);
@@ -563,12 +497,24 @@ describe("tab routing", () => {
     expect(screen.getByTestId("env-tab-overview")).toHaveAttribute("aria-selected", "true");
   });
 
-  it.each(["releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
+  // Releases, Activity, Secrets and Domains were tabs here: a second copy of
+  // each project page per environment. A link to one lands on that page.
+  it.each(["releases", "activity", "secrets", "domains"])("sends a retired %s tab link to the project's page, scoped", async (tab) => {
     routeState.env = "prod";
     routeState.tab = tab;
     renderWithQuery(<ForgeEnvPage />);
-    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", tab));
-    expect(screen.getByTestId(`env-tab-${tab}`)).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ href: `/forge/p/hounders/${tab}`, replace: true }));
+    expect(screen.queryByTestId(`env-tab-${tab}`)).toBeNull();
+  });
+
+  it("links to the project pages that hold the rest of the environment", async () => {
+    routeState.env = "prod";
+    renderWithQuery(<ForgeEnvPage />);
+    await screen.findByTestId("live-section");
+    const links = screen.getByTestId("env-scoped-pages");
+    for (const page of ["releases", "secrets", "domains", "activity"]) {
+      expect(within(links).getByTestId(`env-scoped-${page}`)).toHaveAttribute("href", `/forge/p/hounders/${page}`);
+    }
   });
 
   it("writes the clicked tab to the URL as a history entry, and the default as no param", async () => {
@@ -577,20 +523,20 @@ describe("tab routing", () => {
     renderWithQuery(<ForgeEnvPage />);
     await screen.findByTestId("live-section");
 
-    await user.click(screen.getByTestId("env-tab-activity"));
+    await user.click(screen.getByTestId("env-tab-identity"));
     const call = navigate.mock.calls.at(-1)?.[0] as {
       search: (prev: Record<string, unknown>) => Record<string, unknown>;
       replace?: boolean;
     };
     expect(call.replace).toBeFalsy();
-    expect(call.search({ project: "proj-1" })).toEqual({ project: "proj-1", tab: "activity" });
-    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "activity");
+    expect(call.search({ project: "proj-1" })).toEqual({ project: "proj-1", tab: "identity" });
+    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "identity");
 
     await user.click(screen.getByTestId("env-tab-overview"));
     const back = navigate.mock.calls.at(-1)?.[0] as {
       search: (prev: Record<string, unknown>) => Record<string, unknown>;
     };
-    expect(back.search({ project: "proj-1", tab: "activity" })).toEqual({ project: "proj-1", tab: undefined });
+    expect(back.search({ project: "proj-1", tab: "identity" })).toEqual({ project: "proj-1", tab: undefined });
   });
 
   it("lands a retired Observability link on Overview", async () => {
@@ -607,22 +553,22 @@ describe("tab routing", () => {
     const { rerender } = renderWithQuery(<ForgeEnvPage />);
     await screen.findByTestId("live-section");
 
-    await user.click(screen.getByTestId("env-tab-releases"));
-    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "releases");
+    await user.click(screen.getByTestId("env-tab-identity"));
+    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "identity");
 
-    // The router lands the click, then Back moves the URL to Secrets' entry.
-    routeState.tab = "secrets";
+    // Back/Forward moves the URL to an entry that names Overview explicitly.
+    routeState.tab = "overview";
     rerender(
       <QueryClientProvider client={new QueryClient()}>
         <ForgeEnvPage />
       </QueryClientProvider>
     );
-    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "secrets"));
+    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "overview"));
   });
 
   it("shows one status line in the header, on every tab", async () => {
     routeState.env = "prod";
-    routeState.tab = "secrets";
+    routeState.tab = "identity";
     renderWithQuery(<ForgeEnvPage />);
     const status = await screen.findByTestId("env-page-status");
     expect(status).toHaveTextContent(/^Running · confirmed/);
@@ -672,7 +618,7 @@ describe("a queued deploy", () => {
       expect.objectContaining({
         to: "/settings/$section",
         params: { section: "billing" },
-        search: expect.objectContaining({ tab: "plans", from: "forge", returnTo: expect.stringMatching(/^\//) }),
+        search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
       })
     );
     expect(daemonCalls).toEqual([]);

@@ -67,8 +67,9 @@ import (
 // hijack left behind), so a refusal writes nothing.
 func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.DaemonAttachment) (bool, error) {
 	res, err := db.Bun().NewRaw(`
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6)
+		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity,
+			build_version, build_commit, build_commit_time_unix, build_forge_version)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 		ON CONFLICT (daemon_id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			source = EXCLUDED.source,
@@ -76,6 +77,10 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 			pod_port = EXCLUDED.pod_port,
 			attached_at = EXCLUDED.attached_at,
 			last_stream_activity = EXCLUDED.last_stream_activity,
+			build_version = EXCLUDED.build_version,
+			build_commit = EXCLUDED.build_commit,
+			build_commit_time_unix = EXCLUDED.build_commit_time_unix,
+			build_forge_version = EXCLUDED.build_forge_version,
 			memory_used_bytes = 0,
 			memory_limit_bytes = 0,
 			memory_pressure = FALSE,
@@ -83,6 +88,7 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
 		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)`,
 		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
+		att.Build.Version, att.Build.Commit, att.Build.CommitTimeUnix, att.Build.ForgeVersion,
 	).Exec(ctx)
 	return rowsWritten(res, err)
 }
@@ -93,11 +99,14 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 // later value), the insert is fenced on the daemons row still being the
 // user's, and another user's lease is never touched; either refusal is
 // created == false with no error. xmax = 0 holds only for a row this
-// statement inserted. Bound ($N): it runs on every heartbeat.
+// statement inserted. The build is written only by that insert: it is
+// constant for a session, and a renewal that finds the row leaves it alone.
+// Bound ($N): it runs on every heartbeat.
 func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.DaemonAttachment) (created bool, err error) {
 	err = db.QueryRow(ctx, `
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		SELECT $1, $2, $3, $4, $5, $6, $7
+		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity,
+			build_version, build_commit, build_commit_time_unix, build_forge_version)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		WHERE EXISTS (SELECT 1 FROM daemons d WHERE d.id = $1 AND d.user_id = $2)
 		ON CONFLICT (daemon_id) DO UPDATE SET
 			last_stream_activity = GREATEST(daemon_attachment.last_stream_activity, EXCLUDED.last_stream_activity),
@@ -105,6 +114,7 @@ func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemon
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
 		RETURNING (xmax = 0)`,
 		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
+		att.Build.Version, att.Build.Commit, att.Build.CommitTimeUnix, att.Build.ForgeVersion,
 	).Scan(&created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -265,13 +275,14 @@ func listDaemonAttachments(ctx context.Context, db orm.Context, filter func(*bun
 			podPort = &v
 		}
 		out[i] = daemonAttachmentToCore(row.DaemonID, row.UserID, row.Source, row.PodIP, podPort,
-			row.AttachedAt, row.LastStreamActivity, row.MemoryUsedBytes, row.MemoryLimitBytes, row.MemoryPressure, detected)
+			row.AttachedAt, row.LastStreamActivity, row.MemoryUsedBytes, row.MemoryLimitBytes, row.MemoryPressure, detected,
+			core.DaemonBuild{Version: row.BuildVersion, Commit: row.BuildCommit, CommitTimeUnix: row.BuildCommitTimeUnix, ForgeVersion: row.BuildForgeVersion})
 	}
 	return out, nil
 }
 
 // daemonAttachmentColumns is the column list scanDaemonAttachments reads, in order.
-const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports`
+const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version`
 
 func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 	defer rows.Close()
@@ -284,8 +295,10 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			attachedAt, lastActivity           time.Time
 			used, limit                        int64
 			pressure                           bool
+			build                              core.DaemonBuild
 		)
-		if err := rows.Scan(&daemonID, &userID, &source, &podIP, &podPort, &attachedAt, &lastActivity, &used, &limit, &pressure, &detected); err != nil {
+		if err := rows.Scan(&daemonID, &userID, &source, &podIP, &podPort, &attachedAt, &lastActivity, &used, &limit, &pressure, &detected,
+			&build.Version, &build.Commit, &build.CommitTimeUnix, &build.ForgeVersion); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		var ip *string
@@ -298,7 +311,7 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			port = &v
 		}
 		out = append(out, daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
-			attachedAt, lastActivity, used, limit, pressure, detected))
+			attachedAt, lastActivity, used, limit, pressure, detected, build))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating attachments: %w", err)
@@ -309,11 +322,12 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 // daemonAttachmentToCore builds the lease record. detected_ports is JSON; a decode
 // failure degrades to "no ports" rather than failing the liveness read.
 func daemonAttachmentToCore(daemonID, userID string, source core.DaemonAttachmentSource, podIP *string, podPort *int,
-	attachedAt, lastActivity time.Time, used, limit int64, pressure bool, detected string) *core.DaemonAttachment {
+	attachedAt, lastActivity time.Time, used, limit int64, pressure bool, detected string, build core.DaemonBuild) *core.DaemonAttachment {
 	att := &core.DaemonAttachment{
 		DaemonID: daemonID, UserID: userID, Source: source, PodIP: podIP, PodPort: podPort,
 		AttachedAt: attachedAt, LastStreamActivity: lastActivity,
 		MemoryUsedBytes: used, MemoryLimitBytes: limit, MemoryPressure: pressure,
+		Build: build,
 	}
 	if detected != "" && detected != "[]" {
 		_ = json.Unmarshal([]byte(detected), &att.DetectedPorts)

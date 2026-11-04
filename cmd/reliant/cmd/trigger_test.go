@@ -197,7 +197,7 @@ func TestTriggerCommandTreeIsRegistered(t *testing.T) {
 		names = append(names, sub.Name())
 	}
 	for _, want := range []string{
-		"create", "list", "get", "update", "enable", "disable", "delete", "fire", "events",
+		"create", "list", "get", "update", "enable", "disable", "delete", "fire", "events", "activate", "deactivate",
 	} {
 		assert.Contains(t, names, want)
 	}
@@ -261,13 +261,13 @@ func TestResolveTriggerDaemon(t *testing.T) {
 func TestTriggerCommandsThatEnableRefuseFromAnAgentShell(t *testing.T) {
 	t.Setenv(daemonpolicy.AgentShellEnv, "1")
 
-	for _, cmd := range []*cobra.Command{newTriggerCreateCmd(), newTriggerUpdateCmd(), newTriggerEnableCmd()} {
+	for _, cmd := range []*cobra.Command{newTriggerCreateCmd(), newTriggerUpdateCmd(), newTriggerEnableCmd(), newTriggerActivateCmd()} {
 		require.NotNil(t, cmd.PreRunE, cmd.Name())
 		err := cmd.PreRunE(cmd, nil)
 		require.ErrorIs(t, err, errAgentCannotEnable, cmd.Name())
 		assert.Contains(t, err.Error(), "turn it on in the app")
 	}
-	for _, cmd := range []*cobra.Command{newTriggerDisableCmd(), newTriggerListCmd(), newTriggerGetCmd(), newTriggerDeleteCmd()} {
+	for _, cmd := range []*cobra.Command{newTriggerDisableCmd(), newTriggerListCmd(), newTriggerGetCmd(), newTriggerDeleteCmd(), newTriggerDeactivateCmd()} {
 		assert.Nil(t, cmd.PreRunE, "%s stays available to an agent", cmd.Name())
 	}
 

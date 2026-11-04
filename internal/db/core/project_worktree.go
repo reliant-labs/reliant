@@ -74,6 +74,13 @@ type ProjectDaemon struct {
 	// InstallRequestID ties the row to a queued daemon command, so the
 	// outcome notification — which carries no project id — can find it.
 	InstallRequestID string `json:"install_request_id,omitempty"`
+	// CloneStartedAt is when an installing clone could first run: when it
+	// was queued, if its machine was connected then, else the machine's next
+	// connect. Nil while it waits for a machine that has not connected since.
+	// The connect reconcile's stuck-clone timeout counts from here, never
+	// from ClonedAt (the queue time): a clone queued to a sleeping machine
+	// only starts when the machine wakes.
+	CloneStartedAt *time.Time `json:"clone_started_at,omitempty"`
 }
 
 // ProjectInstallState is how far a project's checkout has got on one daemon.
@@ -141,6 +148,40 @@ type CleanupMetadata struct {
 	// every pass.
 	StrippedPaths []string `json:"stripped_paths,omitempty"`
 	StrippedBytes int64    `json:"stripped_bytes,omitempty"`
+	// LandedAt is when the daemon first reported a live worktree's work
+	// landed (merged into its base branch, nothing else in it); cleared when
+	// a later check finds new work. ArchivedBecause says why the sweep
+	// archived a row on the user's behalf ("landed"); empty for an archive
+	// the user made.
+	LandedAt        *time.Time `json:"landed_at,omitempty"`
+	ArchivedBecause string     `json:"archived_because,omitempty"`
+	// AbsentOn names the machines that, asked about an archived row with no
+	// machine on record, answered that they do not have its folder. Once
+	// every connected machine is on it the row may be forgotten
+	// (worktreesweep.Forget). Cleared when a machine claims the row.
+	AbsentOn []string `json:"absent_on,omitempty"`
+	// Forgotten says the user dropped the record of the folder of a row no
+	// machine was on record for and none connected had: DirectoryDeleted is
+	// set so nothing tracks it any more, but nothing was deleted.
+	Forgotten bool `json:"forgotten,omitempty"`
+}
+
+// ArchivedBecauseLanded marks a worktree the sweep archived because its work
+// had landed and its chats had gone quiet. Its chats stay live; the first
+// tool batch one of them runs brings the worktree back.
+const ArchivedBecauseLanded = "landed"
+
+// ArchivedBecauseRecoverableIdle is automatic retirement of a complete clean
+// pushed/merged workspace, not deletion of generated files beside unique work.
+const ArchivedBecauseRecoverableIdle = "recoverable-idle"
+
+// WorktreeRunActivity is what the chats working in a worktree say about it:
+// whether any run is going (pending, active, or paused awaiting a resume) and
+// when anything last happened in it. A chat works in a worktree when it is
+// bound to it, or one of its threads is.
+type WorktreeRunActivity struct {
+	Running    bool
+	LastActive time.Time
 }
 
 // CleaningNow reports whether a clean-up is genuinely running: flagged, and its
@@ -227,6 +268,10 @@ type Worktree struct {
 	// — set only with a FAILED status, and only for a reason that is the
 	// user's to fix (internal/workspacecreate). Empty otherwise.
 	FailureReason string
+	// ActivityGeneration changes on every admitted server activity. Finalizing
+	// rejects new admissions until the exact journal is reconciled/cancelled.
+	ActivityGeneration   int64
+	RecoveryFinalizingID *string
 }
 
 // Repo is a git repository nested inside a project.

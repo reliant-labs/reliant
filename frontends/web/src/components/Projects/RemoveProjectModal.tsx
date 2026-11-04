@@ -1,5 +1,5 @@
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { collapseHomePath } from "../../lib/pathUtils";
 import type { Project } from "../../store/projectStore";
 
@@ -28,12 +28,12 @@ export function RemoveProjectModal({
   if (!project) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Remove ${project.name}?`} size="sm">
+    <Modal open={isOpen} onClose={onClose} title={`Remove ${project.name}?`} size="sm">
       <div className="flex flex-col gap-4">
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
           {/* Accurate to the schema: project_configs, plans and triggers
               cascade on project delete; nothing touches the filesystem. */}
-          Reliant forgets this project, along with its project settings and automations.{" "}
+          Reliant removes this project, along with its project settings and automations.{" "}
           <span className="font-medium text-foreground">Nothing on disk is deleted</span> — your
           files and git history stay where they are, and you can add the folder back at any time.
         </p>
@@ -50,7 +50,7 @@ export function RemoveProjectModal({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="md"
             onClick={onConfirm}
             loading={isRemoving}

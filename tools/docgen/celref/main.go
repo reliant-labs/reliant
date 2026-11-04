@@ -12,7 +12,7 @@
 // This tool validates that the CEL reference data is correctly populated.
 //
 // Usage: go run ./tools/docgen/celref
-// Regenerate with: make generate-celref
+// Regenerate with: task generate:docs:cel-reference
 
 package main
 

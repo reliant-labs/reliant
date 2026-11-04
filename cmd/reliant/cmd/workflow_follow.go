@@ -180,15 +180,12 @@ func (s *chatUpdateSource) Root(ctx context.Context) (execfollow.RootState, erro
 		return execfollow.RootState{}, err
 	}
 
-	root := resp.Msg.GetRootWorkflow()
-	if root == nil {
-		if all := resp.Msg.GetAllRootWorkflows(); len(all) > 0 {
-			root = all[0]
-		}
-	}
-	if root == nil {
+	roots := resp.Msg.GetAllRootWorkflows()
+	if len(roots) == 0 {
 		return execfollow.RootState{}, nil
 	}
+	root := roots[0] // newest first
+
 	return execfollow.RootState{
 		Found:  true,
 		Status: chatWorkflowStatusString(root),

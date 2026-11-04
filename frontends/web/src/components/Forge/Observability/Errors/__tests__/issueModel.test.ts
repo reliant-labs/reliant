@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 
-import { conflictSummary, frameText, ignoreChange, resolveChange, triageActionsOf } from "../issueModel";
+import { conflictSummary, frameText, ignoreChange, issueAskSubject, resolveChange, triageActionsOf } from "../issueModel";
 
 describe("triage rules", () => {
   it("offers resolve and ignore on an open issue, reopen on a closed one", () => {
@@ -37,5 +37,43 @@ describe("triage rules", () => {
     expect(frameText({ function: "render", file: "a.tsx", line: 4, column: 2 })).toBe("render in a.tsx:4:2");
     expect(frameText({ function: "", file: "bundle.js", line: 1, column: 0 })).toBe("bundle.js:1");
     expect(frameText({ function: "", file: "", line: 0, column: 0 })).toBe("(unknown frame)");
+  });
+});
+
+describe("a conflict on the assignee", () => {
+  const read = { status: "unresolved", resolvedVersion: "", assignee: null } as unknown as Issue;
+  it("says who it is assigned to now", () => {
+    expect(conflictSummary(read, { ...read, assignee: { id: "u3", name: "alan" } })).toBe("It is assigned to alan now, not unassigned.");
+    const assigned = { ...read, assignee: { id: "u1", name: "ada" } } as Issue;
+    expect(conflictSummary(assigned, { ...assigned, assignee: null })).toBe("It is unassigned now, not assigned to ada.");
+  });
+});
+
+describe("what a chat about an issue is handed", () => {
+  const issue = {
+    id: "ISS-7f3a",
+    envName: "prod",
+    title: "panic: nil pointer dereference",
+    culprit: "handler in /srv/app/handler.go",
+    firstVersion: "abc123",
+    firstRelease: "v1.8.1",
+    lastVersion: "v1.8.3",
+  } as Issue;
+
+  it("is references: the id, environment and releases from a row; the latest trace and the ledger's release from the detail", () => {
+    expect(issueAskSubject(issue)).toEqual({ kind: "issue", issueId: "ISS-7f3a", env: "prod", latestTraceId: undefined, firstVersion: "v1.8.1", lastVersion: "v1.8.3" });
+    const detail = { latestEvent: { traceId: "0af7651916cd43dd8448eb211c80319c" }, firstRelease: { version: "v1.8.0" } } as unknown as Parameters<typeof issueAskSubject>[1];
+    expect(issueAskSubject(issue, detail)).toMatchObject({ latestTraceId: "0af7651916cd43dd8448eb211c80319c", firstVersion: "v1.8.0" });
+  });
+
+  it("never carries the title or culprit, which are telemetry", () => {
+    const text = JSON.stringify(issueAskSubject(issue));
+    expect(text).not.toContain("nil pointer");
+    expect(text).not.toContain("handler.go");
+  });
+
+  it("has no environment rather than an empty one", () => {
+    expect(issueAskSubject({ ...issue, envName: "", lastVersion: "", firstRelease: "", firstVersion: "" }).env).toBeNull();
+    expect(issueAskSubject({ ...issue, lastVersion: "", firstRelease: "", firstVersion: "" })).toMatchObject({ firstVersion: undefined, lastVersion: undefined });
   });
 });

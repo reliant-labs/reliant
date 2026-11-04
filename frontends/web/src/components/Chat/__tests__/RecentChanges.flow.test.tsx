@@ -21,14 +21,24 @@ const git = {
   revertFiles: vi.fn(),
 };
 
-vi.mock("../../../../src/api/worktree-grpc", () => ({
-  worktreeGrpc: {
-    getChanges: (...args: unknown[]) => getChangesMock(...args),
-  },
+
+vi.mock("../../../../src/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/project-queries")>()),
+  fetchProjectChanges: vi.fn(),
 }));
 
-vi.mock("../../../../src/api/project-grpc", () => ({
-  projectGrpc: { getChanges: vi.fn() },
+// The panel reads a workspace's changes through fetchWorktreeChanges (the
+// GetWorktreeChanges cache entry) and the multi-repo split through
+// useWorktreeRepoStatuses; with no repo rows it is the single-repo panel.
+vi.mock("../../../../src/hooks/worktree-git-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/worktree-git-queries")>()),
+  fetchWorktreeChanges: (...args: unknown[]) => getChangesMock(...args),
+  useWorktreeRepoStatuses: () => ({ data: undefined }),
+}));
+// The workspace row only supplies the PR's base branch; none here.
+vi.mock("../../../../src/hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/worktree-queries")>()),
+  useWorktreeById: () => undefined,
 }));
 
 vi.mock("../../../../src/api/git", () => ({
@@ -58,8 +68,8 @@ vi.mock("../../Git/GitNotInitialized", () => ({
   GitNotInitialized: () => <div>Git not initialized</div>,
 }));
 
-vi.mock("../../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 let worktreeSeq = 0;
@@ -98,8 +108,8 @@ describe("RecentChanges commit flow", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
+        is_forge: false,
         default_branch: "main",
-        worktree_count: 1,
         last_active: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

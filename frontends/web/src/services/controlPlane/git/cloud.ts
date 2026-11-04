@@ -25,6 +25,7 @@ import type {
   GitCredentialStatus,
   GitRepo,
   ListGitReposPage,
+  BuildOAuthURLArgs,
 } from "./types";
 
 // The wire enums are numeric; the app-side unions are strings so call sites
@@ -106,11 +107,13 @@ export async function saveCredential(
   provider: string,
   accessToken: string,
   scopes: string,
+  refreshToken = "",
 ): Promise<void> {
   await getControlPlaneClient(GitCredentialService).saveGitCredential({
     provider,
     accessToken,
     scopes,
+    refreshToken,
   });
 }
 
@@ -129,9 +132,20 @@ export async function listCredentials(
   return { accounts: [] };
 }
 
-export function getOAuthURL(): string | null {
+/**
+ * The control plane's GitHub authorize URL, or null when no control plane is
+ * configured. `loopback` is the desktop app's receiver: the control plane signs
+ * it into the state so the web callback page relays the code there instead of
+ * exchanging it.
+ */
+export function buildOAuthURL(args: BuildOAuthURLArgs): string | null {
   if (!CONTROL_PLANE_API_URL) return null;
-  return `${CONTROL_PLANE_API_URL}/auth/github/authorize`;
+  const params = new URLSearchParams({
+    token: args.token,
+    returnTo: args.returnTo,
+  });
+  if (args.loopback) params.set("loopback", args.loopback);
+  return `${CONTROL_PLANE_API_URL}/auth/github/authorize?${params.toString()}`;
 }
 
 export interface ExchangeGithubOAuthCodeResult {
@@ -139,6 +153,11 @@ export interface ExchangeGithubOAuthCodeResult {
   returnTo: string;
   /** Machine-readable error code when ok=false (empty on success). */
   error: string;
+  /** True when the user has authorized but the GitHub App is installed on no
+   *  account, so no repository will be visible until they install it. */
+  needsInstall: boolean;
+  /** Where to install the App; set whenever needsInstall is. */
+  installUrl: string;
 }
 
 /**
@@ -157,7 +176,13 @@ export async function exchangeGithubOAuthCode(
   const res = await getControlPlaneClient(
     GitCredentialService,
   ).exchangeGithubOAuthCode({ code, state });
-  return { ok: res.ok, returnTo: res.returnTo, error: res.error };
+  return {
+    ok: res.ok,
+    returnTo: res.returnTo,
+    error: res.error,
+    needsInstall: res.needsInstall,
+    installUrl: res.installUrl,
+  };
 }
 
 // The response reports that the clone was QUEUED, not that it finished:

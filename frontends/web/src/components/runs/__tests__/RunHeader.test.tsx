@@ -5,25 +5,24 @@
  * link to what started it), and the actions the run's state allows.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import type { Chat } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { RunHeader, type RunHeaderActions } from "../RunHeader";
-import { githubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { answerGithubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { setTransport } from "@/lib/connect";
 
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: [{ daemonId: "d-1", hostname: "laptop" }] }),
 }));
 
 // The catalog's trigger types name an integration event.
-vi.mock("@/api/catalog-search-grpc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/catalog-search-grpc")>()),
-  catalogSearchGrpc: { search: async () => githubTriggerTypes() },
-}));
+beforeEach(() => answerGithubTriggerTypes());
+afterEach(() => setTransport(null));
 
 function chat(overrides: Partial<Chat> = {}): Chat {
   return {
@@ -100,7 +99,7 @@ describe("RunHeader", () => {
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by an agent");
   });
 
-  it("a scheduled run links to its automation", async () => {
+  it("a scheduled run links to its trigger, on its workflow's page", async () => {
     renderRunsAt(
       <RunHeader
         chat={chat({ launchKind: "schedule", triggerId: "trig-1" })}
@@ -110,7 +109,7 @@ describe("RunHeader", () => {
       "/workflows/runs/chat-1",
     );
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by schedule Hourly sweep");
-    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-1");
   });
 
   // Every kind an automation fires names that automation and links to it, with
@@ -143,10 +142,10 @@ describe("RunHeader", () => {
     );
     const startedBy = await screen.findByTestId("run-started-by");
     await waitFor(() => expect(startedBy.textContent).toMatch(line));
-    expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/automations/trig-2");
+    expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-2");
   });
 
-  it("a Run now of a schedule says so and still links the automation", async () => {
+  it("a schedule fired by hand says so and still links the trigger", async () => {
     renderRunsAt(
       <RunHeader
         chat={chat({ launchKind: "schedule", triggerId: "trig-1" })}
@@ -156,8 +155,8 @@ describe("RunHeader", () => {
       />,
       "/workflows/runs/chat-1",
     );
-    expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by Run now on Hourly sweep");
-    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+    expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Fired by hand: Hourly sweep");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-1");
   });
 
   it("a webhook run whose automation is gone says what it can, unlinked", async () => {
@@ -190,6 +189,25 @@ describe("RunHeader", () => {
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(handlers.onStop).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  });
+
+  it("a run held for a usage-limit reset still offers Stop", async () => {
+    const user = userEvent.setup();
+    renderRunsAt(
+      <RunHeader
+        chat={chat({
+          workflowState: WorkflowState.ACTIVE,
+          workflowStopReason: WorkflowStopReason.UNSPECIFIED,
+          activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
+        })}
+        actions={handlers}
+      />,
+      "/workflows/runs/chat-1",
+    );
+    expect(await screen.findByText("Waiting for usage limit")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(handlers.onStop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Re-run" })).not.toBeInTheDocument();
   });
 
   it("a paused run offers Resume", async () => {

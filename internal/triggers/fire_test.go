@@ -222,10 +222,11 @@ func TestFireSkipIsIdempotentOnTheDedupeKey(t *testing.T) {
 
 func TestFireSkipsWhileThePreviousRunIsLive(t *testing.T) {
 	// Each of these is a reason not to start a second run: the previous one is
-	// still going to produce work. PENDING is deliberately absent: a pending
-	// root never started, so it is a stranded launch, not a running one (see
+	// still going to produce work. PENDING with no failed start is a start in
+	// flight — a fire that has just committed — and is just as live; only a
+	// PENDING root whose start is recorded as failed is stranded (see
 	// TestFireDoesNotTreatAStrandedPendingRunAsLive).
-	for _, status := range []core.WorkflowStatus{core.Active(), core.Paused()} {
+	for _, status := range []core.WorkflowStatus{core.Active(), core.Paused(), core.Pending()} {
 		t.Run(status.Label(), func(t *testing.T) {
 			repo := newFakeRepo()
 			trigger := testTrigger(t, nil)
@@ -293,6 +294,7 @@ func TestFireDoesNotTreatAStrandedPendingRunAsLive(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	prevChat := "chat-prev"
 	repo.statuses[prevChat] = core.Pending()
+	repo.startFailed[prevChat] = true
 	repo.events = append(repo.events, &core.TriggerEvent{
 		ID: uuid.NewString(), TriggerID: &trigger.ID, UserID: trigger.UserID,
 		Kind: core.TriggerEventKindSchedule, DedupeKey: "earlier-fire",
@@ -305,7 +307,12 @@ func TestFireDoesNotTreatAStrandedPendingRunAsLive(t *testing.T) {
 		t.Fatalf("Fire: %v", err)
 	}
 	if out.Outcome != string(core.TriggerEventLaunched) {
-		t.Fatalf("Outcome = %q, want launched: a never-started root must not block the next fire", out.Outcome)
+		t.Fatalf("Outcome = %q, want launched: a root whose start failed must not block the next fire", out.Outcome)
+	}
+	// The stranded fire is abandoned, so a late retry of it cannot start a
+	// run beside this one.
+	if got := repo.statuses[prevChat]; got != core.Failed() {
+		t.Errorf("stranded root = %s, want failed (abandoned by the fire that replaced it)", got.Label())
 	}
 }
 

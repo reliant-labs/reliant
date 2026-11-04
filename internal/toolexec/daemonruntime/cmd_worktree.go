@@ -18,9 +18,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/worktreeerr"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
@@ -54,6 +56,9 @@ func init() {
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
 	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
 	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
+	RegisterCommand("worktree.recovery_observe", handleWorktreeRecoveryObserve)
+	RegisterCommand("worktree.recovery_capture", handleWorktreeRecoveryCapture)
+	RegisterCommand("worktree.recovery_finalize", handleWorktreeRecoveryFinalize)
 }
 
 // =============================================================================
@@ -105,9 +110,11 @@ type worktreeCreateRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	// SubPath is the path component under the workspace dir for this repo's
 	// checkout. Empty means the workspace root itself (single-repo project).
-	SubPath    string `json:"sub_path,omitempty"`
-	BaseBranch string `json:"base_branch"`
-	Force      bool   `json:"force"`
+	SubPath      string `json:"sub_path,omitempty"`
+	BaseBranch   string `json:"base_branch"`
+	FetchBranch  string `json:"fetch_branch,omitempty"`
+	ExpectedHead string `json:"expected_head,omitempty"`
+	Force        bool   `json:"force"`
 	// WorktreeID is the id of the worktree row this checkout belongs to; it is
 	// written into the git lock reason. Empty skips locking.
 	WorktreeID string `json:"worktree_id,omitempty"`
@@ -179,6 +186,24 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
+	// Review-responder checkouts must refresh the exact target branch even
+	// when this clone already has a stale local or remote-tracking copy.
+	// A verified commit must never re-enter the branch-first resolver: a
+	// SHA-shaped local branch is a legal ref name and may point elsewhere.
+	var startPoint string
+	if req.FetchBranch != "" || req.ExpectedHead != "" {
+		if req.ReuseBranch {
+			return json.Marshal(worktreeCreateResponse{Error: "cannot reuse a branch with a verified fetched head"})
+		}
+		if err := refreshWorktreeHead(ctx, req.ProjectPath, req.FetchBranch, req.ExpectedHead); err != nil {
+			return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+		}
+		// The explicit object expression also defeats Git's DWIM lookup of
+		// a SHA-shaped branch when worktree add consumes this argument.
+		startPoint = req.ExpectedHead + "^{commit}"
+		req.BaseBranch = req.ExpectedHead
+	}
+
 	// Decide what the branch is made from BEFORE anything touches disk, so a
 	// base that cannot be found fails with nothing to roll back. Adopt mode
 	// checks out an existing local branch as it is and needs no base.
@@ -188,8 +213,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		localBranch.Dir = req.ProjectPath
 		reuseLocal = localBranch.Run() == nil
 	}
-	var startPoint string
-	if !reuseLocal {
+	if !reuseLocal && startPoint == "" {
 		var found bool
 		if startPoint, found = resolveWorktreeStartPoint(ctx, req.ProjectPath, req.BaseBranch); !found {
 			// Diagnosed as a refused `git worktree add` would be: a base the
@@ -300,6 +324,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			ErrorCode:   code,
 			ErrorDetail: detail,
 		})
+	}
+
+	if req.ExpectedHead != "" {
+		// Verify the postcondition on the actual checkout as well as the
+		// immutable starting argument; never report a wrong-head success.
+		head := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
+		head.Dir = worktreePath
+		out, err := head.Output()
+		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
+			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+		}
 	}
 
 	// Mark the checkout reliant-owned. forge's storage reaper skips locked
@@ -709,6 +744,7 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 
 	// Check if git worktree path exists and remove it
 	if _, err := os.Stat(req.WorktreePath); err == nil {
+		stopProcessesInRemovedWorkspace(req.WorktreePath)
 		worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 		removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 		removeCmd.Dir = req.ProjectPath
@@ -752,6 +788,7 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	stopProcessesInRemovedWorkspace(req.WorktreePath)
 	worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 	removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 	removeCmd.Dir = req.ProjectPath
@@ -791,10 +828,20 @@ func handleWorktreeRemoveWorkspaceDir(_ context.Context, payload []byte) ([]byte
 		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: "workspace_path is required"})
 	}
 
+	stopProcessesInRemovedWorkspace(req.WorkspacePath)
 	if err := os.RemoveAll(req.WorkspacePath); err != nil {
 		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: err.Error()})
 	}
 	return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: true})
+}
+
+// stopProcessesInRemovedWorkspace stops the background processes running in
+// a workspace directory about to be removed: a dev server left in an archived
+// workspace would otherwise run on, in a directory that no longer exists.
+func stopProcessesInRemovedWorkspace(dir string) {
+	if n := shell.GetBackgroundManager().StopProcessesUnder(dir, "its workspace "+dir+" was removed"); n > 0 {
+		logging.Info(logPrefix+" Stopped background processes of a removed workspace", "dir", dir, "count", n)
+	}
 }
 
 // =============================================================================
@@ -2618,6 +2665,9 @@ func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
 	r := worktreeReclaimers[root]
 	if r == nil {
 		r = worktreereclaim.NewReclaimer(root)
+		r.Acquire = func(ctx context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
+			return AcquireWorktreeRecovery(ctx, paths)
+		}
 		r.OnRepair = logRepairReport
 		worktreeReclaimers[root] = r
 		// Checkouts parked by a clean-up that a crash interrupted go back to
@@ -2701,4 +2751,85 @@ func handleWorktreeReclaim(ctx context.Context, payload []byte, op func(*worktre
 		return nil, fmt.Errorf("worktree root unavailable: %w", err)
 	}
 	return json.Marshal(op(r, ctx, req))
+}
+
+func observeRecoveryWorkspace(ctx context.Context, r *worktreereclaim.Reclaimer, req worktreereclaim.RecoveryRequest) (worktreereclaim.RecoveryActivity, error) {
+	if _, err := uuid.Parse(req.Worktree.ID); err != nil {
+		return worktreereclaim.RecoveryActivity{}, errors.New("invalid worktree identity")
+	}
+	rel, err := filepath.Rel(r.Root, req.Worktree.Path)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, ".reclaim"+string(filepath.Separator)) {
+		return worktreereclaim.RecoveryActivity{}, errors.New("invalid observation path")
+	}
+	var paths []string
+	for _, checkout := range req.Worktree.Checkouts {
+		rel := filepath.FromSlash(checkout.Rel)
+		if rel != "" && (filepath.IsAbs(rel) || filepath.Clean(rel) != rel || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+			return worktreereclaim.RecoveryActivity{}, errors.New("invalid observation checkout")
+		}
+		paths = append(paths, filepath.Join(req.Worktree.Path, rel))
+	}
+	if len(paths) == 0 {
+		return worktreereclaim.RecoveryActivity{}, errors.New("observation checkouts required")
+	}
+	return ObserveWorktreeRecoveries(ctx, paths)
+}
+
+func handleWorktreeRecoveryObserve(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreereclaim.RecoveryRequest
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	activity, err := observeRecoveryWorkspace(ctx, r, req)
+	response := worktreereclaim.RecoveryResponse{Outcome: worktreereclaim.OutcomeHeld, Reason: worktreereclaim.ReasonObservationGap, Activity: activity}
+	if err == nil && worktreereclaim.RecoveryIdleEligible(activity, time.Now()) {
+		response.Outcome = worktreereclaim.OutcomeVerified
+		response.Reason = ""
+	}
+	return json.Marshal(response)
+}
+
+func handleWorktreeRecoveryCapture(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreereclaim.RecoveryRequest
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(r.CaptureRecoveryWorkspace(ctx, req))
+}
+
+func handleWorktreeRecoveryFinalize(ctx context.Context, payload []byte) ([]byte, error) {
+	var req struct {
+		worktreereclaim.RecoveryRequest
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	token := req.Token
+	req.Token = ""
+	result := r.FinalizeRecovery(ctx, req.RecoveryRequest, worktreereclaim.RecoveryFinalizeDeps{
+		Verify: func(ctx context.Context, c worktreereclaim.RecoveryCapture) (worktreereclaim.RecoveryReceipt, error) {
+			return VerifyGitRecovery(ctx, c, token)
+		},
+		Observe: func(ctx context.Context, _ string) (worktreereclaim.RecoveryActivity, error) {
+			return observeRecoveryWorkspace(ctx, r, req.RecoveryRequest)
+		},
+		Acquire: func(ctx context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
+			return AcquireWorktreeRecovery(ctx, paths)
+		},
+		CheckProcessUse: worktreereclaim.CheckProcessUse,
+	})
+	return json.Marshal(result)
 }

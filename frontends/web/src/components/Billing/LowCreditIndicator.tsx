@@ -36,7 +36,7 @@
 import { Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { lowCreditLabel } from "./lowCredit";
@@ -59,7 +59,7 @@ export function LowCreditIndicator({ className }: { className?: string }) {
           ? "Your balance is empty — add credit to keep working"
           : `${label} — click to add credit`
       }
-      placement="bottom"
+      side="bottom"
       delay={300}
     >
       <button

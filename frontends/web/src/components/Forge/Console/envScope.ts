@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE ENVIRONMENT SCOPE (decision D1): environment is a filter in the top
+ * THE ENVIRONMENT SCOPE: environment is a filter in the top
  * bar, on every page, not a place.
  *
  *   - It is `?env=<name>` or `?env=all`, the one scope param every list page
@@ -20,6 +20,8 @@
 import type { RosterEnv } from "@/services/forge/roster";
 
 export const ENV_ALL = "all";
+/** What the scope control says on a dashboard whose signals belong to no environment. */
+export const PLATFORM_SCOPE_LABEL = "platform-wide (not per environment)";
 export const DEFAULT_ENV = "prod";
 
 const storageKey = (project: string) => `forge.console.env.${project}`;

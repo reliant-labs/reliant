@@ -60,6 +60,9 @@ type fixture struct {
 // (GetProjectScenariosJSON) is not on the StubRepo, so a row that reaches a
 // project scenario is answered Internal, as any repository that cannot read
 // it is.
+// scenarioDaemon holds ownProjectID's checkout (newScenarioRepo).
+const scenarioDaemon = "daemon-1"
+
 func newScenarioRepo(f *fixture) *scenario.MockRepository {
 	scenarios := map[string]*db.WorkflowScenario{
 		ownScenarioID: {
@@ -81,9 +84,17 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 		},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == ownProjectID {
-				return &db.Project{ID: id, UserID: "test-user", Path: "/home/test/project"}, nil
+				// projects.path is the creating machine's; the checkout this
+				// store records is /home/test/project on scenarioDaemon.
+				return &db.Project{ID: id, UserID: "test-user", Path: "/Users/creator/project"}, nil
 			}
 			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
+		},
+		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: scenarioDaemon, Path: "/home/test/project", InstallState: core.ProjectInstallInstalled}}, nil
+		},
+		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
 		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 			if userID == "test-user" && slug == ownWorkflowSlug {
@@ -115,4 +126,12 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 			return nil
 		},
 	}
+}
+
+// placeAsNamed places every named machine as itself (daemonplacement.Machines).
+func placeAsNamed(_ context.Context, _, daemonID string) (string, error) {
+	if daemonID == "" {
+		return scenarioDaemon, nil
+	}
+	return daemonID, nil
 }

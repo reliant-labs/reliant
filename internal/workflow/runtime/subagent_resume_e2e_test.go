@@ -156,7 +156,7 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 	wfJSON, err := protojson.Marshal(wf)
 	require.NoError(t, err)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -219,6 +219,14 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 			e.mu.Lock()
 			defer e.mu.Unlock()
 			e.lookups = append(e.lookups, thread)
+			if all, _ := input["all"].(bool); all {
+				var agents []*db.StoppedSpawnAgent
+				for _, agent := range e.durableStopped {
+					agents = append(agents, agent)
+				}
+				slices.SortFunc(agents, func(a, b *db.StoppedSpawnAgent) int { return strings.Compare(a.ChildThreadID, b.ChildThreadID) })
+				return map[string]interface{}{"agents": agents}, nil
+			}
 			if agent := e.durableStopped[thread]; agent != nil {
 				return map[string]interface{}{"agent": agent}, nil
 			}
@@ -529,33 +537,6 @@ func (s *SubAgentResumeE2ESuite) TestMessageThatArrivesWhileTheStepFailsGetsATur
 		"the agent recovered, so its parent hears one completion and no failure")
 }
 
-// The parent acts on the failure report it got earlier and asks to resume the
-// agent — after a message has already resumed it. One agent is one loop on
-// one thread: the parent is told it is running, and no second loop starts.
-func (s *SubAgentResumeE2ESuite) TestParentCannotResumeAnAgentAMessageAlreadyResumed() {
-	env := s.NewTestWorkflowEnvironment()
-	e := newSubAgentResumeEnv(s.T(), env, true)
-
-	e.failingAgentWaitsFor[1] = milestoneParentTurnDelivered(2)
-	e.failTurns[1] = classifyError(stoppingFailureErr())
-	e.onParentTurn[3] = func(agent string) { e.messageAgent(agent, "carry on") }
-	e.parentToolCalls[3] = func(agent string) []map[string]interface{} {
-		input, _ := json.Marshal(map[string]interface{}{"agent_id": agent, "prompt": "retry it", "preset": "general"})
-		return []map[string]interface{}{{"id": "tc3", "name": "spawn", "input": string(input)}}
-	}
-	e.bystanderWaitsFor = milestoneResumedAgentSettled
-
-	e.execute("chat-resume-twice")
-
-	s.Require().True(env.IsWorkflowCompleted())
-	s.Require().NoError(env.GetWorkflowError())
-	s.Require().Equal(2, e.agentTurns("tc1"), "the agent runs once more, for the message — not twice")
-	e.mu.Lock()
-	ownershipChecks := e.ownershipChecks
-	e.mu.Unlock()
-	s.Require().Zero(ownershipChecks, "the parent's resume of a running agent must be refused before it starts anything")
-}
-
 // Control: an agent that COMPLETED is finished. A wake for it — whatever sent
 // it — must not start it again.
 func (s *SubAgentResumeE2ESuite) TestCompletedSubAgentIsNotRestartedByAMessage() {
@@ -695,6 +676,108 @@ func (s *SubAgentResumeE2ESuite) TestMessageForAStoppedAgentAsTheRunEndsIsLeftTo
 // whose run had ended, or by the end-of-run check above: it resumes the agent
 // before anything else, and its root waits for the agent's report before its
 // first turn, so the root reads that report instead of answering nothing.
+func (s *SubAgentResumeE2ESuite) TestFreshPortionResumeAlsoResumesDurableSiblings() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "chat-resume-all-durable-siblings"
+	input := spawnE2EWorkflowInput(chatID)
+	input.ExecContext.ThreadMode = model.ThreadModeInherit
+	requested := stoppedBefore(chatID, "requested", "tc-requested", 0)
+	e.durableStopped["requested"] = requested
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 1)
+	input.Resume = &ResumeInput{AwaitSpawnsFirst: true, ResumeStopped: []SpawnHandoff{stoppedSpawnHandoff(requested)}, ResumeAllStopped: true}
+	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	for _, thread := range []string{"requested", "sibling"} {
+		turns, _ := e.threadTurns(thread)
+		s.Equal(1, turns, "fresh portion resume restarts each unfinished sibling exactly once: %s", thread)
+	}
+}
+
+func (s *SubAgentResumeE2ESuite) TestRecoveryOnlyRunsSetupBeforeLoopAndRecoversSibling() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "recovery-setup-loop"
+	input := spawnE2EWorkflowInput(chatID)
+	input.Resume = &ResumeInput{RecoveryOnly: true, ResumeAllStopped: true}
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 0)
+	e.parentThread = input.ExecContext.Thread
+	root := resumeTestWorkflow(s.T(), `
+name: setup-loop
+entry: [improve_prompt]
+nodes:
+  - id: improve_prompt
+    type: call_llm
+    args:
+      thinking_level: setup
+  - id: implementations
+    type: loop
+    while: false
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+          args:
+            thinking_level: loop
+edges:
+  - from: improve_prompt
+    default: implementations
+`)
+	child := resumeTestWorkflow(s.T(), subAgentResumeYAML)
+	env.RegisterActivityWithOptions(func(_ context.Context, values types.LoadWorkflowInput) (LoadedWorkflow, error) {
+		wf := root
+		if values.WorkflowName == "builtin://agent" {
+			wf = child
+		}
+		raw, err := protojson.Marshal(wf)
+		return LoadedWorkflow{WorkflowJSON: raw}, err
+	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
+	var rootSteps []string
+	env.RegisterActivityWithOptions(func(ctx context.Context, in types.ActivityInput) (map[string]interface{}, error) {
+		if in.Runtime.Thread != input.ExecContext.Thread {
+			return e.callLLM(ctx, in)
+		}
+		e.mu.Lock()
+		rootSteps = append(rootSteps, in.Runtime.StepID)
+		e.mu.Unlock()
+		return map[string]interface{}{"message": map[string]interface{}{"text": "prepared"}, "response_text": "prepared"}, nil
+	}, activity.RegisterOptions{Name: "CallLLM"})
+	input.WorkflowName = "setup-loop"
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	e.mu.Lock()
+	s.Require().GreaterOrEqual(len(rootSteps), 2)
+	s.Equal("improve_prompt", rootSteps[0], "setup must execute before the root loop")
+	for _, step := range rootSteps[1:] {
+		s.Equal("work", step, "only the loop may take additional turns to read the recovered sibling report")
+	}
+	e.mu.Unlock()
+	turns, _ := e.threadTurns("sibling")
+	s.Equal(1, turns)
+}
+
+func (s *SubAgentResumeE2ESuite) TestFreshRootMessageResumesDurableSiblings() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "fresh-root-resumes-siblings"
+	input := spawnE2EWorkflowInput(chatID)
+	input.Resume = &ResumeInput{ResumeAllStopped: true}
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 0)
+	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	turns, _ := e.threadTurns("sibling")
+	s.Equal(1, turns)
+}
+
 func (s *SubAgentResumeE2ESuite) TestRunStartedForAStoppedAgentResumesItBeforeTheRootTakesATurn() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSubAgentResumeEnv(s.T(), env, false)

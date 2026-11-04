@@ -1,0 +1,189 @@
+---
+title: "Lint rules: schema markers and write policy"
+description: "The rules that check forge: markers in SQL, proto and Go, and the rules that catch columns nothing ever writes"
+---
+
+Forge reads a handful of markers out of your SQL comments, proto comments and Go source: `forge:read-only`, `forge:computed`, `forge:guards`, `forge:closed-set` and so on. They change what gets generated, who may write a column and what the read-only database role may see. Two things go wrong with them, and both fail silently. A marker that is misspelled does nothing, and compiles and runs as if you had never written it. A marker that is right can still describe a column that no code ever fills.
+
+These rules catch both. Read the [overview](/forge/linting/overview) for flags and silencing, and use `forge project annotations` for the live vocabulary of markers.
+
+## Misspelled and unread markers
+
+A marker is read by an exact-match recognizer. `forge:server-set` was the old spelling of `forge:read-only`; today it reads as an ordinary comment, the field stays writable by clients, and nothing warns. The four rules below put each marker location under a registry check: the same registry the scanners read from, so the lint and the generator cannot disagree about what a marker is.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-proto-markers` | warning | A misspelled or removed `forge:*` marker in a `.proto` comment, which compiles and silently does nothing |
+| `forge-proto-options` | warning | A `(forge.v1.*)` option the compiled descriptors do not define, which is read by nothing and enforces nothing |
+| `forge-column-markers` | error | A misspelled or unknown `forge:*` marker in a `COMMENT ON` statement, which silently opts the column into nothing |
+| `forge-go-markers` | error | A `//forge:` directive in Go that forge cannot read, such as an em-dash where it wants a colon or a mistyped name |
+| `forge-vendored-proto-drift` | error for `forge.proto`, warning for `validate.proto` | A vendored `proto/forge/v1/forge.proto` or `validate.proto` that differs from the copy in this forge |
+
+### `forge-proto-markers`
+
+```protobuf
+// bad: compiles, does nothing
+message Order {
+  // forge:server-set
+  string cursor = 2;
+}
+```
+
+```text
+⚠ proto/services/order/v1/order.proto:26 [forge-proto-markers] removed forge:* proto marker "forge:server-set" (renamed to "forge:read-only")
+   → "forge:server-set" was renamed to "forge:read-only" and is no longer recognized — this comment currently does NOTHING (the field stays client-writable). Rewrite it as "forge:read-only".
+```
+
+Rewrite it as `// forge:read-only`. It is a warning because plain comments can legitimately mention `forge:`; run `forge project annotations` to see what is real.
+
+### `forge-proto-options`
+
+A `(forge.v1.*)` annotation naming an option field that forge's compiled descriptors do not define. This is the same silent failure arriving through a different route, and it did real damage: a project's vendored `forge.proto` had diverged from forge's own and still declared method options (`authz_public`, `required_roles`, and others) on field numbers upstream had since reserved. `buf` compiled 104 annotations across 14 service protos happily because the local file declared them, and forge read its own descriptor, found nothing, and enforced none of them. The fix is to remove or rename the option; run `forge project upgrade` if your vendored proto is stale.
+
+### `forge-vendored-proto-drift`
+
+Forge copies `proto/forge/v1/forge.proto` and `proto/buf/validate/validate.proto` into a project once. The upgrade path does not track them, so a project scaffolded on an old forge keeps that vintage's copy forever. A stale `forge.proto` is an error, because it is how an annotation gets written, compiled and read by nothing, and field-number drift is a correctness bug; `forge project upgrade` is the mechanical fix. A stale `validate.proto` is a warning: forge does not read its contents, so it costs you newer field rules and nothing else.
+
+### `forge-column-markers`
+
+The SQL twin. Postgres stores a comment verbatim, so `COMMENT ON COLUMN orders.total IS 'forge:immutible'` never opts the column into anything. This lane classifies every marker in a `COMMENT ON` statement through the same classifier `forge generate` runs over the applied schema.
+
+```sql
+-- bad: misspelled, and silently inert
+COMMENT ON COLUMN orders.customer IS 'forge:immutible';
+
+-- fix
+COMMENT ON COLUMN orders.customer IS 'forge:immutable';
+```
+
+### `forge-go-markers`
+
+The Go-source twin, and it gates. A `//forge:exclude-contract — <why>` with an em-dash where the directive takes a colon does not exclude the package, and the contract lint keeps failing on it with no hint that the opt-out was read and refused. Two verdicts fail: a known marker followed by something its parser does not read, and a directive-form `//forge:<name>` whose name no recognizer reads.
+
+```go
+// bad: em-dash, not a colon
+//forge:exclude-contract — adapter, no contract wanted
+
+// bad: a typo
+//forge:exclude-contrat: adapter
+
+// fix
+//forge:exclude-contract: adapter, no contract wanted
+```
+
+## Closed sets and credential columns
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-closed-set` | error | A SQL `CHECK` that does not list exactly the Go set it mirrors, so writes of a missing value fail or the `CHECK` admits rows Go cannot read |
+| `forge-db-grants-undecided` | error | A credential-shaped column with neither `forge:secret` nor `forge:readable`, so nobody decided whether `forge_ro` may read it |
+| `forge-db-grants-unverified` | error | A db-grants run that could not read the schema, so no column was judged |
+
+### `forge-closed-set`
+
+A `CHECK (scope IN (…))` that mirrors a Go set declares it, so the two cannot drift:
+
+```sql
+CHECK (scope IN ('read', 'write'))
+COMMENT ON CONSTRAINT access_tokens_scopes ON access_tokens IS 'forge:closed-set accesstoken.AllScopes';
+```
+
+The lane compares the `CHECK` the migrations last defined with the Go set. A mismatch gates in both directions: a value Go grants and the `CHECK` refuses fails every write of it, and a `CHECK` wider than Go admits rows Go cannot read. The finding carries the forward migration that fixes it, and `forge db migration new --closed-set <constraint>` writes it. It reads migration text, so it needs no database and runs wherever lint runs. It replaces a project-local test that needed a database, skipped under `-short`, and let a forge bump that grew the scope set reach main green.
+
+### `forge-db-grants-undecided`
+
+The read-only database role (`forge_ro`, used by `forge db query`) may read a column only after someone decided it may. A column named like a credential (a token, password, key, ciphertext, or a hash of one) with neither marker is undecided: the generated grants withhold it, and this lane makes the omission an error, so a project cannot ship `forge_ro` reading credentials by oversight and cannot ship a silently unreadable column either.
+
+```sql
+-- bad: access_token is credential-shaped and undecided
+CREATE TABLE git_credentials (id TEXT PRIMARY KEY, access_token TEXT NOT NULL);
+
+-- fix: decide, where the column lives
+COMMENT ON COLUMN git_credentials.access_token IS 'forge:secret';
+COMMENT ON COLUMN usage_events.token_hash IS 'forge:readable — hash of the prompt, not a credential';
+```
+
+For a column with a wire field, `// forge:secret` on the proto field works too. `forge-db-grants-unverified` fires when the lane could not read the schema (no `gen/forge_descriptor/`, or the migrations would not apply to a scratch Postgres): run `forge generate` and retry.
+
+## Write policy
+
+A column a client must not set can be marked `forge:read-only`, `forge:computed`, `forge:generated`, `forge:guards` or `forge:immutable`. The generated Create and Update then omit it. These rules check the other half: that something really does fill the column.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-read-only-field-unwritten` | error (warning while stubs remain) | A `forge:read-only` column that nothing populates, so every row ships as the type's zero value |
+| `forgeconv-computed-field-unwritten` | error (warning while stubs remain) | A `forge:computed` field that no Go file assigns, so the promised derivation never happens |
+| `forgeconv-create-request-nullability` | error, or warning for a hand-written create | An `optional` field that disagrees between an entity and its Create request, which collapses absent and empty into one value |
+| `forgeconv-guarded-field-written` | warning | A scaffolded edit page that writes a `forge:guards` column raw, bypassing the rpc that owns its writes |
+
+### `forgeconv-read-only-field-unwritten`
+
+Marking a field `forge:read-only` removes it from Create and Update. If no Go file assigns it, it has no meaningful `DEFAULT` and it is not `GENERATED`, then nothing ever writes it, and every row ships as the type's zero value (0 cents, the epoch, the empty string) with no error, no failing test and no log line.
+
+```protobuf
+// bad: total_cents is read-only, and no handler sets it
+message Order {
+  // forge:read-only
+  int64 total_cents = 4;
+}
+```
+
+The preferred fix is to make the database compute it, so no code path can forget:
+
+```sql
+ALTER TABLE orders ADD COLUMN total_cents BIGINT
+  GENERATED ALWAYS AS (qty * unit_cents) STORED NOT NULL;
+```
+
+If the value derives from other rows, which Postgres cannot reach from a generated column, derive it in Go and mark the field `forge:computed` so `--computed-fields` holds you to it. If something this check cannot see already writes it (a trigger, another service), say so: `COMMENT ON COLUMN orders.total_cents IS 'forge:fill=handler'`.
+
+While the service still holds forge's own unwired rpc stubs (a method stamped `// forge:gen unwired-stub` returning `Unimplemented`), the finding is a warning that reads `pending: implement ChangeJobStatus`. Right after `forge scaffold`, the custom rpc that will set the column does not exist yet, and failing the gate on forge's own fresh output would teach agents to ignore this rule at the moment it matters. Once no stubs remain, it is an error.
+
+### `forgeconv-computed-field-unwritten`
+
+The same check for `forge:computed`, which promises that your code derives the value. It fails if no non-generated Go file assigns the field. Either derive it (set the field in the Create op's `Entity` hook in `handlers_crud.go`, and write it with `db.Update<Entity>Masked` wherever its inputs change) or relax the marker to `forge:read-only` if something else writes it.
+
+### `forgeconv-create-request-nullability`
+
+`optional` is a field's presence contract, and `Create<Entity>Request` flattens the entity, so the label has to be re-declared there. If it is dropped, absent and `""` collapse into one value. The generated create writes `""` into a nullable foreign-key column and Postgres answers with a foreign-key violation naming a constraint, not the proto line that caused it; the `if req.SourceLeadId != nil` guard in the generated op becomes dead code that reads as though presence were handled.
+
+```protobuf
+// bad
+message Lead   { optional string source_lead_id = 3; }
+message CreateLeadRequest { string source_lead_id = 3; }   // label lost
+
+// fix
+message CreateLeadRequest { optional string source_lead_id = 3; }
+```
+
+Severity follows who writes the create. If forge generates the op, both directions are errors. For a hand-written handler, `optional` only on the Create is the handler's own "omit for the server default" contract and is not a finding; `optional` only on the entity is a warning.
+
+### `forgeconv-guarded-field-written`
+
+`// forge:guards <table>.<column>` says a custom rpc owns a column's writes. Pages generated after the marker honor it. A page generated before it is scaffold-once, so `forge generate` cannot repair it: its `update_mask` still names the column, and saving the form writes it raw through Update, bypassing whatever the rpc enforces. The first symptom is a 500 from a `CHECK` constraint. Remove the column from the mask paths and drop the input, then wire the value to the rpc's generated hook, or delete the marker if the guard is wrong.
+
+## SQL that is correct and wrong
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-time-bucket-session-tz` | warning | A two-argument `date_trunc` over a `TIMESTAMPTZ`, which buckets by the session's time zone |
+| `forge-fixture-rejected` | warning | A scaffolded test fixture statement that Postgres now rejects, such as a write to a `GENERATED` column |
+| `forge-fixture-unverified` | warning | A fixture check that could not reach a scratch Postgres, so no fixture was judged |
+
+### `forge-time-bucket-session-tz`
+
+`date_trunc('day', col)` over a `TIMESTAMPTZ` truncates in the session's time zone, which the driver sets from the client host. The same rows give different totals on a UTC CI box and a UTC-5 laptop, and the only symptom is a chart that disagrees with itself between deploys, which reads as flakiness.
+
+```sql
+-- bad
+SELECT date_trunc('day', created_at) AS day, count(*) FROM orders GROUP BY 1;
+
+-- fix: pin the zone
+SELECT date_trunc('day', created_at, 'UTC') AS day, count(*) FROM orders GROUP BY 1;
+```
+
+It is a warning, because a local-time bucket can be exactly what a shift report wants; the rule makes the choice visible. It stays silent wherever it cannot be sure: three arguments, a named zone, a non-column argument, a `TIMESTAMP WITHOUT TIME ZONE` column, a column name declared with conflicting types, a non-literal unit, or a unit finer than an hour.
+
+### `forge-fixture-rejected` and `forge-fixture-unverified`
+
+`--fixture-drift` executes every literal statement in a scaffolded `handlers_crud_test.go` against the current schema, in a scratch Postgres with each statement rolled back, and reports Postgres's own error for each it rejects: a `GENERATED` column, a `UNIQUE` collision, a dangling foreign key, a `CHECK` a later migration added. The fixture is broken and its test fails, but the fix is an edit to a file you own, so it never gates. A project whose tests use factories pays nothing. When the scratch database cannot be reached, `forge-fixture-unverified` says the lane did not run instead of reporting clean.

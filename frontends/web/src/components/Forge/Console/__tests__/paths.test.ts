@@ -11,16 +11,22 @@ import { describe, expect, it } from "vitest";
 import { defaultParseSearch } from "@tanstack/react-router";
 
 import {
+  carriedObsSearch,
+  carriedOrgSearch,
   consolePageOf,
   consolePath,
   envScopeOfEnvs,
   legacyEnvTarget,
   legacyObservabilityTarget,
   obsViewOfPage,
+  orgPageOf,
+  orgPath,
   pageOfObsView,
   pinnedEnvOf,
   withSearch,
   type ConsolePage,
+  type LegacyEnvSearch,
+  type OrgPage,
 } from "../paths";
 
 const PAGES: ConsolePage[] = [
@@ -30,7 +36,6 @@ const PAGES: ConsolePage[] = [
   { kind: "releases" },
   { kind: "release", version: "20261018.155157-8aecd00c380b" },
   { kind: "release", version: "v1.8.0+build/7" },
-  { kind: "observability" },
   { kind: "obs-view", view: "logs" },
   { kind: "obs-view", view: "metrics" },
   { kind: "obs-view", view: "alerts" },
@@ -42,13 +47,11 @@ const PAGES: ConsolePage[] = [
   { kind: "environment", env: "pr 12/x" },
   { kind: "secrets" },
   { kind: "domains" },
-  { kind: "monitoring" },
-  { kind: "settings" },
   { kind: "activity" },
 ];
 
 describe("console paths", () => {
-  it("are the PROPOSAL §3.2 scheme", () => {
+  it("are the console's URL scheme", () => {
     expect(consolePath("control-plane", { kind: "overview" })).toBe("/forge/p/control-plane");
     expect(consolePath("control-plane", { kind: "obs-view", view: "traces" })).toBe("/forge/p/control-plane/observability/traces");
     expect(consolePath("control-plane", { kind: "environment", env: "prod" })).toBe("/forge/p/control-plane/environments/prod");
@@ -73,6 +76,10 @@ describe("console paths", () => {
     expect(consolePageOf("/forge/env/prod")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/workloads")).toBeNull();
     expect(consolePageOf("/forge/p/x/nope")).toBeNull();
+    // The retired pages are redirects, not pages.
+    expect(consolePageOf("/forge/p/x/observability")).toBeNull();
+    expect(consolePageOf("/forge/p/x/monitoring")).toBeNull();
+    expect(consolePageOf("/forge/p/x/settings")).toBeNull();
     // A dashboard is addressed by its kind: a template is no page, and nothing nests below a dashboard.
     expect(consolePageOf("/forge/p/x/observability/dashboards/template/service-red")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/dashboards/workspace")).toBeNull();
@@ -92,11 +99,12 @@ describe("console paths", () => {
   });
 });
 
-describe("Observability views as pages (D9)", () => {
+describe("Observability views as pages", () => {
   it("files each view under its new home", () => {
-    expect(pageOfObsView(undefined)).toEqual({ kind: "observability" });
+    // The panel's own overview is the console's Overview: one project home.
+    expect(pageOfObsView(undefined)).toEqual({ kind: "overview" });
+    expect(pageOfObsView("overview")).toEqual({ kind: "overview" });
     expect(pageOfObsView("logs")).toEqual({ kind: "obs-view", view: "logs" });
-    expect(pageOfObsView("usage")).toEqual({ kind: "settings" });
   });
 
   it("knows which view each page hosts, and that Metrics and Dashboards host none", () => {
@@ -116,17 +124,18 @@ describe("Observability views as pages (D9)", () => {
 });
 
 describe("redirects from the retired URLs", () => {
-  it.each([
+  it.each<[LegacyEnvSearch, string]>([
     [{}, "/forge/p/shop/environments/prod?env=prod"],
     [{ tab: "overview" }, "/forge/p/shop/environments/prod?env=prod"],
     [{ tab: "changes" }, "/forge/p/shop/environments/prod?env=prod"],
     [{ tab: "running" }, "/forge/p/shop/environments/prod?env=prod&tab=running"],
-    [{ tab: "domains" }, "/forge/p/shop/environments/prod?env=prod&tab=domains"],
+    [{ tab: "domains" }, "/forge/p/shop/domains?env=prod"],
     [{ tab: "identity" }, "/forge/p/shop/environments/prod?env=prod&tab=identity"],
     [{ tab: "releases" }, "/forge/p/shop/releases?env=prod"],
     [{ tab: "activity" }, "/forge/p/shop/activity?env=prod"],
     [{ tab: "secrets", secret: "DATABASE_URL" }, "/forge/p/shop/secrets?env=prod&secret=DATABASE_URL"],
-    [{ tab: "observability" }, "/forge/p/shop/observability?env=prod"],
+    [{ tab: "observability" }, "/forge/p/shop?env=prod"],
+    [{ tab: "observability", view: "usage" }, "/settings/billing"],
   ])("/forge/env/prod %o → %s", (search, target) => {
     expect(legacyEnvTarget("shop", "prod", search)).toBe(target);
   });
@@ -138,11 +147,12 @@ describe("redirects from the retired URLs", () => {
   });
 
   it("sends /forge/observability to the page hosting its view, with envs as the scope", () => {
-    expect(legacyObservabilityTarget("shop", {})).toBe("/forge/p/shop/observability?env=all");
+    expect(legacyObservabilityTarget("shop", {})).toBe("/forge/p/shop?env=all");
     expect(legacyObservabilityTarget("shop", { view: "logs", envs: ["e2e"], q: "timeout" })).toBe(
       "/forge/p/shop/observability/logs?env=e2e&q=timeout"
     );
-    expect(legacyObservabilityTarget("shop", { view: "usage" })).toBe("/forge/p/shop/settings?env=all");
+    // The organization's usage is the app's Settings › Billing.
+    expect(legacyObservabilityTarget("shop", { view: "usage" })).toBe("/settings/billing");
   });
 
   it("sends the retired Workloads view to the Overview, or to the workload's page when it names one environment", () => {
@@ -151,5 +161,56 @@ describe("redirects from the retired URLs", () => {
     // Every environment: the Overview, filtered to the workload, lets the reader pick one.
     expect(legacyObservabilityTarget("shop", { view: "workloads", workload: "api" })).toBe("/forge/p/shop?env=all&q=api");
     expect(legacyEnvTarget("shop", "e2e", { tab: "observability", view: "workloads", workload: "api" })).toBe("/forge/p/shop/workloads/e2e/api?env=e2e");
+  });
+});
+
+const ORG_PAGES: OrgPage[] = [
+  { kind: "observability" },
+  { kind: "obs-view", view: "errors" },
+  { kind: "obs-view", view: "dashboards" },
+  { kind: "obs-view", view: "alerts" },
+];
+
+describe("org paths", () => {
+  it("are /forge/observability and /forge/observability/<view>", () => {
+    expect(orgPath({ kind: "observability" })).toBe("/forge/observability");
+    expect(orgPath({ kind: "obs-view", view: "logs" })).toBe("/forge/observability/logs");
+  });
+
+  it.each(ORG_PAGES)("round-trip %o through orgPageOf", (page) => {
+    expect(orgPageOf(orgPath(page))).toEqual(page);
+  });
+
+  it("tolerate a trailing slash", () => {
+    expect(orgPageOf("/forge/observability/")).toEqual({ kind: "observability" });
+  });
+
+  it("are null outside the org pages", () => {
+    expect(orgPageOf("/")).toBeNull();
+    // The Apps list is /apps, not an org console page; bare /forge redirects there.
+    expect(orgPageOf("/forge")).toBeNull();
+    expect(orgPageOf("/forge/observability/heatmaps")).toBeNull();
+    expect(orgPageOf("/forge/observability/logs/extra")).toBeNull();
+    expect(orgPageOf("/forge/p/shop")).toBeNull();
+    expect(orgPageOf("/forge/p/shop/observability")).toBeNull();
+    expect(orgPageOf("/forge/domains")).toBeNull();
+    expect(orgPageOf("/forge/env/prod")).toBeNull();
+  });
+
+  it("leave the project console's own parsing alone", () => {
+    expect(consolePageOf("/forge")).toBeNull();
+    expect(consolePageOf("/forge/observability")).toBeNull();
+  });
+});
+
+describe("carried search", () => {
+  const search = { range: "6h", q: "timeout", envs: ["shop/prod"], apps: ["shop"], view: "logs", project: "p1", unrelated: 1 };
+
+  it("an org page carries the Observability keys plus envs and apps (the view is the path)", () => {
+    expect(carriedOrgSearch(search)).toEqual({ range: "6h", q: "timeout", envs: ["shop/prod"], apps: ["shop"] });
+  });
+
+  it("an app's console takes neither the org's envs nor its apps", () => {
+    expect(carriedObsSearch(search)).toEqual({ range: "6h", q: "timeout" });
   });
 });

@@ -23,8 +23,8 @@ import (
 type FetchParams struct {
 	URL     string `json:"url" jsonschema:"required,description=The URL to fetch content from"`
 	Format  string `json:"format" jsonschema:"required,enum=text,enum=markdown,enum=html,description=The format to return the content in (text markdown or html)"`
-	Timeout int    `json:"timeout,omitempty" jsonschema:"description=Optional timeout in seconds (max 120)"`
-	MaxSize int    `json:"max_size,omitempty" jsonschema:"description=Maximum bytes to fetch (default: 16000)"`
+	Timeout int    `json:"timeout,omitempty" jsonschema:"description=Optional timeout in seconds (default 30; values above 60 are clamped to 60)"`
+	MaxSize int    `json:"max_size,omitempty" jsonschema:"description=Maximum bytes to read from the response (default: 16000; hard cap 1048576 (1 MiB), larger values are clamped)"`
 }
 
 type FetchPermissionsParams struct {
@@ -47,8 +47,60 @@ type FetchResponseMetadata struct {
 
 type fetchTool struct {
 	client *http.Client
-	// policy is the deployment's dial policy, for a per-call client.
-	policy netguard.Policy
+	// newClient builds the client for a call with its own timeout, under the
+	// same dial policy as client.
+	newClient func(timeoutSecs int) *http.Client
+}
+
+const (
+	fetchDefaultMaxSize  = 16000
+	fetchMaxSizeCap      = 1 << 20 // hard ceiling on bytes read per call, after decompression
+	fetchDefaultTimeout  = 30
+	fetchMaxTimeoutSecs  = 60
+	fetchMaxRedirectHops = 5
+)
+
+// errFetchRedirect marks a redirect the fetch tool refuses to follow.
+var errFetchRedirect = errors.New("redirect refused")
+
+// fetchCheckRedirect allows at most fetchMaxRedirectHops hops, http/https only.
+// The per-hop dial check stays in the guarded transport.
+func fetchCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) > fetchMaxRedirectHops {
+		return fmt.Errorf("%w: stopped after %d redirects", errFetchRedirect, fetchMaxRedirectHops)
+	}
+	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+		return fmt.Errorf("%w: redirect to %q scheme is not allowed (only http and https)", errFetchRedirect, req.URL.Scheme)
+	}
+	return nil
+}
+
+func newFetchClient(policy netguard.Policy, timeoutSecs int) *http.Client {
+	c := newGuardedHTTPClient(policy, time.Duration(timeoutSecs)*time.Second)
+	c.CheckRedirect = fetchCheckRedirect
+	return c
+}
+
+// clampFetchTimeout returns the per-call timeout in seconds; 0 means the default client.
+func clampFetchTimeout(requested int) int {
+	if requested > fetchMaxTimeoutSecs {
+		return fetchMaxTimeoutSecs
+	}
+	if requested < 0 {
+		return 0
+	}
+	return requested
+}
+
+// clampFetchMaxSize returns the effective read limit and whether the request was lowered to the cap.
+func clampFetchMaxSize(requested int) (limit int64, clamped bool) {
+	if requested <= 0 {
+		return fetchDefaultMaxSize, false
+	}
+	if int64(requested) > fetchMaxSizeCap {
+		return fetchMaxSizeCap, true
+	}
+	return int64(requested), false
 }
 
 const (
@@ -66,24 +118,26 @@ WHEN TO USE THIS TOOL:
 HOW TO USE:
 - Provide the URL to fetch content from
 - Specify the desired output format (text, markdown, or html)
-- Optionally set a timeout for the request
+- Optionally set a timeout for the request (default 30s, hard cap 60s)
 
 FEATURES:
 - Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
 - Supports three output formats: text, markdown, and html
-- Automatically handles HTTP redirects
+- Follows up to 5 HTTP redirects, http/https only
 - Detects likely JavaScript-rendered pages and warns you
 - Sets reasonable timeouts to prevent hanging
 
 PARAMETERS:
-- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
-  Prevents downloading huge files that could overwhelm context
+- max_size: Maximum bytes to read from the response (default: 16000, ~16KB; hard cap: 1048576, 1 MiB).
+  Values above the cap are lowered to it. When the response is longer than the limit it is
+  cut off and a "[Content truncated ...]" note is appended; the call still succeeds. The limit
+  applies to the decompressed body.
 
 IMPORTANT LIMITATIONS:
 - Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
   The response metadata will include possible_js_rendered=true when this is detected.
   For JS-heavy sites, consider using browser tools instead.
-- Default maximum response size is 16KB (use max_size to adjust)
+- Default maximum response size is 16KB (use max_size to raise it, up to 1 MiB)
 - Only supports HTTP and HTTPS protocols
 - Cannot handle authentication or cookies
 - Some websites may block automated requests
@@ -95,7 +149,8 @@ TIPS FOR BETTER RESULTS:
 - Use text or markdown format for documentation (html returns raw markup with all chrome)
 - If the response says possible_js_rendered=true, the page needs JavaScript to render.
   Try finding an alternative URL, a raw content source, or use browser tools.
-- Adjust max_size for larger documents (but consider context limits)
+- Adjust max_size for larger documents, up to the 1 MiB cap (but consider context limits)
+- Pages larger than 1 MiB are always truncated; look for a smaller raw/API URL instead
 
 RESPONSE METADATA:
 - content_length: Size of the extracted content
@@ -110,8 +165,8 @@ RESPONSE METADATA:
 // NewFetchTool builds the tool under the deployment's dial policy (netguard.ForDeployment).
 func NewFetchTool(policy netguard.Policy) Tool {
 	tool := &fetchTool{
-		client: newGuardedHTTPClient(policy, 30*time.Second),
-		policy: policy,
+		client:    newFetchClient(policy, fetchDefaultTimeout),
+		newClient: func(timeoutSecs int) *http.Client { return newFetchClient(policy, timeoutSecs) },
 	}
 	return NewToolWrapper[FetchParams, ToolResponse](tool)
 }
@@ -145,12 +200,8 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 	}
 
 	client := t.client
-	if params.Timeout > 0 {
-		maxTimeout := 120 // 2 minutes
-		if params.Timeout > maxTimeout {
-			params.Timeout = maxTimeout
-		}
-		client = newGuardedHTTPClient(t.policy, time.Duration(params.Timeout)*time.Second)
+	if timeout := clampFetchTimeout(params.Timeout); timeout > 0 {
+		client = t.newClient(timeout)
 	}
 
 	req, err := http.NewRequestWithContext(rctx.Context, "GET", params.URL, nil)
@@ -162,7 +213,7 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if errors.Is(err, netguard.ErrBlockedAddress) {
+		if errors.Is(err, netguard.ErrBlockedAddress) || errors.Is(err, errFetchRedirect) {
 			return NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %v", err)), nil
 		}
 		return ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
@@ -177,25 +228,19 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 		return NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
 	}
 
-	// Use custom max size if provided, otherwise default to 16KB
-	maxSize := int64(16000) // Default 16KB - matches MaxOutputSize
-	if params.MaxSize > 0 {
-		maxSize = int64(params.MaxSize)
-	}
+	maxSize, sizeClamped := clampFetchMaxSize(params.MaxSize)
 
-	// Get content length from header
-	contentLength := resp.ContentLength
-	if contentLength < 0 {
-		contentLength = 0 // Unknown size
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize))
+	// Read one byte past the limit to learn whether the body was cut. This bounds
+	// the decompressed bytes too, so a gzip bomb cannot exceed the cap, and it
+	// bounds everything handed to readability / HTML conversion.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize+1))
 	if err != nil {
 		return NewTextErrorResponse("Failed to read response body: " + err.Error()), nil
 	}
-
-	// Check if content was truncated
-	wasTruncated := int64(len(body)) == maxSize && (contentLength == 0 || contentLength > maxSize)
+	wasTruncated := int64(len(body)) > maxSize
+	if wasTruncated {
+		body = body[:maxSize]
+	}
 
 	rawContent := string(body)
 	contentType := resp.Header.Get("Content-Type")
@@ -296,7 +341,11 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 	var warnings []string
 
 	if wasTruncated {
-		warnings = append(warnings, fmt.Sprintf("[Content truncated at %d bytes]", maxSize))
+		warnings = append(warnings, fmt.Sprintf("[Content truncated: only the first %d bytes of the response were read; the rest was discarded.]", maxSize))
+	}
+
+	if sizeClamped {
+		warnings = append(warnings, fmt.Sprintf("[max_size was lowered to the hard cap of %d bytes.]", fetchMaxSizeCap))
 	}
 
 	if possibleJSRender {

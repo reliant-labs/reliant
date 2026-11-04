@@ -618,7 +618,7 @@ func stubNotifyWorkflowStatus(_ context.Context, input map[string]interface{}) (
 	return nil, nil
 }
 
-func stubLoadPresetParams(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+func stubLoadPresetParams(_ context.Context, input types.LoadPresetParamsInput) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"workflow": "builtin://agent",
 		"inputs":   map[string]interface{}{},

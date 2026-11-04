@@ -69,6 +69,10 @@ type routingSettings interface {
 // driver's default account exactly as they did before accounts.
 type AccountRouting struct {
 	Router accountrouter.Service
+	// ClearOtherAssignments removes old-provider pins at the next safe model
+	// call after a chat-wide switch. A failure refuses that call rather than
+	// letting stale routing survive unnoticed.
+	ClearOtherAssignments func(ctx context.Context, userID, threadID, provider string) error
 	// Store supplies the limit rows the account-switch notice quotes (the
 	// window, the reset). Optional.
 	Store accountrouter.Store
@@ -149,6 +153,11 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 		return nil, nil
 	}
 	driver := models.DriverID(providerDriver)
+	if spec.ClearProviderPins && spec.ChatProvider != "" && spec.ThreadID != "" && spec.Routing.ClearOtherAssignments != nil {
+		if err := spec.Routing.ClearOtherAssignments(ctx, spec.UserID, spec.ThreadID, providerDriver); err != nil {
+			return nil, err
+		}
+	}
 	accounts := avail.Accounts[driver]
 	if len(accounts) == 0 {
 		return nil, nil
@@ -295,6 +304,19 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 		facts.FallbackModel = r.fallbackModel(ctx, uc)
 	}
 	return &types.UsageLimitFailure{Err: err, Facts: facts}
+}
+
+// providerFailure is what every activity that streams from a routed account
+// does with the provider's refusal, so a refused account is judged the same
+// way whoever met it: a rejected API key leaves rotation (credentialRejection),
+// a usage limit benches the account (usageLimitFailure), and anything else
+// comes back unchanged. The next request, from any activity, then routes
+// around the account instead of meeting it first again.
+func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usageLimitContext) error {
+	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
+		return rejected
+	}
+	return r.usageLimitFailure(ctx, err, uc)
 }
 
 // usageLimitOf reads a usage-limit refusal's reset and window, from the typed

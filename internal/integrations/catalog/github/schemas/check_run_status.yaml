@@ -1,0 +1,4 @@
+type: string
+enum: [queued, in_progress, completed]
+title: Status
+description: queued, in_progress or completed. A conclusion completes the run whatever this says.

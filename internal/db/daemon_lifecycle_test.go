@@ -46,7 +46,7 @@ func TestApplyDaemonLifecycle_StoresAndRoundTrips(t *testing.T) {
 	updated, err := repo.ApplyDaemonLifecycle(ctx, DaemonLifecycleUpdate{
 		DaemonID:        daemonID,
 		Phase:           "cloning",
-		Size:            "medium",
+		Size:            "l",
 		StatusMessage:   "cloning your repository",
 		ChangedAt:       changedAt,
 		LastOOMKilledAt: &oomAt,
@@ -64,8 +64,8 @@ func TestApplyDaemonLifecycle_StoresAndRoundTrips(t *testing.T) {
 		if d.LifecyclePhase == nil || *d.LifecyclePhase != "cloning" {
 			t.Errorf("%s: lifecycle_phase = %v, want \"cloning\"", label, d.LifecyclePhase)
 		}
-		if d.Size == nil || *d.Size != "medium" {
-			t.Errorf("%s: size = %v, want \"medium\"", label, d.Size)
+		if d.Size == nil || *d.Size != "l" {
+			t.Errorf("%s: size = %v, want \"l\"", label, d.Size)
 		}
 		if d.LastStatusMessage != "cloning your repository" {
 			t.Errorf("%s: last_status_message = %q", label, d.LastStatusMessage)
@@ -175,7 +175,7 @@ func TestApplyDaemonLifecycle_PreservesSizeAndOOMOnPhaseChange(t *testing.T) {
 	t0 := time.Now().UTC().Truncate(time.Millisecond)
 	oomAt := t0.Add(-time.Hour)
 	if _, err := repo.ApplyDaemonLifecycle(ctx, DaemonLifecycleUpdate{
-		DaemonID: daemonID, Phase: "ready", Size: "large",
+		DaemonID: daemonID, Phase: "ready", Size: "xl",
 		ChangedAt: t0, LastOOMKilledAt: &oomAt, OOMKillCount: 3,
 	}); err != nil {
 		t.Fatalf("apply initial: %v", err)
@@ -192,8 +192,8 @@ func TestApplyDaemonLifecycle_PreservesSizeAndOOMOnPhaseChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDaemon: %v", err)
 	}
-	if got.Size == nil || *got.Size != "large" {
-		t.Errorf("size = %v after a bare phase change, want \"large\" preserved", got.Size)
+	if got.Size == nil || *got.Size != "xl" {
+		t.Errorf("size = %v after a bare phase change, want \"xl\" preserved", got.Size)
 	}
 	if got.OOMKillCount != 3 {
 		t.Errorf("oom_kill_count = %d after a bare phase change, want 3 preserved", got.OOMKillCount)

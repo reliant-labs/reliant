@@ -19,11 +19,12 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/cluster/
 // the customer-facing surface for connecting one BY ADDRESS (ConnectCluster)
 // and for listing, reading and removing what is connected.
 //
-// ONE WAY IN. A cluster is connected by address and authenticated either as the
-// hub's cloud workload identity or with a scoped ServiceAccount token the
-// owner supplies once. There is no in-cluster agent: nothing is installed in
-// the target cluster, so there is no second registration path to keep in step
-// with this one.
+// ONE WAY IN. A cluster is connected by address and authenticated ONLY with the
+// scoped ServiceAccount token that `forge cluster connect <context>` minted
+// from the owner's own kube context and uploaded. The hub holds no cloud
+// identity in the owner's cluster and nothing is granted to it. There is no
+// in-cluster agent: nothing is installed in the target cluster, so there is no
+// second registration path to keep in step with this one.
 //
 // ORG-SCOPED, AND THE ORG IS NEVER A REQUEST FIELD. Every RPC acts on the
 // caller's org, resolved server-side from the authenticated principal. A
@@ -62,10 +63,11 @@ service ClusterService {
   }
   // ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
   //
-  // The platform is told the address and the CA up front, and authenticates
-  // either as a cloud workload identity (no secret crosses the boundary at
-  // all) or with a scoped ServiceAccount token the owner pasted once. Nothing
-  // is installed in the target cluster.
+  // The platform is told the address, the CA and the scoped ServiceAccount
+  // token up front, all required. The token is the ONLY credential the
+  // platform ever uses against the cluster; a request without one is
+  // InvalidArgument and names `forge cluster connect`. Nothing is installed in
+  // the target cluster.
   //
   // DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
   // re-run from a checkout, so a second call with different values UPDATES
@@ -73,11 +75,6 @@ service ClusterService {
   // connect command safe to put in a script, and it is why there is no
   // separate UpdateCluster: a second spelling of the same write could
   // disagree with this one about what a partial request means.
-  //
-  // THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
-  // cannot derive. Workload identity means the TARGET cluster must grant
-  // something to US, so forge prints the one-time IAM + RBAC grant the owner
-  // runs — and it can only print it if it knows which principal to name.
   rpc ConnectCluster(ConnectClusterRequest) returns (ConnectClusterResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -115,81 +112,6 @@ enum ClusterConnection {
   CLUSTER_CONNECTION_STALE = 3;
 }
 
-// ClusterAuth is HOW the platform authenticates to a cluster's API server.
-//
-// TWO VALUES, AND THEY ARE THE TWO ENDS OF A REAL TRADE-OFF rather than two
-// clouds.
-//
-// WORKLOAD_IDENTITY_GCP is the good one, where it applies: Flux presents the
-// HUB's own GCP identity through `kubeConfig.configMapRef`, the target
-// cluster's IAM decides whether that identity may act, and NO SECRET EVER
-// CROSSES THE BOUNDARY — there is nothing in our database for a read to leak.
-// Flux's own recommended route.
-//
-// SERVICE_ACCOUNT_TOKEN is the one that works ANYWHERE: an RBAC-scoped
-// ServiceAccount token the owner supplies once, projected into a kubeconfig
-// Secret. It is strictly worse — a replayable bearer token at rest — and it is
-// how a cluster with no cloud identity to trust (Vultr VKE, bare metal, k3s)
-// becomes a target at all. Scoped down by the owner's own RBAC rather than by
-// our promise.
-//
-// EKS AND AKS ARE DELIBERATELY ABSENT, not forgotten. Flux's configMapRef
-// supports `aws` and `azure` providers and adding them is a small change to
-// the validator and one config field each — but there is no user on either
-// cloud today, and an untested code path that LOOKS supported is worse than
-// an absent one: it gets chosen, fails inside a cloud client, and reports a
-// problem with the customer's cluster. Tags 2 and 3 are RESERVED below so
-// those values can be added later without renumbering, and a generic
-// token-authenticated cluster on EKS or AKS already works today.
-//
-// UNSPECIFIED is not a default. A request that does not say how to
-// authenticate is InvalidArgument, because every possible default is wrong:
-// guessing workload identity on a cluster with none produces an auth failure
-// against a healthy cluster, and guessing token with no token produces a
-// kubeconfig authenticating as nobody.
-enum ClusterAuth {
-  CLUSTER_AUTH_UNSPECIFIED = 0;
-  // GKE. cloud_cluster is `projects/<project>/locations/<location>/clusters/<name>`.
-  CLUSTER_AUTH_WORKLOAD_IDENTITY_GCP = 1;
-  // A scoped ServiceAccount token the owner supplies. Works on ANY Kubernetes
-  // cluster; no cloud identity required, and cloud_cluster is not used.
-  CLUSTER_AUTH_SERVICE_ACCOUNT_TOKEN = 4;
-
-  // RESERVED FOR THE TWO CLOUDS WE HAVE NOT BUILT. Holding the tags means
-  // adding EKS/AKS workload identity later is additive rather than a
-  // renumbering — and renumbering an enum whose values are already stored in
-  // a database column is not a thing we would be willing to do.
-  reserved 2; // CLUSTER_AUTH_WORKLOAD_IDENTITY_AWS — EKS, cluster ARN
-  reserved 3; // CLUSTER_AUTH_WORKLOAD_IDENTITY_AZURE — AKS, ARM resource id
-}
-
-// HubIdentity is the principal the CONTROL PLANE acts as.
-//
-// WHY THIS IS A RESPONSE FIELD AND NOT DOCUMENTATION. Workload identity
-// inverts who holds the credential: instead of the owner handing us a token,
-// the owner grants OUR identity access in THEIR cloud. That grant names a
-// principal, and the principal is a deployment-level fact about the platform
-// the caller has no way to know. So the connect response hands it back and
-// forge renders the exact `gcloud` command plus the target cluster RBAC.
-//
-// ONE FIELD, because there is one workload-identity provider. The AWS and
-// Azure principals are reserved alongside the enum values they would serve:
-// returning an empty `aws_role_arn` today would advertise a capability that
-// does not exist, which is the thing the enum's reservation is avoiding.
-//
-// EMPTY IS THE NORMAL STATE IN DEV, where the control plane has no cloud
-// identity. forge must then say "this deployment has no GCP identity
-// configured" rather than print a grant command with a blank principal in it.
-message HubIdentity {
-  // The GCP service account email the hub's workloads run as, e.g.
-  // `control-plane@reliant-labs-475814.iam.gserviceaccount.com`. Granted
-  // `roles/container.clusterViewer` plus target-cluster RBAC.
-  string gcp_service_account = 1;
-
-  reserved 2; // aws_role_arn — with CLUSTER_AUTH_WORKLOAD_IDENTITY_AWS
-  reserved 3; // azure_client_id — with CLUSTER_AUTH_WORKLOAD_IDENTITY_AZURE
-}
-
 message Cluster {
   string id = 1;
   // Org-scoped name, a DNS label. The name environments will address the
@@ -201,27 +123,45 @@ message Cluster {
   repeated string environment_ids = 9;
   google.protobuf.Timestamp created_at = 10;
 
-  // How the platform authenticates to this cluster.
-  ClusterAuth auth = 12;
   // The API server address, as the hub dials it. https only. Set by
   // ConnectCluster.
   string address = 13;
-  // The provider's own resource name for the cluster, set iff auth is a
-  // workload-identity auth (today only WORKLOAD_IDENTITY_GCP). Empty
-  // otherwise.
-  string cloud_cluster = 14;
 
   // The secret-store issuer registered for this cluster, or unset when none
   // is. See ClusterIssuer.
   ClusterIssuer issuer = 15;
 
+  // The SHA-256 fingerprint of the registered CA certificate (the first
+  // CERTIFICATE block of the uploaded bundle), over its DER encoding, as
+  // colon-separated uppercase hex — the form `openssl x509 -fingerprint
+  // -sha256` and `kubectl` print, so it can be compared against a cluster's own
+  // CA by eye. Computed on the server from the stored CA; the CA itself is never
+  // returned. Empty until ConnectCluster has stored a CA.
+  string ca_fingerprint = 16;
+
+  // When the registration row last changed: a connect or re-connect (new
+  // address, CA or token) moves it.
+  google.protobuf.Timestamp updated_at = 17;
+
+  // Tags and names that once carried hub workload identity. The platform
+  // authenticates to a connected cluster only with the scoped credential the
+  // owner uploaded, so there is no auth mode and no cloud resource name.
+  reserved 12, 14;
+  reserved "auth", "cloud_cluster";
+
   // THERE IS NO ca_pem AND NO token HERE, AND THAT IS DELIBERATE. The CA is
-  // not secret but it is bulky and nothing in a UI needs it, and a token must
-  // never be returned at all — a field that exists is a field some future
-  // handler populates. See ConnectClusterRequest.token.
+  // not secret but it is bulky and nothing in a UI needs it (ca_fingerprint is
+  // what identifies it), and a token must never be returned at all — a field
+  // that exists is a field some future handler populates. See
+  // ConnectClusterRequest.token.
 }
 
-message ListClustersRequest {}
+message ListClustersRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListClustersResponse {
   // Sorted by name.
@@ -230,6 +170,10 @@ message ListClustersResponse {
 
 message GetClusterRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetClusterResponse {
@@ -238,6 +182,10 @@ message GetClusterResponse {
 
 message RemoveClusterRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RemoveClusterResponse {}
@@ -252,9 +200,6 @@ message ConnectClusterRequest {
   // A DNS label, unique among the org's live clusters. An EXISTING cluster
   // with this name is UPDATED.
   string name = 1;
-
-  // REQUIRED. UNSPECIFIED is InvalidArgument; see ClusterAuth.
-  ClusterAuth auth = 2;
 
   // The API server address the HUB will dial, e.g.
   // `https://10.0.0.1` or `https://my-cluster.example.com:6443`.
@@ -274,25 +219,12 @@ message ConnectClusterRequest {
   // address.
   string ca_pem = 4;
 
-  // The provider's fully-qualified resource name for the cluster. For
-  // WORKLOAD_IDENTITY_GCP that is
-  // `projects/<project>/locations/<location>/clusters/<name>`.
+  // The scoped ServiceAccount token `forge cluster connect` minted in the
+  // target cluster. REQUIRED: a request without one is InvalidArgument.
   //
-  // REQUIRED for a workload-identity auth and REFUSED for
-  // SERVICE_ACCOUNT_TOKEN, which does not use it. Flux's configMapRef needs
-  // it to perform the provider token exchange, and its format is VALIDATED —
-  // a malformed path produces a Flux reconcile error naming a cloud API, two
-  // layers from the typo.
-  string cloud_cluster = 5;
-
-  // The ServiceAccount token, for SERVICE_ACCOUNT_TOKEN only.
-  //
-  // WRITE-ONLY. It is REQUIRED iff auth is SERVICE_ACCOUNT_TOKEN, REFUSED on
-  // every other auth (a token on a workload-identity request means the caller
-  // misunderstands which credential is in play, and silently ignoring it
-  // would store a secret nothing reads), and it is NEVER RETURNED by any RPC
-  // on this service — there is no field on Cluster to return it in. A request
-  // carrying one is never logged, in whole or in part.
+  // WRITE-ONLY. It is NEVER RETURNED by any RPC on this service — there is no
+  // field on Cluster to return it in. A request carrying one is never logged,
+  // in whole or in part. Removing the cluster deletes the stored token.
   string token = 6;
 
   // When token stops working, if the owner bound it. Optional: a token with
@@ -316,6 +248,15 @@ message ConnectClusterRequest {
   //   present, empty  the registration is removed, and the store stops
   //                   trusting the cluster.
   ClusterIssuerRegistration issuer = 8;
+
+  // Tags and names that once selected hub workload identity: `auth` and
+  // `cloud_cluster`. Connecting takes the uploaded token only.
+  reserved 2, 5;
+  reserved "auth", "cloud_cluster";
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 9;
 }
 
 // ClusterIssuerRegistration declares the service-account issuer of a cluster.
@@ -366,6 +307,9 @@ message ClusterIssuer {
 
 message ConnectClusterResponse {
   Cluster cluster = 1;
-  // The hub's own identities, for the IAM grant forge prints. See HubIdentity.
-  HubIdentity hub_identity = 2;
+
+  // `hub_identity` carried the principal a workload-identity grant named. No
+  // connected cluster trusts a hub identity any more.
+  reserved 2;
+  reserved "hub_identity";
 }

@@ -17,6 +17,12 @@ type durableResumeSource interface {
 	toolGrantLister
 }
 
+// pinnedCatalogReader reads a pinned workflow catalog (db.Repo); a restart
+// checks the checkpoint's pin is still stored before carrying it.
+type pinnedCatalogReader interface {
+	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
+}
+
 // toolGrantLister is the read that recovers what load_tool granted each thread.
 type toolGrantLister interface {
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
@@ -35,7 +41,12 @@ type toolGrantLister interface {
 //   - the background spawns that never reported back, which ran as
 //     goroutines inside the dead execution and died with it;
 //   - each thread's load_tool grants, which lived in that execution's
-//     ChildWorkflowTracker (ToolGrantsFromDurableState).
+//     ChildWorkflowTracker (ToolGrantsFromDurableState);
+//   - the workflow catalog the interrupted run started with, recorded on its
+//     checkpoint, so the restart resumes that position against the same
+//     definitions rather than whatever was pushed since. A pin no longer
+//     stored (unused for the retention period) is dropped and the restart
+//     pins the current catalog: the conversation continues.
 //
 // Best-effort per part: a read that fails degrades that part of the resume
 // and is logged, but never prevents the restart that recovers the chat.
@@ -50,6 +61,7 @@ func ResumeInputFromDurableState(ctx context.Context, repo durableResumeSource, 
 	if checkpoint != nil {
 		resume.NodeID = checkpoint.NodeID
 		resume.LoopIteration = int(checkpoint.LoopIteration)
+		resume.CatalogPin = restorablePin(ctx, repo, checkpoint.CatalogPin, rootWorkflowID)
 	}
 
 	spawns, err := ResumableSpawnsFromDurableState(ctx, repo, rootWorkflowID)
@@ -108,4 +120,27 @@ func ToolGrantsFromDurableState(ctx context.Context, repo toolGrantLister, chatI
 		grants[row.ThreadID] = mergeSortedNames(grants[row.ThreadID], row.Tools)
 	}
 	return grants, nil
+}
+
+// restorablePin is pin when its catalog is still stored, else "".
+func restorablePin(ctx context.Context, repo any, pin, workflowID string) string {
+	if pin == "" {
+		return ""
+	}
+	pinned, ok := repo.(pinnedCatalogReader)
+	if !ok {
+		return pin
+	}
+	_, found, err := pinned.GetPinnedProjectCatalog(ctx, pin)
+	if err != nil {
+		logging.WarnContext(ctx, "Failed to check the checkpoint's workflow catalog - restarting on it anyway",
+			"workflowID", workflowID, "catalogPin", pin, "error", err)
+		return pin
+	}
+	if !found {
+		logging.WarnContext(ctx, "The workflow catalog the interrupted run started with is no longer stored - restarting on the current one",
+			"workflowID", workflowID, "catalogPin", pin)
+		return ""
+	}
+	return pin
 }

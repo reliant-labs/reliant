@@ -26,6 +26,9 @@ const (
 	ScopeAPI = "reliant:api"
 	// ScopeDaemon registers and connects a daemon as the user.
 	ScopeDaemon = "daemon:connect"
+	// ScopeMachines lists, starts, stops and resizes the user's machines
+	// (`reliant machine`). Person-only: a daemon's credential never holds it.
+	ScopeMachines = "daemon:manage"
 )
 
 // ErrNotLoggedIn reports no stored credential for a server.
@@ -58,9 +61,10 @@ type Login struct {
 // needs a browser and a human.
 var ErrInteractiveRequired = errors.New("interactive login required but running non-interactively")
 
-// Run performs the login and returns the credential. It does not store it; see
-// Store. The two are split because a daemon registration keeps its credential in
-// the daemon store, not the CLI's.
+// Run performs the login and returns the credential, naming the account it
+// signed in as (AccountID / AccountEmail). It does not store it; see Store.
+// The two are split because a daemon registration keeps its credential in the
+// daemon store, not the CLI's.
 func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 	if l.NonInteractive {
 		return credentials.Credential{}, ErrInteractiveRequired
@@ -97,11 +101,14 @@ func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 		return credentials.Credential{}, fmt.Errorf("login via %s: %w", meta.Issuer, err)
 	}
 	now := time.Now().UTC()
+	account := accountFromToken(tok)
 	c := credentials.Credential{
-		Token:     tok.AccessToken,
-		Scopes:    strings.Fields(tok.Scope),
-		CreatedAt: now,
-		Issuer:    meta.Issuer,
+		Token:        tok.AccessToken,
+		Scopes:       strings.Fields(tok.Scope),
+		CreatedAt:    now,
+		Issuer:       meta.Issuer,
+		AccountID:    account.ID,
+		AccountEmail: account.Email,
 	}
 	if len(tok.AccessToken) > 13 {
 		c.TokenPrefix = tok.AccessToken[:13]
@@ -153,7 +160,11 @@ func (a *adapter) Store(server string, c credentials.Credential) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return path, credentials.Store(path, server, ClientID, c)
+	if err := credentials.Store(path, server, ClientID, c); err != nil {
+		return path, err
+	}
+	_ = dropLegacyAccount(path, server) // it described the login just replaced
+	return path, nil
 }
 
 func (a *adapter) Lookup(server string) (credentials.Credential, string, error) {
@@ -171,7 +182,7 @@ func (a *adapter) Lookup(server string) (credentials.Credential, string, error) 
 	if c.Expired(a.deps.Now()) {
 		return credentials.Credential{}, path, fmt.Errorf("%w: the stored login expired at %s", ErrNotLoggedIn, c.ExpiresAt.Format(time.RFC3339))
 	}
-	return c, path, nil
+	return adoptLegacyAccount(path, server, c), path, nil
 }
 
 func (a *adapter) Remove(server string) (bool, string, error) {
@@ -180,7 +191,11 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 		return false, "", err
 	}
 	existed, err := credentials.Remove(path, server, ClientID)
-	return existed, path, err
+	if err != nil {
+		return existed, path, err
+	}
+	_ = dropLegacyAccount(path, server)
+	return existed, path, nil
 }
 
 // The CLI's entry points: the adapter over the environment's credentials
@@ -191,8 +206,8 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 // `forge login` writes.
 func CredentialsPath() (string, error) { return New(DepsFromEnv()).CredentialsPath() }
 
-// Store saves c as the reliant CLI's credential for server and returns the
-// file path.
+// Store saves c — with the account it signed in as — as the reliant CLI's
+// login for server, and returns the credentials file path.
 func Store(server string, c credentials.Credential) (string, error) {
 	return New(DepsFromEnv()).Store(server, c)
 }
@@ -234,8 +249,9 @@ func MetadataHandler(issuer string) http.Handler {
 		"issuer":                                issuer,
 		"authorization_endpoint":                issuer + "/oauth/authorize",
 		"token_endpoint":                        issuer + "/oauth/token",
+		"device_authorization_endpoint":         issuer + "/oauth/device_authorization",
 		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code"},
+		"grant_types_supported":                 []string{"authorization_code", DeviceGrantType},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 	}

@@ -1,0 +1,8 @@
+name: fixture
+entry: [review]
+nodes:
+- id: review
+  type: workflow
+  ref: builtin://autopilot-agent
+  args:
+    system_prompt: Review the diff.

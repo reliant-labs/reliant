@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryHistory,
@@ -90,7 +90,7 @@ describe("MobileNavDrawer", () => {
     await screen.findByRole("dialog", { name: "Navigation" });
     expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("href", "/m/inbox");
     // The forge console itself, which collapses its own nav at phone width.
-    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/forge");
+    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/apps");
     expect(screen.getByRole("link", { name: /^Observability/ })).toHaveAttribute("href", "/forge/observability");
   });
 
@@ -143,6 +143,24 @@ describe("MobileNavDrawer", () => {
     expect(screen.getByRole("link", { name: /Account/ })).toHaveAttribute("href", "/m/account");
     expect(screen.getByRole("link", { name: /Project/ })).toHaveAttribute("href", "/m/projects");
     expect(screen.getByText("reliant")).toBeInTheDocument();
+  });
+
+  it("lays the destinations out as a grid above the project switcher", async () => {
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(nav.className).toContain("grid-cols-3");
+    // Every destination is a tile in the grid; the project is not one of them.
+    expect(within(nav).getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /^Settings/ })).toBeInTheDocument();
+    const project = screen.getByRole("link", { name: /Project/ });
+    expect(nav).not.toContainElement(project);
+    expect(nav.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Tiles keep a touch target above the 44px floor.
+    for (const tile of within(nav).getAllByRole("link")) {
+      expect(tile.className).toContain("min-h-[64px]");
+    }
   });
 
   it("calls onClose when the scrim is tapped", async () => {
@@ -203,6 +221,27 @@ describe("MobileNavDrawer", () => {
     last.focus();
     await user.tab();
     expect(document.activeElement).toBe(first);
+  });
+
+  it("traps focus: every Tab is moved by the trap, never left to the browser", async () => {
+    // Safari's default Tab order skips links, so a trap that only wrapped at
+    // the last element let focus escape past a trailing link. A bare keydown
+    // (which moves nothing by itself) proves the trap advances focus on every
+    // Tab, links included, and wraps at the end.
+    renderAt("/m/chats", true, vi.fn());
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(focusable[0]));
+
+    for (let i = 1; i <= focusable.length; i++) {
+      const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(tab);
+      expect(tab.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(focusable[i % focusable.length]);
+    }
   });
 
   it("traps focus: Shift+Tab from the first element wraps to the last", async () => {

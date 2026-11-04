@@ -42,6 +42,7 @@ const modelInputWithTagDefault: InputDef = {
 function renderModelPage(values: Record<string, unknown>) {
   return render(
     <ChatSettingsPopover
+      embedded
       isOpen
       onClose={() => {}}
       initialPage="model"

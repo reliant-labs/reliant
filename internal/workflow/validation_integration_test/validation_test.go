@@ -715,6 +715,7 @@ inputs:
 nodes:
   - id: step1
     type: call_llm
+    model: "mock"
 `,
 			},
 		},
@@ -746,6 +747,7 @@ inputs:
 nodes:
   - id: step1
     type: call_llm
+    model: "mock"
 `,
 			},
 		},
@@ -776,6 +778,7 @@ inputs:
 nodes:
   - id: step1
     type: call_llm
+    model: "mock"
 `,
 			},
 		},

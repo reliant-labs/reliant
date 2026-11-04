@@ -11,6 +11,7 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -22,31 +23,91 @@ import (
 )
 
 // DaemonCommander is the one daemon capability adoption needs: send a command
-// to the user's default daemon and return its raw response.
+// to the machine that holds the project's checkout and return its raw
+// response. Callers bind it to that machine (see OnDaemon) — the user's
+// default daemon is project-blind, and asking a machine without the checkout
+// reports nothing.
 type DaemonCommander interface {
 	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
-// AdoptFromDaemon reconciles the repos registry with the filesystem. Registry
-// rows are written by the clone/init/add flows, so a repo created any other
-// way — `git init` run by hand in the workspace terminal is the canonical
-// case — exists on disk but not in the DB, and everything gating on
-// ListReposByProject wrongly refuses. Callers use this before refusing: ask
-// the user's daemon (repo.discover) what actually exists under the project
-// path, register anything missing, and true up project.IsGitRepo alongside.
-// Returns the project's repos after adoption.
-//
-// Best-effort by design: on daemon or discovery failure it returns nil so the
-// caller keeps its own precondition semantics.
-func AdoptFromDaemon(ctx context.Context, database AdoptStore, router DaemonCommander, project *db.Project) []*core.Repo {
-	payload, err := json.Marshal(map[string]string{"path": project.Path})
-	if err != nil {
-		return nil
+// PinnedSender sends a command to one named daemon.
+type PinnedSender interface {
+	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+}
+
+// OnDaemon binds a router to daemonID, so adoption asks the machine a
+// worktree is about to be created on. An empty daemonID keeps default
+// resolution.
+func OnDaemon(router PinnedSender, daemonID string) DaemonCommander {
+	return pinnedCommander{router: router, daemonID: daemonID}
+}
+
+type pinnedCommander struct {
+	router   PinnedSender
+	daemonID string
+}
+
+func (p pinnedCommander) SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	if p.daemonID == "" {
+		return p.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	}
-	respBytes, err := router.SendDaemonCommand(ctx, project.UserID, "repo.discover", payload, 30_000)
+	return p.router.SendDaemonCommandToDaemon(ctx, userID, p.daemonID, commandType, payload, timeoutMs)
+}
+
+// adoptDiscoverTimeoutMs bounds the repo.discover round trip.
+const adoptDiscoverTimeoutMs = 30_000
+
+// NoReposMessage is the sentence a caller refuses worktree creation with when
+// the registry is empty AND the machine confirmed there is no git repository
+// in the project folder. It names the folder — checkout, the project's
+// checkout on that machine — and how deep the search went, so a user whose
+// repo is real but elsewhere can see why it was not found.
+func NoReposMessage(checkout string) string {
+	return fmt.Sprintf("no git repository found in %s (searched it and %d levels of subfolders); run `git init` there or clone a repository into it before creating a workspace",
+		checkout, DefaultMaxDepth)
+}
+
+// SearchCutShortError is AdoptFromDaemon's answer when the machine's scan of
+// the project stopped early (repo.Discovery.Truncated) before finding any
+// repository: unlike NoReposMessage's case, the machine did not finish
+// looking, so the caller must not say the project has none.
+type SearchCutShortError struct {
+	Path, Reason string
+}
+
+func (e *SearchCutShortError) Error() string {
+	return fmt.Sprintf("the search for git repositories in %s stopped early, because %s, without finding one; add the repository by its folder inside the project, or open the project at the repository's own folder",
+		e.Path, e.Reason)
+}
+
+// AdoptFromDaemon reconciles the repos registry with the filesystem. Registry
+// rows are written by the local create/init/add flows, so a repo that came to
+// exist any other way — a project cloned onto a cloud machine, a project the
+// daemon announced, `git init` run by hand in the workspace terminal — exists
+// on disk but not in the DB, and everything gating on ListReposByProject
+// wrongly refuses. Callers use this before refusing: ask the project's machine
+// (repo.discover) what actually exists under the project path, register
+// anything missing, and true up project.IsGitRepo alongside. Returns the
+// project's repos after adoption.
+//
+// checkout is the project's checkout ON machine (projectcheckout): the
+// directory searched is that machine's, never projects.path.
+//
+// An error means the machine could not answer (unreachable, asleep, the
+// project folder missing on it): the caller must say so rather than claim the
+// project has no repos. A nil error with no repos means the machine looked and
+// found none (NoReposMessage).
+func AdoptFromDaemon(ctx context.Context, database AdoptStore, machine DaemonCommander, project *db.Project, checkout string) ([]*core.Repo, error) {
+	payload, err := json.Marshal(map[string]string{"path": checkout})
 	if err != nil {
-		logging.WarnContext(ctx, "repo adoption: discover failed", "error", err, "project_id", project.ID)
-		return nil
+		return nil, fmt.Errorf("marshal repo.discover payload: %w", err)
+	}
+	respBytes, err := machine.SendDaemonCommand(ctx, project.UserID, "repo.discover", payload, adoptDiscoverTimeoutMs)
+	if err != nil {
+		logging.WarnContext(ctx, "repo adoption: discover failed", "error", err, "project_id", project.ID, "path", checkout)
+		return nil, fmt.Errorf("look for git repositories in %s: %w", checkout, err)
 	}
 	var resp struct {
 		Discovered []struct {
@@ -54,9 +115,22 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, router DaemonComm
 			Name         string `json:"name"`
 			RemoteURL    string `json:"remote_url,omitempty"`
 		} `json:"discovered"`
+		Truncated       bool   `json:"truncated"`
+		TruncatedReason string `json:"truncated_reason"`
 	}
-	if err := json.Unmarshal(respBytes, &resp); err != nil || len(resp.Discovered) == 0 {
-		return nil
+	if err := json.Unmarshal(respBytes, &resp); err != nil {
+		return nil, fmt.Errorf("read repo.discover answer for %s: %w", checkout, err)
+	}
+	if resp.Truncated {
+		logging.WarnContext(ctx, "repo adoption: the machine scanned part of the project", "project_id", project.ID, "path", checkout,
+			"reason", resp.TruncatedReason, "found", len(resp.Discovered))
+		if len(resp.Discovered) == 0 {
+			// Not "there is no repository": the machine did not finish looking.
+			return nil, &SearchCutShortError{Path: checkout, Reason: resp.TruncatedReason}
+		}
+	}
+	if len(resp.Discovered) == 0 {
+		return nil, nil
 	}
 
 	now := time.Now().UTC()
@@ -86,6 +160,8 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, router DaemonComm
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}); err != nil {
+			// A concurrent adoption may have registered the same path first
+			// (UNIQUE (project_id, relative_path)); the re-read below sees it.
 			logging.WarnContext(ctx, "repo adoption: failed to register repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
 			continue
 		}
@@ -103,7 +179,7 @@ func AdoptFromDaemon(ctx context.Context, database AdoptStore, router DaemonComm
 
 	repos, err := database.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("list repos for project %s: %w", project.ID, err)
 	}
-	return repos
+	return repos, nil
 }

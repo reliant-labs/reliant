@@ -22,6 +22,9 @@ func emptyRunRepo() *run.MockRepository {
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+		},
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) {
 			return nil, nil
 		},

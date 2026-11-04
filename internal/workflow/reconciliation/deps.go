@@ -11,6 +11,7 @@ package reconciliation
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -33,6 +34,10 @@ type ReconcilerStore interface {
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
+	// Launches whose start never reached Temporal.
+	ListStrandedWorkflowStarts(ctx context.Context, cutoff time.Time, limit int) ([]*db.Workflow, error)
+	MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error)
+
 	// Orphan reaps.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]db.ReapedWorkflow, error)
 	ReapOrphanedThreads(ctx context.Context) ([]db.ReapedThread, error)
@@ -42,6 +47,13 @@ type ReconcilerStore interface {
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
+	// Approvals nothing waits on any more, and closed approvals whose chat
+	// feed still says pending (approval_sweep.go).
+	ListStaleApprovals(ctx context.Context, limit int) ([]db.StaleApproval, error)
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
+	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
+	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
+
 	// Stranded spawns, backgrounded processes and the tool-call rows they
 	// close.
 	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
@@ -50,6 +62,9 @@ type ReconcilerStore interface {
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+	// Which chats owning a still-running backgrounded process are held on a
+	// provider usage limit (reassertHeldRunWork).
+	ChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error)
 
 	// The agent-message mailbox.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)

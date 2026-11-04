@@ -16,10 +16,10 @@
  * nothing stopped. These tests assert the negative: with no session, the
  * provider fetch is never issued.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 const readSetting = vi.fn();
-const upsertStringSetting = vi.fn(async () => undefined);
+const upsertStringSetting = vi.fn(async (_key: string, _value: string) => undefined);
 
 vi.mock("../../lib/settingsPersistence", () => ({
   readSetting: (key: string) => readSetting(key),
@@ -33,17 +33,24 @@ const getProviders = vi.fn(async () => [] as unknown[]);
 vi.mock("../../api/client", () => ({
   api: { settings: { getProviders: () => getProviders() } },
 }));
-vi.mock("../../api/mcp-grpc", () => ({
-  mcpGrpc: { listServers: vi.fn(async () => ({ servers: [] })) },
+
+// SettingsService is answered at the transport: the code under test reads
+// provider statuses / preferences through the generated hooks' cache entries.
+import { setTransport } from "../../lib/connect";
+import { mockTransport } from "../../lib/test-utils";
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "SettingsService.GetProviderStatuses": async () => ({ providers: await getProviders() }),
+    }),
+  );
+});
+afterEach(() => setTransport(null));
+vi.mock("../../hooks/mcp-queries", () => ({
+  fetchMcpServers: vi.fn(async () => []),
 }));
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-vi.mock("../worktreeStore", () => ({
-  useWorktreeStore: {
-    getState: () => ({ worktrees: [] }),
-    subscribe: vi.fn(() => () => undefined),
-  },
 }));
 vi.mock("../projectStore", () => ({
   useProjectStore: {

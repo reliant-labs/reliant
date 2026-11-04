@@ -35,6 +35,7 @@ func readFile(t *testing.T, path string, opts *daemon.ReadFileOpts) daemon.FileC
 // TestReadFileIsByteExact. Both readers must agree, byte for byte, or an edit
 // behaves differently depending on where the daemon runs.
 func TestFSReadFileIsByteExact(t *testing.T) {
+	t.Parallel() // its own temp dirs and servers; off the package's serial phase
 	cases := []struct {
 		name string
 		body string
@@ -73,6 +74,7 @@ func TestFSReadFileIsByteExact(t *testing.T) {
 // TestFSReadFileMatchesLocalClient asserts the two implementations of the same
 // contract cannot drift: same file, same opts, same FileContent.
 func TestFSReadFileMatchesLocalClient(t *testing.T) {
+	t.Parallel() // its own temp dirs and servers; off the package's serial phase
 	bodies := []string{
 		"one\ntwo\nthree\n",
 		"one\ntwo\nthree",

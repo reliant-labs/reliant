@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
 // tool_call_repo_ext.go and tool_call_result_repo_ext.go: writes alternate
@@ -241,20 +242,6 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 		t.Fatalf("Repo.GetToolCallResultForMessage = %v, %v", got, err)
 	}
 
-	for _, tc := range []struct {
-		ids  []string
-		want string
-	}{{nil, "[]"}, {[]string{m4}, "[tr-c]"}, {[]string{m4, m1}, "[tr-a tr-b tr-c]"}} {
-		got, err := store.ListToolCallResultsByMessageIDs(ctx, o, tc.ids)
-		ids := make([]string, len(got))
-		for i, r := range got {
-			ids[i] = r.ToolCallID
-		}
-		if err != nil || fmt.Sprint(ids) != tc.want {
-			t.Fatalf("ListToolCallResultsByMessageIDs(%v) = %v, %v; want %s", tc.ids, ids, err, tc.want)
-		}
-	}
-
 	// Grants: only results that granted something, per thread.
 	grants, err := store.ListToolGrants(ctx, o, f.chat)
 	if err != nil || len(grants) != 1 || grants[0].ThreadID != f.main || fmt.Sprint(grants[0].Tools) != "[shell view]" {
@@ -397,5 +384,29 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 	procs, err := store.ListBackgroundedProcessToolCalls(ctx, o)
 	if err != nil || len(procs) != 1 || procs[0].ToolCallID != "bg-proc" || procs[0].UserID != "test-user" || *procs[0].DaemonID != "d-9" {
 		t.Fatalf("ListBackgroundedProcessToolCalls = %+v, %v", procs, err)
+	}
+
+	// What the daemon's idle reaper is told: the chat's root run is active,
+	// and its thread's workspace is live.
+	if !procs[0].ChatRunning || procs[0].WorkspaceArchived {
+		t.Fatalf("with an active run and no workspace: %+v", procs[0])
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := o.Bun().NewRaw(query, args...).Exec(ctx); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	// Every run of the chat stopped: no run in progress.
+	exec(`UPDATE workflows SET state = ?, stop_reason = ? WHERE chat_id = ? AND state <> ?`,
+		db.WorkflowStateStopped, db.StopReasonCompleted, f.chat, db.WorkflowStateStopped)
+	// The call's thread works in a workspace that is then archived.
+	exec(`INSERT INTO worktrees (id, name, path, branch, base_branch, project_id, created_at, updated_at, last_active)
+	      VALUES ('wt-bg', 'wt-bg', '/tmp/wt-bg', 'b', 'main', ?0, ?1, ?1, ?1)`, storetest.SeedProjectID, t0)
+	exec(`UPDATE threads SET worktree_id = 'wt-bg' WHERE id = ?`, f.main)
+	exec(`UPDATE worktrees SET deleted_at = ? WHERE id = 'wt-bg'`, t0.Add(time.Hour))
+	procs, err = store.ListBackgroundedProcessToolCalls(ctx, o)
+	if err != nil || len(procs) != 1 || procs[0].ChatRunning || !procs[0].WorkspaceArchived {
+		t.Fatalf("finished chat in an archived workspace: %+v, %v", procs, err)
 	}
 }

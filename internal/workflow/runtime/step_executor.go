@@ -77,6 +77,17 @@ type StepExecutor struct {
 	// enclosingIter is the `iter` of the loop enclosing a sub-workflow body
 	// this executor runs, when that body's own inputs do not carry it.
 	enclosingIter map[string]interface{}
+	// askUserHandoff is set on the iterations of a background spawn's own
+	// agent loop: a blocking ask_user in its execute_tools batch can park
+	// the spawn for a continue-as-new handoff (ask_user_handoff.go).
+	askUserHandoff *toolBatchHandoff
+}
+
+// WithAskUserHandoff lets this executor's execute_tools batches park their
+// spawn inside a blocking ask_user wait (ask_user_handoff.go).
+func (e *StepExecutor) WithAskUserHandoff(h *toolBatchHandoff) *StepExecutor {
+	e.askUserHandoff = h
+	return e
 }
 
 // NewStepExecutor creates a new StepExecutor with all required context.
@@ -268,6 +279,16 @@ type RunningStep struct {
 	// workflow assembled the output itself and writes the message on
 	// completion.
 	SaveDelegated bool
+	// ProviderPinsKey identifies the dispatch routing epoch; an old in-flight
+	// call completing after a switch must not acknowledge the new cleanup.
+	ProviderPinsKey string
+}
+
+func (e *StepExecutor) providerPinsKey() string {
+	if e.childTracker == nil || e.childTracker.chatProvider == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s/%d", e.GetThread(), e.childTracker.chatProvider, e.childTracker.providerUpdates)
 }
 
 // removeRunningStep removes a step from the slice using pointer comparison.
@@ -419,7 +440,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID)
+			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity(node, "unknown step type: "+stepType)
@@ -439,6 +460,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		PreallocatedMessageID: preallocatedMessageID,
 		ThreadInterruptEpoch:  threadInterruptEpoch,
 		SaveDelegated:         saveDelegated,
+		ProviderPinsKey:       e.providerPinsKey(),
 	}
 }
 
@@ -463,6 +485,16 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// inline workflows, and loop iterations alike — which is what lets agent
 	// loops trip the breaker. May block until resume.
 	e.pauseCtrl.ObserveDaemonOfflineStep(e.ctx, running.ActivityName, stepEvent)
+
+	// A run that gave up (an unattended self-pause outlived its ladder) is
+	// ending: a step that completes now fails with that, so whichever
+	// executor holds it returns it instead of carrying on — the pause that
+	// gave up may have been armed by another thread, or by the breaker above.
+	if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil && stepEvent != nil {
+		stepEvent.Data = nil
+		stepEvent.Error = gaveUp
+		stepEvent.RetryExhausted = true
+	}
 
 	// Repeated-identical-tool-error breaker: an unattended agent that has been
 	// told the same thing three times and keeps asking is not going to get
@@ -565,6 +597,12 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		}
 	}
 
+	if (running.ActivityName == "CallLLM" || running.ActivityName == "Compact") && running.ProviderPinsKey != "" {
+		if e.childTracker.providerPinCleanups == nil {
+			e.childTracker.providerPinCleanups = map[string]bool{}
+		}
+		e.childTracker.providerPinCleanups[running.ProviderPinsKey] = true
+	}
 	// Normalize output against schema
 	normalizedOutput := e.normalizeOutput(rawOutput, running.ActivityName)
 
@@ -783,6 +821,7 @@ func (e *StepExecutor) startAction(
 	node *reliantv1.Node,
 	evalResult *reliantv1.Node,
 	preallocatedMessageID string,
+	event *core.WorkflowEvent,
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
@@ -854,8 +893,11 @@ func (e *StepExecutor) startAction(
 			"saveDelegated", delegated,
 		)
 
+		// Always set, nil included: a spawn dispatched from this batch runs
+		// on a context derived from this one and must not inherit it.
+		toolsCtx := withToolBatchHandoff(e.ctx, e.askUserHandoff.forBatch(node.GetId(), event, e.nodeOutputs))
 		future := executeToolsWithSpawnSupport(
-			e.ctx,
+			toolsCtx,
 			e.activityOptions(node),
 			rtx,
 			evalResult,
@@ -935,6 +977,56 @@ func (e *StepExecutor) startCompute(node *reliantv1.Node, evalResult *reliantv1.
 // It is not a registered activity: nothing is dispatched under it.
 const computeActivityName = "Compute"
 
+// runDaemonSelector is the daemon_selector a run node's activity input
+// carries: the node's own selector, else the workflow-level one. The chat's
+// pin (the session_daemon_id fallback) stays marked as one, so ExecuteRunStep
+// lets it yield to a branch workspace's owner as ExecuteTools does: a pin
+// goes stale when the chat moves to the workspace's machine while the run
+// lives. nil means no selector.
+func (e *StepExecutor) runDaemonSelector(node *reliantv1.Node) map[string]interface{} {
+	if node.GetDaemon() != nil {
+		if lit := node.GetDaemon().GetLiteral(); lit != nil {
+			return map[string]interface{}{
+				"id":     lit.GetId(),
+				"name":   lit.GetName(),
+				"type":   lit.GetType(),
+				"labels": lit.GetLabels(),
+			}
+		}
+		if node.GetDaemon().GetExpr() == "" {
+			return nil
+		}
+		ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
+		if err != nil {
+			logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
+			return nil
+		}
+		if ds == nil {
+			return nil
+		}
+		return map[string]interface{}{
+			"id":     ds.ID,
+			"name":   ds.Name,
+			"type":   ds.Type,
+			"labels": ds.Labels,
+		}
+	}
+	if e.execContext == nil || e.execContext.DaemonSelector == nil {
+		return nil
+	}
+	ds := e.execContext.DaemonSelector
+	sel := map[string]interface{}{
+		"id":     ds.ID,
+		"name":   ds.Name,
+		"type":   ds.Type,
+		"labels": ds.Labels,
+	}
+	if ds.Session {
+		sel["session"] = true
+	}
+	return sel
+}
+
 // startRun starts a run (shell command) activity.
 func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool) {
 	runArgs, _ := model.NodeArgsAsMap(evalResult)
@@ -955,35 +1047,8 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	}
 
 	// Daemon selector: node-level override takes priority over workflow-level default
-	if node.GetDaemon() != nil {
-		if lit := node.GetDaemon().GetLiteral(); lit != nil {
-			runInputs["daemon_selector"] = map[string]interface{}{
-				"id":     lit.GetId(),
-				"name":   lit.GetName(),
-				"type":   lit.GetType(),
-				"labels": lit.GetLabels(),
-			}
-		} else if node.GetDaemon().GetExpr() != "" {
-			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
-			if err != nil {
-				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
-			} else if ds != nil {
-				runInputs["daemon_selector"] = map[string]interface{}{
-					"id":     ds.ID,
-					"name":   ds.Name,
-					"type":   ds.Type,
-					"labels": ds.Labels,
-				}
-			}
-		}
-	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
-		ds := e.execContext.DaemonSelector
-		runInputs["daemon_selector"] = map[string]interface{}{
-			"id":     ds.ID,
-			"name":   ds.Name,
-			"type":   ds.Type,
-			"labels": ds.Labels,
-		}
+	if sel := e.runDaemonSelector(node); sel != nil {
+		runInputs["daemon_selector"] = sel
 	}
 
 	logging.Debug("[StepExecutor] startRun",
@@ -999,20 +1064,49 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs[types.RunStepSaveMessageKey] = saveReq
 	}
 
-	future := workflow.ExecuteActivity(e.activityOptions(node), "ExecuteRunStep", runInputs)
+	// The node's timeout bounds the COMMAND: it is the command timeout the
+	// machine enforces (ExecuteRunStepInput.Timeout, in ms). The activity gets
+	// RunStepMachineWaitBudget on top of it, for a command that never reached
+	// its machine to wait for it inside the attempt — an allowance for that
+	// wait only, never extra time for a command running on a healthy machine.
+	// The resolved node first, so a timeout written as an expression counts.
+	if timeout, ok := nodeTimeout(evalResult); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	} else if timeout, ok := nodeTimeout(node); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	}
+	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget+types.RunStepSendOverhead), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep", saveReq != nil
+}
+
+// nodeTimeout is the node's own `timeout`, when it sets a positive one.
+func nodeTimeout(node *reliantv1.Node) (time.Duration, bool) {
+	if node == nil {
+		return 0, false
+	}
+	timeoutStr := model.TimeoutExpr(node)
+	if timeoutStr == "" {
+		return 0, false
+	}
+	parsed, err := time.ParseDuration(timeoutStr)
+	if err != nil || parsed <= 0 {
+		return 0, false
+	}
+	return parsed, true
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.
 func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
+	return e.activityOptionsWithSlack(node, 0)
+}
+
+// activityOptionsWithSlack is activityOptions with slack added to a node's own
+// timeout, for an activity that may legitimately wait before its work starts.
+func (e *StepExecutor) activityOptionsWithSlack(node *reliantv1.Node, slack time.Duration) workflow.Context {
 	// Default to 30 days - we have our own timeout mechanism via heartbeats
 	timeout := 30 * 24 * time.Hour
-	if node != nil {
-		if timeoutStr := model.TimeoutExpr(node); timeoutStr != "" {
-			if parsed, err := time.ParseDuration(timeoutStr); err == nil {
-				timeout = parsed
-			}
-		}
+	if parsed, ok := nodeTimeout(node); ok {
+		timeout = parsed + slack
 	}
 
 	// HeartbeatTimeout controls how quickly Temporal detects a worker that died
@@ -1041,13 +1135,21 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 	return workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 		StartToCloseTimeout: timeout,
 		HeartbeatTimeout:    activityHeartbeatTimeout,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute,
-			MaximumAttempts:    stepActivityMaxAttempts,
-		},
+		RetryPolicy:         stepActivityRetryPolicy(),
 	})
+}
+
+// stepActivityRetryPolicy is the retry ladder every graph step runs on. Its
+// rungs are seconds apart, sized for a flaky call; a database outage is
+// ridden out inside an attempt instead (db_outage.go), so it does not spend
+// the ladder.
+func stepActivityRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute,
+		MaximumAttempts:    stepActivityMaxAttempts,
+	}
 }
 
 // threadInterruptedSince reports whether this executor's thread was interrupted
@@ -1147,6 +1249,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).
+	if e.childTracker != nil && e.childTracker.chatProvider != "" && (model.NodeType(node) == model.NodeTypeCallLLM || model.NodeType(node) == model.NodeTypeCompact) {
+		key := e.providerPinsKey()
+		rtx.ClearProviderPins = !e.childTracker.providerPinCleanups[key]
+	}
+	rtx.Unattended = IsUnattended(e.workflowInputs)
 	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
 	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
 
@@ -1163,6 +1270,18 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// The provider the user chose for the run: what a tier selector with
 		// no provider of its own resolves on (propagateProviderPreference).
 		rtx.ProviderPreference = ProviderPreference(e.workflowInputs)
+		if driver := e.childTracker.chatProvider; driver != "" {
+			rtx.ChatProvider = driver
+			rtx.Descendant = rtx.Thread != e.childTracker.rootThread
+			rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+			if rtx.Descendant {
+				rtx.ChatModel = e.childTracker.chatModel()
+				rtx.ThreadModelChosen = e.childTracker.threadChoseModel(rtx.Thread)
+			}
+			// Kept for query/observability consumers too; strict enforcement
+			// happens at the activity's model-resolution boundary.
+			rtx.ProviderPreference = []string{driver}
+		}
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 		// While the thread is on a fallback model (a usage limit on its own
 		// provider), the lease replaces the chat's selector; the first turn
@@ -1172,6 +1291,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// Whether the loop took this turn on a hint (see
 		// RuntimeContext.SpeculativeTurn).
 		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
+		// The catalog the run started with: the spawn tool describes its
+		// presets from it (catalog_pin.go).
+		rtx.CatalogPin = catalogPinFrom(e.ctx)
 	}
 
 	// Compaction summarizes on the model the thread is on, so a chat on a
@@ -1179,6 +1301,13 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// refused by the same limit call_llm is, so it decides the same way: it
 	// carries the chat's failover policy too.
 	if model.NodeType(node) == model.NodeTypeCompact {
+		rtx.ChatProvider = e.childTracker.chatProvider
+		rtx.Descendant = rtx.Thread != e.childTracker.rootThread
+		rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+		if rtx.ChatProvider != "" && rtx.Descendant {
+			rtx.ChatModel = e.childTracker.chatModel()
+			rtx.ThreadModelChosen = e.childTracker.threadChoseModel(rtx.Thread)
+		}
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 	}
@@ -1257,10 +1386,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
 		// Fall back to workflow-level daemon selector
 		rtx.DaemonSelector = &types.DaemonSelector{
-			ID:     e.execContext.DaemonSelector.ID,
-			Name:   e.execContext.DaemonSelector.Name,
-			Type:   e.execContext.DaemonSelector.Type,
-			Labels: e.execContext.DaemonSelector.Labels,
+			ID:      e.execContext.DaemonSelector.ID,
+			Name:    e.execContext.DaemonSelector.Name,
+			Type:    e.execContext.DaemonSelector.Type,
+			Labels:  e.execContext.DaemonSelector.Labels,
+			Session: e.execContext.DaemonSelector.Session,
 		}
 	}
 

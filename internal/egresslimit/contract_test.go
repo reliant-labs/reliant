@@ -1,0 +1,76 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Contract test rows; canonical pattern in `forge skill load testing/patterns`.
+package egresslimit_test
+
+import (
+	"testing"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	"github.com/reliant-labs/reliant/internal/egresslimit"
+)
+
+// Contract tests for the egresslimit package.
+//
+// This file is scaffolded once by `forge generate` (and `forge package
+// new`). After the first scaffold it is user-owned — forge will not
+// overwrite it. Each row in `cases` exercises one method on the
+// contract.go-defined Service interface.
+//
+// Library reference: github.com/reliant-labs/forge/pkg/tdd
+// Skill: forge skill load contracts
+//
+// Add a row by appending a tdd.ContractCase. Each row supplies a Call
+// closure that invokes one method and returns (any, error); use Want
+// for direct equality, Check for custom assertions, or WantErr for the
+// error-path.
+//
+// Fill Deps with the MOCKS forge already generated — never a
+// hand-rolled fake. `forge generate` writes mock_gen.go next to this
+// file, holding one mock per interface in contract.go AND one per
+// interface your Deps names from another package — so a generated
+// `db.EstimateStore` dep has a `egresslimit.MockEstimateStore`, and a
+// `Store` dep has a `egresslimit.MockStore`, sitting right there. Set its
+// `GetFunc` (etc.) to script the case; every call is recorded by the
+// embedded contractkit.Recorder, so `m.Calls("Get")` and
+// `m.CallCount("Get")` assert ordering and short-circuiting without
+// any bookkeeping of your own.
+func TestContract(t *testing.T) {
+	t.Parallel()
+
+	// svc is DECLARED here and CONSTRUCTED below the empty-table skip, so a
+	// package that has not written its first case yet never calls New. That
+	// ordering is what lets you take service.go's advice — grow New into dep
+	// validation or eager initialization — without this born test going red
+	// on an empty `Deps{}` it was never asked to fill. The Call closures
+	// below capture the VARIABLE, so they see the constructed service.
+	var svc egresslimit.Service
+
+	cases := []tdd.ContractCase{
+		// {
+		//     Name: "MethodX returns expected value",
+		//     Call: func() (any, error) { return svc.MethodX(context.Background(), "arg") },
+		//     Want: "expected",
+		// },
+		// {
+		//     Name:    "MethodY surfaces upstream error",
+		//     Call:    func() (any, error) { return nil, svc.MethodY(context.Background()) },
+		//     WantErr: someSentinel,
+		// },
+	}
+
+	if len(cases) == 0 {
+		t.Skip("contract_test.go: add cases to exercise the egresslimit.Service contract")
+	}
+
+	// Fill Deps with the mocks your cases need. The two-result
+	// `(Service, error)` shape matches the canonical service.go scaffold, so
+	// a dep-validation or eager-init failure is reported right here instead
+	// of surfacing as a nil dereference inside a case.
+	svc, err := egresslimit.New(egresslimit.Deps{})
+	if err != nil {
+		t.Fatalf("egresslimit.New: %v", err)
+	}
+
+	tdd.TableContract(t, svc, cases)
+}

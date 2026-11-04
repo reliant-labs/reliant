@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -21,12 +22,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
+	"github.com/reliant-labs/reliant/internal/version"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
@@ -41,11 +45,17 @@ import (
 
 // maxHeartbeatThrottleInterval is worker.Options.MaxHeartbeatThrottleInterval.
 // Pulled out as a named constant, rather than inlined in workerOpts below, so
-// TestMaxHeartbeatThrottleInterval can pin it: this one value sets BOTH the
-// heartbeat RPC's own deadline and how fast a pending Temporal cancellation
-// reaches a running activity, and those two pull in opposite directions. See
-// the comment on its use below before changing it.
-const maxHeartbeatThrottleInterval = 2 * time.Second
+// TestMaxHeartbeatThrottleInterval can pin it: this one value sets the
+// heartbeat RPC's own deadline, how many heartbeat writes Temporal's database
+// takes per running activity, and — for a stop no nudge reached — how late a
+// cancellation arrives. See the comment on its use below before changing it.
+const maxHeartbeatThrottleInterval = 15 * time.Second
+
+// StopNudgeSource is Config.StopNudges: per workflow, a channel that receives
+// a value whenever a stop is requested for it.
+type StopNudgeSource interface {
+	Watch(workflowID string) (nudged <-chan struct{}, unwatch func())
+}
 
 // Config holds the dependencies needed to create and start a Temporal worker.
 type Config struct {
@@ -90,10 +100,18 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
-	// addresses a user-supplied model endpoint may resolve to.
-	ControlPlaneURL string
+	// HostedActions is fixed-action-only hosted HTTP execution, never a tool
+	// credential source. nil refuses nodes that request hosted_use.
+	HostedActions handlers.HostedActionExecutor
+
+	// SecretResolver resolves declared secrets for the step activities (a
+	// command, a request); nil refuses every step that uses one.
+	SecretResolver handlers.SecretResolver
+
+	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
+	// whether a user-supplied model endpoint may resolve to a private,
+	// loopback or link-local address. False is the default.
+	AllowPrivateEgress bool
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
@@ -102,6 +120,13 @@ type Config struct {
 	// requests and benches one the provider refused. Optional: nil records
 	// nothing and a refused account is waited out, not switched away from.
 	AccountLimits handlers.AccountLimitRecorder
+
+	// StopNudges tells running activities that a stop was just requested
+	// for their workflow, so they ask the server for the cancel at once
+	// instead of a heartbeat window later (workflow/runtime/stop_nudge.go).
+	// Normally a *stopnudge.Hub fed over NATS. nil leaves cancellation to
+	// the regular heartbeat (maxHeartbeatThrottleInterval).
+	StopNudges StopNudgeSource
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -175,9 +200,28 @@ func (c *Config) taskQueueName() string {
 // NewWorker creates a Temporal worker and registers every workflow and
 // activity on it. It does not start it: the returned Worker is a component,
 // polling from Run until Drain stops it (see Worker).
+// sdkClient is the SDK's own client under any decorator of it. worker.New
+// type-asserts its client and panics on anything else ("Client must be created
+// with client.Dial() or client.NewLazyClient()"), and the process's client is
+// decorated (stopnudge.Wrap) so its stop requests nudge running activities:
+// passing it straight through crash-looped the v1.7.85 worker at boot. The
+// activities keep the decorated client; only the poller needs the bare one.
+func sdkClient(c client.Client) client.Client {
+	for {
+		u, ok := c.(interface{ Unwrap() client.Client })
+		if !ok {
+			return c
+		}
+		c = u.Unwrap()
+	}
+}
+
 func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
 	registry := v2.NewActivityRegistry(cfg.Database)
+	if cfg.StopNudges != nil {
+		registry.SetStopNudges(cfg.StopNudges)
+	}
 
 	// Create threads service
 	threadsService := threads.NewService(cfg.Database)
@@ -204,7 +248,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
-	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
+	activityDeps.HostedActions = cfg.HostedActions
+	activityDeps.SecretResolver = cfg.SecretResolver
+	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
 
@@ -212,7 +258,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	v2activities.RegisterAll(registry, activityDeps)
 
 	onFatalError, fatal := fatalErrorSink()
-	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOptions(cfg, onFatalError, runtime.GOMAXPROCS(0)))
+	w := worker.New(sdkClient(cfg.TemporalClient), cfg.taskQueueName(), workerOptions(cfg, onFatalError, runtime.GOMAXPROCS(0)))
 
 	// Register activities with worker
 	registry.RegisterWithWorker(w)
@@ -224,6 +270,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(GenerateTitleWorkflow, workflow.RegisterOptions{
 		Name: "GenerateTitleWorkflow",
 	})
+	w.RegisterWorkflowWithOptions(DraftAutomationWorkflow, workflow.RegisterOptions{
+		Name: DraftAutomationWorkflowName,
+	})
 
 	// Schedule triggers. The workflow is always registered — it is pure
 	// orchestration — but the activity needs a launcher. Registering the
@@ -233,6 +282,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
 		Name: triggers.FireWorkflowName,
 	})
+	w.RegisterWorkflow(triggers.TriggerCapacityRedriveWorkflow)
 	// Inbound triggers (webhook, integration, workflow event) fire through
 	// their own workflow: the api-server's receiver records the event and
 	// starts it, and its activity launches the recorded event.
@@ -253,19 +303,24 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
 				cfg.TriggerCredentials,
 			)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
 	if cfg.TriggerLauncher != nil {
+		// Places pool-bound triggers' runs on a member (internal/machinepool).
+		pools := machinepool.NewPlacer(cfg.Database)
+		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
+			pools = pools.WithWaker(poolMemberWaker{w: w})
+		}
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
@@ -306,59 +361,51 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		// is time for them to report, so Temporal re-dispatches them at once.
 		// Must fit the shutdown budget (SHUTDOWN_TIMEOUT) the Drain runs in.
 		WorkerStopTimeout: activityReleaseGrace + activityReportReserve,
-		// This is the SDK's heartbeat batching window. Ticks from
-		// ActivityWrapper's background heartbeater (activityHeartbeatInterval,
-		// 500ms, workflow/runtime/registry.go) that land inside an open window
-		// are swallowed locally (temporalInvoker.Heartbeat) — no RPC, no
-		// cancellation check — until the window closes and the last details are
-		// sent. Temporal delivers a pending cancellation ONLY in a heartbeat
-		// RPC's response, so cancel latency for anything on this path is
-		// bounded by this value, not by how often RecordHeartbeat is called.
-		// Verified against SDK v1.37.0 and v1.47.0 source; see
-		// specs/fast-cancel-briefing.md for the full trace.
+		// This is the SDK's heartbeat batching window: ticks from
+		// ActivityWrapper's heartbeat loop (activityHeartbeatInterval,
+		// workflow/runtime/registry.go) that land inside an open window are
+		// swallowed locally (temporalInvoker.Heartbeat), so the server sees ONE
+		// heartbeat per running activity per window. Each heartbeat is one
+		// UpdateWorkflowExecution in Temporal's database, serialized on the
+		// workflow's lock. Verified against SDK v1.37.0, v1.47.0 and v1.50.0
+		// source; see specs/fast-cancel-briefing.md.
 		//
-		// This value is ALSO the heartbeat RPC's own deadline, and that is the
-		// budget that actually breaks under load (internal_task_handlers.go
-		// internalHeartBeat):
+		// It is also the heartbeat RPC's own deadline, max(value,
+		// minRPCTimeout=1s) (internal_task_handlers.go internalHeartBeat). At
+		// 500ms that 1s budget was blown 872 times in one day whenever the
+		// Postgres behind Temporal got busy, each one cancelling a healthy
+		// activity; 2s halved it but on 2026-10-30 still lost 2,609 heartbeats
+		// (669 LLM streams) to the 2s deadline. A wider window widens the
+		// budget too.
 		//
-		//	recordTimeout := i.heartbeatThrottleInterval
-		//	if recordTimeout < minRPCTimeout { recordTimeout = minRPCTimeout }
-		//	ctx, cancel := context.WithTimeout(ctx, recordTimeout)
+		// It used to be held at 2s because Temporal delivers a pending
+		// cancellation ONLY in a heartbeat response, which made this value the
+		// cancel latency of pause and interrupt. That is no longer its job:
+		// every stop request is nudged to the worker out of band
+		// (internal/temporal/stopnudge), and the nudged activity asks the
+		// server for its verdict at once (workflow/runtime/stop_nudge.go). So
+		// this is sized for liveness alone. 15s cuts heartbeat writes 7.5x
+		// against 2s — measured 13.6 of prod's 25.5 UpdateWorkflowExecution/s
+		// on 2026-10-30, so roughly 46% of them — while
+		// activityHeartbeatTimeout (60s) still allows four windows before a live
+		// worker could be declared dead.
 		//
-		// So the per-heartbeat budget is max(thisValue, minRPCTimeout=1s). An
-		// earlier revision set this to 500ms and justified it with the claim
-		// that the 1s floor made the budget insensitive to this value — that
-		// the previous 3s setting "never widened that 1s budget at all". That
-		// reading is WRONG: the floor only applies BELOW 1s. At 3s the budget
-		// is 3s. The revert therefore narrowed a 3s budget to 1s while
-		// believing it changed nothing, and it undid a fix that had been
-		// correctly targeted at this exact failure.
-		//
-		// The consequence, measured: 872 "RecordActivityHeartbeat with error /
-		// context deadline exceeded" in a single day's worker log, arriving in
-		// bursts of 50-60 per minute whenever the shared Postgres behind
-		// Temporal got busy. Each one cancels a healthy activity mid-stream.
-		// Chat ee527bdd lost all five of a step's retry attempts inside one
-		// burst and auto-paused.
-		//
-		// Raised to 2s, which doubles the RPC budget that was being blown. The
-		// cost is real and is the reason this is not higher: this value is the
-		// sole determinant of how fast a cancel reaches a running activity, so
-		// pause and interrupt now take up to 2s instead of 500ms.
-		//
-		// Do NOT try to fix heartbeat RPC failures by LOWERING a timeout. The
-		// budget is a max() with a 1s floor, so it only moves upward. Lowering
-		// HeartbeatTimeout (registry.go) to squeeze the 0.8x derivation is
-		// worse than useless: it cannot widen this budget, and it shortens the
-		// window before Temporal declares a live worker dead and re-dispatches
-		// its activities — which during one of these bursts means ExecuteTools
-		// running the same shell commands and file edits twice.
-		//
-		// spuriousHeartbeatCancel (workflow/runtime/registry.go) remains the
-		// backstop that converts whatever still slips through into a retry
+		// Do NOT fix heartbeat RPC failures by LOWERING a timeout: the budget is
+		// a max() with a 1s floor, so it only moves upward, and a shorter
+		// HeartbeatTimeout only shortens the window before Temporal re-dispatches
+		// a live worker's activities (ExecuteTools running the same shell
+		// commands twice). spuriousHeartbeatCancel (workflow/runtime/registry.go)
+		// remains the backstop that turns a failed heartbeat into a retry
 		// rather than a user-visible cancellation.
 		MaxHeartbeatThrottleInterval: maxHeartbeatThrottleInterval,
-		BuildID:                      v2workflow.WorkerBuildID,
+		// The binary's release version, so a workflow task's history event and
+		// the SDK's "Workflow panic" log name the build that ran it. A constant
+		// here ("reliant-worker") made every build look identical: on
+		// 2026-10-23 a mid-rollout TMPRL1100 non-determinism panic — an old
+		// replica replaying history the new one had written — could not be
+		// told apart from a corrupt history. Versioning-based dispatch stays
+		// off (UseBuildIDForVersioning unset): this only labels.
+		BuildID: version.TemporalBuildID(),
 		// Set explicitly rather than inherited from the client, so the identity
 		// is stable no matter how the client was constructed (tests and the
 		// replay harness build their own). This is the value that surfaces as
@@ -369,9 +416,27 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
 			observability.NewMetricsWorkerInterceptor(),
+			observability.NewRunScopeWorkerInterceptor(chatOwners(cfg)),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
+}
+
+// chatOwners answers whose chat an activity is working on, for the run scope
+// the worker stamps on every log line (observability.NewRunScopeWorkerInterceptor).
+// A chat's owner never changes; it is read once per chat per hour.
+func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
+	if cfg.Database == nil {
+		return nil
+	}
+	repo := cfg.Database
+	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+		chat, err := repo.GetChat(ctx, chatID)
+		if err != nil || chat == nil {
+			return "", err
+		}
+		return chat.UserID, nil
+	}, time.Hour, 10000)
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.
@@ -383,6 +448,21 @@ func TaskQueueName(suffix string) string {
 // triggerPollRepo gives the poll activity the owner-scoped connection read it
 // checks a polled trigger's connection with, which lives on the connection
 // store rather than the main repository.
+// poolMemberWaker wakes the pool member a placement chose, on the trigger
+// owner's behalf: the trigger was authorized to run on the pool when it was
+// enabled, exactly as a resuming run was authorized to use its machine, so it
+// goes through the same door (WakeForRun), with the trigger's delegated
+// access as the fallback credential. A member already on its way is success.
+type poolMemberWaker struct{ w toolexec.RunWaker }
+
+func (p poolMemberWaker) WakeMember(ctx context.Context, userID, daemonID string) error {
+	_, err := p.w.WakeForRun(automationcred.Allow(ctx), userID, &toolexec.DaemonSelector{ID: daemonID})
+	if toolexec.IsDaemonPending(err) {
+		return nil
+	}
+	return err
+}
+
 type triggerPollRepo struct {
 	*db.Repo
 	connections db.ConnectionStore

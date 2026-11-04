@@ -1,8 +1,9 @@
 /**
  * Post-onboarding "Starting your machine..." gate.
  *
- * Polls the daemon registry's ListDaemons every 2s for up to 60s after the user
- * finishes onboarding, and surfaces one of four states:
+ * Polls the shared daemon list (daemon-registry-queries) every 2s for up to
+ * POLL_TIMEOUT_MS after the user finishes onboarding, and surfaces one of four
+ * states:
  *
  *   1. Connecting — status is PENDING or DISCONNECTED inside the 60s window.
  *      The copy comes from `classifyDaemonWait`, so the gate narrates the
@@ -31,13 +32,8 @@ import {
 import { cn } from "@/lib/utils";
 import { classifyDaemonWait } from "@/lib/daemon-wait";
 import { DaemonWaitState } from "../DaemonWaitState";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  DaemonStatus,
-  ListDaemonsRequestSchema,
-  type DaemonInfo as Daemon,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { DaemonStatus, type DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { daemonListQuery } from "@/hooks/daemon-registry-queries";
 
 /**
  * How long to keep waiting before offering the failure CTAs.
@@ -84,10 +80,6 @@ interface DaemonConnectingGateProps {
    * first daemon in the list — fine during onboarding since we only create
    * one. */
   daemonRef?: string;
-}
-
-interface DaemonListEnvelope {
-  daemons: Daemon[];
 }
 
 function pickDaemon(daemons: Daemon[], ref?: string): Daemon | undefined {
@@ -139,34 +131,37 @@ export function DaemonConnectingGate({
   // Pre-compute whether we've timed out so the query can stop polling.
   const timedOut = elapsedMs >= POLL_TIMEOUT_MS;
 
-  const queryKey = useMemo(
-    () => ["onboarding", "daemons", "gate", attemptStartedAt] as const,
-    [attemptStartedAt],
-  );
-
-  const { data, refetch } = useQuery<DaemonListEnvelope>({
-    queryKey,
-    queryFn: () =>
-      grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema)),
+  // The shared daemon list, polled on this gate's own cadence. An answer read
+  // BEFORE this attempt began is not an answer to it: a FAILED row from the
+  // attempt the user just retried, or a list cached before onboarding created
+  // the machine, would otherwise decide the gate instantly. It used to get its
+  // own key per attempt for that, which made it a second ListDaemons stream
+  // beside every other reader's; reading the shared entry's `dataUpdatedAt`
+  // keeps one entry and still ignores what predates the attempt.
+  const { data: listed, dataUpdatedAt, refetch } = useQuery(daemonListQuery({
     refetchInterval: (query) => {
-      const daemons = query.state.data?.daemons ?? [];
-      const target = pickDaemon(daemons, daemonRef);
-      // Stop polling once we've reached a terminal state — ACTIVE / FAILED —
-      // or the user has timed out. TanStack passes the latest result via
-      // `query.state.data`, so we don't rely on the closure.
+      // Stop polling once the user has timed out, or once this attempt has
+      // read a terminal state — ACTIVE / FAILED. TanStack passes the latest
+      // result via `query.state`, so we don't rely on the closure.
+      if (Date.now() - attemptStartedAt >= POLL_TIMEOUT_MS) return false;
+      if (query.state.dataUpdatedAt < attemptStartedAt) return POLL_INTERVAL_MS;
+      const target = pickDaemon(query.state.data?.daemons ?? [], daemonRef);
       if (target?.status === DaemonStatus.ACTIVE) return false;
       if (target?.status === DaemonStatus.FAILED) return false;
-      if (Date.now() - attemptStartedAt >= POLL_TIMEOUT_MS) return false;
       return POLL_INTERVAL_MS;
     },
     refetchOnWindowFocus: false,
     staleTime: 0,
-  });
+  }));
+  const daemons = useMemo(
+    () => (listed !== undefined && dataUpdatedAt >= attemptStartedAt ? listed : []),
+    [listed, dataUpdatedAt, attemptStartedAt],
+  );
 
   // Tick the elapsed clock once a second so the user sees a live counter.
   // Stops as soon as we reach a terminal phase or time out.
   useEffect(() => {
-    const target = pickDaemon(data?.daemons ?? [], daemonRef);
+    const target = pickDaemon(daemons, daemonRef);
     const phase = derivePhase(target, Date.now() - attemptStartedAt);
     if (phase !== "connecting") {
       if (tickRef.current) {
@@ -184,17 +179,17 @@ export function DaemonConnectingGate({
         tickRef.current = null;
       }
     };
-  }, [data, daemonRef, attemptStartedAt]);
+  }, [daemons, daemonRef, attemptStartedAt]);
 
-  const daemon = pickDaemon(data?.daemons ?? [], daemonRef);
+  const daemon = pickDaemon(daemons, daemonRef);
   const phase = derivePhase(daemon, elapsedMs);
   const reason = daemon?.lastStatusMessage ?? "";
 
   const handleRetry = useCallback(() => {
     setAttemptStartedAt(Date.now());
     setNow(Date.now());
-    // Don't await — the query will refetch via the new key, and we want the
-    // UI to flip back to "connecting" immediately.
+    // Don't await — the answer predating the new attempt is ignored from now
+    // on, so the UI flips back to "connecting" immediately.
     void refetch();
   }, [refetch]);
 
@@ -234,8 +229,8 @@ export function DaemonConnectingGate({
     // machine's detail view when we know its id.
     const goToEnvironments = () =>
       daemon?.daemonId
-        ? navigate({ to: "/settings/environments/$machineId", params: { machineId: daemon.daemonId } })
-        : navigate({ to: "/settings/$section", params: { section: "environments" } });
+        ? navigate({ to: "/settings/machines/$machineId", params: { machineId: daemon.daemonId } })
+        : navigate({ to: "/settings/$section", params: { section: "machines" } });
 
     return (
       <div

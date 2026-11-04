@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Native dashboards (console v3, decision DB) in the console's model — what
+ * Native dashboards in the console's model — what
  * dashboardsApi.ts maps control-plane `DashboardService` into.
  *
  * A HYBRID of two kinds a reader can open, plus a gallery:
@@ -25,10 +25,10 @@ import type { Dashboard } from "./types";
  * Where a dashboard lives. `generated` and `repo` are both release dashboards
  * (one addressing space on the server); they differ only in who wrote them.
  */
-export type DashboardSource = "generated" | "repo" | "workspace" | "template";
+export type DashboardSource = "generated" | "repo" | "workspace" | "template" | "builtin";
 
 /** The three addressing spaces: what a URL has to name to find a dashboard again. */
-export type DashboardKind = "release" | "workspace" | "template";
+export type DashboardKind = "release" | "workspace" | "template" | "builtin";
 
 export function kindOfSource(source: DashboardSource): DashboardKind {
   return source === "generated" || source === "repo" ? "release" : source;
@@ -72,6 +72,13 @@ export interface DashboardWorkspaceInfo {
 
 /** One row of the index. Never a full spec. */
 export interface DashboardSummary {
+  /**
+   * Absent/standard: spec renderer. The rest are typed built-in views:
+   * organization-costs, organization-usage and organization-billing over
+   * control-plane BillingService; llm-usage over reliant's own usage
+   * (clientBuiltins.ts).
+   */
+  viewKind?: "standard" | "organization-costs" | "organization-usage" | "organization-billing" | "llm-usage";
   ref: DashboardRef;
   source: DashboardSource;
   title: string;
@@ -88,6 +95,14 @@ export interface DashboardSummary {
   workspace: DashboardWorkspaceInfo | null;
   /** Templates: "generated" or "platform". */
   category: string;
+  /**
+   * The page group the spec declares (overview, services, jobs, product,
+   * platform, releases, custom), defaulted by the server. Absent from a
+   * control plane that predates it: the page infers one (dashboardGroups.ts).
+   */
+  group?: string;
+  /** The spec's tags (lowercase, at most eight); search matches them. */
+  tags?: string[];
 }
 
 export interface DashboardIndex {

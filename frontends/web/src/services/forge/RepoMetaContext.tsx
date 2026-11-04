@@ -2,7 +2,7 @@
 
 /**
  * A repository's DEFAULT branch, for the workload page's "Open PR" (decision
- * D6: replicas are declared in code, so Scale proposes a change to the
+ * Replicas are declared in code, so Scale proposes a change to the
  * declaration).
  *
  * WHY THE DEFAULT BRANCH AND NOTHING ELSE. The branch a release was cut from

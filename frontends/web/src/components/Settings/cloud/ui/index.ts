@@ -2,14 +2,11 @@
 // (Billing / Environments / Reliant AI). Ported from admin-web's
 // `frontends/admin-web/src/components/ui/*` but re-implemented against
 // reliant's CSS-variable theme tokens so both light and dark themes render
-// correctly. Vertical sections import from `./ui`.
+// correctly. Vertical sections import from `./ui`; buttons and tables come
+// from forge's library (`@/components/forge-ui/button`, `.../data_table`).
 //
 // The barrel exports exactly the contract surface:
-//   Button, Card, CardHeader, CardTitle, CardContent, PageHeader,
-//   Table, Thead, Tbody, Tr, Th, Td, Badge, StatusDot, EmptyState
-export { Button } from "./button";
-export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
-
+//   Card, CardHeader, CardTitle, CardContent, Badge, StatusDot, EmptyState
 export { Card, CardHeader, CardTitle, CardContent, CardInset } from "./card";
 export type {
   CardProps,
@@ -18,18 +15,6 @@ export type {
   CardContentProps,
 } from "./card";
 
-export { PageHeader } from "./page_header";
-export type { PageHeaderProps } from "./page_header";
-
-export { Table, Thead, Tbody, Tr, Th, Td } from "./table";
-export type {
-  TableProps,
-  TheadProps,
-  TbodyProps,
-  TrProps,
-  ThProps,
-  TdProps,
-} from "./table";
 
 export { Badge } from "./badge";
 export type { BadgeProps, BadgeVariant, BadgeSize } from "./badge";

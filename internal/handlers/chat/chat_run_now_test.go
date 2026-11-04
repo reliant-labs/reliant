@@ -116,6 +116,7 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 	chat, err := f.repo.GetChat(f.ctx, chatID)
 	require.NoError(t, err)
 	assert.NotNil(t, chat.AdoptedAt, "the person who pressed the button owns the run")
+	assert.Equal(t, core.ChatOriginManualRun, chat.Origin)
 	assert.True(t, chat.ListInSidebar, "so it lists in the sidebar like the chat they are about to open")
 	assert.NotNil(t, resp.Msg.GetChat().AdoptedAt)
 }

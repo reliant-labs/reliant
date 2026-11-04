@@ -134,6 +134,9 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_CONTROL_PLANE_URL": "http://cp.surface.test:8080",
 	"INTERNAL_SERVICE_SECRET":   "cp-secret",
 
+	// network
+	"RELIANT_ALLOW_PRIVATE_EGRESS": "true",
+
 	// api only
 	"ALLOWED_EMAIL_DOMAINS":             "a.surface.test, b.surface.test",
 	"CORS_ALLOWED_ORIGINS":              "http://one.surface.test, http://two.surface.test",
@@ -155,6 +158,12 @@ var serverRoleSurfaceEnv = map[string]string{
 	// worker only
 	"RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS": "7",
 	"RELIANT_WORKER_WORKFLOW_TASK_POLLERS":         "3",
+	"RELIANT_WORKER_EGRESS_REPLICAS":               "2",
+	"RELIANT_WORKER_EGRESS_USER_PER_MINUTE":        "11",
+	"RELIANT_WORKER_EGRESS_USER_BURST":             "12",
+	"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT":    "15",
+	"RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT":    "17",
+	"RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL":      "18",
 
 	// integrations
 	"PUBLIC_URL":                         " https://public.surface.test ",
@@ -169,14 +178,11 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "gh-secret",
 	"RELIANT_OAUTH_SLACK_CLIENT_ID":      "slack-client",
 
-	// observability, sentry, analytics
+	// observability, analytics
 	"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel.surface.test:4318",
 	"OTEL_ENABLED":                "true",
 	"PROMETHEUS_ENABLED":          "false",
-	"SENTRY_ENVIRONMENT":          "surface",
-	"SENTRY_ENABLED":              "true",
-	"SENTRY_DSN":                  "https://key@o0.ingest.sentry.io/42",
-	"SENTRY_TRACES_SAMPLE_RATE":   "0.25",
+	"ENVIRONMENT":                 "surface",
 	"RELIANT_ANALYTICS_DISABLED":  "true",
 
 	// llm

@@ -4,6 +4,7 @@ package daemon
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -38,7 +39,29 @@ func ReadFileContent(path string, opts *ReadFileOpts) (*FileContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	return fileContent(data, info.Size(), opts), nil
+}
 
+// ReadOpenFileContent is ReadFileContent for a file already open: it reads f
+// and never reopens it by name, for a caller that vetted the open file
+// (daemonpolicy.CheckViewerFile). It does not close f.
+func ReadOpenFileContent(f *os.File, opts *ReadFileOpts) (*FileContent, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", f.Name(), err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", f.Name())
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", f.Name(), err)
+	}
+	return fileContent(data, info.Size(), opts), nil
+}
+
+// fileContent cuts the requested line window out of a file's bytes.
+func fileContent(data []byte, size int64, opts *ReadFileOpts) *FileContent {
 	offset, limit := 0, 0
 	if opts != nil {
 		offset, limit = opts.Offset, opts.Limit
@@ -56,8 +79,8 @@ func ReadFileContent(path string, opts *ReadFileOpts) (*FileContent, error) {
 		Content:    string(data[start:end]),
 		TotalLines: totalLines,
 		Truncated:  limit > 0 && totalLines > offset+limit,
-		Size:       info.Size(),
-	}, nil
+		Size:       size,
+	}
 }
 
 // lineWindow locates the byte range of lines [offset, offset+limit) within data

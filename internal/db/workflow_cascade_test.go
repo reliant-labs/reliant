@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func insertTestWorkflowWithParent(t *testing.T, repo *Repo, id, chatID string, parentID *string, status WorkflowStatus) {
@@ -88,6 +90,7 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 // CHAT_WORKFLOW_STATUS already carries the distinction (3=completed,
 // 5=cancelled, 4=failed) — the cascade just has to write what happened.
 func TestCascadeTerminalStatusToDescendants_TerminationIsNotCompletion(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

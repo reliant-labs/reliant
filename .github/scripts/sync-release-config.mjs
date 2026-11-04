@@ -57,11 +57,12 @@
 // renderer is *supposed* to be present; omit it only on the fork-friendly path
 // where a contributor genuinely cannot supply the private KCL.
 
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { ReleaseConfigRenderError, renderReleaseConfig } from "./release-config-kcl.mjs";
+import { rendererProblems } from "./release-renderer-check.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUTPUT_PATH = join(REPO_ROOT, "electron", "release.config.json");
@@ -69,7 +70,6 @@ const OUTPUT_PATH = join(REPO_ROOT, "electron", "release.config.json");
 // The sibling control-plane checkout holding the KCL source of truth.
 const CONTROL_PLANE_DIR =
   process.env.CONTROL_PLANE_DIR || resolve(REPO_ROOT, "..", "control-plane");
-const KCL_ENTRYPOINT = "deploy/kcl/desktop_release.k";
 
 const args = process.argv.slice(2);
 const checkOnly = args.includes("--check");
@@ -83,68 +83,13 @@ function fail(message) {
   process.exit(1);
 }
 
-/**
- * Locate the `forge` KCL module, as a `-E name=path` external-package binding.
- *
- * control-plane's `deploy/kcl/desktop_release.k` reaches `import forge`, and a
- * forge project declares no `forge` dependency in kcl.mod: the module is
- * EMBEDDED IN THE FORGE BINARY and supplied to every evaluation as an external
- * package (forge ADR 0003 — "the stock `kcl` CLI cannot render a project on its
- * own"). So `kcl run` alone cannot resolve it: it fails outright on a clean
- * machine, and on a developer's laptop it may silently resolve a stale global
- * `~/.kcl/kpm/forge_kcl` left by an older forge — rendering a DIFFERENT module
- * than control-plane deploys with, while still reporting success.
- *
- * Materializing through forge keeps this gate on the same module control-plane
- * renders with. FORGE_KCL_MODULE_CACHE (forge's documented override) points it
- * at a scratch dir so the result never depends on what is already cached.
- */
-function forgeModuleArg() {
-  const cache = mkdtempSync(join(tmpdir(), "forge-kcl-"));
-  try {
-    // Any command that evaluates the project's KCL materializes the module;
-    // `env options` is the cheapest and writes nothing into the checkout.
-    execFileSync("forge", ["env", "options", "dev-k8s"], {
-      cwd: CONTROL_PLANE_DIR,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, FORGE_KCL_MODULE_CACHE: cache, FORGE_SILENCE_EXPERIMENTAL: "1" },
-    });
-  } catch (err) {
-    if (err.code === "ENOENT") return { unavailable: "forge is not installed" };
-    return { unavailable: `forge could not materialize its KCL module: ${err.stderr || err.message}` };
-  }
-  // The module lands in <cache>/<content-hash>/, with `.complete` written last.
-  for (const entry of readdirSync(cache, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dir = join(cache, entry.name);
-    if (existsSync(join(dir, ".complete"))) return { arg: `forge=${dir}` };
-  }
-  return { unavailable: `forge wrote no complete KCL module into ${cache}` };
-}
-
-/** Render the config for `env` out of control-plane's KCL. */
+/** Render the config for `env` out of control-plane's KCL (release-config-kcl.mjs). */
 function renderFromKCL(env) {
-  const entry = join(CONTROL_PLANE_DIR, KCL_ENTRYPOINT);
-  if (!existsSync(entry)) {
-    return { unavailable: `no control-plane checkout at ${CONTROL_PLANE_DIR}` };
-  }
-  const { arg, unavailable } = forgeModuleArg();
-  if (unavailable) return { unavailable };
-  // The JSON goes to a file, not stdout: kcl prints "waiting for package-cache
-  // lock..." to stdout while another kcl holds the shared package cache, which
-  // a concurrent gate step always might.
-  const out = join(mkdtempSync(join(tmpdir(), "release-config-")), "release_config.json");
   try {
-    execFileSync(
-      "kcl",
-      ["run", KCL_ENTRYPOINT, "-E", arg, "-D", `env=${env}`, "-S", "release_config", "--format", "json", "-o", out],
-      { cwd: CONTROL_PLANE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
-    return { config: JSON.parse(readFileSync(out, "utf8")) };
+    return renderReleaseConfig(CONTROL_PLANE_DIR, env);
   } catch (err) {
-    if (err.code === "ENOENT") return { unavailable: "kcl is not installed" };
-    fail(`kcl render failed for env=${env}:\n${err.stderr || err.message}`);
+    if (err instanceof ReleaseConfigRenderError) fail(err.message);
+    throw err;
   }
 }
 
@@ -164,22 +109,21 @@ function validate(config, env) {
     problems.push(`rendered env is "${config.env}" but "${env}" was requested`);
   }
 
-  // Every value the packaged renderer cannot start correctly without.
-  const requiredVite = [
-    "VITE_API_URL",
-    "VITE_GRPC_URL",
-    "VITE_CONTROL_PLANE_API_URL",
-    "VITE_GATEWAY_URL",
-    "VITE_AUTH_MODE",
-    "VITE_SUPABASE_URL",
-    "VITE_SUPABASE_ANON_KEY",
-  ];
-  for (const key of requiredVite) {
-    const value = config.vite?.[key];
-    if (!value) problems.push(`vite.${key} is empty — the packaged renderer needs it`);
-    else if (/localhost|127\.0\.0\.1/.test(value)) {
-      problems.push(`vite.${key} is ${value} — a packaged build must not target localhost`);
-    }
+  // The RENDERER block is the packaged app's config.js (the main process
+  // answers app://bundle/config.js with it; electron/src/runtime-config.js),
+  // so it is judged exactly as control-plane's render judges the hosted
+  // SPA's runtime_config: against the web frontend's own generated schema.
+  if (config.vite) {
+    problems.push(
+      "a `vite` block is present — the renderer reads no build-time VITE_* any more; " +
+        "its values belong in `renderer` (config.js keys, e.g. API_URL)",
+    );
+  }
+  const renderer = config.renderer;
+  if (!renderer || typeof renderer !== "object") {
+    problems.push("`renderer` is missing — the packaged renderer would have no config.js");
+  } else {
+    problems.push(...rendererProblems(renderer));
   }
 
   const requiredMain = [
@@ -258,5 +202,5 @@ if (unavailable) fail(`cannot render: ${unavailable}`);
 validate(config, requestedEnv);
 writeFileSync(OUTPUT_PATH, serialize(config));
 console.log(`sync-release-config: wrote electron/release.config.json for env=${requestedEnv}`);
-console.log(`  VITE_CONTROL_PLANE_API_URL = ${config.vite.VITE_CONTROL_PLANE_API_URL}`);
-console.log(`  VITE_GATEWAY_URL           = ${config.vite.VITE_GATEWAY_URL}`);
+console.log(`  renderer.CONTROL_PLANE_API_URL = ${config.renderer.CONTROL_PLANE_API_URL}`);
+console.log(`  renderer.GATEWAY_URL           = ${config.renderer.GATEWAY_URL}`);

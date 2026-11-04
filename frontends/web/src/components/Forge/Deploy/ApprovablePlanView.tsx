@@ -66,10 +66,10 @@ export function ApprovablePlanView({
   if (!plan) {
     return (
       <CardInset data-testid="approvable-plan-none" className="space-y-1">
-        <p className="text-sm font-medium text-foreground">
+        <p className="text-sm font-medium text-ink">
           This deploy&apos;s changes could not be worked out.
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           That is not the same as nothing changing — it means the comparison could not be
           made at all, so there is nothing to approve. An environment that has never been
           built has nothing to compare against yet.
@@ -89,11 +89,11 @@ export function ApprovablePlanView({
       {/* WHAT SHIPS. The release this plan was computed for — the artifacts a
           deploy would carry, from the build that produced this plan. */}
       <CardInset className="space-y-1">
-        <p className="text-xs font-medium text-foreground">
+        <p className="text-xs font-medium text-ink">
           {release ? `This deploy ships release ${release}.` : "This deploy ships this plan."}
         </p>
         {plan.config_identical === true && (
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-2xs text-ink-muted">
             The configuration is identical to what is already deployed.
           </p>
         )}
@@ -110,7 +110,7 @@ export function ApprovablePlanView({
       {stop.length === 0 && warn.length === 0 && info.length === 0 && (
         <p
           data-testid="approvable-plan-empty"
-          className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+          className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-ink-muted"
         >
           This deploy changes nothing that forge tracks.
         </p>
@@ -120,16 +120,16 @@ export function ApprovablePlanView({
       {stop.length > 0 && (
         <div
           data-testid="approvable-plan-stop"
-          className="space-y-2 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
+          className="space-y-2 rounded-lg border border-solid border-danger-border bg-danger-surface px-3 py-2"
         >
-          <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-ink">
             <AlertTriangle
-              className="h-3.5 w-3.5 shrink-0 text-destructive-ink"
+              className="h-3.5 w-3.5 shrink-0 text-danger-ink"
               aria-hidden="true"
             />
             This deploy destroys something that cannot be brought back.
           </p>
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-2xs text-ink-muted">
             Deploying succeeds and the thing is still gone. Accept each one separately.
           </p>
 
@@ -149,19 +149,19 @@ export function ApprovablePlanView({
           {nameless.length > 0 && (
             <div
               data-testid="approvable-plan-unacknowledgeable"
-              className="space-y-0.5 rounded-md border border-destructive/40 px-2 py-1.5"
+              className="space-y-0.5 rounded-md border border-danger-border px-2 py-1.5"
             >
-              <p className="text-2xs font-medium text-destructive-ink">
+              <p className="text-2xs font-medium text-danger-ink">
                 This plan cannot be approved from here.
               </p>
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-2xs text-ink-muted">
                 It reports an irreversible change with no name to accept, so there is no way
                 to say yes to it specifically. Re-plan, and if it persists this needs a look
                 before deploying.
               </p>
               <ul className="space-y-0.5 pt-0.5">
                 {nameless.map((finding, index) => (
-                  <li key={index} className="text-2xs text-muted-foreground">
+                  <li key={index} className="text-2xs text-ink-muted">
                     <FindingLine finding={finding} />
                   </li>
                 ))}
@@ -213,10 +213,10 @@ function AcknowledgeCode({
 }) {
   const checkboxId = useId();
   return (
-    <div className="space-y-1 rounded-md border border-destructive/40 px-2 py-1.5">
+    <div className="space-y-1 rounded-md border border-danger-border px-2 py-1.5">
       <ul className="space-y-0.5">
         {findings.map((finding, index) => (
-          <li key={index} className="text-2xs text-muted-foreground">
+          <li key={index} className="text-2xs text-ink-muted">
             <FindingLine finding={finding} />
           </li>
         ))}
@@ -230,7 +230,7 @@ function AcknowledgeCode({
           className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
           data-testid={`acknowledge-${code}`}
         />
-        <span className="text-2xs text-foreground">
+        <span className="text-2xs text-ink">
           I accept this, and I know it cannot be undone.
         </span>
       </label>
@@ -252,9 +252,9 @@ function FindingGroup({
   const Icon = kind === "warn" ? TriangleAlert : Info;
   return (
     <CardInset data-testid={testId} className="space-y-1.5">
-      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-ink">
         <Icon
-          className={cn("h-3.5 w-3.5 shrink-0", kind === "warn" ? "text-warning" : "text-muted-foreground")}
+          className={cn("h-3.5 w-3.5 shrink-0", kind === "warn" ? "text-warning-ink" : "text-ink-muted")}
           aria-hidden="true"
         />
         {title}
@@ -263,7 +263,7 @@ function FindingGroup({
         {findings.map((finding, index) => (
           <li
             key={index}
-            className="text-2xs text-muted-foreground"
+            className="text-2xs text-ink-muted"
             data-finding-class={findingClassOf(finding.class)}
           >
             <FindingLine finding={finding} />
@@ -277,7 +277,7 @@ function FindingGroup({
 function FindingLine({ finding }: { finding: DeployPlanFinding }) {
   return (
     <>
-      {finding.subject && <span className="font-mono text-foreground">{finding.subject}</span>}
+      {finding.subject && <span className="font-mono text-ink">{finding.subject}</span>}
       {finding.detail && (
         <span>
           {finding.subject ? " — " : ""}
@@ -285,7 +285,7 @@ function FindingLine({ finding }: { finding: DeployPlanFinding }) {
         </span>
       )}
       {!finding.subject && !finding.detail && (
-        <span className="font-mono text-foreground">{finding.code ?? "change"}</span>
+        <span className="font-mono text-ink">{finding.code ?? "change"}</span>
       )}
     </>
   );

@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Modal } from '../ui/Modal'
-import { Button } from '../ui/Button'
+import Modal from '../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
 import { LightweightCodeViewer } from '../Chat/LightweightCodeViewer'
 import { Pencil, Eye, Copy, Check, AlertTriangle } from 'lucide-react'
 import type { Workflow } from '../../types/workflow'
-import { workflowGrpc } from '../../api/workflow-grpc'
+import { importWorkflow } from '../../hooks/workflow-queries'
 import { toast } from 'sonner'
 
 interface YamlEditorModalProps {
@@ -60,7 +60,7 @@ export function YamlEditorModal({
   const handleApply = useCallback(async () => {
     try {
       setParseError(null)
-      const result = await workflowGrpc.importWorkflow(projectId, editedContent, true)
+      const result = await importWorkflow(projectId, editedContent, true)
       if (!result.success || !result.workflow) {
         const errMsg = result.validationErrors?.length
           ? result.validationErrors.map(e => e.message).join('; ')
@@ -97,7 +97,7 @@ export function YamlEditorModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Workflow YAML"
       size="xl"
@@ -106,46 +106,55 @@ export function YamlEditorModal({
         {/* Toolbar */}
         <div className="flex items-center justify-between pb-3 border-b border-border">
           <div className="flex items-center gap-2">
-            {/* Mode Toggle */}
-            <div className="flex rounded-lg bg-muted p-0.5">
+            {/* Mode Toggle: only when there is something to toggle to. */}
+            {!isReadOnly && (
+            <div className="flex rounded-lg border border-border/60 bg-background p-0.5" role="group" aria-label="Mode">
               <button
+                type="button"
+                aria-pressed={mode === 'view'}
                 onClick={() => handleModeSwitch('view')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   mode === 'view'
-                    ? 'bg-background text-foreground shadow-sm'
+                    ? 'bg-card text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Eye className="w-4 h-4" />
+                <Eye className="w-4 h-4" aria-hidden="true" />
                 View
               </button>
-              {!isReadOnly && (
-                <button
-                  onClick={() => handleModeSwitch('edit')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mode === 'edit'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Pencil className="w-4 h-4" />
-                  Edit
-                </button>
-              )}
+              <button
+                type="button"
+                aria-pressed={mode === 'edit'}
+                onClick={() => handleModeSwitch('edit')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  mode === 'edit'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Pencil className="w-4 h-4" aria-hidden="true" />
+                Edit
+              </button>
             </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleCopy}
+              aria-label="Copy YAML"
+              title="Copy YAML"
             >
               {copied ? (
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" aria-hidden="true" />
               ) : (
-                <Copy className="w-4 h-4" />
+                <Copy className="w-4 h-4" aria-hidden="true" />
               )}
             </Button>
+            <span className="sr-only" role="status">
+              {copied ? 'YAML copied' : ''}
+            </span>
           </div>
         </div>
 
@@ -178,7 +187,7 @@ export function YamlEditorModal({
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              className="w-full h-full p-3 font-mono text-sm bg-muted/50 border border-border rounded-lg resize-none overscroll-contain focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+              className="w-full h-full p-3 font-mono text-sm bg-muted/50 border border-border rounded-lg resize-none overscroll-contain focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
               spellCheck={false}
               placeholder="Enter YAML content..."
             />

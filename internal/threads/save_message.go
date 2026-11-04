@@ -91,6 +91,16 @@ type SaveMessageOpts struct {
 	WorkflowID   *string
 	StepID       string
 
+	// SenderThreadID and SenderKind attribute a message another agent wrote
+	// (spawn_send and the other mailbox kinds) to its sender. Empty/zero
+	// means the human, or the model's own output. The role stays USER either
+	// way: the model must see it as a user turn on every provider.
+	SenderThreadID string
+	SenderKind     reliantv1.AgentMessageKind
+	// SenderSubject is the sending agent's one-line subject (spawn_send's
+	// `subject`); empty when it gave none.
+	SenderSubject string
+
 	// Context window control
 	// When true, creates a new context window with incremented sequence.
 	// Used for compaction - the summary message starts fresh context.
@@ -129,14 +139,20 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 	// Get context window for thread - thread must already exist
 	cw, err := s.GetLatestContextWindow(ctx, opts.Thread)
 	if err != nil {
-		return nil, fmt.Errorf("thread %s does not exist - must be created before saving messages: %w", opts.Thread, err)
+		return nil, lookupFailed(err,
+			fmt.Sprintf("thread %s does not exist - must be created before saving messages", opts.Thread),
+			fmt.Sprintf("reading thread %s's latest context window", opts.Thread))
 	}
 
 	// Handle new context sequence (for compaction)
 	// Creates a new context window with incremented sequence and links to parent CW
 	if opts.NewContextSequence {
 		parentCWID := cw.ID // Capture parent before reassigning cw
-		newSeq := cw.Sequence + 1
+		// From the thread's counter, never the latest window's sequence + 1.
+		newSeq, err := s.repo.AllocateContextWindowSequence(ctx, opts.Thread)
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate context window sequence: %w", err)
+		}
 		newCWID := contextWindowID(opts.ChatID, opts.Thread, newSeq)
 		newCW := &db.ContextWindow{
 			ID:                    newCWID,
@@ -261,6 +277,9 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		Model:             ptr.StringIfNotEmpty(opts.Model),
 		Agent:             ptr.StringIfNotEmpty(opts.Agent),
 		ProviderAccountID: ptr.StringIfNotEmpty(opts.ProviderAccountID),
+		SenderThreadID:    ptr.StringIfNotEmpty(opts.SenderThreadID),
+		SenderKind:        senderKindPtrIfNonZero(opts.SenderKind),
+		SenderSubject:     ptr.StringIfNotEmpty(opts.SenderSubject),
 		TokenCount:        ptr.IntIfPositive(opts.TokenCount),
 		Cost:              ptr.Float64IfPositive(opts.Cost),
 		WorkflowID:        opts.WorkflowID,
@@ -768,8 +787,17 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 	// A generated video rides in an IMAGE-typed block like an image does: the
 	// block type only says "render this attachment", and the UI splits the two
 	// by MIME. Replay to the model drops it (see messageconv.ContentBlockToPart).
-	if att.AttachmentType != string(attachment.TypeImage) && att.AttachmentType != string(attachment.TypeVideo) {
-		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment is not an image or video; skipping its content block",
+	// A document (a PDF the view or read_attachment tool returned) gets a
+	// DOCUMENT block, which the history reload folds back into its tool result
+	// (messageconv.foldToolResultMedia).
+	var blockType reliantv1.ContentBlockType
+	switch att.AttachmentType {
+	case string(attachment.TypeImage), string(attachment.TypeVideo):
+		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
+	case string(attachment.TypeDocument):
+		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
+	default:
+		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment is not an image, video or document; skipping its content block",
 			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
@@ -779,7 +807,7 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 		ID:        uuid.New().String(),
 		MessageID: messageID,
 		Position:  position,
-		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE,
+		BlockType: blockType,
 		Content:   &attachmentRef,
 		Version:   ptr.Of(1),
 		CreatedAt: timestamp,
@@ -897,6 +925,16 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	if opts.TokenCount > 0 {
 		updateData.TokenCount = &opts.TokenCount
 	}
+	if opts.SenderThreadID != "" {
+		var title *string
+		if t, err := s.repo.GetThread(ctx, opts.SenderThreadID); err != nil {
+			slog.WarnContext(ctx, "[SaveMessage] Failed to load sender thread for chat_update; sending it untitled",
+				"error", err, "sender_thread_id", opts.SenderThreadID, "message_id", messageID)
+		} else if t != nil {
+			title = t.Title
+		}
+		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind, opts.SenderSubject)
+	}
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
@@ -908,6 +946,13 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	}
 
 	return string(updateDataJSON), nil
+}
+
+func senderKindPtrIfNonZero(k reliantv1.AgentMessageKind) *reliantv1.AgentMessageKind {
+	if k == reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED {
+		return nil
+	}
+	return &k
 }
 
 func displayStylePtrIfNonZero(i int32) *reliantv1.DisplayStyle {

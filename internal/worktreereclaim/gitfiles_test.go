@@ -7,12 +7,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // The file readers (gitfiles.go) stand in for git, so they are checked
 // against it: in every state below, whatever they answer must be exactly
 // what git answers, and where they decline the reaper asks git instead.
 func TestGitFileReadersAgreeWithGit(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("the file readers always defer to git on Windows")

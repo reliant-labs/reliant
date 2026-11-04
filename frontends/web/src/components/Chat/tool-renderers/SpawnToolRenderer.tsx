@@ -31,9 +31,10 @@ import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
-import { chatGrpc } from "../../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../../hooks/queued-agent-messages";
 import { newClientMessageId } from "../../../lib/pendingSends";
 import { toast } from "../../../lib/toast-manager";
+import * as chatActions from "../../../hooks/chat-actions";
 
 const MAX_PREVIEW_MESSAGES = 10;
 // How much of the child thread the preview fetches. It renders the newest
@@ -261,16 +262,13 @@ function SpawnPreview({ ctx }: ToolContentProps) {
               : trimmed;
           }
         } else if (block.type === ContentBlockType.TOOL_CALL && block.toolName) {
-          // Resolve the result by tool_call_id from the normalized store index
-          // (falling back to a backend-embedded matchedResult on loaded chats),
-          // mirroring processMessage — no longer read off the block.
+          // Resolve the result by tool_call_id from the normalized store index,
+          // mirroring processMessage: the call block does not carry it.
           const indexed = block.toolCallId
             ? toolResultsByCallId[block.toolCallId]
             : undefined;
-          const isError = indexed
-            ? indexed.is_error === true
-            : block.matchedResult?.isError === true;
-          const hasResult = indexed != null || block.matchedResult != null;
+          const isError = indexed?.is_error === true;
+          const hasResult = indexed != null;
           let detail = extractToolDetail(block.toolName, block.input);
           if (detail.length > MAX_DETAIL_LENGTH) detail = detail.slice(0, MAX_DETAIL_LENGTH) + "\u2026";
           toolCalls.push({
@@ -330,7 +328,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 text-2xs font-mono py-0.5",
-                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary",
+                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary-ink",
                       )}
                     >
                       {tc.failed ? (
@@ -399,7 +397,7 @@ function SendToAgentForm({
     if (!message || sending) return;
     setSending(true);
     try {
-      const response = await chatGrpc.sendAgentMessage(
+      const response = await chatActions.sendAgentMessage(
         chatId,
         threadId,
         message,
@@ -413,6 +411,7 @@ function SendToAgentForm({
         return;
       }
       setValue("");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
       toast.error(error);

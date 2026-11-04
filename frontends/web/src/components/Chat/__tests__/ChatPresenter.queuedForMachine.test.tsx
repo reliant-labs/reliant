@@ -26,6 +26,12 @@ const state = vi.hoisted(() => ({
   chat: undefined as { id: string; workflowId?: string; activity?: number; launchKind?: string } | undefined,
 }));
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChat: () => ({ data: state.chat }),
 }));
@@ -53,11 +59,11 @@ vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 
 // ChatPresenter reads the chat's pending questions to tell whether the thread
 // in view is waiting on the user; none is pending here.
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: [] }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: [] } }) };
 });
 vi.mock("../QueuedMessages", () => ({ QueuedMessages: () => null }));
 // The transcript is stubbed down to the one thing under test: the footer it

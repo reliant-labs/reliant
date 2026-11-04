@@ -10,7 +10,7 @@ import {
   type Tracer,
   type TracerProvider,
 } from "@opentelemetry/api";
-import { startTerminalSessionSpan } from "../terminalTrace";
+import { redactedTerminalWSURL, startTerminalSessionSpan } from "../terminalTrace";
 
 // The terminal websocket's upgrade cannot carry headers, so the client span's
 // trace context rides the URL. These pin that the server gets a traceparent
@@ -103,5 +103,29 @@ describe("startTerminalSessionSpan", () => {
     expect(params.has("traceparent")).toBe(false);
     expect(params.has("reconnect")).toBe(false);
     expect(() => span.end(1006, "closed")).not.toThrow();
+  });
+});
+
+describe("redactedTerminalWSURL", () => {
+  it("keeps the parameter names and redacts every value", () => {
+    const params = new URLSearchParams();
+    params.append("workingDir", "/home/me/secret project");
+    params.append("token", "a+b/c=");
+    params.append("traceparent", `00-${SPAN_CONTEXT.traceId}-${SPAN_CONTEXT.spanId}-01`);
+    params.append("tracestate", "vendor=value");
+
+    const logged = redactedTerminalWSURL("wss://host/api/v2/terminal/ws", params);
+
+    expect(logged).toBe(
+      "wss://host/api/v2/terminal/ws?workingDir=***&token=***&traceparent=***&tracestate=***",
+    );
+    for (const value of params.values()) {
+      expect(logged).not.toContain(value);
+      expect(logged).not.toContain(encodeURIComponent(value));
+    }
+  });
+
+  it("is the bare base without a query", () => {
+    expect(redactedTerminalWSURL("wss://host/ws", new URLSearchParams())).toBe("wss://host/ws");
   });
 });

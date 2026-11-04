@@ -11,6 +11,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { queryClient } from "../../../lib/query-client";
 
 const CHAT_ID = "chat-async";
@@ -23,18 +25,15 @@ globalThis.ResizeObserver ??= class {
 
 const { sendAgentMessageMock } = vi.hoisted(() => ({ sendAgentMessageMock: vi.fn() }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
+setTransport(
+  mockTransport({
     // The server leaves async questions out of the pending list.
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: vi.fn().mockResolvedValue([]),
-    resolveQuestion: vi.fn().mockResolvedValue({ success: true }),
-  },
-}));
+    "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+    "QuestionService.ListAsyncQuestions": { response: { questions: [] } },
+    "QuestionService.ResolveQuestion": { response: {} },
+    "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req),
+  }),
+);
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
@@ -55,23 +54,31 @@ const NO_PRESETS = { presets: [] as never[], loading: false };
 const NO_MODELS = { models: [] as never[] };
 const NO_SLASH_COMMANDS: never[] = [];
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => NO_PRESETS,
   useModels: () => NO_MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => NO_SLASH_COMMANDS }));
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
-}));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: { getDefaultPresets: vi.fn().mockResolvedValue({}), listPresets: vi.fn().mockResolvedValue([]) },
+// The selected workflow has no inputs. One stable result, as React Query
+// returns one: a fresh object per render re-derives the params every render.
+vi.mock("../../../hooks/workflow-queries", async (importActual) => {
+  const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
+    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+  };
+});
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => NO_PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
-import { applyQuestionUpdate } from "../../../hooks/approval-queries";
+import { applyQuestionUpdate } from "../../../hooks/question-queries";
 
 function questionEvent(id: string, prompt: string, async: boolean) {
   return {
@@ -121,7 +128,11 @@ describe("an async question does not take over the composer", () => {
     editor.textContent = "keep going";
     fireEvent.input(editor);
     fireEvent.keyDown(editor, { key: "Enter", shiftKey: false, metaKey: false, ctrlKey: false });
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(CHAT_ID, CHAT_ID, "keep going", [], expect.any(String));
+    await waitFor(() =>
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: CHAT_ID, threadId: CHAT_ID, message: "keep going", attachments: [], clientMessageId: expect.any(String) }),
+      ),
+    );
   });
 
   it("while a blocking question from the same stream still does (control)", async () => {

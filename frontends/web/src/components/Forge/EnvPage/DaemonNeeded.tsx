@@ -16,7 +16,7 @@
 
 import { PowerOff, RefreshCw, Unplug } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
 
 /** The one sentence, kept as a constant so tests and copy cannot drift. */
@@ -41,18 +41,18 @@ export function DaemonNeeded({
   return (
     <div
       data-testid={forgeDisabled ? "forge-api-disabled" : "daemon-needed"}
-      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-4"
+      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-4"
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
       <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-sm text-foreground">{forgeDisabled ? FORGE_API_DISABLED_COPY : DAEMON_OFFLINE_COPY}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-ink">{forgeDisabled ? FORGE_API_DISABLED_COPY : DAEMON_OFFLINE_COPY}</p>
+        <p className="text-xs text-ink-muted">
           {forgeDisabled
             ? `Its operator turned the forge API off, so this tab can't show ${what}.`
             : `It shows ${what}.`}{" "}
           Overview, Releases and Secrets come from Reliant and don&apos;t need it.
         </p>
-        {detail && !forgeDisabled && <p className="font-mono text-2xs text-muted-foreground">{detail}</p>}
+        {detail && !forgeDisabled && <p className="font-mono text-2xs text-ink-muted">{detail}</p>}
       </div>
       {onRetry && !forgeDisabled && (
         <Button

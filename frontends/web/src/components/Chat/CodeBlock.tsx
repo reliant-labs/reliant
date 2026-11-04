@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { Copy, Check } from 'lucide-react';
+import { useSurface } from '../../lib/surfaceContext';
+import { cn } from '../../lib/utils';
 
 interface CodeBlockProps {
   language?: string;
@@ -14,6 +16,7 @@ interface CodeBlockProps {
  */
 export function CodeBlock({ language, children, className }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const isMobile = useSurface() === 'mobile';
 
   const handleCopy = async () => {
     // Extract text content from children
@@ -29,30 +32,32 @@ export function CodeBlock({ language, children, className }: CodeBlockProps) {
   };
 
   return (
-    <div className="not-prose relative my-4 w-full group/codeblock">
-      <pre className="hljs relative w-full overflow-x-auto rounded-md border border-black/10 dark:border-white/10 bg-[var(--code-bg)] text-[var(--code-fg)] whitespace-pre-wrap break-words">
-        {/* Header controls */}
+    <div className="not-prose relative my-4 min-w-0 max-w-full w-full group/codeblock">
+        {/* Controls stay outside the horizontal scroller, so copy remains reachable. */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
-          <Tooltip content={copied ? 'Copied!' : 'Copy code'} placement="bottom" delay={300} wrapperClassName="inline-flex">
-<button
+          <Tooltip content={copied ? 'Copied!' : 'Copy code'} side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
             onClick={handleCopy}
-            className="flex h-6 w-6 items-center justify-center rounded bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-opacity opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100"
+            type="button"
+            className={cn("flex items-center justify-center rounded bg-background text-foreground hover:bg-muted transition-opacity focus-visible:ring-2 focus-visible:ring-ring", isMobile ? "min-h-[44px] min-w-[44px]" : "h-6 w-6 opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100")}
             aria-label={copied ? 'Copied!' : 'Copy code'}
           >
             {copied ? (
-              <Check className="w-3.5 h-3.5 text-green-500" />
+              <Check className="w-3.5 h-3.5 text-success-ink" />
             ) : (
               <Copy className="w-3.5 h-3.5 text-muted-foreground" />
             )}
           </button>
-</Tooltip>
+          </Tooltip>
           {language && (
             <span className="pointer-events-none flex items-center rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-xs text-muted-foreground font-mono">
               {language}
             </span>
           )}
         </div>
-        <code className={`language-${language || ''} block p-4 pr-20 text-sm leading-relaxed font-mono whitespace-pre-wrap break-words ${className || ''}`}>
+      <pre tabIndex={isMobile ? 0 : undefined} aria-label={isMobile ? `${language || 'Code'} code block` : undefined}
+        className={cn("hljs relative w-full max-w-full overflow-x-auto rounded-md border border-border bg-[var(--code-bg)] text-[var(--code-fg)]", isMobile ? "whitespace-pre" : "whitespace-pre-wrap break-words")}>
+        <code className={cn(`language-${language || ''} block p-4 pr-20 text-sm leading-relaxed font-mono`, isMobile ? "pt-16 whitespace-pre" : "whitespace-pre-wrap break-words", className)}>
           {children}
         </code>
       </pre>

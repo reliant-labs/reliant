@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from "react";
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -14,22 +15,34 @@
  * request), or rows slip between pages as time moves.
  */
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
-import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
+import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
+  AddIssueCommentRequest,
+  AssignIssueRequest,
+  DeleteIssueCommentRequest,
   Issue,
+  IssueComment,
   IssueEventList,
   IssueList,
   IssuePlatform,
   IssueScope,
   IssueSort,
   IssueStatus,
+  IssueTimelineList,
+  IssueUser,
+  LinkIssueChatRequest,
+  LinkIssueChatResult,
+  UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "@/services/controlPlane/observability/issuesTypes";
+import type { GetMetricRequest, ListMetricExemplarsRequest, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
 import type {
   ObsScope,
   ListTracesResult,
@@ -37,8 +50,17 @@ import type {
   SearchLogsResult,
   Severity,
   TimeWindow,
+  TraceSummary,
 } from "@/services/controlPlane/observability/types";
+import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+
+// Presentation never changes QueryPanel's computation: two dashboard tiles
+// with different ids/titles/layout but the same query share one in-flight read.
+function panelRequestKey(panel: Panel) {
+  const { id: _id, title: _title, description: _description, width: _width, height: _height, ...request } = panel;
+  return request;
+}
 
 /**
  * Every key starts with the whole scope — org, project, environments and
@@ -48,15 +70,17 @@ import { resolveWindow, type RangePreset } from "@/services/controlPlane/observa
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
-    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? []] as const,
+    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
   overview: (scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) =>
     [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
+  trace: (scope: ObsScope | null, traceId: string, range: RangePreset = "7d") => [...obsKeys.all(scope), "trace", traceId, range] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
-    [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
+    [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
+  metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
+  serviceSignals: (scope: ObsScope | null, range: RangePreset) => [...obsKeys.all(scope), "service-signals", range] as const,
   attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
     [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
   workloads: (scope: ObsScope | null, range: RangePreset, services: string[]) =>
@@ -65,6 +89,56 @@ export const obsKeys = {
     [...obsKeys.all(scope), "workload", range, workload, container] as const,
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
+
+// ── Quota-aware reads and polls ──────────────────────────────────────────────
+//
+// Every read that spends the org's ClickHouse query quota (logs, traces,
+// metrics, profiles, workloads, issues, release health) goes through
+// `useReadApi`, and every poll of one through `usePolled`. Alerts, notifications,
+// usage, delivery and activity read Postgres and are left alone: a quota pause
+// must not stop them.
+
+/**
+ * The observability API with every call guarded by the org's quota state: while
+ * the quota is gone a call answers with the quota error at once, without a
+ * request. Hooks that make a ClickHouse read use this instead of
+ * useObservabilityApi.
+ */
+export function useObsReadApi(): ObservabilityApi {
+  const api = useObservabilityApi();
+  const { store } = useObsQuota();
+  return useMemo(
+    () =>
+      new Proxy(api, {
+        get(target, prop, receiver) {
+          const member = Reflect.get(target, prop, receiver) as unknown;
+          if (typeof member !== "function") return member;
+          return (...args: unknown[]) => store.guard(() => (member as (...a: unknown[]) => Promise<unknown>).apply(target, args));
+        },
+      }),
+    [api, store]
+  );
+}
+
+/**
+ * Polls `queryKey` every `intervalMs` through the console's ONE poll scheduler
+ * (pollRegistry.ts): a single timer per key however many panels watch it,
+ * stopped while the quota is gone, a quarter as fast while it is tight, idle in
+ * a hidden tab, and each poll marked `Forge-Poll` for the server. `false` or a
+ * disabled query does not poll. `quota: false` is for a read that does not
+ * spend the ClickHouse quota (a postgres panel): its polls ignore the quota.
+ */
+function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true, quota = true) {
+  const client = useQueryClient();
+  const { polls } = useObsQuota();
+  const keyHash = hashKey(queryKey);
+  useEffect(() => {
+    if (!enabled || intervalMs === false) return;
+    return polls.subscribe(client, queryKey, intervalMs, { quota });
+    // The key is compared by hash: a new array with the same content is the same key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, polls, keyHash, intervalMs, enabled, quota]);
+}
 
 interface PageParam {
   cursor: string;
@@ -84,7 +158,7 @@ export function useObservabilityOrg() {
     queryKey: obsKeys.org(),
     queryFn: () => api.currentOrgId(),
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
   return { orgId: org.data ?? null, isLoading: org.isLoading, error: org.error, refetch: org.refetch };
 }
@@ -92,15 +166,17 @@ export function useObservabilityOrg() {
 // ── Overview ─────────────────────────────────────────────────────────────────
 
 export function useServiceOverview(scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.overview(scope, range, services, groupBy),
-    queryFn: () => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.overview(scope, range, services, groupBy);
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
-    refetchInterval: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
+  usePolled(queryKey, 60_000, !!scope);
+  return query;
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
@@ -119,10 +195,11 @@ export const LOG_PAGE_SIZE = 200;
 export const LIVE_TAIL_MS = 5_000;
 
 export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live: boolean) {
-  const api = useObservabilityApi();
-  return useInfiniteQuery({
-    queryKey: obsKeys.logs(scope, filters),
-    queryFn: async ({ pageParam }): Promise<SearchLogsResult & { window: TimeWindow }> => {
+  const api = useObsReadApi();
+  const queryKey = obsKeys.logs(scope, filters);
+  const query = useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam, signal }): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.searchLogs({
         ...(scope as ObsScope),
@@ -134,7 +211,7 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
         spanId: filters.spanId,
         limit: LOG_PAGE_SIZE,
         cursor: pageParam?.cursor,
-      });
+      }, { signal });
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -142,10 +219,11 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
     enabled: !!scope,
     // While tailing, older pages would be re-fetched on every tick; keep just the newest.
     maxPages: live ? 1 : undefined,
-    refetchInterval: live ? LIVE_TAIL_MS : false,
     staleTime: 10_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
+  usePolled(queryKey, live ? LIVE_TAIL_MS : false, !!scope);
+  return query;
 }
 
 // ── Traces ───────────────────────────────────────────────────────────────────
@@ -157,15 +235,31 @@ export interface TraceFilters {
   errorsOnly: boolean;
   minDurationMs: number;
   groupBy?: string[];
+  /** Only traces of this user id. */
+  userId?: string;
+  /** Only traces of this browser session. */
+  sessionId?: string;
 }
 
 export const TRACE_PAGE_SIZE = 100;
 
+/**
+ * Refuse rows a control plane older than the user/session filters answered
+ * without them (it ignores the unknown fields). A server that applies a filter
+ * returns only traces with a span carrying the id, so every summary names one;
+ * an older one never fills either field, so rows with none are its signature.
+ */
+function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]) {
+  if (traces.length === 0) return;
+  if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
+  if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
+}
+
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: obsKeys.traces(scope, filters),
-    queryFn: async ({ pageParam }): Promise<ListTracesResult & { window: TimeWindow }> => {
+    queryFn: async ({ pageParam, signal }): Promise<ListTracesResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.listTraces({
         ...(scope as ObsScope),
@@ -175,32 +269,36 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         errorsOnly: filters.errorsOnly,
         minDurationMs: filters.minDurationMs,
         groupBy: filters.groupBy,
+        userId: filters.userId,
+        sessionId: filters.sessionId,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
-      });
+      }, { signal });
+      assertTraceFiltersApplied(filters, result.traces);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
     enabled: !!scope,
     staleTime: 15_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
 /**
- * One trace. Spans are immutable once written, so it never goes stale. The
- * lookup searches the whole 7 days traces are kept, not the list's window: a
- * trace linked from a log may be older than the window the reader is in.
+ * One trace and its incoming causal references. Trace detail uses the selected
+ * range for related-evidence admission; callers without a selected range keep
+ * the historical seven-day lookup. Late spans/links can arrive after the first
+ * fetch, so revisit/focus/Refresh must be able to fetch again. No polling.
  */
-export function useTrace(scope: ObsScope | null, traceId: string | null) {
-  const api = useObservabilityApi();
+export function useTrace(scope: ObsScope | null, traceId: string | null, range: RangePreset = "7d") {
+  const api = useObsReadApi();
   return useQuery({
-    queryKey: obsKeys.trace(scope, traceId ?? ""),
-    queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow("7d") }),
+    queryKey: obsKeys.trace(scope, traceId ?? "", range),
+    queryFn: ({ signal }) => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(range) }, { signal }),
     enabled: !!scope && !!traceId,
-    staleTime: Infinity,
-    retry: obsRetry,
+    staleTime: 15_000,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -226,7 +324,15 @@ export interface PanelQueryOptions {
 
 /**
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
- * service filter rides as `services`; search panels are never run here.
+ * service filter rides as `services`; search and text panels, and a kind this
+ * console does not draw, are never run here (panelRunsQuery).
+ *
+ * Like every observability read it waits its turn in the page's read scheduler
+ * (obsClient), and a refusal for the server's concurrent-read cap is retried
+ * with backoff for as long as the panel is mounted: the result stays loading
+ * with `failureCount > 0` and the cap error as `failureReason`, which the views
+ * draw as "Waiting for capacity…", never as an error. Leaving the page or
+ * changing the range cancels a queued or running read.
  */
 export function usePanelQuery(
   scope: ObsScope | null,
@@ -236,17 +342,56 @@ export function usePanelQuery(
   groupBy: string[] = [],
   options: PanelQueryOptions = {}
 ) {
+  const api = useObsReadApi();
+  // A postgres panel reads the environment's own database, not ClickHouse: the telemetry quota does not apply to it.
+  const databaseApi = useObservabilityApi();
+  const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
+  const enabled = !!scope && panelRunsQuery(panel.kind) && (options.enabled ?? true);
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => {
+      const offset = options.offsetMs?.() ?? 0;
+      const window = resolveWindow(range, Date.now() - offset);
+      if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
+      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy }, { signal });
+    },
+    enabled,
+    staleTime: 30_000,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
+  });
+  // Nor does the quota slow or stop a postgres panel's refresh.
+  usePolled(queryKey, options.refetchInterval ?? false, enabled, panel.kind !== "postgres");
+  return query;
+}
+
+/**
+ * A postgres panel's read (AppDatabaseService.QueryDatabasePanel): one
+ * environment's database, so a scope over several environments, or none, is
+ * refused here with the reason, as the server would refuse it.
+ */
+function queryPostgresPanel(api: ObservabilityApi, scope: ObsScope, window: TimeWindow, panel: Panel, signal: AbortSignal) {
+  if (scope.envIds.length !== 1) {
+    throw new ConnectError("a postgres panel reads one environment's database: choose one environment", Code.InvalidArgument);
+  }
+  if (!panel.postgres) throw new ConnectError("the panel has no postgres query", Code.InvalidArgument);
+  return api.queryDatabasePanel({ environmentId: scope.envIds[0], window, query: panel.postgres, panelId: panel.id }, { signal });
+}
+
+/**
+ * The environment's databases a postgres panel may read, with the tables and
+ * columns its dashboard role may SELECT: the panel editor's schema browser.
+ * Postgres, not ClickHouse, so no quota guard.
+ */
+export function useDashboardDatabases(environmentId: string | null) {
   const api = useObservabilityApi();
   return useQuery({
-    queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? ""),
-    queryFn: () => {
-      const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy });
-    },
-    enabled: !!scope && panel.kind !== "search" && (options.enabled ?? true),
-    staleTime: 30_000,
-    refetchInterval: options.refetchInterval ?? false,
+    queryKey: ["observability", "dashboard-databases", environmentId ?? ""] as const,
+    queryFn: ({ signal }) => api.listDashboardDatabases(environmentId as string, { signal }),
+    enabled: !!environmentId,
+    staleTime: 60_000,
     retry: obsRetry,
+    retryDelay: obsRetryDelay,
   });
 }
 
@@ -260,20 +405,42 @@ export interface FlamegraphFilters {
 }
 
 export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.flamegraph(scope, filters),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.getFlamegraph({
         ...(scope as ObsScope),
         window: resolveWindow(filters.range),
         service: filters.service,
         profileType: filters.profileType,
         traceId: filters.traceId,
-      }),
+      }, { signal }),
     enabled: !!scope && !!filters.service && !!filters.profileType,
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+/**
+ * Which signals each service in the scope sends and declares, over `range`
+ * (pass serviceSignalsRange of the view's window). One request per scope and
+ * range, shared by every picker, tab and link that asks, and keyed without
+ * the attribute filters: the server ignores them, so a filter change must not
+ * re-ask. Never retried on Unimplemented (a control plane that predates the
+ * RPC): the caller treats an error as "unknown" and offers every view.
+ */
+export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
+  const api = useObsReadApi();
+  const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
+  return useQuery({
+    queryKey: obsKeys.serviceSignals(unfiltered, range),
+    queryFn: ({ signal }) => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(range) }, { signal }),
+    enabled: !!unfiltered,
+    staleTime: 60_000,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -293,7 +460,7 @@ export function useObservabilityUsage(orgId: string | null) {
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -310,42 +477,117 @@ export function useAttributeValues(
   prefix: string,
   signal?: "traces" | "logs" | "metrics"
 ) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
-    queryFn: () =>
+    queryFn: ({ signal: abortSignal }) =>
       // Value lookups are capped at 7 days server-side, which is the widest preset.
-      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }),
+      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }, { signal: abortSignal }),
     enabled: !!scope && !!key,
     staleTime: 60_000,
     placeholderData: (previous) => previous,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+// ── Metrics explorer ─────────────────────────────────────────────────────────
+
+/**
+ * The metrics explorer's keys. Every one starts with `metricKeys.all(scope)`, which
+ * itself starts with the whole scope, so Refresh (invalidate `obsKeys.all(scope)`)
+ * re-reads them too, and one scope never shares an answer with another.
+ */
+export const metricKeys = {
+  all: (scope: ObsScope | null) => obsKeys.metrics(scope),
+  catalog: (scope: ObsScope | null, range: RangePreset, name: string, limit: number) =>
+    [...metricKeys.all(scope), "catalog", range, name, limit] as const,
+  detail: (scope: ObsScope | null, range: RangePreset, name: string, kind: MetricKind | "") =>
+    [...metricKeys.all(scope), "detail", range, name, kind] as const,
+  exemplars: (scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery) =>
+    [...metricKeys.all(scope), "exemplars", range, request] as const,
+};
+
+/** The catalog's window: the server caps it at 24 hours, so a longer preset would only be clamped there. */
+const CATALOG_MAX_RANGE: RangePreset = "24h";
+
+function catalogRange(range: RangePreset): RangePreset {
+  return range === "7d" ? CATALOG_MAX_RANGE : range;
+}
+
+/**
+ * The metric catalog: every metric the scope's telemetry carries with its kind,
+ * unit, series estimate and services. The window is the explorer's, capped at 24
+ * hours (a metric last seen three days ago is still reachable by name). The
+ * server caches the answer a minute; the client keeps it as long.
+ */
+export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, name = "", limit = 0) {
+  const api = useObsReadApi();
+  const window = catalogRange(range);
+  return useQuery({
+    queryKey: metricKeys.catalog(scope, window, name, limit),
+    queryFn: ({ signal }) => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }, { signal }),
+    enabled: !!scope,
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+    retry: obsRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+/** One metric's detail: attributes with cardinality, export interval and suggested breakdowns. */
+export function useMetric(scope: ObsScope | null, range: RangePreset, name: string | undefined, kind?: GetMetricRequest["kind"]) {
+  const api = useObsReadApi();
+  const window = catalogRange(range);
+  return useQuery({
+    queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
+    queryFn: ({ signal }) => api.getMetric({ ...(scope as ObsScope), window: resolveWindow(window), name: name as string, kind }, { signal }),
+    enabled: !!scope && !!name,
+    staleTime: 60_000,
+    // NotFound is the answer "no data for this metric in this window": a state to show, not a fault to retry.
+    retry: (failureCount, error) => !(error instanceof ConnectError && error.code === Code.NotFound) && obsRetry(failureCount, error),
+    retryDelay: obsRetryDelay,
+  });
+}
+
+/** What an exemplar read is keyed by: the metric, its filters and the bucket asked about (epoch ms, so two clicks on one bucket share an answer). */
+export type ExemplarsQuery = ListMetricExemplarsRequest;
+
+/** Exemplars of one metric (a sampled observation and its trace), stored traces first. Maximum range 7 days. */
+export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery | null, options: { enabled?: boolean } = {}) {
+  const api = useObsReadApi();
+  return useQuery({
+    queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
+    queryFn: ({ signal }) => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }, { signal }),
+    enabled: !!scope && !!request?.name && (options.enabled ?? true),
+    staleTime: 60_000,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
 // ── Workloads (customer metadata) ────────────────────────────────────────────
 
 export function useWorkloads(scope: ObsScope | null, range: RangePreset, services: string[] = []) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.workloads(scope, range, services),
-    queryFn: () => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.workloads(scope, range, services);
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
-    refetchInterval: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
+  usePolled(queryKey, 60_000, !!scope);
+  return query;
 }
 
 export function useWorkload(scope: ObsScope | null, range: RangePreset, workload: string | undefined, container?: string) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
-    queryFn: () =>
-      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }),
+    queryFn: ({ signal }) =>
+      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }, { signal }),
     enabled: !!scope && !!workload,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -471,7 +713,7 @@ export function useReleases(
     queryFn: () => api.listReleases({ ...(scope as DeliveryScope), window: window(), limit: options.limit }),
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -486,7 +728,7 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
     },
     enabled: !!scope,
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -497,15 +739,52 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
  * it is re-read every minute until the server says the window is complete.
  */
 export function useReleaseHealth(scope: DeliveryScope | null, promotionId: string, windowMs: number) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
-    queryFn: () => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }),
-    enabled: !!scope && !!promotionId,
+  const api = useObsReadApi();
+  const queryKey = [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const;
+  const enabled = !!scope && !!promotionId;
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }, { signal }),
+    enabled,
     staleTime: 30_000,
-    refetchInterval: (query) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
-    retry: releaseHealthRetry,
+    retry: releaseHealthRetry, retryDelay: obsRetryDelay,
   });
+  usePolled(queryKey, query.data && !query.data.afterComplete ? 60_000 : false, enabled);
+  return query;
+}
+
+/**
+ * GetReleaseHealth for several environments' current promotions at once, by
+ * environment id: the Environments page's obs-check column. The same cache
+ * entries as useReleaseHealth, so a release's Health tab and this page share
+ * one read. Not polled: the page is a summary, and a release's own page polls.
+ */
+export function useReleaseHealths(
+  orgId: string | null,
+  projectId: string,
+  items: readonly { envId: string; promotionId: string }[],
+  windowMs: number
+): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
+  const api = useObsReadApi();
+  const results = useQueries({
+    queries: items.map(({ envId, promotionId }) => {
+      const scope: DeliveryScope = { orgId: orgId ?? "", projectId, envIds: [envId] };
+      return {
+        queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...scope, promotionId, windowMs }, { signal }),
+        enabled: !!orgId && !!promotionId,
+        staleTime: 30_000,
+        retry: releaseHealthRetry,
+        retryDelay: obsRetryDelay,
+      };
+    }),
+  });
+  const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
+  items.forEach(({ envId }, index) => {
+    const result = results[index];
+    byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byEnv;
 }
 
 // ── Issues (IssuesService) ────────────────────────────────────────────────────
@@ -516,11 +795,24 @@ export interface IssueFilters {
   statuses: IssueStatus[];
   platform?: IssuePlatform;
   service?: string;
+  /** Only the issues assigned to this user id (the server filters). */
+  assignee?: string;
+  /** Only the issues with an event of this user id in the window (the server filters). */
+  userId?: string;
   sort: IssueSort;
   text: string;
 }
 
 export const ISSUE_PAGE_SIZE = 50;
+
+/**
+ * A user id no one has, which useIssues asks for to learn whether user_id is
+ * applied. User ids are the application's own strings, so no fixed value is
+ * reserved: each read draws a fresh random one (122 bits) nobody can hold.
+ */
+export function issueUserFilterProbe(): string {
+  return `reliant-console-filter-probe-${crypto.randomUUID()}`;
+}
 
 /**
  * One root for every issue read, so a triage (which can move an issue between
@@ -533,45 +825,95 @@ export const issueKeys = {
     [...issueKeys.root(), "list", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], filters] as const,
   detail: (issueId: string, range: RangePreset) => [...issueKeys.root(), "detail", issueId, range] as const,
   events: (issueId: string) => [...issueKeys.root(), "events", issueId] as const,
+  timelines: () => [...issueKeys.root(), "timeline"] as const,
+  timeline: (issueId: string) => [...issueKeys.timelines(), issueId] as const,
+};
+
+const issueRevocations = new WeakMap<QueryClient, Map<string, { generation: number; error: unknown }>>();
+
+/** A membership refusal revokes previously cached sensitive reads of this issue too. */
+async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey, read: () => Promise<T>): Promise<T> {
+  let revocations = issueRevocations.get(client);
+  if (!revocations) { revocations = new Map(); issueRevocations.set(client, revocations); }
+  const generation = revocations.get(issueId)?.generation ?? 0;
+  let result: T;
+  try {
+    result = await read();
+  } catch (error) {
+    if (error instanceof ConnectError && (error.code === Code.PermissionDenied || error.code === Code.Unauthenticated)) {
+      revocations.set(issueId, { generation: (revocations.get(issueId)?.generation ?? 0) + 1, error });
+      const queries = client.getQueryCache().findAll({ predicate: (query) => {
+        const k = query.queryKey;
+        return k[0] === "observability" && k[1] === "issues" && ["detail", "events", "timeline"].includes(String(k[2])) && k[3] === issueId;
+      } });
+      // Cancel siblings before scrubbing them: an older in-flight response must not restore revoked data.
+      await client.cancelQueries({ predicate: (query) => queries.includes(query) && hashKey(query.queryKey) !== hashKey(key) });
+      for (const query of queries) query.setState({ data: undefined, dataUpdatedAt: 0, error, status: "error" });
+    }
+    throw error;
+  }
+  const revoked = revocations.get(issueId);
+  // Some transports ignore cancellation. Never accept a response started before a refusal.
+  if (revoked && revoked.generation !== generation) throw revoked.error;
+  return result;
+}
+
+/** People change rarely; the roster and the reader are read once a while, not per issue. */
+export const peopleKeys = {
+  members: (orgId: string) => ["observability", "people", "members", orgId] as const,
+  me: () => ["observability", "people", "me"] as const,
 };
 
 /** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
 export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: issueKeys.list(scope, filters),
-    queryFn: async ({ pageParam }): Promise<IssueList & { window: TimeWindow }> => {
+    queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
-      const result = await api.listIssues({
+      const request = {
         ...(scope as IssueScope),
         services: filters.service ? [filters.service] : [],
         window,
         statuses: filters.statuses,
         platform: filters.platform,
+        assignee: filters.assignee,
+        userId: filters.userId,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
-      });
+      };
+      // An issue row names no user, so whether the server applied user_id is
+      // asked, not inferred: the same first page for a user nobody is. A server
+      // that knows the filter answers it with nothing; one that ignores it
+      // answers with exactly the unfiltered rows the real read would get.
+      const [result, probe] = await Promise.all([
+        api.listIssues(request, { signal }),
+        filters.userId && !pageParam ? api.listIssues({ ...request, userId: issueUserFilterProbe(), pageSize: 1 }, { signal }) : null,
+      ]);
+      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextPageToken ? { cursor: last.nextPageToken, window: last.window } : undefined),
     enabled: !!scope,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
 /** One issue with its latest event, frames, versions and first release; counts over `range`. */
 export function useIssue(issueId: string | undefined, range: RangePreset) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.detail(issueId ?? "", range);
   return useQuery({
-    queryKey: issueKeys.detail(issueId ?? "", range),
-    queryFn: () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }),
+    queryKey: key,
+    queryFn: ({ signal }) => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }, { signal })),
     enabled: !!issueId,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -579,16 +921,18 @@ export const ISSUE_EVENTS_PAGE_SIZE = 20;
 
 /** One issue's events, newest first. */
 export function useIssueEvents(issueId: string | undefined) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.events(issueId ?? "");
   return useInfiniteQuery({
-    queryKey: issueKeys.events(issueId ?? ""),
-    queryFn: ({ pageParam }): Promise<IssueEventList> =>
-      api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+    queryKey: key,
+    queryFn: ({ pageParam, signal }): Promise<IssueEventList> =>
+      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }, { signal })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -607,6 +951,106 @@ export function useUpdateIssueStatus() {
       void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
     },
+  });
+}
+
+export const ISSUE_TIMELINE_PAGE_SIZE = 100;
+
+/** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
+export function useIssueTimeline(issueId: string | undefined) {
+  // Discussion reads Postgres, not ClickHouse: quota pauses must not block it.
+  const api = useObservabilityApi();
+  const client = useQueryClient();
+  const key = issueKeys.timeline(issueId ?? "");
+  return useInfiniteQuery({
+    queryKey: key,
+    queryFn: ({ pageParam }): Promise<IssueTimelineList> =>
+      readIssue(client, issueId as string, key, () => api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined })),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextPageToken || undefined,
+    enabled: !!issueId,
+    staleTime: 15_000,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+/** The signed-in person: who "me" is, and whose comments are editable. */
+export function useCurrentIssueUser() {
+  const api = useObservabilityApi();
+  return useQuery<IssueUser | null>({
+    queryKey: peopleKeys.me(),
+    queryFn: () => api.getCurrentIssueUser(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** The explicit issue org's roster and caller role, independently cached across org switches. */
+export function useOrgMembers(orgId: string) {
+  const api = useObservabilityApi();
+  const query = useQuery({
+    queryKey: peopleKeys.members(orgId),
+    queryFn: () => api.listOrgMembers(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  // Never offer cached people or admin controls after a membership refusal.
+  return { ...query, data: query.error ? undefined : query.data };
+}
+
+/** Every write below never retries and never re-sends; a refusal is shown, and the reads are re-fetched either way. */
+export function useAddIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, AddIssueCommentRequest>({
+    mutationFn: (req) => api.addIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useUpdateIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, UpdateIssueCommentRequest>({
+    mutationFn: (req) => api.updateIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useDeleteIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<void, unknown, DeleteIssueCommentRequest>({
+    mutationFn: (req) => api.deleteIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+/**
+ * Assign or unassign. Like a triage it echoes the version read, never retries,
+ * and on a stale one (Aborted: a conflict) re-reads the issue instead of
+ * re-sending, so the reader sees what changed.
+ */
+export function useAssignIssue() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<Issue, unknown, AssignIssueRequest>({
+    mutationFn: (req) => api.assignIssue(req),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+    },
+  });
+}
+
+/** Record a chat started from an issue. Idempotent per (issue, chat), so a repeat is harmless. */
+export function useLinkIssueChat() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<LinkIssueChatResult, unknown, LinkIssueChatRequest>({
+    mutationFn: (req) => api.linkIssueChat(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
   });
 }
 
@@ -637,6 +1081,6 @@ export function useActivity(scope: DeliveryScope | null, target: { kind?: string
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }

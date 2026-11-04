@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MessageSquarePlus, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SaveMessageConfig } from '../../types/workflow'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import { ProtoFieldRenderer } from './ProtoFieldRenderer'
 import type { ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import {
@@ -231,7 +231,7 @@ export function SaveMessageConfigEditor({
           <span>Save Message</span>
           <HelpPopover content={helpContent} />
           {hasConfig && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">configured</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">configured</span>
           )}
         </div>
         {configContent}
@@ -254,7 +254,7 @@ export function SaveMessageConfigEditor({
         <span>Save Message</span>
         <HelpPopover content={helpContent} />
         {hasConfig && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">configured</span>
+          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">configured</span>
         )}
       </button>
 

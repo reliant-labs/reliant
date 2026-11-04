@@ -194,7 +194,9 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 		"STRANDED: the run closed before it could be woken and no run was started for the message")
 	assert.Equal(t, fx.chatID, started[0].options.ID, "the chat's own workflow ID, so it replaces the closed run")
 	assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread, "on the thread the message was queued to")
-	assert.Nil(t, started[0].input.Resume, "a fresh run at graph entry")
+	require.NotNil(t, started[0].input.Resume)
+	assert.True(t, started[0].input.Resume.RecoveryOnly, "recovery-only startup must execute graph setup before its loop")
+	assert.True(t, started[0].input.Resume.ResumeAllStopped, "the root message also resumes unfinished siblings")
 	assert.Equal(t, "run-new", resp.Msg.RunId)
 	assert.True(t, resp.Msg.Queued, "the row is still queued; the new run's first turn drains it")
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
@@ -359,7 +361,9 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 			require.Len(t, started, 1, "no run was started for the message")
 			assert.Equal(t, fx.chatID, started[0].options.ID, "the chat's own workflow ID")
 			assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread)
-			assert.Nil(t, started[0].input.Resume, "a fresh run at graph entry")
+			require.NotNil(t, started[0].input.Resume)
+			assert.True(t, started[0].input.Resume.RecoveryOnly, "recovery-only startup must execute graph setup before its loop")
+			assert.True(t, started[0].input.Resume.ResumeAllStopped, "the root message also resumes unfinished siblings")
 			assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the inputs the ended run was running on (the chat's selection)")
 			assert.NotContains(t, started[0].input.Inputs, v2.InputKeyLaunchRun, "a run a person's message started is not the launch run")
 			assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,

@@ -97,11 +97,11 @@ describe('presentDaemon', () => {
 })
 
 describe('sizeLabel', () => {
-  // Size arrives as the lifecycle mirror's own string ("medium"), not the
+  // Size arrives as the lifecycle mirror's own string ("l"), not the
   // control-plane size enum, so the tiers are named rather than numbered.
   it('names each tier', () => {
-    expect(sizeLabel(daemon({ size: 'small' }))).toBe('Small')
-    expect(sizeLabel(daemon({ size: 'xl' }))).toBe('XL')
+    expect(sizeLabel(daemon({ size: 'm' }))).toBe('M')
+    expect(sizeLabel(daemon({ size: '2xl' }))).toBe('2XL')
   })
 
   it('returns empty string when the tier is unset, so no badge renders', () => {

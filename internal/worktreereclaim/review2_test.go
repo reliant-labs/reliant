@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regression tests ported from the second review of #574 (probes N1-N8).
@@ -20,6 +22,7 @@ import (
 // exactly what WorktreeService.relockActive sends) is then a cache hit and a
 // no-op, so the fence survives the unarchive and a phase-two removal succeeds.
 func TestReview2_N1_RelockCacheDefeatsTheFence(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -251,6 +254,7 @@ func TestReview2_N6_StagedButRevertedInWorktree(t *testing.T) {
 // sweep, or a clean-up batch that read the row before the DB flip) simply
 // re-claims, and its phase two removes.
 func TestReview2_N7_ReclaimAfterRelockWithSameFence(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -276,6 +280,7 @@ func TestReview2_N7_ReclaimAfterRelockWithSameFence(t *testing.T) {
 // N8: the automatic classifier (no snapshot, no consent) hashes untracked
 // files into the SHARED object store via `git add -A` on a temp index.
 func TestReview2_N8_ClassifierWritesUntrackedIntoSharedObjects(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -466,13 +471,16 @@ func TestQuarantine_MultiCheckoutIsRemovedOneAtATimeAndRestoredOnChange(t *testi
 	// A process that FOLLOWED the move (an open file, a cwd) writes into the
 	// quarantined copy of the second checkout while it is being re-checked.
 	// (A writer that only knows the old path gets ENOENT; see the test above.)
-	calls := 0
+	written := false
 	f.r.Cwds = func(context.Context) ([]string, error) {
-		calls++
-		if calls == 4 {
+		if !written {
 			entries, _ := os.ReadDir(filepath.Join(f.root, ".reclaim", "qm"))
 			for _, e := range entries {
-				_ = os.WriteFile(filepath.Join(f.root, ".reclaim", "qm", e.Name(), "late.txt"), []byte("x"), 0o644)
+				if e.IsDir() {
+					write(t, filepath.Join(f.root, ".reclaim", "qm", e.Name(), "late.txt"), "x")
+					written = true
+					break
+				}
 			}
 		}
 		return nil, nil
@@ -535,6 +543,7 @@ func TestApplySnapshot_ByteExactAndVerified(t *testing.T) {
 }
 
 func TestApplySnapshot_RefusesADirtyCheckoutAndFailsLoudly(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("dirtyapply", "feat/dirtyapply")
@@ -551,6 +560,7 @@ func TestApplySnapshot_RefusesADirtyCheckoutAndFailsLoudly(t *testing.T) {
 
 // R-S8: the automatic classifier writes NOTHING into the shared object store.
 func TestAutoClassifierWritesNoObjects(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -576,6 +586,7 @@ func TestSnapshotRemove_TooLargeReasonName(t *testing.T) {
 
 // R-S8: a worktree the daemon runs out of time for is deferred untouched.
 func TestReconcile_BatchBudgetDefersTheRest(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

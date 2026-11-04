@@ -78,3 +78,15 @@ export function startTerminalSessionSpan(
     },
   };
 }
+
+/**
+ * The upgrade URL as it may be logged: `base` with every query parameter's
+ * value replaced by `***`. The query carries the auth token, the trace context
+ * and the working directory, none of which belongs in a log line; the
+ * parameter names stay, so a log still says what the connection asked for.
+ */
+export function redactedTerminalWSURL(base: string, params: URLSearchParams): string {
+  const keys = [...new Set(params.keys())];
+  if (keys.length === 0) return base;
+  return `${base}?${keys.map((key) => `${encodeURIComponent(key)}=***`).join("&")}`;
+}

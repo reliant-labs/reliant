@@ -113,9 +113,6 @@ describe("onboarding speaks the user's language", () => {
         const lower = line.toLowerCase();
         for (const banned of BANNED) {
           if (!lower.includes(banned)) continue;
-          // "environments" is the real name of the settings SECTION we deep
-          // link to, and `section: "environments"` is a route param.
-          if (banned === "environment" && lower.includes("/settings")) continue;
           offenders.push(`${name}: ${line}`);
         }
       }

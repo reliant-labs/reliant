@@ -165,6 +165,9 @@ func (b *shellOutputTool) Execute(rctx *rctx.ToolContext, params ShellOutputPara
 		return NewTextErrorResponse(err.Error()), nil
 	}
 
+	// Reading a process's output is using it: not idle, so not reaped.
+	touchProcesses(rctx, params.ProcessID)
+
 	// Set default limit
 	if params.Limit <= 0 {
 		params.Limit = 16000

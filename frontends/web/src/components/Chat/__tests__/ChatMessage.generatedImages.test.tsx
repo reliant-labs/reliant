@@ -25,13 +25,11 @@ import {
 import type { Message } from "../../../types/chat";
 
 const getAttachmentAsBlob = vi.fn(
-  async () => new Blob(["png-bytes"], { type: "image/png" }),
+  async (_id: string) => new Blob(["png-bytes"], { type: "image/png" }),
 );
 
-vi.mock("../../../api/attachment-grpc", () => ({
-  attachmentGrpc: {
-    getAttachmentAsBlob: (id: string) => getAttachmentAsBlob(id),
-  },
+vi.mock("../../../hooks/attachment-queries", () => ({
+  fetchAttachmentBlob: (id: string) => getAttachmentAsBlob(id),
 }));
 
 // The tool card is rendered for real so the test can prove the image is NOT
@@ -56,7 +54,7 @@ vi.mock("../../../store/chatStore", () => ({
 }));
 
 vi.mock("../../../api/client", () => ({
-  api: { toolCalls: { cancel: vi.fn(), convertToBackground: vi.fn() } },
+  api: {},
 }));
 
 vi.mock("../../../lib/logger", () => ({
@@ -130,11 +128,6 @@ function buildAssistantMessage(): Message {
         toolCallId: "call-1",
         toolName: "generate_image",
         input: JSON.stringify({ prompt: "a cat" }),
-        matchedResult: {
-          toolCallId: "call-1",
-          content: "Image generated.",
-          isError: false,
-        },
       },
       {
         id: "block-2",

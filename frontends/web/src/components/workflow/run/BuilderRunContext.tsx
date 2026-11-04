@@ -13,10 +13,11 @@
  * everywhere else they are used.
  */
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { listStepExecutions, type StepRecord } from "../../../api/step-executions-grpc";
+import { chatServiceKeys, useListStepExecutions } from "../../../hooks/chat-service-hooks_gen";
+import { toStepRecords, type StepRecord } from "./stepRecord";
 import type { BuilderRun } from "../hooks/useBuilderTestRun";
 import type { RunNodeState } from "./builderRun";
 
@@ -55,16 +56,21 @@ export function BuilderRunProvider({
   children: ReactNode;
 }) {
   const chatId = run?.chatId ?? null;
-  const query = useQuery({
-    queryKey: ["builder-run-records", chatId, run?.settledVersion ?? 0],
-    queryFn: () => listStepExecutions(chatId!),
-    enabled: !!chatId,
-    // Keep showing the last record while the next one loads, so the Run tab
-    // does not blank out each time a step settles — but never a previous
-    // run's record against this one.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === chatId ? keepPreviousData(previous) : undefined,
-  });
+  const settledVersion = run?.settledVersion ?? 0;
+  // One entry per run (the request is the run's chat), so the Run tab keeps
+  // showing the last record while the next one loads instead of blanking out
+  // each time a step settles, and never shows a previous run's record.
+  const query = useListStepExecutions({ chatId: chatId ?? "" }, { enabled: !!chatId, select: toStepRecords });
+  // Fetched again as steps settle. Joins a read already in flight (the first
+  // one, on mount) rather than issuing a second.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!chatId || settledVersion === 0) return;
+    void queryClient.invalidateQueries(
+      { queryKey: chatServiceKeys.listStepExecutions({ chatId }) },
+      { cancelRefetch: false },
+    );
+  }, [queryClient, chatId, settledVersion]);
   const current = query.data;
   const value = useMemo<BuilderRunContextValue | null>(
     () =>

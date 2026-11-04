@@ -38,7 +38,7 @@ func TestWebSearchDemo(t *testing.T) {
 		t.Skip("Skipping live-network test; set RELIANT_TEST_NETWORK=1 to run")
 	}
 
-	tool := NewWebSearchTool(netguard.ForDeployment(""))
+	tool := NewWebSearchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{
@@ -124,7 +124,7 @@ func TestWebSearchDemo(t *testing.T) {
 // TestWebSearchToolSchema verifies the tool schema is properly generated
 func TestWebSearchToolSchema(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool(netguard.ForDeployment(""))
+	tool := NewWebSearchTool(netguard.ForDeployment(true))
 
 	// Verify the tool has a schema
 	schema := tool.ParamSchema()

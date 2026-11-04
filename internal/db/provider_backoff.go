@@ -73,6 +73,19 @@ func (r *Repo) ListCapacityWakeTargets(ctx context.Context, userID string) ([]st
 	return ids, nil
 }
 
+// ChatsHeldOnUsageLimit returns the chats among chatIDs with a thread parked
+// on a usage-limit wait that began after since. Read-only: one SELECT.
+func (r *Repo) ChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error) {
+	if len(chatIDs) == 0 {
+		return nil, nil
+	}
+	ids, err := store.ListChatsHeldOnUsageLimit(ctx, r.ORM(), chatIDs, since)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chats held on a usage limit: %w", err)
+	}
+	return ids, nil
+}
+
 // ProviderBackoffByChat returns every thread of a chat that has a provider
 // backoff row, keyed by thread id. Read-only: one SELECT.
 func (r *Repo) ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]ProviderBackoff, error) {

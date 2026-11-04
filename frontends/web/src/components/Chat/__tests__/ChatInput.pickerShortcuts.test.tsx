@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { useProjectStore } from "../../../store/projectStore";
-import { buildWorkflowParamsPayload } from "../../../api/chat-grpc";
+import { buildWorkflowParamsPayload } from "../../../hooks/chat-model";
 
 const CHAT_ID = "chat-picker";
 
@@ -51,8 +51,8 @@ vi.mock("../../../lib/chatSelection", () => ({
     return null;
   }),
 }));
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 const DEFINITION = {
@@ -66,13 +66,12 @@ const MODELS = {
   tiers: {},
 };
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => PRESETS,
   useModels: () => MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
-vi.mock("../../../hooks/workflow-config-queries", async () => {
-  const actual = await vi.importActual<typeof import("../../../hooks/workflow-config-queries")>(
-    "../../../hooks/workflow-config-queries",
+vi.mock("../../../hooks/workflow-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../../hooks/workflow-queries")>(
+    "../../../hooks/workflow-queries",
   );
   return {
     ...actual,
@@ -81,15 +80,21 @@ vi.mock("../../../hooks/workflow-config-queries", async () => {
 });
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => [] }));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: { getDefaultPresets: vi.fn().mockResolvedValue({}), listPresets: vi.fn().mockResolvedValue([]) },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
+  useDefaultPresets: () => ({ defaults: {}, loading: false }),
 }));
 vi.mock("../settings", () => ({
-  ChatSettingsPopover: (props: { onPresetChange: (p: unknown) => void; selectedPreset: string | null }) => (
-    <button data-testid="pick-preset" onClick={() => props.onPresetChange(PRESET)}>
-      {props.selectedPreset ?? "None"}
-    </button>
-  ),
+  // Anchored, the real popover always renders its trigger and shows its
+  // content only when open.
+  ChatSettingsPopover: (props: { isOpen: boolean; onPresetChange: (p: unknown) => void; selectedPreset: string | null }) =>
+    props.isOpen ? (
+      <button data-testid="pick-preset" onClick={() => props.onPresetChange(PRESET)}>
+        {props.selectedPreset ?? "None"}
+      </button>
+    ) : null,
 }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 

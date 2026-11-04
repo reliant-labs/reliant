@@ -20,10 +20,9 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { useId, useState } from "react";
 
 import { CardInset } from "../../forge-ui/card";
-import type { CatalogEntry } from "../../../api/catalog-search-grpc";
-import type { Connection } from "../../../api/connection-grpc";
+import type { CatalogEntry } from "../../../hooks/catalog-queries";
 import { methodsUnavailableHere } from "../../../lib/integrationAvailability";
-import { useConnections } from "../../../hooks/connection-queries";
+import { useConnections, type Connection } from "../../../hooks/connection-queries";
 import { cn } from "../../../lib/utils";
 
 export interface ConnectionPickerProps {
@@ -94,12 +93,12 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
               onClick={() => setExpanded(true)}
               disabled={disabled}
               aria-label={`Change ${integration.displayName} connection`}
-              className="shrink-0 rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="shrink-0 rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Change
             </button>
           ) : (
-            <a href="/settings/git-connections" className="shrink-0 text-xs font-medium text-primary hover:underline">
+            <a href="/settings/git-connections" className="shrink-0 text-xs font-medium text-primary-ink hover:underline">
               Manage
             </a>
           )}
@@ -125,12 +124,12 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
       ) : query.isError ? (
         <p role="alert" className="cpv2-field-hint !mt-0">
           Couldn't load your connections.{" "}
-          <button type="button" onClick={() => void query.refetch()} className="font-medium text-primary hover:underline">Retry</button>
+          <button type="button" onClick={() => void query.refetch()} className="font-medium text-primary-ink hover:underline">Retry</button>
         </p>
       ) : state === "delegated" ? (
         <CardInset className="text-sm">
           <p className="text-foreground">Uses your connected {integration.displayName} account.</p>
-          <a href="/settings/git-connections" className="text-xs font-medium text-primary hover:underline">
+          <a href="/settings/git-connections" className="text-xs font-medium text-primary-ink hover:underline">
             Manage in Settings
           </a>
         </CardInset>

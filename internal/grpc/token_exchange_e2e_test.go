@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -28,7 +28,7 @@ import (
 // control-plane's STORAGE faked (fakeControlPlane, Memory under real grant
 // rules):
 //
-//	app session ─► TokenService.CreateToken(DAEMON) ─► MintForUser + clipped UpdateForUser
+//	app session ─► TokenService.CreateToken(DAEMON) ─► atomically clipped MintForUser
 //	daemon credential ─► TokenService.ExchangeToken (public at the interceptor,
 //	                     authenticated in the handler) ─► MintForUser ─► `rlat_`
 //
@@ -49,13 +49,13 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
 
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL, InternalServiceSecret: secret}})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
 	signer := newSessionSigner(t)
 	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{
-		Issuer: controlPlane, ClipsGrants: mode == tokenauthority.ModeControlPlane,
+		Issuer: controlPlane,
 	})
 	gatewayURL := serveGateway(t, authority)
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
@@ -64,8 +64,9 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	session := signer.sign(t, userID)
 	ctx := context.Background()
 
-	// 1. The app mints its daemon credential with a session. Its ceiling is
-	//    clipped to the member's grants: deploy + secret, not domain.
+	// 1. The app mints its daemon credential with a session. It holds every
+	//    scope its person holds ("*"), clipped to the member's grants:
+	//    deploy + secret, not domain.
 	created, err := tokens(session).CreateToken(ctx, connect.NewRequest(&reliantv1.CreateTokenRequest{
 		Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -76,7 +77,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	require.True(t, parent.Scopes.Has(fat.ScopeDaemonConnect))
 	require.True(t, parent.Scopes.Has(fat.ScopeDeployWrite), "the daemon credential carries its user's deploy authority: %s", parent.Scopes)
 	require.False(t, parent.Scopes.Has(fat.ScopeDomainWrite), "a grant the member lacks must be clipped: %s", parent.Scopes)
-	require.False(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential stays a daemon's, not an API credential")
+	require.True(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential holds every scope its person holds, reliant:api included")
 	require.Equal(t, reliantv1.TokenKind_TOKEN_KIND_DAEMON, created.Msg.GetInfo().GetKind())
 	msg, err := connectDaemon(t, gatewayURL, daemonToken)
 	require.NoError(t, err)

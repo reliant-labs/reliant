@@ -156,7 +156,7 @@ describe("the environment strip", () => {
   });
 });
 
-describe("the declaration (D6: Scale opens a pull request)", () => {
+describe("the declaration (Scale opens a pull request)", () => {
   it("recognizes the repository forms a bundle records", () => {
     expect(githubRepoOf("https://github.com/reliant-labs/control-plane.git")).toBe("reliant-labs/control-plane");
     expect(githubRepoOf("git@github.com:reliant-labs/control-plane.git")).toBe("reliant-labs/control-plane");

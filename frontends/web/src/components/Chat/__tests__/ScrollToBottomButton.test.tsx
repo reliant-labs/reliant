@@ -8,7 +8,17 @@ function button(): HTMLElement {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
+
+function stubPointer(coarse: boolean) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: coarse && query.includes("coarse"),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
 
 describe("ScrollToBottomButton", () => {
   // It used to hang off the composer's top edge by a fixed -44px, which put it
@@ -18,7 +28,11 @@ describe("ScrollToBottomButton", () => {
   it("anchors to the bottom edge of its container instead of offsetting from the composer", () => {
     render(<ScrollToBottomButton visible onClick={() => {}} />);
 
-    expect(button().parentElement).toHaveClass("absolute", "bottom-3");
+    expect(button().parentElement).toHaveClass("absolute");
+    // 0.75rem above the frame's bottom edge, plus the floating composer band's
+    // inset where the chrome floats over the transcript (unset, so 0, where it
+    // docks).
+    expect(button().parentElement?.style.bottom).toBe("calc(var(--chat-bottom-inset, 0px) + 0.75rem)");
     expect(button().style.marginTop).toBe("");
   });
 
@@ -52,5 +66,35 @@ describe("ScrollToBottomButton", () => {
     fireEvent.mouseEnter(button());
 
     expect(button()).toHaveClass("opacity-100");
+  });
+
+  it("expands into a labeled pill on a fine pointer", () => {
+    vi.useFakeTimers();
+    stubPointer(false);
+    render(<ScrollToBottomButton visible onClick={() => {}} />);
+
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+
+    expect(button()).toHaveTextContent("Scroll to bottom");
+    expect(button()).toHaveClass("px-3.5");
+  });
+
+  // On a phone the expanding label slides over the text being read.
+  it("stays a 44px circle with no label on a coarse pointer", () => {
+    vi.useFakeTimers();
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(<ScrollToBottomButton visible onClick={onClick} />);
+
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+
+    expect(button()).toHaveTextContent("");
+    expect(button()).toHaveClass("h-[44px]", "w-[44px]", "rounded-full");
+    fireEvent.click(button());
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

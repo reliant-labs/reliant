@@ -63,7 +63,7 @@ describe("TriggerPayloadPanel", () => {
 
   it("asks for a focused input before inserting", () => {
     render(<Harness />);
-    expect(screen.getByText(/Click into an expression field/)).toBeInTheDocument();
+    expect(screen.getByText(/Click into an expression field in a step/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /trigger\.kind\b/ })).toBeDisabled();
   });
 

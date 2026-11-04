@@ -13,6 +13,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
+import * as deployRuns from "./deployAttempts";
 import * as releases from "./releases";
 
 export interface ReleasesApi {
@@ -22,6 +23,9 @@ export interface ReleasesApi {
   listPromotions: typeof releases.listReleasePromotions;
   getRollout: typeof releases.getPromotionRollout;
   getBundle: typeof releases.getPromotionBundle;
+  /** The project's deploys (one per `forge env deploy` run), and one with its log. */
+  listDeployRuns: typeof deployRuns.listDeployRuns;
+  getDeployRun: typeof deployRuns.getDeployRun;
 }
 
 export const controlPlaneReleasesApi: ReleasesApi = {
@@ -31,6 +35,8 @@ export const controlPlaneReleasesApi: ReleasesApi = {
   listPromotions: releases.listReleasePromotions,
   getRollout: releases.getPromotionRollout,
   getBundle: releases.getPromotionBundle,
+  listDeployRuns: deployRuns.listDeployRuns,
+  getDeployRun: deployRuns.getDeployRun,
 };
 
 const ReleasesApiContext = createContext<ReleasesApi>(controlPlaneReleasesApi);

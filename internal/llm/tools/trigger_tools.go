@@ -11,17 +11,63 @@ import (
 )
 
 // A workflow declares WHEN it runs in its `triggers:` block. Declaring fires
-// nothing, and an agent cannot change that: enabling a workflow's triggers is
-// the user's act, done in the app (Workflows -> the workflow -> Enable), which
-// is where they choose the project, machine and connected accounts. An agent
-// writes and tests the workflow; list_triggers shows what the user has enabled.
+// nothing. Activation management tools require per-call interactive approval;
+// unattended runs cannot create standing authority. list_triggers reads the
+// resulting activations; fire_trigger runs one without changing configuration.
 
 // TriggerLister lists the calling user's triggers. It is implemented over
 // TriggerService by internal/triggertools — this package cannot import the
-// gRPC services, which depend on it. There is deliberately no write method: no
-// agent tool creates, enables or re-points an activation.
+// gRPC services, which depend on it. Writes use the separate approval-backed
+// ActivationManager interface.
 type TriggerLister interface {
 	ListTriggers(ctx context.Context, userID string, f TriggerListFilter) ([]TriggerSummary, error)
+}
+
+// TriggerFirer runs an existing activation once as its owner. It cannot create,
+// enable or change a trigger.
+type TriggerFirer interface {
+	FireTrigger(ctx context.Context, userID, triggerID string) (string, error)
+}
+
+// TriggerEventLister reads firing history without exposing event payloads.
+type TriggerEventLister interface {
+	ListTriggerEvents(ctx context.Context, userID, triggerID string, limit int, pageToken string) (TriggerEventPage, error)
+}
+
+type TriggerEventSummary struct {
+	FireWorkflowID string `json:"fire_workflow_id,omitempty"`
+	ID             string `json:"id"`
+	OccurredAt     string `json:"occurred_at"`
+	Outcome        string `json:"outcome"`
+	Detail         string `json:"detail,omitempty"`
+	ChatID         string `json:"chat_id,omitempty"`
+	RunState       string `json:"run_state,omitempty"`
+	// Definition is which workflow definition the firing resolved.
+	Definition *TriggerEventDefinition `json:"definition,omitempty"`
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved: the
+// file and its version, the machine and git commit it was synced from, and
+// why it could not run when the firing was refused.
+type TriggerEventDefinition struct {
+	Summary     string `json:"summary"`
+	Workflow    string `json:"workflow"`
+	Source      string `json:"source,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Machine     string `json:"machine,omitempty"`
+	DaemonID    string `json:"daemon_id,omitempty"`
+	Repo        string `json:"repo,omitempty"`
+	Branch      string `json:"branch,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	Dirty       bool   `json:"dirty,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"`
+	Error       string `json:"error,omitempty"`
+	CatalogPin  string `json:"catalog_pin,omitempty"`
+}
+
+type TriggerEventPage struct {
+	Events        []TriggerEventSummary `json:"events"`
+	NextPageToken string                `json:"next_page_token,omitempty"`
 }
 
 // TriggerListFilter narrows list_triggers.
@@ -40,6 +86,9 @@ type TriggerSummary struct {
 	Enabled         bool
 	ProjectID       string
 	DaemonID        string
+	DaemonName      string
+	MachineState    string
+	NoMachine       bool
 	ConnectionID    string
 	WebhookURL      string
 	NextFireAt      string
@@ -47,6 +96,11 @@ type TriggerSummary struct {
 	HealthDetail    string
 	Source          string // a one-line description of what fires it
 	Filter          string
+	// Definition is where its runs read the workflow from ("project workflow
+	// at control-plane/.reliant/workflows/release.yaml on machine cicd"), and
+	// DefinitionWarnings what about that the owner should act on.
+	Definition         string
+	DefinitionWarnings []string
 }
 
 // =============================================================================
@@ -60,9 +114,9 @@ type ListTriggersParams struct {
 
 const (
 	ListTriggersToolName        = "list_triggers"
-	listTriggersToolDescription = `List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
+	listTriggersToolDescription = `List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).`
+Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.`
 )
 
 type listTriggersTool struct {
@@ -113,7 +167,22 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 		} else {
 			fmt.Fprintf(&b, "  launches %s (source written on the trigger)\n", t.Workflow)
 		}
+		if t.NoMachine {
+			b.WriteString("  machine: none (no-machine activation)\n")
+		} else {
+			state := t.MachineState
+			if state == "" {
+				state = "unknown"
+			}
+			fmt.Fprintf(&b, "  machine: %s (id %s), state %s\n", t.DaemonName, t.DaemonID, state)
+		}
 		fmt.Fprintf(&b, "  fires on: %s\n", t.Source)
+		if t.Definition != "" {
+			fmt.Fprintf(&b, "  definition: %s\n", t.Definition)
+		}
+		for _, w := range t.DefinitionWarnings {
+			fmt.Fprintf(&b, "  warning: %s\n", w)
+		}
 		if t.Filter != "" {
 			fmt.Fprintf(&b, "  filter: %s\n", t.Filter)
 		}
@@ -125,6 +194,10 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 		}
 		if t.HealthDetail != "" {
 			fmt.Fprintf(&b, "  %s: %s\n", strings.ToLower(t.Health), t.HealthDetail)
+		}
+		if t.Health == "BROKEN" && t.Enabled {
+			// Enabled reads as live; a broken activation launches nothing.
+			b.WriteString("  every firing is refused and recorded as failed (nothing launches) until the workflow declares this trigger again; pause_trigger stops the attempts\n")
 		}
 	}
 	return WithResponseMetadata(NewTextResponse(strings.TrimRight(b.String(), "\n")), list), nil

@@ -18,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Interceptor } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
 
-vi.mock("@sentry/react", () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -131,10 +130,14 @@ describe("every server-streaming RPC the web can call", () => {
     }
   }
 
-  it("includes the update stream (the scan works)", () => {
+  it("includes both update streams (the scan works)", () => {
     expect(streams).toContainEqual({
       service: "reliant.v1.StreamingService",
       method: "StreamUserUpdates",
+    });
+    expect(streams).toContainEqual({
+      service: "reliant.v1.StreamingService",
+      method: "StreamChatUpdates",
     });
   });
 

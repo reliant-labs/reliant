@@ -223,13 +223,16 @@ func (s *Service) BranchChat(
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
 	branchChat := &db.Chat{
-		ID:             branchChatID,
-		UserID:         sourceChat.UserID,
-		Title:          title,
-		ProjectID:      sourceChat.ProjectID,
-		WorktreeID:     worktreeID,
-		WorkflowName:   sourceChat.WorkflowName,
-		State:          db.ChatStateIdle,
+		ID:           branchChatID,
+		UserID:       sourceChat.UserID,
+		Title:        title,
+		ProjectID:    sourceChat.ProjectID,
+		WorktreeID:   worktreeID,
+		WorkflowName: sourceChat.WorkflowName,
+		State:        db.ChatStateIdle,
+		// The person who branched owns the branch: it is a conversation
+		// whatever started the chat it came from.
+		Origin:         db.ChatOriginUser,
 		WorkflowID:     &branchWorkflowID, // Root workflow ID = chat ID for UI identification
 		ActiveDaemonID: activeDaemonID,    // Pin to the worktree's owning daemon
 		NoMachine:      noMachine,
@@ -642,24 +645,10 @@ func (s *Service) createBranchRepairToolMessage(
 	now := time.Now()
 	msgID := uuid.New().String()
 
-	// Get next ordinal for this thread
-	nextOrdinal, err := s.deps.Repo.GetNextOrdinal(ctx, assistantMsg.ThreadID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get next ordinal: %w", err)
-	}
-
-	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-	nextSeq, err := s.deps.Repo.GetNextSeq(ctx, chatID, assistantMsg.ThreadID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get next seq: %w", err)
-	}
-
 	// Create the tool message using the same context_window_id as the assistant message
 	repairMsg := &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
-		Ordinal:         nextOrdinal,
-		Seq:             nextSeq,
 		ThreadID:        assistantMsg.ThreadID,
 		ContextWindowID: assistantMsg.ContextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -667,7 +656,8 @@ func (s *Service) createBranchRepairToolMessage(
 		UpdatedAt:       now,
 	}
 
-	if err := s.deps.Repo.CreateMessage(ctx, repairMsg); err != nil {
+	// The next ordinal and seq are allocated with the insert.
+	if err := s.deps.Repo.CreateNumberedMessage(ctx, repairMsg); err != nil {
 		return nil, fmt.Errorf("failed to create repair message: %w", err)
 	}
 
@@ -718,7 +708,7 @@ func (s *Service) ListBranches(
 	}
 
 	// Verify user owns the parent chat
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

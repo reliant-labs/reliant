@@ -135,6 +135,7 @@ func (s *Service) CreateProjectFromRepo(
 			return nil, err
 		}
 	}
+	s.registerClonedRootRepo(ctx, project, cloneURL)
 
 	var branchPtr *string
 	if branch != "" {
@@ -224,6 +225,38 @@ func (s *Service) createProjectForRepo(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create project"))
 	}
 	return project, nil
+}
+
+// registerClonedRootRepo records the clone as the project's root repo when the
+// registry has none. A clone of one repository is, by construction, a git
+// repo at the project root — and the clone is queued, so the discovery that
+// CreateProject runs has nothing to scan yet. Without this row every worktree
+// gate depended on adopting the repo from a daemon later, and refused with
+// "project has no git repos" whenever that adoption asked the wrong machine.
+// Best-effort: a failure leaves that adoption as the fallback.
+func (s *Service) registerClonedRootRepo(ctx context.Context, project *core.Project, cloneURL string) {
+	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		logging.WarnContext(ctx, "CreateProjectFromRepo: could not list repos", "error", err, "project_id", project.ID)
+		return
+	}
+	if len(repos) > 0 {
+		return
+	}
+	now := time.Now().UTC()
+	root := &core.Repo{
+		ID:        uuid.New().String(),
+		ProjectID: project.ID,
+		Name:      project.Name,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if cloneURL != "" {
+		root.RemoteURL = &cloneURL
+	}
+	if err := s.deps.Repo.CreateRepo(ctx, root); err != nil {
+		logging.WarnContext(ctx, "CreateProjectFromRepo: could not register the root repo", "error", err, "project_id", project.ID)
+	}
 }
 
 // cloneRequestID correlates the queued clone with its project_daemons row.

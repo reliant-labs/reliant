@@ -3,13 +3,14 @@
 /**
  * The Overview (project home with the workloads) against the workload
  * fixtures: the environment strip, needs attention, the Services and Jobs
- * tables reading the server's verdict, the scope (D1), the filters, and the
+ * tables reading the server's verdict, the scope, the filters, and the
  * empty / loading / error / not-set-up states.
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
 import { renderOverview } from "./workloadsTestUtils";
@@ -29,17 +30,20 @@ describe("the Overview", () => {
     const strip = screen.getByTestId("overview-env-strip");
     expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("data-tone", "danger");
     expect(within(strip).getByTestId("overview-env-prod")).toHaveTextContent("1 failing");
-    expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("aria-pressed", "true");
+    expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("aria-current", "page");
     expect(within(strip).getByTestId("overview-env-e2e")).toHaveTextContent("1 job failed");
     expect(within(strip).getByTestId("overview-env-dev")).toHaveTextContent("Healthy");
     expect(within(strip).getByTestId("overview-env-previews")).toHaveTextContent("3 running");
   });
 
-  it("scopes the console from the strip", async () => {
-    const harness = renderOverview();
+  it("makes the strip status, each cell a link to that environment — not a second scope switch", async () => {
+    renderOverview();
     await ready();
-    await userEvent.click(screen.getByTestId("overview-env-e2e"));
-    expect(harness.selectEnv).toHaveBeenCalledWith("e2e");
+    const cell = screen.getByTestId("overview-env-e2e");
+    expect(cell.tagName).toBe("A");
+    expect(cell).toHaveAttribute("href", "/overview?env=e2e");
+    expect(cell).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("overview-env-prod")).toHaveAttribute("aria-current", "page");
   });
 
   it("lists the scoped environment's services with the server's verdict, never re-derived", async () => {
@@ -56,7 +60,7 @@ describe("the Overview", () => {
     // A workload with restarts that the server calls degraded reads Degraded (not Crash-looping).
     expect(within(table).getByTestId("overview-service-litellm")).toHaveTextContent("Degraded");
     // The whole row opens the workload, in its environment.
-    expect(within(worker).getByRole("link", { name: "reliant-temporal-worker" })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
+    expect(within(worker).getByRole("link", { name: /^reliant-temporal-worker\b/ })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
     // Only prod's: no environment column, no other env's rows.
     expect(within(table).queryByText("Environment")).toBeNull();
     expect(within(table).getAllByRole("row")).toHaveLength(1 + 6);
@@ -103,6 +107,23 @@ describe("the Overview", () => {
     expect(harness.navigateTo).toHaveBeenCalledWith("/w/prod/reliant-temporal-worker");
   });
 
+  it("offers the way back on each item, naming the environment and the release", async () => {
+    const onRollback = vi.fn();
+    const target = { env: "prod", current: "v2", previous: "20261017.120000-abc" };
+    renderOverview({ rollback: { targets: new Map([["prod", target]]), onRollback, blockedReason: null } });
+    await ready();
+    const attention = screen.getByTestId("overview-attention");
+    const button = within(attention).getAllByRole("button", { name: /Roll back prod to 20261017\.120000/ })[0]!;
+    await userEvent.click(button);
+    expect(onRollback).toHaveBeenCalledWith(target);
+  });
+
+  it("says nothing is deployed without counting telemetry it is about to disown", async () => {
+    renderOverview({ envs: [] });
+    expect(await screen.findByTestId("overview-counts")).toHaveTextContent("Not deployed");
+    expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
+  });
+
   it("shows the latest run of each job with the release that ran it", async () => {
     renderOverview({ env: "e2e" });
     await ready();
@@ -140,11 +161,31 @@ describe("the Overview", () => {
 });
 
 describe("its states", () => {
-  it("says nothing is deployed, with the command that deploys", async () => {
+  it("says nothing is deployed, leads with an agent, and keeps the command that deploys", async () => {
     renderOverview({ envs: [] });
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "empty");
     expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
-    expect(screen.getByText(/forge env deploy <env>/)).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Deploy with an agent" })).toBeInTheDocument();
+    expect(screen.getByText("reliant forge env deploy <env>")).toBeInTheDocument();
+  });
+
+  it("never says nothing is deployed when the deploy state could not be read", async () => {
+    const onRetry = vi.fn();
+    renderOverview({ envs: [], envsUnread: { onRetry, retrying: false } });
+    expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "unread");
+    expect(screen.getByTestId("overview-unread")).toHaveTextContent("Couldn't load deployment status");
+    expect(screen.queryByText("Nothing deployed yet")).toBeNull();
+    expect(screen.queryByTestId("overview-counts")).toBeNull();
+    await userEvent.setup().click(screen.getByTestId("overview-unread-retry"));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Ask Reliant on every row that needs attention", async () => {
+    renderOverview();
+    await ready();
+    const rows = within(screen.getByTestId("overview-attention")).getAllByRole("row");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(within(row).getByTestId("ask-reliant-menu")).toBeInTheDocument();
   });
 
   it("loads at the tables' own row height", () => {
@@ -171,6 +212,26 @@ describe("its states", () => {
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
     expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+  });
+
+  it("still lists the firing alerts when the workload read times out", async () => {
+    // 2026-11-03: ListWorkloads timed out and "Needs attention" showed only an
+    // apology, though the alerts had been read and were firing.
+    const base = createWorkloadsFixtureApi();
+    renderOverview({
+      obs: {
+        ...base,
+        listWorkloads: async () => {
+          throw new ConnectError("ListWorkloads timed out after 10000ms", Code.DeadlineExceeded);
+        },
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "error"));
+    const attention = screen.getByTestId("overview-attention");
+    await waitFor(() => expect(within(attention).getAllByRole("row").length).toBeGreaterThan(0));
+    const rows = within(attention).getAllByRole("row");
+    expect(rows.every((row) => row.getAttribute("data-testid")?.startsWith("attention-alert/"))).toBe(true);
+    expect(within(attention).getByTestId("overview-attention-unread")).toHaveTextContent("only the firing alerts are listed");
   });
 
   it("says when the jobs list was cut short", async () => {

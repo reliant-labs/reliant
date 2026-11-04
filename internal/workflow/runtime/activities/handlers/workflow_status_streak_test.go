@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -144,6 +145,7 @@ func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, str
 // Every kind of automation pages once per failure streak, not only a schedule:
 // a webhook that fails on each delivery is the same 24-pages-a-day problem.
 func TestWorkflowStatus_AutomationFailureNotifiesOncePerStreak(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for _, kind := range storedTriggerKinds {
@@ -228,6 +230,7 @@ func TestWorkflowStatus_InteractiveFailureAlwaysNotifiesAfterScheduleFailures(t 
 // "Notify me when it finishes" is offered on every automation, and honoured on
 // every one: a webhook's or provider event's run is no less worth hearing about.
 func TestWorkflowStatus_NotifyOnCompleteOptIn(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for _, kind := range storedTriggerKinds {
@@ -291,6 +294,7 @@ func TestWorkflowStatus_APersonsReplyInAnAutomationsChatIsAttended(t *testing.T)
 // The runs a trigger fires still follow its policy, and a person's turns in its
 // chats can neither end its failure streak nor start one.
 func TestWorkflowStatus_APersonsReplyNeitherEndsNorJoinsTheTriggersStreak(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for _, kind := range []core.TriggerKind{core.TriggerKindSchedule, core.TriggerKindWebhook} {
@@ -341,6 +345,7 @@ func TestWorkflowStatus_APersonsReplyInAnAgentsRunNotifies(t *testing.T) {
 // policy — here opted OUT of completions, with a failure streak already
 // running — speaks only for runs nobody is behind.
 func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -373,6 +378,7 @@ func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
 // "failed" — a reviewer that never posted its review was recorded as
 // completed, and the automation read green while doing nothing.
 func TestWorkflowStatus_FailureOutcomeRecordsTheFiringAsFailed(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {

@@ -3,6 +3,7 @@ package workflow
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"connectrpc.com/connect"
@@ -50,23 +51,46 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 
 // The read count is what made the latency: with a realistic round trip per
 // read, a listing must cost a handful of round trips, not one per ref.
+//
+// It is measured in synctest's virtual time, where the fake's 20ms sleep per
+// read is the ONLY thing that advances the clock: the listing's own CPU
+// (validating every workflow, under -race) costs nothing, however loaded the
+// host. So the elapsed time is exactly the round trips on the listing's
+// critical path times 20ms: reads in a row add up, concurrent ones overlap.
+// A wall-clock version of this test measured the host instead — its
+// no-latency control alone took 6.8s at load 100.
 func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
-	ctx, repo := workflowlisttest.NewFixture(t, 12)
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
-	req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
-	// Warm the process-wide caches (parsed builtins, tool registry) so what
-	// is measured is the listing's round trips, not first-use CPU.
-	_, err := svc.ListWorkflows(ctx, req)
-	require.NoError(t, err)
+	const roundTrip = 20 * time.Millisecond
+	synctest.Test(t, func(t *testing.T) {
+		ctx, repo := workflowlisttest.NewFixture(t, 12)
+		svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
+		req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
+		list := func(latency time.Duration) time.Duration {
+			repo.Latency = latency
+			start := time.Now()
+			_, err := svc.ListWorkflows(ctx, req)
+			require.NoError(t, err)
+			return time.Since(start)
+		}
 
-	repo.ResetCounts()
-	repo.Latency = 20 * time.Millisecond
-	start := time.Now()
-	_, err = svc.ListWorkflows(ctx, req)
-	elapsed := time.Since(start)
-	require.NoError(t, err)
-	// Before: 522 reads in a row, ~10s at 20ms each. Now a handful, the
-	// independent ones concurrent.
-	assert.Less(t, elapsed, time.Second,
-		"ListWorkflows made %d reads at 20ms each", repo.TotalReads())
+		// The control: with no round-trip latency the listing takes no
+		// virtual time at all, so nothing but the injected round trips is
+		// on the clock below.
+		require.Zero(t, list(0), "only the fake's round trips advance the clock")
+
+		repo.ResetCounts()
+		elapsed := list(roundTrip)
+		trips := int(elapsed / roundTrip)
+		require.Equal(t, time.Duration(trips)*roundTrip, elapsed, "virtual time moves only in whole round trips")
+		// Before: 522 reads in a row, ~10s of round trips at 20ms each. Now a
+		// handful in a row, the independent ones concurrent.
+		assert.LessOrEqual(t, trips, maxListingRoundTripsInARow,
+			"ListWorkflows made %d round trips in a row (%v at %v each; %d reads in all)",
+			trips, elapsed, roundTrip, repo.TotalReads())
+	})
 }
+
+// maxListingRoundTripsInARow is how many reads a listing may make one after
+// another: a handful, against the fixture's 36 refs (the listing makes 2
+// today: the project, then everything that needs it, concurrently).
+const maxListingRoundTripsInARow = 4

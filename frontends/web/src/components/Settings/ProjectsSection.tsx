@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle, FolderPlus, Search } from "lucide-react";
 
 import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { Button } from "@/components/ui/Button";
-import { useNavigateToProjectPicker } from "@/hooks/useNavigateToProjectPicker";
+import Button from "@/components/forge-ui/button";
+import { openAddProject } from "@/store/addProjectDialogStore";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";
+import { useProjects } from "@/hooks/project-queries";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { RemoveProjectModal } from "../Projects/RemoveProjectModal";
+import { ADD_PROJECT_LABEL, NO_PROJECTS_COPY, PROJECT_DEFINITION } from "../Projects/projectCopy";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CurrentProjectDetails } from "./projects/CurrentProjectDetails";
 import { ProjectsTable } from "./projects/ProjectsTable";
@@ -20,48 +22,27 @@ import { projectMatchesQuery, sortProjectsForSettings } from "./projects/project
 const FILTER_THRESHOLD = 8;
 
 /**
- * Settings → Projects: the list of every folder/repo Reliant can work in, and
- * the place to add or forget one. It is about the user's PROJECTS — plural —
- * with the current one summarised underneath, not a dashboard of the current
- * project (which is what this page used to be, and why a user with five
- * projects could only ever see one of them here).
+ * Settings → Projects: the one page for managing projects — every project
+ * Reliant works in, to open, rename or remove, and Add project. It is about
+ * the user's PROJECTS — plural — with the current one summarised underneath.
  *
- * The project picker is the primary place to add a project; this is the
- * second. "Add project" deselects the current project, which is how the picker
- * is reached (see useNavigateToProjectPicker).
+ * There is no other project page: switching is the sidebar's project menu,
+ * and adding is the Add project dialog, which this page opens too.
  */
 export function ProjectsSection() {
   const navigate = useNavigate();
-  const navigateToProjectPicker = useNavigateToProjectPicker();
 
-  const projects = useProjectStore((state) => state.projects);
+  const { projects, isLoading, error: listError, refetch: load } = useProjects();
   const currentProject = useProjectStore((state) => state.currentProject);
-  const isLoading = useProjectStore((state) => state.isLoading);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
-  const selectProject = useProjectStore((state) => state.selectProject);
+  const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
+  const updateProject = useProjectStore((state) => state.updateProject);
   const deleteProject = useProjectStore((state) => state.deleteProject);
 
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(projects.length > 0);
+  const loadError = listError ? listError.message || "Could not load projects" : null;
   const [query, setQuery] = useState("");
   const [pendingRemoval, setPendingRemoval] = useState<Project | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      await loadProjects();
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not load projects");
-    } finally {
-      setHasLoaded(true);
-    }
-  }, [loadProjects]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),
@@ -82,17 +63,26 @@ export function ProjectsSection() {
   const openProject = async (project: Project) => {
     setOpeningProjectId(project.id);
     try {
-      // selectProject does not move the URL while the user is in Settings
-      // (projectStore.syncProjectUrl), so leaving Settings is explicit here.
-      if (project.id !== currentProject?.id) {
-        await selectProject(project);
-      }
+      // Opening a project shows it: the sidebar filters to it and the main
+      // pane moves into it. The filter does not move the URL while the user
+      // is in Settings (projectStore.syncProjectFilterUrl), so leaving
+      // Settings is explicit here.
+      await setProjectFilter(project.id);
       goToProject(project.id);
     } catch (error) {
       logger.error("[ProjectsSection] Failed to open project", error);
       toast.error(`Could not open ${project.name}`);
     } finally {
       setOpeningProjectId(null);
+    }
+  };
+
+  const renameProject = async (project: Project, name: string) => {
+    try {
+      await updateProject(project.id, { name });
+    } catch (error) {
+      logger.error("[ProjectsSection] Failed to rename project", error);
+      toast.error(`Could not rename ${project.name}`);
     }
   };
 
@@ -110,27 +100,27 @@ export function ProjectsSection() {
     }
   };
 
-  const showSkeleton = projects.length === 0 && (!hasLoaded || isLoading) && !loadError;
+  const showSkeleton = projects.length === 0 && isLoading && !loadError;
   const showError = projects.length === 0 && !!loadError;
-  const showEmpty = projects.length === 0 && hasLoaded && !isLoading && !loadError;
+  const showEmpty = projects.length === 0 && !isLoading && !loadError;
   const showFilter = projects.length > FILTER_THRESHOLD;
 
   return (
-    <div className="forge-ui h-full overflow-auto bg-background">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8 lg:px-8">
+    <div className="forge-ui">
+      <div className="flex flex-col gap-6">
         <SettingsPageHeader
           className="mb-0"
           title="Projects"
-          description="Folders and repositories Reliant can work in. Removing a project forgets it and its project settings here — files on disk are never deleted."
+          description={PROJECT_DEFINITION}
           actions={
             <Button
               variant="primary"
               size="md"
               leftIcon={<FolderPlus className="h-4 w-4" />}
-              onClick={navigateToProjectPicker}
+              onClick={() => openAddProject()}
               data-testid="settings-projects-add"
             >
-              Add project
+              {ADD_PROJECT_LABEL}
             </Button>
           }
         />
@@ -155,7 +145,7 @@ export function ProjectsSection() {
             </div>
             {/* secondary, not outline: inside .forge-ui `accent` is the primary
                 colour, so outline's hover:bg-accent would flood on hover. */}
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
+            <Button variant="secondary" size="sm" onClick={load}>
               Try again
             </Button>
           </div>
@@ -165,9 +155,9 @@ export function ProjectsSection() {
           <EmptyState
             icon={<FolderPlus className="h-6 w-6" />}
             title="No projects yet"
-            description="Add a folder or clone a repository and Reliant can start working in it."
-            actionLabel="Add project"
-            onAction={navigateToProjectPicker}
+            description={NO_PROJECTS_COPY}
+            actionLabel={ADD_PROJECT_LABEL}
+            onAction={() => openAddProject()}
           />
         )}
 
@@ -206,6 +196,7 @@ export function ProjectsSection() {
                 currentProjectId={currentProject?.id}
                 onOpen={(project) => void openProject(project)}
                 onRemove={setPendingRemoval}
+                onRename={(project, name) => void renameProject(project, name)}
                 openingProjectId={openingProjectId}
               />
             )}
@@ -217,7 +208,7 @@ export function ProjectsSection() {
             project={currentProject}
             onChatOpened={() => goToProject(currentProject.id)}
             onManageWorkspaces={() =>
-              void navigate({ to: "/settings/$section", params: { section: "workspaces" } })
+              void navigate({ to: "/settings/$section", params: { section: "branches" } })
             }
           />
         )}

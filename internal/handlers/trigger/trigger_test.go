@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -215,6 +216,7 @@ func TestCreateTriggerRespectsExplicitDisabled(t *testing.T) {
 // A create whose schedule cannot be made is rolled back. Reporting success
 // would leave a trigger the owner cannot distinguish from a working one.
 func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -234,6 +236,7 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 // rollback removes the schedule as well as the row; otherwise it would keep
 // firing for a trigger that no longer exists until the next SyncAll.
 func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -311,6 +314,7 @@ func TestCreateTriggerValidates(t *testing.T) {
 }
 
 func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -343,6 +347,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 // or deleting a stored schedule trigger skips the backend rather than
 // panicking on it.
 func TestServiceWithoutTemporal(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -418,6 +423,7 @@ func TestListTriggersIsScopedToTheCaller(t *testing.T) {
 }
 
 func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -446,6 +452,7 @@ func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
 
 // An update that does not mention enabled must not resume a paused trigger.
 func TestUpdateTriggerLeavesEnabledAloneWhenUnset(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -575,6 +582,7 @@ func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
 }
 
 func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -611,6 +619,7 @@ func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
 }
 
 func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -659,6 +668,7 @@ func TestListTriggerEventsBoundsTheLimit(t *testing.T) {
 // The handler's rendered trigger must round-trip through the same parser the
 // syncer uses, or the API would accept configs the backend then rejects.
 func TestRenderedScheduleRoundTripsThroughTheParser(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)
@@ -749,6 +759,7 @@ func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
 }
 
 func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)

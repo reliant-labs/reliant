@@ -36,10 +36,13 @@ package tokenauthority
 import (
 	"context"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // Shared request/response shapes, identical for every store.
@@ -55,6 +58,10 @@ type (
 // forge:contract
 type Authority interface {
 	Introspect(ctx context.Context, token string) (*fat.Principal, error)
+	// IntrospectAccount is Introspect plus the email of the account the token
+	// acts as, when the store knows one: control-plane does; the self-hosted
+	// stores keep no user records and name none.
+	IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error)
 	MintForUser(ctx context.Context, req MintRequest) (Minted, error)
 	ListForUser(ctx context.Context, userID string, scope fat.Scope) ([]TokenInfo, error)
 	RevokeForUser(ctx context.Context, userID, tokenID string) error
@@ -70,12 +77,13 @@ type Authority interface {
 
 // Deps selects and builds the deployment's Authority.
 type Deps struct {
-	// ControlPlaneURL, when set, selects the hosted Authority.
-	ControlPlaneURL string
-	// InternalServiceSecret signs the internal-service bearer. Required with
-	// ControlPlaneURL: a URL without it is a misconfiguration, never a reason
-	// to fall back to the local store.
-	InternalServiceSecret string
+	// ControlPlane is the deployment's control plane. A url
+	// (RELIANT_CONTROL_PLANE_URL) selects the hosted Authority, and then its
+	// internal_service_secret (INTERNAL_SERVICE_SECRET), which signs the
+	// internal-service bearer, is required: a URL without it is a
+	// misconfiguration, never a reason to fall back to the local store. Nil
+	// is self-hosted.
+	ControlPlane *configv1.ControlPlaneConfig
 	// DB is the ORM client over reliant's database, for the self-hosted
 	// store (its statements are internal/store's).
 	DB orm.Context

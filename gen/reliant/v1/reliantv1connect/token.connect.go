@@ -52,6 +52,9 @@ const (
 	// TokenServiceGetGitTokenProcedure is the fully-qualified name of the TokenService's GetGitToken
 	// RPC.
 	TokenServiceGetGitTokenProcedure = "/reliant.v1.TokenService/GetGitToken"
+	// TokenServiceGetGitHubBotTokenProcedure is the fully-qualified name of the TokenService's
+	// GetGitHubBotToken RPC.
+	TokenServiceGetGitHubBotTokenProcedure = "/reliant.v1.TokenService/GetGitHubBotToken"
 )
 
 // TokenServiceClient is a client for the reliant.v1.TokenService service.
@@ -133,6 +136,33 @@ type TokenServiceClient interface {
 	// auth_required: false for the same reason as ExchangeToken: the handler,
 	// not the interceptor, authenticates the caller.
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
+	// GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
+	// ONE repository, so an agent on a daemon can review, label and merge as
+	// the App's bot (`reliant-labs[bot]`) instead of as the user: `reliant
+	// github token --as app --repo owner/name` and `reliant github gh`.
+	//
+	// It is the interactive twin of an automation acting as the app. The same
+	// safety rule holds, enforced by control-plane at the mint: the CALLING
+	// session's acting user must have push access to the repository, so the bot
+	// is never a way past the user's own permissions. The token is scoped to
+	// that one repository and to the requested permissions (issues,
+	// pull_requests, contents; default all three at write), expires within an
+	// hour, and is never stored or logged here. control-plane's audit log
+	// records each mint.
+	//
+	// Daemon credential only, exactly as GetGitToken and for the same reason.
+	//
+	// Errors:
+	//   - UNAUTHENTICATED / PERMISSION_DENIED: not a live daemon credential.
+	//   - INVALID_ARGUMENT: owner or repo is missing or malformed, or a
+	//     permission is outside the three or a level other than read/write.
+	//   - FAILED_PRECONDITION, by `x-forge-error-reason`:
+	//     `git_credential_no_control_plane`, `github_app_not_configured`,
+	//     `github_app_not_installed`, `github_app_permissions`,
+	//     `git_credential_not_connected`, `git_credential_needs_reconnect`.
+	//   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
+	//   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+	GetGitHubBotToken(context.Context, *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error)
 }
 
 // NewTokenServiceClient constructs a client for the reliant.v1.TokenService service. By default, it
@@ -182,17 +212,24 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("GetGitToken")),
 			connect.WithClientOptions(opts...),
 		),
+		getGitHubBotToken: connect.NewClient[v1.GetGitHubBotTokenRequest, v1.GetGitHubBotTokenResponse](
+			httpClient,
+			baseURL+TokenServiceGetGitHubBotTokenProcedure,
+			connect.WithSchema(tokenServiceMethods.ByName("GetGitHubBotToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tokenServiceClient implements TokenServiceClient.
 type tokenServiceClient struct {
-	createToken   *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
-	listTokens    *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken   *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	updateToken   *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
-	exchangeToken *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
-	getGitToken   *connect.Client[v1.GetGitTokenRequest, v1.GetGitTokenResponse]
+	createToken       *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	listTokens        *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
+	revokeToken       *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	updateToken       *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
+	exchangeToken     *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
+	getGitToken       *connect.Client[v1.GetGitTokenRequest, v1.GetGitTokenResponse]
+	getGitHubBotToken *connect.Client[v1.GetGitHubBotTokenRequest, v1.GetGitHubBotTokenResponse]
 }
 
 // CreateToken calls reliant.v1.TokenService.CreateToken.
@@ -223,6 +260,11 @@ func (c *tokenServiceClient) ExchangeToken(ctx context.Context, req *connect.Req
 // GetGitToken calls reliant.v1.TokenService.GetGitToken.
 func (c *tokenServiceClient) GetGitToken(ctx context.Context, req *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error) {
 	return c.getGitToken.CallUnary(ctx, req)
+}
+
+// GetGitHubBotToken calls reliant.v1.TokenService.GetGitHubBotToken.
+func (c *tokenServiceClient) GetGitHubBotToken(ctx context.Context, req *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error) {
+	return c.getGitHubBotToken.CallUnary(ctx, req)
 }
 
 // TokenServiceHandler is an implementation of the reliant.v1.TokenService service.
@@ -304,6 +346,33 @@ type TokenServiceHandler interface {
 	// auth_required: false for the same reason as ExchangeToken: the handler,
 	// not the interceptor, authenticates the caller.
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
+	// GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
+	// ONE repository, so an agent on a daemon can review, label and merge as
+	// the App's bot (`reliant-labs[bot]`) instead of as the user: `reliant
+	// github token --as app --repo owner/name` and `reliant github gh`.
+	//
+	// It is the interactive twin of an automation acting as the app. The same
+	// safety rule holds, enforced by control-plane at the mint: the CALLING
+	// session's acting user must have push access to the repository, so the bot
+	// is never a way past the user's own permissions. The token is scoped to
+	// that one repository and to the requested permissions (issues,
+	// pull_requests, contents; default all three at write), expires within an
+	// hour, and is never stored or logged here. control-plane's audit log
+	// records each mint.
+	//
+	// Daemon credential only, exactly as GetGitToken and for the same reason.
+	//
+	// Errors:
+	//   - UNAUTHENTICATED / PERMISSION_DENIED: not a live daemon credential.
+	//   - INVALID_ARGUMENT: owner or repo is missing or malformed, or a
+	//     permission is outside the three or a level other than read/write.
+	//   - FAILED_PRECONDITION, by `x-forge-error-reason`:
+	//     `git_credential_no_control_plane`, `github_app_not_configured`,
+	//     `github_app_not_installed`, `github_app_permissions`,
+	//     `git_credential_not_connected`, `git_credential_needs_reconnect`.
+	//   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
+	//   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+	GetGitHubBotToken(context.Context, *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -349,6 +418,12 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(tokenServiceMethods.ByName("GetGitToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tokenServiceGetGitHubBotTokenHandler := connect.NewUnaryHandler(
+		TokenServiceGetGitHubBotTokenProcedure,
+		svc.GetGitHubBotToken,
+		connect.WithSchema(tokenServiceMethods.ByName("GetGitHubBotToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TokenServiceCreateTokenProcedure:
@@ -363,6 +438,8 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 			tokenServiceExchangeTokenHandler.ServeHTTP(w, r)
 		case TokenServiceGetGitTokenProcedure:
 			tokenServiceGetGitTokenHandler.ServeHTTP(w, r)
+		case TokenServiceGetGitHubBotTokenProcedure:
+			tokenServiceGetGitHubBotTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -394,4 +471,8 @@ func (UnimplementedTokenServiceHandler) ExchangeToken(context.Context, *connect.
 
 func (UnimplementedTokenServiceHandler) GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.GetGitToken is not implemented"))
+}
+
+func (UnimplementedTokenServiceHandler) GetGitHubBotToken(context.Context, *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.GetGitHubBotToken is not implemented"))
 }

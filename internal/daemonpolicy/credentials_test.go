@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/redact"
 )
 
 func envMap(env []string) map[string]string {
@@ -110,11 +112,107 @@ func TestCredentialsNone_RemovesEveryCredentialVariable(t *testing.T) {
 	}
 }
 
+// The environment a credentials-none child inherits is an allowlist: a secret
+// no deny list names still does not arrive (the 2026-11-01 review, RF-4: the
+// on-call shell shares the network, so anything it can read it can send).
+func TestCredentialsNone_InheritsOnlyTheAllowlist(t *testing.T) {
+	secrets := map[string]string{
+		"OPENAI_API_KEY":                "sk-proj-0123456789abcdefghij",
+		"ANTHROPIC_API_KEY":             "sk-ant-api03-0123456789",
+		"DATABASE_URL":                  "postgres://app:hunter2@db:5432/app",
+		"RELIANT_GITHUB_WEBHOOK_SECRET": "whsec",
+		"RELIANT_VAULT_KEY":             "vault",
+		"FOO_SECRET":                    "foo",
+		"STRIPE_LIVE":                   "stripe-fixture",
+		"SLACK_BOT":                     "slack-fixture",
+		"SOME_UNLISTED_SETTING":         "plain",
+		// On the allowlist by name, dropped by value: a proxy with a password.
+		"HTTPS_PROXY": "http://user:pw@proxy.example:3128",
+	}
+	for k, v := range secrets {
+		t.Setenv(k, v)
+	}
+	toolchain := map[string]string{
+		"PATH":         "/usr/local/go/bin:/usr/bin:/bin",
+		"HOME":         "/home/u",
+		"LANG":         "C.UTF-8",
+		"LC_ALL":       "C.UTF-8",
+		"GOPATH":       "/home/u/go",
+		"GOCACHE":      "/home/u/.cache/go-build",
+		"GOMODCACHE":   "/home/u/go/pkg/mod",
+		"GOFLAGS":      "-mod=mod",
+		"GOTOOLCHAIN":  "local",
+		"NODE_OPTIONS": "--max-old-space-size=4096",
+		"NO_PROXY":     "localhost,127.0.0.1",
+	}
+	for k, v := range toolchain {
+		t.Setenv(k, v)
+	}
+
+	for name, ctx := range map[string]context.Context{
+		"first-party": context.Background(),
+		"confined":    NewContext(context.Background(), &Policy{GrantID: "g"}),
+	} {
+		env := envMap(ChildEnv(ctx, map[string]string{"MY_VAR": "kept", "API_TOKEN": "from-request"}, CredentialsNone))
+		for k := range secrets {
+			if v, ok := env[k]; ok {
+				t.Errorf("%s: %s=%q survived credentials: none", name, k, v)
+			}
+		}
+		if v, ok := env["API_TOKEN"]; ok {
+			t.Errorf("%s: a secret-named request variable survived: API_TOKEN=%q", name, v)
+		}
+		for k, want := range toolchain {
+			if env[k] != want {
+				t.Errorf("%s: toolchain variable %s = %q, want %q", name, k, env[k], want)
+			}
+		}
+		if env["MY_VAR"] != "kept" || env[AgentShellEnv] != "1" {
+			t.Errorf("%s: request variables were dropped: MY_VAR=%q %s=%q", name, env["MY_VAR"], AgentShellEnv, env[AgentShellEnv])
+		}
+	}
+}
+
+// The value check catches a secret under an innocent name on the allowlist.
+func TestLooksSecret(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		want        bool
+	}{
+		{"DATABASE_URL", "postgres://localhost/db", true},
+		{"OPENAI_API_KEY", "x", true},
+		{"MY_WEBHOOK_SECRET", "x", true},
+		{"GOFLAGS", "-ldflags=-X main.k=sk-ant-api03-abcdefghijk", true},
+		{"GOPROXY", "https://user:pw@goproxy.internal,direct", true},
+		{"NODE_OPTIONS", "--require /x.js eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln", true},
+		{"PATH", "/usr/local/bin:/usr/bin:/bin", false},
+		{"HOME", "/home/u", false},
+		{"GOCACHE", "/home/u/.cache/go-build", false},
+		{"LANG", "en_US.UTF-8", false},
+		// Long directory names are not secrets: redact's run-length
+		// heuristics would have dropped HOME and PATH here.
+		{"HOME", "/tmp/TestExecRun_CredentialsNone_CannotReadTheDaemonsCredentialFiles123/001", false},
+		{"PATH", "/opt/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd/bin:/usr/bin", false},
+	} {
+		if got := looksSecret(tc.name, tc.value); got != tc.want {
+			t.Errorf("looksSecret(%q, %q) = %v, want %v", tc.name, tc.value, got, tc.want)
+		}
+		// The value shapes are forge/pkg/redact's: anything flagged by value
+		// is one it redacts too.
+		if tc.want && !secretEnvName.MatchString(tc.name) && redact.Secrets(tc.value) == tc.value {
+			t.Errorf("%q is flagged here but not by forge/pkg/redact", tc.value)
+		}
+	}
+}
+
 func TestCredentialsInherit_KeepsTheEnvironment(t *testing.T) {
 	t.Setenv("GH_TOKEN", "ghp_inherited")
+	t.Setenv("OPENAI_API_KEY", "sk-proj-inherited")
+	t.Setenv("SOME_UNLISTED_SETTING", "plain")
 	env := envMap(ChildEnv(context.Background(), nil, CredentialsInherit))
-	if env["GH_TOKEN"] != "ghp_inherited" {
-		t.Fatalf("default behaviour changed: GH_TOKEN = %q", env["GH_TOKEN"])
+	if env["GH_TOKEN"] != "ghp_inherited" || env["OPENAI_API_KEY"] != "sk-proj-inherited" || env["SOME_UNLISTED_SETTING"] != "plain" {
+		t.Fatalf("default behaviour changed: GH_TOKEN=%q OPENAI_API_KEY=%q SOME_UNLISTED_SETTING=%q",
+			env["GH_TOKEN"], env["OPENAI_API_KEY"], env["SOME_UNLISTED_SETTING"])
 	}
 }
 

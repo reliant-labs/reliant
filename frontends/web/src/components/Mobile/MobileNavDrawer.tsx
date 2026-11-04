@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { dialogOpener } from "../../lib/dialogOpener";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
@@ -34,6 +35,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -50,7 +52,7 @@ interface NavItem {
 
 /**
  * The drawer's destinations, in the desktop sidebar's order (Layout/Sidebar):
- * New chat, then Apps and Observability (the running side of a project), then
+ * New chat, then Apps and Observability (the org's apps and their telemetry), then
  * the Inbox, then the rest.
  *
  * Apps and Observability open the forge console itself, outside `/m/*`: its
@@ -65,7 +67,7 @@ function navItems(): NavItem[] {
     { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
     ...(forge
       ? [
-          { to: "/forge", label: "Apps", icon: Boxes },
+          { to: "/apps", label: "Apps", icon: Boxes },
           { to: "/forge/observability", label: "Observability", icon: Activity },
         ]
       : []),
@@ -79,7 +81,7 @@ function navItems(): NavItem[] {
   ];
 }
 
-/** The Inbox row's trailing badge: the blocking count, else a dot for automation problems. */
+/** The Inbox tile's corner badge: the blocking count, else a dot for automation problems. */
 function InboxBadge() {
   const { count, informational, degraded, announcement } = useMobileDrawerStore((s) => s.inboxBadge);
   return (
@@ -88,13 +90,13 @@ function InboxBadge() {
         <span
           data-testid="drawer-inbox-count"
           aria-hidden="true"
-          className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground"
+          className="absolute right-1.5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground"
         >
           {count}
         </span>
       )}
       {count === 0 && informational && (
-        <span data-testid="drawer-inbox-dot" aria-hidden="true" className="ml-auto h-2 w-2 rounded-full bg-destructive" />
+        <span data-testid="drawer-inbox-dot" aria-hidden="true" className="absolute right-3 top-3 h-2 w-2 rounded-full bg-destructive" />
       )}
       {announcement && (
         <span className="sr-only">
@@ -121,9 +123,9 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const currentProject = useProjectStore((s) => s.currentProject);
   const panelRef = useRef<HTMLDivElement>(null);
-  // The element focused right before the drawer opened, so closing it (by
-  // Escape, scrim tap, or nav) puts focus back where the user's attention
-  // actually was — usually the hamburger button that opened it.
+  // The control that opened the drawer (usually the hamburger button; see
+  // `dialogOpener` for why not simply the focused element), so closing it (by
+  // Escape, scrim tap, or nav) puts focus back where the user's attention was.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(false);
   const previousPathnameRef = useRef(pathname);
@@ -132,7 +134,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   // snapping to its open position on first paint.
   useEffect(() => {
     if (!isOpen) return;
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    restoreFocusRef.current = dialogOpener();
     const raf = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(raf);
   }, [isOpen]);
@@ -155,20 +157,22 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
         onClose();
         return;
       }
-      if (e.key !== "Tab" || !panel) return;
+      if (e.key !== "Tab" || e.defaultPrevented || !panel) return;
 
+      // The trap moves focus itself on every Tab rather than only wrapping at
+      // the ends: Safari's default Tab order skips links, so letting the
+      // browser advance from the second-to-last control would carry focus
+      // past a trailing link and out of the drawer.
       const elements = focusableElements(panel);
       if (elements.length === 0) return;
-      const first = elements[0]!;
-      const last = elements[elements.length - 1]!;
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      e.preventDefault();
+      const current = elements.indexOf(document.activeElement as HTMLElement);
+      const step = e.shiftKey ? -1 : 1;
+      const next =
+        current === -1
+          ? e.shiftKey ? elements.length - 1 : 0
+          : (current + step + elements.length) % elements.length;
+      elements[next]!.focus();
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -229,63 +233,70 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
           </button>
         </div>
 
-        {/* The current project as a card rather than a bordered strip: it is
-            the drawer's only stateful row — it reports something as well as
-            navigating — and the card is what distinguishes it from the six
-            plain destinations beneath. */}
-        <div className="shrink-0 px-3 pb-2">
-          <Link
-            to="/m/projects"
-            className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <FolderOpen className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                Project
-              </div>
-              <div className="truncate text-sm font-medium text-foreground">
-                {currentProject?.name ?? "Select a project"}
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {/* `overscroll-contain` stops a scroll that reaches the end of the nav
-            from chaining to the page behind the drawer. The bottom padding
+        {/* `overscroll-contain` stops a scroll that reaches the end of the
+            drawer from chaining to the page behind it. The bottom padding
             matters in landscape, where the viewport is ~390px tall and the
             last item would otherwise sit flush against the edge with no hint
-            that the list continues. */}
-        <nav
-          className="flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-2 pb-6"
-          aria-label="Main"
-        >
-          {navItems().map(({ to, label, icon: Icon, inboxBadge }) => {
-            const active = pathname === to || pathname.startsWith(`${to}/`);
-            return (
-              <Link
-                key={to}
-                to={to}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex min-h-[48px] w-full items-center gap-3 rounded-lg px-3 text-sm",
-                  "active:bg-foreground/5",
-                  // A filled pill, not just colored text: color alone made the
-                  // current destination easy to miss at a glance, and it is
-                  // the drawer's only orientation cue.
-                  active
-                    ? "bg-primary/10 font-medium text-primary"
-                    : "text-foreground/85",
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {label}
-                {inboxBadge && <InboxBadge />}
-              </Link>
-            );
-          })}
-        </nav>
+            that the drawer continues. */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-6">
+          {/* Destinations as a compact grid (mobile-chat-redesign §9, after
+              ChatGPT's 2026 drawer): up to nine 48px rows became at most three
+              64px rows of tiles, which keeps the project switcher below them
+              on screen even in landscape. */}
+          <nav className="grid grid-cols-3 gap-1 py-2" aria-label="Main">
+            {navItems().map(({ to, label, icon: Icon, inboxBadge }) => {
+              const active = pathname === to || pathname.startsWith(`${to}/`);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg px-1 text-xs",
+                    "active:bg-foreground/5",
+                    // A filled tile, not just colored text: color alone made
+                    // the current destination easy to miss at a glance, and
+                    // it is the drawer's only orientation cue.
+                    active
+                      ? "bg-primary/10 font-medium text-primary-ink"
+                      : "text-foreground/85",
+                  )}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <span className="max-w-full truncate">{label}</span>
+                  {inboxBadge && <InboxBadge />}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* The current project as a card rather than a tile: it is the
+              drawer's only stateful row — it reports something as well as
+              navigating — and the card is what distinguishes it from the
+              plain destinations above. */}
+          <div className="pt-2">
+            <Link
+              to="/m/projects"
+              className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
+                <FolderOpen className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs text-muted-foreground">
+                  Project
+                </div>
+                <div className="truncate text-sm font-medium text-foreground">
+                  {currentProject?.name ?? "Select a project"}
+                </div>
+              </div>
+            </Link>
+          </div>
+
+          <div className="pt-2">
+            <MobileInstallMenuItem />
+          </div>
+        </div>
       </div>
     </div>,
     document.body,

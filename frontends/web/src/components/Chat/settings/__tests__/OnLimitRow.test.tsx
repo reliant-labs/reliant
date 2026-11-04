@@ -1,9 +1,11 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { renderWithQuery } from "../../../../test/renderWithQuery";
 import { ChatSelectionSchema, ProviderPolicy_OnLimit, ProviderPolicySchema } from "../../../../gen/reliant/v1/chat_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { ModelSettingsPage } from "../ModelSettingsPage";
 
 const mocks = vi.hoisted(() => ({
@@ -30,10 +32,6 @@ vi.mock("../../../../hooks/chat-queries", async () => {
     useChatSelection: () => ({ data: mocks.selection }),
     setChatSelection: vi.fn(),
   };
-});
-vi.mock("../../../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../../../api/client")>("../../../../api/client");
-  return { ...actual, api: { ...actual.api, chatsV2: { ...actual.api.chatsV2, updateProviderPolicy: mocks.updateProviderPolicy } } };
 });
 vi.mock("../../../../lib/settingsPersistence", () => ({
   readSetting: mocks.readSetting,
@@ -70,7 +68,26 @@ beforeEach(() => {
   mocks.updateProviderPolicy.mockResolvedValue(selectionWith(ProviderPolicy_OnLimit.WAIT));
   mocks.readSetting.mockResolvedValue({ status: "missing" });
   mocks.upsertStringSetting.mockResolvedValue(undefined);
+  // `mocks.updateProviderPolicy(request)` answers UpdateChatProviderPolicy with the selection.
+  setTransport(
+    mockTransport({
+      "ChatService.UpdateChatProviderPolicy": async (req: unknown) => ({
+        selection: await mocks.updateProviderPolicy(req),
+      }),
+    }),
+  );
 });
+
+afterEach(() => setTransport(null));
+
+/** An UpdateChatProviderPolicy request for (chatId, policy, expectedVersion). */
+function policyWrite(chatId: string, policy: object, expectedVersion?: bigint) {
+  return expect.objectContaining({
+    chatId,
+    providerPolicy: expect.objectContaining(policy),
+    ...(expectedVersion === undefined ? {} : { expectedVersion }),
+  });
+}
 
 describe("OnLimitRow", () => {
   it("names the chat's provider and offers wait, a stand-in on each OTHER provider, Choose…, and the Settings default", () => {
@@ -95,11 +112,9 @@ describe("OnLimitRow", () => {
     renderRow();
     await userEvent.selectOptions(select(), "fallback:gpt-5.6-sol@codex");
     await waitFor(() => expect(mocks.updateProviderPolicy).toHaveBeenCalledTimes(1));
-    expect(mocks.updateProviderPolicy).toHaveBeenCalledWith(
-      "chat-1",
+    expect(mocks.updateProviderPolicy).toHaveBeenCalledWith(policyWrite("chat-1",
       { onLimit: ProviderPolicy_OnLimit.FALLBACK, fallbackModel: "gpt-5.6-sol@codex" },
-      3n,
-    );
+      3n));
   });
 
   it("'Wait' and 'Use Settings default' write WAIT and UNSPECIFIED", async () => {
@@ -107,9 +122,9 @@ describe("OnLimitRow", () => {
     renderRow();
     expect(select().value).toBe("fallback:gpt-5.6-sol@codex");
     await userEvent.selectOptions(select(), "wait");
-    await waitFor(() => expect(mocks.updateProviderPolicy).toHaveBeenLastCalledWith("chat-1", { onLimit: ProviderPolicy_OnLimit.WAIT }, 3n));
+    await waitFor(() => expect(mocks.updateProviderPolicy).toHaveBeenLastCalledWith(policyWrite("chat-1", { onLimit: ProviderPolicy_OnLimit.WAIT }, 3n)));
     await userEvent.selectOptions(select(), "inherit");
-    await waitFor(() => expect(mocks.updateProviderPolicy).toHaveBeenLastCalledWith("chat-1", { onLimit: ProviderPolicy_OnLimit.UNSPECIFIED }, 3n));
+    await waitFor(() => expect(mocks.updateProviderPolicy).toHaveBeenLastCalledWith(policyWrite("chat-1", { onLimit: ProviderPolicy_OnLimit.UNSPECIFIED }, 3n)));
   });
 
   it("'Choose…' lists every model on another provider", async () => {
@@ -123,7 +138,7 @@ describe("OnLimitRow", () => {
     ]);
     await userEvent.selectOptions(picker, "gpt-5.6-terra@codex");
     await waitFor(() =>
-      expect(mocks.updateProviderPolicy).toHaveBeenCalledWith("chat-1", { onLimit: ProviderPolicy_OnLimit.FALLBACK, fallbackModel: "gpt-5.6-terra@codex" }, undefined),
+      expect(mocks.updateProviderPolicy).toHaveBeenCalledWith(policyWrite("chat-1", { onLimit: ProviderPolicy_OnLimit.FALLBACK, fallbackModel: "gpt-5.6-terra@codex" }, undefined)),
     );
   });
 

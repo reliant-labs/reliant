@@ -9,12 +9,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +24,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	temporalclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -41,7 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -63,6 +67,87 @@ import (
 type Stack struct {
 	Repo     *db.Repo
 	Temporal temporalclient.Client
+}
+
+// storyTemporalClient keeps production's shared-queue starts on this story's
+// worker. All other client operations and explicitly different queues pass through.
+// Queue isolation belongs to the fixture, not the production chat handler's Deps.
+type storyTemporalClient struct {
+	temporalclient.Client
+	taskQueue string
+}
+
+func (c storyTemporalClient) ExecuteWorkflow(ctx context.Context, options temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+	if options.TaskQueue == workflow.SharedTaskQueue {
+		options.TaskQueue = c.taskQueue
+	}
+	return c.Client.ExecuteWorkflow(ctx, options, wf, args...)
+}
+
+// forStory copies the stack: parallel stories must never replace the shared
+// client's routing or each other's worker queue.
+func (s *Stack) forStory(taskQueue string) *Stack {
+	story := *s
+	story.Temporal = storyTemporalClient{Client: s.Temporal, taskQueue: taskQueue}
+	return &story
+}
+
+type workflowStartRecorder struct {
+	temporalclient.Client
+	start func(context.Context, temporalclient.StartWorkflowOptions, interface{}, ...interface{}) (temporalclient.WorkflowRun, error)
+}
+
+func (c *workflowStartRecorder) ExecuteWorkflow(ctx context.Context, options temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+	return c.start(ctx, options, wf, args...)
+}
+
+func TestStoryTemporalClientQueueIsolation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	wantRun := &struct{ temporalclient.WorkflowRun }{}
+	wantErr := errors.New("start failed")
+	baseClient := &workflowStartRecorder{}
+	shared := &Stack{Repo: &db.Repo{}, Temporal: baseClient}
+	story := shared.forStory("story-queue")
+	otherStory := shared.forStory("other-story-queue")
+	require.Same(t, baseClient, shared.Temporal, "shared stack must not be mutated")
+	require.Same(t, shared.Repo, story.Repo)
+	require.Same(t, shared.Repo, otherStory.Repo)
+
+	for _, tc := range []struct {
+		name, queue, wantQueue string
+		stack                  *Stack
+	}{
+		{"shared queue", workflow.SharedTaskQueue, "story-queue", story},
+		{"explicit queue", "explicit-queue", "explicit-queue", story},
+		{"empty queue", "", "", story},
+		{"other story", workflow.SharedTaskQueue, "other-story-queue", otherStory},
+		{"shared stack", workflow.SharedTaskQueue, workflow.SharedTaskQueue, shared},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := temporalclient.StartWorkflowOptions{
+				ID: "workflow-id", TaskQueue: tc.queue,
+				WorkflowExecutionTimeout: time.Minute,
+				Memo:                     map[string]interface{}{"story": "memo"},
+			}
+			wantOptions := options
+			wantOptions.TaskQueue = tc.wantQueue
+			called := false
+			baseClient.start = func(gotCtx context.Context, got temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+				called = true
+				require.Same(t, ctx, gotCtx)
+				require.Equal(t, wantOptions, got, "only the shared queue may change")
+				require.Equal(t, "test-workflow", wf)
+				require.Equal(t, []interface{}{"input", 42}, args)
+				return wantRun, wantErr
+			}
+			run, err := tc.stack.Temporal.ExecuteWorkflow(ctx, options, "test-workflow", "input", 42)
+			require.True(t, called)
+			require.Same(t, wantRun, run)
+			require.ErrorIs(t, err, wantErr)
+			require.Equal(t, tc.queue, options.TaskQueue, "caller options must not be mutated")
+		})
+	}
 }
 
 var (
@@ -156,6 +241,10 @@ type Harness struct {
 	// Ctx carries the story's user identity, exactly as the auth interceptor
 	// would have injected it.
 	Ctx context.Context
+
+	// progress counts the story worker's activity starts and finishes: what
+	// the story's waits watch to tell a slow story from a stuck one.
+	progress *atomic.Int64
 }
 
 type harnessConfig struct {
@@ -164,9 +253,7 @@ type harnessConfig struct {
 }
 
 // WithMCPBinder swaps the MCP binder call_llm discovers MCP tools through.
-// The default is a real manager, whose builtin chrome-devtools server connects
-// wherever Chrome is installed — so a story that asserts the exact tool list
-// supplies its own instead of asserting about the host it ran on.
+// The default binds no MCP servers (noMCPServers).
 func WithMCPBinder(binder toolexec.MCPContextBinder) HarnessOption {
 	return func(c *harnessConfig) { c.mcpBinder = binder }
 }
@@ -180,11 +267,28 @@ func WithToolExecutor(exec toolexec.ToolExecutor) HarnessOption {
 	return func(c *harnessConfig) { c.toolExecutor = exec }
 }
 
+// noMCPServers is the stories' default MCP binder: it binds none.
+//
+// The default used to be a real mcp.Manager, and a real manager connects its
+// builtin servers: reliant-docs over HTTPS (https://reliantlabs.mintlify.app)
+// and, wherever Chrome is installed, chrome-devtools — `npx -y
+// chrome-devtools-mcp`, a node process that launches headless Chrome. So every
+// story's first call_llm reached the internet and started a browser, and how
+// long that took was the host's business: on the release-gate host, with
+// sixteen stories at once, the chrome-devtools tools/list ran out its timeout
+// (45s+) inside call_llm, and every story stalled at its seventh activity —
+// "no progress for 45s" — with nothing wrong in the code under test. The
+// stories test chats, tools and pauses, not MCP; MCP has its own tests.
+var noMCPServers = toolexec.MCPContextBinderFunc(func(tc *rctx.ToolContext) *rctx.ToolContext { return tc })
+
 // newHarness stands up a story-scoped environment. Everything registered here
 // is torn down via t.Cleanup.
 func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Harness {
 	t.Helper()
-	s := requireStack(t)
+	taskQueueSuffix := shortID()
+	taskQueue := workersetup.TaskQueueName(taskQueueSuffix)
+	shared := requireStack(t)
+	s := shared.forStory(taskQueue)
 
 	cfg := &harnessConfig{}
 	for _, o := range opts {
@@ -195,7 +299,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	projectID := uuid.New().String()
 	projectPath := t.TempDir()
 
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	// The story's user is a person signed in to the app: approvals require it.
+	ctx := auth.WithCredential(context.WithValue(context.Background(), auth.UserIDContextKey, userID), auth.CredentialSession)
 
 	now := time.Now().UTC()
 	require.NoError(t, s.Repo.CreateProject(ctx, &db.Project{
@@ -207,6 +312,14 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		UpdatedAt:  now,
 		LastActive: now,
 	}), "create story project")
+	// The user's machine and its installed checkout of the project: every
+	// machine call runs in the checkout of the machine it is routed to
+	// (internal/projectcheckout), never projects.path, and is refused on a
+	// project no machine of the user's holds. The local executor stands in
+	// for this machine.
+	machineID := "e2e-machine-" + shortID()
+	require.NoError(t, s.Repo.UpsertDaemon(ctx, &db.Daemon{ID: machineID, UserID: userID}), "register story machine")
+	require.NoError(t, s.Repo.UpsertProjectDaemon(ctx, projectID, machineID, projectPath, nil), "install story checkout")
 	require.NoError(t, s.Repo.CreateWorktree(ctx, &db.Worktree{
 		ID:         uuid.New().String(),
 		Name:       "main",
@@ -232,12 +345,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	}
 
 	hub := noopStreamingHub{}
-	taskQueueSuffix := shortID()
-	taskQueue := workersetup.TaskQueueName(taskQueueSuffix)
 
 	mcpBinder := cfg.mcpBinder
 	if mcpBinder == nil {
-		mcpBinder = toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon))
+		mcpBinder = noMCPServers
 	}
 
 	// The launcher a trigger fire launches through, built the way the worker
@@ -247,8 +358,12 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
 		runs.NewService(s.Repo, s.Temporal, pause), taskQueue)
 
+	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
-		TemporalClient:  s.Temporal,
+		// The SDK worker requires the concrete Dial client, not a wrapper.
+		// Its own queue is isolated by TaskQueueSuffix below; handler starts
+		// and the injected trigger launcher use the story-routed client.
+		TemporalClient:  shared.Temporal,
 		Database:        s.Repo,
 		StreamingHub:    hub,
 		ToolsFactory:    toolsFactory,
@@ -259,6 +374,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
+		// Counts the story's progress for its waits (waitClock).
+		WorkflowInterceptors: []interceptor.WorkerInterceptor{&progressInterceptor{n: progress}},
 	})
 	require.NoError(t, err, "create story worker")
 	workerRun := make(chan error, 1)
@@ -283,12 +400,11 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:    slog.Default(),
-		Config:    &typedconfig.Config{},
-		Repo:      s.Repo,
-		Temporal:  s.Temporal,
-		Pause:     pause,
-		TaskQueue: workersetup.TaskQueueName(taskQueueSuffix),
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Temporal: s.Temporal,
+		Pause:    pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -329,6 +445,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ApprovalSvc: approvalSvc,
 		Pause:       pause,
 		Ctx:         ctx,
+		progress:    progress,
 	}
 }
 
@@ -480,26 +597,138 @@ func (h *Harness) ResolveQuestion(questionID string, selected []string, freetext
 // Assertions / waiting
 // ---------------------------------------------------------------------------
 
+// A story's waits fail when the story STOPS MAKING PROGRESS, not when the
+// host is slow.
+//
+// They used to be a fixed 45s each. On a loaded host (the release gate at load
+// 65-140, beside the unit and integration lanes) sixteen parallel stories on
+// one Temporal dev server and one Postgres are each tens of times slower, and
+// a story whose workflow was still running activities — just slowly — failed
+// "timed out after 45s" with its workflow ACTIVE. That measured the host.
+//
+// Progress is the story worker's activity executions (progressInterceptor):
+// every step of a story's workflow is an activity, and each start and finish
+// counts. A wait fails once stallTimeout passes with none — a hang, at the
+// same 45s it always was — or at storyWaitCap however busy the story is, so a
+// story that loops forever still fails, inside the package's 10m timeout.
 const (
-	waitTimeout  = 45 * time.Second
+	stallTimeout = 45 * time.Second
+	storyWaitCap = 5 * time.Minute
 	pollInterval = 100 * time.Millisecond
 )
 
-// eventually polls cond until it returns true or the timeout elapses. The
-// last detail string is included in the failure message.
+// progressInterceptor counts a story worker's activity starts and finishes.
+type progressInterceptor struct {
+	interceptor.WorkerInterceptorBase
+	n *atomic.Int64
+}
+
+func (p *progressInterceptor) InterceptActivity(_ context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
+	i := &progressActivityInbound{n: p.n}
+	i.Next = next
+	return i
+}
+
+type progressActivityInbound struct {
+	interceptor.ActivityInboundInterceptorBase
+	n *atomic.Int64
+}
+
+func (a *progressActivityInbound) ExecuteActivity(ctx context.Context, in *interceptor.ExecuteActivityInput) (interface{}, error) {
+	a.n.Add(1)
+	defer a.n.Add(1)
+	return a.Next.ExecuteActivity(ctx, in)
+}
+
+// waitClock decides when a wait gives up: after stallTimeout with no progress,
+// or storyWaitCap in all.
+type waitClock struct {
+	progress   *atomic.Int64
+	start      time.Time
+	seen       int64
+	lastChange time.Time
+}
+
+func (h *Harness) newWaitClock() *waitClock {
+	now := time.Now()
+	return &waitClock{progress: h.progress, start: now, seen: h.progress.Load(), lastChange: now}
+}
+
+// expired reports why the wait is over, or "" while the story is progressing.
+func (c *waitClock) expired() string {
+	now := time.Now()
+	if n := c.progress.Load(); n != c.seen {
+		c.seen, c.lastChange = n, now
+	}
+	switch {
+	case now.Sub(c.lastChange) >= stallTimeout:
+		return fmt.Sprintf("no progress for %s (%d activity starts and finishes in %s)",
+			stallTimeout, c.seen, now.Sub(c.start).Round(time.Second))
+	case now.Sub(c.start) >= storyWaitCap:
+		return fmt.Sprintf("still not done after %s, though the story kept running activities (%d starts and finishes)",
+			storyWaitCap, c.seen)
+	}
+	return ""
+}
+
+// eventually polls cond until it returns true or the story stops making
+// progress (waitClock). The last detail string is included in the failure
+// message.
 func (h *Harness) eventually(what string, cond func() (bool, string)) {
 	h.T.Helper()
-	deadline := time.Now().Add(waitTimeout)
+	clock := h.newWaitClock()
 	var last string
-	for time.Now().Before(deadline) {
+	for {
 		ok, detail := cond()
 		if ok {
 			return
 		}
 		last = detail
+		if why := clock.expired(); why != "" {
+			h.T.Fatalf("gave up waiting for %s: %s (last state: %s)", what, why, last)
+		}
 		time.Sleep(pollInterval)
 	}
-	h.T.Fatalf("timed out after %s waiting for %s (last state: %s)", waitTimeout, what, last)
+}
+
+// awaitWorkflow waits for the Temporal execution workflowID to finish, into
+// valuePtr, giving up as eventually does. An execution not started yet is
+// waited for too: a trigger records its launched run (the chat, its workflow
+// id) before the launcher has started it in Temporal, and on a loaded host a
+// story reads the id in between.
+func (h *Harness) awaitWorkflow(workflowID string, valuePtr interface{}) error {
+	h.T.Helper()
+	ctx, cancel := context.WithCancel(h.Ctx)
+	defer cancel()
+	get := func() <-chan error {
+		done := make(chan error, 1)
+		go func() { done <- h.Stack.Temporal.GetWorkflow(ctx, workflowID, "").Get(ctx, valuePtr) }()
+		return done
+	}
+	done := get()
+	clock := h.newWaitClock()
+	tick := time.NewTicker(pollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case err := <-done:
+			var notFound *serviceerror.NotFound
+			if !errors.As(err, &notFound) {
+				return err
+			}
+			if why := clock.expired(); why != "" {
+				return fmt.Errorf("gave up waiting for temporal workflow %s to start: %s: %w", workflowID, why, err)
+			}
+			time.Sleep(pollInterval)
+			done = get()
+		case <-tick.C:
+			if why := clock.expired(); why != "" {
+				cancel()
+				<-done
+				return fmt.Errorf("gave up waiting for temporal workflow %s: %s", workflowID, why)
+			}
+		}
+	}
 }
 
 // WaitToolExecuting blocks until the scripted tool call scriptID is actually
@@ -545,23 +774,17 @@ func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) 
 // returns nil error. Fails the story if the workflow errored.
 func (h *Harness) WaitTemporalWorkflowDone(workflowID string) {
 	h.T.Helper()
-	ctx, cancel := context.WithTimeout(h.Ctx, waitTimeout)
-	defer cancel()
-	run := h.Stack.Temporal.GetWorkflow(ctx, workflowID, "")
-	require.NoError(h.T, run.Get(ctx, nil), "temporal workflow %s should complete cleanly", workflowID)
+	require.NoError(h.T, h.awaitWorkflow(workflowID, nil), "temporal workflow %s should complete cleanly", workflowID)
 }
 
 // WorkflowResult waits for the Temporal execution to finish and returns the
 // DynamicWorkflow outputs.
 func (h *Harness) WorkflowResult(workflowID string) map[string]interface{} {
 	h.T.Helper()
-	ctx, cancel := context.WithTimeout(h.Ctx, waitTimeout)
-	defer cancel()
 	var result struct {
 		Outputs map[string]interface{} `json:"outputs"`
 	}
-	run := h.Stack.Temporal.GetWorkflow(ctx, workflowID, "")
-	require.NoError(h.T, run.Get(ctx, &result), "temporal workflow %s should complete cleanly", workflowID)
+	require.NoError(h.T, h.awaitWorkflow(workflowID, &result), "temporal workflow %s should complete cleanly", workflowID)
 	return result.Outputs
 }
 

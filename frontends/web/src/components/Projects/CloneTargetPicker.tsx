@@ -83,7 +83,7 @@ export function CloneTargetPicker({
                   {immediate ? "Ready — clones now" : "Not running — clones when it's ready"}
                 </span>
               </span>
-              {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />}
+              {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-primary-ink" aria-hidden="true" />}
             </button>
           );
         })}

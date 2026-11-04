@@ -33,7 +33,7 @@ func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
 		)
 	}
 
-	highestInherited, err := h.repo.GetNextSeq(ctx, parentChat, parentThread.ID)
+	_, highestInherited, err := h.repo.AllocateMessageOrder(ctx, parentThread.ID, parentChat)
 	if err != nil {
 		t.Fatalf("parent next seq: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
 	}
 
 	// The seq the branch's first own message would receive.
-	next, err := h.repo.GetNextSeq(ctx, branchChat, branchThread.ID)
+	_, next, err := h.repo.AllocateMessageOrder(ctx, branchThread.ID, branchChat)
 	if err != nil {
 		t.Fatalf("branch next seq: %v", err)
 	}

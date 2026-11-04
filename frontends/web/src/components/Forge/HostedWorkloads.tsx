@@ -10,7 +10,7 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import { verdictCertainty, verdictExplanation, verdictLabel, type HostedVerdict } from "@/services/forge/topology";
 
@@ -33,7 +33,7 @@ const VERDICT_ICON: Record<HostedVerdict, LucideIcon> = {
  * that has not held its shape past the stability window has not yet earned it,
  * so it keeps the dashed, unfilled `unknown` treatment.
  *
- * The TEXT is always `text-foreground`; the hue lives on the icon, the fill
+ * The TEXT is always `text-ink`; the hue lives on the icon, the fill
  * and the border. Hued text at 11px over its own 15% tint measured 2.8:1
  * (success, light) and 3.5:1 (destructive, dark) — below AA — while the
  * certainty still reads from three independent axes without it.
@@ -56,7 +56,7 @@ export function VerdictChip({
     <Tooltip content={detail}>
       <span
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-foreground",
+          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-ink",
           style.container
         )}
         data-verdict={verdict}

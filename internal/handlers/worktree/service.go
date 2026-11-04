@@ -27,6 +27,8 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// GitCredentials resolves the owner's current credential only at call time.
+	GitCredentials GitCredentialProvider
 	// Router carries each worktree command to the machine that holds the
 	// workspace. A router that can also resume a suspended machine
 	// (machinewake.Resumer) has asleep machines woken; see wake. The API
@@ -77,6 +79,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.GitCredentials == nil {
+		return fmt.Errorf("worktree: Deps.GitCredentials is required")
 	}
 	return nil
 }

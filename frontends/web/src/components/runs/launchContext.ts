@@ -7,7 +7,7 @@
  * same way here.
  */
 
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import type { LaunchContext } from "@/lib/runStatus";
 import { RAW_EVENT_NAMING, type IntegrationEventNaming } from "@/lib/integrationEventNames";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";

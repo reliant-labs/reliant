@@ -5,7 +5,9 @@ package daemonpolicy
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,13 +16,13 @@ import (
 // CredentialsNone is the shell's `credentials: none` mode: the child process
 // is handed no GitHub, git, ssh or cloud credentials.
 //
-// This is NOT containment. It removes what Reliant and the daemon's own
-// environment hand a child: tokens in the environment, the Reliant git
-// credential helper, the ssh agent socket, gh's config directory. A child run
-// as the same Unix user can still read that user's files (~/.config/gh/hosts.yml,
-// ~/.git-credentials, ~/.ssh, the daemon's own credentials file) and no
-// environment can stop it. Stopping that needs the shell to run as another user
-// or in a namespace sandbox.
+// It has two halves. This package strips the environment: tokens, the Reliant
+// git credential helper, the ssh agent socket, gh's config directory. That alone
+// is not containment: a child run as the same Unix user can read that user's
+// files (~/.config/gh/hosts.yml, ~/.git-credentials, ~/.ssh, the daemon's own
+// credentials file). The other half is internal/credsandbox, which runs the
+// child in user, mount and PID namespaces where ProtectedCredentials are absent
+// (on Linux; elsewhere only the environment half applies).
 const (
 	CredentialsInherit = ""
 	CredentialsNone    = "none"
@@ -55,6 +57,7 @@ var credentialEnvNames = map[string]bool{
 	"NPM_TOKEN":               true,
 	"FORGE_TOKEN":             true,
 	"FORGE_CREDENTIAL_HELPER": true,
+	"RELIANT_FORGE_ORG":       true,
 	"RELIANT_TOKEN":           true,
 }
 
@@ -122,19 +125,73 @@ func emptyGHConfig() string {
 	return emptyGHConfigDir
 }
 
-// StripCredentials returns env with every credential variable removed and the
-// neutral non-git settings appended: no prompts, no ssh, an empty gh config
-// directory. It leaves git's own configuration to the caller, which is what a
-// caller that supplies its own credential helper needs: GIT_CONFIG_COUNT entries
-// are read AFTER `git -c`, so the resets in WithoutCredentials would wipe it.
-func StripCredentials(env []string) []string {
-	out := make([]string, 0, len(env)+12)
-	for _, kv := range env {
-		name, _, ok := strings.Cut(kv, "=")
-		if !ok || isCredentialEnv(name) {
+// secretEnvName matches a variable name that says it holds a secret or says
+// where one is: OPENAI_API_KEY, STRIPE_SECRET, RELIANT_GITHUB_WEBHOOK_SECRET,
+// DATABASE_URL (a DSN carries its password), SESSION_COOKIE.
+var secretEnvName = regexp.MustCompile(`(?i)(token|secret|passw(or)?d|credential|key|dsn|cookie|session|authorization|_ur[li]$)`)
+
+// secretEnvValues are forge/pkg/redact's exact credential shapes: URL userinfo
+// (a proxy or GOPROXY with a password), a PEM private key, a JWT, and the
+// provider key prefixes. Its two heuristic rules (a 40-character mixed-case
+// run, any run of 40+ word characters) are left out on purpose: a value here
+// is a path more often than not, and a long directory name in HOME or PATH
+// would match them and leave the command with no HOME and no PATH.
+var secretEnvValues = []*regexp.Regexp{
+	regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://[^\s/@:]+:[^\s/@]+@`),
+	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`),
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]*`),
+	regexp.MustCompile(`\b(sk-ant-[A-Za-z0-9_\-]{8,}|sk-[A-Za-z0-9_\-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{8,}|(?:rlat|dpat|rcl|gho|ghp|ghu|ghs|ghr|github_pat|glpat|xox[abprs])[_\-][A-Za-z0-9_\-]{10,}|AIza[0-9A-Za-z_\-]{20,}|ya29\.[0-9A-Za-z_\-]+|AKIA[0-9A-Z]{16})`),
+}
+
+// looksSecret reports whether a variable is a secret by its name, or by its
+// value in one of the exact shapes forge/pkg/redact recognises.
+func looksSecret(name, value string) bool {
+	if secretEnvName.MatchString(name) {
+		return true
+	}
+	for _, re := range secretEnvValues {
+		if re.MatchString(value) {
+			return true
+		}
+	}
+	return false
+}
+
+// StripCredentials returns the environment for a process that must hold no
+// credential: inherited (normally the daemon's own environment) reduced to the
+// variables a build needs and none that looks like a secret, then extra (what
+// the request set explicitly) without its credential variables, then the
+// neutral non-git settings: no prompts, no ssh, an empty gh config directory.
+//
+// inherited is an allowlist (envInheritable), not a deny list. A deny list of
+// credential names was the earlier design and it leaked whatever it did not
+// name: OPENAI_API_KEY, DATABASE_URL, a *_WEBHOOK_SECRET all reached a
+// credentials-none shell, which shares the network, so a prompt injection
+// could send them out (the 2026-11-01 review, RF-4). What a build needs is a
+// short, stable list; every secret a host might hold is not.
+//
+// It leaves git's own configuration to the caller, which is what a caller that
+// supplies its own credential helper needs: GIT_CONFIG_COUNT entries are read
+// AFTER `git -c`, so the resets in WithoutCredentials would wipe it.
+func StripCredentials(inherited []string, extra map[string]string) []string {
+	out := make([]string, 0, len(inherited)+len(extra)+12)
+	for _, kv := range inherited {
+		name, value, ok := strings.Cut(kv, "=")
+		if !ok || !envInheritable(name) || isCredentialEnv(name) || looksSecret(name, value) {
 			continue
 		}
 		out = append(out, kv)
+	}
+	names := make([]string, 0, len(extra))
+	for name := range extra {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if isCredentialEnv(name) || looksSecret(name, extra[name]) {
+			continue
+		}
+		out = append(out, name+"="+extra[name])
 	}
 	out = append(out,
 		"GIT_TERMINAL_PROMPT=0",
@@ -152,8 +209,8 @@ func StripCredentials(env []string) []string {
 // askpass program reset, so a `git push` fails to authenticate and returns at
 // once. It removes whatever the caller's own env added too, so the result carries
 // no credential variable at all.
-func WithoutCredentials(env []string) []string {
-	out := StripCredentials(env)
+func WithoutCredentials(inherited []string, extra map[string]string) []string {
+	out := StripCredentials(inherited, extra)
 	out = append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(len(gitNeutralConfig)))
 	for i, kv := range gitNeutralConfig {
 		out = append(out,

@@ -132,6 +132,11 @@ func TestReleaseTagScriptChecksAncestry(t *testing.T) {
 	if strings.Contains(script, "git tag -f") || strings.Contains(script, "push --force") {
 		t.Error("scripts/release-tag.sh must never force-create or force-push a tag")
 	}
+
+	// --commit tags a later commit of main, never one without the bump.
+	if !strings.Contains(script, `git merge-base --is-ancestor "$VERSION_COMMIT" "$RELEASE_COMMIT"`) {
+		t.Error("scripts/release-tag.sh --commit must require the commit to contain the version bump")
+	}
 }
 
 // TestBaselineTagIsPinned stops the historical baseline from quietly becoming

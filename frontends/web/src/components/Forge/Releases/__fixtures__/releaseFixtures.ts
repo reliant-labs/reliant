@@ -2,7 +2,7 @@
 
 /**
  * An in-memory release ledger for the Releases pages' tests and preview: the
- * story the console v3 mockup tells, as the control plane would record it.
+ * story a busy project tells, as the control plane would record it.
  *
  *   prod   … v20261017 → 20261018.052711 → .063708 (smoke failed) → rolled
  *          back to .052711 → .084518 → .155157, then frontends re-shipped as
@@ -23,6 +23,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { DoraMetrics, Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type {
   ArtifactChange,
+  ForgeAppliedSlot,
   ObjectDelta,
   ReleaseArtifact,
   ReleaseBundle,
@@ -33,6 +34,7 @@ import type {
   ReleaseRecord,
   ReleaseRollout,
 } from "@/services/forge/releases";
+import type { DeployRun } from "@/services/forge/deployAttempts";
 import type { ReleasesApi } from "@/services/forge/ReleasesApiContext";
 
 import type { ReleaseEnv } from "../releaseModel";
@@ -454,6 +456,7 @@ function rollout(environmentId: string, promotionId: string): ReleaseRollout {
     desiredReplicas: i === 0 ? 2 : 1,
     convergedAt: p?.createdAt ? new Date(Date.parse(p.createdAt) + (3 + i) * MIN).toISOString() : undefined,
     lastError: "",
+    reason: "",
   }));
   return {
     promotionId,
@@ -463,6 +466,7 @@ function rollout(environmentId: string, promotionId: string): ReleaseRollout {
     finishedAt: p?.createdAt ? new Date(Date.parse(p.createdAt) + 9 * MIN).toISOString() : undefined,
     workloads,
     unpinned: [],
+    forgeApplied: [],
   };
 }
 
@@ -480,6 +484,45 @@ function bundle(environmentId: string, bundleId: string, digest: string): Releas
   };
 }
 
+// ── Deploys ─────────────────────────────────────────────────────────────────
+
+const runBase = {
+  promotionId: "",
+  startedByUserId: "user-sean",
+  startedByActor: "",
+  phases: [],
+  failedPhase: "",
+  error: "",
+  exitCode: null,
+  runUrl: "",
+  hasLog: true,
+  logTruncated: false,
+  hasReport: false,
+};
+
+/** Newest first: a deploy rolling out to e2e, one that failed building for prod, and the one before it that landed. */
+export const DEPLOY_RUNS: DeployRun[] = [
+  { ...runBase, id: "att-3", env: "e2e", mode: "apply", source: "console", release: V[0]!, phase: "rollout", state: "running", startedAt: at(4 * MIN) },
+  {
+    ...runBase,
+    id: "att-2",
+    env: "prod",
+    mode: "apply",
+    source: "terminal",
+    release: "",
+    phase: "build",
+    state: "failed",
+    failedPhase: "build",
+    error: "building api: docker build exited 1",
+    exitCode: 1,
+    startedAt: at(2 * HOUR),
+    finishedAt: at(2 * HOUR - 3 * MIN),
+  },
+  { ...runBase, id: "att-1", env: "prod", mode: "apply", source: "ci", release: V[1]!, phase: "rollout", state: "succeeded", exitCode: 0, startedAt: at(26 * HOUR), finishedAt: at(26 * HOUR - 6 * MIN) },
+];
+
+export const DEPLOY_RUN_LOG = "[build] api: step 7/12 RUN go build ./cmd/api\n# github.com/acme/api\ninternal/handlers/orders.go:41:2: undefined: ordersv2\nerror: building api: docker build exited 1\n";
+
 // ── The fake API ────────────────────────────────────────────────────────────
 
 export interface ReleasesFixtureOptions {
@@ -489,6 +532,8 @@ export interface ReleasesFixtureOptions {
   promotionsFail?: boolean;
   /** CompareReleases fails. */
   compareFails?: boolean;
+  /** GetRollout's forge-applied slots (a self-managed environment the hub does not converge). */
+  forgeApplied?: ForgeAppliedSlot[];
 }
 
 export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): ReleasesApi {
@@ -520,8 +565,16 @@ export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): 
         if (options.promotionsFail) throw new ConnectError("ledger unavailable", Code.Unavailable);
         return empty ? [] : (PROMOTIONS[environmentId] ?? []);
       }),
-    getRollout: (environmentId, promotionId) => answer(() => rollout(environmentId, promotionId)),
+    getRollout: (environmentId, promotionId) =>
+      answer(() => ({ ...rollout(environmentId, promotionId), forgeApplied: options.forgeApplied ?? [] })),
     getBundle: (environmentId, bundleId, digest) => answer(() => bundle(environmentId, bundleId, digest)),
+    listDeployRuns: (_project, env) => answer(() => (empty ? [] : DEPLOY_RUNS.filter((run) => !env || run.env === env))),
+    getDeployRun: (id) =>
+      answer(() => {
+        const run = DEPLOY_RUNS.find((candidate) => candidate.id === id);
+        if (!run) throw new ConnectError("no such deploy", Code.NotFound);
+        return { run, log: DEPLOY_RUN_LOG, report: "" };
+      }),
   };
 }
 

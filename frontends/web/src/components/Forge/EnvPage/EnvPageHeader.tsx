@@ -27,8 +27,8 @@
 import { Cpu, Rocket, Upload } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Button from "@/components/forge-ui/button";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import { liveKindLabel, type LiveEnv } from "@/services/forge/live";
 import type { EnvLifecycle } from "@/services/forge/roster";
@@ -75,7 +75,7 @@ export function EnvPageHeader({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="min-w-0 truncate font-mono text-2xl font-semibold tracking-tight text-foreground" title={envName}>
+            <h1 className="min-w-0 truncate font-mono text-2xl font-semibold tracking-tight text-ink" title={envName}>
               {envName}
             </h1>
             <span className="flex shrink-0 items-center gap-2" data-testid="env-page-badges">
@@ -89,7 +89,7 @@ export function EnvPageHeader({
           </div>
 
           {lifecycle !== "local" && (release !== "" || headline) && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
               {release !== "" && (
                 <span className="flex min-w-0 max-w-full items-center gap-1.5" data-testid="env-page-release">
                   <span className="shrink-0">Release</span>
@@ -103,9 +103,9 @@ export function EnvPageHeader({
         </div>
 
         {lifecycle === "local" ? (
-          <p className="flex max-w-xs items-center gap-1.5 text-xs text-muted-foreground" data-testid="env-page-local-note">
+          <p className="flex max-w-xs items-center gap-1.5 text-xs text-ink-muted" data-testid="env-page-local-note">
             <Cpu className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Runs your working tree via <code className="font-mono text-foreground">forge env up</code> — never built or released.
+            Runs your working tree via <code className="font-mono text-ink">forge env up</code> — never built or released.
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-2" data-testid="env-page-actions">
@@ -137,8 +137,8 @@ export function EnvPageHeader({
 const TONE_DOT: Record<HeadlineTone, string> = {
   ok: "bg-success",
   progress: "bg-primary motion-safe:animate-pulse",
-  problem: "bg-destructive",
-  quiet: "border border-muted-foreground/60",
+  problem: "bg-danger",
+  quiet: "border border-ink-muted/60",
   // A ring around a fill: waiting is neither the hollow "nothing yet" nor a
   // solid verdict, and the shape says so without the hue.
   waiting: "bg-warning ring-2 ring-warning/30",
@@ -146,9 +146,9 @@ const TONE_DOT: Record<HeadlineTone, string> = {
 
 const TONE_TEXT: Record<HeadlineTone, string> = {
   ok: "text-success-ink",
-  progress: "text-foreground",
-  problem: "text-destructive-ink",
-  quiet: "text-muted-foreground",
+  progress: "text-ink",
+  problem: "text-danger-ink",
+  quiet: "text-ink-muted",
   waiting: "text-warning-ink",
 };
 
@@ -172,7 +172,7 @@ function StatusLine({ headline }: { headline: EnvHeadline }) {
   );
   if (headline.detail === "") return line;
   return (
-    <Tooltip content={headline.detail} placement="bottom" wrapperClassName="min-w-0">
+    <Tooltip content={headline.detail} side="bottom" triggerClassName="min-w-0">
       {line}
     </Tooltip>
   );
@@ -207,7 +207,7 @@ function ActionButton({
   );
   if (!action.disabledReason) return button;
   return (
-    <Tooltip content={action.disabledReason} placement="bottom">
+    <Tooltip content={action.disabledReason} side="bottom">
       <span className="inline-flex">
         {button}
         <span id={`${testId}-reason`} className="sr-only">

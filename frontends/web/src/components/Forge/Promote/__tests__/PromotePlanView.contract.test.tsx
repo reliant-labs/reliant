@@ -47,7 +47,7 @@ describe("direction", () => {
 
     // 3. A rollback is SOLID and destructive; it is not the muted/dashed
     //    treatment reserved for directions that move nothing.
-    expect(backBanner.className).toMatch(/destructive/);
+    expect(backBanner.className).toMatch(/danger/);
     expect(backBanner.className).toMatch(/border-solid/);
     expect(forwardClasses).not.toMatch(/destructive/);
 

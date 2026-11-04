@@ -6,9 +6,9 @@ import {
 } from "../../gen/reliant/v1/model_endpoint_pb";
 import type { ModelEndpoint, ModelEndpointInput, ModelEndpointModel } from "../../gen/reliant/v1/model_endpoint_pb";
 
-/** The message shown while the sealed credential store is not wired in. */
+/** Shown in place of the key field when the server cannot store endpoint keys. */
 export const CREDENTIAL_STORE_NOTE =
-  "API keys and custom headers need Reliant's sealed credential store. Coming with the next update; endpoints without a key work today.";
+  "This server can't store endpoint API keys, so add an endpoint that needs no key.";
 
 /** Keys the server controls; extra JSON may not set them. */
 export const RESERVED_BODY_KEYS = ["model", "messages", "tools", "stream"] as const;

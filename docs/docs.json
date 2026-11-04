@@ -19,7 +19,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Docs",
+        "tab": "Reliant",
         "groups": [
           {
             "group": "Get started",
@@ -70,7 +70,6 @@
               "cli/sign-in",
               "cli/run-a-machine",
               "cli/workflows",
-              "cli/forge",
               "cli/previews",
               "cli/scripting"
             ]
@@ -104,6 +103,7 @@
               "workflows/patterns",
               "workflows/routing",
               "workflows/testing",
+              "workflows/lint",
               "examples/workflow-snippets",
               "guides/self-improvement"
             ]
@@ -119,24 +119,10 @@
             ]
           },
           {
-            "group": "Build & host with Forge",
-            "pages": [
-              "forge/overview",
-              "forge/project-anatomy",
-              "forge/adding-features",
-              "forge/environments-and-deploys",
-              "forge/hosting",
-              "forge/secrets",
-              "forge/custom-domains",
-              "forge/sign-in",
-              "forge/observability",
-              "forge/troubleshooting"
-            ]
-          },
-          {
             "group": "Account & billing",
             "pages": [
               "account/billing",
+              "account/observability-billing",
               "help/privacy"
             ]
           },
@@ -164,6 +150,92 @@
               "architecture/distributed",
               "changelog",
               "license-faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Forge",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "forge/overview",
+              "forge/quick-start"
+            ]
+          },
+          {
+            "group": "Build",
+            "pages": [
+              "forge/project-anatomy",
+              "forge/adding-features",
+              {
+                "group": "Concepts",
+                "pages": [
+                  "forge/concepts/two-sources-of-truth",
+                  "forge/concepts/contracts-and-injection",
+                  "forge/concepts/middleware-and-request-path",
+                  "forge/concepts/config-system",
+                  "forge/concepts/generated-vs-yours"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Deploy & host",
+            "pages": [
+              {
+                "group": "Deploy",
+                "pages": [
+                  "forge/environments-and-deploys",
+                  "forge/deploy/environments",
+                  "forge/deploy/what-gets-deployed",
+                  "forge/deploy/releases-and-promotion",
+                  "forge/deploy/self-hosted-delivery",
+                  "forge/deploy/escape-hatches"
+                ]
+              },
+              "forge/hosting",
+              "forge/secrets",
+              "forge/custom-domains",
+              "forge/sign-in"
+            ]
+          },
+          {
+            "group": "Operate",
+            "pages": [
+              {
+                "group": "Observability",
+                "pages": [
+                  "forge/observability",
+                  "forge/observability/signals",
+                  "forge/observability/where-it-goes",
+                  "forge/observability/forge-obs",
+                  "forge/observability/dashboards-and-alerts",
+                  "forge/observability/health-and-shutdown",
+                  "forge/observability/agents"
+                ]
+              },
+              {
+                "group": "Linting",
+                "pages": [
+                  "forge/linting/overview",
+                  "forge/linting/rollout",
+                  "forge/linting/rules-index",
+                  "forge/linting/rules-migrations",
+                  "forge/linting/rules-conventions",
+                  "forge/linting/rules-schema-and-writes",
+                  "forge/linting/rules-deploy-and-secrets",
+                  "forge/linting/rules-tracing-and-tests"
+                ]
+              },
+              "forge/troubleshooting"
+            ]
+          },
+          {
+            "group": "Forge CLI",
+            "pages": [
+              "cli/forge"
             ]
           }
         ]

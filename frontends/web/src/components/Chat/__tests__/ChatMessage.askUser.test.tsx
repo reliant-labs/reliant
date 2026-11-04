@@ -7,14 +7,24 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatMessage } from "../ChatMessage";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
 import type { Message } from "../../../types/chat";
 
+// Each call's result, as the store's index holds it: the server sends a
+// result as its own TOOL message, and the call finds it by tool_call_id.
+const resultsByCallId: Record<string, { content: string; is_error: boolean }> = {
+  "call-async": { content: "Question posted to the user without waiting.", is_error: false },
+  "call-blocking": { content: "Question posted to the user without waiting.", is_error: false },
+  "call-old-blocking": { content: "Question posted to the user without waiting.", is_error: false },
+};
+
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useToolResultsByCallId: () => ({}),
+  useToolResultsByCallId: () => resultsByCallId,
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
   useChatMessages: () => [],
@@ -28,7 +38,7 @@ vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ branchChat: vi.fn(), connectChatToMachine: vi.fn() }) },
 }));
 vi.mock("../../../api/client", () => ({
-  api: { toolCalls: { cancel: vi.fn(), convertToBackground: vi.fn() } },
+  api: {},
 }));
 vi.mock("../../../lib/logger", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -40,22 +50,26 @@ vi.mock("../BranchToWorktreeModal", () => ({ BranchToWorktreeModal: () => null }
 vi.mock("../BranchToExistingWorktreeModal", () => ({ BranchToExistingWorktreeModal: () => null }));
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
 vi.mock("../ConnectMachineDialog", () => ({ ConnectMachineDialog: () => null }));
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: vi.fn().mockResolvedValue([
-      {
-        question_id: "q-1", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
-        status: "pending", created_at: "", async: true, tool_call_id: "call-async",
+setTransport(
+  mockTransport({
+    "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+    "QuestionService.ListAsyncQuestions": {
+      response: {
+        questions: [
+          {
+            questionId: "q-1", chatId: "chat-1", workflowId: "chat-1", threadId: "chat-1", stepId: "execute_tools",
+            status: "pending", createdAt: "", async: true, toolCallId: "call-async",
+          },
+          {
+            questionId: "q-prod", chatId: "chat-1", workflowId: "chat-1", threadId: "chat-1", stepId: "execute_tools",
+            status: "pending", createdAt: "", async: true, toolCallId: "toolu_015apcEoACxzEnwZDGZw4LBo",
+          },
+        ],
       },
-      {
-        question_id: "q-prod", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
-        status: "pending", created_at: "", async: true, tool_call_id: "toolu_015apcEoACxzEnwZDGZw4LBo",
-      },
-    ]),
-    resolveQuestion: vi.fn(),
-  },
-}));
+    },
+    "QuestionService.ResolveQuestion": { response: {} },
+  }),
+);
 
 function assistantAsking(id: string, input: Record<string, unknown>): Message {
   return {
@@ -74,7 +88,6 @@ function assistantAsking(id: string, input: Record<string, unknown>): Message {
         toolCallId: id,
         toolName: "ask_user",
         input: JSON.stringify(input),
-        matchedResult: { toolCallId: id, content: "Question posted to the user without waiting.", isError: false },
       },
     ],
     createdAt: "2024-01-01T00:00:00.000Z",
@@ -123,12 +136,10 @@ describe("ask_user in the transcript", () => {
 
   // The exact prod shape (chat 641e33c9, 2026-10-22): `questions` is a
   // JSON-encoded string, there is no blocking flag, and the result is in a
-  // separate tool message, so the call block carries none.
+  // separate tool message the store has not indexed yet.
   it("renders the prod ask_user: string-encoded questions, async row found by tool call id", async () => {
     const id = "toolu_015apcEoACxzEnwZDGZw4LBo";
     const message = assistantAsking(id, { questions: JSON.stringify(questions) });
-    const block = message.contentBlocks![1] as unknown as Record<string, unknown>;
-    delete block.matchedResult;
     message.contentBlocks = [message.contentBlocks![1]];
     renderMessage(message);
 

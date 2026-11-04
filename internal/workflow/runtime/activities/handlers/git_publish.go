@@ -224,7 +224,7 @@ func (a *GitPublishActivity) machineFor(ctx context.Context, chat *core.Chat, rt
 	if err != nil {
 		return publishMachine{}, err
 	}
-	id, err := toolexec.ResolveDaemonIDForSelector(ctx, a.daemonRouter, chat.UserID, toolDaemonSelector(owner, rtx.DaemonSelector))
+	id, err := toolexec.ResolveDaemonIDForSelector(ctx, a.daemonRouter, chat.UserID, toolDaemonSelector(owner, chatDaemonSelector(chat, rtx.DaemonSelector)))
 	if err != nil {
 		return publishMachine{}, fmt.Errorf("git_publish: resolving the machine: %w", err)
 	}

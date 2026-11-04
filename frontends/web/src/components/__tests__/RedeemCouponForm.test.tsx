@@ -126,7 +126,7 @@ describe("RedeemCouponForm — reliant provider sync", () => {
 
     // The success message (redemption itself) must still be shown.
     await waitFor(() => {
-      expect(screen.getByText(/added \$20\.00 to your balance/i)).toBeInTheDocument();
+      expect(screen.getByText(/added \$20 to your balance/i)).toBeInTheDocument();
     });
     // But something actionable about the sync failure must appear too.
     await waitFor(() => {
@@ -143,7 +143,7 @@ describe("RedeemCouponForm — account_required", () => {
     new ConnectError(
       "sign in with an email account to redeem a compute coupon",
       Code.FailedPrecondition,
-      new Headers({ "x-reliant-reason": "account_required" }),
+      new Headers({ "x-forge-error-reason": "account_required" }),
     );
 
   function failWith(err: unknown, call = 0) {

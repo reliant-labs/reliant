@@ -5,6 +5,7 @@
  * and documentation.
  */
 
+import { loadConfig } from "./config_gen";
 import { isPackagedRendererOrigin } from "./protocol";
 
 // ============================================================================
@@ -56,7 +57,7 @@ export const isElectron = (): boolean =>
  */
 export const isDev = getIsDev();
 
-/** Hosted app origin used when no build-time override is configured. */
+/** Hosted app origin used when the runtime config names none. */
 const DEFAULT_APP_URL = "https://app.reliantlabs.io";
 
 /**
@@ -102,12 +103,12 @@ const isLocalOrigin = (origin: string): boolean => {
  * browser, so the redirect must name a URL that is reachable from outside this
  * process — the hosted app.
  *
- * Lookup order: build-time override, then the document origin when it is
- * trustworthy for this runtime, then the hosted default.
+ * Lookup order: the runtime config's APP_URL, then the document origin when
+ * it is trustworthy for this runtime, then the hosted default.
  */
 export const getAppURL = (): string => {
-  const configured = import.meta.env.VITE_APP_URL;
-  if (typeof configured === "string" && configured.length > 0) {
+  const configured = loadConfig().APP_URL;
+  if (configured.length > 0) {
     return configured.replace(/\/$/, "");
   }
 
@@ -130,16 +131,16 @@ export const getAppURL = (): string => {
  * Points at admin-server, which owns endpoints like /api/proxy-session that
  * mint workspace-proxy session tokens.
  *
- * Lookup order: window.RELIANT_CONFIG (Electron-injected) first, then
- * VITE_CONTROL_PLANE_API_URL.
+ * Lookup order: window.RELIANT_CONFIG (Electron-injected) first, then the
+ * runtime config's CONTROL_PLANE_API_URL.
  */
 export const getControlPlaneURL = (): string | undefined => {
   if (typeof window !== "undefined" && window.RELIANT_CONFIG?.controlPlaneURL) {
     return window.RELIANT_CONFIG.controlPlaneURL;
   }
 
-  const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
-  return typeof cpURL === "string" && cpURL.length > 0 ? cpURL : undefined;
+  const cpURL = loadConfig().CONTROL_PLANE_API_URL;
+  return cpURL.length > 0 ? cpURL : undefined;
 };
 
 // ============================================================================

@@ -2,45 +2,27 @@
 
 import { describe, expect, it } from "vitest";
 
-import { defaultTab, resolveTab, tabNeedsDaemon, tabParam, tabsFor } from "../envTabs";
+import { defaultTab, resolveTab, retiredTabOf, RETIRED_TABS, tabNeedsDaemon, tabParam, tabsFor } from "../envTabs";
 
 describe("an environment page's tabs", () => {
-  it("leads a LOCAL env with what is running, and gives it no release history", () => {
-    // dev runs the working tree via `forge env up`; it is never built or
-    // released, so "Releases" and "not built yet" are both the wrong question.
+  it("leads a LOCAL env with what is running", () => {
     expect(defaultTab("local")).toBe("running");
-    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "identity", "secrets"]);
+    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "identity"]);
   });
 
-  it("leads a deployed env with its overview, and has releases", () => {
+  it("is the environment as an object: overview and identity, nothing the project pages already have", () => {
     expect(defaultTab("deployed")).toBe("overview");
-    expect(tabsFor("deployed").map((tab) => tab.id)).toEqual([
-      "overview",
-      "identity",
-      "releases",
-      "activity",
-      "secrets",
-      "domains",
-    ]);
+    expect(tabsFor("deployed").map((tab) => tab.id)).toEqual(["overview", "identity"]);
   });
 
   it("keeps every deployed-env tab daemon-free", () => {
-    const needs = Object.fromEntries(tabsFor("deployed").map((tab) => [tab.id, tab.needsDaemon]));
-    expect(needs).toEqual({
-      overview: false,
-      identity: false,
-      releases: false,
-      activity: false,
-      secrets: false,
-      domains: false,
-    });
+    expect(tabsFor("deployed").every((tab) => !tab.needsDaemon)).toBe(true);
+    expect(tabNeedsDaemon("running")).toBe(true);
   });
 
   it("maps the retired two-tab links somewhere sensible", () => {
     expect(resolveTab("live", "deployed")).toBe("overview");
     expect(resolveTab("live", "local")).toBe("running");
-    // The per-branch Changes and Checks tabs were removed; their links still land.
-    // So was Observability: the project's Overview and Observability pages, scoped (D1).
     for (const retired of ["preview", "changes", "checks", "observability"]) {
       expect(resolveTab(retired, "deployed")).toBe("overview");
       expect(resolveTab(retired, "local")).toBe("running");
@@ -49,40 +31,22 @@ describe("an environment page's tabs", () => {
 
   it("falls back to the default for a tab this env does not have", () => {
     expect(resolveTab("running", "deployed")).toBe("overview");
-    expect(resolveTab("releases", "local")).toBe("running");
     expect(resolveTab("nonsense", "deployed")).toBe("overview");
   });
 
   it("keeps the default tab out of the URL", () => {
     expect(tabParam("overview", "deployed")).toBeUndefined();
     expect(tabParam("running", "local")).toBeUndefined();
-    expect(tabParam("releases", "deployed")).toBe("releases");
+    expect(tabParam("identity", "deployed")).toBe("identity");
   });
 });
 
-describe("releases, activity and domains are their own tabs", () => {
-  it("separates release history from convergence activity, and adds domains, for a deployed env", () => {
-    const ids = tabsFor("deployed").map((tab) => tab.id);
-    expect(ids.indexOf("activity")).toBe(ids.indexOf("releases") + 1);
-    expect(ids).toContain("domains");
-  });
-
-  it("keeps them off a local env, which has no releases and binds no domains", () => {
-    const ids = tabsFor("local").map((tab) => tab.id);
-    expect(ids).not.toContain("activity");
-    expect(ids).not.toContain("domains");
-  });
-
-  it("resolves their URL values and marks them daemon-free", () => {
-    expect(resolveTab("activity", "deployed")).toBe("activity");
-    expect(resolveTab("domains", "deployed")).toBe("domains");
-    expect(resolveTab("activity", "local")).toBe("running");
-    expect(tabNeedsDaemon("activity")).toBe(false);
-    expect(tabNeedsDaemon("domains")).toBe(false);
-    expect(tabNeedsDaemon("identity")).toBe(false);
-    expect(tabNeedsDaemon("running")).toBe(true);
-    expect(tabNeedsDaemon("changes")).toBe(false);
-    expect(tabNeedsDaemon("preview")).toBe(false);
-    expect(tabNeedsDaemon(undefined)).toBe(false);
+describe("the tabs that became project pages", () => {
+  it("name the page each one became, so an old link lands there scoped", () => {
+    expect(RETIRED_TABS).toEqual({ releases: "releases", activity: "activity", secrets: "secrets", domains: "domains" });
+    expect(retiredTabOf("secrets")).toBe("secrets");
+    expect(retiredTabOf("identity")).toBeNull();
+    expect(retiredTabOf(undefined)).toBeNull();
+    expect(retiredTabOf("constructor")).toBeNull();
   });
 });

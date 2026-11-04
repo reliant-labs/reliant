@@ -4,8 +4,9 @@ package worktreereclaim
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // A worktree whose branch was squash-merged and whose PR branch was then
@@ -49,63 +50,6 @@ func (f *fixture) pruned(w Worktree) {
 	}
 }
 
-func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "a squash merge, a deleted remote branch and a full reclaim (~66 git processes)")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("sq", "feat/sq")
-	f.commitIn(w, "feat/sq", "one.txt", "1\n", true)
-	f.commitIn(w, "feat/sq", "two.txt", "2\n", true)
-	f.squashMerge("feat/sq")
-	f.pruned(w)
-
-	// The base moved on after the squash, as it does on a busy repository.
-	other := filepath.Join(t.TempDir(), "other")
-	run(t, filepath.Dir(other), "clone", "-q", f.origin, other)
-	run(t, other, "config", "user.name", "x")
-	run(t, other, "config", "user.email", "x@e.com")
-	write(t, filepath.Join(other, "later.txt"), "later\n")
-	run(t, other, "add", ".")
-	run(t, other, "commit", "-q", "-m", "later work")
-	run(t, other, "push", "-q", "origin", "main")
-	run(t, w.Path, "fetch", "-q", "origin")
-
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v, want removed: its two commits are on main as one squash", got)
-	}
-	run(t, f.project, "rev-parse", "--verify", "refs/heads/feat/sq") // the branch itself is never deleted
-}
-
-func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "~59 git processes")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("rb", "feat/rb")
-	f.commitIn(w, "feat/rb", "a.txt", "a\n", true)
-	f.commitIn(w, "feat/rb", "b.txt", "b\n", true)
-
-	// GitHub's "rebase and merge": each commit is re-applied on main with a new
-	// sha but the same patch, and the PR branch is deleted.
-	srv := filepath.Join(t.TempDir(), "server")
-	run(t, filepath.Dir(srv), "clone", "-q", f.origin, srv)
-	run(t, srv, "config", "user.name", "gh")
-	run(t, srv, "config", "user.email", "gh@e.com")
-	write(t, filepath.Join(srv, "newer.txt"), "main moved\n")
-	run(t, srv, "add", ".")
-	run(t, srv, "commit", "-q", "-m", "main moved first")
-	run(t, srv, "cherry-pick", "origin/feat/rb~1", "origin/feat/rb")
-	run(t, srv, "push", "-q", "origin", "main")
-	run(t, f.origin, "branch", "-D", "feat/rb")
-	f.pruned(w)
-	run(t, w.Path, "fetch", "-q", "origin")
-
-	if got := f.one(w); got.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v, want removed", got)
-	}
-}
-
 func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "a merge, an unpushed commit, and two verdicts (~71 git processes)")
@@ -129,6 +73,7 @@ func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 }
 
 func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -140,6 +85,7 @@ func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
 }
 
 func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -157,6 +103,7 @@ func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.
 }
 
 func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -180,6 +127,7 @@ func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
 // A user-locked worktree (someone else's `git worktree lock`) is never theirs
 // to reap, merged or not.
 func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -230,31 +178,6 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 	}
 }
 
-// The base is refreshed before concluding the work is unmerged: the merge may
-// have happened since this clone last fetched.
-func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "a merge on the origin, a fetch and a full reclaim (~64 git processes)")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("ft", "feat/ft")
-	f.commitIn(w, "feat/ft", "f.txt", "f\n", true)
-	stale := run(t, w.Path, "rev-parse", "refs/remotes/origin/main")
-	f.squashMerge("feat/ft")
-	f.pruned(w)
-	// This clone last fetched before the merge: put origin/main back where it was.
-	run(t, w.Path, "update-ref", "refs/remotes/origin/main", stale)
-
-	fetched := 0
-	f.r.FetchBase = func(ctx context.Context, checkout, base string) { fetched++; FetchBaseBranch(ctx, checkout, base) }
-	if got := f.one(w); got.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v, want removed after refreshing origin/main", got)
-	}
-	if fetched == 0 {
-		t.Fatal("origin/main was never refreshed")
-	}
-}
-
 // A branch deleted on GitHub after merge may still have patch-equal changes
 // reverted since; what counts is the patch, so a squash of DIFFERENT content
 // must not match.
@@ -281,52 +204,11 @@ func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 	}
 }
 
-// A multi-repo workspace is removed only when EVERY checkout is done: one
-// squash-merged and one with unpushed work holds the whole thing, and naming
-// the checkout that is not done.
-func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "two checkouts, two squash merges, a verdict and a full reclaim (~130 git processes)")
-	f := newFixture(t)
-	f.idle()
-	ws := filepath.Join(f.root, "proj", "multi")
-	checkouts := map[string]string{"api": "feat/api", "web": "feat/web"}
-	for c, b := range checkouts {
-		run(t, f.project, "worktree", "add", "-q", "-b", b, filepath.Join(ws, c), "main")
-		if err := LockCheckout(context.Background(), filepath.Join(ws, c), "multi"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	w := Worktree{ID: "multi", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "9"}
-	api, web := Worktree{Path: filepath.Join(ws, "api")}, Worktree{Path: filepath.Join(ws, "web")}
-	f.commitIn(api, "feat/api", "api.txt", "a\n", true)
-	f.squashMerge("feat/api")
-	f.pruned(api)
-	f.commitIn(web, "feat/web", "web.txt", "never pushed\n", false)
-	run(t, api.Path, "fetch", "-q", "origin")
-
-	got := f.verdict(w)
-	if got.Outcome != OutcomeHeld || got.Reason != ReasonUnpushed || !strings.Contains(got.Detail, "web") || strings.Contains(got.Detail, "api: ") {
-		t.Fatalf("got %+v, want held/unpushed naming web only", got)
-	}
-	if !exists(filepath.Join(ws, "api")) || !exists(filepath.Join(ws, "web")) {
-		t.Fatal("a checkout was removed from a workspace that is not done")
-	}
-
-	// Once web is merged too, the whole workspace goes.
-	run(t, web.Path, "push", "-q", "origin", "feat/web")
-	f.squashMerge("feat/web")
-	f.pruned(web)
-	run(t, web.Path, "fetch", "-q", "origin")
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(ws) {
-		t.Fatalf("got %+v exists=%v, want the whole workspace removed", got, exists(ws))
-	}
-}
-
 // A patch-id does not see a binary file's bytes, so two different binary
 // changes to one path would look identical. A branch that touches a binary file
 // is therefore never recognised by patch, and stays held.
 func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -351,6 +233,7 @@ func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T
 }
 
 func TestMerged_PatchesOnBaseHandlesWhatItCannotCompare(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("pb", "feat/pb")

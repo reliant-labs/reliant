@@ -44,11 +44,9 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("repo is required")
 	}
 
-	// Default branch
-	if req.Branch == "" {
-		req.Branch = "main"
-	}
-
+	// No branch: the remote's default (its HEAD), which is what the caller
+	// that names none means (a nested repository of a project, restored
+	// onto a pool member, whose default branch was never recorded).
 	// Default path: /home/workspace/projects/<repo-name>
 	if req.Path == "" {
 		repoName := repoNameFromURL(req.Repo)
@@ -121,7 +119,11 @@ func cloneAtomically(ctx context.Context, repo, branch, dest string) error {
 	// accepts an existing empty directory. The URL stays clean: a token in it
 	// would be written to .git/config as remote.origin.url and outlive its
 	// validity there.
-	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, repo, staging)
+	args := []string{"clone"}
+	if branch != "" {
+		args = append(args, "--branch", branch)
+	}
+	cmd := exec.CommandContext(ctx, "git", append(args, repo, staging)...)
 	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0")) //nolint:forbidigo // passes this process environment to a child process; not configuration
 
 	// git clone can be memory-heavy on large repos; attribute a SIGKILL to

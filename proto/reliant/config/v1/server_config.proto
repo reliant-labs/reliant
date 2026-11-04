@@ -58,10 +58,30 @@ message ServerProcessConfig {
 
   IntegrationsConfig integrations = 7;
   ObservabilityConfig observability = 8;
-  SentryConfig sentry = 9;
+  // Sentry was removed: errors reach forge's ClickStack through OTLP.
+  reserved 9;
+  reserved "sentry";
   AnalyticsConfig analytics = 10;
   LLMConfig llm = 11;
   PreviewConfig preview = 12;
+  NetworkConfig network = 13;
+}
+
+// NetworkConfig is the network reach of the dials a user steers from a server
+// role: fetch, websearch, sourcegraph, model-endpoint probes and local-model
+// routes. The rules every config here follows are in config.proto's header.
+message NetworkConfig {
+  // Off by default, and nothing else turns it on: not a missing control-plane
+  // URL, not a hosted or self-hosted guess. A server role is a shared process
+  // next to databases, brokers and a cloud metadata service, so a URL a user
+  // types must not reach loopback, RFC 1918, link-local, metadata or CGNAT
+  // addresses. Set it only for a self-hosted deployment whose users mean those
+  // addresses (an Ollama on the server's own LAN); the process logs a warning
+  // at startup when it is on.
+  bool allow_private_egress = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ALLOW_PRIVATE_EGRESS"
+    description: "Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments only"
+  }];
 }
 
 // NatsConfig is the NATS server a server role connects to: daemon routing,

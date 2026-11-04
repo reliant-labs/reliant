@@ -3,7 +3,9 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -234,6 +236,37 @@ func TestRunTx_DoesNotRetryNonRetryable(t *testing.T) {
 	}
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("the caller's own error must be returned unwrapped, got: %v", err)
+	}
+}
+
+type declinedForTest struct{}
+
+func (declinedForTest) Error() string { return "declined" }
+func (declinedForTest) TxOutcome()    {}
+
+// A body that rolls back ON PURPOSE (a declined launch, a missing row) is
+// control flow, not a transaction failure, and must not be logged at ERROR:
+// prod's error tracker turned every "waiting for workflow capacity" decline
+// into a "Transaction failed" issue (*launch.DeclinedError, 85+ events/4h).
+// A TxOutcome is recognised through wrapping; anything else stays a failure.
+func TestIsExpectedTxOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"no rows", sql.ErrNoRows, true},
+		{"wrapped no rows", fmt.Errorf("lookup: %w", sql.ErrNoRows), true},
+		{"tx outcome", declinedForTest{}, true},
+		{"wrapped tx outcome", fmt.Errorf("launch: %w", declinedForTest{}), true},
+		{"business failure", errors.New("business rule violated"), false},
+		{"database failure", serializationFailure(), false},
+	} {
+		if got := isExpectedTxOutcome(tc.err); got != tc.want {
+			t.Errorf("%s: isExpectedTxOutcome(%v) = %v, want %v", tc.name, tc.err, got, tc.want)
+		}
 	}
 }
 

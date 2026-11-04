@@ -17,6 +17,29 @@ function getPreloadPath() {
 }
 
 /**
+ * The preload of the find bar's view (find-bar.js), packaged beside preload.js.
+ */
+function getFindBarPreloadPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'find-bar-preload.js')
+    : path.join(__dirname, 'find-bar-preload.js');
+}
+
+/**
+ * The find bar view's webPreferences: its own preload, which exposes only the
+ * find bar's channels, and none of the window's capabilities (no webview tag).
+ */
+function getFindBarWebPreferences() {
+  return {
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
+    spellcheck: false,
+    preload: getFindBarPreloadPath(),
+  };
+}
+
+/**
  * Common webPreferences for all BrowserWindows
  * These settings are security-critical and should be consistent across all windows
  */
@@ -58,6 +81,8 @@ function getTitleBarStyle(variant = 'hidden') {
 
 module.exports = {
   getPreloadPath,
+  getFindBarPreloadPath,
+  getFindBarWebPreferences,
   getWebPreferences,
   getCommonWindowOptions,
   getTitleBarStyle,

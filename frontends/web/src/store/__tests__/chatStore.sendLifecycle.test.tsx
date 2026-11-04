@@ -28,7 +28,7 @@ import {
   StreamingState,
   WorkflowState,
 } from "../../gen/reliant/v1/chat_pb";
-import type { QueuedAgentMessageView } from "../../api/chat-grpc";
+import type { QueuedAgentMessageView } from "../../hooks/chat-model";
 import type { ChatUpdate } from "../../types/streaming";
 
 const CHAT = "chat-send-lifecycle";
@@ -40,22 +40,6 @@ const { sendMessageMock, startMock, listQueuedMock } = vi.hoisted(() => ({
   startMock: vi.fn(),
   listQueuedMock: vi.fn(),
 }));
-
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>("../../api/client");
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, sendMessage: sendMessageMock, start: startMock },
-    },
-  };
-});
-
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
-  return { ...actual, chatGrpc: { ...actual.chatGrpc, listQueuedAgentMessages: listQueuedMock } };
-});
 
 // Retry without waiting out the real poll.
 vi.mock("../../lib/daemon-wait", async (importOriginal) => ({
@@ -78,6 +62,27 @@ import { queryClient } from "../../lib/query-client";
 import { initEventBus } from "../../lib/events";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { clearAttempts } from "../../lib/pendingSends";
+import { setTransport } from "@/lib/connect";
+import { chatServiceKeys } from "../../hooks/chat-service-hooks_gen";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+import { paramsOf } from "@/test/chatServer";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+// So are the sends: `sendMessageMock(request)` answers SendMessage, and
+// `startMock(request)` the chat StartChat returns.
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      ...emptyChatPullReads(),
+      ...queuedAgentMessagesAnswer(listQueuedMock),
+      "ChatService.SendMessage": (req: unknown) => sendMessageMock(req),
+      "ChatService.StartChat": async (req: unknown) => ({ chat: await startMock(req) }),
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 type Placement = { transcript: string[]; strip: string[] };
 let renders: Placement[] = [];
@@ -126,11 +131,11 @@ function clientIdOf(failedId: string): string {
 }
 
 function sentIds(): string[] {
-  return sendMessageMock.mock.calls.map((call) => call[3]?.client_message_id as string);
+  return sendMessageMock.mock.calls.map((call) => call[0]?.clientMessageId as string);
 }
 
 const daemonConnecting = () =>
-  new ConnectError("unavailable: no daemon connected for user", Code.Internal);
+  new ConnectError("unavailable: no daemon connected for user", Code.Internal, new Headers({ "x-forge-error-reason": "daemon_not_connected" }));
 
 const refused = () =>
   new ConnectError("model \"gpt-0\" is not a known model", Code.InvalidArgument);
@@ -170,7 +175,7 @@ function realUserMessage(id: string, text: string) {
   } as unknown as ChatUpdate;
 }
 
-function homeChat(workflowState = WorkflowState.COMPLETED) {
+function homeChat(workflowState = WorkflowState.STOPPED) {
   queryClient.setQueryData(chatKeys.detail(CHAT), {
     id: CHAT,
     projectId: "p1",
@@ -195,7 +200,7 @@ beforeEach(() => {
     hasMore: false,
     oldestSeq: 0,
   });
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
   useActivityStore.getState().setActivity(CHAT, ChatActivity.IDLE);
   useProjectStore.setState({ currentProject: { id: "p1", name: "p", path: "/p" } } as never);
   homeChat();
@@ -207,7 +212,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
 });
 
 describe("a send that fails for good", () => {
@@ -246,7 +251,7 @@ describe("a send that fails for good", () => {
     await settle();
 
     expect(sendMessageMock).toHaveBeenCalledTimes(2);
-    expect(sendMessageMock.mock.calls[1][1]).toBe(TEXT);
+    expect(sendMessageMock.mock.calls[1][0].messages[0]?.content).toBe(TEXT);
     // The same send, under the same id: the server saved it once already if
     // the failure was a lost response, and recognizes the repeat by this id.
     // A new id here saves the message twice.
@@ -276,8 +281,8 @@ describe("a send that fails for good", () => {
     });
     await settle();
 
-    expect(sendMessageMock.mock.calls[0][3].workflow_params).toEqual(first);
-    expect(sendMessageMock.mock.calls[1][3].workflow_params).toEqual(now);
+    expect(paramsOf(sendMessageMock.mock.calls[0][0].workflowParams)).toEqual(first);
+    expect(paramsOf(sendMessageMock.mock.calls[1][0].workflowParams)).toEqual(now);
   });
 
   it("is retried with the first attempt's params when the chat has none stored", async () => {
@@ -298,7 +303,7 @@ describe("a send that fails for good", () => {
     });
     await settle();
 
-    expect(sendMessageMock.mock.calls[1][3].workflow_params).toEqual(first);
+    expect(paramsOf(sendMessageMock.mock.calls[1][0].workflowParams)).toEqual(first);
   });
 
   it("is sent again under the same id however many times it fails", async () => {
@@ -390,7 +395,7 @@ describe("a send that fails for good", () => {
     // StartChat carries the id too, and the retry's is the failed attempt's:
     // that is what makes a start that committed and lost its response a
     // replay instead of a second chat.
-    const startIds = startMock.mock.calls.map((call) => call[0].client_message_id);
+    const startIds = startMock.mock.calls.map((call) => call[0].clientMessageId);
     expect(startIds[0]).toBe(clientIdOf(failed!));
     expect(startIds[1]).toBe(clientIdOf(failed!));
   });
@@ -419,7 +424,7 @@ describe("the first message of a new chat", () => {
   const startOnce = () =>
     useChatStore.getState().startChat("w1", TEXT, undefined, undefined, "builtin://agent");
   const startedChat = { id: "new-chat", projectId: "p1", workflowId: "new-chat" };
-  const startedIds = () => startMock.mock.calls.map((call) => call[0].client_message_id);
+  const startedIds = () => startMock.mock.calls.map((call) => call[0].clientMessageId);
 
   it("is sent again under the same id after a failed start, so a start that committed is a replay", async () => {
     startMock
@@ -512,7 +517,7 @@ describe("a send to a run waiting on its machine", () => {
 
     // A mailbox read that lands before the server's row exists keeps it.
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ["queuedAgentMessages"] });
+      await queryClient.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
     });
     await settle();
     expect(latest().strip).toEqual([clientMessageId]);
@@ -529,7 +534,7 @@ describe("a send to a run waiting on its machine", () => {
     await act(async () => {
       answer({ ...saved(clientMessageId), queued: true });
       await sent;
-      await queryClient.invalidateQueries({ queryKey: ["queuedAgentMessages"] });
+      await queryClient.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
     });
     await settle();
 
