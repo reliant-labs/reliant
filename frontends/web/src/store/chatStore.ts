@@ -2177,6 +2177,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         reachedStart,
       });
 
+      // The page's own errors: the snapshot carries only the errors of its
+      // window, so an older error arrives with the history it belongs to and
+      // renders at its place in the timeline. Merged by id, like live ones.
+      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      if (pageErrors.length > 0) {
+        set((s) => ({
+          errorEvents: {
+            ...s.errorEvents,
+            [chatId]: applyErrorUpdates(s.errorEvents[chatId] || [], pageErrors, false),
+          },
+        }));
+      }
+
       return !reachedStart;
     } catch (error) {
       logger.error("[ChatStore] Failed to load older messages:", error);

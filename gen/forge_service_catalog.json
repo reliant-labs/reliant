@@ -5355,6 +5355,12 @@
               "Name": "oldest_seq",
               "ProtoType": "int64",
               "IsOptional": false
+            },
+            {
+              "Name": "errors",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatErrorUpdate"
             }
           ],
           "ListQueuedAgentMessagesRequest": [
@@ -6295,6 +6301,24 @@
               "type_name": "reliant.v1.ChatOrigin"
             }
           ],
+          "reliant.v1.ChatErrorUpdate": [
+            {
+              "name": "entity_id",
+              "kind": "string"
+            },
+            {
+              "name": "sequence_number",
+              "kind": "int64"
+            },
+            {
+              "name": "data_json",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ChatPlan": [
             {
               "name": "id",
@@ -6847,6 +6871,12 @@
             {
               "name": "oldest_seq",
               "kind": "int64"
+            },
+            {
+              "name": "errors",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatErrorUpdate",
+              "repeated": true
             }
           ],
           "reliant.v1.ListQueuedAgentMessagesRequest": [
@@ -7864,6 +7894,7 @@
           "reliant.v1.CancelQueuedAgentMessageRequest": "reliant/v1/chat.proto",
           "reliant.v1.CancelQueuedAgentMessageResponse": "reliant/v1/chat.proto",
           "reliant.v1.Chat": "reliant/v1/chat.proto",
+          "reliant.v1.ChatErrorUpdate": "reliant/v1/chat.proto",
           "reliant.v1.ChatPlan": "reliant/v1/chat.proto",
           "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
           "reliant.v1.ChatUpdate": "reliant/v1/chat.proto",
