@@ -3008,28 +3008,20 @@ func (a *CallLLMActivity) handleThinkingDelta(ctx context.Context, chatID string
 	}
 
 	// Start a new thinking block if needed
-	thinkingPos := state.blockStates.GetThinkingBlockPosition()
 	if len(state.thinkingParts) == 0 {
 		state.thinkingParts = append(state.thinkingParts, "")
 		// Track thinking block position properly
-		thinkingPos = state.blockStates.StartThinkingBlock()
-		// Dual-write: Write thinking_block_start delta to chat_updates
-		a.writeStreamingDelta(ctx, chatID, "thinking_block_start", map[string]interface{}{
-			"block_index": thinkingPos,
-			"block_type":  "thinking",
-			"thread":      thread,
-		}, state)
+		state.blockStates.StartThinkingBlock()
 	}
 
-	// Append to thinking content
+	// Append to thinking content. It reaches the client with the persisted
+	// message, never as a live delta: no client renders thinking while it
+	// streams (the web store discards thinking deltas on arrival), and
+	// publishing them made them most of every chat's delta stream. In prod
+	// they were 82% of the deltas a chat open replays from the 5-minute
+	// deltas buffer: 1,443 of 1,752 frames sent to a phone opening one
+	// active chat, before a single one could be shown.
 	state.thinkingParts[0] += event.Thinking
-
-	// Dual-write: Write thinking_block_delta to chat_updates
-	a.writeStreamingDelta(ctx, chatID, "thinking_block_delta", map[string]interface{}{
-		"block_index": thinkingPos,
-		"delta":       event.Thinking,
-		"thread":      thread,
-	}, state)
 }
 
 // handleToolUseStart handles the start of a tool use block
