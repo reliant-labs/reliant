@@ -22,4 +22,27 @@
 --
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed; the regression test pins the plan on an empty fixture, only prod
+-- shows the planner's choice under real statistics and traffic):
+--
+--   1. The build finished and is usable (indisvalid = true, not left INVALID):
+--        reliant forge db query prod --confirm-env prod --reason "verify idx_tool_calls_chat_spawn" \
+--          "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.idx_tool_calls_chat_spawn'::regclass"
+--   2. The planner adopts it: EXPLAIN (ANALYZE, BUFFERS) the query above for
+--      the chat with the most spawns (the 270-spawn chat of the baseline)
+--      through the same `forge db query`; expect an Index Only Scan using
+--      idx_tool_calls_chat_spawn, no Sort, no "Rows Removed by Filter" on
+--      tool_calls, and workflows read through workflows_pkey.
+--   3. It is used under traffic: idx_scan of idx_tool_calls_chat_spawn in
+--      pg_stat_user_indexes grows across a day of chat opens.
+--   4. The latency moved: over 72h after the deploy,
+--        reliant forge obs query prod --since 72h --sql "SELECT quantile(0.5)(Duration)/1e6 AS p50_ms,
+--          quantile(0.95)(Duration)/1e6 AS p95_ms, max(Duration)/1e6 AS max_ms FROM otel_traces
+--          WHERE SpanName = 'chat_snapshot.spawn_tool_calls'
+--          AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}"
+--      against the baseline above (p50 110ms, p95 807ms, max 2.7s); expect
+--      p95 in single-digit ms. If step 2 shows the old plan or step 4 no
+--      improvement, ANALYZE tool_calls and re-check before any follow-up.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tool_calls_chat_spawn ON public.tool_calls USING btree (chat_id, requested_at) INCLUDE (child_workflow_id, id) WHERE child_workflow_id IS NOT NULL;
