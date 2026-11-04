@@ -164,11 +164,32 @@ func TestFirstTokenGuard(t *testing.T) {
 		defer g.stop()
 		liveness := llm.NewStreamLiveness()
 		assert.False(t, g.due(liveness), "not yet fired")
-		time.Sleep(60 * time.Millisecond)
+		<-g.C()
 		assert.True(t, g.due(liveness), "a fired deadline with no keepalive cuts the stream")
 
 		g.observe(llm.DriverEvent{Type: llm.EventContentDelta, Content: "hi"})
 		assert.False(t, g.due(liveness), "a disarmed guard is never due")
+	})
+
+	t.Run("an output token after the deadline is late, not timely", func(t *testing.T) {
+		t.Parallel()
+		g := newFirstTokenGuard(10 * time.Millisecond)
+		defer g.stop()
+		liveness := llm.NewStreamLiveness()
+		// The timer has fired, as it has when a token is still queued
+		// behind it in the event channel.
+		<-g.C()
+		assert.True(t, g.admit(llm.DriverEvent{Type: llm.EventContentDelta, Content: "late"}, liveness),
+			"a token queued behind a fired deadline must cut the stream")
+	})
+
+	t.Run("an output token before the deadline disarms it", func(t *testing.T) {
+		t.Parallel()
+		g := newFirstTokenGuard(time.Minute)
+		defer g.stop()
+		liveness := llm.NewStreamLiveness()
+		assert.False(t, g.admit(llm.DriverEvent{Type: llm.EventContentDelta, Content: "hi"}, liveness))
+		assert.Nil(t, g.C())
 	})
 
 	t.Run("fires when nothing arrives", func(t *testing.T) {

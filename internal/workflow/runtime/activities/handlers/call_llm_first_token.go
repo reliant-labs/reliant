@@ -18,11 +18,16 @@ import (
 type firstTokenGuard struct {
 	timeout time.Duration
 	timer   *time.Timer
-	armed   bool
+	// deadline is when timer fires. due compares against it rather than
+	// polling timer.C, so the answer does not depend on whether the timer
+	// goroutine has delivered yet.
+	deadline time.Time
+	armed    bool
 }
 
 func newFirstTokenGuard(timeout time.Duration) *firstTokenGuard {
-	return &firstTokenGuard{timeout: timeout, timer: time.NewTimer(timeout), armed: true}
+	deadline := time.Now().Add(timeout)
+	return &firstTokenGuard{timeout: timeout, timer: time.NewTimer(timeout), deadline: deadline, armed: true}
 }
 
 // C is the channel to select on; nil (never ready) once disarmed.
@@ -73,17 +78,27 @@ func (g *firstTokenGuard) expired(liveness *llm.StreamLiveness) bool {
 	return true
 }
 
-// due reports, without blocking, whether the deadline has fired and the
-// stream must be cut (as expired decides). CallLLM calls it after every event,
+// admit is called for every event CallLLM receives, before it processes the
+// event, and reports whether the stream must be cut instead. The deadline is
+// checked first: an output token queued behind a fired deadline is late, and
+// observing it first would disarm the guard and accept it as timely.
+func (g *firstTokenGuard) admit(event llm.DriverEvent, liveness *llm.StreamLiveness) bool {
+	if g.due(liveness) {
+		return true
+	}
+	g.observe(event)
+	return false
+}
+
+// due reports, without blocking, whether the deadline has passed and the
+// stream must be cut (as expired decides). admit calls it for every event,
 // because a channel that is always ready would otherwise starve the select
 // case on C.
 func (g *firstTokenGuard) due(liveness *llm.StreamLiveness) bool {
-	select {
-	case <-g.C():
-		return g.expired(liveness)
-	default:
+	if !g.armed || time.Now().Before(g.deadline) {
 		return false
 	}
+	return g.expired(liveness)
 }
 
 func (g *firstTokenGuard) rearm(d time.Duration) {
@@ -93,6 +108,7 @@ func (g *firstTokenGuard) rearm(d time.Duration) {
 		default:
 		}
 	}
+	g.deadline = time.Now().Add(d)
 	g.timer.Reset(d)
 }
 

@@ -1776,11 +1776,11 @@ streamLoop:
 		case event, ok := <-eventChan:
 			if ok {
 				resetProgressTimer()
-				firstToken.observe(event)
 				// A continuously ready channel never reaches the select
 				// below, so the deadline is checked here too: framing
-				// events alone must not hold the stream open past it.
-				if firstToken.due(liveness) {
+				// events alone must not hold the stream open past it, and
+				// an output token queued after it does not disarm it.
+				if firstToken.admit(event, liveness) {
 					cutForFirstToken()
 					break streamLoop
 				}
@@ -1883,10 +1883,10 @@ streamLoop:
 			// as in the drain above, or a healthy stream whose events all
 			// arrive through this branch would trip the progress timer.
 			resetProgressTimer()
-			firstToken.observe(event)
 			// Select picks at random among ready cases, so a busy event
-			// channel can keep winning over a fired first-token timer.
-			if firstToken.due(liveness) {
+			// channel can keep winning over a fired first-token timer; an
+			// output token that arrives after it fired is late.
+			if firstToken.admit(event, liveness) {
 				cutForFirstToken()
 				break streamLoop
 			}
