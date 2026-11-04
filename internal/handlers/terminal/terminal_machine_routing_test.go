@@ -310,20 +310,16 @@ func (r *slowCreateRouter) SendDaemonCommandToDaemon(ctx context.Context, userID
 // within the bound, not a spinner.
 func TestTerminalWS_CreateIsBoundedAndNamesTheMachineThatDidNotAnswer(t *testing.T) {
 	freshTerminalMachineStateLog(t)
-	previous := terminalCreateTimeout
-	terminalCreateTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { terminalCreateTimeout = previous })
-
 	router := &slowCreateRouter{}
-	srv := httptest.NewServer(TerminalWSHandler(router, staticTokenValidator{userID: terminalTestUserID}, WithTerminalCheckouts(routingCheckouts())))
+	srv := httptest.NewServer(TerminalWSHandler(router, staticTokenValidator{userID: terminalTestUserID},
+		WithTerminalCheckouts(routingCheckouts()), withTerminalCreateTimeout(50*time.Millisecond)))
 	t.Cleanup(srv.Close)
 	query := url.Values{"token": {"test"}, "worktreeId": {"wt-main"}, "projectId": {"p1"}, "chatId": {"chat-on-c"}, "workingDir": {routingProjectPath}}
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/?"+query.Encode(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	// The read deadline is only a hang guard: the reply arrives once the 50ms
-	// create bound fires, so the assertions below need no clock of their own.
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// No read deadline of its own: the reply arrives once the handler's 50ms
+	// create bound fires, and the test binary's timeout is the hang guard.
 	var reply map[string]any
 	require.NoError(t, conn.ReadJSON(&reply))
 

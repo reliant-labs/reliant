@@ -110,9 +110,9 @@ const (
 
 // terminalCreateTimeout bounds terminal.create, the part of the browser's
 // wait for "init" or "error" that depends on the machine. The browser's own
-// bound (TERMINAL_CONNECT_TIMEOUT_MS in Terminal.tsx) sits above it. A var so
-// tests can shrink it.
-var terminalCreateTimeout = 30 * time.Second
+// bound (TERMINAL_CONNECT_TIMEOUT_MS in Terminal.tsx) sits above it. Tests
+// shrink it per handler with withTerminalCreateTimeout.
+const terminalCreateTimeout = 30 * time.Second
 
 // terminalCheckouts is what TerminalWSHandler reads to tell a working
 // directory that may still appear from one that will not. The api-server
@@ -134,7 +134,14 @@ type terminalCheckouts interface {
 type TerminalWSOption func(*terminalWSConfig)
 
 type terminalWSConfig struct {
-	checkouts terminalCheckouts
+	checkouts     terminalCheckouts
+	createTimeout time.Duration
+}
+
+// withTerminalCreateTimeout replaces terminalCreateTimeout for one handler,
+// so a test can shrink the bound without touching any other handler.
+func withTerminalCreateTimeout(d time.Duration) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.createTimeout = d }
 }
 
 // WithTerminalCheckouts lets the handler open the terminal on the machine that
@@ -361,7 +368,7 @@ type wsResizeMessage struct {
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter.
 func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator, opts ...TerminalWSOption) http.HandlerFunc {
-	var cfg terminalWSConfig
+	cfg := terminalWSConfig{createTimeout: terminalCreateTimeout}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -465,8 +472,8 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		// Bounded as a whole: a saturated machine must end in an answer the
 		// browser can show, not a spinner (see terminalCreateTimeout).
-		createCtx, cancelCreate := context.WithTimeout(ctx, terminalCreateTimeout)
-		respBytes, err := sendToMachine(createCtx, router, userID, daemonID, "terminal.create", payload, int32(terminalCreateTimeout/time.Millisecond))
+		createCtx, cancelCreate := context.WithTimeout(ctx, cfg.createTimeout)
+		respBytes, err := sendToMachine(createCtx, router, userID, daemonID, "terminal.create", payload, int32(cfg.createTimeout/time.Millisecond))
 		cancelCreate()
 		if err != nil {
 			if terminal.IsWorkingDirUnavailable(err) {
