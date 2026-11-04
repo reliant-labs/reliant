@@ -122,13 +122,19 @@ func (l *mcpLoads) ensure(ctx context.Context, machine, projectPath string, run 
 		go func() {
 			defer cancel()
 			result, err := run(bg)
-			if err != nil {
+			switch {
+			case err != nil && mcpMachineAbsent(err):
+				// Not connected costs no wait, and the cooldown would
+				// outlive its reconnect: the next turn asks again.
+				l.recordAnswer(machine)
+				result = failedMCPLoad(projectPath, err)
+			case err != nil:
 				l.recordFailure(machine)
 				logging.WarnContext(bg, "MCP load did not reach the machine; leaving it alone for the cooldown",
 					"projectPath", projectPath, "cooldown", mcpLoadFailureCooldown,
 					"elapsed", l.now().Sub(load.started), "error", err)
 				result = failedMCPLoad(projectPath, err)
-			} else {
+			default:
 				l.recordAnswer(machine)
 			}
 			l.mu.Lock()
@@ -150,6 +156,18 @@ func (l *mcpLoads) ensure(ctx context.Context, machine, projectPath string, run 
 	case <-ctx.Done():
 		return failedMCPLoad(projectPath, ctx.Err())
 	}
+}
+
+// mcpMachineAbsent reports whether err proves the command never reached a
+// connected machine: none resolved, it is starting, asleep or reconnecting, or
+// NATS had no responder. Such a failure is immediate, so it is not what the
+// cooldown guards against (a connected machine that holds every caller for the
+// command's full timeout), and a cooldown recorded for it would keep the
+// machine's MCP servers away for up to mcpLoadFailureCooldown after it came
+// back.
+func mcpMachineAbsent(err error) bool {
+	return errors.Is(err, ErrNotDispatched) || IsDaemonPending(err) || IsNoDaemon(err) ||
+		IsDaemonReconnecting(err) || errors.Is(err, errDaemonNotConnected)
 }
 
 func failedMCPLoad(projectPath string, err error) *mcp.ProjectServerLoadResult {

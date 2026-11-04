@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
@@ -120,4 +121,35 @@ func TestDaemonMCPRuntime_FailedMachineIsLeftAloneForTheCooldown(t *testing.T) {
 	require.ErrorIs(t, err, errMCPMachineUnresponsive)
 	assert.Equal(t, 1, router.sent("mcp.ensure_loaded"))
 	assert.Zero(t, router.sent("mcp.server_status"))
+}
+
+// A machine that is not connected fails at once and is not put in the
+// cooldown: the first turn after it reconnects gets its MCP servers, instead of
+// running without them for up to two minutes.
+func TestDaemonMCPRuntime_AbsentMachineGetsItsServersOnReconnect(t *testing.T) {
+	for name, absent := range map[string]error{
+		"suspended":     machineState("machine m1 is suspended", ErrDaemonSuspended),
+		"not connected": connect.NewError(connect.CodeUnavailable, errDaemonNotConnected),
+		"reconnecting":  notDispatched(ErrDaemonReconnecting, "m1"),
+		"no machine":    noMachine("none registered"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			shortMCPLoadBudget(t, time.Second)
+			router := &slowMCPRouter{failure: absent}
+			binder := NewDaemonMCPContextBinder(router)
+			turn := func() *rctx.ToolContext { return bindSlowMCPRuntime(t, binder) }
+
+			result := turn().MCP.EnsureProjectServersLoaded(turn().Context, "/proj")
+			require.True(t, result.HasFailures())
+			require.NotErrorIs(t, result.Errors["/proj"], errMCPMachineUnresponsive)
+
+			router.failure = nil // the machine is back
+			result = turn().MCP.EnsureProjectServersLoaded(turn().Context, "/proj")
+			assert.False(t, result.HasFailures(), "the reconnected machine was left in the cooldown: %v", result.Errors)
+			assert.Equal(t, []string{"docs"}, result.LoadedServers)
+			_, err := turn().MCP.ListProjectTools("/proj")
+			require.NoError(t, err)
+			assert.Equal(t, 2, router.sent("mcp.ensure_loaded"))
+		})
+	}
 }

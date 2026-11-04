@@ -321,7 +321,7 @@ func (w *Watcher) auditGoWorkDirs(ctx context.Context, trigger string, a workDir
 	case a.Removed == 0:
 		verdict = verdictNothingDead
 	}
-	w.appendTrimAudit(ctx, w.reaperPolicyPath(w.reaperConfig()), trimAuditRecord{
+	w.appendTrimAudit(ctx, w.reaperPolicyPath(w.reaperConfig()), trimAuditRecord{ //nolint:gosec // G101: Pass names the trim pass, not a credential
 		At: w.now(), Pass: "go_work_dirs", Trigger: trigger, Verdict: verdict, Ran: true, RecordFresh: true, WorkDirs: &a,
 	})
 }
