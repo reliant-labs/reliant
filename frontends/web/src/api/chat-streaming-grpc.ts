@@ -565,6 +565,9 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
       case "snapshot": {
         const snapshot = event.event.value;
         const receivedAtMs = performance.now();
+        // Read before any callback runs, so whatever they settle cannot
+        // change how this snapshot is reported.
+        const initialOpen = this.chatSyncPendingFor === chatId;
         if (tabSwitchProfiler.isEnabled()) {
           tabSwitchProfiler.mark("grpc-stream-sync-snapshot-received", {
             chatId,
@@ -609,13 +612,16 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
           compactionThreshold: Number(snapshot.compactionThreshold),
         });
 
+        // Sampled after onChatSnapshot returns: it commits the snapshot to
+        // the chat store synchronously, so the store holds it by now, and
+        // the paint measurement starts from this point.
         reportChatSnapshotApplied({
           chatId,
           traceId: this.connectionTraceId,
           openedAtMs: this.connectionOpenedAtMs,
           receivedAtMs,
           appliedAtMs: performance.now(),
-          initialOpen: this.chatSyncPendingFor === chatId,
+          initialOpen,
           messages: snapshot.messages.length,
           otherUpdates: snapshot.otherUpdates.length,
         });
