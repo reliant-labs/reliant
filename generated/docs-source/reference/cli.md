@@ -4124,8 +4124,16 @@ which is exactly when a binding must survive. It also lets you bind a domain
 before its target has ever been deployed, which is the natural order for a
 first launch.
 
---redirect-to serves a 308 to another hostname instead of proxying. The
-apex/www pair is the case for it.
+--redirect-to answers with a permanent redirect to another hostname,
+preserving the path and query, instead of proxying: a 301 for GET and HEAD,
+a 308 for anything else. The apex/www pair is the case for it; point the www
+name at the same records as its apex.
+
+--hsts-include-subdomains adds includeSubDomains to the hostname's
+Strict-Transport-Security, so a browser that has seen it uses HTTPS for every
+name under it. Off by default, and leave it off until every subdomain serves
+HTTPS: a browser remembers the header for a year. A rebind without the flag
+turns it off.
 
 BINDABLE IN ANY STATE, SERVES ONLY WHEN LIVE. Bind before DNS has propagated
 and it starts serving by itself once verification and the certificate
@@ -4141,7 +4149,8 @@ reliant forge domain bind <hostname> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
-| `--redirect-to` | `string` | - | Serve a 308 to this hostname instead of a target |
+| `--hsts-include-subdomains` | `bool` | - | Add includeSubDomains to the hostname's HSTS (every subdomain must serve HTTPS) |
+| `--redirect-to` | `string` | - | Redirect permanently to this hostname instead of serving a target |
 | `--target` | `string` | - | Workload or frontend name in --env to serve |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
@@ -4386,6 +4395,7 @@ reliant forge env build <environment> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base-promotion` | `string` | - | Compose from this exact desired promotion (or resolve current once before builds) |
 | `--bundle-envs` | `string` | - | Write a bundle for each of these envs (comma-separated) from this one build, instead of only for the env argument. A release is env-agnostic and a bundle is not, so this is how one cut produces the manifests for every env it will ship to — each pinned to the same release and the same source. Each env is rendered; each bundle is pushed beside its images for a control-plane env, or written to this machine's ledger otherwise. |
+| `--config-check` | `string` | `auto` | Before a push, boot every workload of the project image with this env's config in the binary's config-check mode (no network) and refuse the push if one would not start: auto (gates from v1.0.16, warns below that pin), gate, warn, off |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
