@@ -208,6 +208,30 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 	}
 }
 
+// A PDF a tool returned (view, read_attachment) is a document attachment and
+// becomes a DOCUMENT block, which the history reload folds back into the tool
+// result for the model. Skipping it, as non-image attachments once were, left
+// the model with the text "PDF file: … (3 pages)" and no pages.
+func TestToolResultAttachments_DocumentBecomesADocumentBlock(t *testing.T) {
+	t.Parallel()
+
+	repo := newFakeBlockRepo()
+	repo.attachments["att-pdf-1"] = &db.Attachment{
+		ID: "att-pdf-1", Filename: "report.pdf", MimeType: "application/pdf",
+		AttachmentType: string(attachment.TypeDocument), Content: []byte("%PDF-1.4"),
+	}
+	svc := NewService(repo)
+	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
+		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "view", Content: "PDF file: report.pdf", AttachmentIDs: []string{"att-pdf-1"}}},
+	}, time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC))
+	require.NoError(t, err)
+	require.Len(t, blocks, 2)
+	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT, blocks[1].BlockType)
+	require.NotNil(t, blocks[1].Content)
+	assert.Equal(t, "att-pdf-1", *blocks[1].Content)
+	assert.Equal(t, 1, blocks[1].Position)
+}
+
 // A generated video rides in an IMAGE-typed block (the UI splits by MIME), and
 // must not be skipped the way a non-image attachment is.
 func TestToolResultAttachments_VideoBecomesABlock(t *testing.T) {

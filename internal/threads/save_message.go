@@ -787,8 +787,17 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 	// A generated video rides in an IMAGE-typed block like an image does: the
 	// block type only says "render this attachment", and the UI splits the two
 	// by MIME. Replay to the model drops it (see messageconv.ContentBlockToPart).
-	if att.AttachmentType != string(attachment.TypeImage) && att.AttachmentType != string(attachment.TypeVideo) {
-		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment is not an image or video; skipping its content block",
+	// A document (a PDF the view or read_attachment tool returned) gets a
+	// DOCUMENT block, which the history reload folds back into its tool result
+	// (messageconv.foldToolResultMedia).
+	var blockType reliantv1.ContentBlockType
+	switch att.AttachmentType {
+	case string(attachment.TypeImage), string(attachment.TypeVideo):
+		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
+	case string(attachment.TypeDocument):
+		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
+	default:
+		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment is not an image, video or document; skipping its content block",
 			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
@@ -798,7 +807,7 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 		ID:        uuid.New().String(),
 		MessageID: messageID,
 		Position:  position,
-		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE,
+		BlockType: blockType,
 		Content:   &attachmentRef,
 		Version:   ptr.Of(1),
 		CreatedAt: timestamp,
