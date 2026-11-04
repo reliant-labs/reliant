@@ -422,14 +422,27 @@ var ErrStreamFirstTokenTimeout = errors.New("llm stream first-token timeout: no 
 // stream that, AT the deadline, is mid-block on keepalives (a redacted
 // thinking block, reported on the request's StreamLiveness): CallLLM holds it
 // only while those keepalives keep arriving within StreamIdleTimeout of each
-// other, accepts its output only while held, and leaves the open block to the
-// transport's mid-block deadline. The full rule is on CallLLM's
-// firstTokenGuard.
+// other, accepts its output only while held, and never past
+// StreamFirstTokenHoldCap. The full rule is on CallLLM's firstTokenGuard.
 const DefaultStreamFirstTokenTimeout = 3 * time.Minute
+
+// DefaultStreamFirstTokenHoldCap bounds the keepalive hold: however steadily
+// keepalives arrive, a request with no output token this long after it was
+// sent is cut. Owner decision 2026-11-04 (reliant #2145): Claude's redacted
+// thinking was measured at 230-301s of keepalives before its first token, so
+// ten minutes holds every such call seen with room to spare, while a provider
+// pinging an empty stream is cut long before its own 15-minute reset.
+const DefaultStreamFirstTokenHoldCap = 10 * time.Minute
 
 // StreamFirstTokenTimeout returns the configured first-token timeout.
 func StreamFirstTokenTimeout() time.Duration {
 	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.FirstToken }, DefaultStreamFirstTokenTimeout)
+}
+
+// StreamFirstTokenHoldCap returns the keepalive hold's overall cap, never
+// shorter than the first-token timeout itself.
+func StreamFirstTokenHoldCap() time.Duration {
+	return max(DefaultStreamFirstTokenHoldCap, StreamFirstTokenTimeout())
 }
 
 // StreamContentStallTimeout returns the configured content-stall timeout.

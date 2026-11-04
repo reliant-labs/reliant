@@ -37,41 +37,57 @@ type keepaliveReport interface {
 //     spent 230-301s there, see llm.DefaultStreamMidBlockStallTimeout), and
 //     cutting it would only repeat the same thinking on every retry.
 //   - A held stream stays held only while keepalives keep coming with no gap
-//     of a hold window or more; the first such gap cuts it. How long a block
-//     may stay open on keepalives is the transport's mid-block deadline, not
-//     this guard's.
+//     of a hold window or more; the first such gap cuts it.
+//   - The hold has an overall cap (llm.StreamFirstTokenHoldCap, 10 minutes)
+//     counted from when the request was sent: at the cap the stream is cut
+//     however fresh its keepalives are. The cap restarts with the deadline on
+//     a RetryWait.
 //   - Output after the deadline is accepted only while the stream is held:
 //     it is the output of the block the hold was for. On a stream that is not
-//     held it is late, and cuts the stream even if it was already queued.
+//     held, or past the cap, it is late, and cuts the stream even if it was
+//     already queued.
+//
+// Why a hold rather than a hard deadline (owner decision 2026-11-04, reliant
+// #2145): Claude's redacted thinking sends 230-301s of keepalives before its
+// first token, so a hard three-minute cut would kill real calls and repeat
+// the same thinking on every retry.
 //
 // The hold window is the byte-idle timeout: the idle reader already cuts a
 // stream silent that long, so a live block cannot go longer between pings.
 type firstTokenGuard struct {
 	timeout time.Duration
 	hold    time.Duration
+	holdCap time.Duration
 	now     func() time.Time
 	// timer wakes CallLLM's select at the deadline, and while held at the
-	// moment the last keepalive goes stale. Every decision is made against
-	// deadline and now, never against whether the timer has delivered yet.
+	// moment the last keepalive goes stale or the cap is reached. Every
+	// decision is made against deadline, capAt and now, never against
+	// whether the timer has delivered yet.
 	timer    *time.Timer
 	deadline time.Time
+	// capAt ends any hold: holdCap after the request was sent.
+	capAt time.Time
 	// held is set when the deadline passed with a fresh keepalive.
 	held  bool
 	armed bool
 }
 
 // newFirstTokenGuard arms a guard for a request sent now. A nil now is
-// time.Now.
-func newFirstTokenGuard(timeout, hold time.Duration, now func() time.Time) *firstTokenGuard {
+// time.Now. A holdCap shorter than timeout is raised to it.
+func newFirstTokenGuard(timeout, hold, holdCap time.Duration, now func() time.Time) *firstTokenGuard {
 	if now == nil {
 		now = time.Now
 	}
+	holdCap = max(holdCap, timeout)
+	sent := now()
 	return &firstTokenGuard{
 		timeout:  timeout,
 		hold:     hold,
+		holdCap:  holdCap,
 		now:      now,
 		timer:    time.NewTimer(timeout),
-		deadline: now().Add(timeout),
+		deadline: sent.Add(timeout),
+		capAt:    sent.Add(holdCap),
 		armed:    true,
 	}
 }
@@ -119,12 +135,19 @@ func (g *firstTokenGuard) cut(keepalives keepaliveReport) bool {
 	if now.Before(g.deadline) {
 		return false
 	}
+	if !now.Before(g.capAt) {
+		return true
+	}
 	last, ok := keepalives.Last()
 	if !ok || now.Sub(last) >= g.hold {
 		return true
 	}
 	g.held = true
-	g.wakeAt(last.Add(g.hold))
+	wake := last.Add(g.hold)
+	if g.capAt.Before(wake) {
+		wake = g.capAt
+	}
+	g.wakeAt(wake)
 	return false
 }
 
@@ -142,7 +165,9 @@ func (g *firstTokenGuard) observe(event llm.DriverEvent) {
 		if event.Retry != nil {
 			delay = event.Retry.Delay
 		}
-		g.deadline = g.now().Add(delay + g.timeout)
+		sent := g.now().Add(delay)
+		g.deadline = sent.Add(g.timeout)
+		g.capAt = sent.Add(g.holdCap)
 		g.held = false
 		g.wakeAt(g.deadline)
 	case llm.EventContentDelta, llm.EventThinkingDelta,

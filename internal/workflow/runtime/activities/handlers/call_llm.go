@@ -1754,7 +1754,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// so a stream trickling non-output events never trips it. This one bounds
 	// the total time to the first output token (see ErrStreamFirstTokenTimeout
 	// and firstTokenGuard for the one keepalive exception).
-	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout(), llm.StreamIdleTimeout(), a.firstTokenNow)
+	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout(), llm.StreamIdleTimeout(), llm.StreamFirstTokenHoldCap(), a.firstTokenNow)
 	defer firstToken.stop()
 	cutForFirstToken := func() {
 		activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",

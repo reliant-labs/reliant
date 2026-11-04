@@ -164,6 +164,8 @@ var (
 const (
 	testFirstToken = time.Minute
 	testHold       = 10 * time.Second
+	// Past the 20 hold windows the longest hold test spans.
+	testHoldCap = 10 * time.Minute
 )
 
 // newTestGuard returns a guard on a fake clock with no keepalive yet. Its
@@ -171,9 +173,70 @@ const (
 func newTestGuard(t *testing.T) (*firstTokenGuard, *guardClock, *fakeKeepalives) {
 	t.Helper()
 	clock := &guardClock{t: time.Unix(1_000_000, 0)}
-	g := newFirstTokenGuard(testFirstToken, testHold, clock.Now)
+	g := newFirstTokenGuard(testFirstToken, testHold, testHoldCap, clock.Now)
 	t.Cleanup(g.stop)
 	return g, clock, &fakeKeepalives{}
+}
+
+// TestFirstTokenGuard_OwnerRule pins the owner's rule (2026-11-04, reliant
+// #2145) at the production defaults: cut after 3 minutes with no output token
+// and no keepalive; while keepalives arrive, hold up to a 10-minute cap.
+func TestFirstTokenGuard_OwnerRule(t *testing.T) {
+	t.Parallel()
+	const keepaliveEvery = 15 * time.Second
+	newProdGuard := func(t *testing.T) (*firstTokenGuard, *guardClock, *fakeKeepalives) {
+		clock := &guardClock{t: time.Unix(1_000_000, 0)}
+		g := newFirstTokenGuard(llm.DefaultStreamFirstTokenTimeout, llm.DefaultStreamIdleTimeout, llm.DefaultStreamFirstTokenHoldCap, clock.Now)
+		t.Cleanup(g.stop)
+		return g, clock, &fakeKeepalives{}
+	}
+
+	t.Run("keepalives only for 5 minutes, then a token: not cut", func(t *testing.T) {
+		t.Parallel()
+		g, clock, keepalives := newProdGuard(t)
+		for range int(5 * time.Minute / keepaliveEvery) {
+			clock.advance(keepaliveEvery)
+			keepalives.touch(clock.Now())
+			require.False(t, g.fire(keepalives), "cut a stream that is still sending keepalives")
+		}
+		require.False(t, g.admit(output, keepalives), "the first token after 5 minutes of keepalives must be accepted")
+		assert.Nil(t, g.C(), "the token disarms the guard")
+	})
+
+	t.Run("no events for 3 minutes: cut", func(t *testing.T) {
+		t.Parallel()
+		g, clock, keepalives := newProdGuard(t)
+		clock.advance(3*time.Minute - time.Nanosecond)
+		require.False(t, g.fire(keepalives))
+		clock.advance(time.Nanosecond)
+		assert.True(t, g.fire(keepalives))
+	})
+
+	t.Run("keepalives past the 10-minute cap: cut", func(t *testing.T) {
+		t.Parallel()
+		g, clock, keepalives := newProdGuard(t)
+		for range int(10*time.Minute/keepaliveEvery) - 1 {
+			clock.advance(keepaliveEvery)
+			keepalives.touch(clock.Now())
+			require.False(t, g.fire(keepalives))
+		}
+		clock.advance(keepaliveEvery)
+		keepalives.touch(clock.Now())
+		assert.True(t, g.fire(keepalives), "keepalives must not hold a stream past the cap")
+	})
+
+	t.Run("a provider retry backoff restarts the cap", func(t *testing.T) {
+		t.Parallel()
+		g, clock, keepalives := newProdGuard(t)
+		clock.advance(9 * time.Minute)
+		keepalives.touch(clock.Now())
+		require.False(t, g.admit(llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Delay: 30 * time.Second}}, keepalives))
+		for range int((30*time.Second + 9*time.Minute) / keepaliveEvery) {
+			clock.advance(keepaliveEvery)
+			keepalives.touch(clock.Now())
+			require.False(t, g.fire(keepalives), "the retried request is charged the first request's wait")
+		}
+	})
 }
 
 func TestFirstTokenGuard(t *testing.T) {
@@ -298,9 +361,23 @@ func TestFirstTokenGuard(t *testing.T) {
 		assert.True(t, g.fire(keepalives))
 	})
 
+	t.Run("the hold is capped however fresh the keepalives", func(t *testing.T) {
+		t.Parallel()
+		g, clock, keepalives := newTestGuard(t)
+		for clock.t.Before(time.Unix(1_000_000, 0).Add(testHoldCap - time.Second)) {
+			clock.advance(time.Second)
+			keepalives.touch(clock.Now())
+			require.False(t, g.admit(framing, keepalives), "held while keepalives continue, inside the cap")
+		}
+		clock.advance(time.Second)
+		keepalives.touch(clock.Now())
+		assert.True(t, g.fire(keepalives), "past the cap a fresh keepalive must not hold the stream")
+		assert.True(t, g.admit(output, keepalives), "output past the cap is late")
+	})
+
 	t.Run("its timer fires at the deadline", func(t *testing.T) {
 		t.Parallel()
-		g := newFirstTokenGuard(10*time.Millisecond, testHold, nil)
+		g := newFirstTokenGuard(10*time.Millisecond, testHold, testHoldCap, nil)
 		defer g.stop()
 		select {
 		case <-g.C():
