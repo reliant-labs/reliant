@@ -112,7 +112,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           filtered={filtered}
           topic="sessions"
           onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })}
-          onClearFilters={() => navigate({ errors: undefined, replay: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
+          onClearFilters={() => navigate({ errors: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
         />
       ) : (
         <Card padding="none" data-testid="obs-sessions-list" aria-busy={sessions.isFetching || undefined}>

@@ -168,7 +168,6 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       assignee: undefined,
       session: undefined,
       t: undefined,
-      replay: undefined,
       user: undefined,
       cursor: undefined,
     });

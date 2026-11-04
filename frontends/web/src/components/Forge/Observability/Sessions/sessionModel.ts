@@ -236,7 +236,6 @@ export function sessionLink(sessionId: string, atMs?: number): ObsSearch {
 export const LEAVE_SESSIONS: ObsSearch = {
   session: undefined,
   t: undefined,
-  replay: undefined,
   user: undefined,
   cursor: undefined,
   errors: undefined,
