@@ -14,6 +14,7 @@ import { create, fromJsonString } from "@bufbuild/protobuf";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
+import { reportChatSnapshotApplied, traceIdFromTraceresponse } from "../lib/chatOpenTelemetry";
 import { ReconnectingStream } from "./stream-connection";
 import { convertUserUpdateData } from "./streaming-grpc";
 import {
@@ -271,6 +272,11 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
   // stream, the chat's user-level updates that scope filters out.
   private projectId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
+  // The current connection's open time (performance.now) and the server
+  // trace it is part of, from its traceresponse header: what the snapshot's
+  // "applied" event reports (lib/chatOpenTelemetry.ts).
+  private connectionOpenedAtMs = 0;
+  private connectionTraceId = "";
   // The chat whose initial sync has not arrived yet for the current
   // subscription, or null. Set when a subscription to a chat begins; cleared
   // by settleChatSync when the server sends caught_up for it. Survives
@@ -520,7 +526,14 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
       chatId: this.chatId?.slice(0, 8),
       chatSinceSeq: Number(this.lastChatSequence),
     });
-    return client.streamChatUpdates(request, { signal });
+    this.connectionOpenedAtMs = performance.now();
+    this.connectionTraceId = "";
+    return client.streamChatUpdates(request, {
+      signal,
+      onHeader: (headers) => {
+        this.connectionTraceId = traceIdFromTraceresponse(headers.get("traceresponse"));
+      },
+    });
   }
 
   protected describe(): Record<string, unknown> {
@@ -551,6 +564,7 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
     switch (event.event.case) {
       case "snapshot": {
         const snapshot = event.event.value;
+        const receivedAtMs = performance.now();
         if (tabSwitchProfiler.isEnabled()) {
           tabSwitchProfiler.mark("grpc-stream-sync-snapshot-received", {
             chatId,
@@ -593,6 +607,17 @@ export class ChatStreamingService extends ReconnectingStream<ChatStreamEvent> {
         this.callbacks.onChatContextUsage?.(chatId, {
           threadTokenCount: Number(snapshot.threadTokenCount),
           compactionThreshold: Number(snapshot.compactionThreshold),
+        });
+
+        reportChatSnapshotApplied({
+          chatId,
+          traceId: this.connectionTraceId,
+          openedAtMs: this.connectionOpenedAtMs,
+          receivedAtMs,
+          appliedAtMs: performance.now(),
+          initialOpen: this.chatSyncPendingFor === chatId,
+          messages: snapshot.messages.length,
+          otherUpdates: snapshot.otherUpdates.length,
         });
         break;
       }
