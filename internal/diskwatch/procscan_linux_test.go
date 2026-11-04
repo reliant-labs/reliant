@@ -39,13 +39,14 @@ func TestCreatorKinds(t *testing.T) {
 	}
 }
 
-// helperEnv makes this test binary, re-executed by startHelper, block until
-// it is killed instead of running tests: a live process whose argv, working
-// directory and environment a test chooses.
+// helperEnv makes this test binary, re-executed by startHelper, report that
+// it is running and then block until it is killed instead of running tests: a
+// live process whose argv, working directory and environment a test chooses.
 const helperEnv = "DISKWATCH_TEST_HELPER"
 
 func TestMain(m *testing.M) {
 	if os.Getenv(helperEnv) == "1" {
+		_, _ = os.Stdout.Write([]byte{'\n'}) // exec is done: /proc shows this image
 		_, _ = io.Copy(io.Discard, os.Stdin) // until killed
 		os.Exit(0)
 	}
@@ -54,7 +55,8 @@ func TestMain(m *testing.M) {
 
 // startHelper starts this test binary as a blocked process with the given
 // argv[0], working directory and extra environment, and returns its pid once
-// /proc shows its exec done (its environment carries helperEnv).
+// the helper has said it runs: its exec has replaced the forked image, so
+// /proc shows the argv, working directory and environment chosen here.
 func startHelper(t *testing.T, argv0, dir string, env ...string) int {
 	t.Helper()
 	self, err := os.Executable()
@@ -65,33 +67,45 @@ func startHelper(t *testing.T, argv0, dir string, env ...string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := &exec.Cmd{Path: self, Args: []string{argv0}, Dir: dir, Stdin: stdin,
+	ready, stdout, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := &exec.Cmd{Path: self, Args: []string{argv0}, Dir: dir, Stdin: stdin, Stdout: stdout,
 		Env: append(append(os.Environ(), helperEnv+"=1"), env...)}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	_ = stdin.Close()
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait(); _ = w.Close() })
+	_ = stdout.Close()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait(); _ = w.Close(); _ = ready.Close() })
+	if _, err := ready.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("the helper process exited before it ran: %v", err)
+	}
 	return cmd.Process.Pid
 }
 
-// waitScan scans /proc until found accepts the snapshot: a child is visible
-// once Start returns, but its exec may not have replaced the forked image yet.
-func waitScan(t *testing.T, found func(procSnapshot) bool) procSnapshot {
+// scanOnly scans the real /proc entry of pid alone, through a root that holds
+// just that entry. What the rest of the host runs is not this test's subject,
+// and the full scan rightly fails on a host where the kernel withholds one of
+// this user's processes from it (a GitHub runner's `systemd --user`: reading
+// its cwd is EACCES), which would fail the test for a process it never made.
+func scanOnly(t *testing.T, pid int) procSnapshot {
 	t.Helper()
-	for i := 0; ; i++ {
-		s, err := scanProcesses()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if found(s) {
-			return s
-		}
-		if i == 1000 {
-			t.Fatalf("the helper process never appeared as expected: %+v", s)
-		}
-		runtime.Gosched()
+	root := t.TempDir()
+	p := strconv.Itoa(pid)
+	if err := os.Symlink(filepath.Join(procRoot, p), filepath.Join(root, p)); err != nil {
+		t.Fatal(err)
 	}
+	boot, err := bootTime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := scanProcRoot(root, os.Geteuid(), boot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 // A real process whose command line names the active toolchain's linker is
@@ -99,26 +113,28 @@ func waitScan(t *testing.T, found func(procSnapshot) bool) procSnapshot {
 func TestScanProcesses_FindsLinkerByCommandLine(t *testing.T) {
 	link := filepath.Join(build.Default.GOROOT, "pkg", "tool", runtime.GOOS+"_"+runtime.GOARCH, "link")
 	pid := startHelper(t, link, "")
-	waitScan(t, func(s procSnapshot) bool {
-		for _, p := range s.linkStarts {
-			if p.PID == pid {
-				return true
-			}
-		}
-		return false
-	})
+	s := scanOnly(t, pid)
+	if len(s.linkStarts) != 1 || s.linkStarts[0].PID != pid {
+		t.Fatalf("linkStarts = %v, want the helper, pid %d", s.linkStarts, pid)
+	}
 }
 
 // The real scan sees a process's working directory and environment.
 func TestScanProcesses_SeesCwdAndEnvironment(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "go-build777")
+	before := time.Now()
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	startHelper(t, "helper", dir, "GOTMPDIR=/somewhere/gotmp-777-1")
-	waitScan(t, func(s procSnapshot) bool { return s.names["go-build777"] && s.names["gotmp-777-1"] })
-	if b := fileBirth(dir); b.IsZero() || b.After(time.Now()) || b.Before(time.Now().Add(-time.Hour)) {
-		t.Errorf("fileBirth = %v, want the directory's creation, just now", b)
+	after := time.Now()
+	// The filesystem stamps a birth from the kernel's coarse clock, up to a
+	// tick behind time.Now: creatorSlack covers that, as it does in the proof.
+	if b := fileBirth(dir); b.Before(before.Add(-creatorSlack)) || b.After(after.Add(creatorSlack)) {
+		t.Errorf("fileBirth = %v, want the directory's creation, between %v and %v", b, before, after)
+	}
+	s := scanOnly(t, startHelper(t, "helper", dir, "GOTMPDIR=/somewhere/gotmp-777-1"))
+	if !s.names["go-build777"] || !s.names["gotmp-777-1"] {
+		t.Fatalf("names = %v, want go-build777 (cwd) and gotmp-777-1 (environment)", s.names)
 	}
 }
 
