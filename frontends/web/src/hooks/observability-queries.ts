@@ -769,8 +769,14 @@ export interface IssueFilters {
 
 export const ISSUE_PAGE_SIZE = 50;
 
-/** A user id no one has (useIssues asks for its issues to learn whether user_id is applied). */
-export const ISSUE_USER_FILTER_PROBE = "reliant-console-filter-probe";
+/**
+ * A user id no one has, which useIssues asks for to learn whether user_id is
+ * applied. User ids are the application's own strings, so no fixed value is
+ * reserved: each read draws a fresh random one (122 bits) nobody can hold.
+ */
+export function issueUserFilterProbe(): string {
+  return `reliant-console-filter-probe-${crypto.randomUUID()}`;
+}
 
 /**
  * One root for every issue read, so a triage (which can move an issue between
@@ -848,7 +854,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // answers with exactly the unfiltered rows the real read would get.
       const [result, probe] = await Promise.all([
         api.listIssues(request, { signal }),
-        filters.userId && !pageParam ? api.listIssues({ ...request, userId: ISSUE_USER_FILTER_PROBE, pageSize: 1 }, { signal }) : null,
+        filters.userId && !pageParam ? api.listIssues({ ...request, userId: issueUserFilterProbe(), pageSize: 1 }, { signal }) : null,
       ]);
       if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
       return { ...result, window };

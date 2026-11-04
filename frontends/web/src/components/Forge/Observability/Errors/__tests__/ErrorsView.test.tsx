@@ -88,6 +88,22 @@ describe("the issue list", () => {
     expect(screen.queryAllByTestId(/^obs-issue-iss-/)).toHaveLength(0);
   });
 
+  it.each(["u_8812", "reliant-console-filter-probe"])("filters by user %s on a supporting control plane whose events name any user id", async (user) => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    // User ids are the application's strings: here the users hit every issue,
+    // including one whose id is the console's old fixed probe value.
+    const users = ["u_8812", "reliant-console-filter-probe"];
+    api.listIssues = async (req, options) => {
+      const page = await listIssues({ ...req, userId: undefined }, options);
+      return !req.userId || users.includes(req.userId) ? page : { ...page, issues: [], nextPageToken: "" };
+    };
+    renderPanel(api, { view: "errors", user }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    expect(rowIds()).toEqual(["iss-orders-deadline", "iss-checkout-total", "iss-worker-conns"]);
+    expect(screen.queryByTestId("obs-error-filter-unsupported")).toBeNull();
+  });
+
   it("pages through next_page_token", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn();
