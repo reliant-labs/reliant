@@ -315,18 +315,18 @@ func TestTerminalWS_CreateIsBoundedAndNamesTheMachineThatDidNotAnswer(t *testing
 	t.Cleanup(func() { terminalCreateTimeout = previous })
 
 	router := &slowCreateRouter{}
-	start := time.Now()
 	srv := httptest.NewServer(TerminalWSHandler(router, staticTokenValidator{userID: terminalTestUserID}, WithTerminalCheckouts(routingCheckouts())))
 	t.Cleanup(srv.Close)
 	query := url.Values{"token": {"test"}, "worktreeId": {"wt-main"}, "projectId": {"p1"}, "chatId": {"chat-on-c"}, "workingDir": {routingProjectPath}}
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/?"+query.Encode(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
+	// The read deadline is only a hang guard: the reply arrives once the 50ms
+	// create bound fires, so the assertions below need no clock of their own.
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var reply map[string]any
 	require.NoError(t, conn.ReadJSON(&reply))
 
-	require.Less(t, time.Since(start), 5*time.Second)
 	require.Equal(t, "error", reply["type"])
 	require.Equal(t, wsErrorMachineNotAnswering, reply["code"])
 	require.Equal(t, "daemon-c", reply["daemon_id"])
