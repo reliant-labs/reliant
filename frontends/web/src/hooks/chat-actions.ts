@@ -24,6 +24,7 @@ import {
   ChatState,
   MessageRole,
   ProviderPolicySchema,
+  type ChatErrorUpdate,
   type ChatSelection,
   type ProviderPolicy_OnLimit,
 } from "../gen/reliant/v1/chat_pb";
@@ -372,7 +373,14 @@ export async function sendMessage(
 export async function listMessages(
   chatId: string,
   options?: { recent?: number; beforeSeq?: number; threadId?: string },
-): Promise<{ messages: Message[]; total: number; hasMore: boolean; oldestSeq: number }> {
+): Promise<{
+  messages: Message[];
+  total: number;
+  hasMore: boolean;
+  oldestSeq: number;
+  /** A scroll-back page's errors (see ListMessagesResponse.errors). */
+  errors: ChatErrorUpdate[];
+}> {
   const response = await client.listMessages({
     chatId,
     recent: options?.recent,
@@ -384,6 +392,7 @@ export async function listMessages(
     total: response.total,
     hasMore: response.hasMore,
     oldestSeq: Number(response.oldestSeq),
+    errors: response.errors,
   };
 }
 
