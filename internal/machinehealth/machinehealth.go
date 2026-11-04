@@ -100,13 +100,13 @@ func New(cfg Config) *Sampler {
 	return &Sampler{cfg: cfg}
 }
 
-// Run logs a sample every Interval until ctx ends. Where the machine has no
-// /proc/loadavg (macOS, Windows) it returns at once: there is nothing to say.
+// Run logs a sample every Interval until ctx ends. The caller decides whether
+// this machine samples at all (daemonruntime starts it on managed machines
+// only). Every source is read afresh each tick, so one that is missing or
+// unreadable (a container /proc without loadavg, a transient read error) drops
+// only its own attributes from that sample, never the sampler.
 func (s *Sampler) Run(ctx context.Context) {
 	if s == nil || s.cfg.Log == nil {
-		return
-	}
-	if _, err := os.Stat(filepath.Join(s.cfg.ProcRoot, "loadavg")); err != nil {
 		return
 	}
 	t := time.NewTicker(s.cfg.Interval)
@@ -121,10 +121,13 @@ func (s *Sampler) Run(ctx context.Context) {
 	}
 }
 
-// LogOnce takes one sample and logs it.
+// LogOnce takes one sample and logs it. A health line with no reading at all
+// is not logged: it would say nothing.
 func (s *Sampler) LogOnce() {
 	health, volumes := s.Sample()
-	s.cfg.Log(HealthMessage, health...)
+	if len(health) > 0 {
+		s.cfg.Log(HealthMessage, health...)
+	}
 	for _, v := range volumes {
 		s.cfg.Log(VolumeMessage, v...)
 	}
@@ -137,7 +140,7 @@ func (s *Sampler) Sample() (health []any, volumes [][]any) {
 	root := s.cfg.ProcRoot
 	if l1, l5, l15, ok := readLoadavg(filepath.Join(root, "loadavg")); ok {
 		health = append(health, "load1", round3(l1), "load5", round3(l5), "load15", round3(l15))
-		if s.cfg.CPUs > 0 {
+		if validReading(s.cfg.CPUs) && s.cfg.CPUs > 0 {
 			health = append(health, "cpus", round3(s.cfg.CPUs),
 				"load1_per_cpu", round3(l1/s.cfg.CPUs), "load5_per_cpu", round3(l5/s.cfg.CPUs))
 		}
@@ -207,7 +210,7 @@ func readLoadavg(path string) (l1, l5, l15 float64, ok bool) {
 	var vals [3]float64
 	for i := range vals {
 		v, err := strconv.ParseFloat(f[i], 64)
-		if err != nil {
+		if err != nil || !validReading(v) {
 			return 0, 0, 0, false
 		}
 		vals[i] = v
@@ -238,7 +241,7 @@ func readPressure(path string) (some, full float64, ok bool) {
 				continue
 			}
 			x, err := strconv.ParseFloat(v, 64)
-			if err != nil {
+			if err != nil || !validReading(x) {
 				break
 			}
 			switch f[0] {
@@ -296,6 +299,13 @@ func isForgeInstall(argv [][]byte) bool {
 		}
 	}
 	return false
+}
+
+// validReading reports whether a parsed load or pressure value is one the
+// source can produce: finite and not negative. ParseFloat accepts "NaN" and
+// "Inf", which a malformed /proc file must not turn into an attribute.
+func validReading(f float64) bool {
+	return !math.IsNaN(f) && !math.IsInf(f, 0) && f >= 0
 }
 
 func round3(f float64) float64 { return math.Round(f*1000) / 1000 }

@@ -2,6 +2,7 @@
 package machinehealth
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,15 +93,49 @@ func TestLogOnceWritesTheHealthLineThenOnePerVolume(t *testing.T) {
 	assert.Equal(t, []string{HealthMessage, VolumeMessage}, msgs)
 }
 
-func TestRunReturnsAtOnceWithoutLoadavg(t *testing.T) {
-	logged := false
-	s := New(Config{ProcRoot: t.TempDir(), Interval: time.Millisecond, Log: func(string, ...any) { logged = true }})
-	done := make(chan struct{})
-	go func() { s.Run(t.Context()); close(done) }()
+func TestRunKeepsSamplingWithoutLoadavg(t *testing.T) {
+	logged := make(chan map[string]any, 1)
+	s := New(Config{
+		ProcRoot: t.TempDir(), // a container /proc with no loadavg and no PSI
+		Interval: time.Millisecond,
+		Slots:    func() (Slots, bool) { return Slots{Capacity: 2, Held: 1}, true },
+		Log: func(msg string, args ...any) {
+			if msg != HealthMessage {
+				return
+			}
+			select {
+			case logged <- attrs(args):
+			default:
+			}
+		},
+	})
+	go s.Run(t.Context())
 	select {
-	case <-done:
+	case h := <-logged:
+		assert.NotContains(t, h, "load1")
+		assert.Equal(t, 2, h["heavy_slots"])
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return on a machine without /proc/loadavg")
+		t.Fatal("Run logged nothing on a machine without /proc/loadavg")
 	}
-	assert.False(t, logged)
+}
+
+func TestLogOnceSkipsAnEmptyHealthLine(t *testing.T) {
+	var msgs []string
+	s := New(Config{ProcRoot: filepath.Join(t.TempDir(), "absent"), Log: func(msg string, _ ...any) { msgs = append(msgs, msg) }})
+	s.LogOnce()
+	assert.Empty(t, msgs)
+}
+
+func TestNonFiniteAndNegativeReadingsAreLeftOut(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "loadavg"), "NaN 1.00 1.00 1/1 1\n")
+	writeFile(t, filepath.Join(root, "pressure", "cpu"), "some avg10=0 avg60=Inf avg300=0 total=0\n")
+	writeFile(t, filepath.Join(root, "pressure", "memory"), "some avg10=0 avg60=-1.5 avg300=0 total=0\n")
+	writeFile(t, filepath.Join(root, "pressure", "io"), "some avg10=0 avg60=1.5 avg300=0 total=0\nfull avg10=0 avg60=+Inf avg300=0 total=0\n")
+	h := attrs(func() []any { health, _ := New(Config{ProcRoot: root, CPUs: math.NaN()}).Sample(); return health }())
+	assert.NotContains(t, h, "load1")
+	assert.NotContains(t, h, "psi_cpu_some_avg60")
+	assert.NotContains(t, h, "psi_memory_some_avg60")
+	assert.Equal(t, 1.5, h["psi_io_some_avg60"])
+	assert.NotContains(t, h, "psi_io_full_avg60")
 }
