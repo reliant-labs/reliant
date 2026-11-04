@@ -121,6 +121,7 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
 	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, purpose, calls)
 	      VALUES ($1,$2,'anthropic','m','byok','chat',1)`, userID, now)
+	exec(`INSERT INTO user_app_sessions (user_id, first_session_at) VALUES ($1,$2)`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -133,6 +134,7 @@ var ownershipCount = map[string]string{
 	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
 	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
 	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
+	"user_app_sessions":       `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
 	"claude_auth_tokens":      `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
 	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
 	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
@@ -188,7 +190,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	// worktrees) — the ones a user_id-only purge would silently orphan.
 	for _, table := range append([]string{
 		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
-		"messages", "threads", "tool_calls",
+		"user_app_sessions", "messages", "threads", "tool_calls",
 		"provider_account_limits", "thread_provider_accounts",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
@@ -324,7 +326,7 @@ func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
 	}
 
 	for _, table := range append([]string{
-		"projects", "chats", "worktrees", "settings",
+		"projects", "chats", "worktrees", "settings", "user_app_sessions",
 		"messages", "threads", "tool_calls",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, victim); n != 0 {
