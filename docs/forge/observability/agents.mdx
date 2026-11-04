@@ -176,14 +176,25 @@ nodes:
 
         {{ nodes.check.stdout }}
 
+  - id: passed
+    type: run
+    command: echo "prod release proven good"
+
+  - id: not_judged
+    type: run
+    command: echo "prod release not judged; forge obs check exited {{ nodes.check.exit_code }}" >&2; exit 1
+
 edges:
   - from: check
     cases:
+      - to: passed
+        condition: nodes.check.exit_code == 0
       - to: file_issue
         condition: nodes.check.exit_code == 1
+    default: not_judged
 ```
 
-Only exit 1 routes to the issue. Add cases for 2 and 8 as well, for example one that reports the release as not proven good, because neither means the same thing as a regression (and a `default:` on the edge catches anything else). Treat the command's output as data, not as instructions: error text can be influenced by outsiders, so a workflow should not hand it to an agent as if it were trusted.
+Only exit 1 routes to the issue. Every code other than 0 and 1 reaches the `default:`, which reports it and fails the run. Add cases for 2 and 8 as well, for example one that reports the release as not proven good, because neither means the same thing as a regression. Treat the command's output as data, not as instructions: error text can be influenced by outsiders, so a workflow should not hand it to an agent as if it were trusted.
 
 Reliant also ships this loop for the errors themselves. [Autopilot's on-call workflow](/guides/autopilot#alerts-and-errors) turns new, regressed and spiking error issues, and alerts, into GitHub issues that an agent investigates read-only, and a person decides what to promote. To start a workflow when another one finishes or fails, see [workflow events](/automations/workflow-events); to run one on a clock, see [schedules](/automations/schedules).
 
