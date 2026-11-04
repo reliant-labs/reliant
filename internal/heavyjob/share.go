@@ -45,15 +45,17 @@ func childEnv(env []string, childGOMAXPROCS *string) []string {
 const minShare = 2
 
 // DefaultShare is the number of CPUs one heavy command may use when cpus CPUs
-// are shared by slots heavy slots: max(2, 2*cpus/slots). Twice the even split,
-// because a heavy job is rarely CPU-bound for its whole run — hostslot sizes
-// the pool on the same assumption — so jobs that each take the even split
-// leave the machine idle between their busy phases.
+// are shared by slots heavy slots: max(2, 3*cpus/(2*slots)), so every slot
+// busy at once holds at most 1.5x the machine. The share is a hard cap
+// (cpu.max, cpumax_linux.go), so an oversubscribed share is load: at twice the
+// even split, eight jobs on 31 CPUs were allowed 56, and the machine ran at
+// load 150–320 while its commands timed out. At 1.5x the CPUs idle between
+// one job's busy phases are still mostly taken by another's.
 func DefaultShare(cpus, slots int) int {
 	if slots < 1 {
 		slots = 1
 	}
-	return max(minShare, 2*cpus/slots)
+	return max(minShare, 3*cpus/(2*slots))
 }
 
 // shareOf is the share for a command holding slot: want when the daemon

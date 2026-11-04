@@ -69,7 +69,23 @@ func New(cfg Config) *Limiter {
 	}
 	l.commands = commands
 	sweep(l.commands, true)
+	if err := enableCPU(l.root, l.commands); err != nil {
+		logging.Warn("proctree: cannot enable the cpu controller for command cgroups; heavy commands are bounded by GOMAXPROCS alone", "error", err)
+	}
 	return l
+}
+
+// enableCPU enables the cpu controller for the command cgroups, so a heavy
+// command's slot wrapper can cap its own cgroup at its CPU share (cpu.max,
+// internal/heavyjob). Both levels hold no process of their own (the daemon is
+// in root's self/), as cgroup v2 requires.
+func enableCPU(root, commands string) error {
+	for _, dir := range []string{root, commands} {
+		if err := os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+cpu"), 0); err != nil {
+			return fmt.Errorf("%s: %w", dir, err)
+		}
+	}
+	return nil
 }
 
 // threadsMax is kernel.threads-max, the machine's limit on threads of every
