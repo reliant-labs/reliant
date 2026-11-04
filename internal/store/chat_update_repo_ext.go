@@ -242,11 +242,12 @@ func LatestWorkflowNodeUpdates(ctx context.Context, db orm.Context, chatID, work
 	return scanChatUpdates(ctx, db, WorkflowNodeHeadsSQL, chatID, workflowID)
 }
 
-// ErrorUpdatesInRangeSQL is ErrorUpdatesInRange's statement: the newest
-// update of each error raised in [$2, the creation of thread $3's first
-// message at or after seq $4), oldest first. $2 NULL leaves the range open
-// below; no such message leaves it open above. Read through
-// idx_chat_updates_errors_created.
+// ErrorUpdatesInRangeSQL is ErrorUpdatesInRange's statement: for each error
+// with an update in [$2, the creation of thread $3's first message at or after
+// seq $4), its newest update INSIDE that range, oldest first. $2 NULL leaves
+// the range open below; no such message leaves it open above. The range is
+// applied before DISTINCT ON on purpose: it is what keeps the read on
+// idx_chat_updates_errors_created. Read through that index.
 const ErrorUpdatesInRangeSQL = `
 		SELECT id, chat_id, sequence_number, update_type, entity_id, data, created_at FROM (
 			SELECT DISTINCT ON (entity_id) id, chat_id, sequence_number, update_type, entity_id, data, created_at
@@ -265,7 +266,11 @@ const ErrorUpdatesInRangeSQL = `
 // ErrorUpdatesInRange is the errors a page of history holds: raised at or
 // after from (nil: since the chat began) and before the first message of
 // thread at or after beforeSeq, the message the client already shows next.
-// One update per error, its newest (a retry series shares one id).
+// One update per error (a retry series shares one id): its newest attempt
+// inside the range, which is not its newest overall when the series runs on
+// past the range's upper edge. That later attempt lies in history the client
+// already holds, so a caller merging these must never let one replace a newer
+// attempt it has (the web client's applyHistoricalErrors).
 func ErrorUpdatesInRange(ctx context.Context, db orm.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]core.ChatUpdate, error) {
 	return scanChatUpdates(ctx, db, ErrorUpdatesInRangeSQL, chatID, from, thread, beforeSeq)
 }
