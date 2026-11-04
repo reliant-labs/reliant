@@ -340,7 +340,6 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             service={search.service}
             text={search.q ?? ""}
             hasError={!!search.errors}
-            hasReplay={!!search.replay}
             user={search.user ?? ""}
             cursor={search.cursor ?? []}
             sessionId={search.session}

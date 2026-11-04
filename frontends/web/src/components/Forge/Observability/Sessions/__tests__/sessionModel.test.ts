@@ -12,7 +12,6 @@ import {
   isLive,
   isReplayKnownUnplayable,
   LIVE_WINDOW_MS,
-  noReplayReason,
   noteReplayUnplayable,
   recordingStart,
   resetReplayVerdictsForTests,
@@ -114,11 +113,6 @@ describe("replay playability", () => {
     expect(recordingStart([ev(3), ev(2)])).toBe(1);
     expect(recordingStart([ev(3)])).toBe(-1);
     expect(recordingStart([])).toBe(-1);
-  });
-
-  it("says why a session has no replay when its summary can tell", () => {
-    expect(noReplayReason({ pageViews: 0, interactions: 0 })).toMatch(/no page view or interaction, only background requests/);
-    expect(noReplayReason({ pageViews: 3, interactions: 0 })).toMatch(/replay sample, replay is off/);
   });
 
   it("remembers, for the tab, a replay the player found unplayable", () => {

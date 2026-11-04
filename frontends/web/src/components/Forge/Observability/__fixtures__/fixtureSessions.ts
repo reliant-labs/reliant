@@ -61,7 +61,8 @@ export function fixtureSessionSummaries(t0: number): SessionSummary[] {
       pageViews: 1 + (n % 7),
       interactions: 3 + ((n * 5) % 31),
       errors: n % 4 === 0 ? 1 + (n % 3) : 0,
-      hasReplay: n % 3 !== 1,
+      // A few are unrecorded: the list never shows them, a trace or an error still links one by id.
+      hasReplay: n % 9 !== 1,
       ...over,
     };
   };
