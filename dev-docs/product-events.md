@@ -102,7 +102,7 @@ is the only join from a landing visitor (`Client = 'landing'`) to a user. The
 landing site hands the visitor over as `?rid=<visitor id>&utm_*` on links to the
 app. This app starts telemetry only after sign-in, by which time the router and the
 sign-in have replaced that URL, so `lib/attributionBoot.ts` holds the handoff at
-boot (localStorage `reliant.landing_attribution`, 7 days, taken once;
+boot (localStorage `reliant.landing_attribution`, 7 days, until telemetry starts;
 `lib/landingAttribution.ts`) and `initTelemetry` gives it to the runtime
 (`enableAttribution({search})`), only with analytics consent.
 `lib/__tests__/landingAttributionHandoff.test.ts` pins it through the real runtime.

@@ -5,7 +5,7 @@ import {
   dropLandingAttribution,
   handoffQuery,
   holdLandingAttribution,
-  takeLandingAttribution,
+  readLandingAttribution,
 } from "../landingAttribution";
 
 const LANDING = "?rid=v_landing_123456&utm_source=reddit&utm_campaign=b2&next=%2Fchats&code=secret";
@@ -20,35 +20,39 @@ describe("landing attribution handoff", () => {
     expect(handoffQuery(`?utm_content=${"x".repeat(300)}`)).toBe(`?utm_content=${"x".repeat(128)}`);
   });
 
-  it("survives the sign-in replacing the URL, and is handed over once", () => {
+  it("survives the sign-in replacing the URL, and stays held until dropped", () => {
     holdLandingAttribution(LANDING, 1_000);
     // The OAuth callback's own page load carries no handoff and must not erase it.
     holdLandingAttribution("?code=abc&state=xyz", 2_000);
     expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).not.toContain("secret");
-    expect(takeLandingAttribution(3_000)).toBe("?rid=v_landing_123456&utm_source=reddit&utm_campaign=b2");
-    expect(takeLandingAttribution(3_000)).toBeUndefined();
+    expect(readLandingAttribution(3_000)).toBe("?rid=v_landing_123456&utm_source=reddit&utm_campaign=b2");
+    // Reading does not consume it: a telemetry start that fails retries with it.
+    expect(readLandingAttribution(3_000)).toBe("?rid=v_landing_123456&utm_source=reddit&utm_campaign=b2");
+    dropLandingAttribution();
+    expect(readLandingAttribution(3_000)).toBeUndefined();
   });
 
   it("a later landing visit replaces the held one (last touch, as the runtime does)", () => {
     holdLandingAttribution(LANDING, 1_000);
     holdLandingAttribution("?rid=v_second_visit_99&utm_source=hn", 2_000);
-    expect(takeLandingAttribution(3_000)).toBe("?rid=v_second_visit_99&utm_source=hn");
+    expect(readLandingAttribution(3_000)).toBe("?rid=v_second_visit_99&utm_source=hn");
   });
 
   it("expires after HOLD_MS and ignores a corrupt or future record", () => {
     holdLandingAttribution(LANDING, 0);
-    expect(takeLandingAttribution(HOLD_MS + 1)).toBeUndefined();
+    expect(readLandingAttribution(HOLD_MS + 1)).toBeUndefined();
     expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
 
     localStorage.setItem(LANDING_ATTRIBUTION_KEY, "{not json");
-    expect(takeLandingAttribution(0)).toBeUndefined();
+    expect(readLandingAttribution(0)).toBeUndefined();
     holdLandingAttribution(LANDING, 10_000);
-    expect(takeLandingAttribution(5_000)).toBeUndefined();
+    expect(readLandingAttribution(5_000)).toBeUndefined();
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
   });
 
   it("drop forgets it", () => {
     holdLandingAttribution(LANDING, 1_000);
     dropLandingAttribution();
-    expect(takeLandingAttribution(2_000)).toBeUndefined();
+    expect(readLandingAttribution(2_000)).toBeUndefined();
   });
 });

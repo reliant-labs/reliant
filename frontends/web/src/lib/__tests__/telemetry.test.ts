@@ -407,8 +407,18 @@ describe("buildTelemetryConfig", () => {
 // The landing → app handoff (landingAttribution.ts): held at boot, handed to the
 // runtime when telemetry starts, after the sign-in has replaced the URL it came on.
 describe("initTelemetry: the landing attribution handoff", () => {
-  it("hands the held rid and utm_* to the runtime before it starts", async () => {
-    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", Date.now());
+  // A fixed clock: the handoff's age is checked against HOLD_MS.
+  const NOW = Date.UTC(2026, 10, 4, 12, 0, 0);
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("hands the held rid and utm_* to the runtime before it starts, and drops it once it runs", async () => {
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
     window.history.replaceState(null, "", "/auth/callback?code=abc");
     await initTelemetry();
     expect(runtime.enableAttribution).toHaveBeenCalledWith({ search: "?rid=v_landing_123456&utm_source=reddit" });
@@ -418,9 +428,25 @@ describe("initTelemetry: the landing attribution handoff", () => {
     expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
   });
 
+  it("keeps it held when the runtime does not start", async () => {
+    runtime.initBrowserTelemetry.mockResolvedValueOnce(false);
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
+    await expect(initTelemetry()).resolves.toBe(false);
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).not.toBeNull();
+  });
+
+  it("keeps it held when the runtime's start rejects", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    runtime.initBrowserTelemetry.mockRejectedValueOnce(new Error("sdk load failed"));
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
+    await expect(initTelemetry()).resolves.toBe(false);
+    warn.mockRestore();
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).not.toBeNull();
+  });
+
   it("drops it without analytics consent", async () => {
     privacy.state.analyticsEnabled = false;
-    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", Date.now());
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
     await initTelemetry();
     expect(runtime.enableAttribution).not.toHaveBeenCalled();
     expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();

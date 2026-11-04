@@ -17,10 +17,11 @@
  * visitor (growth baseline, 2026-11-04).
  *
  * So the boot (attributionBoot.ts, imported before the router) HOLDS the handoff,
- * and initTelemetry TAKES it and gives it to the runtime (enableAttribution's
+ * and initTelemetry READS it and gives it to the runtime (enableAttribution's
  * `search`). Held in localStorage, not sessionStorage: a magic link opens a new tab.
  * Only what the runtime itself would capture is kept (a well-formed `rid` and the
- * `utm_*` values, bounded), for at most HOLD_MS, and taken once. Nothing is sent
+ * `utm_*` values, bounded), for at most HOLD_MS, and dropped once telemetry has
+ * started with it (a failed start keeps it for the next attempt). Nothing is sent
  * from here: the runtime still applies the app's own consent when telemetry starts,
  * and telemetry.ts drops the held handoff when analytics consent is off.
  */
@@ -93,29 +94,32 @@ export function holdLandingAttribution(search: string = currentSearch(), now: nu
 
 /**
  * The held handoff as a query string for the runtime, or undefined when none is
- * held or it is older than HOLD_MS. Taking it removes it: it is handed over once.
+ * held or it is older than HOLD_MS. Reading it leaves it held: telemetry drops it
+ * (dropLandingAttribution) only once the runtime has started with it, so a failed
+ * start leaves it for the next attempt. An expired or corrupt record is removed.
  */
-export function takeLandingAttribution(now: number = Date.now()): string | undefined {
-  const s = storage();
+export function readLandingAttribution(now: number = Date.now()): string | undefined {
   let raw: string | null = null;
   try {
-    raw = s?.getItem(LANDING_ATTRIBUTION_KEY) ?? null;
-    s?.removeItem(LANDING_ATTRIBUTION_KEY);
+    raw = storage()?.getItem(LANDING_ATTRIBUTION_KEY) ?? null;
   } catch {
     return undefined;
   }
   if (!raw) return undefined;
+  let q: string | undefined;
   try {
     const held = JSON.parse(raw) as Partial<Held>;
-    if (typeof held.search !== "string" || typeof held.at !== "number") return undefined;
-    if (now - held.at > HOLD_MS || now < held.at) return undefined;
-    return handoffQuery(held.search) || undefined;
+    if (typeof held.search === "string" && typeof held.at === "number" && now - held.at <= HOLD_MS && now >= held.at) {
+      q = handoffQuery(held.search) || undefined;
+    }
   } catch {
-    return undefined;
+    q = undefined;
   }
+  if (!q) dropLandingAttribution();
+  return q;
 }
 
-/** Forget a held handoff (analytics consent is off). */
+/** Forget a held handoff: the runtime started with it, or analytics consent is off. */
 export function dropLandingAttribution(): void {
   try {
     storage()?.removeItem(LANDING_ATTRIBUTION_KEY);

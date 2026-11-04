@@ -33,7 +33,7 @@ beforeEach(() => vi.clearAllMocks());
 
 import { setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import { enableAttribution, initBrowserTelemetry } from "@reliantlabs/forge-web-runtime/telemetry";
-import { holdLandingAttribution, takeLandingAttribution } from "../landingAttribution";
+import { holdLandingAttribution, readLandingAttribution } from "../landingAttribution";
 
 describe("landing → app attribution handoff (real runtime)", () => {
   it("identifies the signed-in user as the landing visitor after the sign-in replaced the URL", async () => {
@@ -45,7 +45,7 @@ describe("landing → app attribution handoff (real runtime)", () => {
     //    callback is a page load of its own. The address bar loses the handoff.
     window.history.replaceState(null, "", "/auth/callback?code=abc");
     // 3. Telemetry starts after sign-in (telemetry.ts start()).
-    const handoff = takeLandingAttribution();
+    const handoff = readLandingAttribution();
     expect(handoff).toBeDefined();
     enableAttribution({ search: handoff });
     await expect(

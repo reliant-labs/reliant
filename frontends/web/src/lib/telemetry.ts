@@ -27,7 +27,7 @@ import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
-import { takeLandingAttribution } from "./landingAttribution";
+import { dropLandingAttribution, readLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
@@ -256,16 +256,22 @@ async function start(): Promise<boolean> {
   });
 
   // The landing site's rid / utm_* handoff, held since boot: by now the router and
-  // the sign-in have replaced the URL it arrived on (landingAttribution.ts). Taken
-  // either way, so it is never handed over later; handed to the runtime only with
-  // analytics consent, as the landing site gave it only with that consent.
-  const handoff = takeLandingAttribution();
-  if (handoff && privacyConsent().analyticsEnabled) {
-    enableAttribution({ search: handoff });
+  // the sign-in have replaced the URL it arrived on (landingAttribution.ts). Handed
+  // to the runtime only with analytics consent, as the landing site gave it only
+  // with that consent, and dropped without it. It stays held until the runtime is
+  // running, so a failed start leaves it for the next page load's attempt.
+  const handoff = readLandingAttribution();
+  if (handoff) {
+    if (privacyConsent().analyticsEnabled) {
+      enableAttribution({ search: handoff });
+    } else {
+      dropLandingAttribution();
+    }
   }
 
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
+  if (handoff) dropLandingAttribution();
 
   unsubscribeConsent = subscribePrivacyConsent((consent) => {
     if (!consent.crashReportingEnabled) disableTelemetry();
