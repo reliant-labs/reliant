@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { QueryClient } from "@tanstack/react-query";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { Panel } from "@/services/controlPlane/observability/types";
@@ -32,7 +33,7 @@ vi.mock("@monaco-editor/react", () => ({
 
 const starter = starterPanel({ id: "d", title: "D", filters: [], panels: [] });
 
-function renderDrawer(options: { api?: ObservabilityApi; panel?: Panel; envIds?: string[] } = {}) {
+function renderDrawer(options: { api?: ObservabilityApi; panel?: Panel; envIds?: string[]; client?: QueryClient } = {}) {
   const onCall = vi.fn();
   const onSave = vi.fn();
   const api = options.api ?? createFixtureApi({ onCall });
@@ -54,7 +55,8 @@ function renderDrawer(options: { api?: ObservabilityApi; panel?: Panel; envIds?:
       error={null}
       onCancel={vi.fn()}
       onSave={onSave}
-    />
+    />,
+    options.client
   );
   return { onCall, onSave };
 }
@@ -187,6 +189,45 @@ describe("a postgres panel", () => {
     await waitFor(() => expect(screen.getByTestId("statement-run")).toBeEnabled());
     await user.click(screen.getByTestId("statement-run"));
     await waitFor(() => expect(reads()).toHaveLength(2));
+  });
+
+  it("re-reads a statement run again after another, while its answer is still cached", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn();
+    const fixture = createFixtureApi({ onCall });
+    // Each answer is stamped with the read that produced it, so the preview shows which one it draws.
+    let served = 0;
+    const api: ObservabilityApi = {
+      ...fixture,
+      queryDatabasePanel: async (req) => {
+        const result = await fixture.queryDatabasePanel(req);
+        served += 1;
+        return { ...result, rows: result.rows.map((row) => ({ ...row, values: [served] })) };
+      },
+    };
+    // The app's cache keeps an unobserved answer for minutes (the test default drops it at once, which would hide the bug).
+    renderDrawer({ api, client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) });
+    await user.click(kind("Postgres"));
+    await user.click(within(await screen.findByTestId("schema-postgres")).getByRole("button", { name: "Use" }));
+    const reads = () => onCall.mock.calls.filter(([rpc]) => rpc === "QueryDatabasePanel");
+    const editor = await screen.findByLabelText("Postgres statement");
+    const statementA = (editor as HTMLTextAreaElement).value;
+    const runAndWait = async (count: number) => {
+      await user.click(screen.getByTestId("statement-run"));
+      await waitFor(() => expect(reads()).toHaveLength(count));
+      await waitFor(() => expect(screen.getByTestId("statement-run")).toBeEnabled());
+    };
+
+    await runAndWait(1);
+    await user.clear(editor);
+    await user.type(editor, "SELECT 2 AS tables");
+    await runAndWait(2);
+    await user.clear(editor);
+    await user.type(editor, statementA.replace(/[{[]/g, (c) => c + c));
+    expect(editor).toHaveValue(statementA);
+    await runAndWait(3);
+    expect(reads()[2][1]).toMatchObject({ query: { sql: statementA } });
+    expect(await within(screen.getByTestId("panel-drawer-preview")).findByText("3")).toBeInTheDocument();
   });
 
   it("takes comma-separated values and split-by columns as they are typed", async () => {

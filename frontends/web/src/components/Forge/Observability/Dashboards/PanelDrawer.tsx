@@ -30,7 +30,7 @@
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { hashKey } from "@tanstack/react-query";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 
 import { obsKeys, usePanelQuery } from "@/hooks/observability-queries";
@@ -134,12 +134,19 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
   const preview = usePanelQuery(scope, range, queried ?? settled, services, [], { enabled: previewable });
   // A statement's picture (style, unit, title) follows the draft; only its statement waits for Run.
   const drawn: Panel | null = statement ? (ranCurrent ? { ...draft, sql: ranCurrent.sql, minStep: ranCurrent.minStep, postgres: ranCurrent.postgres } : null) : draft.kind === "text" ? draft : settled;
-  // Run again over an unchanged request re-reads it: setting the same key would fetch nothing.
+  // Every Run executes the statement. Run again over an unchanged request re-reads it: setting the same key would fetch nothing.
+  // A changed request whose answer is still cached (A, then B, then A again) is marked stale first, so switching to it fetches
+  // instead of showing the old rows; an uncached one fetches once, on the switch.
+  const queryClient = useQueryClient();
   const sameRequest = (a: Panel, b: Panel) => hashKey(obsKeys.panel(scope, range, a, services, [])) === hashKey(obsKeys.panel(scope, range, b, services, []));
   const run: StatementRun = {
     onRun: () => {
-      if (ranCurrent && previewable && sameRequest(ranCurrent, draft)) void preview.refetch();
-      else setRan(draft);
+      if (ranCurrent && previewable && sameRequest(ranCurrent, draft)) {
+        void preview.refetch();
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: obsKeys.panel(scope, range, draft, services, []), exact: true, refetchType: "none" });
+      setRan(draft);
     },
     canRun: problems.length === 0,
     running: previewable && preview.isFetching,
