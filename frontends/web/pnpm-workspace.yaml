@@ -11,3 +11,5 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   protobufjs: false
+minimumReleaseAgeExclude:
+  - '@reliantlabs/forge-web-runtime@0.13.1'
