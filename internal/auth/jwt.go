@@ -61,6 +61,13 @@ type JWTClaims struct {
 	Role  string `json:"role"`  // User role
 	Exp   int64  `json:"exp"`   // Expiration time
 	Iat   int64  `json:"iat"`   // Issued at
+	// ClientID is the OAuth client the token was issued to. Supabase's OAuth
+	// server adds it to the tokens it issues third-party clients; a session
+	// from signing in to the app has none.
+	ClientID string `json:"client_id,omitempty"`
+	// Credential is the kind of credential these claims were verified from,
+	// set by the validator that verified them — never read from the token.
+	Credential Credential `json:"-"`
 }
 
 // JWTHeader represents the JWT header
@@ -348,6 +355,13 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("%w: failed to parse claims", ErrInvalidToken)
 	}
 	claims.Email = verifiedEmailClaim(claims.Email, raw, v.requireEmailVerifiedClaim)
+
+	// The real provider's tokens are checked against this split after every
+	// deploy that changes it: dev-docs/human-only-approvals-verification.md.
+	claims.Credential = CredentialSession
+	if claims.ClientID != "" {
+		claims.Credential = CredentialOAuthClient
+	}
 
 	return &claims, nil
 }

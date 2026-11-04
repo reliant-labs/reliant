@@ -88,7 +88,7 @@ func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector
 	if !p.Scopes.Permits(fat.ScopeReliantAPI) || p.ActingUserID == "" {
 		return nil, nil, ErrAccessTokenNotAPI
 	}
-	return &JWTClaims{Sub: p.ActingUserID, Role: "authenticated"}, p, nil
+	return &JWTClaims{Sub: p.ActingUserID, Role: "authenticated", Credential: CredentialAccessToken}, p, nil
 }
 
 // ErrAccessTokenInactive is the sentinel an introspector wraps for a token
