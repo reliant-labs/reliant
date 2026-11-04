@@ -408,7 +408,7 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
   await page.route('**/reliant.v1.ChatService/GetWorkflowExecutions', (route) => {
     const { chatId } = route.request().postDataJSON() as { chatId?: string };
     return json(route, options.busyChat && chatId === 'chat_a'
-      ? { rootWorkflow: BUSY_CHAT_WORKFLOW, allRootWorkflows: [BUSY_CHAT_WORKFLOW] }
+      ? { allRootWorkflows: [BUSY_CHAT_WORKFLOW] }
       : {});
   });
   await page.route('**/reliant.v1.InboxService/ListInbox', (route) => {

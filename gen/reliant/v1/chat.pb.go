@@ -6955,9 +6955,8 @@ func (x *GetWorkflowExecutionsRequest) GetView() WorkflowExecutionView {
 // GetWorkflowExecutionsResponse returns the execution tree
 type GetWorkflowExecutionsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The most recent/active root workflow (for backwards compat)
-	RootWorkflow *WorkflowExecution `protobuf:"bytes,1,opt,name=root_workflow,json=rootWorkflow,proto3,oneof" json:"root_workflow,omitempty"`
-	// All root workflows for this chat, sorted by created_at descending (newest first)
+	// All root workflows for this chat, sorted by created_at descending (newest
+	// first). The latest run is the first.
 	AllRootWorkflows []*WorkflowExecution `protobuf:"bytes,2,rep,name=all_root_workflows,json=allRootWorkflows,proto3" json:"all_root_workflows,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -6991,13 +6990,6 @@ func (x *GetWorkflowExecutionsResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetWorkflowExecutionsResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionsResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{83}
-}
-
-func (x *GetWorkflowExecutionsResponse) GetRootWorkflow() *WorkflowExecution {
-	if x != nil {
-		return x.RootWorkflow
-	}
-	return nil
 }
 
 func (x *GetWorkflowExecutionsResponse) GetAllRootWorkflows() []*WorkflowExecution {
@@ -7950,11 +7942,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"n\n" +
 	"\x1cGetWorkflowExecutionsRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x125\n" +
-	"\x04view\x18\x02 \x01(\x0e2!.reliant.v1.WorkflowExecutionViewR\x04view\"\xc7\x01\n" +
-	"\x1dGetWorkflowExecutionsResponse\x12G\n" +
-	"\rroot_workflow\x18\x01 \x01(\v2\x1d.reliant.v1.WorkflowExecutionH\x00R\frootWorkflow\x88\x01\x01\x12K\n" +
-	"\x12all_root_workflows\x18\x02 \x03(\v2\x1d.reliant.v1.WorkflowExecutionR\x10allRootWorkflowsB\x10\n" +
-	"\x0e_root_workflow\"l\n" +
+	"\x04view\x18\x02 \x01(\x0e2!.reliant.v1.WorkflowExecutionViewR\x04view\"\x81\x01\n" +
+	"\x1dGetWorkflowExecutionsResponse\x12K\n" +
+	"\x12all_root_workflows\x18\x02 \x03(\v2\x1d.reliant.v1.WorkflowExecutionR\x10allRootWorkflowsJ\x04\b\x01\x10\x02R\rroot_workflow\"l\n" +
 	"\x19ListStepExecutionsRequest\x12\x1f\n" +
 	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\x12 \n" +
 	"\tnode_path\x18\x02 \x01(\tH\x00R\bnodePath\x88\x01\x01B\f\n" +
@@ -8329,93 +8319,92 @@ var file_reliant_v1_chat_proto_depIdxs = []int32{
 	2,   // 66: reliant.v1.WorkflowExecution.stop_reason:type_name -> reliant.v1.WorkflowStopReason
 	112, // 67: reliant.v1.GetThreadWorkflowInputsResponse.inputs:type_name -> reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry
 	12,  // 68: reliant.v1.GetWorkflowExecutionsRequest.view:type_name -> reliant.v1.WorkflowExecutionView
-	93,  // 69: reliant.v1.GetWorkflowExecutionsResponse.root_workflow:type_name -> reliant.v1.WorkflowExecution
-	93,  // 70: reliant.v1.GetWorkflowExecutionsResponse.all_root_workflows:type_name -> reliant.v1.WorkflowExecution
-	92,  // 71: reliant.v1.ListStepExecutionsResponse.step_executions:type_name -> reliant.v1.StepExecution
-	86,  // 72: reliant.v1.GetWorkflowNodeExecutionsResponse.updates:type_name -> reliant.v1.ChatUpdate
-	14,  // 73: reliant.v1.SetChatDaemonResponse.chat:type_name -> reliant.v1.Chat
-	116, // 74: reliant.v1.StartChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
-	116, // 75: reliant.v1.RunNowRequest.InputsEntry.value:type_name -> google.protobuf.Value
-	116, // 76: reliant.v1.SendMessageRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
-	116, // 77: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	116, // 78: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	23,  // 79: reliant.v1.ChatService.StartChat:input_type -> reliant.v1.StartChatRequest
-	26,  // 80: reliant.v1.ChatService.RunNow:input_type -> reliant.v1.RunNowRequest
-	34,  // 81: reliant.v1.ChatService.AdoptChat:input_type -> reliant.v1.AdoptChatRequest
-	36,  // 82: reliant.v1.ChatService.UnadoptChat:input_type -> reliant.v1.UnadoptChatRequest
-	28,  // 83: reliant.v1.ChatService.ListChats:input_type -> reliant.v1.ListChatsRequest
-	30,  // 84: reliant.v1.ChatService.GetChat:input_type -> reliant.v1.GetChatRequest
-	32,  // 85: reliant.v1.ChatService.UpdateChat:input_type -> reliant.v1.UpdateChatRequest
-	38,  // 86: reliant.v1.ChatService.DeleteChat:input_type -> reliant.v1.DeleteChatRequest
-	40,  // 87: reliant.v1.ChatService.SearchChats:input_type -> reliant.v1.SearchChatsRequest
-	42,  // 88: reliant.v1.ChatService.ListArchivedChats:input_type -> reliant.v1.ListArchivedChatsRequest
-	44,  // 89: reliant.v1.ChatService.SendMessage:input_type -> reliant.v1.SendMessageRequest
-	46,  // 90: reliant.v1.ChatService.SendAgentMessage:input_type -> reliant.v1.SendAgentMessageRequest
-	48,  // 91: reliant.v1.ChatService.ListQueuedAgentMessages:input_type -> reliant.v1.ListQueuedAgentMessagesRequest
-	51,  // 92: reliant.v1.ChatService.CancelQueuedAgentMessage:input_type -> reliant.v1.CancelQueuedAgentMessageRequest
-	53,  // 93: reliant.v1.ChatService.InterruptThread:input_type -> reliant.v1.InterruptThreadRequest
-	55,  // 94: reliant.v1.ChatService.ListMessages:input_type -> reliant.v1.ListMessagesRequest
-	58,  // 95: reliant.v1.ChatService.GetToolResult:input_type -> reliant.v1.GetToolResultRequest
-	60,  // 96: reliant.v1.ChatService.UpdateChatState:input_type -> reliant.v1.UpdateChatStateRequest
-	62,  // 97: reliant.v1.ChatService.TerminateChat:input_type -> reliant.v1.TerminateChatRequest
-	64,  // 98: reliant.v1.ChatService.PauseChat:input_type -> reliant.v1.PauseChatRequest
-	66,  // 99: reliant.v1.ChatService.ResumeChat:input_type -> reliant.v1.ResumeChatRequest
-	67,  // 100: reliant.v1.ChatService.RetryUsageLimitWait:input_type -> reliant.v1.RetryUsageLimitWaitRequest
-	70,  // 101: reliant.v1.ChatService.DismissChat:input_type -> reliant.v1.DismissChatRequest
-	72,  // 102: reliant.v1.ChatService.MarkUnreadChat:input_type -> reliant.v1.MarkUnreadChatRequest
-	74,  // 103: reliant.v1.ChatService.CompactChat:input_type -> reliant.v1.CompactChatRequest
-	77,  // 104: reliant.v1.ChatService.BranchChat:input_type -> reliant.v1.BranchChatRequest
-	80,  // 105: reliant.v1.ChatService.ListBranches:input_type -> reliant.v1.ListBranchesRequest
-	82,  // 106: reliant.v1.ChatService.UpdateWorkflowParams:input_type -> reliant.v1.UpdateWorkflowParamsRequest
-	84,  // 107: reliant.v1.ChatService.UpdateChatProviderPolicy:input_type -> reliant.v1.UpdateChatProviderPolicyRequest
-	87,  // 108: reliant.v1.ChatService.GetChatUpdates:input_type -> reliant.v1.GetChatUpdatesRequest
-	90,  // 109: reliant.v1.ChatService.ListChatPlans:input_type -> reliant.v1.ListChatPlansRequest
-	96,  // 110: reliant.v1.ChatService.GetWorkflowExecutions:input_type -> reliant.v1.GetWorkflowExecutionsRequest
-	98,  // 111: reliant.v1.ChatService.ListStepExecutions:input_type -> reliant.v1.ListStepExecutionsRequest
-	100, // 112: reliant.v1.ChatService.GetWorkflowNodeExecutions:input_type -> reliant.v1.GetWorkflowNodeExecutionsRequest
-	94,  // 113: reliant.v1.ChatService.GetThreadWorkflowInputs:input_type -> reliant.v1.GetThreadWorkflowInputsRequest
-	102, // 114: reliant.v1.ChatService.SetChatDaemon:input_type -> reliant.v1.SetChatDaemonRequest
-	24,  // 115: reliant.v1.ChatService.StartChat:output_type -> reliant.v1.StartChatResponse
-	27,  // 116: reliant.v1.ChatService.RunNow:output_type -> reliant.v1.RunNowResponse
-	35,  // 117: reliant.v1.ChatService.AdoptChat:output_type -> reliant.v1.AdoptChatResponse
-	37,  // 118: reliant.v1.ChatService.UnadoptChat:output_type -> reliant.v1.UnadoptChatResponse
-	29,  // 119: reliant.v1.ChatService.ListChats:output_type -> reliant.v1.ListChatsResponse
-	31,  // 120: reliant.v1.ChatService.GetChat:output_type -> reliant.v1.GetChatResponse
-	33,  // 121: reliant.v1.ChatService.UpdateChat:output_type -> reliant.v1.UpdateChatResponse
-	39,  // 122: reliant.v1.ChatService.DeleteChat:output_type -> reliant.v1.DeleteChatResponse
-	41,  // 123: reliant.v1.ChatService.SearchChats:output_type -> reliant.v1.SearchChatsResponse
-	43,  // 124: reliant.v1.ChatService.ListArchivedChats:output_type -> reliant.v1.ListArchivedChatsResponse
-	45,  // 125: reliant.v1.ChatService.SendMessage:output_type -> reliant.v1.SendMessageResponse
-	47,  // 126: reliant.v1.ChatService.SendAgentMessage:output_type -> reliant.v1.SendAgentMessageResponse
-	50,  // 127: reliant.v1.ChatService.ListQueuedAgentMessages:output_type -> reliant.v1.ListQueuedAgentMessagesResponse
-	52,  // 128: reliant.v1.ChatService.CancelQueuedAgentMessage:output_type -> reliant.v1.CancelQueuedAgentMessageResponse
-	54,  // 129: reliant.v1.ChatService.InterruptThread:output_type -> reliant.v1.InterruptThreadResponse
-	56,  // 130: reliant.v1.ChatService.ListMessages:output_type -> reliant.v1.ListMessagesResponse
-	59,  // 131: reliant.v1.ChatService.GetToolResult:output_type -> reliant.v1.GetToolResultResponse
-	61,  // 132: reliant.v1.ChatService.UpdateChatState:output_type -> reliant.v1.UpdateChatStateResponse
-	63,  // 133: reliant.v1.ChatService.TerminateChat:output_type -> reliant.v1.TerminateChatResponse
-	65,  // 134: reliant.v1.ChatService.PauseChat:output_type -> reliant.v1.PauseChatResponse
-	69,  // 135: reliant.v1.ChatService.ResumeChat:output_type -> reliant.v1.ResumeChatResponse
-	68,  // 136: reliant.v1.ChatService.RetryUsageLimitWait:output_type -> reliant.v1.RetryUsageLimitWaitResponse
-	71,  // 137: reliant.v1.ChatService.DismissChat:output_type -> reliant.v1.DismissChatResponse
-	73,  // 138: reliant.v1.ChatService.MarkUnreadChat:output_type -> reliant.v1.MarkUnreadChatResponse
-	75,  // 139: reliant.v1.ChatService.CompactChat:output_type -> reliant.v1.CompactChatResponse
-	78,  // 140: reliant.v1.ChatService.BranchChat:output_type -> reliant.v1.BranchChatResponse
-	81,  // 141: reliant.v1.ChatService.ListBranches:output_type -> reliant.v1.ListBranchesResponse
-	83,  // 142: reliant.v1.ChatService.UpdateWorkflowParams:output_type -> reliant.v1.UpdateWorkflowParamsResponse
-	85,  // 143: reliant.v1.ChatService.UpdateChatProviderPolicy:output_type -> reliant.v1.UpdateChatProviderPolicyResponse
-	88,  // 144: reliant.v1.ChatService.GetChatUpdates:output_type -> reliant.v1.GetChatUpdatesResponse
-	91,  // 145: reliant.v1.ChatService.ListChatPlans:output_type -> reliant.v1.ListChatPlansResponse
-	97,  // 146: reliant.v1.ChatService.GetWorkflowExecutions:output_type -> reliant.v1.GetWorkflowExecutionsResponse
-	99,  // 147: reliant.v1.ChatService.ListStepExecutions:output_type -> reliant.v1.ListStepExecutionsResponse
-	101, // 148: reliant.v1.ChatService.GetWorkflowNodeExecutions:output_type -> reliant.v1.GetWorkflowNodeExecutionsResponse
-	95,  // 149: reliant.v1.ChatService.GetThreadWorkflowInputs:output_type -> reliant.v1.GetThreadWorkflowInputsResponse
-	103, // 150: reliant.v1.ChatService.SetChatDaemon:output_type -> reliant.v1.SetChatDaemonResponse
-	115, // [115:151] is the sub-list for method output_type
-	79,  // [79:115] is the sub-list for method input_type
-	79,  // [79:79] is the sub-list for extension type_name
-	79,  // [79:79] is the sub-list for extension extendee
-	0,   // [0:79] is the sub-list for field type_name
+	93,  // 69: reliant.v1.GetWorkflowExecutionsResponse.all_root_workflows:type_name -> reliant.v1.WorkflowExecution
+	92,  // 70: reliant.v1.ListStepExecutionsResponse.step_executions:type_name -> reliant.v1.StepExecution
+	86,  // 71: reliant.v1.GetWorkflowNodeExecutionsResponse.updates:type_name -> reliant.v1.ChatUpdate
+	14,  // 72: reliant.v1.SetChatDaemonResponse.chat:type_name -> reliant.v1.Chat
+	116, // 73: reliant.v1.StartChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
+	116, // 74: reliant.v1.RunNowRequest.InputsEntry.value:type_name -> google.protobuf.Value
+	116, // 75: reliant.v1.SendMessageRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
+	116, // 76: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	116, // 77: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry.value:type_name -> google.protobuf.Value
+	23,  // 78: reliant.v1.ChatService.StartChat:input_type -> reliant.v1.StartChatRequest
+	26,  // 79: reliant.v1.ChatService.RunNow:input_type -> reliant.v1.RunNowRequest
+	34,  // 80: reliant.v1.ChatService.AdoptChat:input_type -> reliant.v1.AdoptChatRequest
+	36,  // 81: reliant.v1.ChatService.UnadoptChat:input_type -> reliant.v1.UnadoptChatRequest
+	28,  // 82: reliant.v1.ChatService.ListChats:input_type -> reliant.v1.ListChatsRequest
+	30,  // 83: reliant.v1.ChatService.GetChat:input_type -> reliant.v1.GetChatRequest
+	32,  // 84: reliant.v1.ChatService.UpdateChat:input_type -> reliant.v1.UpdateChatRequest
+	38,  // 85: reliant.v1.ChatService.DeleteChat:input_type -> reliant.v1.DeleteChatRequest
+	40,  // 86: reliant.v1.ChatService.SearchChats:input_type -> reliant.v1.SearchChatsRequest
+	42,  // 87: reliant.v1.ChatService.ListArchivedChats:input_type -> reliant.v1.ListArchivedChatsRequest
+	44,  // 88: reliant.v1.ChatService.SendMessage:input_type -> reliant.v1.SendMessageRequest
+	46,  // 89: reliant.v1.ChatService.SendAgentMessage:input_type -> reliant.v1.SendAgentMessageRequest
+	48,  // 90: reliant.v1.ChatService.ListQueuedAgentMessages:input_type -> reliant.v1.ListQueuedAgentMessagesRequest
+	51,  // 91: reliant.v1.ChatService.CancelQueuedAgentMessage:input_type -> reliant.v1.CancelQueuedAgentMessageRequest
+	53,  // 92: reliant.v1.ChatService.InterruptThread:input_type -> reliant.v1.InterruptThreadRequest
+	55,  // 93: reliant.v1.ChatService.ListMessages:input_type -> reliant.v1.ListMessagesRequest
+	58,  // 94: reliant.v1.ChatService.GetToolResult:input_type -> reliant.v1.GetToolResultRequest
+	60,  // 95: reliant.v1.ChatService.UpdateChatState:input_type -> reliant.v1.UpdateChatStateRequest
+	62,  // 96: reliant.v1.ChatService.TerminateChat:input_type -> reliant.v1.TerminateChatRequest
+	64,  // 97: reliant.v1.ChatService.PauseChat:input_type -> reliant.v1.PauseChatRequest
+	66,  // 98: reliant.v1.ChatService.ResumeChat:input_type -> reliant.v1.ResumeChatRequest
+	67,  // 99: reliant.v1.ChatService.RetryUsageLimitWait:input_type -> reliant.v1.RetryUsageLimitWaitRequest
+	70,  // 100: reliant.v1.ChatService.DismissChat:input_type -> reliant.v1.DismissChatRequest
+	72,  // 101: reliant.v1.ChatService.MarkUnreadChat:input_type -> reliant.v1.MarkUnreadChatRequest
+	74,  // 102: reliant.v1.ChatService.CompactChat:input_type -> reliant.v1.CompactChatRequest
+	77,  // 103: reliant.v1.ChatService.BranchChat:input_type -> reliant.v1.BranchChatRequest
+	80,  // 104: reliant.v1.ChatService.ListBranches:input_type -> reliant.v1.ListBranchesRequest
+	82,  // 105: reliant.v1.ChatService.UpdateWorkflowParams:input_type -> reliant.v1.UpdateWorkflowParamsRequest
+	84,  // 106: reliant.v1.ChatService.UpdateChatProviderPolicy:input_type -> reliant.v1.UpdateChatProviderPolicyRequest
+	87,  // 107: reliant.v1.ChatService.GetChatUpdates:input_type -> reliant.v1.GetChatUpdatesRequest
+	90,  // 108: reliant.v1.ChatService.ListChatPlans:input_type -> reliant.v1.ListChatPlansRequest
+	96,  // 109: reliant.v1.ChatService.GetWorkflowExecutions:input_type -> reliant.v1.GetWorkflowExecutionsRequest
+	98,  // 110: reliant.v1.ChatService.ListStepExecutions:input_type -> reliant.v1.ListStepExecutionsRequest
+	100, // 111: reliant.v1.ChatService.GetWorkflowNodeExecutions:input_type -> reliant.v1.GetWorkflowNodeExecutionsRequest
+	94,  // 112: reliant.v1.ChatService.GetThreadWorkflowInputs:input_type -> reliant.v1.GetThreadWorkflowInputsRequest
+	102, // 113: reliant.v1.ChatService.SetChatDaemon:input_type -> reliant.v1.SetChatDaemonRequest
+	24,  // 114: reliant.v1.ChatService.StartChat:output_type -> reliant.v1.StartChatResponse
+	27,  // 115: reliant.v1.ChatService.RunNow:output_type -> reliant.v1.RunNowResponse
+	35,  // 116: reliant.v1.ChatService.AdoptChat:output_type -> reliant.v1.AdoptChatResponse
+	37,  // 117: reliant.v1.ChatService.UnadoptChat:output_type -> reliant.v1.UnadoptChatResponse
+	29,  // 118: reliant.v1.ChatService.ListChats:output_type -> reliant.v1.ListChatsResponse
+	31,  // 119: reliant.v1.ChatService.GetChat:output_type -> reliant.v1.GetChatResponse
+	33,  // 120: reliant.v1.ChatService.UpdateChat:output_type -> reliant.v1.UpdateChatResponse
+	39,  // 121: reliant.v1.ChatService.DeleteChat:output_type -> reliant.v1.DeleteChatResponse
+	41,  // 122: reliant.v1.ChatService.SearchChats:output_type -> reliant.v1.SearchChatsResponse
+	43,  // 123: reliant.v1.ChatService.ListArchivedChats:output_type -> reliant.v1.ListArchivedChatsResponse
+	45,  // 124: reliant.v1.ChatService.SendMessage:output_type -> reliant.v1.SendMessageResponse
+	47,  // 125: reliant.v1.ChatService.SendAgentMessage:output_type -> reliant.v1.SendAgentMessageResponse
+	50,  // 126: reliant.v1.ChatService.ListQueuedAgentMessages:output_type -> reliant.v1.ListQueuedAgentMessagesResponse
+	52,  // 127: reliant.v1.ChatService.CancelQueuedAgentMessage:output_type -> reliant.v1.CancelQueuedAgentMessageResponse
+	54,  // 128: reliant.v1.ChatService.InterruptThread:output_type -> reliant.v1.InterruptThreadResponse
+	56,  // 129: reliant.v1.ChatService.ListMessages:output_type -> reliant.v1.ListMessagesResponse
+	59,  // 130: reliant.v1.ChatService.GetToolResult:output_type -> reliant.v1.GetToolResultResponse
+	61,  // 131: reliant.v1.ChatService.UpdateChatState:output_type -> reliant.v1.UpdateChatStateResponse
+	63,  // 132: reliant.v1.ChatService.TerminateChat:output_type -> reliant.v1.TerminateChatResponse
+	65,  // 133: reliant.v1.ChatService.PauseChat:output_type -> reliant.v1.PauseChatResponse
+	69,  // 134: reliant.v1.ChatService.ResumeChat:output_type -> reliant.v1.ResumeChatResponse
+	68,  // 135: reliant.v1.ChatService.RetryUsageLimitWait:output_type -> reliant.v1.RetryUsageLimitWaitResponse
+	71,  // 136: reliant.v1.ChatService.DismissChat:output_type -> reliant.v1.DismissChatResponse
+	73,  // 137: reliant.v1.ChatService.MarkUnreadChat:output_type -> reliant.v1.MarkUnreadChatResponse
+	75,  // 138: reliant.v1.ChatService.CompactChat:output_type -> reliant.v1.CompactChatResponse
+	78,  // 139: reliant.v1.ChatService.BranchChat:output_type -> reliant.v1.BranchChatResponse
+	81,  // 140: reliant.v1.ChatService.ListBranches:output_type -> reliant.v1.ListBranchesResponse
+	83,  // 141: reliant.v1.ChatService.UpdateWorkflowParams:output_type -> reliant.v1.UpdateWorkflowParamsResponse
+	85,  // 142: reliant.v1.ChatService.UpdateChatProviderPolicy:output_type -> reliant.v1.UpdateChatProviderPolicyResponse
+	88,  // 143: reliant.v1.ChatService.GetChatUpdates:output_type -> reliant.v1.GetChatUpdatesResponse
+	91,  // 144: reliant.v1.ChatService.ListChatPlans:output_type -> reliant.v1.ListChatPlansResponse
+	97,  // 145: reliant.v1.ChatService.GetWorkflowExecutions:output_type -> reliant.v1.GetWorkflowExecutionsResponse
+	99,  // 146: reliant.v1.ChatService.ListStepExecutions:output_type -> reliant.v1.ListStepExecutionsResponse
+	101, // 147: reliant.v1.ChatService.GetWorkflowNodeExecutions:output_type -> reliant.v1.GetWorkflowNodeExecutionsResponse
+	95,  // 148: reliant.v1.ChatService.GetThreadWorkflowInputs:output_type -> reliant.v1.GetThreadWorkflowInputsResponse
+	103, // 149: reliant.v1.ChatService.SetChatDaemon:output_type -> reliant.v1.SetChatDaemonResponse
+	114, // [114:150] is the sub-list for method output_type
+	78,  // [78:114] is the sub-list for method input_type
+	78,  // [78:78] is the sub-list for extension type_name
+	78,  // [78:78] is the sub-list for extension extendee
+	0,   // [0:78] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_chat_proto_init() }
@@ -8449,7 +8438,6 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[75].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[78].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[79].OneofWrappers = []any{}
-	file_reliant_v1_chat_proto_msgTypes[83].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[84].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

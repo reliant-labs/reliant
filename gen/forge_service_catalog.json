@@ -5161,12 +5161,6 @@
           ],
           "GetWorkflowExecutionsResponse": [
             {
-              "Name": "root_workflow",
-              "ProtoType": "message",
-              "IsOptional": true,
-              "MessageType": "reliant.v1.WorkflowExecution"
-            },
-            {
               "Name": "all_root_workflows",
               "ProtoType": "[]message",
               "IsOptional": false,
@@ -6662,12 +6656,6 @@
             }
           ],
           "reliant.v1.GetWorkflowExecutionsResponse": [
-            {
-              "name": "root_workflow",
-              "kind": "message",
-              "type_name": "reliant.v1.WorkflowExecution",
-              "optional": true
-            },
             {
               "name": "all_root_workflows",
               "kind": "message",

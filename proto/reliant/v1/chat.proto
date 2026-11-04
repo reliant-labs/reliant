@@ -1586,9 +1586,12 @@ message GetWorkflowExecutionsRequest {
 
 // GetWorkflowExecutionsResponse returns the execution tree
 message GetWorkflowExecutionsResponse {
-  // The most recent/active root workflow (for backwards compat)
-  optional WorkflowExecution root_workflow = 1;
-  // All root workflows for this chat, sorted by created_at descending (newest first)
+  // root_workflow was all_root_workflows[0] a second time: the newest root's
+  // whole tree sent twice on every chat open.
+  reserved 1;
+  reserved "root_workflow";
+  // All root workflows for this chat, sorted by created_at descending (newest
+  // first). The latest run is the first.
   repeated WorkflowExecution all_root_workflows = 2;
 }
 
