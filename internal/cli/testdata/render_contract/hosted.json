@@ -1,0 +1,256 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane": {
+      "endpoint": "https://admin.reliantapi.com",
+      "registry_host": "registry.reliantapi.com",
+      "token_env": "FORGE_CONTROL_PLANE_TOKEN",
+      "type": "control_plane"
+    },
+    "control_plane_secrets": [],
+    "databases": [
+      {
+        "cluster": null,
+        "name": "db",
+        "namespace": null,
+        "runtime": "hosted",
+        "spec": {
+          "deletionPolicy": "retain",
+          "engine": "postgres",
+          "instances": 1,
+          "storageGiB": 10
+        }
+      }
+    ],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "frontends": [
+      {
+        "asset_dir": "assets",
+        "base_path": null,
+        "bundle": [],
+        "cache_control": [],
+        "config": null,
+        "dev_runner": "npm",
+        "env_file": null,
+        "env_vars": [],
+        "image": "ghcr.io/acme/web",
+        "name": "web",
+        "path": "frontends/web",
+        "port": 3000,
+        "public_dir": "dist",
+        "runtime": {
+          "type": "hosted"
+        },
+        "runtime_config": {},
+        "runtime_config_spec": {
+          "API_URL": {
+            "workloadURL": {
+              "name": "api"
+            }
+          },
+          "OTEL_ENDPOINT": {
+            "value": "/_otel"
+          }
+        },
+        "source": null,
+        "type": "vite"
+      }
+    ],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "type": "hosted"
+    },
+    "uptime_checks": [
+      {
+        "interval_seconds": 60,
+        "method": "GET",
+        "name": "api",
+        "source": "default",
+        "target": "api",
+        "timeout_seconds": 10
+      },
+      {
+        "interval_seconds": 60,
+        "method": "GET",
+        "name": "web",
+        "source": "default",
+        "target": "web",
+        "timeout_seconds": 10
+      }
+    ],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/acme",
+        "image": "ghcr.io/acme/acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "LOG_LEVEL",
+              "value": "info"
+            },
+            {
+              "managedSecret": {
+                "name": "API_KEY",
+                "optional": true
+              },
+              "name": "API_KEY"
+            },
+            {
+              "databaseRef": {
+                "name": "db"
+              },
+              "name": "DATABASE_URL"
+            },
+            {
+              "name": "CORS_ORIGINS",
+              "workloadURL": {
+                "name": "web"
+              }
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/acme",
+        "image": "ghcr.io/acme/acme",
+        "kind": "job",
+        "name": "migrate",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "databaseRef": {
+                "name": "db"
+              },
+              "name": "DATABASE_URL"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

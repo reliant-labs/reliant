@@ -1,0 +1,155 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+// SessionNav; owned scaffold. See `forge skill load auth`.
+/**
+ * SessionNav — who is signed in, and a way out. Drop into your header or the
+ * sidebar footer:
+ *
+ *   import { SessionNav } from "@/components/session_nav";
+ *   <header><SessionNav /></header>
+ *
+ * Reads the app's auth state through `useAuth()`, which answers from THIS
+ * APP'S API (GET /auth/session) — not from an identity provider the browser
+ * talks to. There is no second session store and no auth endpoint of its
+ * own: what this renders and what your RPCs authenticate as are the same
+ * session by construction, because both ride the one HttpOnly cookie.
+ *
+ * There is nothing to configure here and no provider to select. The server
+ * holds the issuer, the client id and the tokens; the browser holds an
+ * opaque cookie it cannot even read. So this file looks the same whether
+ * your IdP is the dev one or a production issuer.
+ *
+ * `identity` is PRESENTATION ONLY — a name and an email to render. Never
+ * gate anything on it: the server validates the real token on every request,
+ * and a caller who edits this component changes the UI and nothing else.
+ *
+ * Built from forge's base UI primitives (`Avatar`, `Button`).
+ */
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+
+import Avatar from "@/components/ui/avatar";
+import Button from "@/components/ui/button";
+import { useAuth } from "@/lib/auth/use-auth";
+
+/**
+ * A store that never changes, for the hydration flag below.
+ *
+ * Module scope, not inline: `useSyncExternalStore` re-subscribes whenever
+ * `subscribe` changes identity, so a fresh arrow per render would tear down
+ * and re-establish the subscription on every render.
+ */
+const subscribeToNothing = () => () => {};
+
+export function SessionNav() {
+  const { identity, isAuthenticated, isLoading, logout } = useAuth();
+
+  // See the isLoading branch below. `useSyncExternalStore` answers "am I on
+  // the client yet?" without a state update: the server snapshot is false,
+  // the client snapshot is true, and React swaps them on mount. The older
+  // useState + useEffect pair expressed the same thing by rendering twice.
+  const hydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Dismissal, both ways in:
+  //
+  //   - Outside click, decided by CONTAINMENT rather than by a
+  //     stopPropagation guard on the wrapper. A wrapper that swallows every
+  //     click is a <div> pressed into service as a control — no role, no tab
+  //     stop, no keyboard path — and it also eats clicks that anything above
+  //     this component legitimately wants to see.
+  //   - Escape, with focus handed back to the trigger. Click-away alone
+  //     leaves a keyboard identity with a menu they can open and not close, and
+  //     closing while focus sits on "Sign out" would otherwise drop focus to
+  //     <body> and lose their place on the page.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      rootRef.current?.querySelector("button")?.focus();
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const handleSignOut = async () => {
+    setOpen(false);
+    await logout();
+  };
+
+  // The skeleton is CLIENT-ONLY, for the same reason the route guard's gate
+  // is: `isLoading` is a browser fact (the session lives in memory here), so
+  // rendering a placeholder on the client where the server rendered a identity —
+  // or vice versa — is a hydration mismatch, and React answers one by
+  // discarding the server tree and mounting a second copy of the whole app.
+  //
+  // Matching the server on the first client render costs one frame of the
+  // signed-out state; getting it wrong cost two of everything.
+  if (hydrated && isLoading) {
+    return (
+      <div className="h-8 w-24 animate-pulse motion-reduce:animate-none rounded-md bg-surface-muted" />
+    );
+  }
+
+  // Signed out: render NOTHING.
+  //
+  // The route guard has already redirected this visitor to sign in, so a
+  // "Sign in" button here is unreachable in the gated app — and where it IS
+  // reachable (a public route you added to the guard's publicPaths), a
+  // control in the corner of the chrome is the wrong way to offer sign-in
+  // anyway: link to /auth/sign-in from the page itself, where you can say
+  // why.
+  if (!isAuthenticated || !identity) {
+    return null;
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen((v) => !v)}
+        // Disclosure, not a menu: the panel below is a text block plus one
+        // button, so aria-expanded is the whole contract. aria-haspopup
+        // would promise a role="menu" that is not there.
+        aria-expanded={open}
+        className="gap-2"
+      >
+        <Avatar size="xs" name={identity.name ?? identity.email ?? undefined} />
+        <span className="max-w-[12rem] truncate">{identity.name ?? identity.email ?? "User"}</span>
+      </Button>
+
+      {open ? (
+        <div className="absolute right-0 z-50 mt-1 w-56 rounded-md border border-border bg-surface py-1 shadow-lg">
+          <div className="border-b border-border px-3 py-2 text-xs text-ink-subtle">
+            Signed in as
+            <div className="truncate text-sm font-medium text-ink">
+              {identity.email ?? identity.subject}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="block w-full px-3 py-1.5 text-left text-sm text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
