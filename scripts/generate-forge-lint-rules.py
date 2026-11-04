@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
-"""Keep docs/forge/linting/ in step with forge's lint rule tables.
+"""Keep docs/forge/linting/ in step with forge's lint rule registry.
 
-forge declares every rule `forge lint` can grade in two places:
-
-  internal/cli/lint/lint_rules.go         gradableRules(): the rule IDs, grouped
-  internal/cli/lint/lint_rollout_table.go introduced_in / gates_from per rule
-
-This script reads both from a forge checkout and does two things.
+forge declares every rule `forge lint` can grade in
+internal/cli/lint/lint_rules.go (gradableRules(): the rule IDs, grouped) and
+internal/linter/staticexport. The registry carries no prose, so the one source
+of a rule's description is its row in the hand-written family pages
+(docs/forge/linting/rules-*.mdx), whose last column is the description.
 
   --write   rewrites the generated table between the BEGIN/END GENERATED
-            markers in docs/forge/linting/rules-index.mdx.
-  --check   fails if a rule in forge has no row in the hand-written rule
-            tables (rules-*.mdx), if a row names a rule forge no longer has,
-            or if a row's Rollout cell disagrees with the rollout table.
+            markers in rules-index.mdx: Rule (linked to its section on the
+            family page), Group, and the description copied from the family
+            page row.
+  --check   fails if a rule in forge has no row in the family pages, if a row
+            names a rule forge no longer has, if a rule is documented twice
+            with different descriptions, if a description is empty, or if a
+            description holds a character that breaks an MDX table cell.
 
 Regenerate after a forge release (check out the forge ref you document first;
 the script reads files, not git history):
 
   python3 scripts/generate-forge-lint-rules.py --forge ../forge --write
   python3 scripts/generate-forge-lint-rules.py --forge ../forge --check
-
-A Rollout cell reads `v0.1.40` for a rule that has gated since that release
-(the table was audited back to v0.1.40, so older rules read "at or before"),
-and `v1.0.0 -> v1.0.1` for a rule introduced in the first release that warns
-and gates from the second.
 """
 
 import argparse
@@ -86,63 +83,97 @@ def gradable_rules(forge, consts):
     return out
 
 
-def rollouts(forge, consts):
-    """{rule id: (introduced, gates_from or '', fix or '')} from the table."""
-    src = read(os.path.join(forge, "internal/cli/lint/lint_rollout_table.go"))
-    body = src.split("var shippedRules")[1].split("// lintRollouts")[0]
-    out = {}
-    pat = re.compile(
-        r'\{IntroducedIn: "([^"]+)"(?:, GatesFrom: "([^"]+)")?(?:, Fix: "([^"]*)")?, Rules: \[\]string\{(.*?)\}\}',
-        re.S,
-    )
-    for m in pat.finditer(body):
-        intro, gates, fix, rules = m.group(1), m.group(2) or "", m.group(3) or "", m.group(4)
-        rules = re.sub(r"//[^\n]*", "", rules)
-        for q, name in re.findall(r'"([^"]+)"|([A-Za-z_]\w*)', rules):
-            if q:
-                out[q] = (intro, gates, fix)
-            elif name in consts:
-                out[consts[name]] = (intro, gates, fix)
-            else:
-                sys.exit("cannot resolve rollout constant %r" % name)
-    return out
+def slug(heading):
+    """The anchor a docs site derives from a heading, for plain ASCII IDs."""
+    text = heading.replace("`", "").lower()
+    text = re.sub(r"[^a-z0-9 \-]", "", text)
+    return re.sub(r" +", "-", text.strip())
 
 
-def cell(intro, gates):
-    return "%s -> %s" % (intro, gates) if gates else intro
+ROW = re.compile(r"^\|\s*`([a-z][a-z0-9/\-]+)`\s*\|(.*)\|\s*$")
+BAD_CELL = re.compile(r"[|<>{}]")
+
+
+def family_pages():
+    for path in sorted(glob.glob(os.path.join(DOCS_DIR, "rules-*.mdx"))):
+        if os.path.basename(path) != INDEX_PAGE:
+            yield path
+
+
+def documented():
+    """({rule: description}, {rule: (page, anchor or '')}, problems) from the family pages."""
+    desc, where, problems = {}, {}, []
+    for path in family_pages():
+        page = os.path.basename(path)[: -len(".mdx")]
+        headings = []
+        in_fence = False
+        for n, line in enumerate(read(path).splitlines(), 1):
+            if line.startswith("```"):
+                in_fence = not in_fence
+            if in_fence:
+                continue
+            if line.startswith("### "):
+                headings.append(line[4:])
+            m = ROW.match(line)
+            if not m:
+                continue
+            rule = m.group(1)
+            text = m.group(2).split("|")[-1].strip()
+            where_ = "%s.mdx:%d: `%s`" % (page, n, rule)
+            if not text:
+                problems.append("%s has an empty description" % where_)
+            # a description cell may hold backticked <, > and {}: only a bare one breaks MDX
+            bare = BAD_CELL.search(re.sub(r"`[^`]*`", "", text))
+            if bare:
+                problems.append("%s: description has a bare %r, which breaks an MDX table cell" % (where_, bare.group(0)))
+            if rule in desc and desc[rule] != text:
+                problems.append("%s is documented twice with different descriptions" % where_)
+            desc.setdefault(rule, text)
+            where.setdefault(rule, page)
+        # anchors: the ### heading that names the rule in backticks
+        for h in headings:
+            for r in re.findall(r"`([^`]+)`", h):
+                if r in where and where[r] == page and re.fullmatch(r"[a-z0-9\-]+", r):
+                    where[r] = (page, slug(h))
+    return desc, where, problems
 
 
 def table(forge):
     consts = string_consts(forge)
     grade = gradable_rules(forge, consts)
-    roll = rollouts(forge, consts)
+    desc, where, problems = documented()
     ids = [r for r, _ in grade]
-    missing = sorted(set(ids) - set(roll))
-    extra = sorted(set(roll) - set(ids))
-    if missing or extra:
-        sys.exit("rollout table and gradableRules disagree: missing=%s extra=%s" % (missing, extra))
+    for rule in sorted(set(ids) - set(desc)):
+        problems.append("no row for `%s` in rules-*.mdx" % rule)
+    for rule in sorted(set(desc) - set(ids)):
+        problems.append("a row names `%s`, which is not a rule in forge" % rule)
     seen, rows = set(), []
     for rule, group in grade:
-        if rule in seen:
+        if rule in seen or rule not in desc:
             continue
         seen.add(rule)
-        rows.append((rule, group, roll[rule]))
-    return rows
+        loc = where[rule]
+        page, anchor = loc if isinstance(loc, tuple) else (loc, "")
+        link = "/forge/linting/%s%s" % (page, "#" + anchor if anchor else "")
+        rows.append((rule, group, desc[rule], link))
+    return rows, problems
 
 
 def render(rows):
     lines = [
-        "| Rule | Group | Rollout | Codemod |",
-        "|------|-------|---------|---------|",
+        "| Rule | Group | Description |",
+        "|------|-------|-------------|",
     ]
-    for rule, group, (intro, gates, fix) in sorted(rows, key=lambda r: (r[1], r[0])):
-        codemod = "`%s`" % fix if fix else ""
-        lines.append("| `%s` | %s | %s | %s |" % (rule, group, cell(intro, gates), codemod))
+    for rule, group, text, link in sorted(rows, key=lambda r: (r[1], r[0])):
+        lines.append("| [`%s`](%s) | %s | %s |" % (rule, link, group, text))
     return "\n".join(lines)
 
 
 def write(forge):
-    rows = table(forge)
+    rows, problems = table(forge)
+    if problems:
+        print("\n".join(problems))
+        sys.exit(1)
     page = os.path.join(DOCS_DIR, INDEX_PAGE)
     text = read(page)
     head, rest = text.split(BEGIN, 1)
@@ -154,33 +185,16 @@ def write(forge):
 
 
 def check(forge):
-    rows = {r: v for r, _, v in table(forge)}
-    problems = []
-    documented = set()
-    row_pat = re.compile(r"^\|\s*`([a-z][a-z0-9/\-]+)`\s*\|")
-    for path in sorted(glob.glob(os.path.join(DOCS_DIR, "rules-*.mdx"))):
-        if os.path.basename(path) == INDEX_PAGE:
-            continue
-        for n, line in enumerate(read(path).splitlines(), 1):
-            m = row_pat.match(line)
-            if not m:
-                continue
-            rule = m.group(1)
-            if rule not in rows:
-                problems.append("%s:%d: `%s` is not a rule in forge" % (os.path.basename(path), n, rule))
-                continue
-            documented.add(rule)
-            want = cell(rows[rule][0], rows[rule][1])
-            if "| %s |" % want not in line:
-                problems.append(
-                    "%s:%d: `%s` rollout cell should be %r" % (os.path.basename(path), n, rule, want)
-                )
-    for rule in sorted(set(rows) - documented):
-        problems.append("no row for `%s` in rules-*.mdx" % rule)
+    rows, problems = table(forge)
     if problems:
         print("\n".join(problems))
         sys.exit(1)
-    print("ok: %d rules documented, rollout cells match" % len(rows))
+    page = read(os.path.join(DOCS_DIR, INDEX_PAGE))
+    block = page.split(BEGIN, 1)[1].split(END, 1)[0].strip()
+    if block != render(rows):
+        print("rules-index.mdx is stale: run the script with --write")
+        sys.exit(1)
+    print("ok: %d rules documented with a description, index up to date" % len(rows))
 
 
 def main():
