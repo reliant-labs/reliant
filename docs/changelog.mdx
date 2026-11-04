@@ -13,6 +13,36 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.18" description="November 4, 2026">
+### Faster chat opens, person-only approvals, terminals on the chat's machine
+
+Opening a chat is faster: its backlog replays in a few batches, only the errors in view are sent, and database connections stay warm. Only a person signed in to the app can decide an approval. A chat's terminal opens on the chat's machine and never hangs. Tool-result images and PDFs reach the model, and a stalled LLM stream is cut after 3 minutes and retried. Sessions, errors and traces show who and where, and link to each other.
+
+#### Added
+
+- **observability: sessions, errors and traces show who and where; sessions and traces link both ways** [#2149](https://github.com/reliant-labs/reliant/pull/2149)
+- **web: a chat open reports when its transcript is on screen, joined to the server trace** [#2173](https://github.com/reliant-labs/reliant/pull/2173)
+- **chat: a scroll-back page brings the errors of the history it loads** [#2171](https://github.com/reliant-labs/reliant/pull/2171)
+- **approval: only a person signed in to the app can decide an approval (CLI, API and OAuth-client tokens refused)** [#2175](https://github.com/reliant-labs/reliant/pull/2175)
+
+#### Changed
+
+- **stream: a chat open replays its delta backlog as a few batches, without thinking tokens** [#2166](https://github.com/reliant-labs/reliant/pull/2166)
+- **chat: GetWorkflowExecutions sends the newest root once** [#2168](https://github.com/reliant-labs/reliant/pull/2168)
+- **chat: a chat open sends only the errors inside its window, and none stack above it** [#2170](https://github.com/reliant-labs/reliant/pull/2170)
+- **db: keep 20 connections warm, topped up every 2s, so a chat open does not dial** [#2172](https://github.com/reliant-labs/reliant/pull/2172)
+- **privacy: disclose browser, OS, device type and app version in browser telemetry** [#2176](https://github.com/reliant-labs/reliant/pull/2176)
+
+#### Fixed
+
+- **tools: tool-result images and PDFs reach the model** [#2165](https://github.com/reliant-labs/reliant/pull/2165)
+- **electron: pin @reliantlabs/forge-web-runtime ^0.13.1 (was ^0.10.2)** [#2169](https://github.com/reliant-labs/reliant/pull/2169)
+- **web: desktop composer status band expands inline again; the sheet is phone-only** [#2174](https://github.com/reliant-labs/reliant/pull/2174)
+- **llm: cut a stream with no output token after 3 minutes, for retry** [#2145](https://github.com/reliant-labs/reliant/pull/2145)
+- **terminal: a chat's terminal opens on the chat's machine, says which, and never hangs** [#2147](https://github.com/reliant-labs/reliant/pull/2147)
+
+</Update>
+
 <Update label="v1.8.17" description="November 4, 2026">
 ### Mobile and tablet chat, batch approvals, the Reliant color scheme
 
