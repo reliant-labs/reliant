@@ -80,6 +80,20 @@ stopped on 2026-10-24.)
 sub-agent, or a node of a parent graph) and false for one a user, trigger or API
 call started, so a panel counting runs filters `is_child != 'true'`.
 
+`session_start` is the API server's: the first authenticated request after a
+user was idle for 30 minutes (the auth interceptor's session tracker, in memory
+and per replica). `app_first_session` rides on it: the first `session_start` of a
+user EVER, recorded durably in `user_app_sessions` (an `INSERT ... ON CONFLICT DO
+NOTHING` that wins), so it fires exactly once per user across replicas and
+restarts. It tells "signed up but never opened the app" (a control-plane
+`user_signed_up` with no `app_first_session`) from "opened it but did not
+onboard". Any authenticated client counts: the web app, the desktop app, or the
+reliant CLI; a claimable deploy's anonymous account never reaches this API. Like
+every backend event it honours the user's analytics setting, which a new user
+cannot have turned off before their first request. Users who had a project or a
+chat when the table was created were backfilled, so their next visit is not a
+first session.
+
 `page_visited` is the web's: one per navigation, from the router root
 (`components/PageVisitTracker.tsx`). `page_name` is the matched route template
 (`/project/$projectId`), never the URL, so ids, query strings and hashes (a claim
