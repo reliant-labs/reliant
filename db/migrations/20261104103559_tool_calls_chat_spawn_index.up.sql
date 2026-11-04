@@ -1,0 +1,25 @@
+-- forge:backward-compatible — additive index; the previous release's queries read through it or through the indexes it leaves in place.
+
+-- Migration: tool_calls_chat_spawn_index
+--
+-- Every chat open resolves its spawn links (store.SpawnToolCallIDsByChildThread):
+--
+--   SELECT w.thread, tc.id FROM tool_calls tc JOIN workflows w ON w.id = tc.child_workflow_id
+--    WHERE tc.chat_id = $1 AND tc.child_workflow_id IS NOT NULL ORDER BY tc.requested_at
+--
+-- No index led with chat_id among the spawn rows, so the planner walked
+-- idx_tool_calls_child_workflow_id over EVERY spawn call of every chat,
+-- filtered on chat_id, and merge-joined that against a sort of the whole
+-- workflows table (prod, 2026-11-04: 3,135 rows removed by filter, 3,892
+-- buffers + a seq scan of 13.5k workflows for a 270-spawn chat; the span
+-- chat_snapshot.spawn_tool_calls was p50 110ms, p95 807ms, max 2.7s over 72h).
+--
+-- Spawn calls are under 1% of tool_calls (3,854 of 457k), so the index is
+-- partial on exactly the query's predicate: it holds one small entry per
+-- spawn, is read in requested_at order (no sort), and carries
+-- child_workflow_id and id, so it answers the tool_calls side as an
+-- index-only scan and each row joins workflows_pkey directly.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tool_calls_chat_spawn ON public.tool_calls USING btree (chat_id, requested_at) INCLUDE (child_workflow_id, id) WHERE child_workflow_id IS NOT NULL;

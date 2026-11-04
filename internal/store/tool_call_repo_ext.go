@@ -342,7 +342,7 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 	return calls, nil
 }
 
-// listSpawnToolCallIDsByChildThreadSQL: the spawn tool call behind each child
+// SpawnToolCallIDsByChildThreadSQL: the spawn tool call behind each child
 // thread in one chat, for the reconnect snapshot. It is what the
 // background-work pill's cancel button addresses, and threads has no
 // spawned_by_tool_call_id column to read it from.
@@ -362,9 +362,12 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 // Deliberately narrow. The snapshot needs ~1 row per spawn, and a busy chat
 // holds ~10k tool calls whose input jsonb is large; selecting tool_calls.* and
 // filtering in Go would haul all of that over the wire on every page load.
-// Measured on the busiest real chat: 60 rows in 1.9ms via
-// idx_tool_calls_child_workflow_id, against 10,622 tool calls.
-const listSpawnToolCallIDsByChildThreadSQL = `
+// It reads idx_tool_calls_chat_spawn, partial on exactly this WHERE and in
+// requested_at order, so it touches only this chat's spawn rows. Before that
+// index it walked idx_tool_calls_child_workflow_id over every spawn of every
+// chat and filtered on chat_id (prod: p95 807ms on a 270-spawn chat);
+// TestSpawnToolCallIDsByChildThreadUsesChatSpawnIndex holds the plan.
+const SpawnToolCallIDsByChildThreadSQL = `
 SELECT
     w.thread AS child_thread_id,
     tc.id AS tool_call_id
@@ -376,7 +379,7 @@ ORDER BY tc.requested_at ASC
 `
 
 // SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool call
-// that started it, for one chat (listSpawnToolCallIDsByChildThreadSQL). Rows
+// that started it, for one chat (SpawnToolCallIDsByChildThreadSQL). Rows
 // arrive requested_at ASC, so overwriting leaves a resumed spawn's most recent
 // call as the value: the one still executing, and the one a cancel must
 // address.
@@ -385,7 +388,7 @@ func SpawnToolCallIDsByChildThread(ctx context.Context, db orm.Context, chatID s
 		ChildThreadID string `bun:"child_thread_id"`
 		ToolCallID    string `bun:"tool_call_id"`
 	}
-	if err := db.Bun().NewRaw(listSpawnToolCallIDsByChildThreadSQL, chatID).Scan(ctx, &rows); err != nil {
+	if err := db.Bun().NewRaw(SpawnToolCallIDsByChildThreadSQL, chatID).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list spawn tool call ids: %w", err)
 	}
 	byThread := make(map[string]string, len(rows))
