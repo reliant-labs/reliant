@@ -150,6 +150,9 @@ type CallLLMActivity struct {
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
+	// firstTokenNow is the first-token guard's clock; nil is time.Now. Tests
+	// set it to decide exactly when the deadline passes.
+	firstTokenNow func() time.Time
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's
@@ -1749,8 +1752,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// First-token guard: the progress guard measures the gap between events,
 	// so a stream trickling non-output events never trips it. This one bounds
-	// the total time to the first output token (see ErrStreamFirstTokenTimeout).
-	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout())
+	// the total time to the first output token (see ErrStreamFirstTokenTimeout
+	// and firstTokenGuard for the one keepalive exception).
+	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout(), llm.StreamIdleTimeout(), a.firstTokenNow)
 	defer firstToken.stop()
 	cutForFirstToken := func() {
 		activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
@@ -1759,6 +1763,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"provider", resolved.ProviderDriver,
 			"model", resolvedModelID,
 			"firstTokenTimeout", firstToken.timeout,
+			"heldOnKeepalives", firstToken.held,
 			"elapsed", time.Since(llmCallStart))
 		streamErr = llm.ErrStreamFirstTokenTimeout
 		cancelStream()
@@ -1854,9 +1859,9 @@ streamLoop:
 			break streamLoop
 
 		case <-firstToken.C():
-			// A recent keepalive inside an open block defers the deadline;
-			// a stale one does not (see firstTokenGuard.expired).
-			if !firstToken.expired(liveness) {
+			// The deadline, or the end of a keepalive hold (see
+			// firstTokenGuard for the rule).
+			if !firstToken.fire(liveness) {
 				continue
 			}
 			cutForFirstToken()
