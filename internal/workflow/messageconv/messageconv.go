@@ -100,8 +100,12 @@ func DbMessagesToMessages(ctx context.Context, dbMessages []*db.Message, repo St
 
 // buildMessage assembles a message.Message from already-loaded rows.
 func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageContentBlock, cw *db.ContextWindow, repo AttachmentReader) message.Message {
+	role := ProtoMessageRoleToModelRole(dbMsg.Role)
 	parts := make([]message.ContentPart, 0, len(blocks))
 	for _, block := range blocks {
+		if role == message.Tool && foldToolResultMedia(ctx, dbMsg.ChatID, block, parts, repo) {
+			continue
+		}
 		part := ContentBlockToPart(ctx, dbMsg.ChatID, block, repo)
 		if part != nil {
 			parts = append(parts, part)
@@ -116,7 +120,7 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 
 	msg := message.Message{
 		ID:              dbMsg.ID,
-		Role:            ProtoMessageRoleToModelRole(dbMsg.Role),
+		Role:            role,
 		Ordinal:         dbMsg.Ordinal,
 		Thread:          dbMsg.ThreadID, // Direct access
 		ContextSequence: contextSequence,
@@ -137,6 +141,64 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 	}
 
 	return msg
+}
+
+// foldToolResultMedia attaches an IMAGE or DOCUMENT block of a tool message to
+// the tool result before it, reporting whether the block was consumed.
+//
+// A tool's image or PDF is persisted as an attachment row plus a sibling block
+// right after its tool_result block (threads.buildToolContentBlocks). Every
+// driver encodes tool media from ToolResult.BinaryParts — inside the
+// tool_result where the provider accepts it, as a follow-up user turn where it
+// does not — and none reads a bare BinaryContent part on a tool message. So
+// left as a sibling part the bytes loaded and then went nowhere: the model got
+// the tool's text ("Image file: … (image/png, 241.0KB)") and never the image.
+//
+// A DOCUMENT here carries its bytes, unlike a user's attached document, which
+// replays as a read_attachment pointer: the tool already chose the pages to
+// show (view and read_attachment cap a request at 20), so the result is what
+// the model asked to read.
+//
+// A block that cannot be attached — no preceding result, a missing
+// attachment, a generated video — is consumed and logged rather than failing
+// the load: the result's text still answers the tool call.
+func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageContentBlock, parts []message.ContentPart, repo AttachmentReader) bool {
+	if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE &&
+		block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT {
+		return false
+	}
+	if block.Content == nil {
+		return true
+	}
+	last := len(parts) - 1
+	if last < 0 {
+		logging.WarnContext(ctx, "Tool message media block precedes any tool result; dropping it from LLM context",
+			"attachment_id", *block.Content, "chat_id", chatID)
+		return true
+	}
+	result, ok := parts[last].(message.ToolResult)
+	if !ok {
+		logging.WarnContext(ctx, "Tool message media block does not follow a tool result; dropping it from LLM context",
+			"attachment_id", *block.Content, "chat_id", chatID)
+		return true
+	}
+	attachment, err := LoadAttachment(ctx, chatID, *block.Content, repo)
+	if err != nil {
+		logging.ErrorContext(ctx, "Failed to load tool result attachment for LLM context",
+			"attachment_id", *block.Content, "chat_id", chatID, "error", err)
+		return true
+	}
+	// Generated video is for the user, never the model (see ContentBlockToPart).
+	if strings.HasPrefix(attachment.MimeType, "video/") {
+		return true
+	}
+	result.BinaryParts = append(result.BinaryParts, message.BinaryContent{
+		Path:     attachment.FileName,
+		MIMEType: attachment.MimeType,
+		Data:     attachment.Content,
+	})
+	parts[last] = result
+	return true
 }
 
 // ContentBlockToPart converts a content block to a message part.

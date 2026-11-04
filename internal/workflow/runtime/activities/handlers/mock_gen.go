@@ -3024,7 +3024,7 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=c641d20f0aa825ad197f143efff9530052db7f7338f3077779946ea7cceb0c72
+// forge:hash=199466c51911d2ce4b2c4e65ad655dc9825b7eea6d978b4b399a603bea3ba746
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3045,6 +3045,7 @@ type MockExecuteToolsStore struct {
 	GetToolCallResultFunc                 func(context.Context, string) (*db.ToolCallResult, error)
 	UpsertToolCallResultFunc              func(context.Context, string, *db.ToolCallResult) error
 	SetChatDaemonBlockedFunc              func(context.Context, string, bool) error
+	CreateAttachmentFunc                  func(context.Context, *db.Attachment) error
 	EmitToolCallUpdateFunc                func(context.Context, string, db.ToolCallUpdate) error
 	EmitUserRefetchFunc                   func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	MarkQueuedAgentMessagesPreemptingFunc func(context.Context, string, time.Time) (int64, error)
@@ -3154,6 +3155,15 @@ func (m *MockExecuteToolsStore) SetChatDaemonBlocked(ctx context.Context, chatID
 		return m.SetChatDaemonBlockedFunc(ctx, chatID, blocked)
 	}
 	return contractkit.MockNotSet("MockExecuteToolsStore", "SetChatDaemonBlocked")
+}
+
+// CreateAttachment records the call and delegates to CreateAttachmentFunc when set.
+func (m *MockExecuteToolsStore) CreateAttachment(ctx context.Context, attachment *db.Attachment) error {
+	m.Recorder.Record("CreateAttachment", ctx, attachment)
+	if m.CreateAttachmentFunc != nil {
+		return m.CreateAttachmentFunc(ctx, attachment)
+	}
+	return contractkit.MockNotSet("MockExecuteToolsStore", "CreateAttachment")
 }
 
 // EmitToolCallUpdate records the call and delegates to EmitToolCallUpdateFunc when set.

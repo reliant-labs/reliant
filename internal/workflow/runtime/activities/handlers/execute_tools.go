@@ -994,7 +994,10 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		// taken from the result, so the two agree.
 		content += machineOfflineHint
 	}
-	result := a.buildToolResult(toolCallID, toolName, content, execResult.Metadata, isError, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
+	// Images and PDFs reach the model only as attachment ids: the result
+	// leaves this activity without its bytes (persistToolMedia).
+	content, attachmentIDs := a.persistToolMedia(ctx, tec, content, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
+	result := a.buildToolResult(toolCallID, toolName, content, execResult.Metadata, isError, execResult.BinaryParts, attachmentIDs)
 
 	// What the command actually printed. Captured BEFORE the nudge below,
 	// because this is what gets stored and rendered: a tip appended to the
