@@ -8,6 +8,10 @@
 # Everything that decides WHETHER a prebuild is reused and WHAT is published lives
 # here, so scripts/test-release-prebuild.sh can prove it without a runner.
 #
+#   release-prebuild.sh admit <version> <dry-run> <electron/package.json>
+#       Refuse a prebuild dispatch unless <version> is vX.Y.Z, <dry-run> is true (a
+#       prebuild publishes nothing) and the package at this commit is that version.
+#
 #   release-prebuild.sh marker <version> <sha> <web-dist> <out-file>
 #       Write the prebuild marker: the version, the commit, and the identity the
 #       renderer was built with (<web-dist>/version.json). Fails when the renderer
@@ -48,6 +52,15 @@ files_for() {
     win) echo "*.exe *.blockmap" ;;
     *) die "unknown platform '$1' (mac, linux, win)" ;;
   esac
+}
+
+cmd_admit() {
+  [ $# -eq 3 ] || die "usage: admit <version> <dry-run> <electron/package.json>"
+  local version="$1" dry="$2" pkg="$3" want
+  [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "prebuild_version must be vX.Y.Z, got '$version'"
+  [ "$dry" = true ] || die "a prebuild publishes nothing: dispatch it with dry_run=true"
+  want="$(jq -r '.version // empty' "$pkg" 2> /dev/null)" || true
+  [ "v$want" = "$version" ] || die "$pkg at this commit is v${want:-<none>}, not $version"
 }
 
 cmd_marker() {
@@ -130,8 +143,9 @@ cmd_publish() {
 sub="${1:-}"
 [ $# -gt 0 ] && shift
 case "$sub" in
+  admit) cmd_admit "$@" ;;
   marker) cmd_marker "$@" ;;
   find) cmd_find "$@" ;;
   publish) cmd_publish "$@" ;;
-  *) die "usage: release-prebuild.sh marker|find|publish ... (see the header)" ;;
+  *) die "usage: release-prebuild.sh admit|marker|find|publish ... (see the header)" ;;
 esac

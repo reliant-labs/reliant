@@ -52,6 +52,21 @@ find_is() {
   echo "ok: $2"
 }
 
+# 0. Dispatch preconditions: only a dry run of exactly the package's vX.Y.Z is admitted.
+mkdir -p "$fx/pkg"
+echo '{"name":"reliant","version":"1.2.3"}' > "$fx/pkg/package.json"
+bash "$src" admit v1.2.3 true "$fx/pkg/package.json" || fail "admit refused a valid dry-run prebuild"
+echo "ok: a dry-run prebuild of the package's version is admitted"
+! bash "$src" admit v1.2.3 false "$fx/pkg/package.json" 2> "$fx/err" || fail "admit accepted a prebuild that is not a dry run"
+grep -q 'dry_run=true' "$fx/err" || fail "the dry-run refusal does not say why: $(cat "$fx/err")"
+! bash "$src" admit v1.2.3 "" "$fx/pkg/package.json" 2> /dev/null || fail "admit accepted a prebuild with dry_run unset"
+! bash "$src" admit v1.2.4 true "$fx/pkg/package.json" 2> "$fx/err" || fail "admit accepted a version the package is not"
+grep -q 'is v1.2.3, not v1.2.4' "$fx/err" || fail "the version refusal does not say why: $(cat "$fx/err")"
+! bash "$src" admit 1.2.3 true "$fx/pkg/package.json" 2> /dev/null || fail "admit accepted a version without the v"
+! bash "$src" admit v1.2.3-rc.1 true "$fx/pkg/package.json" 2> /dev/null || fail "admit accepted a prerelease version"
+! bash "$src" admit v1.2.3 true "$fx/pkg/missing.json" 2> /dev/null || fail "admit accepted a missing package.json"
+echo "ok: a prebuild that is not a dry run, or not the package's version, is refused"
+
 # 1. The marker records the renderer identity, and refuses one that is not the version.
 mkdir -p "$fx/dist"
 echo '{"version":"1.2.3","commit":"x"}' > "$fx/dist/version.json"

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // TestReleasePrebuildScript runs scripts/test-release-prebuild.sh, the hermetic
@@ -13,11 +15,10 @@ import (
 // selection, the renderer's release identity, every platform's update feeds,
 // feeds published last, and a dry run that uploads nothing.
 func TestReleasePrebuildScript(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs bash and jq subprocesses; runs in full scoped tests")
-	}
+	testkit.Slow(t, "runs scripts/test-release-prebuild.sh (bash and jq subprocesses)",
+		testkit.Inputs("scripts/release-prebuild.sh", "scripts/test-release-prebuild.sh"))
 	if _, err := exec.LookPath("jq"); err != nil {
-		t.Skip("jq not on PATH")
+		t.Fatal("jq is not on PATH: scripts/release-prebuild.sh needs it, as release.yml's runners have it")
 	}
 	cmd := exec.Command("bash", filepath.Join(repoRoot, "scripts", "test-release-prebuild.sh"))
 	if out, err := cmd.CombinedOutput(); err != nil {

@@ -78,12 +78,7 @@ jobs:
         env:
           V: ${{ inputs.prebuild_version }}
           DRY: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          [[ "$V" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::prebuild_version must be vX.Y.Z, got '$V'"; exit 1; }
-          [ "$DRY" = true ] || { echo "::error::a prebuild publishes nothing: dispatch it with dry_run=true"; exit 1; }
-          want="$(jq -r .version electron/package.json)"
-          [ "v$want" = "$V" ] || { echo "::error::electron/package.json at this commit is v$want, not $V"; exit 1; }
+        run: bash scripts/release-prebuild.sh admit "$V" "$DRY" electron/package.json
 
       - name: Find a prebuild of this tag
         id: prebuilt
