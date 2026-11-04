@@ -98,7 +98,10 @@ type ClaimableServiceClient interface {
 	// user in place. Released AT MOST ONCE: the server redeems its vaulted
 	// refresh token (which rotates it), returns the fresh session, deletes its
 	// copy and stamps session_released_at. A second call answers
-	// FailedPrecondition, reason claimable_session_released.
+	// FailedPrecondition, reason claimable_session_released, unless it is a
+	// retry with the first call's retry_key (see OpenClaimSessionRequest); one
+	// that arrives while the first is still running answers Unavailable,
+	// reason claimable_unavailable: retry shortly.
 	OpenClaimSession(context.Context, *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error)
 	// CompleteClaim binds the claim to the signed-in human. REFUSED for an
 	// anonymous caller (PermissionDenied): a claim by someone who has not yet
@@ -273,7 +276,10 @@ type ClaimableServiceHandler interface {
 	// user in place. Released AT MOST ONCE: the server redeems its vaulted
 	// refresh token (which rotates it), returns the fresh session, deletes its
 	// copy and stamps session_released_at. A second call answers
-	// FailedPrecondition, reason claimable_session_released.
+	// FailedPrecondition, reason claimable_session_released, unless it is a
+	// retry with the first call's retry_key (see OpenClaimSessionRequest); one
+	// that arrives while the first is still running answers Unavailable,
+	// reason claimable_unavailable: retry shortly.
 	OpenClaimSession(context.Context, *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error)
 	// CompleteClaim binds the claim to the signed-in human. REFUSED for an
 	// anonymous caller (PermissionDenied): a claim by someone who has not yet

@@ -41,6 +41,10 @@ const SESSION: SessionSummary = {
   interactions: 4,
   errors: 1,
   hasReplay: true,
+  country: "",
+  region: "",
+  city: "",
+  clientAddress: "",
 };
 
 const meta = (at: number): RrwebEvent => ({ type: 4, timestamp: T + at, data: { href: "https://shop.example/", width: 1280, height: 720 } });

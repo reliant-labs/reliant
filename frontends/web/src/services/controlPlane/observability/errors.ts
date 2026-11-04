@@ -31,7 +31,29 @@ import { quotaOf } from "./quota";
 
 export type ObsErrorKind = "not-set-up" | "denied" | "invalid" | "over-quota" | "busy" | "too-broad" | "unavailable";
 
+/**
+ * A filter the control plane answered without. Protobuf servers ignore request
+ * fields they do not know, so a control plane older than a filter answers it
+ * UNFILTERED, and those rows must never be shown as narrowed. The read that
+ * notices (observability-queries) throws this instead of returning them. It
+ * reads as `invalid`: never retried, and drawn with its own copy (ObsError).
+ */
+export class FilterUnsupportedError extends Error {
+  /** What the filter narrows by, for the copy: "user", "browser session". */
+  readonly filter: string;
+  /** What was being listed: "traces", "issues". */
+  readonly subject: string;
+
+  constructor(filter: string, subject: string) {
+    super(`This control plane can't filter ${subject} by ${filter} yet: it answered without the filter, so its results are not shown.`);
+    this.name = "FilterUnsupportedError";
+    this.filter = filter;
+    this.subject = subject;
+  }
+}
+
 export function obsErrorKind(error: unknown): ObsErrorKind {
+  if (error instanceof FilterUnsupportedError) return "invalid";
   if (!(error instanceof ConnectError)) return "unavailable";
   switch (error.code) {
     case Code.FailedPrecondition:

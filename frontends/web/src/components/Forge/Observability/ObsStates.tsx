@@ -18,6 +18,7 @@ import Button from "@/components/forge-ui/button";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import type { BillingTab } from "@/routeSchemas";
 import {
+  FilterUnsupportedError,
   obsErrorKind,
   obsErrorMessage,
   type ObsErrorKind,
@@ -430,6 +431,13 @@ export function ObsError({
   const kind = obsErrorKind(error);
   if (kind === "not-set-up") return <ObsNotSetUp subject={subject} />;
   if (kind === "over-quota") return <ObsWillLoad error={error} />;
+  if (error instanceof FilterUnsupportedError) {
+    return (
+      <StateFrame testId="obs-error-filter-unsupported" tone="error" icon={<AlertTriangle className="h-4 w-4" />} title={`This control plane can't filter ${error.subject} by ${error.filter} yet`}>
+        <p>It answered without the filter, so its {error.subject} are not shown: they would not be narrowed. Clear the filter to see them all.</p>
+      </StateFrame>
+    );
+  }
   const copy = ERROR_COPY[kind];
   const detail = obsErrorMessage(error);
   return (

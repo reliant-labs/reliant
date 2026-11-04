@@ -10,7 +10,7 @@ import { keepsLastResult } from "@/services/controlPlane/observability/quota";
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, SearchX } from "lucide-react";
+import { ArrowLeft, SearchX, Waypoints } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -18,11 +18,13 @@ import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import { useSession, useSessionTimeline } from "@/hooks/observability-session-queries";
 import { rumErrorKind } from "@/services/controlPlane/observability/errors";
+import { presetCovering } from "@/services/controlPlane/observability/window";
 import type { RumScope, SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 
 import { formatAgo, formatCount, formatDuration, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
+import { Place } from "../Place";
 import { AskReliantMenu } from "../AskReliant/AskReliant";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
@@ -113,6 +115,23 @@ function SessionBody({
 
   const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined, assignee: undefined });
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
+  // Every trace of the session — the browser's own spans and the backend work
+  // its requests caused (they carry its id as session.id) — over the window it ran in.
+  // Every other narrowing is dropped: a service kept from the sessions list (its
+  // frontend) would exclude the backend traces this promises.
+  const openTraces = () =>
+    navigate({
+      ...LEAVE_SESSIONS,
+      view: "traces",
+      trace: undefined,
+      span: undefined,
+      service: undefined,
+      minDuration: undefined,
+      groupBy: undefined,
+      f: undefined,
+      rsession: session.sessionId,
+      range: presetCovering(Math.max(0, now - session.startedMs) + 60_000),
+    });
 
   return (
     <div className="space-y-4" data-testid="session-detail" data-state="ready" data-session={session.sessionId}>
@@ -129,6 +148,9 @@ function SessionBody({
             <Status tone="neutral" label="no errors" />
           )}
           {live && <Status tone="neutral" pulse label="active now" />}
+          <Button variant="ghost" size="sm" onClick={openTraces} leftIcon={<Waypoints className="h-3.5 w-3.5" />} data-testid="session-traces">
+            Traces
+          </Button>
           {session.errors > 0 && (
             <span className="ml-auto" data-testid="session-ask">
               <AskReliantMenu subject={{ kind: "session", sessionId: session.sessionId, env: session.envName || null }} appearance="button" label="Ask Reliant" />
@@ -137,6 +159,7 @@ function SessionBody({
         </div>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
+          <Place geo={session} testId="session-place" />
           <span>
             entered on <span className="font-mono text-ink">{session.entryPath || "/"}</span>
           </span>

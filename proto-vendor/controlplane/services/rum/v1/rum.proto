@@ -202,6 +202,16 @@ message SessionSummary {
   int64 errors = 12;
   // Whether a replay was recorded. GetSessionReplay serves it.
   bool has_replay = 13;
+  // Where the browser was: derived by the platform at ingest from the address
+  // it connected from (DB-IP City Lite), never reported by the page. An ISO
+  // 3166-1 alpha-2 country, and the English names of the region and city.
+  // Empty when unknown.
+  string country = 14;
+  string region = 15;
+  string city = 16;
+  // The browser's IP address. Empty unless the platform is configured to keep
+  // it; by default it derives the location above and drops the address.
+  string client_address = 17;
 }
 
 message ListSessionsRequest {

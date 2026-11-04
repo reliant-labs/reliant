@@ -201,6 +201,9 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       spanCount: 4 + (i % 5),
       errorCount: failed ? 1 : 0,
       services: ["api", "worker"],
+      userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
+      sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
+      ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
       source: "",
       operatorData: false,
     };
@@ -1018,6 +1021,8 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (req.rootSpanName) traces = traces.filter((t) => t.rootOperation.includes(req.rootSpanName));
         if (req.errorsOnly) traces = traces.filter((t) => t.errorCount > 0);
         if (req.minDurationMs) traces = traces.filter((t) => t.durationMs >= req.minDurationMs);
+        if (req.userId) traces = traces.filter((t) => t.userId === req.userId);
+        if (req.sessionId) traces = traces.filter((t) => t.sessionId === req.sessionId);
         const durations = traces.map((t) => t.durationMs).sort((a, b) => a - b);
         const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
         const errors = traces.filter((t) => t.errorCount > 0).length;
