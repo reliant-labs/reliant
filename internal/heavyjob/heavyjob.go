@@ -41,7 +41,8 @@
 // threads per heavy job, several thousand for eight of them, against a thread
 // limit (RLIMIT_NPROC counts threads) every agent's processes share. So a
 // slotted command gets its share of the CPUs, DefaultShare:
-// max(2, 2*CPUs/slots) — 8 on 32 CPUs / 8 slots — with CPUs and slots from
+// max(2, 3*CPUs/(2*slots)) — 6 on 32 CPUs / 8 slots, so all slots together
+// hold at most 1.5x the machine — with CPUs and slots from
 // the pool's own capacity (forge/pkg/hostslot: the cgroup quota or affinity,
 // and FORGE_HEAVY_SLOTS or the machine default). The wrapper exports it to the
 // command as GOMAXPROCS and UV_THREADPOOL_SIZE, each only when the command's
@@ -54,6 +55,13 @@
 // GOMAXPROCS=1 and hands it the command's own GOMAXPROCS to restore for the
 // command — so a command waiting for a slot costs a handful of threads, not
 // the 15–19 a waiter at the machine's width holds.
+//
+// The share is also a hard cap: the wrapper sets its command cgroup's cpu.max
+// to it once it holds a slot (cpumax_linux.go; internal/proctree enables the
+// cpu controller for command cgroups). GOMAXPROCS bounds the Go processes and
+// therefore the go command's -p; cpu.max bounds the rest (cgo's cc1 and ld, a
+// command that set its own GOMAXPROCS), so past the slots' total the machine
+// queues work instead of running it all slower until it times out.
 //
 //forge:exclude-contract: one concrete policy over exec.Cmd values (classify, rewrite) plus the slot wrapper this binary runs as; the slots themselves are forge/pkg/hostslot, and there is no second implementation to substitute
 package heavyjob
