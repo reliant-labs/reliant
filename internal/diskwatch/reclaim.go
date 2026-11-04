@@ -4,6 +4,7 @@ package diskwatch
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,14 @@ func (w *Watcher) Reclaim(ctx context.Context) (freed uint64, summary string, er
 	if !w.acquireReaper(ctx) {
 		return 0, "", ctx.Err()
 	}
+	// Killed builds' work directories first: they are this daemon's to
+	// reclaim (gowork.go), and on 2026-11-03 they were most of a full disk
+	// while forge's reaper, which does not own them, freed nothing.
+	cfg := w.cacheTrimConfig()
+	var work uint64
+	if r := w.goWorkDirPass(ctx, cfg, true, "disk_guard", w.newPacer(cfg.RatePerSec)); r != nil {
+		work = r.Freed
+	}
 	res := w.reaperPass(ctx, w.reaperPolicyPath(w.reaperConfig()), "disk_guard")
 	w.releaseReaper()
 
@@ -29,11 +38,17 @@ func (w *Watcher) Reclaim(ctx context.Context) (freed uint64, summary string, er
 	w.poll(context.WithoutCancel(ctx))
 	w.signal()
 
+	if work > 0 {
+		summary = "killed builds' work directories " + FormatBytes(work)
+	}
 	if !res.Ran {
+		if work > 0 {
+			return work, summary, nil
+		}
 		return 0, "", errors.New("forge's storage reaper did not run (the daemon log says why)")
 	}
 	if res.Freed > 0 {
-		summary = "build caches and docker " + FormatBytes(res.Freed)
+		summary = strings.TrimPrefix(summary+", build caches and docker "+FormatBytes(res.Freed), ", ")
 	}
-	return res.Freed, summary, nil
+	return work + res.Freed, summary, nil
 }

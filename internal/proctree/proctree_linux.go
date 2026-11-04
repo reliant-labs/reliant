@@ -265,6 +265,7 @@ func (t *Tree) Release() {
 	}
 	t.forget()
 	t.closeFD()
+	defer t.releaseGoTmp()
 	if t.dir == "" {
 		return
 	}

@@ -16,6 +16,10 @@ func New(cfg Config) *Limiter {
 
 func (t *Tree) prepareCgroup(*exec.Cmd, uint64) {}
 
+// prepareGoTmp gives a command no GOTMPDIR of its own outside Linux: nothing
+// there proves when its processes are gone.
+func (t *Tree) prepareGoTmp(*exec.Cmd) {}
+
 func (t *Tree) closeFD() {}
 
 func (t *Tree) limitNproc() {}
