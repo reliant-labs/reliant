@@ -100,6 +100,44 @@ func lastWorkDirAudit(t *testing.T, w *Watcher) workDirAudit {
 	return *last
 }
 
+// TestReaper_ReclaimsGoWorkDirsOnTheGoCacheCadence is the 2026-11-03/04
+// machine: killed builds' work dirs took 113 GB of free space to zero in six
+// hours while the work-dir pass ran only with the hourly full pass. Between
+// full passes, the Go-cache pass's 10m tick reclaims them too.
+func TestReaper_ReclaimsGoWorkDirsOnTheGoCacheCadence(t *testing.T) {
+	h, goRuns := goCacheHarness(t)
+	h.run = func(context.Context, string) (reaperRun, error) {
+		h.writeForgeRecord(autoGCRecord{At: h.now, OK: true})
+		return reaperRun{}, nil
+	}
+	tmp := h.w.env.Getenv("TMPDIR")
+	births := map[string]time.Time{}
+	mk := func(name string) string {
+		t.Helper()
+		p := filepath.Join(tmp, name)
+		writeFile(t, filepath.Join(p, "b001", "exe", "a.out"), 4096, h.now.Add(-time.Hour))
+		births[p] = h.now.Add(-time.Hour)
+		return p
+	}
+	h.w.trim.birth = func(p string) time.Time { return births[p] }
+	h.w.trim.procs = func() (procSnapshot, error) { return procSnapshot{}, nil }
+
+	if !h.tick() || h.runs() != 1 {
+		t.Fatalf("first tick: want the full pass, runs=%d", h.runs())
+	}
+	build, link := mk("go-build7"), mk("go-link-7")
+	h.advance(10 * time.Minute)
+	if !h.tick() || len(*goRuns) != 1 || h.runs() != 1 {
+		t.Fatalf("10m after: want the Go-cache pass alone, runs=%d go=%d", h.runs(), len(*goRuns))
+	}
+	if exists(build) || exists(link) {
+		t.Errorf("a dead go-build=%v / go-link=%v dir outlived the 10m Go-cache tick; it waited for the hourly full pass", exists(build), exists(link))
+	}
+	if a := lastWorkDirAudit(t, h.w); a.Removed != 2 || a.Proof != "proc_scan" {
+		t.Errorf("audit = %+v, want both dirs removed on a proc_scan proof", a)
+	}
+}
+
 func TestCreatorAlive(t *testing.T) {
 	born := time.Unix(1000, 0)
 	s := procSnapshot{goStarts: []procStart{{PID: 1, Start: born.Add(time.Minute)}, {PID: 2, Start: born.Add(-time.Minute)}, {PID: 3, Start: born.Add(-time.Hour)}}}
