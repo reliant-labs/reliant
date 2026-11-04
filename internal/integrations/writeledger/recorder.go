@@ -63,15 +63,7 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 		return d.inner.RunAuthenticated(ctx, m, a, params, src, site)
 	}
 	r := d.rec
-	// A call carrying a step's resolved secrets goes out intact, but nothing the
-	// ledger persists may hold a value: the plan is derived from the params with
-	// every value masked, and the outcome is masked before it is stored.
-	scrub := httpaction.SecretCall(ctx)
-	planParams := params
-	if scrub != nil {
-		planParams, _ = scrub.MaskAny(params).(map[string]any)
-	}
-	p := planFor(m.GetId(), a.GetId(), planParams)
+	p := planFor(m.GetId(), a.GetId(), params)
 	actor := core.IntegrationActorOwner
 	if site.ActingIdentity == httpaction.IdentityApp {
 		actor = core.IntegrationActorApp
@@ -101,14 +93,14 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 	}
 
 	res, err := d.inner.RunAuthenticated(ctx, m, a, params, src, site)
-	r.settle(ctx, w, p, res, err, scrub)
+	r.settle(ctx, w, p, res, err)
 	return res, err
 }
 
 // settle completes the intent row from the call's outcome. A failure to settle
 // is logged and nothing else: the call already happened, and an intent row left
 // open still matches its echo by target and content.
-func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan, res *httpaction.Result, callErr error, scrub httpaction.SecretScrubber) {
+func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan, res *httpaction.Result, callErr error) {
 	out := core.IntegrationWriteResult{At: r.now().UTC()}
 	switch {
 	case callErr != nil:
@@ -133,12 +125,6 @@ func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan,
 		out.Status = core.IntegrationWriteDone
 		out.ConnectionID = res.ConnectionID
 		out.Target, out.ObjectID, out.ObjectURL = p.completion(res.Data)
-	}
-	if scrub != nil {
-		out.Error = scrub.Mask(out.Error)
-		out.Target = scrub.Mask(out.Target)
-		out.ObjectID = scrub.Mask(out.ObjectID)
-		out.ObjectURL = scrub.Mask(out.ObjectURL)
 	}
 	out.Error = truncate(out.Error, 1000)
 

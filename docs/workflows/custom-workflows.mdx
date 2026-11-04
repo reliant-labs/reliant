@@ -206,7 +206,7 @@ For complete input type documentation, see the [Types Reference](/reference/type
 
 ### Secrets
 
-`secrets:` declares stored secrets by name and the environment each lives in. A step that does not hand its text to a model, an `action` (`with:` values) or a `run` (`command`), can then use one as `{{ secrets.NAME }}`; a `run` step also gets every declared secret as an environment variable of the same name.
+`secrets:` declares stored secrets by name and the environment each lives in. A secret travels only in a credential slot: a header value of `http/request@1` (`"Bearer {{ secrets.NAME }}"`), or an action's `credential: { secret: NAME }`, which the integration sends the way it sends an API key.
 
 ```yaml
 secrets:
@@ -214,7 +214,7 @@ secrets:
     environment: "{{ inputs.trader_env }}"   # "<forge project>/<env name>", an environment id, or an expression
 ```
 
-The workflow never holds the value: it is resolved inside the step, kept out of state and history, and masked in everything the step returns. A secret is a validation error in prompts, `invoke_tool`, conditions, `compute` and the other places a model or an expression would read it. A workflow loaded with `ref:` declares its own secrets. See [Secrets](/integrations/http#secrets) for the full rules and the access list.
+The workflow never holds the value: it is resolved inside the action and written only into the request it sends, so it is never in state, history, logs or anything the step returns. A secret anywhere else, `run` commands included, is a validation error. A workflow loaded with `ref:` declares its own secrets. See [Secrets](/integrations/http#secrets) for the full rules and the access list.
 
 ### Entry Point
 

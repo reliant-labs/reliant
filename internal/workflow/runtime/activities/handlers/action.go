@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,7 +13,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
-	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -41,9 +39,9 @@ type ActionActivity struct {
 	secrets     SecretResolver
 }
 
-// WithSecretResolver lets an action's inputs use the workflow's declared
-// secrets ({{ secrets.NAME }}). A nil resolver makes such an action fail rather
-// than send the placeholder.
+// WithSecretResolver lets an action's credential slots (an http/request header,
+// credential: {secret: NAME}) use the workflow's declared secrets. A nil
+// resolver makes such an action fail rather than send the placeholder.
 func (a *ActionActivity) WithSecretResolver(r SecretResolver) *ActionActivity {
 	clone := *a
 	clone.secrets = r
@@ -130,34 +128,48 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		params[httpaction.ConnectionParam] = connection
 	}
 
-	if args.GetHostedUse() != nil {
-		grant := strings.TrimSpace(model.CelStringRaw(args.GetHostedUse()))
-		return a.executeHosted(ctx, uses, grant, params, rtx), nil
-	}
-
-	// Declared secrets are resolved here, inside the activity: the node reached
-	// it with markers, never values. They are substituted into the request and
-	// every byte the step returns is masked.
-	secrets, failure := a.resolveActionSecrets(ctx, input, params)
+	// Declared secrets reach an action only in a credential slot: a header of
+	// the generic HTTP request, or the action's credential. Slot headers leave
+	// params here, so nothing
+	// that renders, records or returns params (the request template, the write
+	// ledger, the output) ever holds a value; a marker anywhere else fails the
+	// step before anything is resolved or sent.
+	slots, failure := takeSecretHeaders(uses, resolved.Manifest.GetId(), resolved.Spec.GetId(), params)
 	if failure != nil {
 		return failure, nil
 	}
-	if len(secrets.values) > 0 {
-		params = secrets.values.SubstituteAny(params).(map[string]any)
+	// The other slot: credential {secret: NAME}, written where the
+	// integration's api_key method puts a key.
+	if c := args.GetCredential(); c != nil {
+		slot, failure := credentialSlot(uses, resolved.Manifest, c.GetSecret(), params, len(slots) > 0, args.GetHostedUse() != nil, rtx.ActingIdentity)
+		if failure != nil {
+			return failure, nil
+		}
+		slots = append(slots, slot)
+	}
+
+	if args.GetHostedUse() != nil {
+		if len(slots) > 0 {
+			return failedAction(uses, "invalid_argument", "a hosted_use action cannot use declared secrets"), nil
+		}
+		grant := strings.TrimSpace(model.CelStringRaw(args.GetHostedUse()))
+		return a.executeHosted(ctx, uses, grant, params, rtx), nil
 	}
 
 	site := httpaction.CallSite{
 		RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
 		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation,
 	}
-	// A request carrying secrets is held to the transport rules a saved
-	// credential gets (https, redirects and pagination pinned to the first
-	// host), and the write ledger masks what it records with the same values.
-	callCtx := ctx
-	if len(secrets.values) > 0 {
-		callCtx = httpaction.WithSecretCall(ctx, secrets.masker)
+	if len(slots) > 0 {
+		cred, failure := a.secretHeaderCredential(ctx, input, uses, slots)
+		if failure != nil {
+			return failure, nil
+		}
+		// A credential holds the call to https and to the host it started at
+		// (redirects and pagination links included), as a saved connection does.
+		site.StepCredential = cred
 	}
-	result, runErr := a.runner.RunAuthenticated(callCtx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
+	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {
 		out.Content = runErr.Error()
@@ -167,16 +179,15 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 			out.ErrorCode = credErr.Code
 			out.Content = credErr.Message
 		}
-		out.Content = secrets.masker.Mask(out.Content)
 	} else {
 		out.ConnectionId = result.ConnectionID
-		out.Content = secrets.masker.Mask(result.Content)
+		out.Content = result.Content
 		out.IsError = result.IsError
 		out.Retryable = result.Retryable
 		out.StatusCode = int32(result.StatusCode)
 		if result.Data != nil {
 			if data, convErr := structpb.NewStruct(result.Data); convErr == nil {
-				out.Data = secrets.masker.MaskStruct(data)
+				out.Data = data
 			}
 		}
 	}
@@ -185,16 +196,15 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 	return out, nil
 }
 
-// resolveActionSecrets resolves the secrets an action's inputs name. The output
-// is nil-safe: with no secrets in play the masker masks nothing.
-func (a *ActionActivity) resolveActionSecrets(ctx context.Context, input ActivityInput, params map[string]any) (*stepSecrets, *reliantv1.ActionOutput) {
+// secretHeaderCredential resolves the secrets the step's header slots name and
+// returns the credential that writes them into the request.
+func (a *ActionActivity) secretHeaderCredential(ctx context.Context, input ActivityInput, uses string, slots []secretHeader) (httpaction.Credential, *reliantv1.ActionOutput) {
 	rtx := input.Runtime
-	names := namesInAny(params)
-	if len(names) == 0 {
-		return &stepSecrets{values: stepsecrets.Values{}, masker: stepsecrets.NewMasker()}, nil
-	}
-	uses := strings.TrimSpace(model.CelStringRaw(input.Node.GetAction().GetUses()))
 	fail := func(code, message string) *reliantv1.ActionOutput { return failedAction(uses, code, message) }
+	names := make([]string, 0, len(slots))
+	for _, h := range slots {
+		names = append(names, h.secret)
+	}
 	want, err := nodeSecretRefs(input.Node, names)
 	if err != nil {
 		return nil, fail("invalid_argument", err.Error())
@@ -202,7 +212,7 @@ func (a *ActionActivity) resolveActionSecrets(ctx context.Context, input Activit
 	if rtx.WorkflowID == "" || rtx.StepID == "" {
 		return nil, fail("failed_precondition", "secrets require a fixed workflow step")
 	}
-	got, err := resolveStepSecrets(ctx, a.secrets, rtx.WorkflowID, rtx.StepID, want)
+	values, err := resolveStepSecrets(ctx, a.secrets, rtx.WorkflowID, rtx.StepID, want)
 	if err != nil {
 		message, denied := secretFailure(err)
 		code := "failed_precondition"
@@ -211,39 +221,13 @@ func (a *ActionActivity) resolveActionSecrets(ctx context.Context, input Activit
 		}
 		return nil, fail(code, message)
 	}
-	return got, nil
+	cred, err := newSecretHeaderCredential(slots, values)
+	if err != nil {
+		return nil, fail("invalid_argument", err.Error())
+	}
+	return cred, nil
 }
 
 func failedAction(uses, code, message string) *reliantv1.ActionOutput {
 	return &reliantv1.ActionOutput{Uses: uses, IsError: true, ErrorCode: code, Content: message}
-}
-
-// namesInAny returns the distinct secret markers anywhere in decoded JSON.
-func namesInAny(in any) []string {
-	set := map[string]bool{}
-	var walk func(any)
-	walk = func(v any) {
-		switch x := v.(type) {
-		case string:
-			for _, n := range stepsecrets.Names(x) {
-				set[n] = true
-			}
-		case map[string]any:
-			for k, item := range x {
-				walk(k)
-				walk(item)
-			}
-		case []any:
-			for _, item := range x {
-				walk(item)
-			}
-		}
-	}
-	walk(in)
-	out := make([]string, 0, len(set))
-	for n := range set {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
 }

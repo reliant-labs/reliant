@@ -45,7 +45,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
-	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -529,10 +528,6 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
-	// This daemon masks a call's secret values out of its result before the
-	// outbox stores it (maskToolResult) and never backgrounds such a call; the
-	// server sends secret-bearing commands only to a machine that says so.
-	caps = append(caps, toolexec.CapabilitySecretMask)
 	sort.Strings(caps)
 
 	// The disk guard acts on a filling disk: past its reclaim threshold it
@@ -1990,14 +1985,6 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if contextMap["user_id"] == nil {
 		contextMap["user_id"] = d.currentUserID()
 	}
-	// A call carrying values to mask never detaches into the background
-	// manager: adopted, its output would be buffered, streamed and read back
-	// unmasked (maskToolResult masks only the result returned here). The
-	// nearer probe answers "not asked", so a user's background request is
-	// left for unregisterCancel to clear.
-	if toolexec.HasMaskValues(contextMap) {
-		execCtx = daemon.WithBackgroundProbe(execCtx, func() (string, bool) { return "", false })
-	}
 
 	// The worktree or project this call works in: recorded the first time it
 	// is seen, and refused while it (or $HOME) is no longer the directory the
@@ -2073,84 +2060,8 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		}
 	}
 
-	// Values the server marked secret are masked out of the result before
-	// sendToolResult holds it: the result outbox writes it to disk first.
-	maskToolResult(contextMap, result)
-
 	logToolFinished(req.ToolName, result, time.Since(toolStart))
 	d.sendToolResult(s, req.RequestId, result)
-}
-
-// maskToolResult masks the values the server listed under
-// toolexec.SecretMaskContextKey out of everything a result carries.
-func maskToolResult(contextMap map[string]interface{}, result *toolexec.ExecutionResult) {
-	raw, _ := contextMap[toolexec.SecretMaskContextKey].([]interface{})
-	if len(raw) == 0 || result == nil {
-		return
-	}
-	values := make([]string, 0, len(raw))
-	for _, v := range raw {
-		if s, ok := v.(string); ok {
-			values = append(values, s)
-		}
-	}
-	m := stepsecrets.NewMasker(values...)
-	result.Content = maskPreservingJSON(m, result.Content)
-	result.Metadata = maskPreservingJSON(m, result.Metadata)
-	result.ErrorMessage = m.Mask(result.ErrorMessage)
-}
-
-// maskPreservingJSON masks s. When s is one JSON document — the shell tool's
-// result envelope ({"stdout": …, "exit_code": …}) — only its string VALUES
-// are masked: masked as text, a secret equal to a field name (exit_code,
-// stdout) would rename the envelope's keys, and the worker would decode the
-// renamed envelope with zero values, reporting exit 3 as exit 0. Keys and
-// non-string values (numbers, booleans) are structure and are kept; any
-// output a command printed is a string value and is masked. Anything else is
-// masked as text.
-func maskPreservingJSON(m *stepsecrets.Masker, s string) string {
-	trimmed := strings.TrimSpace(s)
-	if trimmed == "" || (trimmed[0] != '{' && trimmed[0] != '[') {
-		return m.Mask(s)
-	}
-	dec := json.NewDecoder(strings.NewReader(trimmed))
-	dec.UseNumber()
-	var doc any
-	if err := dec.Decode(&doc); err != nil {
-		return m.Mask(s)
-	}
-	if _, err := dec.Token(); err != io.EOF {
-		return m.Mask(s) // more than one document: not an envelope
-	}
-	var out strings.Builder
-	enc := json.NewEncoder(&out)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(maskJSONStrings(m, doc)); err != nil {
-		return m.Mask(s)
-	}
-	return strings.TrimSuffix(out.String(), "\n")
-}
-
-// maskJSONStrings masks every string value in decoded JSON, leaving keys and
-// every other type as they are.
-func maskJSONStrings(m *stepsecrets.Masker, v any) any {
-	switch x := v.(type) {
-	case string:
-		return m.Mask(x)
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, item := range x {
-			out[k] = maskJSONStrings(m, item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, item := range x {
-			out[i] = maskJSONStrings(m, item)
-		}
-		return out
-	}
-	return v
 }
 
 // toolResponse is the wire reply to a tool request.

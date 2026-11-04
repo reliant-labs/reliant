@@ -747,6 +747,27 @@ message ActionArgs {
     label: "Hosted use grant"
     visibility_contexts: "basic"
   }];
+
+  // Credential authenticates the action with one of the workflow's declared
+  // secrets, in place of a saved connection. The value is resolved inside the
+  // action's activity and written only where the integration's api_key auth
+  // method puts a key (its header and prefix); the call is held to https and to
+  // the integration's own hosts. Refused alongside connection or hosted_use, and
+  // for an integration with no api_key method that names its header.
+  ActionCredential credential = 6 [(reliant) = {
+    description: "Authenticate with a declared secret instead of a saved connection, as {secret: NAME}"
+    example: "{\"secret\": \"SENTRY_TOKEN\"}"
+    type_hint: "JSON object"
+    label: "Credential"
+    visibility_contexts: "basic"
+  }];
+}
+
+// ActionCredential names the declared secret an action authenticates with.
+message ActionCredential {
+  // Secret is the name of a secret in the workflow's `secrets:` block. A name,
+  // never a value and never an expression.
+  string secret = 1;
 }
 
 // GitPublishArgs configures a git_publish node: commit a worktree's changes and
@@ -2165,14 +2186,17 @@ message Workflow {
   // machine is up and before its first node (preflight), and fails at once,
   // with every missing item named, instead of an hour in.
   WorkflowRequirements requires = 21;
-  // Secrets declares the secrets this workflow uses, by name. A name may appear
-  // as {{ secrets.NAME }} in any step that does not hand its text to a model
-  // (an action's url, headers, body or inputs, a run command, a non-agent
-  // tool's parameters); in a run step every declared secret is also exported as
-  // an environment variable of the same name. The placeholder stays literal in
-  // workflow state and Temporal history: it is resolved inside the step's
-  // activity, through the control plane, and every resolved value is masked in
-  // what the step returns. A child workflow (a ref) declares its own secrets.
+  // Secrets declares the secrets this workflow uses, by name. A secret travels
+  // only in a credential slot, never in text a step can print or return:
+  //   - a header value of http/request@1, as {{ secrets.NAME }} alone or after
+  //     a literal prefix ("Bearer {{ secrets.NAME }}");
+  //   - an action's credential: {secret: NAME}, applied through its
+  //     integration's api_key auth method.
+  // It is refused everywhere else, run steps and every model-facing field
+  // included. The placeholder stays a marker in workflow state and Temporal
+  // history: only the action's activity resolves it, through the control plane,
+  // and writes it into the outgoing request. A child workflow (a ref) declares
+  // its own secrets.
   map<string, SecretDeclaration> secrets = 22;
 }
 

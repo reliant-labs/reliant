@@ -38694,6 +38694,17 @@
               "name": "hosted_use",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "credential",
+              "kind": "message",
+              "type_name": "reliant.v1.ActionCredential"
+            }
+          ],
+          "reliant.v1.ActionCredential": [
+            {
+              "name": "secret",
+              "kind": "string"
             }
           ],
           "reliant.v1.AnyInputConfig": [
@@ -41441,6 +41452,7 @@
         },
         "SchemaFiles": {
           "reliant.v1.ActionArgs": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ActionCredential": "reliant/v1/workflow_v2.proto",
           "reliant.v1.AnyInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ApprovalArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ArrayInputConfig": "reliant/v1/workflow_v2.proto",

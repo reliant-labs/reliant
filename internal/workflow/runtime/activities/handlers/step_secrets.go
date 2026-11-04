@@ -3,10 +3,15 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
+	"golang.org/x/net/http/httpguts"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -16,10 +21,11 @@ import (
 // the controller checks each secret's access list against the trusted run
 // identity before it returns any value.
 //
-// Only the step activities that run a command or a request hold one. The values
-// it returns live for one activity attempt and are never an activity input or
-// result: a placeholder stays literal in workflow state and Temporal history,
-// and every output is masked before the activity returns.
+// Only the action activity holds one, and it puts a value into exactly one
+// place: a header of the request it sends. The values live for one activity
+// attempt and are never an activity input or result, never a param, and never
+// part of any text the step returns: a placeholder stays a marker in workflow
+// state and Temporal history.
 type SecretResolver interface {
 	ResolveSecrets(ctx context.Context, runID, nodeID string, refs []stepsecrets.Ref) (map[stepsecrets.Ref]string, error)
 }
@@ -32,22 +38,15 @@ type StepSecretRef struct {
 	Environment string `json:"environment"`
 }
 
-// stepSecrets are the resolved values of one activity attempt.
-type stepSecrets struct {
-	values stepsecrets.Values
-	masker *stepsecrets.Masker
-}
-
 // errSecretsNotConfigured is shown when a step needs secrets and this worker has
 // no resolver (no control plane is configured).
 var errSecretsNotConfigured = errors.New("secrets are not available: this worker has no secret resolver configured")
 
 // resolveStepSecrets resolves the named secrets, in the environments the
-// declarations name. want is the full set the step needs; an empty set resolves
-// nothing and returns a masker that masks nothing.
-func resolveStepSecrets(ctx context.Context, resolver SecretResolver, runID, nodeID string, want []StepSecretRef) (*stepSecrets, error) {
+// declarations name. want is the full set the step needs.
+func resolveStepSecrets(ctx context.Context, resolver SecretResolver, runID, nodeID string, want []StepSecretRef) (stepsecrets.Values, error) {
 	if len(want) == 0 {
-		return &stepSecrets{values: stepsecrets.Values{}, masker: stepsecrets.NewMasker()}, nil
+		return stepsecrets.Values{}, nil
 	}
 	if resolver == nil {
 		return nil, errSecretsNotConfigured
@@ -68,16 +67,14 @@ func resolveStepSecrets(ctx context.Context, resolver SecretResolver, runID, nod
 		return nil, err
 	}
 	values := make(stepsecrets.Values, len(byName))
-	raw := make([]string, 0, len(byName))
 	for name, ref := range byName {
 		v, ok := got[ref]
 		if !ok {
 			return nil, errors.New("secret resolution response is incomplete")
 		}
 		values[name] = v
-		raw = append(raw, v)
 	}
-	return &stepSecrets{values: values, masker: stepsecrets.NewMasker(raw...)}, nil
+	return values, nil
 }
 
 // secretFailure is the text a step shows when its secrets could not be
@@ -113,13 +110,179 @@ func nodeSecretRefs(node *reliantv1.Node, names []string) ([]StepSecretRef, erro
 	return out, nil
 }
 
-// allNodeSecretRefs is every secret the node's workflow declared, for a step
-// that exports them all to a command's environment.
-func allNodeSecretRefs(node *reliantv1.Node) []StepSecretRef {
-	out := make([]StepSecretRef, 0, len(node.GetSecretRefs()))
-	for _, r := range node.GetSecretRefs() {
-		out = append(out, StepSecretRef{Name: r.GetName(), Environment: model.CelStringValue(r.GetEnvironment())})
+// secretHeader is one credential slot: a request header whose value is a
+// literal prefix (possibly empty) and one declared secret.
+type secretHeader struct {
+	name   string // canonical header name
+	prefix string
+	secret string
+}
+
+// httpIntegration and httpRequestAction name the one action that takes secret
+// header slots: the generic HTTP request, whose author picks the host and so
+// knows which header the API reads a key from.
+const (
+	httpIntegration   = "http"
+	httpRequestAction = "request"
+)
+
+// refusedSecretHeaders are headers a secret may never fill: the transport owns
+// them, or they describe the body rather than authenticate the call.
+var refusedSecretHeaders = map[string]bool{
+	"Host": true, "Content-Length": true, "Content-Type": true, "Content-Encoding": true,
+	"Transfer-Encoding": true, "Connection": true, "Upgrade": true, "Te": true,
+	"Trailer": true, "Keep-Alive": true,
+}
+
+// SecretHeaderAllowed reports whether a header may be a credential slot.
+func SecretHeaderAllowed(name string) bool {
+	canonical := http.CanonicalHeaderKey(name)
+	return httpguts.ValidHeaderFieldName(name) && !refusedSecretHeaders[canonical] &&
+		!strings.HasPrefix(canonical, "Proxy-")
+}
+
+// takeSecretHeaders removes the credential slots from an action's params and
+// returns them. A marker anywhere else (the url, the query, the body, a header
+// that is not a whole slot, any other action's input) fails the step: params
+// that leave here hold no marker, so nothing downstream can be handed a value.
+func takeSecretHeaders(uses, integrationID, actionID string, params map[string]any) ([]secretHeader, *reliantv1.ActionOutput) {
+	fail := func(message string) ([]secretHeader, *reliantv1.ActionOutput) {
+		return nil, failedAction(uses, "invalid_argument", message)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	var slots []secretHeader
+	if integrationID == httpIntegration && actionID == httpRequestAction {
+		if headers, ok := params["headers"].(map[string]any); ok {
+			kept := make(map[string]any, len(headers))
+			seen := map[string]bool{}
+			for name, raw := range headers {
+				value, isString := raw.(string)
+				if !isString || !stepsecrets.HasMarker(value) {
+					kept[name] = raw
+					continue
+				}
+				prefix, secret, ok := stepsecrets.CredentialSlot(value)
+				if !ok {
+					return fail(fmt.Sprintf("header %s: a secret must end the value, once, after only literal text (e.g. \"Bearer {{ secrets.NAME }}\")", name))
+				}
+				if !SecretHeaderAllowed(name) {
+					return fail(fmt.Sprintf("header %s cannot carry a secret", name))
+				}
+				canonical := http.CanonicalHeaderKey(name)
+				if seen[canonical] {
+					return fail(fmt.Sprintf("header %s is given twice", canonical))
+				}
+				seen[canonical] = true
+				slots = append(slots, secretHeader{name: canonical, prefix: prefix, secret: secret})
+			}
+			// A plain header of the same name would be overwritten by the slot,
+			// or overwrite it: either way the author meant one of them.
+			for name := range kept {
+				if seen[http.CanonicalHeaderKey(name)] {
+					return fail(fmt.Sprintf("header %s is given twice", http.CanonicalHeaderKey(name)))
+				}
+			}
+			if len(slots) > 0 {
+				params["headers"] = kept
+			}
+		}
+	}
+	if anyHasMarker(params) {
+		return fail("a secret can only be the value of an HTTP request header (http/request@1 with.headers)")
+	}
+	sort.Slice(slots, func(i, j int) bool { return slots[i].name < slots[j].name })
+	return slots, nil
+}
+
+// credentialSlot is an action's credential: {secret: NAME}, as the one header
+// its integration's api_key method sends a key in. It stands in for a saved
+// connection, so it is refused next to one, next to a header slot or hosted
+// use, and for an automation that speaks as the app (whose identity the
+// secret is not).
+func credentialSlot(uses string, m *reliantv1.IntegrationManifest, secret string, params map[string]any, hasHeaderSlots, hostedUse bool, actingIdentity string) (secretHeader, *reliantv1.ActionOutput) {
+	fail := func(message string) (secretHeader, *reliantv1.ActionOutput) {
+		return secretHeader{}, failedAction(uses, "invalid_argument", message)
+	}
+	_, named := params[httpaction.ConnectionParam]
+	switch {
+	case !stepsecrets.NamePattern.MatchString(secret):
+		return fail("credential.secret must name a declared secret")
+	case named:
+		return fail("credential and connection are mutually exclusive")
+	case hasHeaderSlots:
+		return fail("a secret header and a credential are mutually exclusive")
+	case hostedUse:
+		return fail("credential and hosted_use are mutually exclusive")
+	case actingIdentity != "":
+		return fail("an automation that acts as " + actingIdentity + " cannot authenticate with a declared secret")
+	}
+	header, prefix, err := httpaction.APIKeyPlacement(m)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return secretHeader{name: header, prefix: prefix, secret: secret}, nil
+}
+
+func anyHasMarker(in any) bool {
+	switch x := in.(type) {
+	case string:
+		return stepsecrets.HasMarker(x)
+	case map[string]any:
+		for k, item := range x {
+			if stepsecrets.HasMarker(k) || anyHasMarker(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range x {
+			if anyHasMarker(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// secretHeaderCredential writes resolved secrets into their header slots. It
+// is an httpaction.Credential, so the runner treats the call as an
+// authenticated one: https only, and never sent to a second host.
+type secretHeaderCredential struct {
+	headers []secretHeader
+	values  stepsecrets.Values
+}
+
+// newSecretHeaderCredential checks every resolved value can be a header value
+// before anything is sent. The error names the secret, never its value.
+func newSecretHeaderCredential(slots []secretHeader, values stepsecrets.Values) (*secretHeaderCredential, error) {
+	for _, h := range slots {
+		v, ok := values[h.secret]
+		if !ok || v == "" {
+			return nil, fmt.Errorf("secret %s resolved to no value", h.secret)
+		}
+		if !httpguts.ValidHeaderFieldValue(h.prefix + v) {
+			return nil, fmt.Errorf("secret %s cannot be sent in header %s: it holds a line break or a control character", h.secret, h.name)
+		}
+	}
+	return &secretHeaderCredential{headers: slots, values: values}, nil
+}
+
+func (c *secretHeaderCredential) ConnectionID() string      { return "" }
+func (c *secretHeaderCredential) Params() map[string]string { return nil }
+
+func (c *secretHeaderCredential) Apply(req *http.Request) error {
+	for _, h := range c.headers {
+		req.Header.Set(h.name, h.prefix+c.values[h.secret])
+	}
+	return nil
+}
+
+// Scrub is the Credential contract every authenticated call shares: the runner
+// passes errors and results through it. The value is never put into either by
+// this step; this only covers a server that echoes it back verbatim.
+func (c *secretHeaderCredential) Scrub(s string) string {
+	for _, h := range c.headers {
+		if v := c.values[h.secret]; v != "" {
+			s = strings.ReplaceAll(s, v, "[secret]")
+		}
+	}
+	return s
 }

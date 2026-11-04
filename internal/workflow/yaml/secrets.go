@@ -79,13 +79,11 @@ func marshalWorkflowSecrets(secrets map[string]*reliantv1.SecretDeclaration) (*y
 	return m, nil
 }
 
-// bindNodeSecretRefs records, on every node that executes a command or a
-// request, which declared secrets its activity must resolve, and where each
-// lives. The refs carry names and environment expressions only.
-//
-//   - an action node resolves the secrets its `with` names;
-//   - a run node resolves every declared secret, because each is exported to the
-//     command as an environment variable of the same name.
+// bindNodeSecretRefs records, on every action node that uses a declared secret,
+// which secrets its activity must resolve and where each lives. The refs carry
+// names and environment expressions only. An action resolves the secrets its
+// credential slots name: an http/request@1 header value and credential.secret.
+// No other node resolves any (a run step's command could print it).
 //
 // A reference to an undeclared name gets no ref here; validation reports it.
 // Inline loop and workflow bodies share the root's declarations. A workflow
@@ -100,17 +98,13 @@ func bindNodeSecretRefs(wf *reliantv1.Workflow) {
 		for _, node := range w.GetNodes() {
 			node.SecretRefs = nil
 			var names []string
-			switch {
-			case node.GetRun() != nil:
-				for name := range decls {
-					names = append(names, name)
-				}
-			case node.GetAction() != nil:
+			if args := node.GetAction(); args != nil {
 				set := map[string]bool{}
-				for _, v := range node.GetAction().GetWith() {
-					for _, n := range stepsecrets.AuthoredNamesInValue(v) {
-						set[n] = true
-					}
+				for _, n := range stepsecrets.AuthoredNamesInValue(args.GetWith()["headers"]) {
+					set[n] = true
+				}
+				if c := args.GetCredential(); c != nil && c.GetSecret() != "" {
+					set[c.GetSecret()] = true
 				}
 				for n := range set {
 					names = append(names, n)

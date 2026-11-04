@@ -30,36 +30,127 @@ func secretErrors(t *testing.T, source string) string {
 	return errorsText(staticAnalysisOf(t, source))
 }
 
-func TestSecretsAreAllowedInNonModelSteps(t *testing.T) {
+// A secret is allowed in exactly the two credential slots.
+func TestSecretsAreAllowedOnlyInCredentialSlots(t *testing.T) {
 	allowed := map[string]string{
-		"action url, header and body": `  - id: call
+		"http header, whole value and after a literal prefix": `  - id: call
     type: action
     uses: http/request@1
     with:
-      url: "{{ inputs.base }}/x?k={{ secrets.TRADER_KEY }}"
+      url: "{{ inputs.base }}/x"
       method: POST
-      headers: {X-API-Key: "{{ secrets.TRADER_KEY }}", Authorization: "Bearer {{ secrets.TRADER_KEY }}"}
-      body: {key: "{{ secrets.TRADER_KEY }}", nested: [{k: "{{ secrets.TRADER_KEY }}"}]}
+      headers: {X-API-Key: "{{ secrets.TRADER_KEY }}", Authorization: "Bearer {{ secrets.TRADER_KEY }}", Accept: "application/json"}
+      body: {qty: 3}
 `,
-		"action connection-less integration input": `  - id: call
+		"an integration's credential": `  - id: call
     type: action
-    uses: http/request@1
-    with:
-      url: "https://x.example/"
-      query: {token: "{{ secrets.TRADER_KEY }}"}
-`,
-		"run command": `  - id: call
-    type: run
-    command: 'curl -H "X-API-Key: {{ secrets.TRADER_KEY }}" https://x.example/'
-`,
-		"run command by environment variable": `  - id: call
-    type: run
-    command: 'curl -H "X-API-Key: $TRADER_KEY" https://x.example/'
+    uses: github/user.get@1
+    credential: {secret: TRADER_KEY}
 `,
 	}
 	for name, node := range allowed {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, "", secretErrors(t, secretWorkflow(node)))
+		})
+	}
+}
+
+// A step cannot echo a secret: every other place a step's input could carry one
+// to text it prints or returns is refused.
+func TestSecretsAreRefusedOutsideCredentialSlots(t *testing.T) {
+	refused := map[string]string{
+		"http url": `  - id: call
+    type: action
+    uses: http/request@1
+    with: {url: "https://x.example/x?k={{ secrets.TRADER_KEY }}"}
+`,
+		"http query": `  - id: call
+    type: action
+    uses: http/request@1
+    with: {url: "https://x.example/", query: {token: "{{ secrets.TRADER_KEY }}"}}
+`,
+		"http body": `  - id: call
+    type: action
+    uses: http/request@1
+    with: {url: "https://x.example/", method: POST, body: {key: "{{ secrets.TRADER_KEY }}"}}
+`,
+		"another action's inputs": `  - id: call
+    type: action
+    uses: github/issue.comment.list@1
+    with: {owner: "{{ secrets.TRADER_KEY }}", repo: r, issue_number: 1}
+`,
+		"run command": `  - id: call
+    type: run
+    command: 'curl -H "X-API-Key: {{ secrets.TRADER_KEY }}" https://x.example/'
+`,
+	}
+	for name, node := range refused {
+		t.Run(name, func(t *testing.T) {
+			require.Contains(t, secretErrors(t, secretWorkflow(node)), "secrets.NAME may not be used here")
+		})
+	}
+
+	for name, header := range map[string]string{
+		"text after the hole":   `"{{ secrets.TRADER_KEY }} x"`,
+		"two holes":             `"{{ secrets.TRADER_KEY }}{{ secrets.TRADER_KEY }}"`,
+		"an expression prefix":  `"{{ inputs.base }} {{ secrets.TRADER_KEY }}"`,
+		"a refused header Host": "",
+	} {
+		t.Run("header: "+name, func(t *testing.T) {
+			h := "X-Key: " + header
+			if header == "" {
+				h = `Host: "{{ secrets.TRADER_KEY }}"`
+			}
+			node := `  - id: call
+    type: action
+    uses: http/request@1
+    with:
+      url: "https://x.example/"
+      headers: {` + h + `}
+`
+			require.NotEmpty(t, secretErrors(t, secretWorkflow(node)))
+		})
+	}
+}
+
+func TestActionCredentialRules(t *testing.T) {
+	for name, tc := range map[string]struct{ node, want string }{
+		"undeclared": {`  - id: call
+    type: action
+    uses: github/user.get@1
+    credential: {secret: OTHER_KEY}
+`, "secrets.OTHER_KEY is not declared"},
+		"with a connection": {`  - id: call
+    type: action
+    uses: github/user.get@1
+    connection: conn_1
+    credential: {secret: TRADER_KEY}
+`, "mutually exclusive"},
+		"an integration whose header is open": {`  - id: call
+    type: action
+    uses: http/request@1
+    credential: {secret: TRADER_KEY}
+    with: {url: "https://x.example/"}
+`, "names no header"},
+		"an integration with no api_key method": {`  - id: call
+    type: action
+    uses: slack/message.post@1
+    credential: {secret: TRADER_KEY}
+    with: {channel: C1, text: hi}
+`, "no api_key auth method"},
+		"a value, not a name": {`  - id: call
+    type: action
+    uses: github/user.get@1
+    credential: {secret: "{{ secrets.TRADER_KEY }}"}
+`, "name of a declared secret"},
+		"an integration whose connection carries settings": {`  - id: call
+    type: action
+    uses: sentry/issue.list@1
+    credential: {secret: TRADER_KEY}
+`, "needs connection settings"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Contains(t, secretErrors(t, secretWorkflow(tc.node)), tc.want)
 		})
 	}
 }
@@ -220,7 +311,7 @@ func TestSecretsInLoopBodiesAndSubWorkflows(t *testing.T) {
 
 	leaky := strings.Replace(loop, `headers: {X-API-Key: "{{ secrets.TRADER_KEY }}"}`, `headers: {X-API-Key: "{{ secrets.TRADER_KEY }}"}
             body: "{{ secrets.TRADER_KEY }}"`, 1)
-	require.Equal(t, "", secretErrors(t, leaky), "a request body is an allowed place")
+	require.Contains(t, secretErrors(t, leaky), "may not be used here", "a request body is not a credential slot")
 
 	// A model call inside the same loop body is not.
 	withModel := strings.Replace(loop, "      nodes:\n", `      nodes:
@@ -270,8 +361,6 @@ func TestSecretDeclarationRules(t *testing.T) {
 	for name, tc := range map[string]struct{ decl, want string }{
 		"no environment": {"  TRADER_KEY: {}", "required"},
 		"bad name":       {`  "BAD-NAME": {environment: a/b}`, "letters, digits and underscores"},
-		"reserved name":  {"  PATH: {environment: a/b}", "cannot be a secret's name"},
-		"reliant prefix": {"  RELIANT_TOKEN: {environment: a/b}", "cannot be a secret's name"},
 		"node-derived":   {`  TRADER_KEY: {environment: "{{ nodes.x.env }}"}`, "inputs only"},
 		"iter-derived":   {`  TRADER_KEY: {environment: "{{ iter.item }}"}`, "inputs only"},
 	} {

@@ -1,11 +1,10 @@
 // Package stepsecrets is the pure core of declared secrets: finding the
-// {{ secrets.NAME }} placeholders in a step's inputs, the digest a resolve
-// ticket is bound to, substituting resolved values, and masking them again in
-// everything a step returns.
+// {{ secrets.NAME }} placeholders in a step's inputs, the markers they render
+// to, and the digest a resolve ticket is bound to.
 //
-// A placeholder is not CEL. Workflow state and Temporal history carry it as
-// literal text; only inside an activity is it replaced, and the value never
-// leaves that activity: Mask runs over every output before it is returned.
+// A placeholder is not CEL. Workflow state and Temporal history carry it as a
+// marker; only the action activity resolves it, and then only into a request's
+// credential slot (a header), never into text a step returns.
 //
 //forge:exclude-contract: pure helpers shared by the step activities and the workflow runtime
 package stepsecrets
@@ -14,11 +13,9 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,12 +27,8 @@ import (
 // Namespace is the identifier a placeholder reads: {{ secrets.NAME }}.
 const Namespace = "secrets"
 
-// Mask replaces a resolved value wherever it, or an encoding of it, appears.
-const Mask = "***"
-
-// NamePattern is a secret name, and the environment variable it is exported as.
-// It is the control plane's tenantsecret charset, so a name is valid on both
-// sides of the wire.
+// NamePattern is a secret name. It is the control plane's tenantsecret charset,
+// so a name is valid on both sides of the wire.
 var NamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 
 // plainSecretExpr is the one expression a placeholder may be: secrets.NAME.
@@ -235,16 +228,24 @@ func Unprotect(s string) string {
 	})
 }
 
-// ShellRefs rewrites the markers in a shell command to ${NAME}, so the value
-// reaches the command through its environment and never through its text: it is
-// not in the command line, a process listing or any stored copy of the command.
-func ShellRefs(s string) string {
-	if !strings.Contains(s, markerOpen) {
-		return s
+// HasMarker reports whether s carries a marker, or anything that starts one.
+func HasMarker(s string) bool { return strings.Contains(s, markerOpen) }
+
+// CredentialSlot splits a rendered value that is one credential slot: a literal
+// prefix (possibly empty, e.g. "Bearer ") followed by exactly one marker, which
+// ends the value. Anything else (no marker, two, text after it) is not a slot.
+// The prefix is what the author wrote around the placeholder, so it is sent as
+// is, ahead of the resolved value.
+func CredentialSlot(s string) (prefix, name string, ok bool) {
+	if strings.Count(s, markerOpen) != 1 || !strings.HasSuffix(s, markerClose) {
+		return "", "", false
 	}
-	return markerPattern.ReplaceAllStringFunc(s, func(found string) string {
-		return "${" + markerPattern.FindStringSubmatch(found)[1] + "}"
-	})
+	at := strings.Index(s, markerOpen)
+	m := markerPattern.FindStringSubmatch(s[at:])
+	if m == nil || len(m[0]) != len(s)-at {
+		return "", "", false
+	}
+	return s[:at], m[1], true
 }
 
 // AuthoredNamesInValue returns the distinct authored placeholder names anywhere
@@ -345,212 +346,3 @@ type Values map[string]string
 
 func (Values) String() string   { return "stepsecrets.Values{redacted}" }
 func (Values) GoString() string { return "stepsecrets.Values{redacted}" }
-
-// Substitute replaces every marker in s with its value. A marker
-// whose name has no value is left in place. Substitution is one pass: a value
-// that itself looks like a marker is data, not a second lookup.
-func (v Values) Substitute(s string) string {
-	if !strings.Contains(s, markerOpen) {
-		return s
-	}
-	return markerPattern.ReplaceAllStringFunc(s, func(found string) string {
-		if val, ok := v[markerPattern.FindStringSubmatch(found)[1]]; ok {
-			return val
-		}
-		return found
-	})
-}
-
-// SubstituteValue returns a copy of a structured value with every string
-// substituted, so a secret in a header or body reaches the request intact.
-func (v Values) SubstituteValue(in *structpb.Value) *structpb.Value {
-	switch k := in.GetKind().(type) {
-	case *structpb.Value_StringValue:
-		return structpb.NewStringValue(v.Substitute(k.StringValue))
-	case *structpb.Value_StructValue:
-		fields := make(map[string]*structpb.Value, len(k.StructValue.GetFields()))
-		for name, f := range k.StructValue.GetFields() {
-			fields[name] = v.SubstituteValue(f)
-		}
-		return structpb.NewStructValue(&structpb.Struct{Fields: fields})
-	case *structpb.Value_ListValue:
-		items := make([]*structpb.Value, 0, len(k.ListValue.GetValues()))
-		for _, item := range k.ListValue.GetValues() {
-			items = append(items, v.SubstituteValue(item))
-		}
-		return structpb.NewListValue(&structpb.ListValue{Values: items})
-	default:
-		return in
-	}
-}
-
-// SubstituteAny is SubstituteValue for decoded JSON (map[string]any, []any, string).
-func (v Values) SubstituteAny(in any) any {
-	switch x := in.(type) {
-	case string:
-		return v.Substitute(x)
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, item := range x {
-			out[k] = v.SubstituteAny(item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, item := range x {
-			out[i] = v.SubstituteAny(item)
-		}
-		return out
-	default:
-		return in
-	}
-}
-
-// Env returns the values as environment variables named after the secrets.
-func (v Values) Env() map[string]string {
-	out := make(map[string]string, len(v))
-	for name, val := range v {
-		out[name] = val
-	}
-	return out
-}
-
-// Masker replaces resolved values, and their encodings, with Mask.
-type Masker struct{ forms []string }
-
-// NewMasker builds a masker for the given values. For each value it masks the
-// raw text and the forms a value takes when something echoes it: standard and
-// URL-safe base64 (padded and not), URL query and path escapes, and the JSON
-// string escape. Longer forms are replaced first so a form that contains a
-// shorter one is not left half-masked.
-func NewMasker(values ...string) *Masker {
-	set := map[string]bool{}
-	add := func(s string) {
-		// A one- or two-byte value would shred ordinary text. The control plane
-		// refuses short values; this is the matching floor on this side.
-		if len(s) >= 4 {
-			set[s] = true
-		}
-	}
-	for _, val := range values {
-		if val == "" {
-			continue
-		}
-		add(val)
-		raw := []byte(val)
-		add(base64.StdEncoding.EncodeToString(raw))
-		add(base64.RawStdEncoding.EncodeToString(raw))
-		add(base64.URLEncoding.EncodeToString(raw))
-		add(base64.RawURLEncoding.EncodeToString(raw))
-		add(url.QueryEscape(val))
-		add(url.PathEscape(val))
-		if j, err := json.Marshal(val); err == nil && len(j) > 2 {
-			add(string(j[1 : len(j)-1]))
-		}
-		// A line-by-line view: a multi-line value is masked per line too, so a
-		// tool that prints it indented or prefixed does not leave a line behind.
-		if strings.ContainsAny(val, "\r\n") {
-			for _, line := range strings.FieldsFunc(val, func(r rune) bool { return r == '\n' || r == '\r' }) {
-				add(strings.TrimSpace(line))
-			}
-		}
-	}
-	forms := make([]string, 0, len(set))
-	for f := range set {
-		forms = append(forms, f)
-	}
-	sort.Slice(forms, func(i, j int) bool {
-		if len(forms[i]) != len(forms[j]) {
-			return len(forms[i]) > len(forms[j])
-		}
-		return forms[i] < forms[j]
-	})
-	return &Masker{forms: forms}
-}
-
-// Empty reports whether the masker has nothing to mask.
-func (m *Masker) Empty() bool { return m == nil || len(m.forms) == 0 }
-
-// Mask returns s with every registered form replaced.
-func (m *Masker) Mask(s string) string {
-	if m.Empty() || s == "" {
-		return s
-	}
-	for _, f := range m.forms {
-		if strings.Contains(s, f) {
-			s = strings.ReplaceAll(s, f, Mask)
-		}
-	}
-	return s
-}
-
-// MaskError returns an error whose text is masked and whose cause chain is
-// dropped when it could carry a value.
-func (m *Masker) MaskError(err error) error {
-	if err == nil || m.Empty() {
-		return err
-	}
-	if masked := m.Mask(err.Error()); masked != err.Error() {
-		return maskedError(masked)
-	}
-	return err
-}
-
-type maskedError string
-
-func (e maskedError) Error() string { return string(e) }
-
-// MaskAny masks every string in decoded JSON.
-func (m *Masker) MaskAny(in any) any {
-	switch x := in.(type) {
-	case string:
-		return m.Mask(x)
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, item := range x {
-			out[m.Mask(k)] = m.MaskAny(item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, item := range x {
-			out[i] = m.MaskAny(item)
-		}
-		return out
-	default:
-		return in
-	}
-}
-
-// MaskValue returns a copy of a structured value with every string masked.
-func (m *Masker) MaskValue(in *structpb.Value) *structpb.Value {
-	if m.Empty() || in == nil {
-		return in
-	}
-	switch k := in.GetKind().(type) {
-	case *structpb.Value_StringValue:
-		return structpb.NewStringValue(m.Mask(k.StringValue))
-	case *structpb.Value_StructValue:
-		return structpb.NewStructValue(m.MaskStruct(k.StructValue))
-	case *structpb.Value_ListValue:
-		items := make([]*structpb.Value, 0, len(k.ListValue.GetValues()))
-		for _, item := range k.ListValue.GetValues() {
-			items = append(items, m.MaskValue(item))
-		}
-		return structpb.NewListValue(&structpb.ListValue{Values: items})
-	default:
-		return in
-	}
-}
-
-// MaskStruct returns a copy of a struct with every key and string masked.
-func (m *Masker) MaskStruct(s *structpb.Struct) *structpb.Struct {
-	if s == nil || m.Empty() {
-		return s
-	}
-	fields := make(map[string]*structpb.Value, len(s.GetFields()))
-	for name, f := range s.GetFields() {
-		fields[m.Mask(name)] = m.MaskValue(f)
-	}
-	return &structpb.Struct{Fields: fields}
-}

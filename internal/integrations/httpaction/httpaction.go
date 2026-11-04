@@ -288,29 +288,19 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 	// A credential must never reach a host other than the one the call started
 	// at: custom auth headers (X-Api-Key) survive a redirect, so a redirect or a
 	// pagination link to another host would leak it.
-	//
-	// A call that carries a workflow step's resolved secrets (WithSecrets) is
-	// held to the same rule: its values sit in the URL, headers or body.
 	pinnedHost := ""
-	secretCall := SecretCall(ctx) != nil
-	onlyHTTPS := "a connection is only sent over https"
-	secondHost := "a credential is never sent to a second host"
-	if secretCall && cred == nil {
-		onlyHTTPS = "a request carrying a secret is only sent over https"
-		secondHost = "a request carrying a secret is never sent to a second host"
-	}
-	if cred != nil || secretCall {
+	if cred != nil {
 		pinnedHost = strings.ToLower(target.Host)
 		if target.Scheme != "https" {
-			return nil, errors.New(onlyHTTPS)
+			return nil, fmt.Errorf("a connection is only sent over https")
 		}
 	}
 	checkPinned := func(u *url.URL) error {
 		if pinnedHost != "" && strings.ToLower(u.Host) != pinnedHost {
-			return fmt.Errorf("host %q differs from %q: %s", u.Host, pinnedHost, secondHost)
+			return fmt.Errorf("host %q differs from %q: a credential is never sent to a second host", u.Host, pinnedHost)
 		}
 		if pinnedHost != "" && u.Scheme != "https" {
-			return errors.New(onlyHTTPS)
+			return fmt.Errorf("a connection is only sent over https")
 		}
 		return nil
 	}
@@ -508,60 +498,14 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 		return nil, err
 	}
 	raw := resp.Body
-	// A call carrying a step's secrets has the response masked here, whole,
-	// before anything cuts it (defaultErrorMessage and notJSONResult keep 300
-	// bytes, a success maxContentChars): a secret the server echoes across a
-	// cut would leave a fragment no registered form matches, and the action
-	// activity's mask afterwards could not catch it (reliant #2037 review).
-	// A JSON body is masked as a decoded document: json.Unmarshal restores
-	// spellings the wire text does not show (\u escapes, an escaped slash).
-	scrub := SecretCall(ctx)
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
-		// Decoded BEFORE masking: masking the wire text could turn a valid
-		// document invalid (a numeric value replaced by the mask). The decoded
-		// document is masked and the raw text re-derived from it.
 		if p.jsonErr = json.Unmarshal(raw, &parsed); p.jsonErr == nil {
-			if scrub != nil {
-				parsed = maskNumbers(scrub, scrub.MaskAny(parsed))
-				if b, err := json.Marshal(parsed); err == nil {
-					p.raw = b
-				} else {
-					p.raw = []byte(scrub.Mask(string(raw)))
-				}
-			}
 			p.parsed = parsed
-			return p, nil
 		}
-	}
-	if scrub != nil && len(raw) > 0 {
-		p.raw = []byte(scrub.Mask(string(raw)))
 	}
 	return p, nil
-}
-
-// maskNumbers replaces a decoded JSON number whose text is a secret value with
-// the mask: MaskAny masks strings, and a numeric secret ("123456") echoed as a
-// number would otherwise survive into the step's structured output.
-func maskNumbers(s SecretScrubber, v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, e := range x {
-			x[k] = maskNumbers(s, e)
-		}
-		return x
-	case []any:
-		for i, e := range x {
-			x[i] = maskNumbers(s, e)
-		}
-		return x
-	case float64:
-		if t := strconv.FormatFloat(x, 'f', -1, 64); s.Mask(t) != t {
-			return s.Mask(t)
-		}
-	}
-	return v
 }
 
 func validateParams(a *reliantv1.ActionSpec, params *map[string]any) error {

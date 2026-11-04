@@ -384,57 +384,7 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
 	}
-	if len(req.MaskValues) > 0 {
-		contextMap[SecretMaskContextKey] = req.MaskValues
-	}
 	return contextMap
-}
-
-// SecretMaskContextKey is the context-map key carrying ToolRequest.MaskValues
-// to the machine that runs the tool. Built server-side only; a model's tool
-// input never reaches the context map.
-const SecretMaskContextKey = "secret_mask"
-
-// CapabilitySecretMask is the capability a daemon registers when it masks
-// SecretMaskContextKey's values out of a result before it stores or sends it,
-// and refuses to background a command carrying them. The server sends a
-// secret-bearing command only to a machine that advertises it: an older
-// daemon ignores the mask and would write an echoed secret to its result
-// outbox. Not a tool name; the "feature:" prefix keeps it apart from them.
-const CapabilitySecretMask = "feature:secret_mask/v1"
-
-// HasMaskValues reports whether a server-built context map lists values to
-// mask (SecretMaskContextKey), in either the in-process ([]string) or the
-// JSON-decoded ([]interface{}) form.
-func HasMaskValues(contextMap map[string]interface{}) bool {
-	switch v := contextMap[SecretMaskContextKey].(type) {
-	case []string:
-		return len(v) > 0
-	case []interface{}:
-		return len(v) > 0
-	}
-	return false
-}
-
-// MaskValues returns the values a server-built context map lists to mask
-// (SecretMaskContextKey), from either form HasMaskValues accepts; nil when
-// there are none.
-func MaskValues(contextMap map[string]interface{}) []string {
-	switch v := contextMap[SecretMaskContextKey].(type) {
-	case []string:
-		if len(v) > 0 {
-			return v
-		}
-	case []interface{}:
-		var out []string
-		for _, x := range v {
-			if s, ok := x.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
 }
 
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the

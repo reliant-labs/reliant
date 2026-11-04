@@ -47,7 +47,7 @@ To authenticate, save an API-key or basic-auth connection for the `http` integra
 
 ## Secrets
 
-A workflow can use a stored secret, such as an API key, without a model ever seeing it. Declare the secrets at the top of the workflow, then name one with `{{ secrets.NAME }}` in any step that does not hand its text to a model:
+A workflow can authenticate a request with a stored secret, such as an API key, without the value ever appearing in anything a step or a model can read. Declare the secrets at the top of the workflow, then put one in a **credential slot**:
 
 ```yaml
 name: trader-bot
@@ -56,6 +56,8 @@ secrets:
   TRADER_KEY:
     environment: trader/staging        # "<forge project>/<env name>", or an environment id
     # environment: "{{ inputs.trader_env }}"   # may also be an expression over inputs
+  GH_PAT:
+    environment: ops/prod
 
 nodes:
   - id: get_briefing
@@ -68,29 +70,36 @@ nodes:
         Authorization: "Bearer {{ secrets.TRADER_KEY }}"
       body: { account: "main" }
 
-  - id: deploy
-    type: run
-    command: ./deploy.sh --key "{{ secrets.TRADER_KEY }}"   # or just use $TRADER_KEY
+  - id: whoami
+    type: action
+    uses: github/user.get@1
+    credential: { secret: GH_PAT }     # sent as GitHub's api_key: Authorization: Bearer <value>
 
 edges:
   - from: get_briefing
-    default: deploy
+    default: whoami
 ```
 
-### Where a secret can be used
+### The two credential slots
 
-| Step | Where | How the value is delivered |
+| Slot | Where | How the value is sent |
 |---|---|---|
-| `action` | any value under `with:` (for `http/request@1`: `url`, `headers`, `body`) | substituted into the request inside the step |
-| `run` | the `command` | every declared secret is exported to the command as an environment variable of the same name; `{{ secrets.NAME }}` in the command text becomes `"${NAME}"`, so the value is never in the command line |
+| HTTP header | a header value of `http/request@1`: `{{ secrets.NAME }}` alone, or after literal text (`"Bearer {{ secrets.NAME }}"`) | written into that request header as the request is sent |
+| Integration credential | `credential: { secret: NAME }` on an action, in place of `connection` | written where the integration's `api_key` method puts a key (its header and prefix) |
 
-A secret is a validation error everywhere else: prompts and messages for `call_llm`, `router`, agents and sub-agents, `save_message`, tool configs and response tools, `invoke_tool` (every tool a workflow can name hands its parameters to a model or a chat), conditions, `compute`, `while`, `key`, `items`, edges and workflow `outputs`. Once a value is in a prompt it has gone to the model provider and cannot be recalled. Only a whole `{{ secrets.NAME }}` is a secret reference; `secrets['NAME']`, `secrets.NAME.upperAscii()` and concatenations are refused. The name must be declared, and a name cannot be one a `run` step needs for itself (`PATH`, `HOME`, `GITHUB_TOKEN`, anything starting `RELIANT_`, and similar).
+A secret is a validation error everywhere else, and the step refuses it again when it runs: an HTTP `url`, `query` or `body`, any other action input, a `run` command, prompts and messages, `save_message`, tool configs, `invoke_tool`, conditions, `compute`, `while`, `key`, `items`, edges and workflow `outputs`. A header that carries a secret cannot be `Host`, `Content-*`, `Transfer-Encoding`, `Connection` or a `Proxy-*` header. Only a whole `{{ secrets.NAME }}` is a secret reference; `secrets['NAME']`, `secrets.NAME.upperAscii()` and concatenations are refused.
+
+`credential` is refused next to `connection` or `hosted_use`, and for an integration that has no `api_key` method, sends its key in the query string, leaves the header to each connection (`http/request@1`: use a header slot), or needs connection settings a key does not carry (Sentry's organization: use a saved connection).
+
+`run` steps never receive a secret: a command can print its own environment, so there is nothing to put one in that it could not echo.
 
 ### What Reliant keeps
 
-The value is fetched by the worker for one step attempt, held in memory, and never written to the run's state, the Temporal history, logs, spans, node outputs or the UI. The step receives the reference, not the value, until it runs. Everything the step returns is **masked** before it leaves the step: a request's response, a command's output, errors and the text the UI shows. The mask covers the value as it is, in base64, URL-escaped and JSON-escaped, and line by line for a multi-line value. It cannot hide a value the step transforms in other ways (hashing, splitting it across lines), so a `run` step is a place you trust with the secret.
+The value is fetched by the worker for one step attempt, through the control plane, and written only into the outgoing request. It is never a step input, so it is not in the run's state, the Temporal history, the write ledger, logs, spans, node outputs, errors or the UI. Nothing is masked after the fact: the value is simply never in that text.
 
-A request that carries a secret is held to the same transport rules as one that carries a saved connection: it is sent only over HTTPS, and redirects and pagination links are followed only within the host the request started at. A redirect to another host fails the step instead of being followed. For a `run` step, the machine that runs the command masks the secret values out of its output before the result is stored or sent anywhere, so the raw output is never written to the machine's result outbox. The write ledger and logs are built from masked text too.
+A request that carries a secret is held to the same transport rules as one that carries a saved connection: it is sent only over HTTPS, and redirects and pagination links are followed only within the host the request started at (an integration credential also only to the integration's own hosts). A redirect to another host fails the step instead of being followed.
+
+What a remote server sends back is its own: an API that echoes your request headers (such as a debugging endpoint) returns the value in its response, exactly as it would for a saved connection. Send a secret only to the API it belongs to.
 
 Text that reaches a step as data, such as a workflow input or the output of an earlier step, is never treated as a secret reference, even if it contains `{{ secrets.NAME }}`.
 

@@ -33,6 +33,10 @@ nodes:
   - id: ship
     type: run
     command: deploy
+  - id: gh
+    type: action
+    uses: github/user.get@1
+    credential: {secret: DEPLOY_TOKEN}
   - id: each
     type: loop
     items: "{{ [1] }}"
@@ -44,7 +48,8 @@ nodes:
           uses: http/request@1
           with:
             url: https://example.com
-            body: {token: "Bearer {{ secrets.DEPLOY_TOKEN }}"}
+            headers: {Authorization: "Bearer {{ secrets.DEPLOY_TOKEN }}"}
+            body: {note: "{{ secrets.TRADER_KEY }}"}
 `
 
 func TestSecretsBlockParsesAndBindsRefsToTheNodesThatNeedThem(t *testing.T) {
@@ -61,12 +66,14 @@ func TestSecretsBlockParsesAndBindsRefsToTheNodesThatNeedThem(t *testing.T) {
 			byID[n.GetId()] = append(byID[n.GetId()], r.GetName())
 		}
 	}
-	assert.Equal(t, []string{"TRADER_KEY"}, byID["call"], "an action gets the secrets its `with` names")
+	assert.Equal(t, []string{"TRADER_KEY"}, byID["call"], "an action gets the secrets its header slots name")
 	assert.Empty(t, byID["plain"])
-	assert.Equal(t, []string{"DEPLOY_TOKEN", "TRADER_KEY"}, byID["ship"], "a run step gets every declared secret")
+	assert.Empty(t, byID["ship"], "a run step gets no secret: its command could print it")
+	assert.Equal(t, []string{"DEPLOY_TOKEN"}, byID["gh"], "an action gets its credential's secret")
+	assert.Equal(t, "DEPLOY_TOKEN", wf.GetNodes()[3].GetAction().GetCredential().GetSecret())
 
-	inner := wf.GetNodes()[3].GetLoop().GetInline().GetNodes()[0]
-	require.Len(t, inner.GetSecretRefs(), 1, "inline bodies use the root's declarations")
+	inner := wf.GetNodes()[4].GetLoop().GetInline().GetNodes()[0]
+	require.Len(t, inner.GetSecretRefs(), 1, "inline bodies use the root's declarations; a body hole binds nothing")
 	assert.Equal(t, "DEPLOY_TOKEN", inner.GetSecretRefs()[0].GetName())
 }
 
@@ -82,7 +89,9 @@ func TestSecretsBlockRoundTrips(t *testing.T) {
 	again, err := ParseWorkflow(out)
 	require.NoError(t, err)
 	assert.Len(t, again.GetSecrets(), 2)
-	assert.Len(t, again.GetNodes()[2].GetSecretRefs(), 2)
+	assert.Empty(t, again.GetNodes()[2].GetSecretRefs())
+	assert.Equal(t, "DEPLOY_TOKEN", again.GetNodes()[3].GetAction().GetCredential().GetSecret(), "credential round-trips")
+	assert.Len(t, again.GetNodes()[3].GetSecretRefs(), 1)
 }
 
 func TestSecretsBlockRejectsMalformedDeclarations(t *testing.T) {

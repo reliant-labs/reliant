@@ -86,22 +86,7 @@ type ToolContext struct {
 	// (toolexec.ToolRequest.RunStep, which only the run-step executor sets),
 	// never from tool input, so a model cannot claim it.
 	RunStep bool
-
-	// SecretMask holds the values the server listed to mask out of this
-	// call's result (toolexec.ToolRequest.MaskValues: a run step's declared
-	// secrets). The daemon masks the result it returns, but a tool that cuts
-	// its output first — the shell tool's head+tail truncation — would leave
-	// the fragments of a value that crosses the cut, which no longer match
-	// it; so the shell tool masks its streams before any truncation. Output a
-	// tool keeps anywhere else — a background process's buffer — would escape
-	// both, so the shell tool refuses to background such a command. Set from
-	// the server-built context only, like RunStep.
-	SecretMask []string
 }
-
-// MasksSecrets reports whether the server listed values to mask out of this
-// call's result (SecretMask).
-func (c *ToolContext) MasksSecrets() bool { return len(c.SecretMask) > 0 }
 
 // NewToolContext creates a context for V2 tool execution
 // This doesn't require a session since V2 uses threads/contexts instead

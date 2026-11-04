@@ -85,7 +85,7 @@ func newController(t *testing.T, respond func(n int, w http.ResponseWriter)) (*C
 }
 
 func TestResolveSecretsReturnsValuesForARedeemedTicketBoundToTheRefs(t *testing.T) {
-	for _, activityType := range []string{"Action", "ExecuteRunStep"} {
+	for _, activityType := range []string{"Action"} {
 		t.Run(activityType, func(t *testing.T) {
 			c, ctl, store := newController(t, func(_ int, w http.ResponseWriter) { okValues(w) })
 			got, err := resolveInActivity(t, c, activityType, []stepsecrets.Ref{traderRef, traderRef})
@@ -113,6 +113,10 @@ func TestResolveSecretsRefusesActivitiesThatMayNotResolve(t *testing.T) {
 
 	_, err = resolveInActivity(t, c, "ExecuteTools", []stepsecrets.Ref{traderRef})
 	require.Error(t, err, "a tool activity may not resolve")
+
+	// A run step's command can print whatever it holds, so it never resolves.
+	_, err = resolveInActivity(t, c, "ExecuteRunStep", []stepsecrets.Ref{traderRef})
+	require.Error(t, err, "a run step may not resolve")
 
 	var foreign error
 	actionTest(t, "Action", func(ctx context.Context) error {
@@ -169,7 +173,7 @@ func TestResolveSecretsShowsAControlPlaneRefusalAndDoesNotRetryIt(t *testing.T) 
 		calls.Add(1)
 		http.Error(w, reason, http.StatusForbidden)
 	})
-	_, err := resolveInActivity(t, c, "ExecuteRunStep", []stepsecrets.Ref{traderRef})
+	_, err := resolveInActivity(t, c, "Action", []stepsecrets.Ref{traderRef})
 	var denied *stepsecrets.DeniedError
 	require.ErrorAs(t, err, &denied)
 	assert.Equal(t, reason, denied.Reason)

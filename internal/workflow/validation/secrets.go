@@ -2,10 +2,15 @@ package validation
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
+	"golang.org/x/net/http/httpguts"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -19,35 +24,24 @@ import (
 // engine would see it is always a mistake.
 const secretsNamespace wfcel.CELNamespace = "secrets"
 
-// reservedSecretNames cannot name a secret because a run step exports every
-// declared secret as an environment variable of the same name.
-var reservedSecretNames = map[string]bool{
-	"PATH": true, "HOME": true, "SHELL": true, "USER": true, "LOGNAME": true, "PWD": true, "OLDPWD": true,
-	"IFS": true, "ENV": true, "BASH_ENV": true, "TMPDIR": true, "TERM": true, "LANG": true,
-	"LD_PRELOAD": true, "LD_LIBRARY_PATH": true, "DYLD_INSERT_LIBRARIES": true, "DYLD_LIBRARY_PATH": true,
-	"GH_TOKEN": true, "GITHUB_TOKEN": true, "SSH_AUTH_SOCK": true,
-}
-
 // validateSecrets enforces the secret rules for one workflow file.
 //
-// A secret is usable by any step that does not hand its text to a model:
+// A secret travels only in a credential slot, never in text a step can print or
+// return. There are two slots:
 //
-//	action  with.*   (an http/request@1 url, headers and body, or an integration input)
-//	run     command (every declared secret is also exported to it as an
-//	        environment variable of the same name)
+//	action http/request@1  with.headers.<Name>: "{{ secrets.NAME }}", or a
+//	                       literal prefix and then the hole ("Bearer {{ secrets.NAME }}")
+//	action (any)           credential: {secret: NAME}, applied through the
+//	                       integration's api_key auth method
 //
-// It is an error in everything a model reads or writes (call_llm, router, agent
-// and sub-agent prompts and messages, save_message, tool configs, response
-// tools), in CEL that decides or computes (compute, conditions, while/key/items,
-// edges, workflow outputs), in every other node's arguments, in invoke_tool
-// (every tool a workflow can name today hands its parameters to a model or a
-// chat), and in the declaration itself. Once a value is in a prompt it has gone
-// to the model provider, and masking cannot recall it.
+// A hole anywhere else is an error: an http url, query or body, any other
+// action's inputs, a run command (a command can print its own environment), and
+// everything a model reads or writes, decides on or computes with. The
+// activity enforces the same rule again at run time.
 //
 // Only a whole {{ secrets.NAME }} hole is a placeholder. A hole that reads
 // `secrets` any other way (secrets['A'], secrets.A.upperAscii(), a
-// concatenation) is refused: it could not be substituted, so it must not run as
-// CEL.
+// concatenation) is refused.
 func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 	declared := wf.GetSecrets()
 	names := make([]string, 0, len(declared))
@@ -58,12 +52,8 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 
 	for _, name := range names {
 		path := []string{wf.GetName(), "secrets", name}
-		upper := strings.ToUpper(name)
-		switch {
-		case !stepsecrets.NamePattern.MatchString(name):
+		if !stepsecrets.NamePattern.MatchString(name) {
 			result.AddError(CategoryStructure, path, "", "secret names are letters, digits and underscores, starting with a letter or underscore")
-		case reservedSecretNames[upper] || strings.HasPrefix(upper, "RELIANT_"):
-			result.AddError(CategoryStructure, path, "", fmt.Sprintf("%q cannot be a secret's name: a run step exports every declared secret as an environment variable of the same name", name))
 		}
 		switch env := declared[name].GetEnvironment(); {
 		case !model.CelStringIsSet(env):
@@ -74,8 +64,6 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 	}
 
 	used := map[string]bool{}
-	check := func(text string, path []string) { validateSecretHoles(text, declared, used, path, result) }
-
 	var walkBody func(w *reliantv1.Workflow, base []string, root bool)
 	walkBody = func(w *reliantv1.Workflow, base []string, root bool) {
 		if !root && len(w.GetSecrets()) > 0 {
@@ -87,14 +75,8 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 					result.AddError(CategoryStructure, joinPath(nodePath, "inline"), "secrets", "secrets are declared once, at the top level of the workflow file; an inline body uses them, and a workflow loaded by ref declares its own")
 				}
 			}
-			switch {
-			case node.GetAction() != nil:
-				with := node.GetAction().GetWith()
-				for _, k := range sortedValueKeys(with) {
-					eachString(with[k], joinPath(nodePath, "with", k), check)
-				}
-			case node.GetRun() != nil:
-				check(model.CelStringRaw(node.GetRun().GetCommand()), joinPath(nodePath, "command"))
+			if args := node.GetAction(); args != nil {
+				validateActionSecrets(args, declared, used, nodePath, result)
 			}
 		})
 	}
@@ -103,32 +85,144 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 		walkBody(h, []string{wf.GetName(), "on_failure"}, false)
 	}
 
-	// A run step exports every declared secret, so with one present none is
-	// unused.
-	if !workflowHasRunStep(wf) {
-		for _, name := range names {
-			if !used[name] {
-				result.Add(&Error{
-					Severity: SeverityWarning, Category: CategoryStructure,
-					Path:    []string{wf.GetName(), "secrets", name},
-					Message: fmt.Sprintf("secret %q is declared but no step uses it", name),
-				})
-			}
+	for _, name := range names {
+		if !used[name] {
+			result.Add(&Error{
+				Severity: SeverityWarning, Category: CategoryStructure,
+				Path:    []string{wf.GetName(), "secrets", name},
+				Message: fmt.Sprintf("secret %q is declared but no step uses it", name),
+			})
 		}
 	}
 
-	// Everything else: any read of `secrets` outside an allowed field is an error.
+	// Everything else: any read of `secrets` outside an action is an error.
 	rejectSecretsOutsideAllowed(wf.ProtoReflect(), []string{wf.GetName()}, result)
 }
 
-func workflowHasRunStep(wf *reliantv1.Workflow) bool {
-	found := false
-	walkWorkflowNodes(wf, nil, func(node *reliantv1.Node, _ []string) {
-		if node.GetRun() != nil {
-			found = true
+// httpRequestUses is the one action whose headers are credential slots: the
+// generic HTTP request, whose author picks the host and the header its API
+// reads a key from.
+const httpRequestUses = "http/request@1"
+
+// validateActionSecrets checks an action's two slots, and refuses a hole in
+// every other input it has.
+func validateActionSecrets(args *reliantv1.ActionArgs, declared map[string]*reliantv1.SecretDeclaration, used map[string]bool, nodePath []string, result *Result) {
+	uses := strings.TrimSpace(model.CelStringRaw(args.GetUses()))
+	isHTTP := !model.CelStringIsExpr(args.GetUses()) && uses == httpRequestUses
+	slots := 0
+	with := args.GetWith()
+	for _, k := range sortedValueKeys(with) {
+		if k == "headers" && isHTTP && with[k].GetStructValue() != nil {
+			fields := with[k].GetStructValue().GetFields()
+			for _, h := range sortedValueKeys(fields) {
+				path := joinPath(nodePath, "with", "headers", h)
+				text := fields[h].GetStringValue()
+				if _, isString := fields[h].GetKind().(*structpb.Value_StringValue); !isString || !strings.Contains(text, "{{") {
+					eachString(fields[h], path, func(s string, p []string) { checkSecretsString(s, false, p, result) })
+					continue
+				}
+				if name, ok := validateHeaderSlot(h, text, path, result); ok {
+					slots++
+					markDeclared(name, declared, used, path, result)
+				}
+			}
+			continue
 		}
-	})
-	return found
+		eachString(with[k], joinPath(nodePath, "with", k), func(s string, p []string) { checkSecretsString(s, false, p, result) })
+	}
+
+	cred := args.GetCredential()
+	if cred == nil {
+		return
+	}
+	path := joinPath(nodePath, "credential")
+	name := cred.GetSecret()
+	if !stepsecrets.NamePattern.MatchString(name) {
+		result.AddError(CategoryStructure, path, "secret", "credential.secret is the name of a declared secret, not a value or an expression")
+		return
+	}
+	markDeclared(name, declared, used, path, result)
+	switch {
+	case model.CelStringIsSet(args.GetConnection()):
+		result.AddError(CategoryStructure, path, "", "credential and connection are mutually exclusive: authenticate with one")
+	case args.GetHostedUse() != nil:
+		result.AddError(CategoryStructure, path, "", "credential and hosted_use are mutually exclusive")
+	case slots > 0:
+		result.AddError(CategoryStructure, path, "", "a secret header and a credential are mutually exclusive: authenticate with one")
+	case model.CelStringIsExpr(args.GetUses()):
+		result.AddError(CategoryStructure, path, "", "a credential needs a fixed uses: the integration decides where the key is sent")
+	default:
+		resolved, err := catalog.MustBuiltin().Resolve(uses)
+		if err != nil {
+			return // reported by validateActionNode
+		}
+		if _, _, err := httpaction.APIKeyPlacement(resolved.Manifest); err != nil {
+			result.AddError(CategoryStructure, path, "", err.Error())
+		}
+	}
+}
+
+// validateHeaderSlot checks that a header value is one credential slot: a
+// literal prefix and one {{ secrets.NAME }} hole that ends the value.
+func validateHeaderSlot(header, text string, path []string, result *Result) (string, bool) {
+	matches, err := wfcel.ScanTemplate(text)
+	if err != nil {
+		return "", false // reported by the template-syntax layer
+	}
+	reads := false
+	for _, m := range matches {
+		if _, ok := stepsecrets.PlainName(m.Expr); ok {
+			reads = true
+			continue
+		}
+		if refs, err := wfcel.ReferencesOf([]string{m.Expr}, secretsNamespace); err == nil && refs.Referenced {
+			reads = true
+		}
+	}
+	if !reads {
+		return "", false // an ordinary templated header
+	}
+	name, plain := "", false
+	if len(matches) == 1 {
+		name, plain = stepsecrets.PlainName(matches[0].Expr)
+	}
+	switch {
+	case !plain || matches[0].End != len(text) || strings.Contains(text[:matches[0].Start], "{{"):
+		result.Add(&Error{
+			Severity: SeverityError, Category: CategoryStructure, Path: path,
+			Message:    "a secret header's value is one {{ secrets.NAME }} hole at its end, after only literal text",
+			Suggestion: `write it as "Bearer {{ secrets.NAME }}" or "{{ secrets.NAME }}"`,
+		})
+		return "", false
+	case !secretHeaderAllowed(header):
+		result.AddError(CategoryStructure, path, "", fmt.Sprintf("header %s cannot carry a secret", header))
+		return "", false
+	}
+	return name, true
+}
+
+func markDeclared(name string, declared map[string]*reliantv1.SecretDeclaration, used map[string]bool, path []string, result *Result) {
+	if _, ok := declared[name]; !ok {
+		result.Add(&Error{
+			Severity: SeverityError, Category: CategoryStructure, Path: path,
+			Message:    fmt.Sprintf("secrets.%s is not declared", name),
+			Suggestion: fmt.Sprintf("declare it at the top of the workflow:\nsecrets:\n  %s:\n    environment: <forge project>/<env name>", name),
+		})
+		return
+	}
+	used[name] = true
+}
+
+// secretHeaderAllowed mirrors the activity's rule: the transport's own headers
+// and the body's description are never a credential slot.
+func secretHeaderAllowed(name string) bool {
+	canonical := http.CanonicalHeaderKey(name)
+	switch canonical {
+	case "Host", "Content-Length", "Content-Type", "Content-Encoding", "Transfer-Encoding",
+		"Connection", "Upgrade", "Te", "Trailer", "Keep-Alive":
+		return false
+	}
+	return httpguts.ValidHeaderFieldName(name) && !strings.HasPrefix(canonical, "Proxy-")
 }
 
 // validateSecretEnvironmentScope refuses an environment expression that reads
@@ -139,39 +233,6 @@ func validateSecretEnvironmentScope(raw string, path []string, result *Result) {
 	others := []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELTrigger, wfcel.CELFailure, secretsNamespace}
 	if refs, err := wfcel.TemplateReferencesAny(raw, others); err == nil && refs {
 		result.AddError(CategoryStructure, path, "environment", "a secret's environment may be an expression over inputs only")
-	}
-}
-
-// validateSecretHoles checks the placeholders in one allowed field: each hole
-// that reads `secrets` is exactly {{ secrets.NAME }} and names a declared secret.
-func validateSecretHoles(text string, declared map[string]*reliantv1.SecretDeclaration, used map[string]bool, path []string, result *Result) {
-	if !strings.Contains(text, "{{") {
-		return
-	}
-	matches, err := wfcel.ScanTemplate(text)
-	if err != nil {
-		return // reported by the template-syntax layer
-	}
-	for _, m := range matches {
-		if name, ok := stepsecrets.PlainName(m.Expr); ok {
-			if _, isDeclared := declared[name]; !isDeclared {
-				result.Add(&Error{
-					Severity: SeverityError, Category: CategoryStructure, Path: path,
-					Message:    fmt.Sprintf("secrets.%s is not declared", name),
-					Suggestion: fmt.Sprintf("declare it at the top of the workflow:\nsecrets:\n  %s:\n    environment: <forge project>/<env name>", name),
-				})
-				continue
-			}
-			used[name] = true
-			continue
-		}
-		if refs, err := wfcel.ReferencesOf([]string{m.Expr}, secretsNamespace); err == nil && refs.Referenced {
-			result.Add(&Error{
-				Severity: SeverityError, Category: CategoryStructure, Path: path,
-				Message:    "a secret is used as a whole {{ secrets.NAME }} hole; it cannot be indexed, passed to a function or combined in an expression",
-				Suggestion: "write the surrounding text outside the hole: \"Bearer {{ secrets.NAME }}\"",
-			})
-		}
 	}
 }
 
@@ -195,15 +256,13 @@ func eachString(v *structpb.Value, path []string, fn func(string, []string)) {
 	}
 }
 
-// secretsAllowedHere reports whether a field is one a step may read a secret in
-// (an action's `with`, a run's `command`), or one to skip
-// (Node.secret_refs is the parser's own record of the declarations).
+// secretsAllowedHere reports whether a field is checked by
+// validateActionSecrets instead (an action's `with` and `credential`), or one to
+// skip (Node.secret_refs is the parser's own record of the declarations).
 func secretsAllowedHere(md protoreflect.MessageDescriptor, field protoreflect.Name) (allowed, skip bool) {
 	switch md.FullName() {
 	case "reliant.v1.ActionArgs":
-		return field == "with", false
-	case "reliant.v1.RunArgs":
-		return field == "command", false
+		return field == "with" || field == "credential", false
 	case "reliant.v1.Node":
 		return false, field == "secret_refs"
 	}
@@ -286,7 +345,7 @@ func checkSecretsString(s string, rawCEL bool, path []string, result *Result) {
 	result.Add(&Error{
 		Severity: SeverityError, Category: CategoryStructure,
 		Path:       path,
-		Message:    "secrets.NAME may not be used here: this field is read or written by a model, or decides what the workflow does, and a secret that reaches a prompt has gone to the model provider",
-		Suggestion: "use a secret only in an action's inputs (url, headers, body) or a run step's command (or read the exported $NAME in it); the step's output is masked",
+		Message:    "secrets.NAME may not be used here: a secret travels only in a credential slot, never in text a step or a model can read, print or return",
+		Suggestion: "use it as an http/request@1 header value (\"Authorization\": \"Bearer {{ secrets.NAME }}\") or as an action's credential: {secret: NAME}",
 	})
 }

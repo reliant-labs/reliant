@@ -78,10 +78,6 @@ type shellInput struct {
 	Command     string `json:"command"`
 	Timeout     int    `json:"timeout,omitempty"` // timeout in milliseconds
 	Credentials string `json:"credentials,omitempty"`
-	// Env is the command's extra environment: the only place the daemon reads
-	// it from. A run step's declared secrets travel here, never in Command, so a
-	// value is not in the command line, a process listing or a stored command.
-	Env map[string]string `json:"env,omitempty"`
 }
 
 // ExecuteCommand routes a shell command through the daemon's shell tool.
@@ -97,7 +93,6 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		Command:     command,
 		Timeout:     timeoutMs,
 		Credentials: e.execCtx.Credentials,
-		Env:         env,
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
@@ -127,14 +122,12 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		WorktreePath:   e.execCtx.WorktreePath,
 		WorkingDir:     effectiveWorkingDir,
 		Timeout:        time.Duration(timeoutMs) * time.Millisecond,
+		Environment:    env,
 		DaemonSelector: e.execCtx.DaemonSelector,
 		// A run node's command, not a model's call: the shell tool lets
 		// timeoutMs (the node's declared timeout) bound it instead of the
 		// model's 10-minute foreground cap. Set here and nowhere else.
 		RunStep: true,
-		// The env is a run step's declared secrets: the machine masks what the
-		// command echoes before it persists or sends the result.
-		MaskValues: envValues(env),
 	}
 
 	// Execute through the daemon
@@ -268,14 +261,4 @@ func resolveRunCheckout(ctx context.Context, r projectcheckout.Reader, router to
 		execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: target.DaemonID}
 	}
 	return nil
-}
-
-func envValues(env map[string]string) []string {
-	out := make([]string, 0, len(env))
-	for _, v := range env {
-		if v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
 }

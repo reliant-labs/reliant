@@ -28,10 +28,11 @@ const (
 	resolveRetryBackoff = 300 * time.Millisecond
 )
 
-// resolveActivityTypes are the activities that may resolve declared secrets: the
-// ones that run a step with a command or a request. The ticket is still bound to
-// the run, the node and the refs, so this only names who may ask.
-var resolveActivityTypes = map[string]bool{"Action": true, "ExecuteRunStep": true}
+// resolveActivityTypes are the activities that may resolve declared secrets:
+// only the action step, which puts a value into a request's credential slot. The
+// ticket is still bound to the run, the node and the refs, so this only names
+// who may ask.
+var resolveActivityTypes = map[string]bool{"Action": true}
 
 var (
 	refEnvironment = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,256}$`)

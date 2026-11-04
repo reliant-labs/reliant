@@ -9,7 +9,6 @@ import (
 	"github.com/google/cel-go/common/operators"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -44,11 +43,6 @@ func requireRunCommandValues(node *reliantv1.Node, builder *CELContextBuilder) e
 	}
 	config, activation := builder.scope()
 	for _, match := range matches {
-		// A declared secret is not a value reference: it is resolved in the
-		// activity, and an empty one fails there.
-		if _, secret := stepsecrets.PlainName(match.Expr); secret {
-			continue
-		}
 		expr := match.Expr
 		// Resolution already ran and would have reported a compile error.
 		compiled, err := compileCEL(config, strings.TrimSpace(expr))
