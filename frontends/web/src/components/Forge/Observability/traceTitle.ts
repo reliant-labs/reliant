@@ -28,6 +28,8 @@ export interface TraceTitle {
 
 // `[VERB ]/?<package>.<Service>/<Method>`: a Connect or gRPC procedure.
 const RPC = /^(?:([A-Z]+) )?\/?((?:[A-Za-z_]\w*\.)+)?([A-Za-z_]\w*)\/([A-Za-z_]\w*)$/;
+// A procedure's service when it carries no package: `ChatService`.
+const PACKAGELESS_SERVICE = /^[A-Z]\w*Service$/;
 // A name that says only the HTTP method: HyperDX's `HTTP POST`, or a bare `POST`.
 const GENERIC = /^(?:HTTP )?([A-Z]+)$/;
 // A path segment that is a value rather than part of the route: a number, a
@@ -43,9 +45,8 @@ const ID_SEGMENT =
  */
 export function operationName(name: string, attributes: Record<string, string> = {}): string {
   const trimmed = name.trim();
-  const rpc = RPC.exec(trimmed);
-  // The package is what makes it a procedure: `GET /v1/items` is a path.
-  if (rpc?.[2]) return `${rpc[3]}.${rpc[4]}`;
+  const rpc = rpcName(trimmed);
+  if (rpc) return rpc;
   const generic = GENERIC.exec(trimmed);
   if (!generic && trimmed !== "") return name;
 
@@ -53,10 +54,22 @@ export function operationName(name: string, attributes: Record<string, string> =
   const route = attributes["http.route"];
   const path = route || pathOf(attributes["url.path"] || attributes["http.target"] || attributes["url.full"] || attributes["http.url"] || "");
   if (!path) return name;
-  const asRpc = RPC.exec(path);
-  if (asRpc?.[2]) return `${asRpc[3]}.${asRpc[4]}`;
+  const asRpc = rpcName(path);
+  if (asRpc) return asRpc;
   const shown = route ? route : collapseIds(path);
   return verb ? `${verb} ${shown}` : shown;
+}
+
+// `Service.Method` when `name` is a procedure. A package (`reliant.v1.`) makes
+// it one; without a package, only a PascalCase `<Name>Service/<Method>` does,
+// so `GET /v1/items` stays a path.
+function rpcName(name: string): string | null {
+  const rpc = RPC.exec(name);
+  if (!rpc) return null;
+  const [, , pkg, service, method] = rpc;
+  if (!service || !method) return null;
+  if (pkg || (PACKAGELESS_SERVICE.test(service) && /^[A-Z]/.test(method))) return `${service}.${method}`;
+  return null;
 }
 
 /** The title of a whole trace. Null for a trace with no spans. */

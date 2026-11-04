@@ -36,6 +36,17 @@ describe("operationName", () => {
     );
   });
 
+  it("names a package-less RPC Service.Method, and leaves a package-less path alone", () => {
+    expect(operationName("ChatService/SendMessage")).toBe("ChatService.SendMessage");
+    expect(operationName("/ChatService/SendMessage")).toBe("ChatService.SendMessage");
+    expect(operationName("POST /ChatService/SendMessage")).toBe("ChatService.SendMessage");
+    expect(operationName("HTTP POST", { "http.method": "POST", "http.url": "https://api.example/ChatService/SendMessage" })).toBe("ChatService.SendMessage");
+    expect(operationName("GET /v1/items")).toBe("GET /v1/items");
+    expect(operationName("/v1/items")).toBe("/v1/items");
+    expect(operationName("HTTP GET", { "url.path": "/v1/items" })).toBe("GET /v1/items");
+    expect(operationName("HTTP GET", { "url.path": "/Users/Profile" })).toBe("GET /Users/Profile");
+  });
+
   it("names an HTTP span by method and route, never a bare HTTP POST", () => {
     expect(operationName("HTTP POST", { "http.method": "POST", "http.url": "https://dash.reliantlabs.io/auth/v1/token?x=1" })).toBe("POST /auth/v1/token");
     expect(operationName("GET", { "http.route": "/v1/items/{id}", "url.path": "/v1/items/42" })).toBe("GET /v1/items/{id}");
